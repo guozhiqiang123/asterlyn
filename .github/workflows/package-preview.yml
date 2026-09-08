@@ -53,6 +53,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Test delivery scripts
+        run: npm run test:scripts
+
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
@@ -75,24 +78,28 @@ jobs:
             target: x86_64-unknown-linux-gnu
             args: ""
             bundle-root: target/release/bundle
+            smoke-executable: target/release/asterlyn
             apple_signing_identity: ""
           - label: Windows x86_64
             platform: windows-latest
             target: x86_64-pc-windows-msvc
             args: ""
             bundle-root: target/release/bundle
+            smoke-executable: target/release/asterlyn.exe
             apple_signing_identity: ""
           - label: macOS Apple Silicon
             platform: macos-latest
             target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
             bundle-root: target/aarch64-apple-darwin/release/bundle
+            smoke-executable: target/aarch64-apple-darwin/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn
             apple_signing_identity: "-"
           - label: macOS Intel
             platform: macos-latest
             target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
             bundle-root: target/x86_64-apple-darwin/release/bundle
+            smoke-executable: target/x86_64-apple-darwin/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn
             apple_signing_identity: "-"
 
     runs-on: ${{ matrix.platform }}
@@ -123,6 +130,7 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
+            xvfb \
             xdg-utils
 
       - name: Install frontend dependencies
@@ -137,6 +145,14 @@ jobs:
           args: ${{ matrix.args }}
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: asterlyn-[version]-[platform]-[arch]-[bundle]
+
+      - name: Smoke native app on Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" node scripts/smoke-native-app.mjs "${{ matrix.smoke-executable }}"
+
+      - name: Smoke native app
+        if: matrix.platform != 'ubuntu-22.04'
+        run: node scripts/smoke-native-app.mjs "${{ matrix.smoke-executable }}"
 
       - name: Generate artifact checksums
         run: node scripts/hash-release-artifacts.mjs "${{ matrix.bundle-root }}" "ci-artifacts/${{ matrix.target }}.sha256"
