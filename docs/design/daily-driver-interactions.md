@@ -48,6 +48,12 @@ Local acceptance used the real Tauri window against the Asterlyn repository: com
 
 Selection is scope-specific: the staged and working-tree rows for a partially staged path are distinct selectable items. Plain click or keyboard traversal establishes the primary patch, `Ctrl/Cmd` toggles items, and `Shift` selects a visible range. Batch stage acts only on selected working-tree rows; batch unstage acts only on selected index rows. A filter narrows visible rows and group actions but does not silently discard hidden selections, so the toolbar always reports the full selected count. After a mutation, selections migrate to the corresponding side only when that side exists in the fresh Git snapshot.
 
+**Implemented and locally accepted on 2026-09-08.** Changed files can be filtered by path, original path, status, scope, or conflict state; `Ctrl/Cmd+F`, `Escape`, `Enter`, arrow keys, `Home`, `End`, `Space`, `Ctrl/Cmd`, and `Shift` support search and scoped selection. A two-file selection was staged and then unstaged through the real Tauri window, and the fresh snapshots moved both selected rows between working-tree and index scope without touching unrelated paths. Hidden selections remained counted while filtering.
+
+Working-tree and commit patches now share `Unified`, `Split`, and `Whitespace` controls. Split mode derives aligned before/after documents from the canonical patch, keeps replacement blocks and no-newline markers side-specific, disables wrapping to preserve row alignment, and synchronizes vertical scrolling while allowing independent horizontal inspection. Whitespace mode adds visible spaces, tabs, and trailing-space emphasis without re-running Git. Four focused projection tests cover replacements, addition/deletion-only blocks, no-newline markers, and hunk content that resembles file headers. The production frontend build, TypeScript check, seven delivery/presentation script tests, 13 Git core tests, desktop Rust check, and strict workspace Clippy passed.
+
+Known limits are explicit: split view does not yet provide intraline word highlighting, moved-block detection, or source-file line-number gutters; its line numbers describe aligned patch rows. Split projection is limited to the standard single-file unified patches emitted by Asterlyn's current backend. Large patches remain bounded at 4 MiB. These limits do not affect Git state and do not block safe local branch work in U4.
+
 ### U4 — Safe local branch work
 
 - Add checkout and branch creation with dirty-worktree preflight.
@@ -62,4 +68,4 @@ Selection is scope-specific: the staged and working-tree rows for a partially st
 
 ## Sequencing rule
 
-U1–U3 are the immediate usability queue and may proceed while Windows/macOS interactive release checks remain open. U1 and U2 are locally accepted; U3 is the active slice. U4 and U5 begin the Stage 2 daily-driver Git workstation. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are locally accepted as the first usability phase while Windows/macOS interactive release checks remain open. U4 and U5 are the next Stage 2 daily-driver Git workstation phase. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.

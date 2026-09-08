@@ -893,7 +893,44 @@ textarea:focus-visible {
 }
 
 .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: 12px;
+}
+
+.diff-controls {
+  display: inline-flex;
+  overflow: hidden;
+  height: 25px;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: #242529;
+}
+
+.diff-controls button {
+  padding: 0 7px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.diff-controls button:last-child {
+  border-right: 0;
+}
+
+.diff-controls button:hover {
+  background: var(--bg-elevated);
+  color: var(--text-soft);
+}
+
+.diff-controls button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: #b9d0ff;
 }
 
 .scope-pill {
@@ -924,6 +961,62 @@ textarea:focus-visible {
 
 .content-body.diff-surface {
   overflow: hidden;
+}
+
+.diff-surface.split-diff {
+  overflow: hidden;
+}
+
+.diff-split-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.diff-pane {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 25px minmax(0, 1fr);
+}
+
+.diff-pane-old {
+  border-right: 1px solid var(--border-strong);
+}
+
+.diff-pane-label {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: #242529;
+  color: var(--text-faint);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.diff-pane-old .diff-pane-label {
+  color: #d98a90;
+}
+
+.diff-pane-new .diff-pane-label {
+  color: #86c895;
+}
+
+.diff-editor-host {
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cm-editor .cm-trailingSpace {
+  border-radius: 2px;
+  background: #db5c5c45;
 }
 
 .commit-explorer {

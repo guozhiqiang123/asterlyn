@@ -3,6 +3,7 @@ import { BRAND } from "./brand";
 import { DiffEditor } from "./diff-editor";
 import { icon } from "./icons";
 import { windowControls } from "./window-controls";
+import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import type {
   BranchSummary,
   ChangeKind,
@@ -33,6 +34,8 @@ interface AppState {
   commitPatch: CommitDiffResult | null;
   commitPatchLoading: boolean;
   commitPatchError: string | null;
+  diffLayout: DiffLayout;
+  showWhitespace: boolean;
   selectedBranch: string | null;
   commitMessage: string;
   loading: boolean;
@@ -56,6 +59,8 @@ export class AsterlynApp {
     commitPatch: null,
     commitPatchLoading: false,
     commitPatchError: null,
+    diffLayout: "unified",
+    showWhitespace: false,
     selectedBranch: null,
     commitMessage: "",
     loading: false,
@@ -932,8 +937,9 @@ export class AsterlynApp {
       }
       header.innerHTML = `
         ${this.contentHeading(basename(selected.path), selected.path)}
-        <div class="header-actions"><span class="scope-pill">${selected.staged ? "Staged" : "Working tree"}</span></div>
+        <div class="header-actions">${this.diffControls()}<span class="scope-pill">${selected.staged ? "Staged" : "Working tree"}</span></div>
       `;
+      this.bindDiffControls();
       body.innerHTML = this.loadingBlock("Loading patch…");
       return;
     }
@@ -947,8 +953,9 @@ export class AsterlynApp {
       }
       header.innerHTML = `
         ${this.contentHeading(commit.subject, commit.shortOid)}
-        <div class="header-actions"><code class="oid">${escapeHtml(commit.shortOid)}</code></div>
+        <div class="header-actions">${this.diffControls()}<code class="oid">${escapeHtml(commit.shortOid)}</code></div>
       `;
+      this.bindDiffControls();
       if (this.state.commitDetailsLoading) {
         body.innerHTML = this.loadingBlock("Loading changed files…");
         return;
@@ -1002,6 +1009,54 @@ export class AsterlynApp {
     return `<div class="content-title-group"><span class="content-kicker">${escapeHtml(subtitle)}</span><h2>${escapeHtml(title)}</h2></div>`;
   }
 
+  private diffControls(): string {
+    return `
+      <div class="diff-controls" role="group" aria-label="Diff presentation">
+        <button type="button" data-diff-layout="unified" aria-pressed="${this.state.diffLayout === "unified"}" title="Unified diff">Unified</button>
+        <button type="button" data-diff-layout="split" aria-pressed="${this.state.diffLayout === "split"}" title="Side-by-side diff">Split</button>
+        <button type="button" data-diff-whitespace aria-pressed="${this.state.showWhitespace}" title="Show whitespace characters">Whitespace</button>
+      </div>`;
+  }
+
+  private bindDiffControls(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const layout = button.dataset.diffLayout as DiffLayout;
+        if (layout === this.state.diffLayout) return;
+        this.state.diffLayout = layout;
+        this.syncDiffControls();
+        this.diffEditor.setPresentation(this.diffPresentation());
+      });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-diff-whitespace]")?.addEventListener(
+      "click",
+      () => {
+        this.state.showWhitespace = !this.state.showWhitespace;
+        this.syncDiffControls();
+        this.diffEditor.setPresentation(this.diffPresentation());
+      },
+    );
+  }
+
+  private syncDiffControls(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
+      button.setAttribute(
+        "aria-pressed",
+        String(button.dataset.diffLayout === this.state.diffLayout),
+      );
+    });
+    this.root
+      .querySelector<HTMLButtonElement>("[data-diff-whitespace]")
+      ?.setAttribute("aria-pressed", String(this.state.showWhitespace));
+  }
+
+  private diffPresentation(): DiffPresentation {
+    return {
+      layout: this.state.diffLayout,
+      showWhitespace: this.state.showWhitespace,
+    };
+  }
+
   private async loadSelectedDiff(): Promise<void> {
     const snapshot = this.state.snapshot;
     const selected = this.state.selectedChange;
@@ -1013,7 +1068,11 @@ export class AsterlynApp {
       const body = this.query("#content-body");
       body.innerHTML = "";
       body.classList.add("diff-surface");
-      this.diffEditor.mount(body, diff.patch || "No textual diff is available for this selection.");
+      this.diffEditor.mount(
+        body,
+        diff.patch || "No textual diff is available for this selection.",
+        this.diffPresentation(),
+      );
       if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
     } catch (error) {
       if (generation !== this.diffGeneration) return;
@@ -1250,7 +1309,11 @@ export class AsterlynApp {
     }
     target.innerHTML = "";
     target.classList.add("diff-surface");
-    this.diffEditor.mount(target, patch.patch || "No textual diff is available for this file.");
+    this.diffEditor.mount(
+      target,
+      patch.patch || "No textual diff is available for this file.",
+      this.diffPresentation(),
+    );
   }
 
   private selectedCommitFile(details: CommitDetails): CommitFileChange | null {

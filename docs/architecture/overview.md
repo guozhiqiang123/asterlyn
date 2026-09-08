@@ -44,6 +44,7 @@ This avoids both extremes: a monolith that loads every subsystem at startup and 
 
 - **Desktop shell:** the application protocol isolates Tauri-specific details. If operating-system webviews become a blocker, the shell can change without rewriting Git/domain code.
 - **Editor engine:** CodeMirror is wrapped as an editor surface. Document models, commands, diagnostics, and navigation must not leak CodeMirror classes across the application boundary.
+- **Diff presentation:** Git returns one bounded canonical patch. Unified view displays it directly; split view derives aligned before/after documents in the presentation layer and synchronizes vertical scrolling. Whitespace visibility is a CodeMirror decoration over the same patch, never a different Git query, so display preferences cannot alter review truth.
 - **Git backend:** system Git is the M1 reference adapter. libgit2 or specialized readers may later accelerate selected read paths, but writes retain one canonical semantics until parity is proven.
 - **Language intelligence:** LSP is the first interoperability layer, not the complete product model. A bounded index may supplement it later.
 - **Extensions:** internal capability boundaries mature before a public ABI. Public APIs are versioned and capability-scoped.

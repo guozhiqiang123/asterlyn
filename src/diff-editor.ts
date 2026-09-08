@@ -1,10 +1,12 @@
-import { EditorState, RangeSetBuilder } from "@codemirror/state";
+import { EditorState, RangeSetBuilder, type Extension } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
   drawSelection,
   highlightActiveLine,
   highlightActiveLineGutter,
+  highlightTrailingWhitespace,
+  highlightWhitespace,
   keymap,
   lineNumbers,
 } from "@codemirror/view";
@@ -13,16 +15,20 @@ import {
   openSearchPanel,
   searchKeymap,
 } from "@codemirror/search";
+import { splitUnifiedDiff, type DiffPresentation } from "./diff-presentation";
 
 const diffLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
   const builder = new RangeSetBuilder<Decoration>();
+  let inHunk = false;
   for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
     const line = state.doc.line(lineNumber);
     const text = line.text;
     let className = "";
-    if (text.startsWith("+") && !text.startsWith("+++")) {
+    if (text.startsWith("diff --git ")) inHunk = false;
+    if (text.startsWith("@@")) inHunk = true;
+    if (text.startsWith("+") && (inHunk || !text.startsWith("+++ "))) {
       className = "cm-diff-added";
-    } else if (text.startsWith("-") && !text.startsWith("---")) {
+    } else if (text.startsWith("-") && (inHunk || !text.startsWith("--- "))) {
       className = "cm-diff-removed";
     } else if (text.startsWith("@@")) {
       className = "cm-diff-hunk";
@@ -94,41 +100,152 @@ const asterlynTheme = EditorView.theme(
 );
 
 export class DiffEditor {
-  private view: EditorView | null = null;
+  private readonly views: EditorView[] = [];
+  private parent: HTMLElement | null = null;
+  private sourceDocument = "";
+  private presentation: DiffPresentation = {
+    layout: "unified",
+    showWhitespace: false,
+  };
 
-  mount(parent: HTMLElement, document: string): void {
+  mount(
+    parent: HTMLElement,
+    document: string,
+    presentation: DiffPresentation = this.presentation,
+  ): void {
     this.destroy();
-    this.view = new EditorView({
+    this.parent = parent;
+    this.sourceDocument = document;
+    this.presentation = { ...presentation };
+    this.render();
+  }
+
+  setPresentation(presentation: DiffPresentation): void {
+    const previousLayout = this.presentation.layout;
+    const scroll = this.captureScroll();
+    this.presentation = { ...presentation };
+    if (!this.parent) return;
+    this.render();
+    window.requestAnimationFrame(() => {
+      for (const [index, view] of this.views.entries()) {
+        const maximum = Math.max(0, view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight);
+        view.scrollDOM.scrollTop = maximum * scroll.topRatio;
+        view.scrollDOM.scrollLeft =
+          previousLayout === this.presentation.layout ? (scroll.left[index] ?? 0) : 0;
+      }
+    });
+  }
+
+  private render(): void {
+    const parent = this.parent;
+    if (!parent) return;
+    this.destroyViews();
+    parent.replaceChildren();
+    parent.classList.toggle("split-diff", this.presentation.layout === "split");
+
+    if (this.presentation.layout === "unified") {
+      this.views.push(this.createView(parent, this.sourceDocument));
+      return;
+    }
+
+    const split = splitUnifiedDiff(this.sourceDocument);
+    const grid = window.document.createElement("div");
+    grid.className = "diff-split-grid";
+    const oldHost = this.createPane(grid, "Before", "old");
+    const newHost = this.createPane(grid, "After", "new");
+    parent.append(grid);
+    const oldView = this.createView(oldHost, split.oldDocument);
+    const newView = this.createView(newHost, split.newDocument);
+    this.views.push(oldView, newView);
+    this.synchronizeVerticalScroll(oldView, newView);
+  }
+
+  private createPane(
+    parent: HTMLElement,
+    label: string,
+    side: "old" | "new",
+  ): HTMLElement {
+    const pane = window.document.createElement("section");
+    pane.className = `diff-pane diff-pane-${side}`;
+    pane.setAttribute("aria-label", `${label} side of patch`);
+    const heading = window.document.createElement("div");
+    heading.className = "diff-pane-label";
+    heading.textContent = label;
+    const host = window.document.createElement("div");
+    host.className = "diff-editor-host";
+    pane.append(heading, host);
+    parent.append(pane);
+    return host;
+  }
+
+  private createView(parent: HTMLElement, document: string): EditorView {
+    const extensions: Extension[] = [
+      EditorState.readOnly.of(true),
+      EditorState.tabSize.of(4),
+      EditorView.editable.of(false),
+      lineNumbers(),
+      drawSelection(),
+      highlightActiveLine(),
+      highlightActiveLineGutter(),
+      highlightSelectionMatches(),
+      diffLineDecorations,
+      asterlynTheme,
+      keymap.of([
+        ...searchKeymap,
+        {
+          key: "Mod-f",
+          run: openSearchPanel,
+        },
+      ]),
+    ];
+    if (this.presentation.layout === "unified") {
+      extensions.push(EditorView.lineWrapping);
+    }
+    if (this.presentation.showWhitespace) {
+      extensions.push(highlightWhitespace(), highlightTrailingWhitespace());
+    }
+
+    return new EditorView({
       parent,
       state: EditorState.create({
         doc: document,
-        extensions: [
-          EditorState.readOnly.of(true),
-          EditorState.tabSize.of(4),
-          EditorView.editable.of(false),
-          EditorView.lineWrapping,
-          lineNumbers(),
-          drawSelection(),
-          highlightActiveLine(),
-          highlightActiveLineGutter(),
-          highlightSelectionMatches(),
-          diffLineDecorations,
-          asterlynTheme,
-          keymap.of([
-            ...searchKeymap,
-            {
-              key: "Mod-f",
-              run: openSearchPanel,
-            },
-          ]),
-        ],
+        extensions,
       }),
     });
   }
 
+  private synchronizeVerticalScroll(first: EditorView, second: EditorView): void {
+    let synchronizing = false;
+    const mirror = (source: HTMLElement, target: HTMLElement) => {
+      if (synchronizing) return;
+      synchronizing = true;
+      target.scrollTop = source.scrollTop;
+      window.requestAnimationFrame(() => {
+        synchronizing = false;
+      });
+    };
+    first.scrollDOM.addEventListener("scroll", () => mirror(first.scrollDOM, second.scrollDOM));
+    second.scrollDOM.addEventListener("scroll", () => mirror(second.scrollDOM, first.scrollDOM));
+  }
+
+  private captureScroll(): { topRatio: number; left: number[] } {
+    const first = this.views[0]?.scrollDOM;
+    const maximum = first ? Math.max(0, first.scrollHeight - first.clientHeight) : 0;
+    return {
+      topRatio: first && maximum > 0 ? first.scrollTop / maximum : 0,
+      left: this.views.map((view) => view.scrollDOM.scrollLeft),
+    };
+  }
+
+  private destroyViews(): void {
+    for (const view of this.views) view.destroy();
+    this.views.length = 0;
+  }
+
   destroy(): void {
-    this.view?.destroy();
-    this.view = null;
+    this.destroyViews();
+    this.parent?.classList.remove("split-diff");
+    this.parent = null;
+    this.sourceDocument = "";
   }
 }
-
