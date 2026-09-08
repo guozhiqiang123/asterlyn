@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/asterlyn-git"]
+members = ["crates/asterlyn-git", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
@@ -9,4 +9,3 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
-

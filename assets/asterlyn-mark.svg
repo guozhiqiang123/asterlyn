@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="base" x1="70" y1="46" x2="438" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3574F0"/>
+      <stop offset="0.58" stop-color="#315EAC"/>
+      <stop offset="1" stop-color="#294436"/>
+    </linearGradient>
+    <linearGradient id="facet" x1="128" y1="96" x2="388" y2="406" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#89B2FF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#59A869" stop-opacity="0.38"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#1E1F22"/>
+  <path d="M256 72 426 170v172L256 440 86 342V170L256 72Z" fill="url(#base)"/>
+  <path d="m256 72 170 98-170 98L86 170l170-98Z" fill="url(#facet)"/>
+  <path d="m256 268 170-98v172l-170 98V268Z" fill="#233C52" fill-opacity="0.64"/>
+  <path d="m86 170 170 98v172L86 342V170Z" fill="#2A4A7C" fill-opacity="0.72"/>
+  <path d="m256 143 91 225h-48l-19-51h-84l-19 51h-47l89-225h37Zm8 132-26-72-27 72h53Z" fill="#F4F7FC"/>
+</svg>
+

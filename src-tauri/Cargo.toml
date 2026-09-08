@@ -1,0 +1,20 @@
+[package]
+name = "asterlyn"
+version = "0.1.0"
+description = "A lightweight developer workspace with Git at its center"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "asterlyn_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+asterlyn-git = { path = "../crates/asterlyn-git" }
+serde.workspace = true
+tauri = { version = "2.11.5", features = [] }
+
