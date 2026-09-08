@@ -396,6 +396,125 @@ impl GitRepository {
         Ok(String::from_utf8_lossy(&oid.stdout).trim().to_string())
     }
 
+    pub fn switch_branch(&self, target_full_name: &str) -> Result<(), GitError> {
+        let target_name = validate_local_branch_ref(target_full_name)?;
+        self.ensure_local_branch_exists(target_full_name)?;
+        let current = self.current_branch()?;
+        if current.as_deref() == Some(target_name) {
+            return Err(GitError::InvalidInput {
+                field: "target branch".to_string(),
+                message: format!("'{target_name}' is already checked out"),
+            });
+        }
+        self.ensure_clean_worktree("switch branch")?;
+        self.run_mutation(
+            "switch branch",
+            vec![
+                OsString::from("switch"),
+                OsString::from("--no-guess"),
+                OsString::from("--"),
+                OsString::from(target_name),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn create_branch(&self, name: &str) -> Result<(), GitError> {
+        let name = self.validate_branch_name(name)?;
+        let full_name = format!("refs/heads/{name}");
+        if self.local_branch_exists(&full_name)? {
+            return Err(GitError::InvalidInput {
+                field: "branch name".to_string(),
+                message: format!("'{name}' already exists"),
+            });
+        }
+        self.ensure_clean_worktree("create branch")?;
+        self.run_mutation(
+            "create branch",
+            vec![
+                OsString::from("switch"),
+                OsString::from("--create"),
+                OsString::from(name),
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn validate_branch_name<'a>(&self, name: &'a str) -> Result<&'a str, GitError> {
+        let name = name.trim();
+        if name.is_empty() || name.contains('\0') || name.starts_with('-') || name.starts_with("@{")
+        {
+            return Err(GitError::InvalidInput {
+                field: "branch name".to_string(),
+                message: "enter a literal local branch name".to_string(),
+            });
+        }
+        let output = run_git_output(&self.root, ["check-ref-format", "--branch", name]).map_err(
+            |error| GitError::Io {
+                operation: "validate branch name".to_string(),
+                message: error.to_string(),
+            },
+        )?;
+        let normalized = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !output.status.success() || normalized != name {
+            return Err(GitError::InvalidInput {
+                field: "branch name".to_string(),
+                message: sanitize_stderr(&output.stderr, "Git rejected the branch name"),
+            });
+        }
+        Ok(name)
+    }
+
+    fn current_branch(&self) -> Result<Option<String>, GitError> {
+        let output = self.run_read("read current branch", ["branch", "--show-current"])?;
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok((!branch.is_empty()).then_some(branch))
+    }
+
+    fn ensure_local_branch_exists(&self, full_name: &str) -> Result<(), GitError> {
+        if self.local_branch_exists(full_name)? {
+            Ok(())
+        } else {
+            Err(GitError::InvalidInput {
+                field: "target branch".to_string(),
+                message: "the local branch no longer exists".to_string(),
+            })
+        }
+    }
+
+    fn local_branch_exists(&self, full_name: &str) -> Result<bool, GitError> {
+        let output = run_git_output(&self.root, ["show-ref", "--verify", "--quiet", full_name])
+            .map_err(|error| GitError::Io {
+                operation: "verify local branch".to_string(),
+                message: error.to_string(),
+            })?;
+        match output.status.code() {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(GitError::CommandFailed {
+                operation: "verify local branch".to_string(),
+                status: output.status.code(),
+                message: sanitize_stderr(&output.stderr, "could not verify local branch"),
+            }),
+        }
+    }
+
+    fn ensure_clean_worktree(&self, operation: &str) -> Result<(), GitError> {
+        let status = self.run_read(
+            "preflight working tree",
+            ["status", "--porcelain=v2", "-z", "--untracked-files=normal"],
+        )?;
+        let (_, changes) = parse_status(&status.stdout)?;
+        if changes.is_empty() {
+            return Ok(());
+        }
+        Err(GitError::UnsafeOperation {
+            operation: operation.to_string(),
+            message: "commit, stash, or remove working-tree changes before continuing".to_string(),
+            blockers: changes.into_iter().map(|change| change.path).collect(),
+        })
+    }
+
     fn run_read<const N: usize>(
         &self,
         operation: &str,
@@ -673,6 +792,17 @@ fn validate_object_id(oid: &str) -> Result<(), GitError> {
         });
     }
     Ok(())
+}
+
+fn validate_local_branch_ref(full_name: &str) -> Result<&str, GitError> {
+    let name = full_name.strip_prefix("refs/heads/").unwrap_or_default();
+    if name.is_empty() || name.contains('\0') {
+        return Err(GitError::InvalidInput {
+            field: "target branch".to_string(),
+            message: "select an existing local branch".to_string(),
+        });
+    }
+    Ok(name)
 }
 
 fn parse_commit_files(output: &[u8]) -> Result<Vec<CommitFileChange>, GitError> {
@@ -1028,6 +1158,121 @@ mod tests {
             .commit_diff(&oid, "../outside", None)
             .expect_err("path traversal is rejected before Git runs");
         assert!(matches!(invalid_path, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn switches_only_clean_local_branches() {
+        let directory = fixture();
+        fs::write(directory.path().join("base.txt"), "base\n").expect("fixture file");
+        git(directory.path(), &["add", "base.txt"]);
+        git(directory.path(), &["commit", "-m", "Root"]);
+        git(directory.path(), &["branch", "feature"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        repository
+            .switch_branch("refs/heads/feature")
+            .expect("clean switch succeeds");
+        assert_eq!(
+            repository
+                .tracked_snapshot(10)
+                .expect("snapshot loads")
+                .branch
+                .head
+                .as_deref(),
+            Some("feature")
+        );
+
+        fs::write(directory.path().join("base.txt"), "dirty\n").expect("dirty file");
+        let dirty = repository
+            .switch_branch("refs/heads/main")
+            .expect_err("tracked changes block switching");
+        assert!(matches!(
+            dirty,
+            GitError::UnsafeOperation { ref blockers, .. } if blockers == &["base.txt"]
+        ));
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "feature"
+        );
+
+        git(directory.path(), &["restore", "base.txt"]);
+        fs::write(directory.path().join("untracked.txt"), "untracked\n").expect("untracked file");
+        let untracked = repository
+            .switch_branch("refs/heads/main")
+            .expect_err("untracked changes block switching");
+        assert!(matches!(
+            untracked,
+            GitError::UnsafeOperation { ref blockers, .. } if blockers == &["untracked.txt"]
+        ));
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "feature"
+        );
+
+        fs::remove_file(directory.path().join("untracked.txt")).expect("remove fixture");
+        repository
+            .switch_branch("refs/heads/main")
+            .expect("clean switch succeeds");
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "main"
+        );
+
+        git(
+            directory.path(),
+            &["update-ref", "refs/heads/--detach", "HEAD"],
+        );
+        repository
+            .switch_branch("refs/heads/--detach")
+            .expect("option-shaped branch is passed as a literal target");
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "--detach"
+        );
+    }
+
+    #[test]
+    fn creates_valid_branches_only_from_a_clean_worktree() {
+        let directory = fixture();
+        fs::write(directory.path().join("base.txt"), "base\n").expect("fixture file");
+        git(directory.path(), &["add", "base.txt"]);
+        git(directory.path(), &["commit", "-m", "Root"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        for invalid in ["", "-danger", "@{-1}", "bad name", "topic..name"] {
+            let error = repository
+                .create_branch(invalid)
+                .expect_err("invalid branch name is rejected");
+            assert!(matches!(error, GitError::InvalidInput { .. }));
+        }
+
+        fs::write(directory.path().join("pending.txt"), "pending\n").expect("pending file");
+        let dirty = repository
+            .create_branch("feature/safe")
+            .expect_err("dirty worktree blocks branch creation");
+        assert!(matches!(dirty, GitError::UnsafeOperation { .. }));
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "main"
+        );
+
+        fs::remove_file(directory.path().join("pending.txt")).expect("remove fixture");
+        repository
+            .create_branch("feature/safe")
+            .expect("clean branch creation succeeds");
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "feature/safe"
+        );
+        let duplicate = repository
+            .create_branch("main")
+            .expect_err("existing branch is rejected");
+        assert!(matches!(duplicate, GitError::InvalidInput { .. }));
+
+        let remote = repository
+            .switch_branch("refs/remotes/origin/main")
+            .expect_err("remote refs are not implicit local branches");
+        assert!(matches!(remote, GitError::InvalidInput { .. }));
     }
 
     #[test]

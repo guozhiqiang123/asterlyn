@@ -60,6 +60,8 @@ Known limits are explicit: split view does not yet provide intraline word highli
 - Explain blocked operations and preserve the current repository when switching is unsafe.
 - Keep delete, force, reset, and history rewriting outside this slice.
 
+The initial safety contract is deliberately conservative: U4 switches existing local branches and creates a local branch from the current `HEAD` only when the full working tree is known to be clean. Staged, unstaged, conflicted, and untracked paths all block mutation. The interface explains the blockers first, while the Git core repeats the complete preflight immediately before `git switch`; it accepts only a selected `refs/heads/*` ref or a literal name that passes `git check-ref-format`. Automatic stash, carrying local changes, remote-branch materialization, deletion, force, and history rewriting require separate recovery-aware slices.
+
 ### U5 — Remote daily loop
 
 - Add fetch first, then pull and push with explicit upstream and divergence previews.

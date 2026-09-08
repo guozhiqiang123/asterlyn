@@ -24,6 +24,11 @@ pub enum GitError {
         field: String,
         message: String,
     },
+    UnsafeOperation {
+        operation: String,
+        message: String,
+        blockers: Vec<String>,
+    },
     Cancelled {
         operation: String,
     },
@@ -56,6 +61,15 @@ impl Display for GitError {
             Self::InvalidInput { field, message } => {
                 write!(formatter, "Invalid {field}: {message}")
             }
+            Self::UnsafeOperation {
+                operation,
+                message,
+                blockers,
+            } => write!(
+                formatter,
+                "Unsafe Git operation '{operation}' was blocked: {message} ({} blocking paths)",
+                blockers.len()
+            ),
             Self::Cancelled { operation } => {
                 write!(formatter, "Git operation '{operation}' was cancelled")
             }

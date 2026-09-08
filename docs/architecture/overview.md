@@ -33,6 +33,7 @@ Tauri is a shell/transport adapter, not the domain center.
 4. Mutation commands are narrower than query commands and return enough state for the UI to reconcile.
 5. UI state is replaceable; repository truth is re-read from Git after mutations.
 6. Long-running work supports cancellation, progress, bounded output, and stale-result rejection.
+7. Branch mutations accept literal local refs or validated new names only. The UI waits for complete working-tree discovery, and the Git core independently rejects any staged, unstaged, conflicted, or untracked blocker immediately before invoking `git switch`.
 
 ## Runtime model
 
