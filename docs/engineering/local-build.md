@@ -35,6 +35,22 @@ Deepin 23 may expose a GPU render node while denying the KMS buffer operation us
 
 `npm run dev` starts the interface in browser demo mode when the Tauri bridge is absent. Demo mode is deliberately visible in the title bar and never claims to read or mutate the entered repository. It exists for fast layout, interaction, and accessibility work; native behavior is accepted only through Rust integration tests and a desktop smoke test.
 
+## Local performance evidence
+
+Run the release inspection utility to separate interactive tracked latency from deferred untracked discovery:
+
+```bash
+cargo run --release -p asterlyn-git --example inspect -- /path/to/repository 10
+```
+
+On Linux, repeat steady-state process-tree PSS, RSS, and idle CPU sampling with:
+
+```bash
+scripts/measure-linux-process-tree.sh target/release/asterlyn /path/to/repository
+```
+
+The memory helper launches only the supplied local binary and repository, waits 60 seconds by default, samples every descendant process through `/proc`, and terminates each launched instance after the sample. It is evidence collection rather than a portable benchmark harness; record the machine, repository state, build profile, run count, and limitations with accepted results.
+
 ## Packaging policy
 
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.

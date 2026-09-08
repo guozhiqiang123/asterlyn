@@ -15,6 +15,7 @@ use crate::model::{
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 #[derive(Debug, Clone)]
 pub struct GitRepository {
@@ -366,7 +367,7 @@ impl GitRepository {
             let wait_result = child.try_wait();
             match wait_result {
                 Ok(Some(status)) => break status,
-                Ok(None) => thread::sleep(Duration::from_millis(10)),
+                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
                 Err(error) => {
                     let _ = child.kill();
                     let _ = child.wait();

@@ -2,7 +2,7 @@ use std::env;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use asterlyn_git::GitRepository;
+use asterlyn_git::{CancellationToken, GitRepository, UntrackedState};
 
 fn main() -> ExitCode {
     match run() {
@@ -29,18 +29,36 @@ fn run() -> Result<(), String> {
 
     let repository = GitRepository::open(&path).map_err(|error| error.to_string())?;
     let mut snapshot_micros = Vec::with_capacity(iterations);
+    let mut tracked_micros = Vec::with_capacity(iterations);
+    let mut untracked_micros = Vec::with_capacity(iterations);
     let mut last_snapshot = None;
 
     for _ in 0..iterations {
-        let started = Instant::now();
-        let snapshot = repository
-            .snapshot(150)
+        let snapshot_started = Instant::now();
+        let tracked_started = Instant::now();
+        let mut snapshot = repository
+            .tracked_snapshot(150)
             .map_err(|error| error.to_string())?;
-        snapshot_micros.push(started.elapsed().as_micros());
+        tracked_micros.push(tracked_started.elapsed().as_micros());
+
+        let untracked_started = Instant::now();
+        let untracked = repository
+            .untracked_changes(&CancellationToken::new())
+            .map_err(|error| error.to_string())?;
+        untracked_micros.push(untracked_started.elapsed().as_micros());
+        snapshot.changes.extend(untracked.changes);
+        snapshot
+            .changes
+            .sort_by(|left, right| left.path.cmp(&right.path));
+        snapshot.untracked_state = UntrackedState::Complete;
+
+        snapshot_micros.push(snapshot_started.elapsed().as_micros());
         last_snapshot = Some(snapshot);
     }
 
     snapshot_micros.sort_unstable();
+    tracked_micros.sort_unstable();
+    untracked_micros.sort_unstable();
     let snapshot = last_snapshot.expect("at least one iteration is required");
     println!("root={}", snapshot.root);
     println!("changes={}", snapshot.changes.len());
@@ -60,6 +78,8 @@ fn run() -> Result<(), String> {
         "snapshot_max_ms={:.3}",
         milliseconds(*snapshot_micros.last().expect("timings exist"))
     );
+    print_timings("tracked", &tracked_micros);
+    print_timings("untracked", &untracked_micros);
 
     if let Some(change) = snapshot.changes.first() {
         let staged = change.has_staged_change();
@@ -76,6 +96,22 @@ fn run() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn print_timings(label: &str, timings: &[u128]) {
+    println!("{label}_min_ms={:.3}", milliseconds(timings[0]));
+    println!(
+        "{label}_median_ms={:.3}",
+        milliseconds(percentile(timings, 0.50))
+    );
+    println!(
+        "{label}_p95_ms={:.3}",
+        milliseconds(percentile(timings, 0.95))
+    );
+    println!(
+        "{label}_max_ms={:.3}",
+        milliseconds(*timings.last().expect("timings exist"))
+    );
 }
 
 fn percentile(values: &[u128], percentile: f64) -> u128 {
