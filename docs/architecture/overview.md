@@ -55,6 +55,8 @@ The frontend requests a repository snapshot with a monotonically increasing requ
 
 After a stage/unstage/commit action, the application requests fresh tracked state and starts a new untracked scan rather than manually pretending the mutation succeeded. File-system events are coalesced and treated as refresh hints, not truth. The compatibility `snapshot` operation in the pure Git crate still composes both phases for callers that require an atomic-looking complete result, while interactive callers use the phased API.
 
+Commit inspection is a separate, lazy read path rather than part of the repository snapshot. A selected commit first loads its NUL-delimited changed-file summary and then loads only the selected file patch. Ordinary and merge commits are compared with their first parent, matching the mainline review model used by common Git clients; root commits are compared with the empty tree. The frontend rejects responses whose commit or file selection is no longer current, while the Rust boundary accepts only full hexadecimal object IDs and repository-relative paths.
+
 ## Failure policy
 
 - A failed Git command returns its operation, exit status, and sanitized stderr.

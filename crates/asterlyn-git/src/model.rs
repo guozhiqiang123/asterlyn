@@ -96,6 +96,32 @@ pub struct CommitSummary {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CommitDetails {
+    pub oid: String,
+    pub parent_oid: Option<String>,
+    pub files: Vec<CommitFileChange>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFileChange {
+    pub path: String,
+    pub original_path: Option<String>,
+    pub status: ChangeKind,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDiffResult {
+    pub oid: String,
+    pub path: String,
+    pub patch: String,
+    pub binary: bool,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct BranchSummary {
     pub full_name: String,
     pub name: String,

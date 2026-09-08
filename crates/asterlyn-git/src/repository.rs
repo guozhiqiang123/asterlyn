@@ -10,7 +10,8 @@ use std::time::Duration;
 
 use crate::error::GitError;
 use crate::model::{
-    ChangeKind, DiffResult, FileChange, RepositorySnapshot, UntrackedScan, UntrackedState,
+    ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange,
+    RepositorySnapshot, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -220,6 +221,107 @@ impl GitRepository {
         })
     }
 
+    pub fn commit_details(&self, oid: &str) -> Result<CommitDetails, GitError> {
+        validate_object_id(oid)?;
+        let parent_oid = self.first_parent(oid)?;
+        let output = if let Some(parent) = &parent_oid {
+            self.run_read_owned(
+                "read commit file list",
+                vec![
+                    OsString::from("diff"),
+                    OsString::from("--no-ext-diff"),
+                    OsString::from("--name-status"),
+                    OsString::from("-z"),
+                    OsString::from("-M"),
+                    OsString::from("-C"),
+                    OsString::from(parent),
+                    OsString::from(oid),
+                ],
+            )?
+        } else {
+            self.run_read_owned(
+                "read root commit file list",
+                vec![
+                    OsString::from("diff-tree"),
+                    OsString::from("--root"),
+                    OsString::from("--no-commit-id"),
+                    OsString::from("--name-status"),
+                    OsString::from("-z"),
+                    OsString::from("-r"),
+                    OsString::from("-M"),
+                    OsString::from("-C"),
+                    OsString::from(oid),
+                ],
+            )?
+        };
+
+        Ok(CommitDetails {
+            oid: oid.to_string(),
+            parent_oid,
+            files: parse_commit_files(&output.stdout)?,
+        })
+    }
+
+    pub fn commit_diff(
+        &self,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<CommitDiffResult, GitError> {
+        validate_object_id(oid)?;
+        validate_relative_path(path)?;
+        if let Some(original_path) = original_path {
+            validate_relative_path(original_path)?;
+        }
+
+        let parent_oid = self.first_parent(oid)?;
+        let mut args = if let Some(parent) = parent_oid {
+            vec![
+                OsString::from("diff"),
+                OsString::from("--no-ext-diff"),
+                OsString::from("--no-color"),
+                OsString::from("--unified=3"),
+                OsString::from("-M"),
+                OsString::from("-C"),
+                OsString::from(parent),
+                OsString::from(oid),
+            ]
+        } else {
+            vec![
+                OsString::from("show"),
+                OsString::from("--format="),
+                OsString::from("--no-ext-diff"),
+                OsString::from("--no-color"),
+                OsString::from("--unified=3"),
+                OsString::from("-M"),
+                OsString::from("-C"),
+                OsString::from(oid),
+            ]
+        };
+        args.push(OsString::from("--"));
+        if let Some(original_path) = original_path {
+            args.push(OsString::from(original_path));
+        }
+        args.push(OsString::from(path));
+
+        let output = self.run_read_owned("read commit file diff", args)?;
+        let mut patch = output.stdout;
+        let binary = patch.windows(15).any(|window| window == b"Binary files ");
+        let truncated = patch.len() > DIFF_LIMIT_BYTES;
+        if truncated {
+            patch.truncate(DIFF_LIMIT_BYTES);
+            patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
+        }
+
+        Ok(CommitDiffResult {
+            oid: oid.to_string(),
+            path: path.to_string(),
+            patch: String::from_utf8_lossy(&patch).into_owned(),
+            binary,
+            truncated,
+        })
+    }
+
     pub fn stage(&self, paths: &[String]) -> Result<(), GitError> {
         let paths = validate_paths(paths)?;
         let mut args = vec![OsString::from("add"), OsString::from("--")];
@@ -389,6 +491,33 @@ impl GitRepository {
         ensure_success(operation, output)
     }
 
+    fn first_parent(&self, oid: &str) -> Result<Option<String>, GitError> {
+        let output = self.run_read_owned(
+            "read commit parents",
+            vec![
+                OsString::from("rev-list"),
+                OsString::from("--parents"),
+                OsString::from("--max-count=1"),
+                OsString::from(oid),
+            ],
+        )?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        let mut objects = line.split_ascii_whitespace();
+        let Some(resolved_oid) = objects.next() else {
+            return Err(GitError::Parse {
+                context: "commit parents".to_string(),
+                message: "Git returned no commit".to_string(),
+            });
+        };
+        if !resolved_oid.eq_ignore_ascii_case(oid) {
+            return Err(GitError::Parse {
+                context: "commit parents".to_string(),
+                message: "Git returned an unexpected commit id".to_string(),
+            });
+        }
+        Ok(objects.next().map(str::to_string))
+    }
+
     fn detect_operation(&self) -> Option<String> {
         let candidates = [
             ("rebase-merge", "rebase"),
@@ -518,7 +647,7 @@ fn validate_paths(paths: &[String]) -> Result<Vec<OsString>, GitError> {
 
 fn validate_relative_path(path: &str) -> Result<(), GitError> {
     let candidate = Path::new(path);
-    if path.is_empty() || candidate.is_absolute() {
+    if path.is_empty() || path.contains('\0') || candidate.is_absolute() {
         return Err(GitError::InvalidInput {
             field: "path".to_string(),
             message: "the path must be repository-relative".to_string(),
@@ -534,6 +663,82 @@ fn validate_relative_path(path: &str) -> Result<(), GitError> {
         });
     }
     Ok(())
+}
+
+fn validate_object_id(oid: &str) -> Result<(), GitError> {
+    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(GitError::InvalidInput {
+            field: "commit id".to_string(),
+            message: "expected a full hexadecimal object id".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn parse_commit_files(output: &[u8]) -> Result<Vec<CommitFileChange>, GitError> {
+    let fields: Vec<_> = output
+        .split(|byte| *byte == 0)
+        .filter(|field| !field.is_empty())
+        .collect();
+    let mut files = Vec::new();
+    let mut index = 0;
+    while index < fields.len() {
+        let status = fields[index];
+        index += 1;
+        let Some(code) = status.first().copied() else {
+            return Err(commit_file_parse_error("empty status"));
+        };
+        let kind = commit_change_kind(code);
+        if matches!(kind, ChangeKind::Renamed | ChangeKind::Copied) {
+            let Some(original_path) = fields.get(index) else {
+                return Err(commit_file_parse_error(
+                    "rename/copy source path is missing",
+                ));
+            };
+            let Some(path) = fields.get(index + 1) else {
+                return Err(commit_file_parse_error(
+                    "rename/copy destination path is missing",
+                ));
+            };
+            files.push(CommitFileChange {
+                path: String::from_utf8_lossy(path).into_owned(),
+                original_path: Some(String::from_utf8_lossy(original_path).into_owned()),
+                status: kind,
+            });
+            index += 2;
+        } else {
+            let Some(path) = fields.get(index) else {
+                return Err(commit_file_parse_error("changed path is missing"));
+            };
+            files.push(CommitFileChange {
+                path: String::from_utf8_lossy(path).into_owned(),
+                original_path: None,
+                status: kind,
+            });
+            index += 1;
+        }
+    }
+    Ok(files)
+}
+
+fn commit_change_kind(code: u8) -> ChangeKind {
+    match code {
+        b'A' => ChangeKind::Added,
+        b'M' => ChangeKind::Modified,
+        b'D' => ChangeKind::Deleted,
+        b'R' => ChangeKind::Renamed,
+        b'C' => ChangeKind::Copied,
+        b'T' => ChangeKind::TypeChanged,
+        b'U' => ChangeKind::Unmerged,
+        _ => ChangeKind::Unknown,
+    }
+}
+
+fn commit_file_parse_error(message: &str) -> GitError {
+    GitError::Parse {
+        context: "commit file list".to_string(),
+        message: message.to_string(),
+    }
 }
 
 fn untracked_patch(path: &str, data: &[u8]) -> String {
@@ -571,6 +776,22 @@ mod tests {
             args,
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    fn git_stdout(path: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .expect("git should start");
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
     fn fixture() -> TempDir {
@@ -665,6 +886,161 @@ mod tests {
         let snapshot = repository.snapshot(50).expect("committed snapshot loads");
         assert_eq!(snapshot.commits[0].subject, "Initial fixture");
         assert!(snapshot.changes.is_empty());
+    }
+
+    #[test]
+    fn reads_root_and_ordinary_commit_files_and_patches() {
+        let directory = fixture();
+        fs::write(directory.path().join("kept.txt"), "before\n").expect("fixture file");
+        fs::write(directory.path().join("old-name.txt"), "rename me\n").expect("fixture file");
+        fs::write(directory.path().join("removed.txt"), "remove me\n").expect("fixture file");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        repository
+            .stage(&[
+                "kept.txt".to_string(),
+                "old-name.txt".to_string(),
+                "removed.txt".to_string(),
+            ])
+            .expect("initial files stage");
+        let root_oid = repository.commit("Root").expect("root commit succeeds");
+
+        let root = repository
+            .commit_details(&root_oid)
+            .expect("root details load");
+        assert_eq!(root.parent_oid, None);
+        assert_eq!(root.files.len(), 3);
+        assert!(
+            root.files
+                .iter()
+                .all(|file| file.status == ChangeKind::Added)
+        );
+        let root_patch = repository
+            .commit_diff(&root_oid, "kept.txt", None)
+            .expect("root patch loads");
+        assert!(root_patch.patch.contains("+before"));
+
+        fs::write(directory.path().join("kept.txt"), "after\n").expect("modified file");
+        fs::rename(
+            directory.path().join("old-name.txt"),
+            directory.path().join("new-name.txt"),
+        )
+        .expect("rename fixture");
+        fs::remove_file(directory.path().join("removed.txt")).expect("remove fixture");
+        fs::write(directory.path().join("added.txt"), "new\n").expect("new fixture");
+        repository
+            .stage(&[
+                "kept.txt".to_string(),
+                "old-name.txt".to_string(),
+                "new-name.txt".to_string(),
+                "removed.txt".to_string(),
+                "added.txt".to_string(),
+            ])
+            .expect("changed files stage");
+        let oid = repository.commit("Change files").expect("commit succeeds");
+
+        let details = repository.commit_details(&oid).expect("details load");
+        assert_eq!(details.parent_oid.as_deref(), Some(root_oid.as_str()));
+        assert_eq!(details.files.len(), 4);
+        assert_eq!(
+            details
+                .files
+                .iter()
+                .find(|file| file.path == "kept.txt")
+                .map(|file| file.status),
+            Some(ChangeKind::Modified)
+        );
+        assert_eq!(
+            details
+                .files
+                .iter()
+                .find(|file| file.path == "added.txt")
+                .map(|file| file.status),
+            Some(ChangeKind::Added)
+        );
+        assert_eq!(
+            details
+                .files
+                .iter()
+                .find(|file| file.path == "removed.txt")
+                .map(|file| file.status),
+            Some(ChangeKind::Deleted)
+        );
+        let renamed = details
+            .files
+            .iter()
+            .find(|file| file.path == "new-name.txt")
+            .expect("renamed file is present");
+        assert_eq!(renamed.status, ChangeKind::Renamed);
+        assert_eq!(renamed.original_path.as_deref(), Some("old-name.txt"));
+
+        let patch = repository
+            .commit_diff(&oid, &renamed.path, renamed.original_path.as_deref())
+            .expect("rename patch loads");
+        assert!(patch.patch.contains("rename from old-name.txt"));
+        assert!(patch.patch.contains("rename to new-name.txt"));
+    }
+
+    #[test]
+    fn merge_commit_details_compare_against_first_parent() {
+        let directory = fixture();
+        fs::write(directory.path().join("base.txt"), "base\n").expect("fixture file");
+        git(directory.path(), &["add", "base.txt"]);
+        git(directory.path(), &["commit", "-m", "Root"]);
+        git(directory.path(), &["branch", "side"]);
+
+        fs::write(directory.path().join("main.txt"), "main\n").expect("main file");
+        git(directory.path(), &["add", "main.txt"]);
+        git(directory.path(), &["commit", "-m", "Main"]);
+        let main_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+
+        git(directory.path(), &["checkout", "side"]);
+        fs::write(directory.path().join("side.txt"), "side\n").expect("side file");
+        git(directory.path(), &["add", "side.txt"]);
+        git(directory.path(), &["commit", "-m", "Side"]);
+        git(directory.path(), &["checkout", "main"]);
+        git(
+            directory.path(),
+            &["merge", "--no-ff", "side", "-m", "Merge side"],
+        );
+        let merge_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let details = repository
+            .commit_details(&merge_oid)
+            .expect("merge details load");
+        assert_eq!(details.parent_oid.as_deref(), Some(main_oid.as_str()));
+        assert_eq!(details.files.len(), 1);
+        assert_eq!(details.files[0].path, "side.txt");
+        assert_eq!(details.files[0].status, ChangeKind::Added);
+    }
+
+    #[test]
+    fn rejects_untrusted_commit_detail_arguments() {
+        let directory = fixture();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let invalid_oid = repository
+            .commit_details("HEAD")
+            .expect_err("symbolic revision is rejected");
+        assert!(matches!(invalid_oid, GitError::InvalidInput { .. }));
+
+        let oid = "a".repeat(40);
+        let invalid_path = repository
+            .commit_diff(&oid, "../outside", None)
+            .expect_err("path traversal is rejected before Git runs");
+        assert!(matches!(invalid_path, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn parses_nul_delimited_commit_paths_without_text_delimiter_ambiguity() {
+        let files = parse_commit_files(
+            b"M\0dir/file with spaces.txt\0R100\0old\tname.txt\0new\nname.txt\0",
+        )
+        .expect("file list parses");
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "dir/file with spaces.txt");
+        assert_eq!(files[1].original_path.as_deref(), Some("old\tname.txt"));
+        assert_eq!(files[1].path, "new\nname.txt");
+        assert_eq!(files[1].status, ChangeKind::Renamed);
     }
 
     #[test]
