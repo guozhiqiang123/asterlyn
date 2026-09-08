@@ -109,7 +109,7 @@ export class AsterlynApp {
     workingPatchLoading: false,
     workingPatchError: null,
     workingPatchVersion: 0,
-    diffLayout: "unified",
+    diffLayout: "split",
     showWhitespace: false,
     selectedBranch: null,
     newBranchName: "",
@@ -1730,6 +1730,11 @@ export class AsterlynApp {
     return {
       layout: this.state.diffLayout,
       showWhitespace: this.state.showWhitespace,
+      splitPercentage: this.state.layout.diffBeforePercent,
+      onSplitPercentageChange: (value, committed) => {
+        this.resizeWorkbench("diffBeforePercent", value);
+        if (committed) this.persistWorkbenchLayout();
+      },
     };
   }
 

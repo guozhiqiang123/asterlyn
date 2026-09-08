@@ -1,4 +1,9 @@
-import { EditorState, RangeSetBuilder, type Extension } from "@codemirror/state";
+import {
+  EditorState,
+  RangeSetBuilder,
+  type Extension,
+  type Range,
+} from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -15,9 +20,14 @@ import {
   openSearchPanel,
   searchKeymap,
 } from "@codemirror/search";
-import { splitUnifiedDiff, type DiffPresentation } from "./diff-presentation";
+import {
+  splitUnifiedDiff,
+  type DiffPresentation,
+  type SourceDiffRow,
+} from "./diff-presentation";
+import { attachSplitter } from "./workbench/splitter";
 
-const diffLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
+const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
   const builder = new RangeSetBuilder<Decoration>();
   let inHunk = false;
   for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
@@ -95,6 +105,29 @@ const asterlynTheme = EditorView.theme(
     ".cm-diff-removed": { backgroundColor: "#5b2d3266", color: "#f0b8bd" },
     ".cm-diff-hunk": { backgroundColor: "#233d6166", color: "#a8c7fa" },
     ".cm-diff-meta": { color: "#858a94", fontStyle: "italic" },
+    ".cm-source-added": { backgroundColor: "#29443670" },
+    ".cm-source-removed": { backgroundColor: "#5b2d3270" },
+    ".cm-source-spacer": {
+      backgroundColor: "#191a1d",
+      color: "transparent",
+    },
+    ".cm-source-omitted": {
+      backgroundColor: "#233d6152",
+      color: "#8eb4ef",
+      fontStyle: "italic",
+    },
+    ".cm-source-notice": {
+      color: "#a4a7ae",
+      fontStyle: "italic",
+    },
+    ".cm-source-word-added": {
+      borderRadius: "2px",
+      backgroundColor: "#397b4eaa",
+    },
+    ".cm-source-word-removed": {
+      borderRadius: "2px",
+      backgroundColor: "#94424aaa",
+    },
   },
   { dark: true },
 );
@@ -104,9 +137,10 @@ export class DiffEditor {
   private parent: HTMLElement | null = null;
   private sourceDocument = "";
   private presentation: DiffPresentation = {
-    layout: "unified",
+    layout: "split",
     showWhitespace: false,
   };
+  private splitDispose: (() => void) | null = null;
 
   mount(
     parent: HTMLElement,
@@ -155,11 +189,42 @@ export class DiffEditor {
     const split = splitUnifiedDiff(this.sourceDocument);
     const grid = window.document.createElement("div");
     grid.className = "diff-split-grid";
-    const oldHost = this.createPane(grid, "Before", "old");
-    const newHost = this.createPane(grid, "After", "new");
+    let splitPercentage = clampPercentage(this.presentation.splitPercentage ?? 50);
+    grid.style.setProperty("--diff-before-width", `${splitPercentage}%`);
+    const oldHost = this.createPane(grid, "Before · bounded patch", "old");
+    const divider = window.document.createElement("div");
+    divider.className = "workbench-splitter vertical diff-splitter";
+    divider.setAttribute("aria-label", "Resize Diff sides");
+    grid.append(divider);
+    const newHost = this.createPane(grid, "After · bounded patch", "new");
     parent.append(grid);
-    const oldView = this.createView(oldHost, split.oldDocument);
-    const newView = this.createView(newHost, split.newDocument);
+    this.splitDispose = attachSplitter(divider, {
+      orientation: "vertical",
+      getValue: () =>
+        (Math.max(1, grid.getBoundingClientRect().width) * splitPercentage) / 100,
+      getRange: () => {
+        const width = Math.max(1, grid.getBoundingClientRect().width);
+        return { minimum: width * 0.25, maximum: width * 0.75 };
+      },
+      onChange: (value) => {
+        const width = Math.max(1, grid.getBoundingClientRect().width);
+        splitPercentage = clampPercentage((value / width) * 100);
+        grid.style.setProperty("--diff-before-width", `${splitPercentage}%`);
+        this.presentation = { ...this.presentation, splitPercentage };
+        this.presentation.onSplitPercentageChange?.(splitPercentage, false);
+        this.requestMeasure();
+      },
+      onCommit: () => {
+        this.presentation.onSplitPercentageChange?.(splitPercentage, true);
+      },
+      onReset: () => {
+        splitPercentage = 50;
+        grid.style.setProperty("--diff-before-width", "50%");
+        this.presentation = { ...this.presentation, splitPercentage };
+      },
+    });
+    const oldView = this.createView(oldHost, split.oldDocument, split.rows, "old");
+    const newView = this.createView(newHost, split.newDocument, split.rows, "new");
     this.views.push(oldView, newView);
     this.synchronizeVerticalScroll(oldView, newView);
   }
@@ -182,17 +247,20 @@ export class DiffEditor {
     return host;
   }
 
-  private createView(parent: HTMLElement, document: string): EditorView {
+  private createView(
+    parent: HTMLElement,
+    document: string,
+    rows?: SourceDiffRow[],
+    side?: "old" | "new",
+  ): EditorView {
     const extensions: Extension[] = [
       EditorState.readOnly.of(true),
       EditorState.tabSize.of(4),
       EditorView.editable.of(false),
-      lineNumbers(),
       drawSelection(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
       highlightSelectionMatches(),
-      diffLineDecorations,
       asterlynTheme,
       keymap.of([
         ...searchKeymap,
@@ -202,6 +270,17 @@ export class DiffEditor {
         },
       ]),
     ];
+    if (rows && side) {
+      extensions.push(
+        lineNumbers({
+          formatNumber: (lineNumber) =>
+            rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
+        }),
+        sourceLineDecorations(rows, side),
+      );
+    } else {
+      extensions.push(lineNumbers(), unifiedLineDecorations);
+    }
     if (this.presentation.layout === "unified") {
       extensions.push(EditorView.lineWrapping);
     }
@@ -242,6 +321,8 @@ export class DiffEditor {
   }
 
   private destroyViews(): void {
+    this.splitDispose?.();
+    this.splitDispose = null;
     for (const view of this.views) view.destroy();
     this.views.length = 0;
   }
@@ -252,4 +333,51 @@ export class DiffEditor {
     this.parent = null;
     this.sourceDocument = "";
   }
+}
+
+function sourceLineDecorations(
+  rows: SourceDiffRow[],
+  side: "old" | "new",
+): Extension {
+  return EditorView.decorations.compute(["doc"], (state) => {
+    const decorations: Array<Range<Decoration>> = [];
+    for (const [index, row] of rows.entries()) {
+      if (index >= state.doc.lines) break;
+      const line = state.doc.line(index + 1);
+      const sourceSide = row[side];
+      const className = sourceLineClass(row, side);
+      if (className) {
+        decorations.push(Decoration.line({ class: className }).range(line.from));
+      }
+      const markClass =
+        side === "old" ? "cm-source-word-removed" : "cm-source-word-added";
+      for (const range of sourceSide.changed) {
+        if (range.to <= range.from || range.from >= line.length) continue;
+        decorations.push(
+          Decoration.mark({ class: markClass }).range(
+            line.from + range.from,
+            line.from + Math.min(line.length, range.to),
+          ),
+        );
+      }
+    }
+    return Decoration.set(decorations, true);
+  });
+}
+
+function sourceLineClass(row: SourceDiffRow, side: "old" | "new"): string {
+  if (row.kind === "omitted") return "cm-source-omitted";
+  if (row.kind === "notice") return "cm-source-notice";
+  if (row[side].lineNumber === null) return "cm-source-spacer";
+  if (side === "old" && (row.kind === "removed" || row.kind === "modified")) {
+    return "cm-source-removed";
+  }
+  if (side === "new" && (row.kind === "added" || row.kind === "modified")) {
+    return "cm-source-added";
+  }
+  return "";
+}
+
+function clampPercentage(value: number): number {
+  return Math.min(75, Math.max(25, value));
 }

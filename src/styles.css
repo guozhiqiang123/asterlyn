@@ -1502,7 +1502,7 @@ textarea:focus-visible {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, var(--diff-before-width, 50%)) 5px minmax(0, 1fr);
 }
 
 .diff-pane {
@@ -1510,10 +1510,6 @@ textarea:focus-visible {
   min-width: 0;
   min-height: 0;
   grid-template-rows: 25px minmax(0, 1fr);
-}
-
-.diff-pane-old {
-  border-right: 1px solid var(--border-strong);
 }
 
 .diff-pane-label {
@@ -1527,6 +1523,11 @@ textarea:focus-visible {
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+.diff-splitter {
+  height: 100%;
+  background: #17181b;
 }
 
 .diff-pane-old .diff-pane-label {
