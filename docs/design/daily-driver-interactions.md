@@ -80,6 +80,17 @@ Remote processes receive null stdin, non-interactive credential settings, and no
 
 The 20-test Git core suite now includes remote metadata, unsupported mappings, dirty-worktree fetch/push, clean fast-forward pull, divergence, ordinary push, first publish, mirror rejection, detached `HEAD`, pre-cancellation, and failure classification. Eleven frontend script tests cover remote selection and Fetch/Pull/Push policy in addition to diff and delivery behavior, while the Tauri registry test checks per-repository serialization and exact cancellation IDs. U5 deliberately has no pruning, transfer-progress meter, interactive credential prompt, force or lease push, tags, submodule recursion, signing, custom fetch namespace, local-dot upstream, merge, or rebase. Cancellation never claims rollback, and a cancelled push remains indeterminate until Fetch succeeds.
 
+### U6 — Persistent IDE workbench
+
+- Replace mutually exclusive whole-page views with a fixed Files, Branches, Changes activity rail.
+- Keep one permanent center editor while Files or Changes occupies the left dock and Branches independently occupies the bottom dock.
+- Arrange Branches as branch/ref navigation, commit history, and commit/file details in three columns.
+- Make the left dock, bottom dock, Branches columns, and side-by-side Diff boundary pointer- and keyboard-resizable with versioned local persistence.
+- Route working-tree and commit-file selections into typed editor documents without direct cross-zone DOM calls.
+- Present bounded patches as source-like side-by-side rows with real hunk line numbers, omitted-context markers, aligned gaps, and conservative intraline highlighting.
+
+U6 deliberately freezes the long-term layout contract before expanding Git operations. Its Files tree is read-only and includes tracked plus non-ignored untracked paths; file creation, deletion, rename, editing, watching, save/recovery, encodings, and complete-file Diff reads remain Stage 3 capabilities. The activity rail itself is fixed-width because it is a control strip rather than a content pane. Layout references from Android Studio and Rebased remain behavioral studies only; Asterlyn does not reuse their source, assets, icons, fonts, branding, or screenshots.
+
 ## Sequencing rule
 
-U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, and U5 is locally accepted as the remote daily-loop slice while Windows/macOS interactive release checks remain open. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, and U5 is locally accepted as the remote daily-loop slice. U6 now takes priority over additional Git operations because it establishes the shell all later editor and tool capabilities must inhabit. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
