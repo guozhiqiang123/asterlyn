@@ -17,7 +17,7 @@ cargo test -p asterlyn-git
 
 ## Linux desktop prerequisites
 
-Tauri 2 uses WebKitGTK 4.1 on Linux. A normal development machine should install the distribution packages recommended by Tauri, including WebKitGTK 4.1, JavaScriptCoreGTK 4.1, libsoup 3, GTK 3, and their development metadata.
+Tauri 2 uses WebKitGTK 4.1 on Linux. A normal development machine should install the distribution packages recommended by Tauri, including WebKitGTK 4.1, JavaScriptCoreGTK 4.1, libsoup 3, GTK 3, librsvg 2, and their development metadata.
 
 When administrator access is unavailable on a Debian-family machine whose runtime libraries are already compatible, this repository provides an isolated fallback:
 
@@ -39,4 +39,3 @@ The setup helper downloads distribution packages and extracts them into a user-o
 - Signing/notarization credentials belong in protected CI facilities, never repository files.
 - Record compiler/runtime versions, artifact hashes, SBOM, startup/memory evidence, and smoke-test results with each preview or stable release.
 - The user-owned Linux sysroot is not bundled into the application; Linux uses the supported system WebKitGTK runtime.
-

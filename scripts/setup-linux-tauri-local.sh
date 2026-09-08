@@ -20,14 +20,18 @@ packages=(
   libsoup-3.0-dev
   libnghttp2-dev
   libpsl-dev
+  librsvg2-dev
   gir1.2-soup-3.0
   gir1.2-javascriptcoregtk-4.1
   gir1.2-webkit2-4.1
+  gir1.2-rsvg-2.0
   libwebkit2gtk-4.1-0
   libjavascriptcoregtk-4.1-0
   libsoup-3.0-0
   libnghttp2-14
   libpsl5
+  librsvg2-2
+  librsvg2-common
 )
 
 (
@@ -51,14 +55,13 @@ while IFS= read -r -d '' pc_file; do
     "${pc_file}"
 done < <(
   find "${pc_root}" -maxdepth 1 -type f \
-    \( -name 'webkit2gtk*.pc' -o -name 'javascriptcoregtk*.pc' -o -name 'libsoup*.pc' -o -name 'libnghttp2.pc' -o -name 'libpsl.pc' \) \
+    \( -name 'webkit2gtk*.pc' -o -name 'javascriptcoregtk*.pc' -o -name 'libsoup*.pc' -o -name 'libnghttp2.pc' -o -name 'libpsl.pc' -o -name 'librsvg-2.0.pc' \) \
     -print0
 )
 
 PKG_CONFIG_PATH="${pc_root}" pkg-config --modversion \
-  javascriptcoregtk-4.1 libsoup-3.0 webkit2gtk-4.1
+  javascriptcoregtk-4.1 libsoup-3.0 webkit2gtk-4.1 librsvg-2.0
 
 echo
 echo "Local Tauri development sysroot is ready at ${sysroot}."
 echo "Run Linux native commands through scripts/with-linux-tauri-env.sh."
-
