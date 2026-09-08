@@ -37,6 +37,7 @@ interface AppState {
   diffLayout: DiffLayout;
   showWhitespace: boolean;
   selectedBranch: string | null;
+  newBranchName: string;
   commitMessage: string;
   loading: boolean;
   error: string | null;
@@ -62,6 +63,7 @@ export class AsterlynApp {
     diffLayout: "unified",
     showWhitespace: false,
     selectedBranch: null,
+    newBranchName: "",
     commitMessage: "",
     loading: false,
     error: null,
@@ -912,10 +914,38 @@ export class AsterlynApp {
   private bindBranchEvents(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-branch]").forEach((row) => {
       row.addEventListener("click", () => {
-        this.state.selectedBranch = row.dataset.branch ?? null;
-        this.renderWorkspace();
+        const fullName = row.dataset.branch;
+        if (fullName) this.selectBranch(fullName);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        const rows = Array.from(
+          this.root.querySelectorAll<HTMLButtonElement>("[data-branch]"),
+        );
+        const current = rows.indexOf(row);
+        if (current < 0) return;
+        event.preventDefault();
+        const target =
+          event.key === "Home"
+            ? rows[0]
+            : event.key === "End"
+              ? rows.at(-1)
+              : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
+        const fullName = target?.dataset.branch;
+        if (fullName) this.selectBranch(fullName, true);
       });
     });
+  }
+
+  private selectBranch(fullName: string, restoreFocus = false): void {
+    this.state.selectedBranch = fullName;
+    this.renderWorkspace();
+    if (restoreFocus) {
+      const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
+      Array.from(rows)
+        .find((row) => row.dataset.branch === fullName)
+        ?.focus();
+    }
   }
 
   private renderContent(snapshot: RepositorySnapshot): void {
@@ -1383,7 +1413,10 @@ export class AsterlynApp {
     }
 
     const branch = selectedBranch(snapshot, this.state.selectedBranch);
-    inspector.innerHTML = branch ? this.branchInspector(branch) : this.inspectorPlaceholder();
+    inspector.innerHTML = branch
+      ? this.branchInspector(branch, snapshot)
+      : this.inspectorPlaceholder();
+    if (branch) this.bindBranchInspector(branch, snapshot);
   }
 
   private async mutatePaths(stage: boolean, paths: string[]): Promise<void> {
@@ -1454,6 +1487,93 @@ export class AsterlynApp {
       this.showError(error);
     } finally {
       this.setLoading(false, "Ready");
+    }
+    if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
+    }
+  }
+
+  private async switchBranch(branch: BranchSummary): Promise<void> {
+    const snapshot = this.state.snapshot;
+    if (
+      !snapshot ||
+      branch.kind !== "local" ||
+      branch.current ||
+      !this.branchSafety(snapshot).ready ||
+      this.state.loading
+    ) {
+      return;
+    }
+    await this.runBranchMutation(
+      `Checking out ${branch.name}…`,
+      `Checked out ${branch.name}`,
+      (root) => bridge.switchBranch(root, branch.fullName),
+    );
+  }
+
+  private async createBranch(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const name = this.state.newBranchName.trim();
+    if (
+      !snapshot ||
+      !name ||
+      !this.branchSafety(snapshot).ready ||
+      this.state.loading
+    ) {
+      return;
+    }
+    await this.runBranchMutation(
+      `Creating ${name}…`,
+      `Created and checked out ${name}`,
+      (root) => bridge.createBranch(root, name),
+    );
+    if (this.state.snapshot?.branch.head === name) {
+      this.state.newBranchName = "";
+      if (this.state.activeView === "branches") {
+        this.renderInspector(this.state.snapshot);
+      }
+    }
+  }
+
+  private async runBranchMutation(
+    loadingMessage: string,
+    successMessage: string,
+    mutation: (repositoryRoot: string) => Promise<RepositorySnapshot>,
+  ): Promise<void> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot) return;
+    const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    this.clearError();
+    let pendingRoot: string | null = null;
+    let succeeded = false;
+    this.setLoading(true, loadingMessage);
+    this.renderInspector(snapshot);
+    try {
+      const next = await mutation(snapshot.root);
+      if (generation !== this.requestGeneration) return;
+      this.state.snapshot = next;
+      this.state.selectedBranch =
+        next.branches.find((branch) => branch.current)?.fullName ??
+        next.branches[0]?.fullName ??
+        null;
+      this.state.selectedChangeKeys.clear();
+      this.state.selectedChange = null;
+      this.changeSelectionAnchor = null;
+      this.chooseValidChangeSelection();
+      this.renderWorkspace();
+      pendingRoot = next.root;
+      succeeded = true;
+    } catch (error) {
+      if (generation !== this.requestGeneration) return;
+      this.showError(error);
+    } finally {
+      if (generation === this.requestGeneration) {
+        this.setLoading(false, "Ready");
+        const current = this.state.snapshot;
+        if (current) this.renderInspector(current);
+        if (succeeded) this.setStatus(successMessage, "success");
+      }
     }
     if (pendingRoot && generation === this.requestGeneration) {
       void this.completeUntrackedScan(pendingRoot, generation);
@@ -1681,7 +1801,27 @@ export class AsterlynApp {
       <div class="message-card"><span>Message</span><p>${escapeHtml(commit.subject)}</p></div>`;
   }
 
-  private branchInspector(branch: BranchSummary): string {
+  private branchInspector(
+    branch: BranchSummary,
+    snapshot: RepositorySnapshot,
+  ): string {
+    const safety = this.branchSafety(snapshot);
+    const localTarget = branch.kind === "local";
+    const canCheckout =
+      localTarget && !branch.current && safety.ready && !this.state.loading;
+    const checkoutLabel = branch.current
+      ? "Current branch"
+      : localTarget
+        ? safety.ready
+          ? `Checkout ${branch.name}`
+          : "Checkout blocked"
+        : "Local branches only";
+    const blockers = safety.blockers.length
+      ? `<ul class="branch-blockers">${safety.blockers
+          .slice(0, 5)
+          .map((path) => `<li>${escapeHtml(path)}</li>`)
+          .join("")}</ul>${safety.blockers.length > 5 ? `<small>and ${safety.blockers.length - 5} more</small>` : ""}`
+      : "";
     return `
       <div class="inspector-header"><span class="panel-eyebrow">${escapeHtml(branch.kind)}</span><h2>${escapeHtml(branch.name)}</h2></div>
       <dl class="metadata-list">
@@ -1690,7 +1830,83 @@ export class AsterlynApp {
         <div><dt>Tracking</dt><dd>${escapeHtml(branch.tracking ?? "No divergence")}</dd></div>
         <div><dt>Updated</dt><dd>${formatRelative(branch.committedAt)}</dd></div>
       </dl>
-      <div class="safety-note"><span>${icon("branch", 15)}</span><p>Checkout and branch mutation arrive in Stage 2 after recovery and conflict flows are in place.</p></div>`;
+      <section class="branch-action-card ${safety.ready ? "ready" : "blocked"}">
+        <div class="branch-action-heading"><span>${icon("branch", 15)}</span><strong>Checkout</strong></div>
+        <p>${localTarget ? escapeHtml(safety.message) : "Select a local branch to check it out. Remote and tag checkout remain deferred."}</p>
+        ${localTarget ? blockers : ""}
+        <button class="primary-button" id="checkout-branch" type="button" ${canCheckout ? "" : "disabled"}>${escapeHtml(checkoutLabel)}</button>
+      </section>
+      <section class="branch-action-card create-branch-card ${safety.ready ? "ready" : "blocked"}">
+        <div class="branch-action-heading"><span>${icon("plus", 15)}</span><strong>New local branch</strong></div>
+        <p>Create from the current <code>HEAD</code>. The same clean-worktree gate applies.</p>
+        <form id="create-branch-form">
+          <label for="new-branch-name">Branch name</label>
+          <input id="new-branch-name" type="text" value="${escapeAttribute(this.state.newBranchName)}" placeholder="feature/name" autocomplete="off" spellcheck="false" />
+          <button class="secondary-button" id="create-branch-button" type="submit" ${safety.ready && this.state.newBranchName.trim() && !this.state.loading ? "" : "disabled"}>Create and checkout</button>
+        </form>
+      </section>`;
+  }
+
+  private branchSafety(snapshot: RepositorySnapshot): {
+    ready: boolean;
+    message: string;
+    blockers: string[];
+  } {
+    const blockers = snapshot.changes.map((change) => change.path);
+    if (blockers.length > 0) {
+      return {
+        ready: false,
+        message: `${blockers.length} changed ${blockers.length === 1 ? "path blocks" : "paths block"} branch mutation. Commit, stash, or remove the changes first.`,
+        blockers,
+      };
+    }
+    if (snapshot.untrackedState === "pending") {
+      return {
+        ready: false,
+        message: "Checking for untracked files before branch mutation…",
+        blockers: [],
+      };
+    }
+    if (snapshot.untrackedState === "failed") {
+      return {
+        ready: false,
+        message: "The untracked-file check failed. Refresh before changing branches.",
+        blockers: [],
+      };
+    }
+    return {
+      ready: true,
+      message: "The index and working tree are clean. Asterlyn will verify again immediately before switching.",
+      blockers: [],
+    };
+  }
+
+  private bindBranchInspector(
+    branch: BranchSummary,
+    snapshot: RepositorySnapshot,
+  ): void {
+    this.root.querySelector<HTMLButtonElement>("#checkout-branch")?.addEventListener(
+      "click",
+      () => void this.switchBranch(branch),
+    );
+    const input = this.root.querySelector<HTMLInputElement>("#new-branch-name");
+    const button = this.root.querySelector<HTMLButtonElement>("#create-branch-button");
+    input?.addEventListener("input", () => {
+      this.state.newBranchName = input.value;
+      if (button) {
+        button.disabled =
+          !this.branchSafety(snapshot).ready ||
+          input.value.trim().length === 0 ||
+          this.state.loading;
+      }
+    });
+    this.root.querySelector<HTMLFormElement>("#create-branch-form")?.addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        if (!button?.disabled) void this.createBranch();
+      },
+    );
   }
 
   private inspectorPlaceholder(): string {

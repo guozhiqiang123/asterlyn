@@ -2,9 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   demoCommitDetails,
   demoCommitDiff,
+  demoCreateBranch,
   demoDiff,
   demoSnapshot,
   demoStage,
+  demoSwitchBranch,
   demoTrackedSnapshot,
   demoUntrackedScan,
   demoUnstage,
@@ -189,6 +191,36 @@ export const bridge = {
     return invoke<RepositorySnapshot>("commit_changes", {
       repositoryRoot,
       message,
+    });
+  },
+
+  async switchBranch(
+    repositoryRoot: string,
+    targetFullName: string,
+  ): Promise<RepositorySnapshot> {
+    if (!isTauri) {
+      await demoDelay(260);
+      browserSnapshot = demoSwitchBranch(browserSnapshot, targetFullName);
+      return demoTrackedSnapshot(browserSnapshot);
+    }
+    return invoke<RepositorySnapshot>("switch_branch", {
+      repositoryRoot,
+      targetFullName,
+    });
+  },
+
+  async createBranch(
+    repositoryRoot: string,
+    name: string,
+  ): Promise<RepositorySnapshot> {
+    if (!isTauri) {
+      await demoDelay(260);
+      browserSnapshot = demoCreateBranch(browserSnapshot, name);
+      return demoTrackedSnapshot(browserSnapshot);
+    }
+    return invoke<RepositorySnapshot>("create_branch", {
+      repositoryRoot,
+      name,
     });
   },
 };

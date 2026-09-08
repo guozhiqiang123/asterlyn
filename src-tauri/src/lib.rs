@@ -167,6 +167,32 @@ async fn commit_changes(
     .await
 }
 
+#[tauri::command]
+async fn switch_branch(
+    repository_root: String,
+    target_full_name: String,
+) -> Result<RepositorySnapshot, GitError> {
+    run_blocking("switch branch", move || {
+        let repository = GitRepository::open(repository_root)?;
+        repository.switch_branch(&target_full_name)?;
+        repository.tracked_snapshot(COMMIT_LIMIT)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn create_branch(
+    repository_root: String,
+    name: String,
+) -> Result<RepositorySnapshot, GitError> {
+    run_blocking("create branch", move || {
+        let repository = GitRepository::open(repository_root)?;
+        repository.create_branch(&name)?;
+        repository.tracked_snapshot(COMMIT_LIMIT)
+    })
+    .await
+}
+
 fn lock_scan_registry(scans: &ScanRegistry) -> Result<MutexGuard<'_, ScanRegistryState>, GitError> {
     scans.inner.lock().map_err(|_| GitError::Io {
         operation: "manage untracked scan".to_string(),
@@ -201,7 +227,9 @@ pub fn run() {
             read_commit_diff,
             stage_paths,
             unstage_paths,
-            commit_changes
+            commit_changes,
+            switch_branch,
+            create_branch
         ])
         .run(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");

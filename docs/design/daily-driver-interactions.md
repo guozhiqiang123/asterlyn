@@ -62,6 +62,10 @@ Known limits are explicit: split view does not yet provide intraline word highli
 
 The initial safety contract is deliberately conservative: U4 switches existing local branches and creates a local branch from the current `HEAD` only when the full working tree is known to be clean. Staged, unstaged, conflicted, and untracked paths all block mutation. The interface explains the blockers first, while the Git core repeats the complete preflight immediately before `git switch`; it accepts only a selected `refs/heads/*` ref or a literal name that passes `git check-ref-format`. Automatic stash, carrying local changes, remote-branch materialization, deletion, force, and history rewriting require separate recovery-aware slices.
 
+**Implemented and locally accepted on 2026-09-08.** The branch inspector now distinguishes the current branch, switchable local branches, remote-only refs, pending or failed untracked discovery, and dirty-worktree blockers before enabling a mutation. The real Tauri window showed all five modified Asterlyn paths and disabled branch creation in the dirty repository. A separate clean clone then created and checked out `feature/u4-native` through the interface, switched back to the existing `main` branch, moved branch selection from the keyboard, and rejected `bad name` without changing `HEAD`. The refreshed snapshot, branch list, status bar, and inspector all followed each successful mutation.
+
+The 15-test Git core suite covers clean checkout and creation, tracked and untracked blockers, invalid and duplicate names, option-shaped local refs, and rejection of remote refs in addition to the earlier status, history, and patch contracts. TypeScript checking, the production frontend build, the desktop Rust check through the local WebKit environment, and strict workspace Clippy passed. Asterlyn does not hold an operating-system lock across preflight and `git switch`; Git remains the final authority if another process changes the repository in that short interval. This slice still provides no automatic stash, dirty-change carry, remote-branch materialization, deletion, force, reset, or history rewriting.
+
 ### U5 — Remote daily loop
 
 - Add fetch first, then pull and push with explicit upstream and divergence previews.
@@ -70,4 +74,4 @@ The initial safety contract is deliberately conservative: U4 switches existing l
 
 ## Sequencing rule
 
-U1–U3 are locally accepted as the first usability phase while Windows/macOS interactive release checks remain open. U4 and U5 are the next Stage 2 daily-driver Git workstation phase. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are published as the first usability phase, and U4 is locally accepted as the first Stage 2 daily-driver slice while Windows/macOS interactive release checks remain open. U5 remote daily-loop work is next. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.

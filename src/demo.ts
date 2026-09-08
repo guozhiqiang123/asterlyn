@@ -278,6 +278,77 @@ export function demoUntrackedScan(
   };
 }
 
+export function demoSwitchBranch(
+  snapshot: RepositorySnapshot,
+  targetFullName: string,
+): RepositorySnapshot {
+  ensureDemoBranchMutationIsSafe(snapshot);
+  const next = structuredClone(snapshot);
+  const target = next.branches.find(
+    (branch) => branch.kind === "local" && branch.fullName === targetFullName,
+  );
+  if (!target) throw new Error("Select an existing local branch.");
+  if (target.current) throw new Error(`${target.name} is already checked out.`);
+  for (const branch of next.branches) branch.current = branch === target;
+  next.branch = {
+    head: target.name,
+    oid: target.oid,
+    upstream: target.upstream,
+    ahead: 0,
+    behind: 0,
+    detached: false,
+    unborn: false,
+  };
+  return next;
+}
+
+export function demoCreateBranch(
+  snapshot: RepositorySnapshot,
+  name: string,
+): RepositorySnapshot {
+  ensureDemoBranchMutationIsSafe(snapshot);
+  const normalized = name.trim();
+  if (!/^(?![-.])(?!.*\.\.)(?!.*@\{)[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(normalized)) {
+    throw new Error("Enter a valid literal local branch name.");
+  }
+  const fullName = `refs/heads/${normalized}`;
+  if (snapshot.branches.some((branch) => branch.fullName === fullName)) {
+    throw new Error(`${normalized} already exists.`);
+  }
+  const next = structuredClone(snapshot);
+  for (const branch of next.branches) branch.current = false;
+  const tip = next.commits[0];
+  next.branches.unshift({
+    fullName,
+    name: normalized,
+    oid: next.branch.oid ?? tip?.oid ?? "0".repeat(40),
+    current: true,
+    kind: "local",
+    upstream: null,
+    tracking: null,
+    committedAt: tip?.authoredAt ?? Math.floor(Date.now() / 1000),
+    subject: tip?.subject ?? "Unborn branch",
+  });
+  next.branch = {
+    ...next.branch,
+    head: normalized,
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    detached: false,
+  };
+  return next;
+}
+
+function ensureDemoBranchMutationIsSafe(snapshot: RepositorySnapshot): void {
+  if (snapshot.untrackedState !== "complete") {
+    throw new Error("Wait for the working-tree scan to finish.");
+  }
+  if (snapshot.changes.length > 0) {
+    throw new Error("Commit, stash, or remove working-tree changes before continuing.");
+  }
+}
+
 function stageKind(kind: ChangeKind): ChangeKind {
   return kind === "untracked" ? "added" : kind;
 }
