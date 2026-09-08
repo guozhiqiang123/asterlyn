@@ -2,6 +2,7 @@ node_modules/
 dist/
 target/
 .artifacts/
+ci-artifacts/
 src-tauri/target/
 src-tauri/gen/schemas/
 .idea/
