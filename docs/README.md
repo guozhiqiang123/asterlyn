@@ -24,6 +24,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Design and references
 
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
+- [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
 
 ## Benchmarks
 
