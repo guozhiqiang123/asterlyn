@@ -35,6 +35,17 @@ Deepin 23 may expose a GPU render node while denying the KMS buffer operation us
 
 `npm run dev` starts the interface in browser demo mode when the Tauri bridge is absent. Demo mode is deliberately visible in the title bar and never claims to read or mutate the entered repository. It exists for fast layout, interaction, and accessibility work; native behavior is accepted only through Rust integration tests and a desktop smoke test.
 
+## Platform icon generation
+
+[`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. Its transparent safe area is shared across targets so the mark keeps a comparable optical size when Windows, macOS, and Linux apply different frames or masks. Regenerate the complete platform set atomically with the repository-pinned Tauri CLI:
+
+```bash
+npm run tauri -- icon assets/asterlyn-mark.svg
+npm run test:scripts
+```
+
+Do not retouch files under `src-tauri/icons/` individually. The script tests verify the desktop PNG dimensions, required Windows ICO frames, modern macOS ICNS frames, and the declared source safe area.
+
 ## Local performance evidence
 
 Run the release inspection utility to separate interactive tracked latency from deferred untracked discovery:

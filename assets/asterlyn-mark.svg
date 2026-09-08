@@ -10,11 +10,12 @@
       <stop offset="1" stop-color="#59A869" stop-opacity="0.38"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="#1E1F22"/>
-  <path d="M256 72 426 170v172L256 440 86 342V170L256 72Z" fill="url(#base)"/>
-  <path d="m256 72 170 98-170 98L86 170l170-98Z" fill="url(#facet)"/>
-  <path d="m256 268 170-98v172l-170 98V268Z" fill="#233C52" fill-opacity="0.64"/>
-  <path d="m86 170 170 98v172L86 342V170Z" fill="#2A4A7C" fill-opacity="0.72"/>
-  <path d="m256 143 91 225h-48l-19-51h-84l-19 51h-47l89-225h37Zm8 132-26-72-27 72h53Z" fill="#F4F7FC"/>
+  <g data-safe-inset="40" transform="translate(40 40) scale(0.84375)">
+    <rect width="512" height="512" rx="112" fill="#1E1F22"/>
+    <path d="M256 72 426 170v172L256 440 86 342V170L256 72Z" fill="url(#base)"/>
+    <path d="m256 72 170 98-170 98L86 170l170-98Z" fill="url(#facet)"/>
+    <path d="m256 268 170-98v172l-170 98V268Z" fill="#233C52" fill-opacity="0.64"/>
+    <path d="m86 170 170 98v172L86 342V170Z" fill="#2A4A7C" fill-opacity="0.72"/>
+    <path d="m256 143 91 225h-48l-19-51h-84l-19 51h-47l89-225h37Zm8 132-26-72-27 72h53Z" fill="#F4F7FC"/>
+  </g>
 </svg>
-
