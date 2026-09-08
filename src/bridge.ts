@@ -3,12 +3,19 @@ import {
   demoDiff,
   demoSnapshot,
   demoStage,
+  demoTrackedSnapshot,
+  demoUntrackedScan,
   demoUnstage,
 } from "./demo";
-import type { DiffResult, RepositorySnapshot } from "./models";
+import type {
+  DiffResult,
+  RepositorySnapshot,
+  UntrackedScan,
+} from "./models";
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 let browserSnapshot = structuredClone(demoSnapshot);
+const cancelledDemoScans = new Set<string>();
 
 export const bridge = {
   isDemo: !isTauri,
@@ -22,9 +29,36 @@ export const bridge = {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot.root = path || demoSnapshot.root;
-      return structuredClone(browserSnapshot);
+      return demoTrackedSnapshot(browserSnapshot);
     }
     return invoke<RepositorySnapshot>("open_repository", { path });
+  },
+
+  async scanUntracked(
+    repositoryRoot: string,
+    scanId: string,
+  ): Promise<UntrackedScan> {
+    if (!isTauri) {
+      await demoDelay(360);
+      if (cancelledDemoScans.delete(scanId)) {
+        throw new Error("Untracked scan was cancelled.");
+      }
+      const scan = demoUntrackedScan(browserSnapshot);
+      scan.root = repositoryRoot;
+      return scan;
+    }
+    return invoke<UntrackedScan>("scan_untracked", {
+      repositoryRoot,
+      scanId,
+    });
+  },
+
+  async cancelUntrackedScan(scanId: string): Promise<void> {
+    if (!isTauri) {
+      cancelledDemoScans.add(scanId);
+      return;
+    }
+    return invoke<void>("cancel_untracked_scan", { scanId });
   },
 
   async readDiff(
@@ -50,7 +84,7 @@ export const bridge = {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoStage(browserSnapshot, paths);
-      return structuredClone(browserSnapshot);
+      return demoTrackedSnapshot(browserSnapshot);
     }
     return invoke<RepositorySnapshot>("stage_paths", {
       repositoryRoot,
@@ -65,7 +99,7 @@ export const bridge = {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoUnstage(browserSnapshot, paths);
-      return structuredClone(browserSnapshot);
+      return demoTrackedSnapshot(browserSnapshot);
     }
     return invoke<RepositorySnapshot>("unstage_paths", {
       repositoryRoot,
@@ -100,7 +134,7 @@ export const bridge = {
       next.branch.ahead += 1;
       if (committed.length === 0) throw new Error("Nothing is staged.");
       browserSnapshot = next;
-      return structuredClone(next);
+      return demoTrackedSnapshot(next);
     }
     return invoke<RepositorySnapshot>("commit_changes", {
       repositoryRoot,

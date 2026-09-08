@@ -1,6 +1,24 @@
-use asterlyn_git::{DiffResult, GitError, GitRepository, RepositorySnapshot};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, MutexGuard};
+
+use asterlyn_git::{
+    CancellationToken, DiffResult, GitError, GitRepository, RepositorySnapshot, UntrackedScan,
+};
+use tauri::State;
 
 const COMMIT_LIMIT: usize = 150;
+const CANCELLED_SCAN_RETENTION: usize = 256;
+
+#[derive(Default)]
+struct ScanRegistry {
+    inner: Mutex<ScanRegistryState>,
+}
+
+#[derive(Default)]
+struct ScanRegistryState {
+    active: HashMap<String, CancellationToken>,
+    cancelled: HashSet<String>,
+}
 
 #[tauri::command]
 fn initial_repository() -> Option<String> {
@@ -13,9 +31,60 @@ fn initial_repository() -> Option<String> {
 #[tauri::command]
 async fn open_repository(path: String) -> Result<RepositorySnapshot, GitError> {
     run_blocking("open repository", move || {
-        GitRepository::open(path)?.snapshot(COMMIT_LIMIT)
+        GitRepository::open(path)?.tracked_snapshot(COMMIT_LIMIT)
     })
     .await
+}
+
+#[tauri::command]
+async fn scan_untracked(
+    repository_root: String,
+    scan_id: String,
+    scans: State<'_, ScanRegistry>,
+) -> Result<UntrackedScan, GitError> {
+    let cancellation = CancellationToken::new();
+    {
+        let mut registry = lock_scan_registry(scans.inner())?;
+        if registry.cancelled.remove(&scan_id) {
+            cancellation.cancel();
+        }
+        if let Some(previous) = registry
+            .active
+            .insert(scan_id.clone(), cancellation.clone())
+        {
+            previous.cancel();
+        }
+    }
+
+    let task_cancellation = cancellation.clone();
+    let result = run_blocking("scan untracked files", move || {
+        GitRepository::open(repository_root)?.untracked_changes(&task_cancellation)
+    })
+    .await;
+
+    let mut registry = lock_scan_registry(scans.inner())?;
+    if registry
+        .active
+        .get(&scan_id)
+        .is_some_and(|active| active.refers_to(&cancellation))
+    {
+        registry.active.remove(&scan_id);
+    }
+    result
+}
+
+#[tauri::command]
+fn cancel_untracked_scan(scan_id: String, scans: State<'_, ScanRegistry>) -> Result<(), GitError> {
+    let mut registry = lock_scan_registry(scans.inner())?;
+    if let Some(cancellation) = registry.active.remove(&scan_id) {
+        cancellation.cancel();
+    } else {
+        if registry.cancelled.len() >= CANCELLED_SCAN_RETENTION {
+            registry.cancelled.clear();
+        }
+        registry.cancelled.insert(scan_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -38,7 +107,7 @@ async fn stage_paths(
     run_blocking("stage paths", move || {
         let repository = GitRepository::open(repository_root)?;
         repository.stage(&paths)?;
-        repository.snapshot(COMMIT_LIMIT)
+        repository.tracked_snapshot(COMMIT_LIMIT)
     })
     .await
 }
@@ -51,7 +120,7 @@ async fn unstage_paths(
     run_blocking("unstage paths", move || {
         let repository = GitRepository::open(repository_root)?;
         repository.unstage(&paths)?;
-        repository.snapshot(COMMIT_LIMIT)
+        repository.tracked_snapshot(COMMIT_LIMIT)
     })
     .await
 }
@@ -64,9 +133,16 @@ async fn commit_changes(
     run_blocking("create commit", move || {
         let repository = GitRepository::open(repository_root)?;
         repository.commit(&message)?;
-        repository.snapshot(COMMIT_LIMIT)
+        repository.tracked_snapshot(COMMIT_LIMIT)
     })
     .await
+}
+
+fn lock_scan_registry(scans: &ScanRegistry) -> Result<MutexGuard<'_, ScanRegistryState>, GitError> {
+    scans.inner.lock().map_err(|_| GitError::Io {
+        operation: "manage untracked scan".to_string(),
+        message: "scan registry lock was poisoned".to_string(),
+    })
 }
 
 async fn run_blocking<T, F>(operation: &str, task: F) -> Result<T, GitError>
@@ -85,9 +161,12 @@ where
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ScanRegistry::default())
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
+            scan_untracked,
+            cancel_untracked_scan,
             read_diff,
             stage_paths,
             unstage_paths,

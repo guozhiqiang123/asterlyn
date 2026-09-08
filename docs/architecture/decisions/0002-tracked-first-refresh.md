@@ -13,7 +13,7 @@ Generation checks in the frontend prevent stale data from being displayed, but r
 ## Decision
 
 - The pure Git capability exposes a fast tracked snapshot and a separate untracked supplement.
-- A tracked snapshot explicitly carries `pending` untracked state; only a successfully merged supplement changes it to `complete`.
+- A tracked snapshot explicitly carries `pending` untracked state; a successfully merged supplement changes it to `complete`, while a visible scan failure changes it to `failed` without inventing a clean state.
 - Untracked discovery uses system Git and a core-owned cancellation token. Cancellation terminates the child process and drains its pipes rather than merely ignoring its eventual result.
 - The desktop adapter owns active-request registration. Presentation code owns generations and merges only a supplement whose request and repository root still match.
 - Mutations invalidate and cancel prior scans, return fresh tracked truth, and start a new supplement.

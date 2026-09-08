@@ -2,6 +2,7 @@ import type {
   ChangeKind,
   DiffResult,
   RepositorySnapshot,
+  UntrackedScan,
 } from "./models";
 
 export const demoSnapshot: RepositorySnapshot = {
@@ -116,6 +117,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "docs: establish Asterlyn roadmap and architecture",
     },
   ],
+  untrackedState: "complete",
 };
 
 const patches: Record<string, string> = {
@@ -202,6 +204,30 @@ export function demoUnstage(
   return next;
 }
 
+export function demoTrackedSnapshot(
+  snapshot: RepositorySnapshot,
+): RepositorySnapshot {
+  const next = structuredClone(snapshot);
+  next.changes = next.changes.filter(
+    (change) => change.worktreeStatus !== "untracked",
+  );
+  next.untrackedState = "pending";
+  return next;
+}
+
+export function demoUntrackedScan(
+  snapshot: RepositorySnapshot,
+): UntrackedScan {
+  return {
+    root: snapshot.root,
+    changes: structuredClone(
+      snapshot.changes.filter(
+        (change) => change.worktreeStatus === "untracked",
+      ),
+    ),
+  };
+}
+
 function stageKind(kind: ChangeKind): ChangeKind {
   return kind === "untracked" ? "added" : kind;
 }
@@ -209,4 +235,3 @@ function stageKind(kind: ChangeKind): ChangeKind {
 function unstageKind(kind: ChangeKind): ChangeKind {
   return kind === "added" ? "untracked" : kind;
 }
-

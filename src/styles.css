@@ -453,6 +453,39 @@ textarea:focus-visible {
   color: #65a7e8;
 }
 
+.untracked-scan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 9px 10px;
+  padding: 7px 8px;
+  border: 1px solid #3d4657;
+  border-radius: 5px;
+  background: #292e38;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.untracked-scan.failed {
+  border-color: #624345;
+  background: #382a2d;
+  color: #d99a9a;
+}
+
+.scan-alert {
+  display: inline-grid;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #8d444a;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 .change-path,
 .history-copy,
 .branch-copy {

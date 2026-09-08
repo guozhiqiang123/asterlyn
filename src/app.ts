@@ -39,6 +39,12 @@ export class AsterlynApp {
   };
   private requestGeneration = 0;
   private diffGeneration = 0;
+  private scanSequence = 0;
+  private activeUntrackedScan: {
+    id: string;
+    generation: number;
+    root: string;
+  } | null = null;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -212,6 +218,8 @@ export class AsterlynApp {
 
   private async openRepository(path: string): Promise<void> {
     const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    let pendingRoot: string | null = null;
     this.setLoading(true, "Opening repository…");
     try {
       const snapshot = await bridge.openRepository(path);
@@ -228,12 +236,16 @@ export class AsterlynApp {
       this.closeRepositoryDialog();
       this.renderWorkspace();
       if (this.state.activeView === "changes") void this.loadSelectedDiff();
+      pendingRoot = snapshot.root;
     } catch (error) {
       if (generation !== this.requestGeneration) return;
       this.showError(error);
       if (!this.state.snapshot) this.openRepositoryDialog(path);
     } finally {
       if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+    }
+    if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
     }
   }
 
@@ -302,6 +314,22 @@ export class AsterlynApp {
     const staged = snapshot.changes.filter(hasStagedChange);
     const unstaged = snapshot.changes.filter(hasWorktreeChange);
     if (staged.length === 0 && unstaged.length === 0) {
+      if (snapshot.untrackedState === "pending") {
+        return this.emptyState(
+          "Checking for untracked files",
+          "Tracked changes are ready. The remaining working tree is still being scanned.",
+          "changes",
+          true,
+        );
+      }
+      if (snapshot.untrackedState === "failed") {
+        return this.emptyState(
+          "Untracked scan failed",
+          "Tracked state is available. Refresh to try the remaining scan again.",
+          "changes",
+          true,
+        );
+      }
       return this.emptyState(
         "Working tree clean",
         "There are no local changes to review.",
@@ -312,7 +340,14 @@ export class AsterlynApp {
     return [
       this.renderChangeGroup("Staged", staged, true),
       this.renderChangeGroup("Unstaged", unstaged, false),
+      this.untrackedScanNotice(snapshot),
     ].join("");
+  }
+
+  private untrackedScanNotice(snapshot: RepositorySnapshot): string {
+    if (snapshot.untrackedState === "complete") return "";
+    const failed = snapshot.untrackedState === "failed";
+    return `<div class="untracked-scan ${failed ? "failed" : ""}">${failed ? '<span class="scan-alert">!</span>' : '<span class="spinner"></span>'}<span>${failed ? "Untracked files could not be scanned. Refresh to retry." : "Scanning untracked files… counts are provisional."}</span></div>`;
   }
 
   private renderChangeGroup(
@@ -595,6 +630,9 @@ export class AsterlynApp {
   private async mutatePaths(stage: boolean, paths: string[]): Promise<void> {
     const snapshot = this.state.snapshot;
     if (!snapshot || paths.length === 0 || this.state.loading) return;
+    const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    let pendingRoot: string | null = null;
     this.setLoading(true, stage ? "Staging changes…" : "Unstaging changes…");
     try {
       const next = stage
@@ -604,10 +642,14 @@ export class AsterlynApp {
       this.chooseValidChangeSelection();
       this.renderWorkspace();
       void this.loadSelectedDiff();
+      pendingRoot = next.root;
     } catch (error) {
       this.showError(error);
     } finally {
       this.setLoading(false, "Ready");
+    }
+    if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
     }
   }
 
@@ -615,6 +657,9 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     const message = this.state.commitMessage.trim();
     if (!snapshot || !message || this.state.loading) return;
+    const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    let pendingRoot: string | null = null;
     this.setLoading(true, "Creating commit…");
     try {
       const next = await bridge.commitChanges(snapshot.root, message);
@@ -625,11 +670,85 @@ export class AsterlynApp {
       this.renderWorkspace();
       void this.loadSelectedDiff();
       this.setStatus("Commit created", "success");
+      pendingRoot = next.root;
     } catch (error) {
       this.showError(error);
     } finally {
       this.setLoading(false, "Ready");
     }
+    if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
+    }
+  }
+
+  private async completeUntrackedScan(
+    repositoryRoot: string,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.requestGeneration) return;
+    const scan = {
+      id: `${generation}-${++this.scanSequence}`,
+      generation,
+      root: repositoryRoot,
+    };
+    this.activeUntrackedScan = scan;
+    this.setStatus("Scanning untracked files…", "busy");
+    let completed = false;
+
+    try {
+      const supplement = await bridge.scanUntracked(repositoryRoot, scan.id);
+      if (
+        this.activeUntrackedScan !== scan ||
+        generation !== this.requestGeneration ||
+        supplement.root !== repositoryRoot
+      ) {
+        return;
+      }
+      const snapshot = this.state.snapshot;
+      if (!snapshot || snapshot.root !== repositoryRoot) return;
+
+      const tracked = snapshot.changes.filter(
+        (change) => change.worktreeStatus !== "untracked",
+      );
+      this.state.snapshot = {
+        ...snapshot,
+        changes: [...tracked, ...supplement.changes].sort((left, right) =>
+          left.path.localeCompare(right.path),
+        ),
+        untrackedState: "complete",
+      };
+      this.chooseValidChangeSelection();
+      this.renderWorkspace();
+      if (this.state.activeView === "changes") void this.loadSelectedDiff();
+      completed = true;
+    } catch (error) {
+      if (
+        this.activeUntrackedScan !== scan ||
+        generation !== this.requestGeneration
+      ) {
+        return;
+      }
+      const snapshot = this.state.snapshot;
+      if (snapshot?.root === repositoryRoot) {
+        snapshot.untrackedState = "failed";
+        this.renderWorkspace();
+      }
+      this.showError(error);
+    } finally {
+      if (this.activeUntrackedScan === scan) {
+        this.activeUntrackedScan = null;
+        if (completed) this.setStatus("Ready", "normal");
+      }
+    }
+  }
+
+  private cancelActiveUntrackedScan(): void {
+    const scan = this.activeUntrackedScan;
+    if (!scan) return;
+    this.activeUntrackedScan = null;
+    void bridge.cancelUntrackedScan(scan.id).catch(() => {
+      // Generation checks still prevent an obsolete supplement from being merged.
+    });
   }
 
   private chooseValidChangeSelection(): void {

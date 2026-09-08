@@ -63,6 +63,12 @@ export interface RepositorySnapshot {
   changes: FileChange[];
   commits: CommitSummary[];
   branches: BranchSummary[];
+  untrackedState: "pending" | "complete" | "failed";
+}
+
+export interface UntrackedScan {
+  root: string;
+  changes: FileChange[];
 }
 
 export interface DiffResult {
@@ -79,4 +85,3 @@ export interface ChangeSelection {
   path: string;
   staged: boolean;
 }
-

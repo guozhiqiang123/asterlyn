@@ -16,6 +16,7 @@ pub struct RepositorySnapshot {
 pub enum UntrackedState {
     Pending,
     Complete,
+    Failed,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
