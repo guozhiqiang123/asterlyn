@@ -22,3 +22,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Design and references
 
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
+
+## Benchmarks
+
+- [`benchmarks/2026-09-08-m1-baseline.md`](benchmarks/2026-09-08-m1-baseline.md) — first functional, build, latency, memory, CPU, and artifact-size evidence.

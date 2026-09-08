@@ -57,3 +57,4 @@ It is not the final product identity and does not authorize shortcuts that would
 
 The first implementation slice covers repository open/refresh, status/history/branch presentation, patch viewing, stage/unstage, and commit. Advanced Stage 2 operations remain outside this slice.
 
+The first accepted evidence set is recorded in [`../benchmarks/2026-09-08-m1-baseline.md`](../benchmarks/2026-09-08-m1-baseline.md). Its conclusion is **mixed**: the vertical slice and packaging are viable, but large-repository untracked discovery exceeds the refresh budget and the memory margin needs repeated measurement before M1 can close.
