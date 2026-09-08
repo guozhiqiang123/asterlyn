@@ -27,6 +27,8 @@ Android Studio demonstrates useful interaction patterns: one compact top-level b
 - Keep a single draggable 44 px application bar with minimize, maximize/restore, and close controls.
 - Preserve keyboard focus, visible hover/pressed states, window resizing, and browser-demo behavior.
 
+**Implemented and locally accepted on 2026-09-08.** The Linux release window removed the native title row while retaining the same 1,320 × 820 content window, recovering approximately 40 px of outer vertical space. Automated pointer checks exercised minimize/restore, maximize/restore, drag, and close against the real Tauri window. The controls expose focus-visible styling and accessible names; browser demo mode omits them. Frontend checks/build, delivery-script tests, the 10-test Rust workspace, Clippy, release compilation, and Debian bundling passed. Windows/macOS appearance and control interaction remain unverified until the next CI and platform review; this does not block U2.
+
 ### U2 — Complete commit inspection
 
 - Load the selected commit's changed-file summary without blocking history navigation.

@@ -2,6 +2,7 @@ import { bridge } from "./bridge";
 import { BRAND } from "./brand";
 import { DiffEditor } from "./diff-editor";
 import { icon } from "./icons";
+import { windowControls } from "./window-controls";
 import type {
   BranchSummary,
   ChangeKind,
@@ -85,11 +86,22 @@ export class AsterlynApp {
             <span class="repository-name" id="repository-name">No repository</span>
             <span class="repository-path" id="repository-path">Open a local folder</span>
           </button>
-          <div class="topbar-actions">
+          <div class="topbar-actions" data-tauri-drag-region>
             <span class="demo-badge ${bridge.isDemo ? "" : "hidden"}">Browser demo</span>
             <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh repository" title="Refresh (Ctrl/Cmd+R)">
               ${icon("refresh", 17)}
             </button>
+            <div class="window-controls ${windowControls.available ? "" : "hidden"}" role="group" aria-label="Window controls">
+              <button class="window-control-button" id="window-minimize" type="button" aria-label="Minimize window" title="Minimize">
+                ${icon("minimize", 15)}
+              </button>
+              <button class="window-control-button" id="window-maximize" type="button" aria-label="Maximize window" title="Maximize">
+                ${icon("maximize", 14)}
+              </button>
+              <button class="window-control-button close" id="window-close" type="button" aria-label="Close window" title="Close">
+                ${icon("close", 15)}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -183,6 +195,7 @@ export class AsterlynApp {
       this.openRepositoryDialog(),
     );
     this.query("#refresh-button").addEventListener("click", () => void this.refresh());
+    this.bindWindowControls();
     this.query("#toast-close").addEventListener("click", () => this.clearError());
     this.query("#dialog-close").addEventListener("click", () =>
       this.closeRepositoryDialog(),
@@ -214,6 +227,49 @@ export class AsterlynApp {
         void this.refresh();
       }
     });
+  }
+
+  private bindWindowControls(): void {
+    if (!windowControls.available) return;
+
+    this.query("#window-minimize").addEventListener("click", () => {
+      void this.runWindowAction(() => windowControls.minimize());
+    });
+    this.query("#window-maximize").addEventListener("click", () => {
+      void this.runWindowAction(async () => {
+        await windowControls.toggleMaximize();
+        await this.syncMaximizeControl();
+      });
+    });
+    this.query("#window-close").addEventListener("click", () => {
+      void this.runWindowAction(() => windowControls.close());
+    });
+
+    this.refreshMaximizeControl();
+    void windowControls
+      .onResized(() => this.refreshMaximizeControl())
+      .catch((error) => this.showError(error));
+  }
+
+  private async runWindowAction(action: () => Promise<void>): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  private async syncMaximizeControl(): Promise<void> {
+    const maximized = await windowControls.isMaximized();
+    const button = this.query<HTMLButtonElement>("#window-maximize");
+    const label = maximized ? "Restore window" : "Maximize window";
+    button.setAttribute("aria-label", label);
+    button.title = maximized ? "Restore" : "Maximize";
+    button.innerHTML = icon(maximized ? "restore" : "maximize", 14);
+  }
+
+  private refreshMaximizeControl(): void {
+    void this.syncMaximizeControl().catch((error) => this.showError(error));
   }
 
   private async openRepository(path: string): Promise<void> {

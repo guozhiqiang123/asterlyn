@@ -14,6 +14,10 @@ const paths: Record<string, string> = {
   chevron: '<path d="m9 7 5 5-5 5"/>',
   commit:
     '<circle cx="12" cy="12" r="3"/><path d="M3 12h6M15 12h6"/>',
+  minimize: '<path d="M6 16h12"/>',
+  maximize: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  restore:
+    '<path d="M8 9V6h10v10h-3"/><rect x="5" y="9" width="10" height="10" rx="1"/>',
   close: '<path d="m7 7 10 10M17 7 7 17"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
 };
@@ -21,4 +25,3 @@ const paths: Record<string, string> = {
 export function icon(name: keyof typeof paths, size = 18): string {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
 }
-
