@@ -27,3 +27,10 @@ export function editorDocumentKey(document: EditorDocument): string {
       return `commit\0${document.repositoryRoot}\0${document.oid}\0${document.path}`;
   }
 }
+
+export function editorDocumentContentKey(
+  document: EditorDocument,
+  contentRevision: string,
+): string {
+  return `${editorDocumentKey(document)}\0${contentRevision}`;
+}

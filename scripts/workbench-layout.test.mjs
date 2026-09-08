@@ -9,6 +9,10 @@ import {
   reduceWorkbenchLayout,
   saveWorkbenchLayout,
 } from "../src/workbench/layout-state.ts";
+import {
+  editorDocumentContentKey,
+  editorDocumentKey,
+} from "../src/workbench/editor-document.ts";
 import { resizeValue } from "../src/workbench/splitter.ts";
 
 test("left and bottom tools toggle independently", () => {
@@ -84,6 +88,24 @@ test("splitter values honor direction and range", () => {
   assert.equal(resizeValue(300, 80, -1, range), 220);
   assert.equal(resizeValue(300, 800, 1, range), 500);
   assert.equal(resizeValue(300, 800, -1, range), 200);
+});
+
+test("same working Diff identity remounts for each content revision", () => {
+  const document = {
+    kind: "working-diff",
+    repositoryRoot: "/workspace/project",
+    selection: { path: "src/app.ts", staged: false },
+  };
+
+  assert.equal(editorDocumentKey(document), editorDocumentKey({ ...document }));
+  assert.notEqual(
+    editorDocumentContentKey(document, "patch:4"),
+    editorDocumentContentKey(document, "loading"),
+  );
+  assert.notEqual(
+    editorDocumentContentKey(document, "patch:4"),
+    editorDocumentContentKey(document, "patch:5"),
+  );
 });
 
 function memoryStorage(initial) {

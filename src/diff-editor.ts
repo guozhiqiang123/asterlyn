@@ -141,6 +141,7 @@ export class DiffEditor {
     showWhitespace: false,
   };
   private splitDispose: (() => void) | null = null;
+  private scrollDispose: (() => void) | null = null;
 
   mount(
     parent: HTMLElement,
@@ -226,7 +227,7 @@ export class DiffEditor {
     const oldView = this.createView(oldHost, split.oldDocument, split.rows, "old");
     const newView = this.createView(newHost, split.newDocument, split.rows, "new");
     this.views.push(oldView, newView);
-    this.synchronizeVerticalScroll(oldView, newView);
+    this.scrollDispose = this.synchronizeVerticalScroll(oldView, newView);
   }
 
   private createPane(
@@ -297,7 +298,10 @@ export class DiffEditor {
     });
   }
 
-  private synchronizeVerticalScroll(first: EditorView, second: EditorView): void {
+  private synchronizeVerticalScroll(
+    first: EditorView,
+    second: EditorView,
+  ): () => void {
     let synchronizing = false;
     const mirror = (source: HTMLElement, target: HTMLElement) => {
       if (synchronizing) return;
@@ -307,8 +311,14 @@ export class DiffEditor {
         synchronizing = false;
       });
     };
-    first.scrollDOM.addEventListener("scroll", () => mirror(first.scrollDOM, second.scrollDOM));
-    second.scrollDOM.addEventListener("scroll", () => mirror(second.scrollDOM, first.scrollDOM));
+    const mirrorFirst = () => mirror(first.scrollDOM, second.scrollDOM);
+    const mirrorSecond = () => mirror(second.scrollDOM, first.scrollDOM);
+    first.scrollDOM.addEventListener("scroll", mirrorFirst);
+    second.scrollDOM.addEventListener("scroll", mirrorSecond);
+    return () => {
+      first.scrollDOM.removeEventListener("scroll", mirrorFirst);
+      second.scrollDOM.removeEventListener("scroll", mirrorSecond);
+    };
   }
 
   private captureScroll(): { topRatio: number; left: number[] } {
@@ -321,6 +331,8 @@ export class DiffEditor {
   }
 
   private destroyViews(): void {
+    this.scrollDispose?.();
+    this.scrollDispose = null;
     this.splitDispose?.();
     this.splitDispose = null;
     for (const view of this.views) view.destroy();

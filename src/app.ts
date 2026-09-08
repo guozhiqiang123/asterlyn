@@ -6,7 +6,7 @@ import { preferredRemote, remotePolicy } from "./remote-policy";
 import { windowControls } from "./window-controls";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
-  editorDocumentKey,
+  editorDocumentContentKey,
   type EditorDocument,
 } from "./workbench/editor-document";
 import {
@@ -1583,7 +1583,7 @@ export class AsterlynApp {
       tabbar.innerHTML = `<span class="editor-tab active">${escapeHtml(basename(document.path))}</span>`;
       header.innerHTML = this.contentHeading(basename(document.path), document.path);
       this.showEditorHtml(
-        editorDocumentKey(document),
+        editorDocumentContentKey(document, "navigation-placeholder-v1"),
         this.emptyState(
           "File navigation is connected",
           "This read-only project tree establishes the editor route. File loading, editing, save, and recovery belong to Stage 3.",
@@ -1601,12 +1601,17 @@ export class AsterlynApp {
         <div class="header-actions">${this.diffControls()}<span class="scope-pill">${selected.staged ? "Staged" : "Working tree"}</span></div>
       `;
       this.bindDiffControls();
-      const key = editorDocumentKey(document);
       if (this.state.workingPatchLoading) {
-        this.showEditorHtml(`${key}:loading`, this.loadingBlock("Loading patch…"));
+        this.showEditorHtml(
+          editorDocumentContentKey(document, "loading"),
+          this.loadingBlock("Loading patch…"),
+        );
       } else if (this.state.workingPatchError) {
         this.showEditorHtml(
-          `${key}:error:${this.state.workingPatchError}`,
+          editorDocumentContentKey(
+            document,
+            `error:${this.state.workingPatchError}`,
+          ),
           this.retryState(
             "Could not load patch",
             this.state.workingPatchError,
@@ -1619,7 +1624,10 @@ export class AsterlynApp {
         });
       } else if (this.state.workingPatch) {
         this.mountEditorDiff(
-          `${key}:patch:${this.state.workingPatchVersion}`,
+          editorDocumentContentKey(
+            document,
+            `patch:${this.state.workingPatchVersion}`,
+          ),
           this.state.workingPatch.patch ||
             "No textual diff is available for this selection.",
         );
@@ -1635,12 +1643,17 @@ export class AsterlynApp {
       <div class="header-actions">${this.diffControls()}<code class="oid">${escapeHtml(shortOid)}</code></div>
     `;
     this.bindDiffControls();
-    const key = editorDocumentKey(document);
     if (this.state.commitPatchLoading) {
-      this.showEditorHtml(`${key}:loading`, this.loadingBlock("Loading commit patch…"));
+      this.showEditorHtml(
+        editorDocumentContentKey(document, "loading"),
+        this.loadingBlock("Loading commit patch…"),
+      );
     } else if (this.state.commitPatchError) {
       this.showEditorHtml(
-        `${key}:error:${this.state.commitPatchError}`,
+        editorDocumentContentKey(
+          document,
+          `error:${this.state.commitPatchError}`,
+        ),
         this.retryState(
           "Could not load patch",
           this.state.commitPatchError,
@@ -1653,7 +1666,10 @@ export class AsterlynApp {
       });
     } else if (this.state.commitPatch) {
       this.mountEditorDiff(
-        `${key}:patch:${this.state.commitPatchVersion}`,
+        editorDocumentContentKey(
+          document,
+          `patch:${this.state.commitPatchVersion}`,
+        ),
         this.state.commitPatch.patch || "No textual diff is available for this file.",
       );
     }

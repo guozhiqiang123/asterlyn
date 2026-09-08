@@ -22,7 +22,7 @@ export function attachSplitter(
 ): () => void {
   const direction = options.direction ?? 1;
   const step = options.step ?? 16;
-  const pointerDisposers: Array<() => void> = [];
+  let activePointerDispose: (() => void) | null = null;
 
   element.setAttribute("role", "separator");
   element.setAttribute("aria-orientation", options.orientation);
@@ -43,6 +43,8 @@ export function attachSplitter(
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    activePointerDispose?.();
+    activePointerDispose = null;
     const startCoordinate = pointerCoordinate(event, options.orientation);
     const startValue = options.getValue();
     element.classList.add("dragging");
@@ -58,6 +60,11 @@ export function attachSplitter(
     };
     const finish = (finishEvent: PointerEvent) => {
       if (finishEvent.pointerId !== event.pointerId) return;
+      activePointerDispose?.();
+      activePointerDispose = null;
+      options.onCommit?.();
+    };
+    activePointerDispose = () => {
       element.classList.remove("dragging");
       if (element.hasPointerCapture(event.pointerId)) {
         element.releasePointerCapture(event.pointerId);
@@ -65,16 +72,10 @@ export function attachSplitter(
       element.removeEventListener("pointermove", onPointerMove);
       element.removeEventListener("pointerup", finish);
       element.removeEventListener("pointercancel", finish);
-      options.onCommit?.();
     };
     element.addEventListener("pointermove", onPointerMove);
     element.addEventListener("pointerup", finish);
     element.addEventListener("pointercancel", finish);
-    pointerDisposers.push(() => {
-      element.removeEventListener("pointermove", onPointerMove);
-      element.removeEventListener("pointerup", finish);
-      element.removeEventListener("pointercancel", finish);
-    });
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -113,7 +114,8 @@ export function attachSplitter(
     element.removeEventListener("pointerdown", onPointerDown);
     element.removeEventListener("keydown", onKeyDown);
     element.removeEventListener("dblclick", onDoubleClick);
-    for (const dispose of pointerDisposers) dispose();
+    activePointerDispose?.();
+    activePointerDispose = null;
   };
 }
 
