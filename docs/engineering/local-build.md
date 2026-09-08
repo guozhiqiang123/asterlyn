@@ -54,6 +54,7 @@ The memory helper launches only the supplied local binary and repository, waits 
 ## Packaging policy
 
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.
+- The preview matrix and its trust boundary are documented in [`ci.md`](ci.md).
 - Signing/notarization credentials belong in protected CI facilities, never repository files.
 - Record compiler/runtime versions, artifact hashes, SBOM, startup/memory evidence, and smoke-test results with each preview or stable release.
 - The user-owned Linux sysroot is not bundled into the application; Linux uses the supported system WebKitGTK runtime.
