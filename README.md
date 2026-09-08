@@ -19,3 +19,8 @@ M1 builds a usable Git workbench: open a local repository, inspect branch and wo
 
 Start with [`docs/README.md`](docs/README.md).
 
+After building the desktop binary, a repository can be opened directly:
+
+```bash
+target/release/asterlyn /path/to/repository
+```

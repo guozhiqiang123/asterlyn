@@ -51,6 +51,12 @@ export class AsterlynApp {
       return;
     }
 
+    const initial = await bridge.initialRepository();
+    if (initial) {
+      await this.openRepository(initial);
+      return;
+    }
+
     const recent = window.localStorage.getItem(RECENT_REPOSITORY_KEY);
     if (recent) {
       await this.openRepository(recent);

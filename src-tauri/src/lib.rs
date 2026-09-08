@@ -3,6 +3,14 @@ use asterlyn_git::{DiffResult, GitError, GitRepository, RepositorySnapshot};
 const COMMIT_LIMIT: usize = 150;
 
 #[tauri::command]
+fn initial_repository() -> Option<String> {
+    std::env::args_os()
+        .skip(1)
+        .find(|argument| !argument.to_string_lossy().starts_with('-'))
+        .map(|argument| argument.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 async fn open_repository(path: String) -> Result<RepositorySnapshot, GitError> {
     run_blocking("open repository", move || {
         GitRepository::open(path)?.snapshot(COMMIT_LIMIT)
@@ -78,6 +86,7 @@ where
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            initial_repository,
             open_repository,
             read_diff,
             stage_paths,

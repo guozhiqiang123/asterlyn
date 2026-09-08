@@ -13,6 +13,11 @@ let browserSnapshot = structuredClone(demoSnapshot);
 export const bridge = {
   isDemo: !isTauri,
 
+  async initialRepository(): Promise<string | null> {
+    if (!isTauri) return null;
+    return invoke<string | null>("initial_repository");
+  },
+
   async openRepository(path: string): Promise<RepositorySnapshot> {
     if (!isTauri) {
       await demoDelay();
@@ -107,4 +112,3 @@ export const bridge = {
 function demoDelay(milliseconds = 160): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
-
