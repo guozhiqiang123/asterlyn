@@ -489,18 +489,8 @@ textarea:focus-visible {
 }
 
 .activity-button.active {
-  background: var(--bg-elevated);
-  color: var(--text);
-}
-
-.activity-button.active::before {
-  position: absolute;
-  left: -4px;
-  width: 3px;
-  height: 23px;
-  border-radius: 0 2px 2px 0;
   background: var(--accent);
-  content: "";
+  color: white;
 }
 
 .workbench {
@@ -809,6 +799,25 @@ textarea:focus-visible {
   font-size: 9px;
 }
 
+.bottom-tool-hide {
+  display: inline-grid;
+  width: 25px;
+  height: 24px;
+  place-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.bottom-tool-hide:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
 .git-tool-grid {
   display: grid;
   overflow: hidden;
@@ -827,8 +836,9 @@ textarea:focus-visible {
 }
 
 .git-details-pane {
-  display: block;
-  overflow: auto;
+  display: grid;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .git-pane-header {
@@ -862,11 +872,16 @@ textarea:focus-visible {
 }
 
 .git-detail-files {
+  display: grid;
+  overflow: hidden;
+  min-height: 0;
+  grid-template-rows: 31px minmax(0, 1fr);
   border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .git-detail-files .commit-file-list {
-  max-height: 260px;
+  max-height: none;
 }
 
 .change-group,
@@ -936,7 +951,7 @@ textarea:focus-visible {
 }
 
 .change-row {
-  grid-template-columns: 20px 23px minmax(0, 1fr) auto 26px;
+  grid-template-columns: 23px minmax(0, 1fr) auto 26px;
   min-height: 37px;
   padding: 3px 5px 3px 7px;
 }
@@ -952,28 +967,14 @@ textarea:focus-visible {
   background: #214283;
 }
 
-.change-row.selected {
-  background: #2b3d5e;
-}
-
+.change-row.selected,
 .change-row.primary {
   background: #214283;
-  box-shadow: inset 3px 0 #6b9bfa;
 }
 
-.selection-check {
-  display: inline-grid;
-  width: 14px;
-  height: 14px;
-  place-items: center;
-  border: 1px solid #5c6068;
-  border-radius: 3px;
-  color: white;
-}
-
-.change-row.selected .selection-check {
-  border-color: #6b9bfa;
-  background: var(--accent);
+.change-row:focus-visible {
+  outline: 1px solid #8ab4ff;
+  outline-offset: -1px;
 }
 
 .change-status {
@@ -1950,6 +1951,73 @@ textarea:focus-visible {
 .metadata-list {
   margin: 0;
   padding: 6px 14px 12px;
+}
+
+.commit-detail-layout {
+  display: grid;
+  overflow: hidden;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(100px, 1fr) auto;
+}
+
+.commit-detail-header {
+  padding-block: 8px;
+}
+
+.commit-information {
+  overflow: auto;
+  max-height: min(48%, 330px);
+  background: #242529;
+}
+
+.commit-information summary {
+  display: grid;
+  min-height: 34px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--text-soft);
+  cursor: pointer;
+  list-style: none;
+}
+
+.commit-information summary::-webkit-details-marker {
+  display: none;
+}
+
+.commit-information summary:hover {
+  background: var(--bg-hover);
+}
+
+.commit-information-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.commit-information-label .icon {
+  transition: transform 120ms ease;
+}
+
+.commit-information[open] .commit-information-label .icon {
+  transform: rotate(90deg);
+}
+
+.commit-information-preview {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-information .message-card {
+  margin-top: 5px;
 }
 
 .metadata-list div {

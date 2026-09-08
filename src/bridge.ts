@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   demoCommitDetails,
   demoCommitDiff,
@@ -30,12 +31,34 @@ const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
 const cancelledDemoRemoteOperations = new Set<string>();
 
+export type DirectoryChoice =
+  | { kind: "selected"; path: string }
+  | { kind: "cancelled" }
+  | { kind: "unsupported" };
+
 export const bridge = {
   isDemo: !isTauri,
 
   async initialRepository(): Promise<string | null> {
     if (!isTauri) return null;
     return invoke<string | null>("initial_repository");
+  },
+
+  async chooseRepositoryDirectory(
+    defaultPath: string | null,
+  ): Promise<DirectoryChoice> {
+    if (!isTauri) return { kind: "unsupported" };
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Open Git Repository",
+      defaultPath: defaultPath || undefined,
+    });
+    if (selected === null) return { kind: "cancelled" };
+    if (Array.isArray(selected)) {
+      throw new Error("The folder chooser returned more than one path.");
+    }
+    return { kind: "selected", path: selected };
   },
 
   async openRepository(path: string): Promise<RepositorySnapshot> {

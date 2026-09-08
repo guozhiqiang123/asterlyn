@@ -17,4 +17,5 @@ tauri-build = { version = "2.6.3", features = [] }
 asterlyn-git = { path = "../crates/asterlyn-git" }
 serde.workspace = true
 tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2"
 

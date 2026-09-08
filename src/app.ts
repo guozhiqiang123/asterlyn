@@ -129,6 +129,7 @@ export class AsterlynApp {
   private remoteOperationSequence = 0;
   private projectFilesGeneration = 0;
   private mountedEditorKey: string | null = null;
+  private repositoryChooserOpen = false;
   private splitterDisposers: Array<() => void> = [];
   private workspaceResizeObserver: ResizeObserver | null = null;
   private activeUntrackedScan: {
@@ -158,7 +159,7 @@ export class AsterlynApp {
     if (recent) {
       await this.openRepository(recent);
     } else {
-      this.openRepositoryDialog();
+      await this.chooseRepository();
     }
   }
 
@@ -250,6 +251,9 @@ export class AsterlynApp {
               <div class="bottom-tool-header">
                 <strong>Git</strong>
                 <span>Branches and Log</span>
+                <button class="bottom-tool-hide" id="hide-git-tool" type="button" aria-label="Hide Git tool window" title="Hide Git tool window">
+                  ${icon("minimize", 14)}
+                </button>
               </div>
               <div class="git-tool-grid" id="git-tool-grid">
                 <section class="git-tool-pane branch-tree-pane" aria-label="Branches">
@@ -288,12 +292,12 @@ export class AsterlynApp {
           <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
             <div class="dialog-heading">
               <div>
-                <span class="panel-eyebrow">Workspace</span>
-                <h2 id="dialog-title">Open a Git repository</h2>
+                <span class="panel-eyebrow">Browser demo</span>
+                <h2 id="dialog-title">Simulate opening a repository</h2>
               </div>
               <button class="icon-button" id="dialog-close" type="button" aria-label="Close">${icon("close", 17)}</button>
             </div>
-            <p>Enter the path to a local repository. Asterlyn reads Git state directly and does not import or copy the project.</p>
+            <p>Enter a sample path for browser-only interaction testing. This demo does not read that folder from your computer.</p>
             <form id="repository-form">
               <label for="repository-input">Repository path</label>
               <input id="repository-input" name="path" type="text" spellcheck="false" autocomplete="off" placeholder="/path/to/project" />
@@ -322,7 +326,7 @@ export class AsterlynApp {
 
   private bindShellEvents(): void {
     this.query("#repository-switcher").addEventListener("click", () =>
-      this.openRepositoryDialog(),
+      void this.chooseRepository(),
     );
     this.query("#sync-button").addEventListener("click", (event) => {
       event.stopPropagation();
@@ -355,6 +359,9 @@ export class AsterlynApp {
         const tool = button.dataset.tool as "files" | "branches" | "changes";
         this.toggleTool(tool);
       });
+    });
+    this.query("#hide-git-tool").addEventListener("click", () => {
+      this.toggleTool("branches");
     });
     this.bindWorkbenchSplitters();
     this.workspaceResizeObserver = new ResizeObserver(() => {
@@ -492,7 +499,7 @@ export class AsterlynApp {
     } catch (error) {
       if (generation !== this.requestGeneration) return;
       this.showError(error);
-      if (!this.state.snapshot) this.openRepositoryDialog(path);
+      if (!this.state.snapshot && bridge.isDemo) this.openRepositoryDialog(path);
     } finally {
       if (generation === this.requestGeneration) this.setLoading(false, "Ready");
     }
@@ -1158,7 +1165,6 @@ export class AsterlynApp {
     const actionLabel = staged ? "Unstage" : "Stage";
     return `
       <div class="change-row ${selected ? "selected" : ""} ${primary ? "primary" : ""}" role="option" tabindex="0" data-change-key="${escapeAttribute(key)}" data-change-path="${escapeAttribute(change.path)}" data-staged="${staged}" aria-selected="${selected}" aria-label="${selected ? "Selected, " : ""}view ${staged ? "staged" : "working tree"} diff for ${escapeAttribute(change.path)}">
-        <span class="selection-check" aria-hidden="true">${selected ? icon("check", 12) : ""}</span>
         <span class="change-status status-${kind}" title="${changeLabel(kind)}">${changeCode(kind)}</span>
         <span class="change-path">
           <span class="file-name">${escapeHtml(basename(change.path))}</span>
@@ -2079,7 +2085,12 @@ export class AsterlynApp {
     if (!commit) return this.inspectorPlaceholder();
     const details =
       this.state.commitDetails?.oid === commit.oid ? this.state.commitDetails : null;
-    const files = this.state.commitDetailsLoading
+    const fileCount = this.state.commitDetailsLoading
+      ? "…"
+      : this.state.commitDetailsError
+        ? "!"
+        : (details?.files.length.toString() ?? "…");
+    const fileRows = this.state.commitDetailsLoading
       ? this.loadingBlock("Loading changed files…")
       : this.state.commitDetailsError
         ? this.retryState(
@@ -2089,9 +2100,26 @@ export class AsterlynApp {
             "history",
           )
         : details
-          ? `<section class="git-detail-files"><div class="commit-files-header"><span>Changed files</span><b>${details.files.length}</b></div><div class="commit-file-list">${details.files.length ? details.files.map((file) => this.commitFileRow(file, file.path === this.state.selectedCommitFile)).join("") : '<div class="group-empty">No first-parent changes</div>'}</div></section>`
+          ? details.files.length
+            ? details.files
+                .map((file) =>
+                  this.commitFileRow(
+                    file,
+                    file.path === this.state.selectedCommitFile,
+                  ),
+                )
+                .join("")
+            : '<div class="group-empty">No first-parent changes</div>'
           : this.loadingBlock("Loading changed files…");
-    return `${this.commitInspector(commit)}${files}`;
+    return `
+      <div class="commit-detail-layout">
+        <div class="inspector-header commit-detail-header"><span class="panel-eyebrow">Commit</span><h2>${escapeHtml(commit.shortOid)}</h2></div>
+        <section class="git-detail-files" aria-label="Changed files">
+          <div class="commit-files-header"><span>Changed files</span><b>${fileCount}</b></div>
+          <div class="commit-file-list">${fileRows}</div>
+        </section>
+        ${this.commitInspector(commit)}
+      </div>`;
   }
 
   private bindGitDetailEvents(snapshot: RepositorySnapshot): void {
@@ -2475,6 +2503,28 @@ export class AsterlynApp {
     this.query("#toast").classList.add("hidden");
   }
 
+  private async chooseRepository(): Promise<void> {
+    if (this.repositoryChooserOpen || this.state.loading) return;
+    this.repositoryChooserOpen = true;
+    const switcher = this.query<HTMLButtonElement>("#repository-switcher");
+    switcher.disabled = true;
+    try {
+      const choice = await bridge.chooseRepositoryDirectory(
+        this.state.snapshot?.root ?? null,
+      );
+      if (choice.kind === "selected") {
+        await this.openRepository(choice.path);
+      } else if (choice.kind === "unsupported") {
+        this.openRepositoryDialog();
+      }
+    } catch (error) {
+      this.showError(error);
+    } finally {
+      this.repositoryChooserOpen = false;
+      switcher.disabled = false;
+    }
+  }
+
   private openRepositoryDialog(path = ""): void {
     const dialog = this.query("#repository-dialog");
     const input = this.query<HTMLInputElement>("#repository-input");
@@ -2490,25 +2540,25 @@ export class AsterlynApp {
 
   private commitInspector(commit: CommitSummary): string {
     const details = this.state.commitDetails?.oid === commit.oid ? this.state.commitDetails : null;
-    const fileSummary = this.state.commitDetailsLoading
-      ? "Loading…"
-      : this.state.commitDetailsError
-        ? "Unavailable"
-        : (details?.files.length.toString() ?? "—");
     const comparison = details
       ? details.parentOid?.slice(0, 10) ?? "Empty tree"
       : commit.parents[0]?.slice(0, 10) ?? "Empty tree";
     return `
-      <div class="inspector-header"><span class="panel-eyebrow">Commit</span><h2>${escapeHtml(commit.shortOid)}</h2></div>
-      <dl class="metadata-list">
-        <div><dt>Author</dt><dd>${escapeHtml(commit.authorName)}</dd></div>
-        <div><dt>Email</dt><dd>${escapeHtml(commit.authorEmail)}</dd></div>
-        <div><dt>Date</dt><dd>${formatAbsolute(commit.authoredAt)}</dd></div>
-        <div><dt>Parents</dt><dd>${commit.parents.length || "None"}</dd></div>
-        <div><dt>Changed files</dt><dd>${fileSummary}</dd></div>
-        <div><dt>Compared with</dt><dd>${escapeHtml(comparison)}</dd></div>
-      </dl>
-      <div class="message-card"><span>Message</span><p>${escapeHtml(commit.subject)}</p></div>`;
+      <details class="commit-information">
+        <summary>
+          <span class="commit-information-label">${icon("chevron", 13)} Commit information</span>
+          <span class="commit-information-preview">${escapeHtml(commit.authorName)} · ${formatRelative(commit.authoredAt)}</span>
+        </summary>
+        <div class="message-card"><span>Message</span><p>${escapeHtml(commit.subject)}</p></div>
+        <dl class="metadata-list">
+          <div><dt>Author</dt><dd>${escapeHtml(commit.authorName)}</dd></div>
+          <div><dt>Email</dt><dd>${escapeHtml(commit.authorEmail)}</dd></div>
+          <div><dt>Date</dt><dd>${formatAbsolute(commit.authoredAt)}</dd></div>
+          <div><dt>Object</dt><dd title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.oid)}</dd></div>
+          <div><dt>Parents</dt><dd>${commit.parents.length || "None"}</dd></div>
+          <div><dt>Compared with</dt><dd>${escapeHtml(comparison)}</dd></div>
+        </dl>
+      </details>`;
   }
 
   private branchInspector(
