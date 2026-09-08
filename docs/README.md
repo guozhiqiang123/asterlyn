@@ -16,9 +16,9 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
+- [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
 
 ## Design and references
 
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
-

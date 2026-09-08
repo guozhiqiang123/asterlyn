@@ -2,8 +2,8 @@ node_modules/
 dist/
 target/
 src-tauri/target/
+src-tauri/gen/schemas/
 .idea/
 .vscode/
 *.log
 .DS_Store
-
