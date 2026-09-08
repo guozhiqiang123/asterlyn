@@ -136,6 +136,10 @@ export class DiffEditor {
     });
   }
 
+  requestMeasure(): void {
+    for (const view of this.views) view.requestMeasure();
+  }
+
   private render(): void {
     const parent = this.parent;
     if (!parent) return;

@@ -19,6 +19,7 @@ import type {
   CommitDiffResult,
   CommitFileChange,
   DiffResult,
+  ProjectFileList,
   RepositorySnapshot,
   UntrackedScan,
 } from "./models";
@@ -87,6 +88,27 @@ export const bridge = {
       path,
       staged,
     });
+  },
+
+  async listProjectFiles(repositoryRoot: string): Promise<ProjectFileList> {
+    if (!isTauri) {
+      await demoDelay(120);
+      const paths = [
+        "README.md",
+        "package.json",
+        "src/app.ts",
+        "src/bridge.ts",
+        "src/diff-editor.ts",
+        "src/styles.css",
+        ...browserSnapshot.changes.map((change) => change.path),
+      ];
+      return {
+        root: repositoryRoot,
+        paths: Array.from(new Set(paths)).sort(),
+        truncated: false,
+      };
+    }
+    return invoke<ProjectFileList>("list_project_files", { repositoryRoot });
   },
 
   async readCommitDetails(

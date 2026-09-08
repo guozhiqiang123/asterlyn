@@ -446,7 +446,7 @@ textarea:focus-visible {
 
 .workspace {
   display: grid;
-  grid-template-columns: 50px minmax(260px, 320px) minmax(420px, 1fr) minmax(250px, 300px);
+  grid-template-columns: 44px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -457,14 +457,14 @@ textarea:focus-visible {
   align-items: center;
   border-right: 1px solid var(--border);
   background: #242529;
-  padding: 7px 0;
+  padding: 5px 0;
 }
 
 .activity-button {
   position: relative;
   display: grid;
-  width: 42px;
-  height: 43px;
+  width: 36px;
+  height: 38px;
   place-items: center;
   margin-bottom: 2px;
   padding: 0;
@@ -503,6 +503,92 @@ textarea:focus-visible {
   content: "";
 }
 
+.workbench {
+  --left-tool-width: 300px;
+  --bottom-tool-height: 340px;
+  --branch-tree-width: 270px;
+  --branch-details-width: 320px;
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--bg-deep);
+}
+
+.workbench.bottom-tool-open {
+  grid-template-rows: minmax(210px, 1fr) 5px var(--bottom-tool-height);
+}
+
+.editor-row {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workbench.left-tool-open .editor-row {
+  grid-template-columns: var(--left-tool-width) 5px minmax(380px, 1fr);
+}
+
+.tool-window[hidden],
+.workbench-splitter[hidden] {
+  display: none;
+}
+
+.workbench-splitter {
+  position: relative;
+  z-index: 4;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+
+.workbench-splitter::after {
+  position: absolute;
+  background: var(--border);
+  content: "";
+  transition: background 100ms ease;
+}
+
+.workbench-splitter.vertical {
+  width: 5px;
+  cursor: col-resize;
+}
+
+.workbench-splitter.vertical::after {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+}
+
+.workbench-splitter.horizontal {
+  height: 5px;
+  cursor: row-resize;
+}
+
+.workbench-splitter.horizontal::after {
+  top: 2px;
+  right: 0;
+  left: 0;
+  height: 1px;
+}
+
+.workbench-splitter:hover::after,
+.workbench-splitter:focus-visible::after,
+.workbench-splitter.dragging::after {
+  background: var(--accent);
+}
+
+.workbench-splitter:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .rail-spacer {
   flex: 1;
 }
@@ -524,7 +610,6 @@ textarea:focus-visible {
 .navigator {
   display: grid;
   grid-template-rows: 62px minmax(0, 1fr);
-  border-right: 1px solid var(--border);
   background: var(--bg-panel);
 }
 
@@ -576,6 +661,212 @@ textarea:focus-visible {
 .navigator-body {
   overflow: auto;
   min-height: 0;
+}
+
+.changes-tool-layout {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(150px, 1fr) auto;
+}
+
+.changes-tool-navigation {
+  overflow: auto;
+  min-height: 0;
+}
+
+.commit-tool {
+  overflow: auto;
+  max-height: min(42vh, 330px);
+  border-top: 1px solid var(--border-strong);
+  background: #242529;
+}
+
+.commit-tool .inspector-header {
+  padding: 8px 12px;
+}
+
+.commit-tool .commit-summary {
+  padding: 8px 12px;
+}
+
+.commit-tool .commit-form {
+  padding: 9px 12px 12px;
+}
+
+.commit-tool .commit-form textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.project-tree {
+  min-width: max-content;
+  padding: 5px 4px 12px;
+}
+
+.project-directory > summary,
+.project-file-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 calc(7px + var(--tree-depth) * 14px);
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: default;
+  font-size: 10px;
+  list-style: none;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.project-directory > summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-directory > summary:hover,
+.project-file-row:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tree-chevron {
+  display: inline-flex;
+  color: var(--text-faint);
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+}
+
+.project-directory[open] > summary .tree-chevron {
+  transform: rotate(90deg);
+}
+
+.project-file-row {
+  padding-left: calc(25px + var(--tree-depth) * 14px);
+}
+
+.project-file-row.selected {
+  background: #214283;
+  color: #f0f5ff;
+}
+
+.project-file-glyph {
+  display: inline-grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 3px;
+  background: #34363b;
+  color: #90b5f8;
+  font-family: ui-monospace, monospace;
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.project-tree-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.project-tree-notice.warning {
+  color: #d9b36c;
+}
+
+.bottom-tool {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 30px minmax(0, 1fr);
+  background: var(--bg-panel);
+}
+
+.bottom-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: #242529;
+}
+
+.bottom-tool-header strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.bottom-tool-header span {
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.git-tool-grid {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: var(--branch-tree-width) 5px minmax(320px, 1fr) 5px var(--branch-details-width);
+}
+
+.git-tool-pane {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 31px minmax(0, 1fr);
+  background: var(--bg-panel);
+}
+
+.git-details-pane {
+  display: block;
+  overflow: auto;
+}
+
+.git-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.git-pane-header strong {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.git-pane-header span {
+  min-width: 20px;
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 17px;
+  text-align: center;
+}
+
+.git-pane-body {
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.git-detail-files {
+  border-top: 1px solid var(--border);
+}
+
+.git-detail-files .commit-file-list {
+  max-height: 260px;
 }
 
 .change-group,
@@ -1065,8 +1356,50 @@ textarea:focus-visible {
 
 .content-panel {
   display: grid;
-  grid-template-rows: 62px minmax(0, 1fr);
+  grid-template-rows: 31px 48px minmax(0, 1fr);
   background: var(--bg-deep);
+}
+
+.editor-panel {
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor-tabbar {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  background: #242529;
+}
+
+.editor-tab {
+  display: inline-flex;
+  overflow: hidden;
+  min-width: 120px;
+  max-width: 280px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-tab.active {
+  border-top: 2px solid var(--accent);
+  background: var(--bg-deep);
+  color: var(--text);
+}
+
+.editor-tab small {
+  color: var(--text-faint);
+  font-family: ui-monospace, monospace;
+  font-size: 8px;
 }
 
 .content-header {
@@ -1074,7 +1407,7 @@ textarea:focus-visible {
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 15px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
 }
 

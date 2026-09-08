@@ -100,6 +100,12 @@ export interface UntrackedScan {
   changes: FileChange[];
 }
 
+export interface ProjectFileList {
+  root: string;
+  paths: string[];
+  truncated: boolean;
+}
+
 export interface DiffResult {
   path: string;
   staged: boolean;

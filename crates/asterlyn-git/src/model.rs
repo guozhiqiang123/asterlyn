@@ -27,6 +27,14 @@ pub struct UntrackedScan {
     pub changes: Vec<FileChange>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFileList {
+    pub root: String,
+    pub paths: Vec<String>,
+    pub truncated: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchState {

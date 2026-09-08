@@ -3,11 +3,12 @@ use std::sync::{Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
-    RepositorySnapshot, UntrackedScan,
+    ProjectFileList, RepositorySnapshot, UntrackedScan,
 };
 use tauri::State;
 
 const COMMIT_LIMIT: usize = 150;
+const PROJECT_FILE_LIMIT: usize = 5_000;
 const CANCELLED_SCAN_RETENTION: usize = 256;
 const CANCELLED_REMOTE_RETENTION: usize = 128;
 
@@ -172,6 +173,14 @@ async fn read_diff(
 ) -> Result<DiffResult, GitError> {
     run_blocking("read diff", move || {
         GitRepository::open(repository_root)?.diff(&path, staged)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn list_project_files(repository_root: String) -> Result<ProjectFileList, GitError> {
+    run_blocking("list project files", move || {
+        GitRepository::open(repository_root)?.project_files(PROJECT_FILE_LIMIT)
     })
     .await
 }
@@ -401,6 +410,7 @@ pub fn run() {
             open_repository,
             scan_untracked,
             cancel_untracked_scan,
+            list_project_files,
             read_diff,
             read_commit_details,
             read_commit_diff,

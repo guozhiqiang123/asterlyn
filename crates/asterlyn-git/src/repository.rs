@@ -14,7 +14,7 @@ use std::os::unix::process::CommandExt;
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange,
-    RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
+    ProjectFileList, RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -196,6 +196,26 @@ impl GitRepository {
         Ok(UntrackedScan {
             root: self.root.to_string_lossy().into_owned(),
             changes,
+        })
+    }
+
+    pub fn project_files(&self, limit: usize) -> Result<ProjectFileList, GitError> {
+        let output = self.run_read("list tracked project files", ["ls-files", "--cached", "-z"])?;
+        let maximum = limit.clamp(1, 100_000);
+        let mut paths: Vec<_> = output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .collect();
+        paths.sort();
+        paths.dedup();
+        let truncated = paths.len() > maximum;
+        paths.truncate(maximum);
+        Ok(ProjectFileList {
+            root: self.root.to_string_lossy().into_owned(),
+            paths,
+            truncated,
         })
     }
 
@@ -1790,6 +1810,25 @@ mod tests {
         let complete = repository.snapshot(50).expect("full snapshot loads");
         assert_eq!(complete.untracked_state, UntrackedState::Complete);
         assert_eq!(complete.changes.len(), 1);
+    }
+
+    #[test]
+    fn project_file_list_is_sorted_bounded_and_tracked_only() {
+        let directory = fixture();
+        fs::create_dir_all(directory.path().join("src")).expect("fixture directory");
+        fs::write(directory.path().join("src/zeta.rs"), "zeta\n").expect("tracked file");
+        fs::write(directory.path().join("alpha.txt"), "alpha\n").expect("tracked file");
+        fs::write(directory.path().join("untracked.txt"), "later\n").expect("untracked file");
+        git(directory.path(), &["add", "alpha.txt", "src/zeta.rs"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        let complete = repository.project_files(10).expect("project files load");
+        assert_eq!(complete.paths, ["alpha.txt", "src/zeta.rs"]);
+        assert!(!complete.truncated);
+
+        let bounded = repository.project_files(1).expect("bounded files load");
+        assert_eq!(bounded.paths, ["alpha.txt"]);
+        assert!(bounded.truncated);
     }
 
     #[test]
