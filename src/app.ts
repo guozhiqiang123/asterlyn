@@ -22,6 +22,8 @@ interface AppState {
   snapshot: RepositorySnapshot | null;
   activeView: WorkspaceView;
   selectedChange: ChangeSelection | null;
+  selectedChangeKeys: Set<string>;
+  changeQuery: string;
   selectedCommit: string | null;
   historyQuery: string;
   selectedCommitFile: string | null;
@@ -43,6 +45,8 @@ export class AsterlynApp {
     snapshot: null,
     activeView: "changes",
     selectedChange: null,
+    selectedChangeKeys: new Set(),
+    changeQuery: "",
     selectedCommit: null,
     historyQuery: "",
     selectedCommitFile: null,
@@ -61,6 +65,7 @@ export class AsterlynApp {
   private diffGeneration = 0;
   private commitDetailsGeneration = 0;
   private commitDiffGeneration = 0;
+  private changeSelectionAnchor: string | null = null;
   private scanSequence = 0;
   private activeUntrackedScan: {
     id: string;
@@ -250,12 +255,13 @@ export class AsterlynApp {
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "f" &&
-        this.state.activeView === "history" &&
+        (this.state.activeView === "changes" || this.state.activeView === "history") &&
         !event.defaultPrevented &&
         !(event.target instanceof Element && event.target.closest(".cm-editor"))
       ) {
         event.preventDefault();
-        this.focusHistoryFilter();
+        if (this.state.activeView === "history") this.focusHistoryFilter();
+        else this.focusChangeFilter();
       }
     });
   }
@@ -313,6 +319,9 @@ export class AsterlynApp {
       if (generation !== this.requestGeneration) return;
       window.localStorage.setItem(RECENT_REPOSITORY_KEY, snapshot.root);
       this.state.snapshot = snapshot;
+      this.state.changeQuery = "";
+      this.state.selectedChangeKeys.clear();
+      this.changeSelectionAnchor = null;
       this.state.selectedCommit = snapshot.commits[0]?.oid ?? null;
       this.state.historyQuery = "";
       this.clearCommitInspection();
@@ -393,8 +402,11 @@ export class AsterlynApp {
 
     if (this.state.activeView === "changes") {
       title.textContent = "Changes";
-      count.textContent = snapshot.changes.length.toString();
-      count.title = `${snapshot.changes.length} changed files`;
+      const filtered = this.filteredChanges(snapshot);
+      count.textContent = filtered.length.toString();
+      count.title = this.state.changeQuery
+        ? `${filtered.length} of ${snapshot.changes.length} changed files`
+        : `${snapshot.changes.length} changed files`;
       body.innerHTML = this.renderChangeNavigation(snapshot);
       this.bindChangeEvents();
       return;
@@ -420,9 +432,7 @@ export class AsterlynApp {
   }
 
   private renderChangeNavigation(snapshot: RepositorySnapshot): string {
-    const staged = snapshot.changes.filter(hasStagedChange);
-    const unstaged = snapshot.changes.filter(hasWorktreeChange);
-    if (staged.length === 0 && unstaged.length === 0) {
+    if (snapshot.changes.length === 0) {
       if (snapshot.untrackedState === "pending") {
         return this.emptyState(
           "Checking for untracked files",
@@ -446,11 +456,68 @@ export class AsterlynApp {
         true,
       );
     }
+    return `
+      <div class="changes-navigation">
+        ${this.renderChangeToolbar()}
+        <div class="change-results" id="change-results">
+          ${this.renderChangeResults(snapshot, this.filteredChanges(snapshot))}
+        </div>
+      </div>`;
+  }
+
+  private renderChangeToolbar(): string {
+    const staged = Array.from(this.state.selectedChangeKeys).filter((key) =>
+      key.startsWith("index:"),
+    ).length;
+    const unstaged = this.state.selectedChangeKeys.size - staged;
+    return `
+      <div class="change-toolbar">
+        <label class="change-filter" for="change-filter">
+          ${icon("search", 14)}
+          <input id="change-filter" type="search" value="${escapeAttribute(this.state.changeQuery)}" placeholder="Filter changed files…" autocomplete="off" spellcheck="false" aria-label="Filter changed files" aria-keyshortcuts="Control+F Meta+F" />
+          <span>Ctrl F</span>
+        </label>
+        <div class="selection-toolbar" aria-label="Selected change actions">
+          <span>${this.state.selectedChangeKeys.size} selected</span>
+          <div>
+            <button type="button" data-selection-action="unstage" ${staged === 0 ? "disabled" : ""}>Unstage${staged ? ` ${staged}` : ""}</button>
+            <button type="button" data-selection-action="stage" ${unstaged === 0 ? "disabled" : ""}>Stage${unstaged ? ` ${unstaged}` : ""}</button>
+            <button type="button" data-selection-action="clear" ${this.state.selectedChangeKeys.size === 0 ? "disabled" : ""} aria-label="Clear change selection">Clear</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  private renderChangeResults(
+    snapshot: RepositorySnapshot,
+    changes: FileChange[],
+  ): string {
+    if (changes.length === 0) {
+      return `<div class="change-no-results"><strong>No matching files</strong><span>Try another path or status.</span></div>`;
+    }
+    const staged = changes.filter(hasStagedChange);
+    const unstaged = changes.filter(hasWorktreeChange);
     return [
       this.renderChangeGroup("Staged", staged, true),
       this.renderChangeGroup("Unstaged", unstaged, false),
       this.untrackedScanNotice(snapshot),
     ].join("");
+  }
+
+  private filteredChanges(snapshot: RepositorySnapshot): FileChange[] {
+    const query = this.state.changeQuery.trim().toLocaleLowerCase();
+    if (!query) return snapshot.changes;
+    return snapshot.changes.filter((change) =>
+      [
+        change.path,
+        change.originalPath ?? "",
+        change.indexStatus,
+        change.worktreeStatus,
+        hasStagedChange(change) ? "staged" : "",
+        hasWorktreeChange(change) ? "unstaged working tree" : "",
+        change.conflicted ? "conflict conflicted" : "",
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
+    );
   }
 
   private untrackedScanNotice(snapshot: RepositorySnapshot): string {
@@ -480,12 +547,15 @@ export class AsterlynApp {
 
   private changeRow(change: FileChange, staged: boolean): string {
     const kind = staged ? change.indexStatus : change.worktreeStatus;
-    const selected =
+    const key = changeSelectionKey(change.path, staged);
+    const selected = this.state.selectedChangeKeys.has(key);
+    const primary =
       this.state.selectedChange?.path === change.path &&
       this.state.selectedChange.staged === staged;
     const actionLabel = staged ? "Unstage" : "Stage";
     return `
-      <div class="change-row ${selected ? "selected" : ""}" role="button" tabindex="0" data-change-path="${escapeAttribute(change.path)}" data-staged="${staged}" aria-pressed="${selected}" aria-label="View ${staged ? "staged" : "working tree"} diff for ${escapeAttribute(change.path)}">
+      <div class="change-row ${selected ? "selected" : ""} ${primary ? "primary" : ""}" role="option" tabindex="0" data-change-key="${escapeAttribute(key)}" data-change-path="${escapeAttribute(change.path)}" data-staged="${staged}" aria-selected="${selected}" aria-label="${selected ? "Selected, " : ""}view ${staged ? "staged" : "working tree"} diff for ${escapeAttribute(change.path)}">
+        <span class="selection-check" aria-hidden="true">${selected ? icon("check", 12) : ""}</span>
         <span class="change-status status-${kind}" title="${changeLabel(kind)}">${changeCode(kind)}</span>
         <span class="change-path">
           <span class="file-name">${escapeHtml(basename(change.path))}</span>
@@ -584,6 +654,51 @@ export class AsterlynApp {
   }
 
   private bindChangeEvents(): void {
+    const input = this.root.querySelector<HTMLInputElement>("#change-filter");
+    input?.addEventListener("input", () => {
+      this.state.changeQuery = input.value;
+      this.renderFilteredChanges();
+    });
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && input.value) {
+        event.preventDefault();
+        event.stopPropagation();
+        input.value = "";
+        this.state.changeQuery = "";
+        this.renderFilteredChanges();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "ArrowDown") {
+        const first = this.root.querySelector<HTMLElement>("[data-change-key]");
+        if (!first) return;
+        event.preventDefault();
+        this.selectChangeRow(first, false, false, true);
+      }
+    });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-selection-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const action = button.dataset.selectionAction;
+          if (action === "clear") {
+            this.state.selectedChangeKeys.clear();
+            this.state.selectedChange = null;
+            this.changeSelectionAnchor = null;
+            this.renderWorkspace();
+            return;
+          }
+          const staged = action === "unstage";
+          const prefix = staged ? "index:" : "worktree:";
+          const paths = Array.from(this.state.selectedChangeKeys)
+            .filter((key) => key.startsWith(prefix))
+            .map(changePathFromKey);
+          void this.mutatePaths(!staged, paths);
+        });
+      });
+    this.bindChangeRowsAndGroups();
+  }
+
+  private bindChangeRowsAndGroups(): void {
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
       row.addEventListener("click", (event) => {
         const action = (event.target as HTMLElement).closest<HTMLElement>("[data-path-action]");
@@ -594,18 +709,32 @@ export class AsterlynApp {
           void this.mutatePaths(action.dataset.pathAction === "stage", [path]);
           return;
         }
-        this.state.selectedChange = { path, staged: row.dataset.staged === "true" };
-        this.renderWorkspace();
-        void this.loadSelectedDiff();
+        this.selectChangeRow(
+          row,
+          event.ctrlKey || event.metaKey,
+          event.shiftKey,
+          false,
+        );
       });
       row.addEventListener("keydown", (event) => {
-        if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
+        if (event.target !== row) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          this.selectChangeRow(row, event.key === " " || event.ctrlKey || event.metaKey, event.shiftKey, true);
+          return;
+        }
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        const rows = Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-key]"));
+        const current = rows.indexOf(row);
+        if (current < 0) return;
         event.preventDefault();
-        const path = row.dataset.changePath;
-        if (!path) return;
-        this.state.selectedChange = { path, staged: row.dataset.staged === "true" };
-        this.renderWorkspace();
-        void this.loadSelectedDiff();
+        const target =
+          event.key === "Home"
+            ? rows[0]
+            : event.key === "End"
+              ? rows.at(-1)
+              : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
+        if (target) this.selectChangeRow(target, false, event.shiftKey, true);
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-group-action]").forEach((button) => {
@@ -613,12 +742,78 @@ export class AsterlynApp {
         const staged = button.dataset.groupAction === "stage";
         const snapshot = this.state.snapshot;
         if (!snapshot) return;
-        const paths = snapshot.changes
+        const paths = this.filteredChanges(snapshot)
           .filter(staged ? hasWorktreeChange : hasStagedChange)
           .map((change) => change.path);
         void this.mutatePaths(staged, paths);
       });
     });
+  }
+
+  private selectChangeRow(
+    row: HTMLElement,
+    toggle: boolean,
+    range: boolean,
+    restoreFocus: boolean,
+  ): void {
+    const key = row.dataset.changeKey;
+    const path = row.dataset.changePath;
+    if (!key || !path) return;
+    if (range && this.changeSelectionAnchor) {
+      const rows = Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-key]"));
+      const keys = rows.flatMap((candidate) =>
+        candidate.dataset.changeKey ? [candidate.dataset.changeKey] : [],
+      );
+      const anchor = keys.indexOf(this.changeSelectionAnchor);
+      const target = keys.indexOf(key);
+      if (anchor >= 0 && target >= 0) {
+        const [start, end] = anchor <= target ? [anchor, target] : [target, anchor];
+        this.state.selectedChangeKeys = new Set(keys.slice(start, end + 1));
+      } else {
+        this.state.selectedChangeKeys = new Set([key]);
+      }
+    } else if (toggle) {
+      if (this.state.selectedChangeKeys.has(key)) this.state.selectedChangeKeys.delete(key);
+      else this.state.selectedChangeKeys.add(key);
+      this.changeSelectionAnchor = key;
+    } else {
+      this.state.selectedChangeKeys = new Set([key]);
+      this.changeSelectionAnchor = key;
+    }
+
+    const primaryKey = this.state.selectedChangeKeys.has(key)
+      ? key
+      : Array.from(this.state.selectedChangeKeys).at(-1) ?? null;
+    this.state.selectedChange = primaryKey
+      ? changeSelectionFromKey(primaryKey)
+      : null;
+    this.renderWorkspace();
+    if (this.state.selectedChange) void this.loadSelectedDiff();
+    if (restoreFocus && primaryKey) this.focusChangeRow(primaryKey);
+  }
+
+  private renderFilteredChanges(): void {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || this.state.activeView !== "changes") return;
+    const changes = this.filteredChanges(snapshot);
+    this.query("#change-results").innerHTML = this.renderChangeResults(snapshot, changes);
+    const count = this.query("#navigator-count");
+    count.textContent = changes.length.toString();
+    count.title = `${changes.length} of ${snapshot.changes.length} changed files`;
+    this.bindChangeRowsAndGroups();
+  }
+
+  private focusChangeFilter(): void {
+    const input = this.root.querySelector<HTMLInputElement>("#change-filter");
+    input?.focus();
+    input?.select();
+  }
+
+  private focusChangeRow(key: string): void {
+    const rows = this.root.querySelectorAll<HTMLElement>("[data-change-key]");
+    Array.from(rows)
+      .find((row) => row.dataset.changeKey === key)
+      ?.focus();
   }
 
   private bindHistoryEvents(): void {
@@ -1140,6 +1335,25 @@ export class AsterlynApp {
         ? await bridge.stagePaths(snapshot.root, paths)
         : await bridge.unstagePaths(snapshot.root, paths);
       this.state.snapshot = next;
+      const sourcePrefix = stage ? "worktree:" : "index:";
+      const migrated = new Set(this.state.selectedChangeKeys);
+      for (const path of paths) {
+        const sourceKey = `${sourcePrefix}${path}`;
+        if (!migrated.delete(sourceKey)) continue;
+        if (changeExists(next, path, stage)) {
+          migrated.add(changeSelectionKey(path, stage));
+        }
+      }
+      this.state.selectedChangeKeys = migrated;
+      if (
+        this.state.selectedChange &&
+        paths.includes(this.state.selectedChange.path) &&
+        this.state.selectedChange.staged !== stage
+      ) {
+        this.state.selectedChange = changeExists(next, this.state.selectedChange.path, stage)
+          ? { path: this.state.selectedChange.path, staged: stage }
+          : null;
+      }
       this.chooseValidChangeSelection();
       this.renderWorkspace();
       void this.loadSelectedDiff();
@@ -1255,6 +1469,14 @@ export class AsterlynApp {
 
   private chooseValidChangeSelection(): void {
     const changes = this.state.snapshot?.changes ?? [];
+    const validKeys = new Set<string>();
+    for (const change of changes) {
+      if (hasStagedChange(change)) validKeys.add(changeSelectionKey(change.path, true));
+      if (hasWorktreeChange(change)) validKeys.add(changeSelectionKey(change.path, false));
+    }
+    this.state.selectedChangeKeys = new Set(
+      Array.from(this.state.selectedChangeKeys).filter((key) => validKeys.has(key)),
+    );
     const current = this.state.selectedChange;
     const valid = current
       ? changes.some(
@@ -1263,7 +1485,22 @@ export class AsterlynApp {
             (current.staged ? hasStagedChange(change) : hasWorktreeChange(change)),
         )
       : false;
-    if (valid) return;
+    if (current && valid) {
+      const currentKey = changeSelectionKey(current.path, current.staged);
+      if (this.state.selectedChangeKeys.size === 0) {
+        this.state.selectedChangeKeys.add(currentKey);
+      } else if (!this.state.selectedChangeKeys.has(currentKey)) {
+        const selectedKey = Array.from(this.state.selectedChangeKeys).at(-1);
+        this.state.selectedChange = selectedKey ? changeSelectionFromKey(selectedKey) : null;
+      }
+      return;
+    }
+
+    const selectedKey = Array.from(this.state.selectedChangeKeys).at(-1);
+    if (selectedKey) {
+      this.state.selectedChange = changeSelectionFromKey(selectedKey);
+      return;
+    }
 
     const staged = changes.find(hasStagedChange);
     const unstaged = changes.find(hasWorktreeChange);
@@ -1272,6 +1509,20 @@ export class AsterlynApp {
       : unstaged
         ? { path: unstaged.path, staged: false }
         : null;
+    if (this.state.selectedChange) {
+      this.state.selectedChangeKeys.add(
+        changeSelectionKey(
+          this.state.selectedChange.path,
+          this.state.selectedChange.staged,
+        ),
+      );
+      this.changeSelectionAnchor = changeSelectionKey(
+        this.state.selectedChange.path,
+        this.state.selectedChange.staged,
+      );
+    } else {
+      this.changeSelectionAnchor = null;
+    }
   }
 
   private renderStatus(snapshot: RepositorySnapshot): void {
@@ -1418,6 +1669,32 @@ function hasStagedChange(change: FileChange): boolean {
 
 function hasWorktreeChange(change: FileChange): boolean {
   return change.worktreeStatus !== "unmodified" && change.worktreeStatus !== "ignored";
+}
+
+function changeSelectionKey(path: string, staged: boolean): string {
+  return `${staged ? "index" : "worktree"}:${path}`;
+}
+
+function changePathFromKey(key: string): string {
+  return key.slice(key.indexOf(":") + 1);
+}
+
+function changeSelectionFromKey(key: string): ChangeSelection {
+  return {
+    path: changePathFromKey(key),
+    staged: key.startsWith("index:"),
+  };
+}
+
+function changeExists(
+  snapshot: RepositorySnapshot,
+  path: string,
+  staged: boolean,
+): boolean {
+  return snapshot.changes.some(
+    (change) =>
+      change.path === path && (staged ? hasStagedChange(change) : hasWorktreeChange(change)),
+  );
 }
 
 function selectedCommit(

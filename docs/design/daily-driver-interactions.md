@@ -46,6 +46,8 @@ Local acceptance used the real Tauri window against the Asterlyn repository: com
 - Support multi-selection for stage/unstage while preserving partial-stage truth.
 - Add unified/split and whitespace presentation controls without changing Git content.
 
+Selection is scope-specific: the staged and working-tree rows for a partially staged path are distinct selectable items. Plain click or keyboard traversal establishes the primary patch, `Ctrl/Cmd` toggles items, and `Shift` selects a visible range. Batch stage acts only on selected working-tree rows; batch unstage acts only on selected index rows. A filter narrows visible rows and group actions but does not silently discard hidden selections, so the toolbar always reports the full selected count. After a mutation, selections migrate to the corresponding side only when that side exists in the fresh Git snapshot.
+
 ### U4 — Safe local branch work
 
 - Add checkout and branch creation with dirty-worktree preflight.
