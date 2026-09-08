@@ -60,3 +60,5 @@ The first implementation slice covers repository open/refresh, status/history/br
 The first accepted evidence set is recorded in [`../benchmarks/2026-09-08-m1-baseline.md`](../benchmarks/2026-09-08-m1-baseline.md). Its conclusion is **mixed**: the vertical slice and packaging are viable, but large-repository untracked discovery exceeds the refresh budget and the memory margin needs repeated measurement before M1 can close.
 
 M1.1 follows [`ADR-0002`](../architecture/decisions/0002-tracked-first-refresh.md): interactive refresh returns tracked truth first, displays provisional counts while untracked discovery runs, cancels obsolete scans, and never labels a pending or failed scan as a clean repository.
+
+The accepted [`M1.1 evidence`](../benchmarks/2026-09-08-m1-1-tracked-first.md) concludes that tracked readiness **improved** and repeated Linux memory showed **no material change** while remaining within budget. The Linux vertical slice is accepted for continued development. M1 remains open at the release level until Windows and macOS CI builds and artifact smoke checks exist.
