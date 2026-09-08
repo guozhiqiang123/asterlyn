@@ -34,6 +34,7 @@ Tauri is a shell/transport adapter, not the domain center.
 5. UI state is replaceable; repository truth is re-read from Git after mutations.
 6. Long-running work supports cancellation, progress, bounded output, and stale-result rejection.
 7. Branch mutations accept literal local refs or validated new names only. The UI waits for complete working-tree discovery, and the Git core independently rejects any staged, unstaged, conflicted, or untracked blocker immediately before invoking `git switch`.
+8. Remote mutations accept configured remote names rather than URLs. U5 supports only the canonical branch mapping from `refs/heads/*` into `refs/remotes/<remote>/*`, disables implicit tag/submodule/signing/force expansion, and returns typed failure categories instead of child-process output.
 
 ## Runtime model
 
@@ -57,11 +58,15 @@ The frontend requests a repository snapshot with a monotonically increasing requ
 
 After a stage/unstage/commit action, the application requests fresh tracked state and starts a new untracked scan rather than manually pretending the mutation succeeded. File-system events are coalesced and treated as refresh hints, not truth. The compatibility `snapshot` operation in the pure Git crate still composes both phases for callers that require an atomic-looking complete result, while interactive callers use the phased API.
 
+Remote work follows the same reconciliation rule but uses a repository-scoped cancellable operation. Fetch updates only the selected remote's canonical branch-tracking namespace and does not prune in the initial slice. Pull performs that bounded fetch, then revalidates `HEAD`, upstream configuration, repository-operation state, and complete cleanliness before a fast-forward-only merge to the fetched commit ID. Push sends the current full local ref to the exact configured upstream ref, or publishes the same-named branch to an explicitly selected remote; it cannot force, mirror, follow tags, sign, or recurse into submodules. Cancellation terminates the matching Git process tree and never attempts rollback. A cancelled push has an explicitly unknown remote outcome until a later fetch reconciles it.
+
 Commit inspection is a separate, lazy read path rather than part of the repository snapshot. A selected commit first loads its NUL-delimited changed-file summary and then loads only the selected file patch. Ordinary and merge commits are compared with their first parent, matching the mainline review model used by common Git clients; root commits are compared with the empty tree. The frontend rejects responses whose commit or file selection is no longer current, while the Rust boundary accepts only full hexadecimal object IDs and repository-relative paths.
 
 ## Failure policy
 
 - A failed Git command returns its operation, exit status, and sanitized stderr.
+- A failed remote command returns only a typed authentication, network, rejection, or unknown category; bounded child output is discarded and remote URLs never enter application state.
+- Remote credentials remain inside configured non-interactive Git credential helpers or the SSH agent. Asterlyn disables terminal/askpass interaction and inherited Git tracing for these commands and never stores a username, password, token, or authorization header.
 - Unsupported repository states remain visible; they are not normalized into “clean.”
 - Invalid UTF-8 is decoded lossily for display while raw paths remain an acknowledged M1 limitation.
 - Crashes in optional services must not bring down the editor host.

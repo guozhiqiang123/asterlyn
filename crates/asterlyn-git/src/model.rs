@@ -8,6 +8,7 @@ pub struct RepositorySnapshot {
     pub changes: Vec<FileChange>,
     pub commits: Vec<CommitSummary>,
     pub branches: Vec<BranchSummary>,
+    pub remotes: Vec<RemoteSummary>,
     pub untracked_state: UntrackedState,
 }
 
@@ -32,10 +33,20 @@ pub struct BranchState {
     pub head: Option<String>,
     pub oid: Option<String>,
     pub upstream: Option<String>,
+    pub upstream_remote: Option<String>,
+    pub upstream_ref: Option<String>,
     pub ahead: u32,
     pub behind: u32,
     pub detached: bool,
     pub unborn: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSummary {
+    pub name: String,
+    pub fetch_supported: bool,
+    pub push_supported: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

@@ -72,6 +72,10 @@ The 15-test Git core suite covers clean checkout and creation, tracked and untra
 - Introduce credential integration without storing secrets in application state or logs.
 - Keep force push and provider-specific pull-request workflows deferred.
 
+The initial remote contract is intentionally narrow. Asterlyn accepts a configured remote name but never imports its URL into application state. Fetch updates the standard `refs/heads/*` to `refs/remotes/<remote>/*` mapping without tags, submodules, or pruning. Pull is a cancellable upstream fetch followed by a second branch/upstream/operation/cleanliness check and a fast-forward-only merge to the fetched commit ID. Push uses an explicit non-force refspec to the configured upstream, or publishes a same-named new branch to the selected remote and sets upstream only after success. Mirror remotes, custom fetch namespaces, local-dot upstreams, divergence, force, tag propagation, signing, submodule recursion, and credential prompts are rejected or deferred rather than interpreted silently.
+
+Remote processes receive null stdin, non-interactive credential settings, and no inherited askpass or Git tracing. Configured credential helpers and SSH agents remain trusted system integrations; their secrets are never represented by Asterlyn models. Output is retained only in a small transient buffer for failure classification and is then discarded. Cancellation targets the matching repository operation and performs no rollback: fetch tracking refs or local pull state may already have changed, while a cancelled push has an unknown remote outcome until a later successful fetch.
+
 ## Sequencing rule
 
 U1–U3 are published as the first usability phase, and U4 is locally accepted as the first Stage 2 daily-driver slice while Windows/macOS interactive release checks remain open. U5 remote daily-loop work is next. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.

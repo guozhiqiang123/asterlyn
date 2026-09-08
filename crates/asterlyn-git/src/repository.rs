@@ -2,21 +2,40 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use crate::error::GitError;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
+use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange,
-    RepositorySnapshot, UntrackedScan, UntrackedState,
+    RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpstreamTarget {
+    remote: String,
+    merge_ref: String,
+    tracking_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CurrentBranchContext {
+    full_ref: String,
+    oid: String,
+    upstream: Option<UpstreamTarget>,
+    behind: u32,
+}
 
 #[derive(Debug, Clone)]
 pub struct GitRepository {
@@ -99,7 +118,13 @@ impl GitRepository {
                 "--untracked-files=no",
             ],
         )?;
-        let (branch, changes) = parse_status(&status.stdout)?;
+        let (mut branch, changes) = parse_status(&status.stdout)?;
+        if let Some(head) = branch.head.as_deref()
+            && let Some(upstream) = self.read_upstream_target(head)?
+        {
+            branch.upstream_remote = Some(upstream.remote);
+            branch.upstream_ref = Some(upstream.merge_ref);
+        }
 
         let commits = if branch.unborn {
             Vec::new()
@@ -129,6 +154,7 @@ impl GitRepository {
                 "refs/tags",
             ],
         )?;
+        let remotes = self.remote_summaries()?;
 
         Ok(RepositorySnapshot {
             root: self.root.to_string_lossy().into_owned(),
@@ -138,6 +164,7 @@ impl GitRepository {
             changes,
             commits,
             branches: parse_branches(&refs.stdout)?,
+            remotes,
             untracked_state: UntrackedState::Pending,
         })
     }
@@ -440,6 +467,524 @@ impl GitRepository {
         Ok(())
     }
 
+    pub fn fetch_remote(
+        &self,
+        remote: &str,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
+        self.ensure_no_repository_operation("fetch")?;
+        let remote = self.validated_remote(remote, false)?;
+        let refspec = canonical_fetch_refspec(&remote.name);
+        self.run_remote_operation(
+            "fetch",
+            &remote.name,
+            vec![
+                OsString::from("fetch"),
+                OsString::from("--no-prune"),
+                OsString::from("--no-prune-tags"),
+                OsString::from("--no-tags"),
+                OsString::from("--no-recurse-submodules"),
+                OsString::from("--"),
+                OsString::from(&remote.name),
+                OsString::from(refspec),
+            ],
+            cancellation,
+            true,
+            false,
+        )?;
+        Ok(())
+    }
+
+    pub fn pull_ff_only(&self, cancellation: &CancellationToken) -> Result<(), GitError> {
+        self.ensure_no_repository_operation("pull")?;
+        self.ensure_clean_worktree("pull")?;
+        let before = self.current_branch_context("pull")?;
+        let upstream = before
+            .upstream
+            .as_ref()
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "upstream".to_string(),
+                message: "the current branch has no supported remote upstream".to_string(),
+            })?;
+        self.validated_upstream(upstream, false)?;
+
+        let pull_refspec = format!("+{}:{}", upstream.merge_ref, upstream.tracking_ref);
+        self.run_remote_operation(
+            "pull fetch",
+            &upstream.remote,
+            vec![
+                OsString::from("fetch"),
+                OsString::from("--no-prune"),
+                OsString::from("--no-prune-tags"),
+                OsString::from("--no-tags"),
+                OsString::from("--no-recurse-submodules"),
+                OsString::from("--"),
+                OsString::from(&upstream.remote),
+                OsString::from(pull_refspec),
+            ],
+            cancellation,
+            true,
+            false,
+        )?;
+
+        if cancellation.is_cancelled() {
+            return Err(remote_cancelled("pull", true, false));
+        }
+        self.ensure_no_repository_operation("pull")?;
+        self.ensure_clean_worktree("pull")?;
+        let after = self.current_branch_context("pull")?;
+        if before.full_ref != after.full_ref
+            || before.oid != after.oid
+            || before.upstream != after.upstream
+        {
+            return Err(GitError::UnsafeOperation {
+                operation: "pull".to_string(),
+                message: "HEAD or upstream changed while fetching; refresh before retrying"
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        let upstream = after.upstream.as_ref().expect("upstream equality checked");
+        self.validated_upstream(upstream, false)?;
+        let target_oid = self.resolve_commit(&upstream.tracking_ref, "read fetched upstream")?;
+
+        if self.is_ancestor(&target_oid, &after.oid)? {
+            return Ok(());
+        }
+        if !self.is_ancestor(&after.oid, &target_oid)? {
+            return Err(GitError::UnsafeOperation {
+                operation: "pull".to_string(),
+                message:
+                    "the current branch and upstream have diverged; merge or rebase explicitly"
+                        .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+
+        self.ensure_no_repository_operation("pull")?;
+        self.ensure_clean_worktree("pull")?;
+        let before_merge = self.current_branch_context("pull")?;
+        let current_target =
+            before_merge
+                .upstream
+                .as_ref()
+                .ok_or_else(|| GitError::InvalidInput {
+                    field: "upstream".to_string(),
+                    message: "the current branch no longer has a supported upstream".to_string(),
+                })?;
+        let current_target_oid =
+            self.resolve_commit(&current_target.tracking_ref, "recheck fetched upstream")?;
+        if before_merge != after || current_target_oid != target_oid {
+            return Err(GitError::UnsafeOperation {
+                operation: "pull".to_string(),
+                message:
+                    "branch or upstream state changed before fast-forward; refresh before retrying"
+                        .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+
+        self.run_remote_operation(
+            "fast-forward pull",
+            &upstream.remote,
+            vec![
+                OsString::from("-c"),
+                OsString::from("submodule.recurse=false"),
+                OsString::from("merge"),
+                OsString::from("--ff-only"),
+                OsString::from("--no-autostash"),
+                OsString::from("--"),
+                OsString::from(target_oid),
+            ],
+            cancellation,
+            true,
+            false,
+        )?;
+        Ok(())
+    }
+
+    pub fn push_current(
+        &self,
+        remote: &str,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
+        self.ensure_no_repository_operation("push")?;
+        let context = self.current_branch_context("push")?;
+        let configured_remote = self.validated_remote(remote, true)?;
+        let (destination, publish) = match context.upstream.as_ref() {
+            Some(upstream) => {
+                self.validated_upstream(upstream, true)?;
+                if upstream.remote != configured_remote.name {
+                    return Err(GitError::InvalidInput {
+                        field: "push remote".to_string(),
+                        message: "the selected remote does not match the current upstream"
+                            .to_string(),
+                    });
+                }
+                if context.behind > 0 {
+                    return Err(GitError::UnsafeOperation {
+                        operation: "push".to_string(),
+                        message:
+                            "the current branch is behind or diverged; fetch and reconcile it first"
+                                .to_string(),
+                        blockers: Vec::new(),
+                    });
+                }
+                (upstream.merge_ref.clone(), false)
+            }
+            None => (context.full_ref.clone(), true),
+        };
+
+        let mut args = vec![
+            OsString::from("-c"),
+            OsString::from("push.followTags=false"),
+            OsString::from("-c"),
+            OsString::from("push.recurseSubmodules=no"),
+            OsString::from("push"),
+            OsString::from("--porcelain"),
+            OsString::from("--no-progress"),
+            OsString::from("--no-force"),
+            OsString::from("--no-mirror"),
+            OsString::from("--no-follow-tags"),
+            OsString::from("--no-signed"),
+            OsString::from("--recurse-submodules=no"),
+        ];
+        self.ensure_no_repository_operation("push")?;
+        let before_push = self.current_branch_context("push")?;
+        if before_push != context {
+            return Err(GitError::UnsafeOperation {
+                operation: "push".to_string(),
+                message: "branch or upstream state changed before push; refresh before retrying"
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        self.validated_remote(&configured_remote.name, true)?;
+        if publish {
+            args.push(OsString::from("--set-upstream"));
+        }
+        args.extend([
+            OsString::from("--"),
+            OsString::from(&configured_remote.name),
+            OsString::from(format!("{}:{destination}", context.full_ref)),
+        ]);
+        self.run_remote_operation(
+            "push",
+            &configured_remote.name,
+            args,
+            cancellation,
+            true,
+            true,
+        )?;
+        Ok(())
+    }
+
+    fn remote_summaries(&self) -> Result<Vec<RemoteSummary>, GitError> {
+        let output = self.run_read("read remotes", ["remote"])?;
+        let mut names: Vec<_> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+            .into_iter()
+            .map(|name| {
+                let fetch_supported = self.remote_fetch_is_supported(&name)?;
+                let push_supported = fetch_supported && !self.remote_is_mirror(&name)?;
+                Ok(RemoteSummary {
+                    name,
+                    fetch_supported,
+                    push_supported,
+                })
+            })
+            .collect()
+    }
+
+    fn validated_remote(&self, name: &str, require_push: bool) -> Result<RemoteSummary, GitError> {
+        if name.is_empty()
+            || name != name.trim()
+            || name.contains(['\0', '\n', '\r'])
+            || name == "."
+        {
+            return Err(invalid_remote("select a configured non-local remote"));
+        }
+        let remote = self
+            .remote_summaries()?
+            .into_iter()
+            .find(|remote| remote.name == name)
+            .ok_or_else(|| invalid_remote("the selected remote is no longer configured"))?;
+        if !remote.fetch_supported {
+            return Err(invalid_remote(
+                "the remote uses a custom or unsafe fetch refspec that U5 does not support",
+            ));
+        }
+        if require_push && !remote.push_supported {
+            return Err(invalid_remote(
+                "mirror remotes cannot be pushed by Asterlyn",
+            ));
+        }
+        Ok(remote)
+    }
+
+    fn remote_fetch_is_supported(&self, remote: &str) -> Result<bool, GitError> {
+        let probe_ref = format!("refs/remotes/{remote}/asterlyn-probe");
+        if !self.ref_is_valid(&probe_ref)? {
+            return Ok(false);
+        }
+        let key = format!("remote.{remote}.fetch");
+        let values = self.read_config_values(&key, "read remote fetch mapping")?;
+        let expected = canonical_fetch_refspec(remote);
+        Ok(values.len() == 1
+            && values[0].trim_start_matches('+') == expected.trim_start_matches('+'))
+    }
+
+    fn remote_is_mirror(&self, remote: &str) -> Result<bool, GitError> {
+        let key = format!("remote.{remote}.mirror");
+        let output = run_git_output(&self.root, ["config", "--bool", "--get-all", &key]).map_err(
+            |error| GitError::Io {
+                operation: "read remote mirror mode".to_string(),
+                message: error.to_string(),
+            },
+        )?;
+        match output.status.code() {
+            Some(0) => Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|value| value.trim() == "true")),
+            Some(1) => Ok(false),
+            _ => Err(GitError::CommandFailed {
+                operation: "read remote mirror mode".to_string(),
+                status: output.status.code(),
+                message: "Git could not read the remote mirror mode".to_string(),
+            }),
+        }
+    }
+
+    fn read_config_values(&self, key: &str, operation: &str) -> Result<Vec<String>, GitError> {
+        let output = run_git_output(&self.root, ["config", "--get-all", key]).map_err(|error| {
+            GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            }
+        })?;
+        match output.status.code() {
+            Some(0) => Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()),
+            Some(1) => Ok(Vec::new()),
+            _ => Err(GitError::CommandFailed {
+                operation: operation.to_string(),
+                status: output.status.code(),
+                message: "Git could not read the remote configuration".to_string(),
+            }),
+        }
+    }
+
+    fn read_upstream_target(&self, branch: &str) -> Result<Option<UpstreamTarget>, GitError> {
+        let branch_ref = format!("refs/heads/{branch}");
+        let output = self.run_read_owned(
+            "read branch upstream",
+            vec![
+                OsString::from("for-each-ref"),
+                OsString::from(
+                    "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)",
+                ),
+                OsString::from(branch_ref),
+            ],
+        )?;
+        let value = String::from_utf8_lossy(&output.stdout);
+        let value = value.trim_end_matches(['\r', '\n']);
+        if value.is_empty() {
+            return Ok(None);
+        }
+        let fields: Vec<_> = value.split('\0').collect();
+        if fields.len() != 3 {
+            return Err(GitError::Parse {
+                context: "branch upstream".to_string(),
+                message: "Git returned an unexpected upstream record".to_string(),
+            });
+        }
+        if fields.iter().all(|field| field.is_empty()) {
+            return Ok(None);
+        }
+        Ok(Some(UpstreamTarget {
+            remote: fields[0].to_string(),
+            merge_ref: fields[1].to_string(),
+            tracking_ref: fields[2].to_string(),
+        }))
+    }
+
+    fn validated_upstream(
+        &self,
+        upstream: &UpstreamTarget,
+        require_push: bool,
+    ) -> Result<RemoteSummary, GitError> {
+        let remote = self.validated_remote(&upstream.remote, require_push)?;
+        if !upstream.merge_ref.starts_with("refs/heads/")
+            || !self.ref_is_valid(&upstream.merge_ref)?
+            || !self.ref_is_valid(&upstream.tracking_ref)?
+        {
+            return Err(invalid_remote(
+                "the current upstream does not point to a valid remote branch",
+            ));
+        }
+        let suffix = upstream
+            .merge_ref
+            .strip_prefix("refs/heads/")
+            .expect("prefix checked");
+        let expected_tracking = format!("refs/remotes/{}/{suffix}", remote.name);
+        if upstream.tracking_ref != expected_tracking {
+            return Err(invalid_remote(
+                "the current upstream uses a custom tracking namespace that U5 does not support",
+            ));
+        }
+        Ok(remote)
+    }
+
+    fn current_branch_context(&self, operation: &str) -> Result<CurrentBranchContext, GitError> {
+        let status = self.run_read(
+            "read current branch state",
+            [
+                "status",
+                "--porcelain=v2",
+                "--branch",
+                "-z",
+                "--untracked-files=no",
+            ],
+        )?;
+        let (branch, _) = parse_status(&status.stdout)?;
+        let name = branch.head.ok_or_else(|| GitError::UnsafeOperation {
+            operation: operation.to_string(),
+            message: "a checked-out local branch is required".to_string(),
+            blockers: Vec::new(),
+        })?;
+        let oid = branch.oid.ok_or_else(|| GitError::UnsafeOperation {
+            operation: operation.to_string(),
+            message: "the current branch does not have a commit yet".to_string(),
+            blockers: Vec::new(),
+        })?;
+        validate_object_id(&oid)?;
+        let full_ref = self.symbolic_head(operation)?;
+        if full_ref.strip_prefix("refs/heads/") != Some(name.as_str())
+            || !self.ref_is_valid(&full_ref)?
+        {
+            return Err(GitError::Parse {
+                context: "current branch".to_string(),
+                message: "Git returned an invalid current branch ref".to_string(),
+            });
+        }
+        let upstream = self.read_upstream_target(&name)?;
+        Ok(CurrentBranchContext {
+            full_ref,
+            oid,
+            upstream,
+            behind: branch.behind,
+        })
+    }
+
+    fn symbolic_head(&self, operation: &str) -> Result<String, GitError> {
+        let output =
+            run_git_output(&self.root, ["symbolic-ref", "--quiet", "HEAD"]).map_err(|error| {
+                GitError::Io {
+                    operation: "read symbolic HEAD".to_string(),
+                    message: error.to_string(),
+                }
+            })?;
+        match output.status.code() {
+            Some(0) => {
+                let reference = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if reference.starts_with("refs/heads/") {
+                    Ok(reference)
+                } else {
+                    Err(GitError::UnsafeOperation {
+                        operation: operation.to_string(),
+                        message: "HEAD must point to a local branch".to_string(),
+                        blockers: Vec::new(),
+                    })
+                }
+            }
+            Some(1) => Err(GitError::UnsafeOperation {
+                operation: operation.to_string(),
+                message: "a checked-out local branch is required".to_string(),
+                blockers: Vec::new(),
+            }),
+            _ => Err(GitError::CommandFailed {
+                operation: "read symbolic HEAD".to_string(),
+                status: output.status.code(),
+                message: "Git could not resolve the current branch".to_string(),
+            }),
+        }
+    }
+
+    fn ensure_no_repository_operation(&self, operation: &str) -> Result<(), GitError> {
+        if let Some(active) = self.detect_operation() {
+            return Err(GitError::UnsafeOperation {
+                operation: operation.to_string(),
+                message: format!("finish the active {active} operation first"),
+                blockers: Vec::new(),
+            });
+        }
+        Ok(())
+    }
+
+    fn ref_is_valid(&self, reference: &str) -> Result<bool, GitError> {
+        let output =
+            run_git_output(&self.root, ["check-ref-format", reference]).map_err(|error| {
+                GitError::Io {
+                    operation: "validate Git ref".to_string(),
+                    message: error.to_string(),
+                }
+            })?;
+        match output.status.code() {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(GitError::CommandFailed {
+                operation: "validate Git ref".to_string(),
+                status: output.status.code(),
+                message: "Git could not validate a ref".to_string(),
+            }),
+        }
+    }
+
+    fn resolve_commit(&self, reference: &str, operation: &str) -> Result<String, GitError> {
+        let output = self.run_read_owned(
+            operation,
+            vec![
+                OsString::from("rev-parse"),
+                OsString::from("--verify"),
+                OsString::from(format!("{reference}^{{commit}}")),
+            ],
+        )?;
+        let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        validate_object_id(&oid)?;
+        Ok(oid)
+    }
+
+    fn is_ancestor(&self, ancestor: &str, descendant: &str) -> Result<bool, GitError> {
+        let output = run_git_output(
+            &self.root,
+            ["merge-base", "--is-ancestor", ancestor, descendant],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "compare branch ancestry".to_string(),
+            message: error.to_string(),
+        })?;
+        match output.status.code() {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(GitError::CommandFailed {
+                operation: "compare branch ancestry".to_string(),
+                status: output.status.code(),
+                message: "Git could not compare branch ancestry".to_string(),
+            }),
+        }
+    }
+
     fn validate_branch_name<'a>(&self, name: &'a str) -> Result<&'a str, GitError> {
         let name = name.trim();
         if name.is_empty() || name.contains('\0') || name.starts_with('-') || name.starts_with("@{")
@@ -541,6 +1086,88 @@ impl GitRepository {
             message: error.to_string(),
         })?;
         ensure_success(operation, output)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_remote_operation(
+        &self,
+        operation: &str,
+        remote: &str,
+        args: Vec<OsString>,
+        cancellation: &CancellationToken,
+        repository_state_may_have_changed: bool,
+        remote_state_may_have_changed: bool,
+    ) -> Result<Output, GitError> {
+        if cancellation.is_cancelled() {
+            return Err(remote_cancelled(
+                operation,
+                repository_state_may_have_changed,
+                remote_state_may_have_changed,
+            ));
+        }
+
+        let mut child = remote_command(&self.root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            })?;
+        let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git stdout was not available".to_string(),
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git stderr was not available".to_string(),
+        })?;
+        let stdout_reader = thread::spawn(move || read_stream_bounded(stdout));
+        let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if cancellation.is_cancelled() => {
+                    terminate_process_tree(&mut child);
+                    let _ = join_stream(stdout_reader, operation, "stdout");
+                    let _ = join_stream(stderr_reader, operation, "stderr");
+                    return Err(remote_cancelled(
+                        operation,
+                        repository_state_may_have_changed,
+                        remote_state_may_have_changed,
+                    ));
+                }
+                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
+                Err(error) => {
+                    terminate_process_tree(&mut child);
+                    let _ = join_stream(stdout_reader, operation, "stdout");
+                    let _ = join_stream(stderr_reader, operation, "stderr");
+                    return Err(GitError::Io {
+                        operation: operation.to_string(),
+                        message: error.to_string(),
+                    });
+                }
+            }
+        };
+
+        let stdout = join_stream(stdout_reader, operation, "stdout")?;
+        let stderr = join_stream(stderr_reader, operation, "stderr")?;
+        let output = Output {
+            status,
+            stdout,
+            stderr,
+        };
+        if output.status.success() {
+            Ok(output)
+        } else {
+            Err(GitError::RemoteFailed {
+                operation: operation.to_string(),
+                remote: remote.to_string(),
+                reason: classify_remote_failure(&output.stdout, &output.stderr),
+            })
+        }
     }
 
     fn run_cancellable_read<const N: usize>(
@@ -659,6 +1286,20 @@ fn read_stream(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn read_stream_bounded(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
+    let mut retained = Vec::new();
+    let mut buffer = [0_u8; 8 * 1024];
+    loop {
+        let count = stream.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        let remaining = REMOTE_OUTPUT_LIMIT_BYTES.saturating_sub(retained.len());
+        retained.extend_from_slice(&buffer[..count.min(remaining)]);
+    }
+    Ok(retained)
+}
+
 fn join_stream(
     reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
     operation: &str,
@@ -713,6 +1354,75 @@ fn base_command(path: &Path) -> Command {
         .env("LANG", "C")
         .env("GIT_TERMINAL_PROMPT", "0");
     command
+}
+
+fn remote_command(path: &Path) -> Command {
+    let mut command = base_command(path);
+    command
+        .arg("-c")
+        .arg("credential.interactive=never")
+        .arg("-c")
+        .arg("core.askPass=")
+        .env("GCM_INTERACTIVE", "Never")
+        .env("SSH_ASKPASS_REQUIRE", "never")
+        .env_remove("GIT_ASKPASS")
+        .env_remove("SSH_ASKPASS")
+        .env_remove("GIT_CONFIG_PARAMETERS")
+        .stdin(Stdio::null());
+    for (key, _) in std::env::vars_os() {
+        let name = key.to_string_lossy();
+        if name.starts_with("GIT_TRACE")
+            || name == "GIT_CURL_VERBOSE"
+            || name == "GIT_CONFIG_COUNT"
+            || name == "GIT_CONFIG_GLOBAL"
+            || name == "GIT_CONFIG_SYSTEM"
+            || name == "GIT_CONFIG_NOSYSTEM"
+            || name == "GIT_EXEC_PATH"
+            || name.starts_with("GIT_CONFIG_KEY_")
+            || name.starts_with("GIT_CONFIG_VALUE_")
+        {
+            command.env_remove(key);
+        }
+    }
+    #[cfg(unix)]
+    command.process_group(0);
+    command
+}
+
+fn terminate_process_tree(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        let process_group = -(child.id() as i32);
+        // SAFETY: the child was placed in its own process group before spawn. Signals target only
+        // that group, and failures fall back to Child::kill below.
+        unsafe {
+            libc::kill(process_group, libc::SIGTERM);
+        }
+        for _ in 0..25 {
+            if child.try_wait().ok().flatten().is_some() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(4));
+        }
+        // SAFETY: same dedicated process-group invariant as above. Sending SIGKILL even after the
+        // direct child exits also removes a descendant that ignored SIGTERM.
+        unsafe {
+            libc::kill(process_group, libc::SIGKILL);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn ensure_success(operation: &str, output: Output) -> Result<Output, GitError> {
@@ -803,6 +1513,67 @@ fn validate_local_branch_ref(full_name: &str) -> Result<&str, GitError> {
         });
     }
     Ok(name)
+}
+
+fn canonical_fetch_refspec(remote: &str) -> String {
+    format!("+refs/heads/*:refs/remotes/{remote}/*")
+}
+
+fn invalid_remote(message: &str) -> GitError {
+    GitError::InvalidInput {
+        field: "remote".to_string(),
+        message: message.to_string(),
+    }
+}
+
+fn remote_cancelled(
+    operation: &str,
+    repository_state_may_have_changed: bool,
+    remote_state_may_have_changed: bool,
+) -> GitError {
+    GitError::RemoteCancelled {
+        operation: operation.to_string(),
+        repository_state_may_have_changed,
+        remote_state_may_have_changed,
+    }
+}
+
+fn classify_remote_failure(stdout: &[u8], stderr: &[u8]) -> RemoteFailureKind {
+    let mut output = Vec::with_capacity(stdout.len() + stderr.len());
+    output.extend_from_slice(stdout);
+    output.extend_from_slice(stderr);
+    let message = String::from_utf8_lossy(&output).to_ascii_lowercase();
+    if [
+        "authentication failed",
+        "could not read username",
+        "permission denied",
+        "publickey",
+        "access denied",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+    {
+        RemoteFailureKind::Authentication
+    } else if [
+        "could not resolve host",
+        "couldn't connect",
+        "connection refused",
+        "connection timed out",
+        "network is unreachable",
+        "unable to access",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+    {
+        RemoteFailureKind::Network
+    } else if ["non-fast-forward", "rejected", "failed to push some refs"]
+        .iter()
+        .any(|needle| message.contains(needle))
+    {
+        RemoteFailureKind::Rejected
+    } else {
+        RemoteFailureKind::Unknown
+    }
 }
 
 fn parse_commit_files(output: &[u8]) -> Result<Vec<CommitFileChange>, GitError> {
@@ -933,6 +1704,59 @@ mod tests {
             &["config", "user.email", "test@asterlyn.invalid"],
         );
         directory
+    }
+
+    struct RemoteFixture {
+        _directory: TempDir,
+        remote: PathBuf,
+        local: PathBuf,
+        peer: PathBuf,
+    }
+
+    fn remote_fixture() -> RemoteFixture {
+        let directory = tempfile::tempdir().expect("remote temp directory");
+        let remote = directory.path().join("remote.git");
+        let seed = directory.path().join("seed");
+        let local = directory.path().join("local");
+        let peer = directory.path().join("peer");
+        let remote_path = remote.to_string_lossy().into_owned();
+        let seed_path = seed.to_string_lossy().into_owned();
+        let local_path = local.to_string_lossy().into_owned();
+        let peer_path = peer.to_string_lossy().into_owned();
+
+        git(directory.path(), &["init", "--bare", &remote_path]);
+        git(directory.path(), &["init", "-b", "main", &seed_path]);
+        git(&seed, &["config", "user.name", "Asterlyn Test"]);
+        git(&seed, &["config", "user.email", "test@asterlyn.invalid"]);
+        fs::write(seed.join("base.txt"), "base\n").expect("seed file");
+        git(&seed, &["add", "base.txt"]);
+        git(&seed, &["commit", "-m", "Root"]);
+        git(&seed, &["remote", "add", "origin", &remote_path]);
+        git(&seed, &["push", "--set-upstream", "origin", "main"]);
+        git(&remote, &["symbolic-ref", "HEAD", "refs/heads/main"]);
+        git(directory.path(), &["clone", &remote_path, &local_path]);
+        git(directory.path(), &["clone", &remote_path, &peer_path]);
+        for repository in [&local, &peer] {
+            git(repository, &["config", "user.name", "Asterlyn Test"]);
+            git(
+                repository,
+                &["config", "user.email", "test@asterlyn.invalid"],
+            );
+        }
+
+        RemoteFixture {
+            _directory: directory,
+            remote,
+            local,
+            peer,
+        }
+    }
+
+    fn commit_file(repository: &Path, path: &str, contents: &str, message: &str) -> String {
+        fs::write(repository.join(path), contents).expect("commit fixture file");
+        git(repository, &["add", path]);
+        git(repository, &["commit", "-m", message]);
+        git_stdout(repository, &["rev-parse", "HEAD"])
     }
 
     #[test]
@@ -1296,5 +2120,237 @@ mod tests {
             .stage(&["../outside".to_string()])
             .expect_err("traversal should fail");
         assert!(matches!(error, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn snapshots_remote_capabilities_without_exposing_urls() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let snapshot = repository
+            .tracked_snapshot(10)
+            .expect("tracked snapshot loads");
+        assert_eq!(snapshot.branch.upstream_remote.as_deref(), Some("origin"));
+        assert_eq!(
+            snapshot.branch.upstream_ref.as_deref(),
+            Some("refs/heads/main")
+        );
+        assert_eq!(
+            snapshot.remotes,
+            vec![RemoteSummary {
+                name: "origin".to_string(),
+                fetch_supported: true,
+                push_supported: true,
+            }]
+        );
+
+        let remote_path = fixture.remote.to_string_lossy().into_owned();
+        git(&fixture.local, &["remote", "add", "unsafe", &remote_path]);
+        git(
+            &fixture.local,
+            &["config", "--unset-all", "remote.unsafe.fetch"],
+        );
+        git(
+            &fixture.local,
+            &[
+                "config",
+                "--add",
+                "remote.unsafe.fetch",
+                "+refs/tags/*:refs/tags/*",
+            ],
+        );
+        let snapshot = repository
+            .tracked_snapshot(10)
+            .expect("snapshot with unsupported remote loads");
+        let unsafe_remote = snapshot
+            .remotes
+            .iter()
+            .find(|remote| remote.name == "unsafe")
+            .expect("unsupported remote is visible");
+        assert!(!unsafe_remote.fetch_supported);
+        assert!(!unsafe_remote.push_supported);
+        let rejected = repository
+            .fetch_remote("unsafe", &CancellationToken::new())
+            .expect_err("unsafe fetch mapping is rejected");
+        assert!(matches!(rejected, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn fetches_supported_remote_without_touching_worktree_changes() {
+        let fixture = remote_fixture();
+        let peer_oid = commit_file(&fixture.peer, "peer.txt", "peer\n", "Peer change");
+        git(&fixture.peer, &["push", "origin", "main"]);
+        fs::write(fixture.local.join("base.txt"), "dirty\n").expect("dirty local file");
+        let original_oid = git_stdout(&fixture.local, &["rev-parse", "HEAD"]);
+        git(
+            &fixture.local,
+            &["update-ref", "refs/remotes/origin/stale", &original_oid],
+        );
+        git(&fixture.local, &["config", "fetch.prune", "true"]);
+        git(&fixture.local, &["config", "fetch.pruneTags", "true"]);
+        git(&fixture.local, &["config", "remote.origin.prune", "true"]);
+        git(
+            &fixture.local,
+            &["config", "remote.origin.pruneTags", "true"],
+        );
+
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        repository
+            .fetch_remote("origin", &CancellationToken::new())
+            .expect("fetch succeeds with dirty worktree");
+
+        assert_eq!(
+            fs::read_to_string(fixture.local.join("base.txt")).expect("dirty file remains"),
+            "dirty\n"
+        );
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/main"]),
+            peer_oid
+        );
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/stale"]),
+            original_oid
+        );
+        assert_eq!(
+            repository
+                .tracked_snapshot(10)
+                .expect("snapshot loads")
+                .branch
+                .behind,
+            1
+        );
+    }
+
+    #[test]
+    fn pulls_only_clean_fast_forwards_and_blocks_divergence() {
+        let fixture = remote_fixture();
+        let peer_oid = commit_file(&fixture.peer, "peer.txt", "peer\n", "Peer change");
+        git(&fixture.peer, &["push", "origin", "main"]);
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let old_tracking = git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/main"]);
+        git(
+            &fixture.local,
+            &["update-ref", "refs/remotes/origin/stale", &old_tracking],
+        );
+        git(&fixture.local, &["config", "fetch.prune", "true"]);
+        git(&fixture.local, &["config", "remote.origin.prune", "true"]);
+
+        fs::write(fixture.local.join("pending.txt"), "pending\n").expect("untracked blocker");
+        let dirty = repository
+            .pull_ff_only(&CancellationToken::new())
+            .expect_err("untracked path blocks pull before fetch");
+        assert!(matches!(dirty, GitError::UnsafeOperation { .. }));
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/main"]),
+            old_tracking
+        );
+
+        fs::remove_file(fixture.local.join("pending.txt")).expect("remove blocker");
+        repository
+            .pull_ff_only(&CancellationToken::new())
+            .expect("clean fast-forward pull succeeds");
+        assert_eq!(git_stdout(&fixture.local, &["rev-parse", "HEAD"]), peer_oid);
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/stale"]),
+            old_tracking
+        );
+
+        let local_oid = commit_file(&fixture.local, "local.txt", "local\n", "Local change");
+        let remote_oid = commit_file(&fixture.peer, "remote.txt", "remote\n", "Remote change");
+        git(&fixture.peer, &["push", "origin", "main"]);
+        let diverged = repository
+            .pull_ff_only(&CancellationToken::new())
+            .expect_err("divergence is not merged automatically");
+        assert!(matches!(diverged, GitError::UnsafeOperation { .. }));
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "HEAD"]),
+            local_oid
+        );
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/main"]),
+            remote_oid
+        );
+    }
+
+    #[test]
+    fn pushes_commits_and_publishes_new_branch_without_force() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let main_oid = commit_file(&fixture.local, "local.txt", "local\n", "Local change");
+        fs::write(fixture.local.join("pending.txt"), "pending\n").expect("untracked local file");
+        repository
+            .push_current("origin", &CancellationToken::new())
+            .expect("push ignores uncommitted worktree content");
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            main_oid
+        );
+        assert!(fixture.local.join("pending.txt").exists());
+
+        fs::remove_file(fixture.local.join("pending.txt")).expect("remove untracked file");
+        repository
+            .create_branch("feature/publish")
+            .expect("clean branch creation succeeds");
+        let feature_oid = commit_file(&fixture.local, "feature.txt", "feature\n", "Feature change");
+        repository
+            .push_current("origin", &CancellationToken::new())
+            .expect("new branch is published with upstream");
+        assert_eq!(
+            git_stdout(
+                &fixture.remote,
+                &["rev-parse", "refs/heads/feature/publish"]
+            ),
+            feature_oid
+        );
+        assert_eq!(
+            git_stdout(
+                &fixture.local,
+                &["rev-parse", "--abbrev-ref", "@{upstream}"]
+            ),
+            "origin/feature/publish"
+        );
+
+        git(&fixture.local, &["config", "remote.origin.mirror", "TRUE"]);
+        let mirror = repository
+            .push_current("origin", &CancellationToken::new())
+            .expect_err("mirror remote is rejected");
+        assert!(matches!(mirror, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn remote_cancellation_and_failures_are_typed_without_child_output() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let cancelled = repository
+            .fetch_remote("origin", &cancellation)
+            .expect_err("preemptive cancellation stops fetch");
+        assert!(matches!(
+            cancelled,
+            GitError::RemoteCancelled {
+                repository_state_may_have_changed: true,
+                remote_state_may_have_changed: false,
+                ..
+            }
+        ));
+
+        assert_eq!(
+            classify_remote_failure(&[], b"fatal: Authentication failed for secret"),
+            RemoteFailureKind::Authentication
+        );
+        assert_eq!(
+            classify_remote_failure(&[], b"fatal: unable to access token: connection refused"),
+            RemoteFailureKind::Network
+        );
+        assert_eq!(
+            classify_remote_failure(b"! refs/heads/main [rejected]", b""),
+            RemoteFailureKind::Rejected
+        );
+
+        git(&fixture.local, &["checkout", "--detach"]);
+        let detached = repository
+            .push_current("origin", &CancellationToken::new())
+            .expect_err("detached HEAD cannot be pushed implicitly");
+        assert!(matches!(detached, GitError::UnsafeOperation { .. }));
     }
 }

@@ -1,5 +1,14 @@
 use std::fmt::{Display, Formatter};
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteFailureKind {
+    Authentication,
+    Network,
+    Rejected,
+    Unknown,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum GitError {
@@ -28,6 +37,18 @@ pub enum GitError {
         operation: String,
         message: String,
         blockers: Vec<String>,
+    },
+    RemoteFailed {
+        operation: String,
+        remote: String,
+        reason: RemoteFailureKind,
+    },
+    RemoteCancelled {
+        operation: String,
+        #[serde(rename = "repositoryStateMayHaveChanged")]
+        repository_state_may_have_changed: bool,
+        #[serde(rename = "remoteStateMayHaveChanged")]
+        remote_state_may_have_changed: bool,
     },
     Cancelled {
         operation: String,
@@ -65,10 +86,31 @@ impl Display for GitError {
                 operation,
                 message,
                 blockers,
+            } => {
+                write!(
+                    formatter,
+                    "Unsafe Git operation '{operation}' was blocked: {message}"
+                )?;
+                if !blockers.is_empty() {
+                    write!(formatter, " ({} blocking paths)", blockers.len())?;
+                }
+                Ok(())
+            }
+            Self::RemoteFailed {
+                operation,
+                remote,
+                reason,
             } => write!(
                 formatter,
-                "Unsafe Git operation '{operation}' was blocked: {message} ({} blocking paths)",
-                blockers.len()
+                "Remote Git operation '{operation}' failed for '{remote}': {reason:?}"
+            ),
+            Self::RemoteCancelled {
+                operation,
+                repository_state_may_have_changed,
+                remote_state_may_have_changed,
+            } => write!(
+                formatter,
+                "Remote Git operation '{operation}' was cancelled (repository state may have changed: {repository_state_may_have_changed}, remote state may have changed: {remote_state_may_have_changed})"
             ),
             Self::Cancelled { operation } => {
                 write!(formatter, "Git operation '{operation}' was cancelled")
