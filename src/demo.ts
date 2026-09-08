@@ -15,6 +15,8 @@ export const demoSnapshot: RepositorySnapshot = {
     head: "feature/git-workbench",
     oid: "df535785471311c9cdd936ff023d7d65dafb74a3",
     upstream: "origin/feature/git-workbench",
+    upstreamRemote: "origin",
+    upstreamRef: "refs/heads/feature/git-workbench",
     ahead: 2,
     behind: 0,
     detached: false,
@@ -118,6 +120,13 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788837600,
       subject: "docs: establish Asterlyn roadmap and architecture",
+    },
+  ],
+  remotes: [
+    {
+      name: "origin",
+      fetchSupported: true,
+      pushSupported: true,
     },
   ],
   untrackedState: "complete",
@@ -294,6 +303,10 @@ export function demoSwitchBranch(
     head: target.name,
     oid: target.oid,
     upstream: target.upstream,
+    upstreamRemote: target.upstream ? "origin" : null,
+    upstreamRef: target.upstream
+      ? `refs/heads/${target.upstream.split("/").slice(1).join("/")}`
+      : null,
     ahead: 0,
     behind: 0,
     detached: false,
@@ -333,10 +346,64 @@ export function demoCreateBranch(
     ...next.branch,
     head: normalized,
     upstream: null,
+    upstreamRemote: null,
+    upstreamRef: null,
     ahead: 0,
     behind: 0,
     detached: false,
   };
+  return next;
+}
+
+export function demoFetchRemote(
+  snapshot: RepositorySnapshot,
+  remoteName: string,
+): RepositorySnapshot {
+  const remote = snapshot.remotes.find((candidate) => candidate.name === remoteName);
+  if (!remote?.fetchSupported) throw new Error("Select a supported remote.");
+  return structuredClone(snapshot);
+}
+
+export function demoPullCurrent(snapshot: RepositorySnapshot): RepositorySnapshot {
+  ensureDemoBranchMutationIsSafe(snapshot);
+  if (!snapshot.branch.head || !snapshot.branch.upstreamRemote) {
+    throw new Error("The current branch has no supported remote upstream.");
+  }
+  if (snapshot.operation) throw new Error(`Finish the active ${snapshot.operation} first.`);
+  if (snapshot.branch.ahead > 0 && snapshot.branch.behind > 0) {
+    throw new Error("The branch has diverged. Merge or rebase explicitly.");
+  }
+  const next = structuredClone(snapshot);
+  next.branch.behind = 0;
+  return next;
+}
+
+export function demoPushCurrent(
+  snapshot: RepositorySnapshot,
+  remoteName: string,
+): RepositorySnapshot {
+  const remote = snapshot.remotes.find((candidate) => candidate.name === remoteName);
+  if (!remote?.pushSupported) throw new Error("Select a supported non-mirror remote.");
+  if (!snapshot.branch.head || snapshot.branch.unborn || snapshot.branch.detached) {
+    throw new Error("A checked-out branch with a commit is required.");
+  }
+  if (snapshot.operation) throw new Error(`Finish the active ${snapshot.operation} first.`);
+  if (snapshot.branch.behind > 0) {
+    throw new Error("Fetch and reconcile the branch before pushing.");
+  }
+  const next = structuredClone(snapshot);
+  const branchName = next.branch.head;
+  if (!next.branch.upstreamRemote) {
+    next.branch.upstream = `${remoteName}/${branchName}`;
+    next.branch.upstreamRemote = remoteName;
+    next.branch.upstreamRef = `refs/heads/${branchName}`;
+    const local = next.branches.find((branch) => branch.current);
+    if (local) {
+      local.upstream = next.branch.upstream;
+      local.tracking = null;
+    }
+  }
+  next.branch.ahead = 0;
   return next;
 }
 

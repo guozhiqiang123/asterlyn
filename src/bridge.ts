@@ -4,6 +4,9 @@ import {
   demoCommitDiff,
   demoCreateBranch,
   demoDiff,
+  demoFetchRemote,
+  demoPullCurrent,
+  demoPushCurrent,
   demoSnapshot,
   demoStage,
   demoSwitchBranch,
@@ -24,6 +27,7 @@ const isTauri = "__TAURI_INTERNALS__" in window;
 let browserSnapshot = structuredClone(demoSnapshot);
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
+const cancelledDemoRemoteOperations = new Set<string>();
 
 export const bridge = {
   isDemo: !isTauri,
@@ -223,7 +227,83 @@ export const bridge = {
       name,
     });
   },
+
+  async fetchRemote(
+    repositoryRoot: string,
+    remote: string,
+    operationId: string,
+  ): Promise<RepositorySnapshot> {
+    if (!isTauri) {
+      await demoDelay(480);
+      if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
+        throw new Error("Fetch was cancelled; local tracking refs may have changed.");
+      }
+      browserSnapshot = demoFetchRemote(browserSnapshot, remote);
+      return demoTrackedSnapshot(browserSnapshot);
+    }
+    return invoke<RepositorySnapshot>("fetch_remote", {
+      repositoryRoot,
+      remote,
+      operationId,
+    });
+  },
+
+  async pullCurrent(
+    repositoryRoot: string,
+    operationId: string,
+  ): Promise<RepositorySnapshot> {
+    if (!isTauri) {
+      await demoDelay(560);
+      if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
+        throw new Error("Pull was cancelled; refresh before continuing.");
+      }
+      browserSnapshot = demoPullCurrent(browserSnapshot);
+      return demoTrackedSnapshot(browserSnapshot);
+    }
+    return invoke<RepositorySnapshot>("pull_current", {
+      repositoryRoot,
+      operationId,
+    });
+  },
+
+  async pushCurrent(
+    repositoryRoot: string,
+    remote: string,
+    operationId: string,
+  ): Promise<RepositorySnapshot> {
+    if (!isTauri) {
+      await demoDelay(520);
+      if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
+        throw new Error("Push was cancelled; the remote outcome is unknown until fetch.");
+      }
+      browserSnapshot = demoPushCurrent(browserSnapshot, remote);
+      return demoTrackedSnapshot(browserSnapshot);
+    }
+    return invoke<RepositorySnapshot>("push_current", {
+      repositoryRoot,
+      remote,
+      operationId,
+    });
+  },
+
+  async cancelRemoteOperation(
+    repositoryRoot: string,
+    operationId: string,
+  ): Promise<void> {
+    if (!isTauri) {
+      cancelledDemoRemoteOperations.add(remoteOperationKey(repositoryRoot, operationId));
+      return;
+    }
+    return invoke<void>("cancel_remote_operation", {
+      repositoryRoot,
+      operationId,
+    });
+  },
 };
+
+function remoteOperationKey(repositoryRoot: string, operationId: string): string {
+  return `${repositoryRoot}\0${operationId}`;
+}
 
 function demoDelay(milliseconds = 160): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));

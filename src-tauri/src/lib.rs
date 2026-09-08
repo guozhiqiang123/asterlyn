@@ -9,6 +9,7 @@ use tauri::State;
 
 const COMMIT_LIMIT: usize = 150;
 const CANCELLED_SCAN_RETENTION: usize = 256;
+const CANCELLED_REMOTE_RETENTION: usize = 128;
 
 #[derive(Default)]
 struct ScanRegistry {
@@ -19,6 +20,81 @@ struct ScanRegistry {
 struct ScanRegistryState {
     active: HashMap<String, CancellationToken>,
     cancelled: HashSet<String>,
+}
+
+#[derive(Default)]
+struct RemoteOperationRegistry {
+    inner: Mutex<RemoteOperationRegistryState>,
+}
+
+#[derive(Default)]
+struct RemoteOperationRegistryState {
+    active: HashMap<String, ActiveRemoteOperation>,
+    cancelled: HashSet<(String, String)>,
+}
+
+struct ActiveRemoteOperation {
+    id: String,
+    cancellation: CancellationToken,
+}
+
+impl RemoteOperationRegistryState {
+    fn register(
+        &mut self,
+        repository_root: &str,
+        operation_id: &str,
+        operation: &str,
+    ) -> Result<CancellationToken, GitError> {
+        if self.active.contains_key(repository_root) {
+            return Err(GitError::UnsafeOperation {
+                operation: operation.to_string(),
+                message: "another remote operation is already running for this repository"
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        let cancellation = CancellationToken::new();
+        if self
+            .cancelled
+            .remove(&(repository_root.to_string(), operation_id.to_string()))
+        {
+            cancellation.cancel();
+        }
+        self.active.insert(
+            repository_root.to_string(),
+            ActiveRemoteOperation {
+                id: operation_id.to_string(),
+                cancellation: cancellation.clone(),
+            },
+        );
+        Ok(cancellation)
+    }
+
+    fn cancel(&mut self, repository_root: String, operation_id: String) {
+        if let Some(active) = self.active.get(&repository_root)
+            && active.id == operation_id
+        {
+            active.cancellation.cancel();
+            return;
+        }
+        if self.cancelled.len() >= CANCELLED_REMOTE_RETENTION {
+            self.cancelled.clear();
+        }
+        self.cancelled.insert((repository_root, operation_id));
+    }
+
+    fn finish(
+        &mut self,
+        repository_root: &str,
+        operation_id: &str,
+        cancellation: &CancellationToken,
+    ) {
+        if self.active.get(repository_root).is_some_and(|active| {
+            active.id == operation_id && active.cancellation.refers_to(cancellation)
+        }) {
+            self.active.remove(repository_root);
+        }
+    }
 }
 
 #[tauri::command]
@@ -193,10 +269,112 @@ async fn create_branch(
     .await
 }
 
+#[tauri::command]
+async fn fetch_remote(
+    repository_root: String,
+    remote: String,
+    operation_id: String,
+    operations: State<'_, RemoteOperationRegistry>,
+) -> Result<RepositorySnapshot, GitError> {
+    run_remote_action(
+        repository_root,
+        operation_id,
+        operations.inner(),
+        "fetch",
+        move |repository, cancellation| repository.fetch_remote(&remote, cancellation),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn pull_current(
+    repository_root: String,
+    operation_id: String,
+    operations: State<'_, RemoteOperationRegistry>,
+) -> Result<RepositorySnapshot, GitError> {
+    run_remote_action(
+        repository_root,
+        operation_id,
+        operations.inner(),
+        "pull",
+        move |repository, cancellation| repository.pull_ff_only(cancellation),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn push_current(
+    repository_root: String,
+    remote: String,
+    operation_id: String,
+    operations: State<'_, RemoteOperationRegistry>,
+) -> Result<RepositorySnapshot, GitError> {
+    run_remote_action(
+        repository_root,
+        operation_id,
+        operations.inner(),
+        "push",
+        move |repository, cancellation| repository.push_current(&remote, cancellation),
+    )
+    .await
+}
+
+#[tauri::command]
+fn cancel_remote_operation(
+    repository_root: String,
+    operation_id: String,
+    operations: State<'_, RemoteOperationRegistry>,
+) -> Result<(), GitError> {
+    let mut registry = lock_remote_registry(operations.inner())?;
+    registry.cancel(repository_root, operation_id);
+    Ok(())
+}
+
+async fn run_remote_action<F>(
+    repository_root: String,
+    operation_id: String,
+    operations: &RemoteOperationRegistry,
+    operation: &str,
+    action: F,
+) -> Result<RepositorySnapshot, GitError>
+where
+    F: FnOnce(&GitRepository, &CancellationToken) -> Result<(), GitError> + Send + 'static,
+{
+    let repository = run_blocking("open repository for remote operation", move || {
+        GitRepository::open(repository_root)
+    })
+    .await?;
+    let resolved_root = repository.root().to_string_lossy().into_owned();
+    let cancellation = {
+        let mut registry = lock_remote_registry(operations)?;
+        registry.register(&resolved_root, &operation_id, operation)?
+    };
+
+    let task_cancellation = cancellation.clone();
+    let result = run_blocking(operation, move || {
+        action(&repository, &task_cancellation)?;
+        repository.tracked_snapshot(COMMIT_LIMIT)
+    })
+    .await;
+
+    let mut registry = lock_remote_registry(operations)?;
+    registry.finish(&resolved_root, &operation_id, &cancellation);
+    result
+}
+
 fn lock_scan_registry(scans: &ScanRegistry) -> Result<MutexGuard<'_, ScanRegistryState>, GitError> {
     scans.inner.lock().map_err(|_| GitError::Io {
         operation: "manage untracked scan".to_string(),
         message: "scan registry lock was poisoned".to_string(),
+    })
+}
+
+fn lock_remote_registry(
+    operations: &RemoteOperationRegistry,
+) -> Result<MutexGuard<'_, RemoteOperationRegistryState>, GitError> {
+    operations.inner.lock().map_err(|_| GitError::Io {
+        operation: "manage remote operations".to_string(),
+        message: "remote operation registry lock was poisoned".to_string(),
     })
 }
 
@@ -217,6 +395,7 @@ where
 pub fn run() {
     tauri::Builder::default()
         .manage(ScanRegistry::default())
+        .manage(RemoteOperationRegistry::default())
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
@@ -229,8 +408,47 @@ pub fn run() {
             unstage_paths,
             commit_changes,
             switch_branch,
-            create_branch
+            create_branch,
+            fetch_remote,
+            pull_current,
+            push_current,
+            cancel_remote_operation
         ])
         .run(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remote_registry_serializes_by_repository_and_cancels_exact_ids() {
+        let mut registry = RemoteOperationRegistryState::default();
+        let first = registry
+            .register("/repo", "one", "fetch")
+            .expect("first operation registers");
+        let duplicate = registry
+            .register("/repo", "two", "push")
+            .expect_err("same repository is serialized");
+        assert!(matches!(duplicate, GitError::UnsafeOperation { .. }));
+
+        let other = registry
+            .register("/other", "one", "fetch")
+            .expect("different repository can run independently");
+        registry.cancel("/repo".to_string(), "wrong".to_string());
+        assert!(!first.is_cancelled());
+        assert!(!other.is_cancelled());
+
+        registry.cancel("/repo".to_string(), "one".to_string());
+        assert!(first.is_cancelled());
+        registry.finish("/repo", "one", &first);
+        assert!(!registry.active.contains_key("/repo"));
+
+        registry.cancel("/future".to_string(), "queued".to_string());
+        let queued = registry
+            .register("/future", "queued", "pull")
+            .expect("pre-cancelled operation registers as cancelled");
+        assert!(queued.is_cancelled());
+    }
 }

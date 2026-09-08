@@ -15,10 +15,18 @@ export interface BranchState {
   head: string | null;
   oid: string | null;
   upstream: string | null;
+  upstreamRemote: string | null;
+  upstreamRef: string | null;
   ahead: number;
   behind: number;
   detached: boolean;
   unborn: boolean;
+}
+
+export interface RemoteSummary {
+  name: string;
+  fetchSupported: boolean;
+  pushSupported: boolean;
 }
 
 export interface FileChange {
@@ -83,6 +91,7 @@ export interface RepositorySnapshot {
   changes: FileChange[];
   commits: CommitSummary[];
   branches: BranchSummary[];
+  remotes: RemoteSummary[];
   untrackedState: "pending" | "complete" | "failed";
 }
 

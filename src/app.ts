@@ -2,6 +2,7 @@ import { bridge } from "./bridge";
 import { BRAND } from "./brand";
 import { DiffEditor } from "./diff-editor";
 import { icon } from "./icons";
+import { preferredRemote, remotePolicy } from "./remote-policy";
 import { windowControls } from "./window-controls";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import type {
@@ -38,6 +39,14 @@ interface AppState {
   showWhitespace: boolean;
   selectedBranch: string | null;
   newBranchName: string;
+  syncPopoverOpen: boolean;
+  selectedRemote: string | null;
+  remoteOperation: {
+    id: string;
+    root: string;
+    kind: "fetch" | "pull" | "push";
+    cancelling: boolean;
+  } | null;
   commitMessage: string;
   loading: boolean;
   error: string | null;
@@ -64,6 +73,9 @@ export class AsterlynApp {
     showWhitespace: false,
     selectedBranch: null,
     newBranchName: "",
+    syncPopoverOpen: false,
+    selectedRemote: null,
+    remoteOperation: null,
     commitMessage: "",
     loading: false,
     error: null,
@@ -74,6 +86,7 @@ export class AsterlynApp {
   private commitDiffGeneration = 0;
   private changeSelectionAnchor: string | null = null;
   private scanSequence = 0;
+  private remoteOperationSequence = 0;
   private activeUntrackedScan: {
     id: string;
     generation: number;
@@ -121,6 +134,13 @@ export class AsterlynApp {
           </button>
           <div class="topbar-actions" data-tauri-drag-region>
             <span class="demo-badge ${bridge.isDemo ? "" : "hidden"}">Browser demo</span>
+            <div class="sync-anchor" id="sync-anchor">
+              <button class="icon-button sync-button" id="sync-button" type="button" aria-label="Remote sync" title="Remote sync" aria-haspopup="dialog" aria-expanded="false">
+                ${icon("sync", 17)}
+                <span class="sync-badge hidden" id="sync-badge"></span>
+              </button>
+              <section class="sync-popover hidden" id="sync-popover" role="dialog" aria-label="Remote sync"></section>
+            </div>
             <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh repository" title="Refresh (Ctrl/Cmd+R)">
               ${icon("refresh", 17)}
             </button>
@@ -227,6 +247,12 @@ export class AsterlynApp {
     this.query("#repository-switcher").addEventListener("click", () =>
       this.openRepositoryDialog(),
     );
+    this.query("#sync-button").addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!this.state.snapshot) return;
+      this.state.syncPopoverOpen = !this.state.syncPopoverOpen;
+      this.renderRemotePopover(this.state.snapshot);
+    });
     this.query("#refresh-button").addEventListener("click", () => void this.refresh());
     this.bindWindowControls();
     this.query("#toast-close").addEventListener("click", () => this.clearError());
@@ -254,7 +280,13 @@ export class AsterlynApp {
       });
     });
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") this.closeRepositoryDialog();
+      if (event.key === "Escape") {
+        this.closeRepositoryDialog();
+        if (this.state.syncPopoverOpen && !this.state.remoteOperation) {
+          this.state.syncPopoverOpen = false;
+          if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
+        }
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r") {
         event.preventDefault();
         void this.refresh();
@@ -269,6 +301,17 @@ export class AsterlynApp {
         event.preventDefault();
         if (this.state.activeView === "history") this.focusHistoryFilter();
         else this.focusChangeFilter();
+      }
+    });
+    window.addEventListener("pointerdown", (event) => {
+      if (
+        this.state.syncPopoverOpen &&
+        !this.state.remoteOperation &&
+        event.target instanceof Element &&
+        !event.target.closest("#sync-anchor")
+      ) {
+        this.state.syncPopoverOpen = false;
+        if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
       }
     });
   }
@@ -319,6 +362,7 @@ export class AsterlynApp {
   private async openRepository(path: string): Promise<void> {
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
+    void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.setLoading(true, "Opening repository…");
     try {
@@ -338,6 +382,8 @@ export class AsterlynApp {
         snapshot.branches.find((branch) => branch.current)?.fullName ??
         snapshot.branches[0]?.fullName ??
         null;
+      this.state.remoteOperation = null;
+      this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
       this.chooseValidChangeSelection();
       this.state.error = null;
       this.closeRepositoryDialog();
@@ -361,6 +407,185 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.loading) return;
     await this.openRepository(snapshot.root);
+  }
+
+  private renderRemotePopover(snapshot: RepositorySnapshot): void {
+    const button = this.query<HTMLButtonElement>("#sync-button");
+    const badge = this.query("#sync-badge");
+    const popover = this.query("#sync-popover");
+    const divergence = [
+      snapshot.branch.ahead ? `↑${snapshot.branch.ahead}` : "",
+      snapshot.branch.behind ? `↓${snapshot.branch.behind}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    badge.textContent = divergence;
+    badge.classList.toggle("hidden", !divergence);
+    button.setAttribute("aria-expanded", this.state.syncPopoverOpen.toString());
+    button.disabled = false;
+    popover.classList.toggle("hidden", !this.state.syncPopoverOpen);
+    if (!this.state.syncPopoverOpen) {
+      popover.innerHTML = "";
+      return;
+    }
+
+    const policy = remotePolicy(snapshot, this.state.selectedRemote);
+    const operation =
+      this.state.remoteOperation?.root === snapshot.root
+        ? this.state.remoteOperation
+        : null;
+    const pushTarget =
+      policy.pushRemote && policy.destination
+        ? `${policy.pushRemote.name}:${policy.destination}`
+        : "Not configured";
+    const remoteOptions = snapshot.remotes
+      .map(
+        (remote) =>
+          `<option value="${escapeAttribute(remote.name)}" ${remote.name === policy.selectedRemote?.name ? "selected" : ""}>${escapeHtml(remote.name)}${remote.fetchSupported ? "" : " · unsupported mapping"}</option>`,
+      )
+      .join("");
+    const action = (
+      kind: "fetch" | "pull" | "push",
+      state: ReturnType<typeof remotePolicy>["fetch"],
+      iconName: "download" | "upload" | "sync",
+    ) => `
+      <div class="sync-action-row">
+        <span class="sync-action-icon">${icon(iconName, 16)}</span>
+        <div><strong>${escapeHtml(state.label)}</strong><p>${escapeHtml(state.detail)}</p></div>
+        <button class="secondary-button compact" type="button" data-remote-action="${kind}" ${state.enabled && !this.state.loading ? "" : "disabled"}>${escapeHtml(state.label)}</button>
+      </div>`;
+
+    popover.innerHTML = `
+      <div class="sync-popover-header">
+        <div><span class="panel-eyebrow">Remote</span><h2>Sync repository</h2></div>
+        <span class="sync-state ${snapshot.branch.ahead > 0 && snapshot.branch.behind > 0 ? "diverged" : ""}">${divergence || "Up to date"}</span>
+      </div>
+      <label class="remote-select" for="remote-select"><span>Remote</span><select id="remote-select" ${operation ? "disabled" : ""}>${remoteOptions}</select></label>
+      <div class="sync-route" aria-label="Remote ref target">
+        <code title="${escapeAttribute(policy.source ?? "No local branch")}">${escapeHtml(policy.source ?? "No local branch")}</code>
+        <span>→</span>
+        <code title="${escapeAttribute(pushTarget)}">${escapeHtml(pushTarget)}</code>
+      </div>
+      <p class="sync-advisory">Ahead/behind values use local tracking refs. Fetch refreshes them before the next decision.</p>
+      ${
+        operation
+          ? `<div class="remote-operation-banner"><span class="spinner"></span><div><strong>${operation.cancelling ? "Cancelling…" : `${capitalize(operation.kind)} in progress`}</strong><p>${operation.kind === "push" ? "If cancelled, the remote outcome remains unknown until fetch." : "Cancellation never rolls repository state back."}</p></div><button class="secondary-button compact" id="cancel-remote-operation" type="button" ${operation.cancelling ? "disabled" : ""}>Cancel</button></div>`
+          : `${action("fetch", policy.fetch, "download")}${action("pull", policy.pull, "sync")}${action("push", policy.push, "upload")}`
+      }
+      <div class="credential-note"><span>${icon("check", 14)}</span><p>Uses configured non-interactive Git credentials or SSH agent. Asterlyn never stores remote secrets.</p></div>`;
+
+    this.root
+      .querySelector<HTMLSelectElement>("#remote-select")
+      ?.addEventListener("change", (event) => {
+        this.state.selectedRemote = (event.currentTarget as HTMLSelectElement).value;
+        this.renderRemotePopover(snapshot);
+      });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-remote-action]")
+      .forEach((actionButton) => {
+        actionButton.addEventListener("click", () => {
+          const kind = actionButton.dataset.remoteAction as "fetch" | "pull" | "push";
+          void this.runRemoteOperation(kind);
+        });
+      });
+    this.root
+      .querySelector<HTMLButtonElement>("#cancel-remote-operation")
+      ?.addEventListener("click", () => void this.cancelActiveRemoteOperation());
+  }
+
+  private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<void> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || this.state.loading || this.state.remoteOperation) return;
+    const policy = remotePolicy(snapshot, this.state.selectedRemote);
+    const actionState = policy[kind];
+    if (!actionState.enabled) return;
+    const remote = kind === "push" ? policy.pushRemote : policy.selectedRemote;
+    if (kind !== "pull" && !remote) return;
+
+    const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    const operationId = `${generation}-${++this.remoteOperationSequence}-${kind}`;
+    this.state.remoteOperation = {
+      id: operationId,
+      root: snapshot.root,
+      kind,
+      cancelling: false,
+    };
+    this.clearError();
+    this.setLoading(true, `${capitalize(kind)} in progress…`);
+    this.renderRemotePopover(snapshot);
+    let pendingRoot: string | null = null;
+    let succeeded = false;
+    let failed = false;
+
+    try {
+      const next =
+        kind === "fetch"
+          ? await bridge.fetchRemote(snapshot.root, remote!.name, operationId)
+          : kind === "pull"
+            ? await bridge.pullCurrent(snapshot.root, operationId)
+            : await bridge.pushCurrent(snapshot.root, remote!.name, operationId);
+      if (generation !== this.requestGeneration) return;
+      this.acceptRemoteSnapshot(next);
+      pendingRoot = next.root;
+      succeeded = true;
+    } catch (error) {
+      if (generation !== this.requestGeneration) return;
+      failed = true;
+      this.showError(error);
+      try {
+        const reconciled = await bridge.openRepository(snapshot.root);
+        if (generation !== this.requestGeneration) return;
+        this.acceptRemoteSnapshot(reconciled);
+        pendingRoot = reconciled.root;
+      } catch {
+        this.setStatus("Remote operation ended; refresh required", "warning");
+      }
+    } finally {
+      if (generation === this.requestGeneration) {
+        this.state.remoteOperation = null;
+        this.setLoading(false, "Ready");
+        if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
+        if (succeeded) this.setStatus(`${capitalize(kind)} completed`, "success");
+        else if (failed) this.setStatus("Remote operation needs review", "warning");
+      }
+    }
+    if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
+    }
+  }
+
+  private acceptRemoteSnapshot(snapshot: RepositorySnapshot): void {
+    this.state.snapshot = snapshot;
+    this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
+    this.state.selectedBranch =
+      snapshot.branches.find((branch) => branch.current)?.fullName ??
+      snapshot.branches[0]?.fullName ??
+      null;
+    this.state.selectedChangeKeys.clear();
+    this.state.selectedChange = null;
+    this.changeSelectionAnchor = null;
+    this.chooseValidChangeSelection();
+    this.renderWorkspace();
+  }
+
+  private async cancelActiveRemoteOperation(): Promise<void> {
+    const operation = this.state.remoteOperation;
+    if (!operation || operation.cancelling) return;
+    operation.cancelling = true;
+    if (this.state.snapshot?.root === operation.root) {
+      this.setStatus(`Cancelling ${operation.kind}…`, "busy");
+      this.renderRemotePopover(this.state.snapshot);
+    }
+    try {
+      await bridge.cancelRemoteOperation(operation.root, operation.id);
+    } catch (error) {
+      operation.cancelling = false;
+      this.showError(error);
+      if (this.state.snapshot?.root === operation.root) {
+        this.renderRemotePopover(this.state.snapshot);
+      }
+    }
   }
 
   private switchView(view: WorkspaceView): void {
@@ -400,6 +625,8 @@ export class AsterlynApp {
   private renderTopbar(snapshot: RepositorySnapshot): void {
     this.query("#repository-name").textContent = basename(snapshot.root);
     this.query("#repository-path").textContent = snapshot.root;
+    this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
+    this.renderRemotePopover(snapshot);
   }
 
   private renderNavigator(snapshot: RepositorySnapshot): void {
@@ -2059,11 +2286,36 @@ function formatAbsolute(epochSeconds: number): string {
   }).format(new Date(epochSeconds * 1000));
 }
 
+function capitalize(value: string): string {
+  return value.charAt(0).toLocaleUpperCase() + value.slice(1);
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
     const value = error as Record<string, unknown>;
+    if (value.kind === "remoteCancelled") {
+      if (value.remoteStateMayHaveChanged === true) {
+        return "Push cancellation was requested. The remote outcome is unknown; fetch before retrying.";
+      }
+      return value.repositoryStateMayHaveChanged === true
+        ? "Remote operation was cancelled. Repository refs or files may have changed; the view was refreshed."
+        : "Remote operation was cancelled.";
+    }
+    if (value.kind === "remoteFailed") {
+      const reason = typeof value.reason === "string" ? value.reason : "unknown";
+      const fallback =
+        "The remote operation failed without exposing child-process output. Check Git configuration and retry.";
+      const messages: Record<string, string> = {
+        authentication:
+          "Authentication was unavailable. Configure a non-interactive Git credential helper or SSH agent, then retry.",
+        network: "The remote could not be reached. Check the network and remote configuration.",
+        rejected: "The remote rejected the update. Fetch and review the branch state before retrying.",
+        unknown: fallback,
+      };
+      return messages[reason] ?? fallback;
+    }
     const message = typeof value.message === "string" ? value.message : null;
     const operation = typeof value.operation === "string" ? value.operation : null;
     if (message && operation) return `${operation}: ${message}`;
