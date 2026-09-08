@@ -1,11 +1,17 @@
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::Duration;
 
 use crate::error::GitError;
-use crate::model::{DiffResult, RepositorySnapshot};
+use crate::model::{
+    ChangeKind, DiffResult, FileChange, RepositorySnapshot, UntrackedScan, UntrackedState,
+};
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -14,6 +20,29 @@ const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 pub struct GitRepository {
     root: PathBuf,
     git_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+
+    pub fn refers_to(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.cancelled, &other.cancelled)
+    }
 }
 
 impl GitRepository {
@@ -47,6 +76,17 @@ impl GitRepository {
     }
 
     pub fn snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
+        let mut snapshot = self.tracked_snapshot(commit_limit)?;
+        let scan = self.untracked_changes(&CancellationToken::new())?;
+        snapshot.changes.extend(scan.changes);
+        snapshot
+            .changes
+            .sort_by(|left, right| left.path.cmp(&right.path));
+        snapshot.untracked_state = UntrackedState::Complete;
+        Ok(snapshot)
+    }
+
+    pub fn tracked_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
         let status = self.run_read(
             "read working tree status",
             [
@@ -54,7 +94,7 @@ impl GitRepository {
                 "--porcelain=v2",
                 "--branch",
                 "-z",
-                "--untracked-files=all",
+                "--untracked-files=no",
             ],
         )?;
         let (branch, changes) = parse_status(&status.stdout)?;
@@ -96,6 +136,37 @@ impl GitRepository {
             changes,
             commits,
             branches: parse_branches(&refs.stdout)?,
+            untracked_state: UntrackedState::Pending,
+        })
+    }
+
+    pub fn untracked_changes(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<UntrackedScan, GitError> {
+        let output = self.run_cancellable_read(
+            "scan untracked files",
+            ["ls-files", "--others", "--exclude-standard", "-z"],
+            cancellation,
+        )?;
+        let mut changes: Vec<_> = output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| FileChange {
+                path: String::from_utf8_lossy(path).into_owned(),
+                original_path: None,
+                index_status: ChangeKind::Unmodified,
+                worktree_status: ChangeKind::Untracked,
+                conflicted: false,
+                submodule: false,
+            })
+            .collect();
+        changes.sort_by(|left, right| left.path.cmp(&right.path));
+
+        Ok(UntrackedScan {
+            root: self.root.to_string_lossy().into_owned(),
+            changes,
         })
     }
 
@@ -250,6 +321,73 @@ impl GitRepository {
         ensure_success(operation, output)
     }
 
+    fn run_cancellable_read<const N: usize>(
+        &self,
+        operation: &str,
+        args: [&str; N],
+        cancellation: &CancellationToken,
+    ) -> Result<Output, GitError> {
+        if cancellation.is_cancelled() {
+            return Err(GitError::Cancelled {
+                operation: operation.to_string(),
+            });
+        }
+
+        let mut child = base_command(&self.root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            })?;
+        let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git stdout was not available".to_string(),
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git stderr was not available".to_string(),
+        })?;
+        let stdout_reader = thread::spawn(move || read_stream(stdout));
+        let stderr_reader = thread::spawn(move || read_stream(stderr));
+
+        let status = loop {
+            if cancellation.is_cancelled() {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = join_stream(stdout_reader, operation, "stdout");
+                let _ = join_stream(stderr_reader, operation, "stderr");
+                return Err(GitError::Cancelled {
+                    operation: operation.to_string(),
+                });
+            }
+            let wait_result = child.try_wait();
+            match wait_result {
+                Ok(Some(status)) => break status,
+                Ok(None) => thread::sleep(Duration::from_millis(10)),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = join_stream(stdout_reader, operation, "stdout");
+                    let _ = join_stream(stderr_reader, operation, "stderr");
+                    return Err(GitError::Io {
+                        operation: operation.to_string(),
+                        message: error.to_string(),
+                    });
+                }
+            }
+        };
+
+        let output = Output {
+            status,
+            stdout: join_stream(stdout_reader, operation, "stdout")?,
+            stderr: join_stream(stderr_reader, operation, "stderr")?,
+        };
+        ensure_success(operation, output)
+    }
+
     fn detect_operation(&self) -> Option<String> {
         let candidates = [
             ("rebase-merge", "rebase"),
@@ -264,6 +402,29 @@ impl GitRepository {
             .find(|(marker, _)| self.git_dir.join(marker).exists())
             .map(|(_, operation)| (*operation).to_string())
     }
+}
+
+fn read_stream(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    stream.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn join_stream(
+    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    operation: &str,
+    stream: &str,
+) -> Result<Vec<u8>, GitError> {
+    reader
+        .join()
+        .map_err(|_| GitError::Io {
+            operation: operation.to_string(),
+            message: format!("Git {stream} reader stopped unexpectedly"),
+        })?
+        .map_err(|error| GitError::Io {
+            operation: operation.to_string(),
+            message: format!("could not read Git {stream}: {error}"),
+        })
 }
 
 fn run_from<const N: usize>(
@@ -430,6 +591,42 @@ mod tests {
         assert_eq!(snapshot.branch.head.as_deref(), Some("main"));
         assert!(snapshot.branch.unborn);
         assert!(snapshot.commits.is_empty());
+    }
+
+    #[test]
+    fn tracked_snapshot_defers_untracked_discovery() {
+        let directory = fixture();
+        fs::write(directory.path().join("later.txt"), "later\n").expect("fixture file");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        let tracked = repository
+            .tracked_snapshot(50)
+            .expect("tracked snapshot loads");
+        assert_eq!(tracked.untracked_state, UntrackedState::Pending);
+        assert!(tracked.changes.is_empty());
+
+        let scan = repository
+            .untracked_changes(&CancellationToken::new())
+            .expect("untracked scan loads");
+        assert_eq!(scan.changes.len(), 1);
+        assert_eq!(scan.changes[0].path, "later.txt");
+
+        let complete = repository.snapshot(50).expect("full snapshot loads");
+        assert_eq!(complete.untracked_state, UntrackedState::Complete);
+        assert_eq!(complete.changes.len(), 1);
+    }
+
+    #[test]
+    fn untracked_discovery_honors_preemptive_cancellation() {
+        let directory = fixture();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let error = repository
+            .untracked_changes(&cancellation)
+            .expect_err("cancelled scan should stop");
+        assert!(matches!(error, GitError::Cancelled { .. }));
     }
 
     #[test]

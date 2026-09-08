@@ -51,7 +51,9 @@ This avoids both extremes: a monolith that loads every subsystem at startup and 
 
 ## State and event flow
 
-The frontend requests a repository snapshot with a monotonically increasing request generation. The backend returns immutable data. After a stage/unstage/commit action, the application requests a fresh snapshot rather than manually pretending the mutation succeeded. File-system events are coalesced and treated as refresh hints, not truth.
+The frontend requests a repository snapshot with a monotonically increasing request generation. The backend returns immutable data. Repository refresh is deliberately two-phase: tracked/index, branch, history, and ref state arrive first; an independently cancellable untracked-path scan completes the snapshot afterward. The UI identifies pending untracked discovery instead of briefly claiming the repository is clean, merges a supplement only into its matching generation, and cancels obsolete Git child processes when the repository changes or a mutation begins.
+
+After a stage/unstage/commit action, the application requests fresh tracked state and starts a new untracked scan rather than manually pretending the mutation succeeded. File-system events are coalesced and treated as refresh hints, not truth. The compatibility `snapshot` operation in the pure Git crate still composes both phases for callers that require an atomic-looking complete result, while interactive callers use the phased API.
 
 ## Failure policy
 
@@ -60,4 +62,3 @@ The frontend requests a repository snapshot with a monotonically increasing requ
 - Invalid UTF-8 is decoded lossily for display while raw paths remain an acknowledged M1 limitation.
 - Crashes in optional services must not bring down the editor host.
 - Any feature that can rewrite or discard work needs a preview and recovery story before release.
-

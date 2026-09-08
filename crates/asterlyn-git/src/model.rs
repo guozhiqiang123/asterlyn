@@ -8,6 +8,21 @@ pub struct RepositorySnapshot {
     pub changes: Vec<FileChange>,
     pub commits: Vec<CommitSummary>,
     pub branches: Vec<BranchSummary>,
+    pub untracked_state: UntrackedState,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum UntrackedState {
+    Pending,
+    Complete,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UntrackedScan {
+    pub root: String,
+    pub changes: Vec<FileChange>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]

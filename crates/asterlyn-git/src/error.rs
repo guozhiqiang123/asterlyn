@@ -24,6 +24,9 @@ pub enum GitError {
         field: String,
         message: String,
     },
+    Cancelled {
+        operation: String,
+    },
 }
 
 impl Display for GitError {
@@ -52,6 +55,9 @@ impl Display for GitError {
             }
             Self::InvalidInput { field, message } => {
                 write!(formatter, "Invalid {field}: {message}")
+            }
+            Self::Cancelled { operation } => {
+                write!(formatter, "Git operation '{operation}' was cancelled")
             }
         }
     }
