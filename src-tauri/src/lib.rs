@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard};
 
 use asterlyn_git::{
-    CancellationToken, DiffResult, GitError, GitRepository, RepositorySnapshot, UntrackedScan,
+    CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
+    RepositorySnapshot, UntrackedScan,
 };
 use tauri::State;
 
@@ -100,6 +101,34 @@ async fn read_diff(
 }
 
 #[tauri::command]
+async fn read_commit_details(
+    repository_root: String,
+    commit_oid: String,
+) -> Result<CommitDetails, GitError> {
+    run_blocking("read commit details", move || {
+        GitRepository::open(repository_root)?.commit_details(&commit_oid)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_commit_diff(
+    repository_root: String,
+    commit_oid: String,
+    path: String,
+    original_path: Option<String>,
+) -> Result<CommitDiffResult, GitError> {
+    run_blocking("read commit diff", move || {
+        GitRepository::open(repository_root)?.commit_diff(
+            &commit_oid,
+            &path,
+            original_path.as_deref(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
 async fn stage_paths(
     repository_root: String,
     paths: Vec<String>,
@@ -168,6 +197,8 @@ pub fn run() {
             scan_untracked,
             cancel_untracked_scan,
             read_diff,
+            read_commit_details,
+            read_commit_diff,
             stage_paths,
             unstage_paths,
             commit_changes

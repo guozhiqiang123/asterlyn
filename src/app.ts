@@ -7,6 +7,9 @@ import type {
   BranchSummary,
   ChangeKind,
   ChangeSelection,
+  CommitDetails,
+  CommitDiffResult,
+  CommitFileChange,
   CommitSummary,
   FileChange,
   RepositorySnapshot,
@@ -20,6 +23,14 @@ interface AppState {
   activeView: WorkspaceView;
   selectedChange: ChangeSelection | null;
   selectedCommit: string | null;
+  historyQuery: string;
+  selectedCommitFile: string | null;
+  commitDetails: CommitDetails | null;
+  commitDetailsLoading: boolean;
+  commitDetailsError: string | null;
+  commitPatch: CommitDiffResult | null;
+  commitPatchLoading: boolean;
+  commitPatchError: string | null;
   selectedBranch: string | null;
   commitMessage: string;
   loading: boolean;
@@ -33,6 +44,14 @@ export class AsterlynApp {
     activeView: "changes",
     selectedChange: null,
     selectedCommit: null,
+    historyQuery: "",
+    selectedCommitFile: null,
+    commitDetails: null,
+    commitDetailsLoading: false,
+    commitDetailsError: null,
+    commitPatch: null,
+    commitPatchLoading: false,
+    commitPatchError: null,
     selectedBranch: null,
     commitMessage: "",
     loading: false,
@@ -40,6 +59,8 @@ export class AsterlynApp {
   };
   private requestGeneration = 0;
   private diffGeneration = 0;
+  private commitDetailsGeneration = 0;
+  private commitDiffGeneration = 0;
   private scanSequence = 0;
   private activeUntrackedScan: {
     id: string;
@@ -226,6 +247,16 @@ export class AsterlynApp {
         event.preventDefault();
         void this.refresh();
       }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "f" &&
+        this.state.activeView === "history" &&
+        !event.defaultPrevented &&
+        !(event.target instanceof Element && event.target.closest(".cm-editor"))
+      ) {
+        event.preventDefault();
+        this.focusHistoryFilter();
+      }
     });
   }
 
@@ -283,6 +314,10 @@ export class AsterlynApp {
       window.localStorage.setItem(RECENT_REPOSITORY_KEY, snapshot.root);
       this.state.snapshot = snapshot;
       this.state.selectedCommit = snapshot.commits[0]?.oid ?? null;
+      this.state.historyQuery = "";
+      this.clearCommitInspection();
+      this.state.commitDetailsLoading =
+        this.state.activeView === "history" && this.state.selectedCommit !== null;
       this.state.selectedBranch =
         snapshot.branches.find((branch) => branch.current)?.fullName ??
         snapshot.branches[0]?.fullName ??
@@ -292,6 +327,7 @@ export class AsterlynApp {
       this.closeRepositoryDialog();
       this.renderWorkspace();
       if (this.state.activeView === "changes") void this.loadSelectedDiff();
+      if (this.state.activeView === "history") void this.loadSelectedCommitDetails();
       pendingRoot = snapshot.root;
     } catch (error) {
       if (generation !== this.requestGeneration) return;
@@ -315,6 +351,14 @@ export class AsterlynApp {
     if (view === this.state.activeView) return;
     this.state.activeView = view;
     this.diffEditor.destroy();
+    if (
+      view === "history" &&
+      this.state.selectedCommit !== null &&
+      this.state.commitDetails?.oid !== this.state.selectedCommit
+    ) {
+      this.state.commitDetailsLoading = true;
+      this.state.commitDetailsError = null;
+    }
     this.root.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
       const active = button.dataset.view === view;
       button.classList.toggle("active", active);
@@ -322,6 +366,9 @@ export class AsterlynApp {
     });
     this.renderWorkspace();
     if (view === "changes") void this.loadSelectedDiff();
+    if (view === "history" && this.state.commitDetails?.oid !== this.state.selectedCommit) {
+      void this.loadSelectedCommitDetails();
+    }
   }
 
   private renderWorkspace(): void {
@@ -347,6 +394,7 @@ export class AsterlynApp {
     if (this.state.activeView === "changes") {
       title.textContent = "Changes";
       count.textContent = snapshot.changes.length.toString();
+      count.title = `${snapshot.changes.length} changed files`;
       body.innerHTML = this.renderChangeNavigation(snapshot);
       this.bindChangeEvents();
       return;
@@ -354,7 +402,11 @@ export class AsterlynApp {
 
     if (this.state.activeView === "history") {
       title.textContent = "History";
-      count.textContent = snapshot.commits.length.toString();
+      const filtered = this.filteredHistoryCommits(snapshot);
+      count.textContent = filtered.length.toString();
+      count.title = this.state.historyQuery
+        ? `${filtered.length} of ${snapshot.commits.length} commits`
+        : `${snapshot.commits.length} commits`;
       body.innerHTML = this.renderHistoryNavigation(snapshot);
       this.bindHistoryEvents();
       return;
@@ -362,6 +414,7 @@ export class AsterlynApp {
 
     title.textContent = "Branches";
     count.textContent = snapshot.branches.length.toString();
+    count.title = `${snapshot.branches.length} refs`;
     body.innerHTML = this.renderBranchNavigation(snapshot);
     this.bindBranchEvents();
   }
@@ -448,7 +501,25 @@ export class AsterlynApp {
     if (snapshot.commits.length === 0) {
       return this.emptyState("No commits yet", "The first commit will appear here.", "history", true);
     }
-    return `<div class="history-list">${snapshot.commits
+    const commits = this.filteredHistoryCommits(snapshot);
+    return `
+      <div class="history-navigation">
+        <label class="history-filter" for="history-filter">
+          ${icon("search", 14)}
+          <input id="history-filter" type="search" value="${escapeAttribute(this.state.historyQuery)}" placeholder="Filter message, author, hash…" autocomplete="off" spellcheck="false" aria-label="Filter commit history" aria-keyshortcuts="Control+F Meta+F" />
+          <span>Ctrl F</span>
+        </label>
+        <div class="history-results" id="history-results" aria-live="polite">
+          ${this.renderHistoryRows(commits)}
+        </div>
+      </div>`;
+  }
+
+  private renderHistoryRows(commits: CommitSummary[]): string {
+    if (commits.length === 0) {
+      return `<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>`;
+    }
+    return `<div class="history-list">${commits
       .map((commit) => {
         const selected = commit.oid === this.state.selectedCommit;
         return `
@@ -462,6 +533,21 @@ export class AsterlynApp {
           </button>`;
       })
       .join("")}</div>`;
+  }
+
+  private filteredHistoryCommits(snapshot: RepositorySnapshot): CommitSummary[] {
+    const query = this.state.historyQuery.trim().toLocaleLowerCase();
+    if (!query) return snapshot.commits;
+    return snapshot.commits.filter((commit) =>
+      [
+        commit.oid,
+        commit.shortOid,
+        commit.subject,
+        commit.authorName,
+        commit.authorEmail,
+        ...commit.decorations,
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
+    );
   }
 
   private renderBranchNavigation(snapshot: RepositorySnapshot): string {
@@ -536,12 +622,91 @@ export class AsterlynApp {
   }
 
   private bindHistoryEvents(): void {
+    const input = this.root.querySelector<HTMLInputElement>("#history-filter");
+    input?.addEventListener("input", () => {
+      this.state.historyQuery = input.value;
+      this.renderHistoryResults();
+    });
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && input.value) {
+        event.preventDefault();
+        event.stopPropagation();
+        input.value = "";
+        this.state.historyQuery = "";
+        this.renderHistoryResults();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "ArrowDown") {
+        const first = this.root.querySelector<HTMLButtonElement>("[data-commit]");
+        if (!first) return;
+        event.preventDefault();
+        const oid = first.dataset.commit;
+        if (oid) this.selectCommit(oid, true);
+      }
+    });
+    this.bindHistoryRows();
+  }
+
+  private bindHistoryRows(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-commit]").forEach((row) => {
       row.addEventListener("click", () => {
-        this.state.selectedCommit = row.dataset.commit ?? null;
-        this.renderWorkspace();
+        const oid = row.dataset.commit;
+        if (oid) this.selectCommit(oid);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        const rows = Array.from(
+          this.root.querySelectorAll<HTMLButtonElement>("[data-commit]"),
+        );
+        const current = rows.indexOf(row);
+        if (current < 0) return;
+        event.preventDefault();
+        const target =
+          event.key === "Home"
+            ? rows[0]
+            : event.key === "End"
+              ? rows.at(-1)
+              : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
+        const oid = target?.dataset.commit;
+        if (oid) this.selectCommit(oid, true);
       });
     });
+  }
+
+  private renderHistoryResults(): void {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || this.state.activeView !== "history") return;
+    const commits = this.filteredHistoryCommits(snapshot);
+    this.query("#history-results").innerHTML = this.renderHistoryRows(commits);
+    const count = this.query("#navigator-count");
+    count.textContent = commits.length.toString();
+    count.title = `${commits.length} of ${snapshot.commits.length} commits`;
+    this.bindHistoryRows();
+  }
+
+  private focusHistoryFilter(): void {
+    const input = this.root.querySelector<HTMLInputElement>("#history-filter");
+    input?.focus();
+    input?.select();
+  }
+
+  private selectCommit(oid: string, restoreFocus = false): void {
+    if (oid === this.state.selectedCommit && this.state.commitDetails?.oid === oid) {
+      if (restoreFocus) this.focusHistoryCommit(oid);
+      return;
+    }
+    this.state.selectedCommit = oid;
+    this.clearCommitInspection();
+    this.state.commitDetailsLoading = true;
+    this.renderWorkspace();
+    if (restoreFocus) this.focusHistoryCommit(oid);
+    void this.loadSelectedCommitDetails();
+  }
+
+  private focusHistoryCommit(oid: string): void {
+    this.root
+      .querySelector<HTMLButtonElement>(`[data-commit="${oid}"]`)
+      ?.focus();
   }
 
   private bindBranchEvents(): void {
@@ -557,6 +722,7 @@ export class AsterlynApp {
     this.diffEditor.destroy();
     const header = this.query("#content-header");
     const body = this.query("#content-body");
+    body.classList.remove("diff-surface");
 
     if (this.state.activeView === "changes") {
       const selected = this.state.selectedChange;
@@ -588,7 +754,39 @@ export class AsterlynApp {
         ${this.contentHeading(commit.subject, commit.shortOid)}
         <div class="header-actions"><code class="oid">${escapeHtml(commit.shortOid)}</code></div>
       `;
-      body.innerHTML = this.commitDetail(commit);
+      if (this.state.commitDetailsLoading) {
+        body.innerHTML = this.loadingBlock("Loading changed files…");
+        return;
+      }
+      if (this.state.commitDetailsError) {
+        body.innerHTML = this.retryState(
+          "Could not load commit",
+          this.state.commitDetailsError,
+          "retry-commit-details",
+          "history",
+        );
+        this.query("#retry-commit-details").addEventListener("click", () => {
+          void this.loadSelectedCommitDetails();
+        });
+        return;
+      }
+      const details = this.state.commitDetails;
+      if (!details || details.oid !== commit.oid) {
+        body.innerHTML = this.loadingBlock("Loading changed files…");
+        return;
+      }
+      if (details.files.length === 0) {
+        body.innerHTML = this.emptyState(
+          "No first-parent changes",
+          "This commit does not change files relative to its first parent.",
+          "history",
+        );
+        return;
+      }
+      const file = this.selectedCommitFile(details);
+      body.innerHTML = this.commitExplorer(details, file);
+      this.bindCommitFileEvents();
+      this.renderCommitPatch(file);
       return;
     }
 
@@ -631,6 +829,253 @@ export class AsterlynApp {
       );
       this.showError(error);
     }
+  }
+
+  private async loadSelectedCommitDetails(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const oid = this.state.selectedCommit;
+    if (!snapshot || !oid || this.state.activeView !== "history") return;
+    const generation = ++this.commitDetailsGeneration;
+    this.commitDiffGeneration += 1;
+    this.state.commitDetails = null;
+    this.state.selectedCommitFile = null;
+    this.state.commitDetailsLoading = true;
+    this.state.commitDetailsError = null;
+    this.state.commitPatch = null;
+    this.state.commitPatchLoading = false;
+    this.state.commitPatchError = null;
+    this.renderContent(snapshot);
+    this.renderInspector(snapshot);
+
+    try {
+      const details = await bridge.readCommitDetails(snapshot.root, oid);
+      if (
+        generation !== this.commitDetailsGeneration ||
+        this.state.activeView !== "history" ||
+        this.state.snapshot?.root !== snapshot.root ||
+        this.state.selectedCommit !== oid ||
+        details.oid !== oid
+      ) {
+        return;
+      }
+      this.state.commitDetails = details;
+      this.state.commitDetailsLoading = false;
+      this.state.selectedCommitFile = details.files[0]?.path ?? null;
+      this.state.commitPatchLoading = details.files.length > 0;
+      this.renderContent(snapshot);
+      this.renderInspector(snapshot);
+      if (details.files.length > 0) void this.loadSelectedCommitDiff();
+    } catch (error) {
+      if (
+        generation !== this.commitDetailsGeneration ||
+        this.state.activeView !== "history" ||
+        this.state.snapshot?.root !== snapshot.root ||
+        this.state.selectedCommit !== oid
+      ) {
+        return;
+      }
+      this.state.commitDetailsLoading = false;
+      this.state.commitDetailsError = errorMessage(error);
+      this.renderContent(snapshot);
+      this.renderInspector(snapshot);
+      this.showError(error);
+    }
+  }
+
+  private async loadSelectedCommitDiff(restoreFocus = false): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const details = this.state.commitDetails;
+    const file = details ? this.selectedCommitFile(details) : null;
+    if (!snapshot || !details || !file || this.state.activeView !== "history") return;
+    const oid = details.oid;
+    const generation = ++this.commitDiffGeneration;
+    this.state.commitPatch = null;
+    this.state.commitPatchLoading = true;
+    this.state.commitPatchError = null;
+    this.renderContent(snapshot);
+    if (restoreFocus) this.focusCommitFile(file.path);
+
+    try {
+      const diff = await bridge.readCommitDiff(
+        snapshot.root,
+        oid,
+        file.path,
+        file.originalPath,
+      );
+      if (
+        generation !== this.commitDiffGeneration ||
+        this.state.activeView !== "history" ||
+        this.state.snapshot?.root !== snapshot.root ||
+        this.state.selectedCommit !== oid ||
+        this.state.selectedCommitFile !== file.path ||
+        diff.oid !== oid ||
+        diff.path !== file.path
+      ) {
+        return;
+      }
+      this.state.commitPatch = diff;
+      this.state.commitPatchLoading = false;
+      this.renderContent(snapshot);
+      if (restoreFocus) this.focusCommitFile(file.path);
+      if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
+    } catch (error) {
+      if (
+        generation !== this.commitDiffGeneration ||
+        this.state.activeView !== "history" ||
+        this.state.snapshot?.root !== snapshot.root ||
+        this.state.selectedCommit !== oid ||
+        this.state.selectedCommitFile !== file.path
+      ) {
+        return;
+      }
+      this.state.commitPatchLoading = false;
+      this.state.commitPatchError = errorMessage(error);
+      this.renderContent(snapshot);
+      if (restoreFocus) this.focusCommitFile(file.path);
+      this.showError(error);
+    }
+  }
+
+  private commitExplorer(
+    details: CommitDetails,
+    selected: CommitFileChange | null,
+  ): string {
+    return `
+      <div class="commit-explorer">
+        <section class="commit-files" aria-label="Changed files">
+          <div class="commit-files-header"><span>Changed files</span><b>${details.files.length}</b></div>
+          <div class="commit-file-list">
+            ${details.files.map((file) => this.commitFileRow(file, file.path === selected?.path)).join("")}
+          </div>
+        </section>
+        <section class="commit-patch" aria-label="Commit patch">
+          <div class="commit-patch-header">
+            <div class="commit-patch-title">
+              <strong>${selected ? escapeHtml(basename(selected.path)) : "No file selected"}</strong>
+              <span>${selected ? escapeHtml(selected.path) : "Select a changed file"}</span>
+            </div>
+            ${selected ? `<span class="scope-pill status-scope-${selected.status}">${escapeHtml(changeLabel(selected.status))}</span>` : ""}
+          </div>
+          <div class="commit-patch-body" id="commit-patch-body"></div>
+        </section>
+      </div>`;
+  }
+
+  private commitFileRow(file: CommitFileChange, selected: boolean): string {
+    const previous = file.originalPath
+      ? `<span class="commit-file-origin">${escapeHtml(file.originalPath)} →</span>`
+      : "";
+    return `
+      <button class="commit-file-row ${selected ? "selected" : ""}" type="button" data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
+        <span class="change-status status-${file.status}" title="${escapeAttribute(changeLabel(file.status))}">${changeCode(file.status)}</span>
+        <span class="change-path">
+          ${previous}
+          <span class="file-name">${escapeHtml(basename(file.path))}</span>
+          <span class="file-directory">${escapeHtml(dirname(file.path))}</span>
+        </span>
+      </button>`;
+  }
+
+  private bindCommitFileEvents(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-commit-file]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const path = row.dataset.commitFile;
+        if (!path || path === this.state.selectedCommitFile) return;
+        this.state.selectedCommitFile = path;
+        void this.loadSelectedCommitDiff(true);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        const rows = Array.from(
+          this.root.querySelectorAll<HTMLButtonElement>("[data-commit-file]"),
+        );
+        const current = rows.indexOf(row);
+        if (current < 0) return;
+        event.preventDefault();
+        const target =
+          event.key === "Home"
+            ? rows[0]
+            : event.key === "End"
+              ? rows.at(-1)
+              : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
+        const path = target?.dataset.commitFile;
+        if (!path) return;
+        if (path === this.state.selectedCommitFile) {
+          this.focusCommitFile(path);
+          return;
+        }
+        this.state.selectedCommitFile = path;
+        void this.loadSelectedCommitDiff(true);
+      });
+    });
+  }
+
+  private focusCommitFile(path: string): void {
+    const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-commit-file]");
+    Array.from(rows)
+      .find((row) => row.dataset.commitFile === path)
+      ?.focus();
+  }
+
+  private renderCommitPatch(file: CommitFileChange | null): void {
+    const target = this.query("#commit-patch-body");
+    if (!file) {
+      target.innerHTML = this.emptyState(
+        "No file selected",
+        "Select a changed file to inspect its patch.",
+        "changes",
+        true,
+      );
+      return;
+    }
+    if (this.state.commitPatchLoading) {
+      target.innerHTML = this.loadingBlock("Loading commit patch…");
+      return;
+    }
+    if (this.state.commitPatchError) {
+      target.innerHTML = this.retryState(
+        "Could not load patch",
+        this.state.commitPatchError,
+        "retry-commit-patch",
+        "changes",
+      );
+      this.query("#retry-commit-patch").addEventListener("click", () => {
+        void this.loadSelectedCommitDiff();
+      });
+      return;
+    }
+    const patch = this.state.commitPatch;
+    if (
+      !patch ||
+      patch.oid !== this.state.selectedCommit ||
+      patch.path !== this.state.selectedCommitFile
+    ) {
+      target.innerHTML = this.loadingBlock("Loading commit patch…");
+      return;
+    }
+    target.innerHTML = "";
+    target.classList.add("diff-surface");
+    this.diffEditor.mount(target, patch.patch || "No textual diff is available for this file.");
+  }
+
+  private selectedCommitFile(details: CommitDetails): CommitFileChange | null {
+    return (
+      details.files.find((file) => file.path === this.state.selectedCommitFile) ??
+      details.files[0] ??
+      null
+    );
+  }
+
+  private clearCommitInspection(): void {
+    this.commitDetailsGeneration += 1;
+    this.commitDiffGeneration += 1;
+    this.state.selectedCommitFile = null;
+    this.state.commitDetails = null;
+    this.state.commitDetailsLoading = false;
+    this.state.commitDetailsError = null;
+    this.state.commitPatch = null;
+    this.state.commitPatchLoading = false;
+    this.state.commitPatchError = null;
   }
 
   private renderInspector(snapshot: RepositorySnapshot): void {
@@ -722,6 +1167,7 @@ export class AsterlynApp {
       this.state.snapshot = next;
       this.state.commitMessage = "";
       this.state.selectedCommit = next.commits[0]?.oid ?? null;
+      this.clearCommitInspection();
       this.chooseValidChangeSelection();
       this.renderWorkspace();
       void this.loadSelectedDiff();
@@ -883,24 +1329,6 @@ export class AsterlynApp {
     this.query("#repository-dialog").classList.add("hidden");
   }
 
-  private commitDetail(commit: CommitSummary): string {
-    return `
-      <article class="detail-canvas">
-        <div class="commit-avatar">${escapeHtml(initials(commit.authorName))}</div>
-        <div class="detail-lead">
-          <span>${escapeHtml(commit.authorName)} &lt;${escapeHtml(commit.authorEmail)}&gt;</span>
-          <time>${formatAbsolute(commit.authoredAt)}</time>
-        </div>
-        <h3>${escapeHtml(commit.subject)}</h3>
-        <div class="detail-grid">
-          <div><span>Commit</span><code>${escapeHtml(commit.oid)}</code></div>
-          <div><span>Parents</span><code>${commit.parents.length ? commit.parents.map((parent) => escapeHtml(parent.slice(0, 10))).join(", ") : "Root commit"}</code></div>
-        </div>
-        ${commit.decorations.length ? `<div class="decoration-list">${commit.decorations.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
-        <div class="detail-placeholder"><span>${icon("changes", 22)}</span><div><strong>Commit file details</strong><p>Per-commit changed files and patch inspection are scheduled for the next M1 slice.</p></div></div>
-      </article>`;
-  }
-
   private branchDetail(branch: BranchSummary): string {
     return `
       <article class="detail-canvas">
@@ -917,6 +1345,15 @@ export class AsterlynApp {
   }
 
   private commitInspector(commit: CommitSummary): string {
+    const details = this.state.commitDetails?.oid === commit.oid ? this.state.commitDetails : null;
+    const fileSummary = this.state.commitDetailsLoading
+      ? "Loading…"
+      : this.state.commitDetailsError
+        ? "Unavailable"
+        : (details?.files.length.toString() ?? "—");
+    const comparison = details
+      ? details.parentOid?.slice(0, 10) ?? "Empty tree"
+      : commit.parents[0]?.slice(0, 10) ?? "Empty tree";
     return `
       <div class="inspector-header"><span class="panel-eyebrow">Commit</span><h2>${escapeHtml(commit.shortOid)}</h2></div>
       <dl class="metadata-list">
@@ -924,6 +1361,8 @@ export class AsterlynApp {
         <div><dt>Email</dt><dd>${escapeHtml(commit.authorEmail)}</dd></div>
         <div><dt>Date</dt><dd>${formatAbsolute(commit.authoredAt)}</dd></div>
         <div><dt>Parents</dt><dd>${commit.parents.length || "None"}</dd></div>
+        <div><dt>Changed files</dt><dd>${fileSummary}</dd></div>
+        <div><dt>Compared with</dt><dd>${escapeHtml(comparison)}</dd></div>
       </dl>
       <div class="message-card"><span>Message</span><p>${escapeHtml(commit.subject)}</p></div>`;
   }
@@ -955,6 +1394,15 @@ export class AsterlynApp {
 
   private loadingBlock(label: string): string {
     return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(label)}</span></div>`;
+  }
+
+  private retryState(
+    title: string,
+    detail: string,
+    buttonId: string,
+    iconName: "changes" | "history",
+  ): string {
+    return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><button class="secondary-button retry-button" id="${buttonId}" type="button">Try again</button></div>`;
   }
 
   private query<T extends Element = HTMLElement>(selector: string): T {
@@ -1033,15 +1481,6 @@ function dirname(path: string): string {
   const normalized = path.replaceAll("\\", "/");
   const offset = normalized.lastIndexOf("/");
   return offset < 0 ? "" : normalized.slice(0, offset);
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
 }
 
 function formatRelative(epochSeconds: number): string {

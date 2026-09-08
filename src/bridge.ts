@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  demoCommitDetails,
+  demoCommitDiff,
   demoDiff,
   demoSnapshot,
   demoStage,
@@ -8,6 +10,9 @@ import {
   demoUnstage,
 } from "./demo";
 import type {
+  CommitDetails,
+  CommitDiffResult,
+  CommitFileChange,
   DiffResult,
   RepositorySnapshot,
   UntrackedScan,
@@ -15,6 +20,7 @@ import type {
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 let browserSnapshot = structuredClone(demoSnapshot);
+const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
 
 export const bridge = {
@@ -77,6 +83,42 @@ export const bridge = {
     });
   },
 
+  async readCommitDetails(
+    repositoryRoot: string,
+    commitOid: string,
+  ): Promise<CommitDetails> {
+    if (!isTauri) {
+      await demoDelay(180);
+      const details = demoCommitDetails(commitOid);
+      details.files = structuredClone(browserCommitFiles.get(commitOid) ?? details.files);
+      details.parentOid =
+        browserSnapshot.commits.find((commit) => commit.oid === commitOid)?.parents[0] ?? null;
+      return details;
+    }
+    return invoke<CommitDetails>("read_commit_details", {
+      repositoryRoot,
+      commitOid,
+    });
+  },
+
+  async readCommitDiff(
+    repositoryRoot: string,
+    commitOid: string,
+    path: string,
+    originalPath: string | null,
+  ): Promise<CommitDiffResult> {
+    if (!isTauri) {
+      await demoDelay(110);
+      return demoCommitDiff(commitOid, path);
+    }
+    return invoke<CommitDiffResult>("read_commit_diff", {
+      repositoryRoot,
+      commitOid,
+      path,
+      originalPath,
+    });
+  },
+
   async stagePaths(
     repositoryRoot: string,
     paths: string[],
@@ -117,6 +159,7 @@ export const bridge = {
       const committed = next.changes.filter(
         (change) => change.indexStatus !== "unmodified",
       );
+      if (committed.length === 0) throw new Error("Nothing is staged.");
       next.changes = next.changes
         .map((change) => ({ ...change, indexStatus: "unmodified" as const }))
         .filter((change) => change.worktreeStatus !== "unmodified");
@@ -131,8 +174,15 @@ export const bridge = {
         decorations: ["HEAD"],
         subject: message.split("\n")[0] ?? message,
       });
+      browserCommitFiles.set(
+        oid,
+        committed.map((change) => ({
+          path: change.path,
+          originalPath: change.originalPath,
+          status: change.indexStatus,
+        })),
+      );
       next.branch.ahead += 1;
-      if (committed.length === 0) throw new Error("Nothing is staged.");
       browserSnapshot = next;
       return demoTrackedSnapshot(next);
     }

@@ -1,5 +1,8 @@
 import type {
   ChangeKind,
+  CommitDetails,
+  CommitDiffResult,
+  CommitFileChange,
   DiffResult,
   RepositorySnapshot,
   UntrackedScan,
@@ -171,6 +174,53 @@ export function demoDiff(path: string, staged: boolean): DiffResult {
     patch:
       patches[path] ??
       `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old content\n+updated content\n`,
+    binary: false,
+    truncated: false,
+  };
+}
+
+export function demoCommitDetails(oid: string): CommitDetails {
+  const files: CommitFileChange[] =
+    oid === demoSnapshot.commits[1]?.oid
+      ? [
+          {
+            path: "docs/product/roadmap.md",
+            originalPath: null,
+            status: "added",
+          },
+          {
+            path: "docs/architecture/overview.md",
+            originalPath: null,
+            status: "added",
+          },
+        ]
+      : [
+          {
+            path: "crates/asterlyn-git/src/repository.rs",
+            originalPath: null,
+            status: "modified",
+          },
+          {
+            path: "src/diff-editor.ts",
+            originalPath: null,
+            status: "added",
+          },
+        ];
+  const commit = demoSnapshot.commits.find((candidate) => candidate.oid === oid);
+  return {
+    oid,
+    parentOid: commit?.parents[0] ?? null,
+    files,
+  };
+}
+
+export function demoCommitDiff(oid: string, path: string): CommitDiffResult {
+  return {
+    oid,
+    path,
+    patch:
+      patches[path] ??
+      `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old content\n+committed content\n`,
     binary: false,
     truncated: false,
   };

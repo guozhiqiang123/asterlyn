@@ -41,6 +41,26 @@ export interface CommitSummary {
   subject: string;
 }
 
+export interface CommitDetails {
+  oid: string;
+  parentOid: string | null;
+  files: CommitFileChange[];
+}
+
+export interface CommitFileChange {
+  path: string;
+  originalPath: string | null;
+  status: ChangeKind;
+}
+
+export interface CommitDiffResult {
+  oid: string;
+  path: string;
+  patch: string;
+  binary: boolean;
+  truncated: boolean;
+}
+
 export type BranchKind = "local" | "remote" | "tag";
 
 export interface BranchSummary {

@@ -36,6 +36,10 @@ Android Studio demonstrates useful interaction patterns: one compact top-level b
 - Add history text/hash filtering and useful empty/error/loading states.
 - Reject stale commit-detail responses when selection changes quickly.
 
+**Implemented and locally accepted on 2026-09-08.** Commit selection now lazily loads a NUL-delimited changed-file list and then only the selected file patch. Root commits compare with the empty tree; ordinary and merge commits compare with their first parent. The history filter matches message, author, email, decoration, short hash, and full hash. `Ctrl/Cmd+F`, `Escape`, `Enter`, arrow keys, `Home`, and `End` cover filter and list navigation while CodeMirror retains its own patch search. Commit/file request generations, repository root, object ID, and selected path must all still match before a response is presented; loading, empty, truncation, command-failure, and retry states remain visible.
+
+Local acceptance used the real Tauri window against the Asterlyn repository: commit changes loaded into the two-pane file/patch view, filtering reduced and emptied the history list correctly, and keyboard navigation changed both commits and files while preserving the current patch. The 13-test Git core suite covers root, ordinary, rename, deletion, addition, merge-first-parent, invalid object ID/path, and delimiter-safe paths. TypeScript checking, the production frontend build, the desktop Rust check through the local WebKit environment, and Git core tests passed. Current limits remain the 150-commit snapshot window, 4 MiB per-file patch cap, first-parent-only merge inspection, and lossy display of non-UTF-8 paths. These are explicit follow-up constraints rather than blockers for U3.
+
 ### U3 — Scalable working-tree review
 
 - Add change filtering and keyboard list navigation.
@@ -56,4 +60,4 @@ Android Studio demonstrates useful interaction patterns: one compact top-level b
 
 ## Sequencing rule
 
-U1–U3 are the immediate usability queue and may proceed while Windows/macOS interactive release checks remain open. U4 and U5 begin the Stage 2 daily-driver Git workstation. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are the immediate usability queue and may proceed while Windows/macOS interactive release checks remain open. U1 and U2 are locally accepted; U3 is the active slice. U4 and U5 begin the Stage 2 daily-driver Git workstation. Platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.

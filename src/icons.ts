@@ -7,6 +7,7 @@ const paths: Record<string, string> = {
     '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2M4.7 5.4 3 5.2l.2 1.7"/>',
   refresh:
     '<path d="M18.4 8A7 7 0 1 0 19 14M18.5 4.5V8h-3.6"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/>',
   folder:
     '<path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9h17"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
