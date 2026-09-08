@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -21,4 +22,3 @@
     "vite": "^8.2.2"
   }
 }
-
