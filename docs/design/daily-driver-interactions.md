@@ -99,6 +99,17 @@ Local acceptance passed 20 frontend and delivery tests, 21 Git-core tests, two T
 
 The comparison conclusion is **improved**: the required concurrent work contexts and every planned content splitter are present, the permanent editor survives unrelated tool changes, and prior U1-U5 Git behavior remains covered. The evidence does not claim lower runtime memory or faster Git operations because U6 changed layout and presentation rather than those performance paths. Remaining limitations are the 5,000 tracked-path UI cap after Git output has already been buffered, patch-derived rather than complete-file Diff content, no moved-code detection, a read-only Files route, and no Windows/macOS interactive verification. The next product action is Stage 3's bounded file-content, editor buffer, save, and recovery contract; future large-repository work should stream or incrementally enumerate project paths before increasing the visible cap.
 
+### U7 — Desktop interaction fidelity
+
+- Present each active activity-rail item as one rounded accent tile, without a second edge marker.
+- Treat each Changes row as the complete selection target. Selection uses row background plus the existing `aria-selected` state; checkbox-like decoration and an additional primary stripe are removed while modifier, range, and keyboard selection remain intact.
+- Make changed files the first substantive region in commit details and give their list the available height. Author, date, object identity, ancestry, and message remain available afterward in a collapsed semantic disclosure.
+- Add a visible Hide action to the Git tool-window header. It closes only the bottom tool through the existing persisted layout transition and does not replace or clear the active editor document.
+- Open repositories through the operating system's folder chooser in the desktop runtime. Cancellation leaves the current workspace unchanged, errors stay visible, and the manual absolute-path dialog is retained only as an explicitly labeled browser-demo fallback.
+- Maintain one original Asterlyn SVG mark with a measurable transparent safe area, then regenerate the complete Tauri platform icon set rather than hand-adjusting individual outputs.
+
+U7 is a presentation and platform-adapter slice. It changes neither Git mutation semantics nor the typed editor-document boundary established by U6. Native directory access is limited to the user-selected path; the workbench does not receive a general filesystem browser capability. Platform icons remain Asterlyn-owned artwork and do not reuse Android Studio, JetBrains, or operating-system assets.
+
 ## Sequencing rule
 
-U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, and U6 is locally accepted as the persistent workbench contract. Stage 3 editor foundations now take priority over additional Git operations. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, and U6 is locally accepted as the persistent workbench contract. U7 now closes the highest-friction desktop interaction mismatches before Stage 3 editor foundations begin. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
