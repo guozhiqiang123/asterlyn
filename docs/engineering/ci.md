@@ -41,3 +41,18 @@ The [`Package preview` run 34197199295](https://github.com/guozhiqiang123/asterl
 **Conclusion: improved.** Clean hosted runners can compile and package the same revision for all four target combinations, and every target publishes a checksum manifest. This accepts the M1 cross-platform compilation and packaging gate. It does not accept real-device launch behavior, signing, notarization, updater behavior, or release publication; those remain separate gates.
 
 The immediately preceding run exposed one workflow-only defect: package creation succeeded on every target, but checksum manifests were written below a hidden directory that artifact upload ignored. Moving those manifests to a non-hidden CI output directory resolved the failure without changing application or package content.
+
+## Accepted native process smoke evidence — 2026-09-08
+
+The [`Package preview` run 34199137559](https://github.com/guozhiqiang123/asterlyn/actions/runs/34199137559) passed from source commit `29cd7e1aa0ee671cd0e73bd23197576e65d3d08c`:
+
+- Delivery-script tests passed, including expected acceptance of a live process, rejection with diagnostics for an early exit, and disposable-repository fixture verification.
+- Linux x86_64 launched under Xvfb and remained alive for the full 6,000 ms observation window.
+- Windows x86_64 launched directly and remained alive for the full 6,000 ms observation window.
+- The bundled macOS Apple Silicon executable launched directly and remained alive for the full 6,000 ms observation window.
+- The bundled macOS Intel executable launched directly and remained alive for the full 6,000 ms observation window.
+- All four jobs subsequently regenerated and uploaded their package checksum manifests.
+
+**Conclusion: improved.** The delivery matrix now rejects native binaries that are missing or terminate during startup on their target hosted environment. The smoke launcher invokes processes without a shell, bounds captured diagnostics, terminates the process tree, and removes its temporary repository.
+
+This evidence is intentionally narrower than an interactive smoke test. It does not prove window painting, focus/accessibility behavior, installed-package integration, or the open → inspect → stage → commit workflow on Windows and macOS. The next delivery action is an interactive test of installed artifacts on those platforms or a documented equivalent environment.
