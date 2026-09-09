@@ -5,6 +5,13 @@ use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+mod search;
+
+pub use search::{
+    SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchSkipReason,
+    SearchSkippedFile, WorkspaceSearchMatch, WorkspaceSearchReport,
+};
+
 pub const DEFAULT_TEXT_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 
@@ -50,6 +57,8 @@ pub enum WorkspaceError {
     InvalidEncoding { message: String },
     Conflict { current_revision: String },
     Busy { message: String },
+    InvalidSearch { message: String },
+    Cancelled { message: String },
     Io { operation: String, message: String },
 }
 
@@ -62,7 +71,9 @@ impl Display for WorkspaceError {
             | Self::UnsupportedFile { message }
             | Self::BinaryFile { message }
             | Self::InvalidEncoding { message }
-            | Self::Busy { message } => formatter.write_str(message),
+            | Self::Busy { message }
+            | Self::InvalidSearch { message }
+            | Self::Cancelled { message } => formatter.write_str(message),
             Self::FileTooLarge { limit_bytes } => {
                 write!(
                     formatter,

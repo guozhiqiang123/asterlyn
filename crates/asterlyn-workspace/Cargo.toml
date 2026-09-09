@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+memchr.workspace = true
 serde.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
