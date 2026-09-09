@@ -1,7 +1,7 @@
 import type { CommitSummary } from "../models";
 
 export type RefHistorySource =
-  | { kind: "head" }
+  | { kind: "all" }
   | { kind: "ref"; fullName: string };
 
 export interface RefHistoryState {
@@ -30,14 +30,14 @@ export function emptyRefHistory(): RefHistoryState {
   };
 }
 
-export function installHeadHistory(
+export function installAllRefHistory(
   previous: RefHistoryState,
   root: string,
   commits: CommitSummary[],
 ): RefHistoryState {
   return {
     root,
-    source: { kind: "head" },
+    source: { kind: "all" },
     commits,
     status: "ready",
     error: null,

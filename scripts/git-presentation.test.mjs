@@ -5,6 +5,7 @@ import {
   buildCommitFileTree,
   commitReferences,
   groupRemoteBranches,
+  projectCommitGraph,
 } from "../src/workbench/git-presentation.ts";
 
 test("commit decorations become truthful semantic references", () => {
@@ -84,6 +85,89 @@ test("remote refs group by remote and retain exact selectable refs", () => {
   );
 });
 
+test("commit graph keeps a linear history in one lane", () => {
+  const graph = projectCommitGraph([
+    commit("tip", ["root"]),
+    commit("root", []),
+  ]);
+
+  assert.equal(graph.laneCount, 1);
+  assert.deepEqual(
+    graph.rows.map(({ oid, nodeLane, parentCount }) => [oid, nodeLane, parentCount]),
+    [
+      ["tip", 0, 1],
+      ["root", 0, 0],
+    ],
+  );
+  assert.deepEqual(
+    graph.rows[0].segments.map(({ kind, fromLane, toLane }) => [
+      kind,
+      fromLane,
+      toLane,
+    ]),
+    [["parent", 0, 0]],
+  );
+  assert.deepEqual(
+    graph.rows[1].segments.map(({ kind, fromLane, toLane }) => [
+      kind,
+      fromLane,
+      toLane,
+    ]),
+    [["incoming", 0, 0]],
+  );
+});
+
+test("commit graph fans out a merge and converges at the shared parent", () => {
+  const graph = projectCommitGraph([
+    commit("merge", ["main", "side"]),
+    commit("main", ["root"]),
+    commit("side", ["root"]),
+    commit("root", []),
+  ]);
+
+  assert.equal(graph.laneCount, 2);
+  assert.equal(graph.rows[0].parentCount, 2);
+  assert.deepEqual(
+    graph.rows[0].segments
+      .filter(({ kind }) => kind === "parent")
+      .map(({ fromLane, toLane }) => [fromLane, toLane]),
+    [
+      [0, 0],
+      [0, 1],
+    ],
+  );
+  assert.ok(
+    graph.rows[1].segments.some(
+      ({ kind, fromLane, toLane }) =>
+        kind === "through" && fromLane === 1 && toLane === 1,
+    ),
+  );
+  assert.equal(graph.rows[2].nodeLane, 1);
+  assert.ok(
+    graph.rows[2].segments.some(
+      ({ kind, fromLane, toLane }) =>
+        kind === "parent" && fromLane === 1 && toLane === 0,
+    ),
+  );
+  assert.equal(graph.rows[3].nodeLane, 0);
+});
+
+test("commit graph does not infer ancestry from adjacent unrelated rows", () => {
+  const graph = projectCommitGraph([
+    commit("visible-tip", ["hidden-parent"]),
+    commit("unrelated", []),
+  ]);
+
+  assert.equal(graph.rows[1].startsLane, true);
+  assert.equal(graph.rows[1].nodeLane, 1);
+  assert.equal(
+    graph.rows[1].segments.some(
+      ({ kind, fromLane }) => kind === "parent" && fromLane === 0,
+    ),
+    false,
+  );
+});
+
 function file(path, status) {
   return { path, originalPath: null, status };
 }
@@ -100,4 +184,8 @@ function branch(fullName, name) {
     committedAt: 1,
     subject: "subject",
   };
+}
+
+function commit(oid, parents) {
+  return { oid, parents };
 }

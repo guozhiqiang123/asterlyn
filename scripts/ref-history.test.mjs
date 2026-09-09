@@ -5,7 +5,7 @@ import {
   completeRefHistory,
   emptyRefHistory,
   failRefHistory,
-  installHeadHistory,
+  installAllRefHistory,
 } from "../src/workbench/ref-history.ts";
 
 const commit = (oid) => ({
@@ -20,8 +20,8 @@ const commit = (oid) => ({
 });
 
 test("ref history accepts only its current request identity", () => {
-  const head = installHeadHistory(emptyRefHistory(), "/one", [commit("head")]);
-  const first = beginRefHistory(head, "/one", "refs/heads/first");
+  const all = installAllRefHistory(emptyRefHistory(), "/one", [commit("head")]);
+  const first = beginRefHistory(all, "/one", "refs/heads/first");
   const second = beginRefHistory(first.state, "/one", "refs/heads/second");
 
   assert.equal(
@@ -50,16 +50,16 @@ test("repository and mutation changes invalidate pending ref responses", () => {
     "/one",
     "refs/remotes/origin/main",
   );
-  const nextHead = installHeadHistory(pending.state, "/two", [commit("new-head")]);
+  const nextAll = installAllRefHistory(pending.state, "/two", [commit("new-head")]);
 
   assert.equal(
-    failRefHistory(nextHead, pending.request, "stale failure"),
-    nextHead,
+    failRefHistory(nextAll, pending.request, "stale failure"),
+    nextAll,
   );
   assert.equal(
-    completeRefHistory(nextHead, pending.request, [commit("stale success")]),
-    nextHead,
+    completeRefHistory(nextAll, pending.request, [commit("stale success")]),
+    nextAll,
   );
-  assert.equal(nextHead.source?.kind, "head");
-  assert.deepEqual(nextHead.commits.map(({ oid }) => oid), ["new-head"]);
+  assert.equal(nextAll.source?.kind, "all");
+  assert.deepEqual(nextAll.commits.map(({ oid }) => oid), ["new-head"]);
 });

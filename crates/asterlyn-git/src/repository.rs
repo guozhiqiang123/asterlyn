@@ -126,11 +126,6 @@ impl GitRepository {
             branch.upstream_ref = Some(upstream.merge_ref);
         }
 
-        let commits = match branch.oid.as_deref() {
-            Some(oid) if !branch.unborn => self.read_commit_history(oid, commit_limit)?,
-            _ => Vec::new(),
-        };
-
         let refs = self.run_read(
             "read branches and tags",
             [
@@ -142,6 +137,17 @@ impl GitRepository {
                 "refs/tags",
             ],
         )?;
+        let branches = parse_branches(&refs.stdout)?;
+        let mut history_tips: Vec<_> = branches
+            .iter()
+            .map(|reference| reference.oid.clone())
+            .collect();
+        if let Some(oid) = branch.oid.as_ref() {
+            history_tips.push(oid.clone());
+        }
+        history_tips.sort_unstable();
+        history_tips.dedup();
+        let commits = self.read_all_commit_history(&history_tips, commit_limit)?;
         let remotes = self.remote_summaries()?;
 
         Ok(RepositorySnapshot {
@@ -151,7 +157,7 @@ impl GitRepository {
             operation: self.detect_operation(),
             changes,
             commits,
-            branches: parse_branches(&refs.stdout)?,
+            branches,
             remotes,
             untracked_state: UntrackedState::Pending,
         })
@@ -179,18 +185,48 @@ impl GitRepository {
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
         validate_object_id(oid)?;
-        let limit = commit_limit.clamp(1, 500).to_string();
-        let output = self.run_read_owned(
+        self.run_commit_history(
             "read commit history",
-            vec![
-                OsString::from("log"),
-                OsString::from("--decorate=short"),
-                OsString::from(format!("--max-count={limit}")),
-                OsString::from("--format=%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e"),
-                OsString::from(oid),
-                OsString::from("--"),
-            ],
-        )?;
+            vec![OsString::from(oid)],
+            commit_limit,
+        )
+    }
+
+    fn read_all_commit_history(
+        &self,
+        tip_oids: &[String],
+        commit_limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
+        if tip_oids.is_empty() {
+            return Ok(Vec::new());
+        }
+        for oid in tip_oids {
+            validate_object_id(oid)?;
+        }
+        self.run_commit_history(
+            "read all-ref commit history",
+            tip_oids.iter().map(OsString::from).collect(),
+            commit_limit,
+        )
+    }
+
+    fn run_commit_history(
+        &self,
+        operation: &str,
+        selectors: Vec<OsString>,
+        commit_limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
+        let limit = commit_limit.clamp(1, 500).to_string();
+        let mut arguments = vec![
+            OsString::from("log"),
+            OsString::from("--topo-order"),
+            OsString::from("--decorate=short"),
+            OsString::from(format!("--max-count={limit}")),
+            OsString::from("--format=%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e"),
+        ];
+        arguments.extend(selectors);
+        arguments.push(OsString::from("--"));
+        let output = self.run_read_owned(operation, arguments)?;
         parse_commits(&output.stdout)
     }
 
@@ -1877,7 +1913,7 @@ mod tests {
     }
 
     #[test]
-    fn history_is_scoped_to_head_or_an_exact_valid_ref() {
+    fn history_is_scoped_to_all_refs_or_an_exact_valid_ref() {
         let directory = fixture();
         let root = commit_file(directory.path(), "base.txt", "base\n", "Root");
         git(directory.path(), &["switch", "-c", "feature"]);
@@ -1910,9 +1946,10 @@ mod tests {
         let snapshot = repository
             .tracked_snapshot(50)
             .expect("tracked snapshot loads");
-        assert_eq!(snapshot.commits[0].oid, main);
-        assert_eq!(snapshot.commits.len(), 2);
-        assert!(!snapshot.commits.iter().any(|commit| commit.oid == feature));
+        assert_eq!(snapshot.commits.len(), 3);
+        assert!(snapshot.commits.iter().any(|commit| commit.oid == root));
+        assert!(snapshot.commits.iter().any(|commit| commit.oid == main));
+        assert!(snapshot.commits.iter().any(|commit| commit.oid == feature));
 
         let feature_history = repository
             .commit_history("refs/heads/feature", 50)
@@ -1992,7 +2029,7 @@ mod tests {
     }
 
     #[test]
-    fn detached_snapshot_keeps_head_history() {
+    fn detached_snapshot_keeps_all_ref_history() {
         let directory = fixture();
         let root = commit_file(directory.path(), "base.txt", "base\n", "Root");
         let tip = commit_file(directory.path(), "tip.txt", "tip\n", "Tip");
@@ -2003,9 +2040,50 @@ mod tests {
             .tracked_snapshot(50)
             .expect("detached snapshot loads");
         assert!(snapshot.branch.detached);
-        assert_eq!(snapshot.commits.len(), 1);
-        assert_eq!(snapshot.commits[0].oid, root);
-        assert!(!snapshot.commits.iter().any(|commit| commit.oid == tip));
+        assert_eq!(snapshot.commits.len(), 2);
+        assert!(snapshot.commits.iter().any(|commit| commit.oid == root));
+        assert!(snapshot.commits.iter().any(|commit| commit.oid == tip));
+    }
+
+    #[test]
+    fn all_ref_history_is_topological_and_keeps_every_merge_parent() {
+        let directory = fixture();
+        let root = commit_file(directory.path(), "base.txt", "base\n", "Root");
+        git(directory.path(), &["branch", "side"]);
+        let main = commit_file(directory.path(), "main.txt", "main\n", "Main");
+        git(directory.path(), &["switch", "side"]);
+        let side = commit_file(directory.path(), "side.txt", "side\n", "Side");
+        git(directory.path(), &["switch", "main"]);
+        git(
+            directory.path(),
+            &["merge", "--no-ff", "side", "-m", "Merge side"],
+        );
+        let merge_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+
+        let commits = GitRepository::open(directory.path())
+            .expect("repository opens")
+            .tracked_snapshot(50)
+            .expect("all-ref history loads")
+            .commits;
+        let merge = commits
+            .iter()
+            .find(|commit| commit.oid == merge_oid)
+            .expect("merge commit is present");
+        assert_eq!(merge.parents, vec![main, side]);
+        assert!(commits.iter().any(|commit| commit.oid == root));
+
+        for (child_index, commit) in commits.iter().enumerate() {
+            for parent in &commit.parents {
+                if let Some(parent_index) = commits.iter().position(|item| &item.oid == parent) {
+                    assert!(
+                        child_index < parent_index,
+                        "child {} must precede parent {}",
+                        commit.oid,
+                        parent
+                    );
+                }
+            }
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import type { BranchSummary, CommitFileChange } from "../models";
+import type { BranchSummary, CommitFileChange, CommitSummary } from "../models";
 
 export type CommitFileView = "tree" | "flat";
 export type CommitReferenceKind = "head" | "local" | "remote" | "tag" | "other";
@@ -19,6 +19,136 @@ export interface CommitFileTreeNode {
 export interface RemoteBranchGroup {
   name: string;
   branches: Array<{ branch: BranchSummary; displayName: string }>;
+}
+
+export type CommitGraphSegmentKind = "incoming" | "parent" | "through";
+
+export interface CommitGraphSegment {
+  kind: CommitGraphSegmentKind;
+  fromLane: number;
+  toLane: number;
+  color: number;
+}
+
+export interface CommitGraphRow {
+  oid: string;
+  nodeLane: number;
+  nodeColor: number;
+  laneCount: number;
+  parentCount: number;
+  startsLane: boolean;
+  segments: CommitGraphSegment[];
+}
+
+export interface CommitGraphProjection {
+  laneCount: number;
+  rows: CommitGraphRow[];
+}
+
+interface ActiveGraphLane {
+  oid: string;
+  color: number;
+}
+
+const GRAPH_COLOR_COUNT = 8;
+
+export function projectCommitGraph(
+  commits: Pick<CommitSummary, "oid" | "parents">[],
+): CommitGraphProjection {
+  let lanes: ActiveGraphLane[] = [];
+  let nextColor = 0;
+  let laneCount = 1;
+  const rows: CommitGraphRow[] = [];
+
+  const allocateColor = (active: ActiveGraphLane[]): number => {
+    const used = new Set(active.map((lane) => lane.color));
+    for (let offset = 0; offset < GRAPH_COLOR_COUNT; offset += 1) {
+      const candidate = (nextColor + offset) % GRAPH_COLOR_COUNT;
+      if (used.has(candidate)) continue;
+      nextColor = (candidate + 1) % GRAPH_COLOR_COUNT;
+      return candidate;
+    }
+    const candidate = nextColor;
+    nextColor = (nextColor + 1) % GRAPH_COLOR_COUNT;
+    return candidate;
+  };
+
+  for (const commit of commits) {
+    const before = [...lanes];
+    let nodeLane = before.findIndex((lane) => lane.oid === commit.oid);
+    const startsLane = nodeLane < 0;
+    if (startsLane) {
+      nodeLane = before.length;
+      before.push({ oid: commit.oid, color: allocateColor(before) });
+    }
+    const nodeColor = before[nodeLane]!.color;
+    const parents = commit.parents.filter(
+      (parent, index, values) => parent.length > 0 && values.indexOf(parent) === index,
+    );
+    const after = before.filter((_, index) => index !== nodeLane);
+
+    for (const [parentIndex, parent] of parents.entries()) {
+      if (after.some((lane) => lane.oid === parent)) continue;
+      const previousParent = parentIndex > 0 ? parents[parentIndex - 1] : null;
+      const previousLane = previousParent
+        ? after.findIndex((lane) => lane.oid === previousParent)
+        : -1;
+      const insertAt =
+        parentIndex === 0
+          ? Math.min(nodeLane, after.length)
+          : Math.min(previousLane >= 0 ? previousLane + 1 : nodeLane + parentIndex, after.length);
+      after.splice(insertAt, 0, {
+        oid: parent,
+        color: parentIndex === 0 ? nodeColor : allocateColor(after),
+      });
+    }
+
+    const segments: CommitGraphSegment[] = [];
+    if (!startsLane) {
+      segments.push({
+        kind: "incoming",
+        fromLane: nodeLane,
+        toLane: nodeLane,
+        color: nodeColor,
+      });
+    }
+    for (const [fromLane, lane] of before.entries()) {
+      if (fromLane === nodeLane) continue;
+      const toLane = after.findIndex((candidate) => candidate.oid === lane.oid);
+      if (toLane < 0) continue;
+      segments.push({
+        kind: "through",
+        fromLane,
+        toLane,
+        color: lane.color,
+      });
+    }
+    for (const [parentIndex, parent] of parents.entries()) {
+      const toLane = after.findIndex((lane) => lane.oid === parent);
+      if (toLane < 0) continue;
+      segments.push({
+        kind: "parent",
+        fromLane: nodeLane,
+        toLane,
+        color: parentIndex === 0 ? nodeColor : after[toLane]!.color,
+      });
+    }
+
+    const rowLaneCount = Math.max(before.length, after.length, 1);
+    laneCount = Math.max(laneCount, rowLaneCount);
+    rows.push({
+      oid: commit.oid,
+      nodeLane,
+      nodeColor,
+      laneCount: rowLaneCount,
+      parentCount: parents.length,
+      startsLane,
+      segments,
+    });
+    lanes = after;
+  }
+
+  return { laneCount, rows };
 }
 
 export function commitReferences(

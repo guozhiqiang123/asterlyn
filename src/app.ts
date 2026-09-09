@@ -24,7 +24,7 @@ import {
   completeRefHistory,
   emptyRefHistory,
   failRefHistory,
-  installHeadHistory,
+  installAllRefHistory,
   type RefHistoryRequest,
   type RefHistoryState,
 } from "./workbench/ref-history";
@@ -36,6 +36,9 @@ import {
   buildCommitFileTree,
   commitReferences,
   groupRemoteBranches,
+  projectCommitGraph,
+  type CommitGraphRow,
+  type CommitGraphSegment,
   type CommitFileTreeNode,
   type CommitFileView,
   type CommitReference,
@@ -501,10 +504,7 @@ export class AsterlynApp {
       this.state.projectFilesLoading = true;
       this.state.projectFilesError = null;
       this.state.projectFilesTruncated = false;
-      this.state.selectedBranch =
-        snapshot.branches.find((branch) => branch.current)?.fullName ??
-        snapshot.branches[0]?.fullName ??
-        null;
+      this.state.selectedBranch = null;
       this.installSnapshotHistory(snapshot, true);
       this.state.commitDetailsLoading =
         this.state.layout.bottomTool === "branches" &&
@@ -687,10 +687,7 @@ export class AsterlynApp {
   private acceptRemoteSnapshot(snapshot: RepositorySnapshot): void {
     this.state.snapshot = snapshot;
     this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
-    this.state.selectedBranch =
-      snapshot.branches.find((branch) => branch.current)?.fullName ??
-      snapshot.branches[0]?.fullName ??
-      null;
+    this.state.selectedBranch = null;
     this.installSnapshotHistory(snapshot);
     this.state.selectedChangeKeys.clear();
     this.state.selectedChange = null;
@@ -1241,21 +1238,49 @@ export class AsterlynApp {
     if (commits.length === 0) {
       return `<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>`;
     }
-    return `<div class="history-list" role="listbox" aria-label="Commit history">${commits
-      .map((commit) => {
+    const graph = projectCommitGraph(commits);
+    const graphWidth = Math.max(22, 14 + (graph.laneCount - 1) * 12);
+    return `<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${commits
+      .map((commit, index) => {
         const selected = commit.oid === this.state.selectedCommit;
         const references = this.commitReferenceBadges(commit.decorations, 2);
         return `
           <button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${commit.oid}" aria-selected="${selected}" title="${escapeAttribute(commit.subject)}">
-            <span class="graph-dot ${commit.parents.length > 1 ? "merge" : ""}"></span>
+            ${this.renderCommitGraph(graph.rows[index]!, graphWidth)}
             <span class="history-subject">${escapeHtml(commit.subject)}</span>
             <span class="history-references">${references}</span>
             <span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span>
             <time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time>
-            <code class="history-oid" title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.shortOid)}</code>
           </button>`;
       })
       .join("")}</div>`;
+  }
+
+  private renderCommitGraph(row: CommitGraphRow, width: number): string {
+    const parentSummary =
+      row.parentCount === 0
+        ? "root commit"
+        : row.parentCount === 1
+          ? "one parent"
+          : `merge commit with ${row.parentCount} parents`;
+    const lines = row.segments
+      .map(
+        (segment) =>
+          `<path class="commit-graph-line graph-color-${segment.color}" d="${this.commitGraphPath(segment)}" />`,
+      )
+      .join("");
+    const nodeX = 7 + row.nodeLane * 12;
+    return `<span class="history-graph" role="img" aria-label="Graph lane ${row.nodeLane + 1} of ${row.laneCount}, ${parentSummary}"><svg viewBox="0 0 ${width} 28" width="${width}" height="28" aria-hidden="true" focusable="false">${lines}<circle class="commit-graph-node graph-color-${row.nodeColor} ${row.parentCount > 1 ? "merge" : ""}" cx="${nodeX}" cy="14" r="${row.parentCount > 1 ? 4 : 3.5}" /></svg></span>`;
+  }
+
+  private commitGraphPath(segment: CommitGraphSegment): string {
+    const fromX = 7 + segment.fromLane * 12;
+    const toX = 7 + segment.toLane * 12;
+    const fromY = segment.kind === "parent" ? 14 : 0;
+    const toY = segment.kind === "incoming" ? 14 : 28;
+    if (fromX === toX) return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+    const middleY = (fromY + toY) / 2;
+    return `M ${fromX} ${fromY} C ${fromX} ${middleY}, ${toX} ${middleY}, ${toX} ${toY}`;
   }
 
   private historyScope(): {
@@ -1265,7 +1290,11 @@ export class AsterlynApp {
   } {
     const source = this.state.history.source;
     if (source?.kind !== "ref") {
-      return { icon: "head", label: "HEAD", title: "History from the observed HEAD" };
+      return {
+        icon: "branch",
+        label: "All refs",
+        title: "History from local branches, remote-tracking branches, and tags",
+      };
     }
     const branch = this.state.snapshot?.branches.find(
       (candidate) => candidate.fullName === source.fullName,
@@ -1374,8 +1403,11 @@ export class AsterlynApp {
   private branchRow(branch: BranchSummary, displayName = branch.name, nested = false): string {
     const selected = branch.fullName === this.state.selectedBranch;
     const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
+    const title = selected
+      ? `${branch.name} — ${branch.subject} — Activate again to show all refs`
+      : `${branch.name} — ${branch.subject}`;
     return `
-      <button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" aria-pressed="${selected}" title="${escapeAttribute(`${branch.name} — ${branch.subject}`)}">
+      <button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" aria-pressed="${selected}" title="${escapeAttribute(title)}">
         <span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span>
         <span class="branch-name">${escapeHtml(displayName)}</span>
         ${branch.current ? '<span class="current-label">HEAD</span>' : ""}
@@ -1633,7 +1665,7 @@ export class AsterlynApp {
         : this.state.history.status === "error"
           ? "!"
           : filteredCount.toString();
-    count.title = `${filteredCount} of ${this.state.history.commits.length} commits in the selected history`;
+    count.title = `${filteredCount} of ${this.state.history.commits.length} commits in ${this.historyScope().label}`;
   }
 
   private renderBranchCount(snapshot: RepositorySnapshot): void {
@@ -1757,6 +1789,20 @@ export class AsterlynApp {
   private selectBranch(fullName: string, restoreFocus = false): void {
     const snapshot = this.state.snapshot;
     if (!snapshot?.branches.some((branch) => branch.fullName === fullName)) return;
+    if (this.state.selectedBranch === fullName) {
+      this.state.selectedBranch = null;
+      this.state.gitDetail = "commit";
+      this.installSnapshotHistory(snapshot, true);
+      this.renderBottomTool();
+      if (restoreFocus) {
+        const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
+        Array.from(rows)
+          .find((row) => row.dataset.branch === fullName)
+          ?.focus();
+      }
+      this.loadVisibleCommitDetails();
+      return;
+    }
     this.state.selectedBranch = fullName;
     this.state.gitDetail = "branch";
     this.state.selectedCommit = null;
@@ -2295,13 +2341,13 @@ export class AsterlynApp {
     const previousSource = this.state.history.source;
     const previousRoot = this.state.history.root;
     const previousSelected = this.state.selectedCommit;
-    this.state.history = installHeadHistory(
+    this.state.history = installAllRefHistory(
       this.state.history,
       snapshot.root,
       snapshot.commits,
     );
     const selected =
-      !preferTip && previousSource?.kind === "head"
+      !preferTip && previousSource?.kind === "all"
         ? snapshot.commits.find((commit) => commit.oid === previousSelected)?.oid ??
           snapshot.commits[0]?.oid ??
           null
@@ -2309,7 +2355,7 @@ export class AsterlynApp {
     this.state.selectedCommit = selected;
     if (
       previousRoot !== snapshot.root ||
-      previousSource?.kind !== "head" ||
+      previousSource?.kind !== "all" ||
       previousSelected !== selected
     ) {
       this.clearCommitInspection();
@@ -2488,10 +2534,7 @@ export class AsterlynApp {
         ? await bridge.stagePaths(snapshot.root, paths)
         : await bridge.unstagePaths(snapshot.root, paths);
       this.state.snapshot = next;
-      this.state.selectedBranch =
-        next.branches.find((branch) => branch.current)?.fullName ??
-        next.branches[0]?.fullName ??
-        null;
+      this.state.selectedBranch = null;
       this.installSnapshotHistory(next);
       const sourcePrefix = stage ? "worktree:" : "index:";
       const migrated = new Set(this.state.selectedChangeKeys);
@@ -2542,10 +2585,7 @@ export class AsterlynApp {
       const next = await bridge.commitChanges(snapshot.root, message);
       this.state.snapshot = next;
       this.state.commitMessage = "";
-      this.state.selectedBranch =
-        next.branches.find((branch) => branch.current)?.fullName ??
-        next.branches[0]?.fullName ??
-        null;
+      this.state.selectedBranch = null;
       this.installSnapshotHistory(next, true);
       this.chooseValidChangeSelection();
       this.reconcileWorkingDocument(next);
@@ -2624,10 +2664,7 @@ export class AsterlynApp {
       const next = await mutation(snapshot.root);
       if (generation !== this.requestGeneration) return;
       this.state.snapshot = next;
-      this.state.selectedBranch =
-        next.branches.find((branch) => branch.current)?.fullName ??
-        next.branches[0]?.fullName ??
-        null;
+      this.state.selectedBranch = null;
       this.installSnapshotHistory(next, true);
       this.state.selectedChangeKeys.clear();
       this.state.selectedChange = null;
@@ -3133,11 +3170,8 @@ function selectedBranch(
   snapshot: RepositorySnapshot,
   fullName: string | null,
 ): BranchSummary | null {
-  return (
-    snapshot.branches.find((branch) => branch.fullName === fullName) ??
-    snapshot.branches[0] ??
-    null
-  );
+  if (!fullName) return null;
+  return snapshot.branches.find((branch) => branch.fullName === fullName) ?? null;
 }
 
 function changeCode(kind: ChangeKind): string {

@@ -70,12 +70,35 @@ export const demoSnapshot: RepositorySnapshot = {
     {
       oid: "df535785471311c9cdd936ff023d7d65dafb74a3",
       shortOid: "df53578",
-      parents: ["54978419e233f8b5f53c55197e2742a3440ef894"],
+      parents: [
+        "a68b48279c6b51f8adcf1bb20ca7e7c61284bf31",
+        "b4c3d2e1f09876543210fedcba9876543210abcd",
+      ],
       authorName: "Guozhiqiang",
       authorEmail: "developer@example.invalid",
       authoredAt: 1788839400,
       decorations: ["HEAD -> feature/git-workbench"],
+      subject: "merge: complete the Git workbench foundation",
+    },
+    {
+      oid: "a68b48279c6b51f8adcf1bb20ca7e7c61284bf31",
+      shortOid: "a68b482",
+      parents: ["54978419e233f8b5f53c55197e2742a3440ef894"],
+      authorName: "Guozhiqiang",
+      authorEmail: "developer@example.invalid",
+      authoredAt: 1788839000,
+      decorations: ["origin/feature/git-workbench"],
       subject: "feat(git): add tested repository core",
+    },
+    {
+      oid: "b4c3d2e1f09876543210fedcba9876543210abcd",
+      shortOid: "b4c3d2e",
+      parents: ["54978419e233f8b5f53c55197e2742a3440ef894"],
+      authorName: "Asterlyn Contributor",
+      authorEmail: "contributor@example.invalid",
+      authoredAt: 1788838500,
+      decorations: ["feature/graph-rendering"],
+      subject: "feat(history): prototype topology graph lanes",
     },
     {
       oid: "54978419e233f8b5f53c55197e2742a3440ef894",
@@ -84,7 +107,7 @@ export const demoSnapshot: RepositorySnapshot = {
       authorName: "Guozhiqiang",
       authorEmail: "developer@example.invalid",
       authoredAt: 1788837600,
-      decorations: ["main"],
+      decorations: ["main", "origin/main", "tag: v0.1.0"],
       subject: "docs: establish Asterlyn roadmap and architecture",
     },
   ],
@@ -98,7 +121,18 @@ export const demoSnapshot: RepositorySnapshot = {
       upstream: "origin/feature/git-workbench",
       tracking: "[ahead 2]",
       committedAt: 1788839400,
-      subject: "feat(git): add tested repository core",
+      subject: "merge: complete the Git workbench foundation",
+    },
+    {
+      fullName: "refs/heads/feature/graph-rendering",
+      name: "feature/graph-rendering",
+      oid: "b4c3d2e1f09876543210fedcba9876543210abcd",
+      current: false,
+      kind: "local",
+      upstream: null,
+      tracking: null,
+      committedAt: 1788838500,
+      subject: "feat(history): prototype topology graph lanes",
     },
     {
       fullName: "refs/heads/main",
@@ -110,6 +144,17 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788837600,
       subject: "docs: establish Asterlyn roadmap and architecture",
+    },
+    {
+      fullName: "refs/remotes/origin/feature/git-workbench",
+      name: "origin/feature/git-workbench",
+      oid: "a68b48279c6b51f8adcf1bb20ca7e7c61284bf31",
+      current: false,
+      kind: "remote",
+      upstream: null,
+      tracking: null,
+      committedAt: 1788839000,
+      subject: "feat(git): add tested repository core",
     },
     {
       fullName: "refs/remotes/origin/main",
@@ -201,8 +246,9 @@ export function demoDiff(path: string, staged: boolean): DiffResult {
 }
 
 export function demoCommitDetails(oid: string): CommitDetails {
+  const commit = demoSnapshot.commits.find((candidate) => candidate.oid === oid);
   const files: CommitFileChange[] =
-    oid === demoSnapshot.commits[1]?.oid
+    commit?.parents.length === 0
       ? [
           {
             path: "docs/product/roadmap.md",
@@ -227,7 +273,6 @@ export function demoCommitDetails(oid: string): CommitDetails {
             status: "added",
           },
         ];
-  const commit = demoSnapshot.commits.find((candidate) => candidate.oid === oid);
   return {
     oid,
     parentOid: commit?.parents[0] ?? null,
@@ -279,7 +324,10 @@ export function demoTrackedSnapshot(
   snapshot: RepositorySnapshot,
 ): RepositorySnapshot {
   const next = structuredClone(snapshot);
-  next.commits = demoHistoryFromOid(snapshot, snapshot.branch.oid);
+  next.commits = demoHistoryFromTips(
+    snapshot,
+    snapshot.branches.map((branch) => branch.oid),
+  );
   next.changes = next.changes.filter(
     (change) => change.worktreeStatus !== "untracked",
   );
@@ -300,10 +348,16 @@ function demoHistoryFromOid(
   snapshot: RepositorySnapshot,
   tip: string | null,
 ): CommitSummary[] {
-  if (!tip) return [];
+  return demoHistoryFromTips(snapshot, tip ? [tip] : []);
+}
+
+function demoHistoryFromTips(
+  snapshot: RepositorySnapshot,
+  tips: string[],
+): CommitSummary[] {
   const byOid = new Map(snapshot.commits.map((commit) => [commit.oid, commit]));
   const reachable = new Set<string>();
-  const pending = [tip];
+  const pending = [...tips];
   while (pending.length > 0) {
     const oid = pending.pop();
     if (!oid || reachable.has(oid)) continue;
