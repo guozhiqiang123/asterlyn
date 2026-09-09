@@ -1,0 +1,40 @@
+# Editor core interaction plan
+
+## Outcome
+
+Stage 3 makes Asterlyn dependable as a text/code editor with language intelligence disabled. It proceeds through independently reversible slices so file safety and buffer lifetime are proven before search, services, or extensibility depend on them.
+
+## E1 — Safe multi-tab text editing
+
+E1 replaces the project-file placeholder with a complete explicit-save loop:
+
+- Open tracked or non-ignored untracked files from the bounded project tree using an exact Git-root-qualified identity.
+- Keep up to 20 heterogeneous tabs: persistent editable text tabs plus one replaceable read-only Diff preview.
+- Deduplicate repeated file opens, switch tabs without losing exact content, close clean tabs, and retain dirty tabs until Save succeeds or the user cancels.
+- Edit UTF-8 text up to two MiB in the CodeMirror adapter, preserving BOM, LF/CRLF/mixed separators, bare CR, and final-newline state.
+- Save through a freshly authorized, optimistic, same-directory atomic replacement. A conflict preserves the local buffer and never exposes force overwrite.
+- Preserve text tabs across repository refresh. Save All or Cancel protects repository and window transitions.
+
+E1 intentionally adds no syntax mode, watcher, autosave, draft persistence, force/discard, file creation, workspace search, split editor, terminal, or language service.
+
+### E1 acceptance
+
+- Rust tests cover authorized tracked/untracked identity, path escape and link rejection, text/size/encoding policy, exact byte round trips, permission preservation, conflict safety, idempotent retry, and concurrent-save serialization.
+- TypeScript tests cover tab deduplication, Diff preview replacement, stale load/save rejection, edits during save, exact mixed-line-ending composition, dirty transition guards, and the 20-tab bound.
+- Browser interaction covers opening and switching at least two files, editing, dirty markers, `Ctrl/Cmd+S`, clean close, Diff preview coexistence, and refresh retention using the deterministic bridge.
+- Native Linux interaction covers one real read, save, external conflict, and retry-safe result against a disposable repository. Existing working and commit Diff journeys remain usable.
+- Acceptance records absolute build/resource results, limitations, and next action. Packaging and remote publication wait for the agreed larger Stage 3 checkpoint.
+
+## Later Stage 3 slices
+
+### E2 — Navigation and search
+
+Add file/text search and replace, recent files, go-to-file, command palette, symbol-free navigation, and keyboard-first result traversal over bounded workspace services.
+
+### E3 — Editor groups and preferences
+
+Add splits, tab movement, settings/keymaps, language-neutral indentation, encoding/EOL controls, file watching, external-change comparison, and a measured large-file mode.
+
+### E4 — Recovery and task surfaces
+
+Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

@@ -13,6 +13,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0001-foundation.md`](architecture/decisions/0001-foundation.md) — first architecture decision record.
 - [`architecture/decisions/0002-tracked-first-refresh.md`](architecture/decisions/0002-tracked-first-refresh.md) — cancellable two-phase repository refresh contract.
 - [`architecture/decisions/0003-persistent-workbench.md`](architecture/decisions/0003-persistent-workbench.md) — persistent editor, orthogonal tool windows, and resizable layout state.
+- [`architecture/decisions/0004-safe-text-editing.md`](architecture/decisions/0004-safe-text-editing.md) — authorized text-file access, optimistic save, and editor-session ownership.
 
 ## Delivery
 
@@ -26,6 +27,7 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
 - [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
+- [`design/editor-core-interactions.md`](design/editor-core-interactions.md) — Stage 3 editor slices, invariants, and acceptance evidence.
 
 ## Benchmarks
 
