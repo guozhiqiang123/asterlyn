@@ -946,6 +946,10 @@ textarea:focus-visible {
   grid-template-rows: 35px minmax(0, 1fr);
 }
 
+.commit-log-pane {
+  container-type: inline-size;
+}
+
 .branch-results,
 .history-results {
   overflow: auto;
@@ -1500,6 +1504,11 @@ textarea:focus-visible {
   text-overflow: ellipsis;
 }
 
+.history-filter-chevron {
+  display: inline-grid;
+  place-items: center;
+}
+
 .history-filter-button:focus-visible,
 .history-mode-button:focus-visible,
 .history-menu-option:focus-visible {
@@ -1600,6 +1609,96 @@ textarea:focus-visible {
   color: #8bb4ff;
 }
 
+.history-ref-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+}
+
+.history-ref-option .history-menu-option {
+  min-width: 0;
+}
+
+.history-favorite-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #6f747d;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.history-ref-option:hover .history-favorite-button,
+.history-favorite-button.active,
+.history-favorite-button:focus-visible {
+  opacity: 1;
+}
+
+.history-favorite-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.history-favorite-button.active {
+  color: #e3c25f;
+}
+
+.history-favorite-button.active .icon {
+  fill: currentColor;
+}
+
+.history-path-search {
+  display: grid;
+  height: 28px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  margin: 1px 2px 5px;
+  padding: 0 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-deep);
+  color: var(--text-faint);
+}
+
+.history-path-search:focus-within {
+  border-color: #6b9bfa;
+}
+
+.history-path-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.history-selected-path,
+.history-menu-note {
+  overflow: hidden;
+  margin: 0 5px 4px;
+  padding: 6px 7px;
+  border-radius: 4px;
+  background: var(--bg-deep);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-menu-note {
+  background: transparent;
+  color: var(--text-faint);
+  white-space: normal;
+}
+
 .history-menu-empty {
   padding: 9px 8px;
   color: var(--text-faint);
@@ -1616,6 +1715,27 @@ textarea:focus-visible {
   color: #e5a1a8;
   font-size: 9px;
   line-height: 1.35;
+}
+
+@container (max-width: 500px) {
+  .history-search-control {
+    min-width: 110px;
+    max-width: 145px;
+    flex-basis: 125px;
+  }
+
+  .history-filter-strip {
+    flex: 0 0 auto;
+  }
+
+  .history-filter-button {
+    width: 24px;
+    padding: 0;
+  }
+
+  .history-filter-button > span {
+    display: none;
+  }
 }
 
 .history-scope {
@@ -1763,6 +1883,23 @@ textarea:focus-visible {
   stroke-linecap: round;
   stroke-width: 1.25px;
   vector-effect: non-scaling-stroke;
+}
+
+.commit-graph-line.collapsed {
+  stroke-dasharray: 2 3;
+}
+
+.commit-graph-gap {
+  fill: currentColor;
+}
+
+.history-collapsed-row {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.history-collapsed-row .history-author {
+  color: #82aaf2;
 }
 
 .commit-graph-node {
