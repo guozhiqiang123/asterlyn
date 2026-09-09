@@ -1400,19 +1400,222 @@ textarea:focus-visible {
 }
 
 .history-toolbar {
-  display: grid;
+  position: relative;
+  display: flex;
   min-width: 0;
-  grid-template-columns: minmax(150px, 1fr) minmax(75px, auto) auto;
   align-items: center;
   gap: 5px;
   padding: 0 6px;
   border-bottom: 1px solid var(--border);
 }
 
-.history-toolbar .history-filter {
-  width: 100%;
+.history-search-control {
+  display: flex;
+  min-width: 125px;
+  max-width: 260px;
+  flex: 1 1 210px;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-deep);
+}
+
+.history-search-control:focus-within {
+  border-color: #6b9bfa;
+  box-shadow: 0 0 0 1px #6b9bfa;
+}
+
+.history-search-control .history-filter {
+  min-width: 75px;
+  flex: 1 1 auto;
   height: 27px;
   margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.history-search-control .history-filter:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.history-mode-button,
+.history-filter-button {
+  display: inline-flex;
+  height: 25px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.history-mode-button {
+  min-width: 25px;
+  padding: 0 3px;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  font-family: ui-monospace, monospace;
+}
+
+.history-mode-button:hover,
+.history-filter-button:hover,
+.history-filter-button.open {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.history-mode-button.active,
+.history-filter-button.active {
+  color: #8bb4ff;
+}
+
+.history-mode-button.active {
+  background: #24477a;
+}
+
+.history-filter-strip {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 1px;
+}
+
+.history-filter-button {
+  gap: 2px;
+}
+
+.history-filter-button > span {
+  overflow: hidden;
+  max-width: 90px;
+  text-overflow: ellipsis;
+}
+
+.history-filter-button:focus-visible,
+.history-mode-button:focus-visible,
+.history-menu-option:focus-visible {
+  outline: 1px solid #8ab4ff;
+  outline-offset: -1px;
+}
+
+.history-filter-popover {
+  position: absolute;
+  z-index: 30;
+  top: 32px;
+  left: min(270px, 35%);
+  overflow: auto;
+  width: min(310px, calc(100% - 16px));
+  max-height: min(410px, calc(100vh - 150px));
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #292b2f;
+  box-shadow: 0 8px 22px #0008;
+}
+
+.history-filter-popover-user,
+.history-filter-popover-date,
+.history-filter-popover-paths,
+.history-filter-popover-graph {
+  width: min(260px, calc(100% - 16px));
+}
+
+.history-menu-heading {
+  padding: 8px 8px 4px;
+  color: var(--text-faint);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-menu-option {
+  display: grid;
+  width: 100%;
+  min-height: 27px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  text-align: left;
+}
+
+.history-menu-option:hover,
+.history-menu-option[aria-pressed="true"] {
+  background: var(--bg-hover);
+}
+
+.history-menu-option > span {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-menu-option.two-line > span {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0;
+}
+
+.history-menu-option strong,
+.history-menu-option small {
+  overflow: hidden;
+  max-width: 220px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-menu-option strong {
+  font-size: 10px;
+  font-weight: 550;
+}
+
+.history-menu-option small,
+.history-menu-option em {
+  color: var(--text-faint);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.history-menu-option > .icon {
+  color: #8bb4ff;
+}
+
+.history-menu-empty {
+  padding: 9px 8px;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.history-text-error {
+  margin: 5px 8px 0;
+  padding: 5px 7px;
+  border: 1px solid #70464b;
+  border-radius: 4px;
+  background: #392b2e;
+  color: #e5a1a8;
+  font-size: 9px;
+  line-height: 1.35;
 }
 
 .history-scope {

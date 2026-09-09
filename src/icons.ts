@@ -28,6 +28,8 @@ const paths: Record<string, string> = {
     '<path d="M8 9V6h10v10h-3"/><rect x="5" y="9" width="10" height="10" rx="1"/>',
   close: '<path d="m7 7 10 10M17 7 7 17"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
+  "chevron-down": '<path d="m7 9 5 5 5-5"/>',
+  sort: '<path d="M8 5v14m0 0-3-3m3 3 3-3M16 19V5m0 0-3 3m3-3 3 3"/>',
 };
 
 export function icon(name: keyof typeof paths, size = 18): string {

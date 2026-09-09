@@ -1,8 +1,9 @@
-import type { CommitSummary } from "../models";
+import type { CommitSummary, HistoryQuery } from "../models";
+import { historyQueryKey, normalizeHistoryQuery } from "./history-query.ts";
 
 export type RefHistorySource =
-  | { kind: "all" }
-  | { kind: "ref"; fullName: string };
+  | { kind: "snapshot" }
+  | { kind: "query"; key: string; query: HistoryQuery };
 
 export interface RefHistoryState {
   root: string | null;
@@ -15,7 +16,8 @@ export interface RefHistoryState {
 
 export interface RefHistoryRequest {
   root: string;
-  fullName: string;
+  key: string;
+  query: HistoryQuery;
   generation: number;
 }
 
@@ -30,14 +32,14 @@ export function emptyRefHistory(): RefHistoryState {
   };
 }
 
-export function installAllRefHistory(
+export function installSnapshotHistory(
   previous: RefHistoryState,
   root: string,
   commits: CommitSummary[],
 ): RefHistoryState {
   return {
     root,
-    source: { kind: "all" },
+    source: { kind: "snapshot" },
     commits,
     status: "ready",
     error: null,
@@ -45,22 +47,24 @@ export function installAllRefHistory(
   };
 }
 
-export function beginRefHistory(
+export function beginHistoryQuery(
   previous: RefHistoryState,
   root: string,
-  fullName: string,
+  query: HistoryQuery,
 ): { state: RefHistoryState; request: RefHistoryRequest } {
   const generation = previous.generation + 1;
+  const normalized = normalizeHistoryQuery(query);
+  const key = historyQueryKey(normalized);
   return {
     state: {
       root,
-      source: { kind: "ref", fullName },
+      source: { kind: "query", key, query: normalized },
       commits: [],
       status: "loading",
       error: null,
       generation,
     },
-    request: { root, fullName, generation },
+    request: { root, key, query: normalized, generation },
   };
 }
 
@@ -89,7 +93,7 @@ function matchesRequest(
   return (
     current.generation === request.generation &&
     current.root === request.root &&
-    current.source?.kind === "ref" &&
-    current.source.fullName === request.fullName
+    current.source?.kind === "query" &&
+    current.source.key === request.key
   );
 }

@@ -49,6 +49,19 @@ export interface CommitSummary {
   subject: string;
 }
 
+export type HistoryOrder = "topological" | "date";
+
+export interface HistoryQuery {
+  refs: string[];
+  authorEmails: string[];
+  currentAuthor: boolean;
+  sinceEpoch: number | null;
+  path: string | null;
+  firstParent: boolean;
+  excludeMerges: boolean;
+  order: HistoryOrder;
+}
+
 export interface CommitDetails {
   oid: string;
   parentOid: string | null;

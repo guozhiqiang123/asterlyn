@@ -14,7 +14,8 @@ use std::os::unix::process::CommandExt;
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
-    FileChange, ProjectFileList, RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
+    FileChange, HistoryOrder, HistoryQuery, ProjectFileList, RemoteSummary, RepositorySnapshot,
+    UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -179,6 +180,41 @@ impl GitRepository {
         self.read_commit_history(&oid, commit_limit)
     }
 
+    pub fn query_commit_history(
+        &self,
+        query: &HistoryQuery,
+        commit_limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
+        validate_history_query(query)?;
+        let selectors = if query.refs.is_empty() {
+            self.history_tip_oids()?
+        } else {
+            let mut oids = Vec::with_capacity(query.refs.len());
+            for full_name in &query.refs {
+                let reference = validate_history_ref(full_name)?;
+                if !self.ref_is_valid(reference)? {
+                    return Err(GitError::InvalidInput {
+                        field: "history refs".to_string(),
+                        message: "select only existing branches or tags".to_string(),
+                    });
+                }
+                oids.push(self.resolve_history_ref(reference)?);
+            }
+            oids.sort_unstable();
+            oids.dedup();
+            oids
+        };
+        if selectors.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.run_commit_history_query(
+            "query commit history",
+            selectors.iter().map(OsString::from).collect(),
+            query,
+            commit_limit,
+        )
+    }
+
     fn read_commit_history(
         &self,
         oid: &str,
@@ -216,18 +252,113 @@ impl GitRepository {
         selectors: Vec<OsString>,
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
+        self.run_commit_history_query(operation, selectors, &HistoryQuery::default(), commit_limit)
+    }
+
+    fn run_commit_history_query(
+        &self,
+        operation: &str,
+        selectors: Vec<OsString>,
+        query: &HistoryQuery,
+        commit_limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
         let limit = commit_limit.clamp(1, 500).to_string();
         let mut arguments = vec![
             OsString::from("log"),
-            OsString::from("--topo-order"),
+            OsString::from(match query.order {
+                HistoryOrder::Topological => "--topo-order",
+                HistoryOrder::Date => "--date-order",
+            }),
             OsString::from("--decorate=short"),
             OsString::from(format!("--max-count={limit}")),
             OsString::from("--format=%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e"),
         ];
+        if query.first_parent {
+            arguments.push(OsString::from("--first-parent"));
+        }
+        if query.exclude_merges {
+            arguments.push(OsString::from("--no-merges"));
+        }
+        if let Some(since_epoch) = query.since_epoch {
+            arguments.push(OsString::from(format!("--since=@{since_epoch}")));
+        }
+        let mut author_emails = query.author_emails.clone();
+        if query.current_author {
+            author_emails.push(self.current_author_email()?);
+        }
+        author_emails.sort_unstable();
+        author_emails.dedup();
+        for email in author_emails {
+            arguments.push(OsString::from(format!(
+                "--author=<{}>",
+                escape_git_regexp(&email)
+            )));
+        }
         arguments.extend(selectors);
         arguments.push(OsString::from("--"));
+        if let Some(path) = query.path.as_ref() {
+            arguments.push(OsString::from(path));
+        }
         let output = self.run_read_owned(operation, arguments)?;
         parse_commits(&output.stdout)
+    }
+
+    fn history_tip_oids(&self) -> Result<Vec<String>, GitError> {
+        let refs = self.run_read(
+            "read history tips",
+            [
+                "for-each-ref",
+                "--format=%(objectname)",
+                "refs/heads",
+                "refs/remotes",
+                "refs/tags",
+            ],
+        )?;
+        let mut oids: Vec<_> = String::from_utf8_lossy(&refs.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect();
+        let head = run_git_output(
+            &self.root,
+            ["rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "read history HEAD".to_string(),
+            message: error.to_string(),
+        })?;
+        if head.status.success() {
+            let oid = String::from_utf8_lossy(&head.stdout).trim().to_string();
+            if !oid.is_empty() {
+                oids.push(oid);
+            }
+        }
+        for oid in &oids {
+            validate_object_id(oid)?;
+        }
+        oids.sort_unstable();
+        oids.dedup();
+        Ok(oids)
+    }
+
+    fn current_author_email(&self) -> Result<String, GitError> {
+        let output =
+            run_git_output(&self.root, ["config", "--get", "user.email"]).map_err(|error| {
+                GitError::Io {
+                    operation: "read Git user email".to_string(),
+                    message: error.to_string(),
+                }
+            })?;
+        if !output.status.success() {
+            return Err(GitError::InvalidInput {
+                field: "history user".to_string(),
+                message: "configure Git user.email before filtering by me".to_string(),
+            });
+        }
+        let email = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        validate_author_email(&email)?;
+        Ok(email)
     }
 
     pub fn untracked_changes(
@@ -1635,6 +1766,66 @@ fn validate_history_ref(full_name: &str) -> Result<&str, GitError> {
     Ok(full_name)
 }
 
+fn validate_history_query(query: &HistoryQuery) -> Result<(), GitError> {
+    if query.refs.len() > 256 {
+        return Err(GitError::InvalidInput {
+            field: "history refs".to_string(),
+            message: "select at most 256 refs".to_string(),
+        });
+    }
+    for reference in &query.refs {
+        validate_history_ref(reference)?;
+    }
+    if query.author_emails.len() > 64 {
+        return Err(GitError::InvalidInput {
+            field: "history users".to_string(),
+            message: "select at most 64 authors".to_string(),
+        });
+    }
+    for email in &query.author_emails {
+        validate_author_email(email)?;
+    }
+    if query.since_epoch.is_some_and(|value| value <= 0) {
+        return Err(GitError::InvalidInput {
+            field: "history date".to_string(),
+            message: "the lower date bound must be a positive Unix timestamp".to_string(),
+        });
+    }
+    if let Some(path) = query.path.as_ref() {
+        validate_relative_path(path)?;
+    }
+    Ok(())
+}
+
+fn validate_author_email(email: &str) -> Result<(), GitError> {
+    if email.is_empty()
+        || email.len() > 320
+        || email
+            .chars()
+            .any(|character| matches!(character, '\0' | '\r' | '\n'))
+        || !email.contains('@')
+    {
+        return Err(GitError::InvalidInput {
+            field: "history user".to_string(),
+            message: "select a valid author email".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn escape_git_regexp(value: &str) -> String {
+    value.chars().fold(String::new(), |mut escaped, character| {
+        if matches!(
+            character,
+            '\\' | '.' | '^' | '$' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+        escaped
+    })
+}
+
 fn canonical_fetch_refspec(remote: &str) -> String {
     format!("+refs/heads/*:refs/remotes/{remote}/*")
 }
@@ -2083,6 +2274,178 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn typed_history_query_filters_refs_authors_dates_paths_and_topology() {
+        let directory = fixture();
+        let root = commit_file(directory.path(), "base.txt", "base\n", "Root");
+        git(directory.path(), &["branch", "side"]);
+        let main = commit_file(directory.path(), "main.txt", "main\n", "Main by test");
+        git(directory.path(), &["switch", "side"]);
+        git(directory.path(), &["config", "user.name", "Grace Hopper"]);
+        git(
+            directory.path(),
+            &["config", "user.email", "grace@example.invalid"],
+        );
+        let side = commit_file(directory.path(), "side.txt", "side\n", "Side by Grace");
+        git(directory.path(), &["switch", "main"]);
+        git(directory.path(), &["config", "user.name", "Asterlyn Test"]);
+        git(
+            directory.path(),
+            &["config", "user.email", "test@asterlyn.invalid"],
+        );
+        git(
+            directory.path(),
+            &["merge", "--no-ff", "side", "-m", "Merge side"],
+        );
+        let merge_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        let multi_ref = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    refs: vec!["refs/heads/main".to_string(), "refs/heads/side".to_string()],
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("multi-ref history loads");
+        for oid in [&root, &main, &side, &merge_oid] {
+            assert!(multi_ref.iter().any(|commit| &commit.oid == oid));
+        }
+
+        let grace = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    author_emails: vec!["grace@example.invalid".to_string()],
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("author history loads");
+        assert_eq!(
+            grace
+                .iter()
+                .map(|commit| commit.subject.as_str())
+                .collect::<Vec<_>>(),
+            ["Side by Grace"]
+        );
+
+        git(
+            directory.path(),
+            &["config", "user.email", "grace@example.invalid"],
+        );
+        let current_author = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    current_author: true,
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("current author history loads");
+        assert_eq!(current_author.len(), 1);
+        assert_eq!(current_author[0].oid, side);
+
+        let path_history = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    path: Some("side.txt".to_string()),
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("path history loads");
+        assert!(path_history.iter().any(|commit| commit.oid == side));
+        assert!(!path_history.iter().any(|commit| commit.oid == main));
+
+        let first_parent = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    refs: vec!["refs/heads/main".to_string()],
+                    first_parent: true,
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("first-parent history loads");
+        assert!(first_parent.iter().any(|commit| commit.oid == merge_oid));
+        assert!(!first_parent.iter().any(|commit| commit.oid == side));
+
+        let without_merges = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    exclude_merges: true,
+                    order: HistoryOrder::Date,
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("no-merge date history loads");
+        assert!(!without_merges.iter().any(|commit| commit.oid == merge_oid));
+        for (child_index, commit) in without_merges.iter().enumerate() {
+            for parent in &commit.parents {
+                if let Some(parent_index) =
+                    without_merges.iter().position(|item| &item.oid == parent)
+                {
+                    assert!(child_index < parent_index);
+                }
+            }
+        }
+
+        let future = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock is after epoch")
+            .as_secs() as i64
+            + 86_400;
+        assert!(
+            repository
+                .query_commit_history(
+                    &HistoryQuery {
+                        since_epoch: Some(future),
+                        ..HistoryQuery::default()
+                    },
+                    50,
+                )
+                .expect("future date query loads")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn typed_history_query_rejects_untrusted_values() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Root");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let invalid_queries = [
+            HistoryQuery {
+                refs: vec!["HEAD".to_string()],
+                ..HistoryQuery::default()
+            },
+            HistoryQuery {
+                refs: vec!["refs/heads/missing".to_string()],
+                ..HistoryQuery::default()
+            },
+            HistoryQuery {
+                author_emails: vec!["not-an-email".to_string()],
+                ..HistoryQuery::default()
+            },
+            HistoryQuery {
+                path: Some("../outside".to_string()),
+                ..HistoryQuery::default()
+            },
+            HistoryQuery {
+                since_epoch: Some(0),
+                ..HistoryQuery::default()
+            },
+        ];
+        for query in invalid_queries {
+            let error = repository
+                .query_commit_history(&query, 50)
+                .expect_err("invalid history query is rejected");
+            assert!(matches!(error, GitError::InvalidInput { .. }));
         }
     }
 

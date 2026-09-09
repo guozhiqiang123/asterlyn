@@ -3,7 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   demoCommitDetails,
   demoCommitDiff,
-  demoCommitHistory,
+  demoQueryHistory,
   demoCreateBranch,
   demoDiff,
   demoFetchRemote,
@@ -22,6 +22,7 @@ import type {
   CommitFileChange,
   CommitSummary,
   DiffResult,
+  HistoryQuery,
   ProjectFileList,
   RepositorySnapshot,
   UntrackedScan,
@@ -72,17 +73,17 @@ export const bridge = {
     return invoke<RepositorySnapshot>("open_repository", { path });
   },
 
-  async readRefHistory(
+  async readHistory(
     repositoryRoot: string,
-    fullName: string,
+    query: HistoryQuery,
   ): Promise<CommitSummary[]> {
     if (!isTauri) {
       await demoDelay(180);
-      return demoCommitHistory(browserSnapshot, fullName);
+      return demoQueryHistory(browserSnapshot, query);
     }
-    return invoke<CommitSummary[]>("read_ref_history", {
+    return invoke<CommitSummary[]>("read_history", {
       repositoryRoot,
-      fullName,
+      query,
     });
   },
 

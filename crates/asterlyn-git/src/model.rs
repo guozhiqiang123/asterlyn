@@ -113,6 +113,27 @@ pub struct CommitSummary {
     pub subject: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum HistoryOrder {
+    #[default]
+    Topological,
+    Date,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryQuery {
+    pub refs: Vec<String>,
+    pub author_emails: Vec<String>,
+    pub current_author: bool,
+    pub since_epoch: Option<i64>,
+    pub path: Option<String>,
+    pub first_parent: bool,
+    pub exclude_merges: bool,
+    pub order: HistoryOrder,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitDetails {

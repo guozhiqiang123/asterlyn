@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, CommitSummary, DiffResult, GitError,
-    GitRepository, ProjectFileList, RepositorySnapshot, UntrackedScan,
+    GitRepository, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
 };
 use tauri::State;
 
@@ -115,12 +115,12 @@ async fn open_repository(path: String) -> Result<RepositorySnapshot, GitError> {
 }
 
 #[tauri::command]
-async fn read_ref_history(
+async fn read_history(
     repository_root: String,
-    full_name: String,
+    query: HistoryQuery,
 ) -> Result<Vec<CommitSummary>, GitError> {
-    run_blocking("read ref history", move || {
-        GitRepository::open(repository_root)?.commit_history(&full_name, COMMIT_LIMIT)
+    run_blocking("read history", move || {
+        GitRepository::open(repository_root)?.query_commit_history(&query, COMMIT_LIMIT)
     })
     .await
 }
@@ -420,7 +420,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
-            read_ref_history,
+            read_history,
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,

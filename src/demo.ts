@@ -5,6 +5,7 @@ import type {
   CommitFileChange,
   CommitSummary,
   DiffResult,
+  HistoryQuery,
   RepositorySnapshot,
   UntrackedScan,
 } from "./models";
@@ -344,6 +345,45 @@ export function demoCommitHistory(
   return demoHistoryFromOid(snapshot, reference.oid);
 }
 
+export function demoQueryHistory(
+  snapshot: RepositorySnapshot,
+  query: HistoryQuery,
+): CommitSummary[] {
+  const tips =
+    query.refs.length === 0
+      ? snapshot.branches.map((branch) => branch.oid)
+      : query.refs.map((fullName) => {
+          const reference = snapshot.branches.find(
+            (branch) => branch.fullName === fullName,
+          );
+          if (!reference) throw new Error("The selected ref no longer exists.");
+          return reference.oid;
+        });
+  let commits = demoHistoryFromTips(snapshot, tips, query.firstParent);
+  const authors = new Set(query.authorEmails);
+  if (query.currentAuthor) authors.add("developer@example.invalid");
+  if (authors.size > 0) {
+    commits = commits.filter((commit) => authors.has(commit.authorEmail));
+  }
+  if (query.sinceEpoch !== null) {
+    commits = commits.filter((commit) => commit.authoredAt >= query.sinceEpoch!);
+  }
+  if (query.path) {
+    commits = commits.filter((commit) =>
+      demoCommitDetails(commit.oid).files.some(
+        (file) => file.path === query.path || file.originalPath === query.path,
+      ),
+    );
+  }
+  if (query.excludeMerges) {
+    commits = commits.filter((commit) => commit.parents.length < 2);
+  }
+  if (query.order === "date") {
+    commits.sort((left, right) => right.authoredAt - left.authoredAt);
+  }
+  return commits;
+}
+
 function demoHistoryFromOid(
   snapshot: RepositorySnapshot,
   tip: string | null,
@@ -354,6 +394,7 @@ function demoHistoryFromOid(
 function demoHistoryFromTips(
   snapshot: RepositorySnapshot,
   tips: string[],
+  firstParent = false,
 ): CommitSummary[] {
   const byOid = new Map(snapshot.commits.map((commit) => [commit.oid, commit]));
   const reachable = new Set<string>();
@@ -362,7 +403,8 @@ function demoHistoryFromTips(
     const oid = pending.pop();
     if (!oid || reachable.has(oid)) continue;
     reachable.add(oid);
-    pending.push(...(byOid.get(oid)?.parents ?? []));
+    const parents = byOid.get(oid)?.parents ?? [];
+    pending.push(...(firstParent ? parents.slice(0, 1) : parents));
   }
   return structuredClone(snapshot.commits.filter((commit) => reachable.has(commit.oid)));
 }

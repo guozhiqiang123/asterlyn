@@ -20,14 +20,24 @@ import {
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
 import {
-  beginRefHistory,
+  beginHistoryQuery,
   completeRefHistory,
   emptyRefHistory,
   failRefHistory,
-  installAllRefHistory,
+  installSnapshotHistory,
   type RefHistoryRequest,
   type RefHistoryState,
 } from "./workbench/ref-history";
+import {
+  defaultHistoryQuery,
+  filterHistoryText,
+  historyAuthorChoices,
+  historyDateSince,
+  historyQueryKey,
+  isSnapshotHistoryQuery,
+  normalizeHistoryQuery,
+  type HistoryDatePreset,
+} from "./workbench/history-query";
 import {
   buildProjectTree,
   type ProjectTreeNode,
@@ -53,11 +63,14 @@ import type {
   CommitSummary,
   DiffResult,
   FileChange,
+  HistoryQuery,
   RepositorySnapshot,
 } from "./models";
 
 const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
+
+type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
 
 interface AppState {
   snapshot: RepositorySnapshot | null;
@@ -73,6 +86,22 @@ interface AppState {
   changeQuery: string;
   selectedCommit: string | null;
   historyQuery: string;
+  historyCaseSensitive: boolean;
+  historyRegularExpression: boolean;
+  historyRefs: Set<string>;
+  historyAuthorEmails: Set<string>;
+  historyCurrentAuthor: boolean;
+  historyDatePreset: HistoryDatePreset;
+  historySinceEpoch: number | null;
+  historyPath: string | null;
+  historyPathQuery: string;
+  historyOrder: HistoryQuery["order"];
+  historyFirstParent: boolean;
+  historyExcludeMerges: boolean;
+  historyCollapseLinear: boolean;
+  historyFilterMenu: HistoryFilterMenu | null;
+  historyFavoriteRefs: Set<string>;
+  historyRecentRefs: string[];
   branchQuery: string;
   history: RefHistoryState;
   selectedCommitFile: string | null;
@@ -122,6 +151,22 @@ export class AsterlynApp {
     changeQuery: "",
     selectedCommit: null,
     historyQuery: "",
+    historyCaseSensitive: false,
+    historyRegularExpression: false,
+    historyRefs: new Set(),
+    historyAuthorEmails: new Set(),
+    historyCurrentAuthor: false,
+    historyDatePreset: "all",
+    historySinceEpoch: null,
+    historyPath: null,
+    historyPathQuery: "",
+    historyOrder: "topological",
+    historyFirstParent: false,
+    historyExcludeMerges: false,
+    historyCollapseLinear: false,
+    historyFilterMenu: null,
+    historyFavoriteRefs: new Set(),
+    historyRecentRefs: [],
     branchQuery: "",
     history: emptyRefHistory(),
     selectedCommitFile: null,
@@ -399,6 +444,10 @@ export class AsterlynApp {
     window.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         this.closeRepositoryDialog();
+        if (this.state.historyFilterMenu) {
+          this.state.historyFilterMenu = null;
+          if (this.state.layout.bottomTool === "branches") this.renderBottomTool();
+        }
         if (this.state.syncPopoverOpen && !this.state.remoteOperation) {
           this.state.syncPopoverOpen = false;
           if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
@@ -427,6 +476,14 @@ export class AsterlynApp {
       }
     });
     window.addEventListener("pointerdown", (event) => {
+      if (
+        this.state.historyFilterMenu &&
+        event.target instanceof Element &&
+        !event.target.closest(".history-toolbar")
+      ) {
+        this.state.historyFilterMenu = null;
+        if (this.state.layout.bottomTool === "branches") this.renderBottomTool();
+      }
       if (
         this.state.syncPopoverOpen &&
         !this.state.remoteOperation &&
@@ -497,6 +554,7 @@ export class AsterlynApp {
       this.state.selectedChangeKeys.clear();
       this.changeSelectionAnchor = null;
       this.state.historyQuery = "";
+      this.resetHistoryFilters();
       this.state.gitDetail = "commit";
       this.state.activeDocument = { kind: "welcome" };
       this.clearWorkingDiff();
@@ -1202,31 +1260,42 @@ export class AsterlynApp {
   }
 
   private renderHistoryNavigation(): string {
-    const commits = this.filteredHistoryCommits();
+    const filtered = this.filteredHistory();
     const scope = this.historyScope();
+    const snapshot = this.state.snapshot!;
     const results =
       this.state.history.status === "loading"
-        ? this.loadingBlock("Loading selected ref history…")
+        ? this.loadingBlock("Loading filtered history…")
         : this.state.history.status === "error"
           ? this.retryState(
               "Could not load history",
-              this.state.history.error ?? "The selected ref could not be read.",
+              this.state.history.error ?? "The selected history query could not be read.",
               "retry-ref-history",
               "history",
             )
           : this.state.history.commits.length === 0
-            ? `<div class="history-no-results"><strong>No commits on this ref</strong><span>The selected branch or tag has no commit history.</span></div>`
-            : this.renderHistoryRows(commits);
+            ? `<div class="history-no-results"><strong>No commits match these filters</strong><span>Clear one or more history filters to widen the query.</span></div>`
+            : this.renderHistoryRows(filtered.commits, filtered.error);
     return `
       <div class="history-navigation">
         <div class="history-toolbar">
-          <label class="history-filter" for="history-filter">
-            ${icon("search", 14)}
-            <input id="history-filter" type="search" value="${escapeAttribute(this.state.historyQuery)}" placeholder="Text or hash" autocomplete="off" spellcheck="false" aria-label="Filter commit history" aria-keyshortcuts="Control+F Meta+F" />
-            <span>Ctrl F</span>
-          </label>
-          <span class="history-scope" title="${escapeAttribute(scope.title)}">${icon(scope.icon, 13)}<span>${escapeHtml(scope.label)}</span></span>
+          <div class="history-search-control">
+            <label class="history-filter" for="history-filter">
+              ${icon("search", 14)}
+              <input id="history-filter" type="search" value="${escapeAttribute(this.state.historyQuery)}" placeholder="Text or hash" autocomplete="off" spellcheck="false" aria-label="Filter commit history" aria-keyshortcuts="Control+F Meta+F" />
+            </label>
+            <button class="history-mode-button ${this.state.historyRegularExpression ? "active" : ""}" type="button" data-history-text-mode="regex" aria-pressed="${this.state.historyRegularExpression}" title="Use regular expression">.*</button>
+            <button class="history-mode-button ${this.state.historyCaseSensitive ? "active" : ""}" type="button" data-history-text-mode="case" aria-pressed="${this.state.historyCaseSensitive}" title="Match case">Cc</button>
+          </div>
+          <div class="history-filter-strip" aria-label="History query filters">
+            ${this.historyFilterButton("branch", scope.label, this.state.historyRefs.size > 0, scope.title)}
+            ${this.historyFilterButton("user", this.historyUserLabel(), this.state.historyCurrentAuthor || this.state.historyAuthorEmails.size > 0, "Filter by commit author")}
+            ${this.historyFilterButton("date", this.historyDateLabel(), this.state.historyDatePreset !== "all", "Filter by commit date")}
+            ${this.historyFilterButton("paths", this.state.historyPath ? basename(this.state.historyPath) : "Paths", this.state.historyPath !== null, "Filter by one repository path")}
+            ${this.historyFilterButton("graph", "", this.state.historyOrder !== "topological" || this.state.historyFirstParent || this.state.historyExcludeMerges, "Graph order and traversal options", "sort")}
+          </div>
           <span class="compact-count" id="history-count">0</span>
+          ${this.renderHistoryFilterPopover(snapshot)}
         </div>
         <div class="history-results" id="history-results" aria-live="polite">
           ${results}
@@ -1234,13 +1303,90 @@ export class AsterlynApp {
       </div>`;
   }
 
-  private renderHistoryRows(commits: CommitSummary[]): string {
+  private historyFilterButton(
+    menu: HistoryFilterMenu,
+    label: string,
+    active: boolean,
+    title: string,
+    iconName?: "sort",
+  ): string {
+    const open = this.state.historyFilterMenu === menu;
+    return `<button class="history-filter-button ${active ? "active" : ""} ${open ? "open" : ""}" type="button" data-history-menu="${menu}" aria-expanded="${open}" title="${escapeAttribute(title)}">${iconName ? icon(iconName, 13) : `<span>${escapeHtml(label)}</span>${icon("chevron-down", 10)}`}</button>`;
+  }
+
+  private renderHistoryFilterPopover(snapshot: RepositorySnapshot): string {
+    const menu = this.state.historyFilterMenu;
+    if (!menu) return "";
+    const body =
+      menu === "branch"
+        ? this.renderHistoryBranchMenu(snapshot)
+        : menu === "user"
+          ? this.renderHistoryUserMenu(snapshot)
+          : menu === "date"
+            ? this.renderHistoryDateMenu()
+            : menu === "paths"
+              ? `<div class="history-menu-empty">Path selection is added in the next U11 batch.</div>`
+              : this.renderHistoryGraphMenu();
+    return `<div class="history-filter-popover history-filter-popover-${menu}" role="menu">${body}</div>`;
+  }
+
+  private renderHistoryBranchMenu(snapshot: RepositorySnapshot): string {
+    const allSelected = this.state.historyRefs.size === 0;
+    const groups: Array<[string, BranchSummary["kind"]]> = [
+      ["Local", "local"],
+      ["Remote", "remote"],
+      ["Tags", "tag"],
+    ];
+    return `<button class="history-menu-option" type="button" data-history-clear-refs aria-pressed="${allSelected}"><span>All refs</span>${allSelected ? icon("check", 13) : ""}</button>${groups
+      .map(([label, kind]) => {
+        const refs = snapshot.branches.filter((branch) => branch.kind === kind);
+        if (refs.length === 0) return "";
+        return `<div class="history-menu-heading">${label}</div>${refs
+          .map((branch) => {
+            const selected = this.state.historyRefs.has(branch.fullName);
+            return `<button class="history-menu-option" type="button" data-history-ref="${escapeAttribute(branch.fullName)}" aria-pressed="${selected}" title="${escapeAttribute(branch.fullName)}"><span>${icon(branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch", 13)}${escapeHtml(branch.name)}</span>${selected ? icon("check", 13) : ""}</button>`;
+          })
+          .join("")}`;
+      })
+      .join("")}`;
+  }
+
+  private renderHistoryUserMenu(snapshot: RepositorySnapshot): string {
+    const choices = historyAuthorChoices(snapshot.commits);
+    const allSelected = !this.state.historyCurrentAuthor && this.state.historyAuthorEmails.size === 0;
+    return `<button class="history-menu-option" type="button" data-history-clear-users aria-pressed="${allSelected}"><span>All users</span>${allSelected ? icon("check", 13) : ""}</button><div class="history-menu-heading">Identity</div><button class="history-menu-option" type="button" data-history-me aria-pressed="${this.state.historyCurrentAuthor}"><span>me</span>${this.state.historyCurrentAuthor ? icon("check", 13) : ""}</button><div class="history-menu-heading">Loaded authors</div>${choices
+      .map((choice) => {
+        const selected = this.state.historyAuthorEmails.has(choice.email);
+        return `<button class="history-menu-option two-line" type="button" data-history-author="${escapeAttribute(choice.email)}" aria-pressed="${selected}"><span><strong>${escapeHtml(choice.name)}</strong><small>${escapeHtml(choice.email)}</small></span><em>${choice.count}</em>${selected ? icon("check", 13) : ""}</button>`;
+      })
+      .join("")}`;
+  }
+
+  private renderHistoryDateMenu(): string {
+    const options: Array<[HistoryDatePreset, string]> = [
+      ["all", "All dates"],
+      ["day", "Last 24 hours"],
+      ["week", "Last 7 days"],
+    ];
+    return options
+      .map(([preset, label]) => {
+        const selected = this.state.historyDatePreset === preset;
+        return `<button class="history-menu-option" type="button" data-history-date="${preset}" aria-pressed="${selected}"><span>${label}</span>${selected ? icon("check", 13) : ""}</button>`;
+      })
+      .join("");
+  }
+
+  private renderHistoryGraphMenu(): string {
+    return `<div class="history-menu-heading">Sort</div><button class="history-menu-option" type="button" data-history-order="date" aria-pressed="${this.state.historyOrder === "date"}"><span>By commit date</span>${this.state.historyOrder === "date" ? icon("check", 13) : ""}</button><button class="history-menu-option" type="button" data-history-order="topological" aria-pressed="${this.state.historyOrder === "topological"}"><span>Topologically</span>${this.state.historyOrder === "topological" ? icon("check", 13) : ""}</button><div class="history-menu-heading">Options</div><div class="history-menu-empty">Traversal and linear-branch controls follow in the next U11 batch.</div>`;
+  }
+
+  private renderHistoryRows(commits: CommitSummary[], textError: string | null = null): string {
     if (commits.length === 0) {
-      return `<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>`;
+      return `${textError ? `<div class="history-text-error" role="status">Invalid expression: ${escapeHtml(textError)}</div>` : ""}<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>`;
     }
     const graph = projectCommitGraph(commits);
     const graphWidth = Math.max(22, 14 + (graph.laneCount - 1) * 12);
-    return `<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${commits
+    return `${textError ? `<div class="history-text-error" role="status">Invalid expression: ${escapeHtml(textError)}. Showing the unfiltered result.</div>` : ""}<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${commits
       .map((commit, index) => {
         const selected = commit.oid === this.state.selectedCommit;
         const references = this.commitReferenceBadges(commit.decorations, 2);
@@ -1288,22 +1434,43 @@ export class AsterlynApp {
     label: string;
     title: string;
   } {
-    const source = this.state.history.source;
-    if (source?.kind !== "ref") {
+    const refs = Array.from(this.state.historyRefs);
+    if (refs.length === 0) {
       return {
         icon: "branch",
         label: "All refs",
         title: "History from local branches, remote-tracking branches, and tags",
       };
     }
+    if (refs.length > 1) {
+      return {
+        icon: "branch",
+        label: `Branch ${refs.length}`,
+        title: refs.join(", "),
+      };
+    }
+    const fullName = refs[0]!;
     const branch = this.state.snapshot?.branches.find(
-      (candidate) => candidate.fullName === source.fullName,
+      (candidate) => candidate.fullName === fullName,
     );
     return {
       icon: branch?.kind === "tag" ? "tag" : "branch",
-      label: branch?.name ?? source.fullName,
-      title: source.fullName,
+      label: branch?.name ?? fullName,
+      title: fullName,
     };
+  }
+
+  private historyUserLabel(): string {
+    const count = this.state.historyAuthorEmails.size + (this.state.historyCurrentAuthor ? 1 : 0);
+    return count === 0 ? "User" : count === 1 && this.state.historyCurrentAuthor ? "me" : `User ${count}`;
+  }
+
+  private historyDateLabel(): string {
+    return this.state.historyDatePreset === "day"
+      ? "24 hours"
+      : this.state.historyDatePreset === "week"
+        ? "7 days"
+        : "Date";
   }
 
   private commitReferenceBadges(decorations: string[], limit: number): string {
@@ -1322,19 +1489,15 @@ export class AsterlynApp {
     return `<span class="commit-reference ${reference.kind}" title="${escapeAttribute(capitalize(reference.kind))}: ${escapeAttribute(reference.label)}">${icon(iconName, 12)}<span>${escapeHtml(reference.label)}</span></span>`;
   }
 
+  private filteredHistory(): ReturnType<typeof filterHistoryText> {
+    return filterHistoryText(this.state.history.commits, this.state.historyQuery, {
+      caseSensitive: this.state.historyCaseSensitive,
+      regularExpression: this.state.historyRegularExpression,
+    });
+  }
+
   private filteredHistoryCommits(): CommitSummary[] {
-    const query = this.state.historyQuery.trim().toLocaleLowerCase();
-    if (!query) return this.state.history.commits;
-    return this.state.history.commits.filter((commit) =>
-      [
-        commit.oid,
-        commit.shortOid,
-        commit.subject,
-        commit.authorName,
-        commit.authorEmail,
-        ...commit.decorations,
-      ].some((value) => value.toLocaleLowerCase().includes(query)),
-    );
+    return this.filteredHistory().commits;
   }
 
   private renderBranchNavigation(snapshot: RepositorySnapshot): string {
@@ -1401,7 +1564,7 @@ export class AsterlynApp {
   }
 
   private branchRow(branch: BranchSummary, displayName = branch.name, nested = false): string {
-    const selected = branch.fullName === this.state.selectedBranch;
+    const selected = this.state.historyRefs.has(branch.fullName);
     const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
     const title = selected
       ? `${branch.name} — ${branch.subject} — Activate again to show all refs`
@@ -1613,9 +1776,82 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#retry-ref-history")
       ?.addEventListener("click", () => {
-        const fullName = this.state.selectedBranch;
-        if (fullName) this.selectBranch(fullName);
+        this.applyHistoryQuery();
       });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-text-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.historyTextMode === "case") {
+          this.state.historyCaseSensitive = !this.state.historyCaseSensitive;
+        } else {
+          this.state.historyRegularExpression = !this.state.historyRegularExpression;
+        }
+        this.renderBottomTool();
+        this.focusHistoryFilter();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-menu]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const menu = button.dataset.historyMenu as HistoryFilterMenu | undefined;
+        if (!menu) return;
+        this.state.historyFilterMenu = this.state.historyFilterMenu === menu ? null : menu;
+        this.renderBottomTool();
+      });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-history-clear-refs]")?.addEventListener("click", () => {
+      this.state.historyRefs.clear();
+      this.state.selectedBranch = null;
+      this.state.gitDetail = "commit";
+      this.applyHistoryQuery();
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-ref]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const fullName = button.dataset.historyRef;
+        if (!fullName) return;
+        const refs = new Set(this.state.historyRefs);
+        if (refs.has(fullName)) refs.delete(fullName);
+        else refs.add(fullName);
+        this.state.historyRefs = refs;
+        this.state.selectedBranch = refs.size === 1 ? Array.from(refs)[0]! : null;
+        this.state.gitDetail = refs.size === 1 ? "branch" : "commit";
+        this.applyHistoryQuery();
+      });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-history-clear-users]")?.addEventListener("click", () => {
+      this.state.historyCurrentAuthor = false;
+      this.state.historyAuthorEmails.clear();
+      this.applyHistoryQuery();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-history-me]")?.addEventListener("click", () => {
+      this.state.historyCurrentAuthor = !this.state.historyCurrentAuthor;
+      this.applyHistoryQuery();
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-author]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const email = button.dataset.historyAuthor;
+        if (!email) return;
+        const authors = new Set(this.state.historyAuthorEmails);
+        if (authors.has(email)) authors.delete(email);
+        else authors.add(email);
+        this.state.historyAuthorEmails = authors;
+        this.applyHistoryQuery();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-date]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const preset = button.dataset.historyDate as HistoryDatePreset | undefined;
+        if (!preset) return;
+        this.state.historyDatePreset = preset;
+        this.state.historySinceEpoch = historyDateSince(preset);
+        this.applyHistoryQuery();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-order]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.state.historyOrder = button.dataset.historyOrder === "date" ? "date" : "topological";
+        this.applyHistoryQuery();
+      });
+    });
     this.bindHistoryRows();
   }
 
@@ -1652,7 +1888,7 @@ export class AsterlynApp {
       this.renderHistoryCount(commits.length);
       return;
     }
-    this.query("#history-results").innerHTML = this.renderHistoryRows(commits);
+    this.query("#history-results").innerHTML = this.renderHistoryRows(commits, this.filteredHistory().error);
     this.renderHistoryCount(commits.length);
     this.bindHistoryRows();
   }
@@ -1789,44 +2025,39 @@ export class AsterlynApp {
   private selectBranch(fullName: string, restoreFocus = false): void {
     const snapshot = this.state.snapshot;
     if (!snapshot?.branches.some((branch) => branch.fullName === fullName)) return;
-    if (this.state.selectedBranch === fullName) {
+    if (this.state.historyRefs.size === 1 && this.state.historyRefs.has(fullName)) {
+      this.state.historyRefs.clear();
       this.state.selectedBranch = null;
       this.state.gitDetail = "commit";
-      this.installSnapshotHistory(snapshot, true);
-      this.renderBottomTool();
+      this.applyHistoryQuery(true);
       if (restoreFocus) {
         const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
         Array.from(rows)
           .find((row) => row.dataset.branch === fullName)
           ?.focus();
       }
-      this.loadVisibleCommitDetails();
       return;
     }
+    this.state.historyRefs = new Set([fullName]);
     this.state.selectedBranch = fullName;
     this.state.gitDetail = "branch";
-    this.state.selectedCommit = null;
-    this.clearCommitInspection();
-    const pending = beginRefHistory(this.state.history, snapshot.root, fullName);
-    this.state.history = pending.state;
-    this.renderBottomTool();
+    this.applyHistoryQuery(true);
     if (restoreFocus) {
       const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
       Array.from(rows)
         .find((row) => row.dataset.branch === fullName)
         ?.focus();
     }
-    void this.loadRefHistory(pending.request);
   }
 
-  private async loadRefHistory(request: RefHistoryRequest): Promise<void> {
+  private async loadHistory(request: RefHistoryRequest): Promise<void> {
     try {
-      const commits = await bridge.readRefHistory(request.root, request.fullName);
+      const commits = await bridge.readHistory(request.root, request.query);
       const next = completeRefHistory(this.state.history, request, commits);
       if (
         next === this.state.history ||
         this.state.snapshot?.root !== request.root ||
-        this.state.selectedBranch !== request.fullName
+        historyQueryKey(this.activeHistoryQuery()) !== request.key
       ) {
         return;
       }
@@ -1839,7 +2070,7 @@ export class AsterlynApp {
       if (
         next === this.state.history ||
         this.state.snapshot?.root !== request.root ||
-        this.state.selectedBranch !== request.fullName
+        historyQueryKey(this.activeHistoryQuery()) !== request.key
       ) {
         return;
       }
@@ -1847,7 +2078,7 @@ export class AsterlynApp {
       this.state.selectedCommit = null;
       this.clearCommitInspection();
       this.renderBottomTool();
-      this.setStatus("Selected ref history could not be loaded", "warning");
+      this.setStatus("Filtered history could not be loaded", "warning");
     }
   }
 
@@ -2341,13 +2572,14 @@ export class AsterlynApp {
     const previousSource = this.state.history.source;
     const previousRoot = this.state.history.root;
     const previousSelected = this.state.selectedCommit;
-    this.state.history = installAllRefHistory(
+    this.resetHistoryFilters();
+    this.state.history = installSnapshotHistory(
       this.state.history,
       snapshot.root,
       snapshot.commits,
     );
     const selected =
-      !preferTip && previousSource?.kind === "all"
+      !preferTip && previousSource?.kind === "snapshot"
         ? snapshot.commits.find((commit) => commit.oid === previousSelected)?.oid ??
           snapshot.commits[0]?.oid ??
           null
@@ -2355,11 +2587,58 @@ export class AsterlynApp {
     this.state.selectedCommit = selected;
     if (
       previousRoot !== snapshot.root ||
-      previousSource?.kind !== "all" ||
+      previousSource?.kind !== "snapshot" ||
       previousSelected !== selected
     ) {
       this.clearCommitInspection();
     }
+  }
+
+  private resetHistoryFilters(): void {
+    const query = defaultHistoryQuery();
+    this.state.historyRefs = new Set(query.refs);
+    this.state.historyAuthorEmails = new Set(query.authorEmails);
+    this.state.historyCurrentAuthor = query.currentAuthor;
+    this.state.historyDatePreset = "all";
+    this.state.historySinceEpoch = query.sinceEpoch;
+    this.state.historyPath = query.path;
+    this.state.historyPathQuery = "";
+    this.state.historyOrder = query.order;
+    this.state.historyFirstParent = query.firstParent;
+    this.state.historyExcludeMerges = query.excludeMerges;
+    this.state.historyCollapseLinear = false;
+    this.state.historyFilterMenu = null;
+  }
+
+  private activeHistoryQuery(): HistoryQuery {
+    return normalizeHistoryQuery({
+      refs: Array.from(this.state.historyRefs),
+      authorEmails: Array.from(this.state.historyAuthorEmails),
+      currentAuthor: this.state.historyCurrentAuthor,
+      sinceEpoch: this.state.historySinceEpoch,
+      path: this.state.historyPath,
+      firstParent: this.state.historyFirstParent,
+      excludeMerges: this.state.historyExcludeMerges,
+      order: this.state.historyOrder,
+    });
+  }
+
+  private applyHistoryQuery(preferTip = false): void {
+    const snapshot = this.state.snapshot;
+    if (!snapshot) return;
+    const query = this.activeHistoryQuery();
+    this.state.selectedCommit = null;
+    this.clearCommitInspection();
+    if (isSnapshotHistoryQuery(query)) {
+      this.installSnapshotHistory(snapshot, preferTip);
+      this.renderBottomTool();
+      this.loadVisibleCommitDetails();
+      return;
+    }
+    const pending = beginHistoryQuery(this.state.history, snapshot.root, query);
+    this.state.history = pending.state;
+    this.renderBottomTool();
+    void this.loadHistory(pending.request);
   }
 
   private clearWorkingDiff(): void {
