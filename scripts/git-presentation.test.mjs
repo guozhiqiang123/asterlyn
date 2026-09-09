@@ -168,12 +168,29 @@ test("commit graph does not infer ancestry from adjacent unrelated rows", () => 
   );
 });
 
+test("commit graph never connects identical object IDs across Git roots", () => {
+  const graph = projectCommitGraph([
+    commit("shared", ["parent"], "."),
+    commit("shared", ["parent"], "modules/library"),
+    commit("parent", [], "."),
+    commit("parent", [], "modules/library"),
+  ]);
+
+  assert.equal(graph.rows[0].startsLane, true);
+  assert.equal(graph.rows[1].startsLane, true);
+  assert.notEqual(graph.rows[0].nodeLane, graph.rows[1].nodeLane);
+  assert.equal(graph.rows[2].nodeColor, graph.rows[0].nodeColor);
+  assert.equal(graph.rows[3].nodeColor, graph.rows[1].nodeColor);
+  assert.notEqual(graph.rows[2].nodeColor, graph.rows[3].nodeColor);
+});
+
 function file(path, status) {
   return { path, originalPath: null, status };
 }
 
 function branch(fullName, name) {
   return {
+    repositoryId: ".",
     fullName,
     name,
     oid: "1".repeat(40),
@@ -186,6 +203,6 @@ function branch(fullName, name) {
   };
 }
 
-function commit(oid, parents) {
-  return { oid, parents };
+function commit(oid, parents, repositoryId = ".") {
+  return { repositoryId, oid, parents };
 }

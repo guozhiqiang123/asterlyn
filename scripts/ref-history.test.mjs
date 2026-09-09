@@ -10,6 +10,7 @@ import {
 import { defaultHistoryQuery } from "../src/workbench/history-query.ts";
 
 const commit = (oid) => ({
+  repositoryId: ".",
   oid,
   shortOid: oid.slice(0, 7),
   parents: [],
@@ -24,11 +25,11 @@ test("ref history accepts only its current request identity", () => {
   const all = installSnapshotHistory(emptyRefHistory(), "/one", [commit("head")]);
   const first = beginHistoryQuery(all, "/one", {
     ...defaultHistoryQuery(),
-    refs: ["refs/heads/first"],
+    refs: [{ repositoryId: ".", fullName: "refs/heads/first" }],
   });
   const second = beginHistoryQuery(first.state, "/one", {
     ...defaultHistoryQuery(),
-    refs: ["refs/heads/second"],
+    refs: [{ repositoryId: ".", fullName: "refs/heads/second" }],
   });
 
   assert.equal(
@@ -54,7 +55,7 @@ test("ref history accepts only its current request identity", () => {
 test("repository and mutation changes invalidate pending ref responses", () => {
   const pending = beginHistoryQuery(emptyRefHistory(), "/one", {
     ...defaultHistoryQuery(),
-    refs: ["refs/remotes/origin/main"],
+    refs: [{ repositoryId: ".", fullName: "refs/remotes/origin/main" }],
   });
   const nextAll = installSnapshotHistory(pending.state, "/two", [commit("new-head")]);
 

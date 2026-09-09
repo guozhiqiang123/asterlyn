@@ -1,40 +1,52 @@
 import type { CommitSummary } from "../models";
+import { commitKey, parentCommitKey } from "./history-identity.ts";
 
 export type HistoryDisplayEntry =
   | {
       kind: "commit";
       commit: CommitSummary;
-      graphCommit: Pick<CommitSummary, "oid" | "parents">;
+      graphCommit: Pick<CommitSummary, "repositoryId" | "oid" | "parents">;
     }
   | {
       kind: "collapsed";
       id: string;
       count: number;
       firstOid: string;
-      graphCommit: Pick<CommitSummary, "oid" | "parents">;
+      firstKey: string;
+      graphCommit: Pick<CommitSummary, "repositoryId" | "oid" | "parents">;
     };
 
 export function collapseLinearHistory(
   commits: CommitSummary[],
-  selectedOid: string | null,
+  selectedKey: string | null,
 ): HistoryDisplayEntry[] {
   if (commits.length < 4) return commitEntries(commits);
-  const loaded = new Set(commits.map((commit) => commit.oid));
-  const childCounts = new Map(commits.map((commit) => [commit.oid, 0]));
+  const loaded = new Set(commits.map(commitKey));
+  const childCounts = new Map(commits.map((commit) => [commitKey(commit), 0]));
   for (const commit of commits) {
     for (const parent of commit.parents) {
-      if (loaded.has(parent)) childCounts.set(parent, (childCounts.get(parent) ?? 0) + 1);
+      const parentKey = parentCommitKey(commit.repositoryId, parent);
+      if (loaded.has(parentKey)) {
+        childCounts.set(parentKey, (childCounts.get(parentKey) ?? 0) + 1);
+      }
     }
   }
 
   const rawEntries: Array<
     | { kind: "commit"; commit: CommitSummary }
-    | { kind: "collapsed"; id: string; count: number; firstOid: string; parentOid: string }
+    | {
+        kind: "collapsed";
+        id: string;
+        count: number;
+        firstOid: string;
+        parentOid: string;
+        repositoryId: string;
+      }
   > = [];
   const collapsedStarts = new Map<string, string>();
   let index = 0;
   while (index < commits.length) {
-    if (!isCollapsible(commits, index, childCounts, selectedOid)) {
+    if (!isCollapsible(commits, index, childCounts, selectedKey)) {
       rawEntries.push({ kind: "commit", commit: commits[index]! });
       index += 1;
       continue;
@@ -43,7 +55,8 @@ export function collapseLinearHistory(
     let end = start;
     while (
       end + 1 < commits.length &&
-      isCollapsible(commits, end + 1, childCounts, selectedOid) &&
+      isCollapsible(commits, end + 1, childCounts, selectedKey) &&
+      commits[end]!.repositoryId === commits[end + 1]!.repositoryId &&
       commits[end]!.parents[0] === commits[end + 1]!.oid
     ) {
       end += 1;
@@ -56,14 +69,15 @@ export function collapseLinearHistory(
     }
     const first = commits[start]!;
     const last = commits[end]!;
-    const id = `collapsed:${first.oid}:${last.oid}`;
-    collapsedStarts.set(first.oid, id);
+    const id = `collapsed:${commitKey(first)}:${commitKey(last)}`;
+    collapsedStarts.set(commitKey(first), id);
     rawEntries.push({
       kind: "collapsed",
       id,
       count,
       firstOid: first.oid,
       parentOid: last.parents[0]!,
+      repositoryId: first.repositoryId,
     });
     index = end + 1;
   }
@@ -75,14 +89,22 @@ export function collapseLinearHistory(
           id: entry.id,
           count: entry.count,
           firstOid: entry.firstOid,
-          graphCommit: { oid: entry.id, parents: [entry.parentOid] },
+          firstKey: parentCommitKey(entry.repositoryId, entry.firstOid),
+          graphCommit: {
+            repositoryId: entry.repositoryId,
+            oid: entry.id,
+            parents: [entry.parentOid],
+          },
         }
       : {
           kind: "commit",
           commit: entry.commit,
           graphCommit: {
             oid: entry.commit.oid,
-            parents: entry.commit.parents.map((parent) => collapsedStarts.get(parent) ?? parent),
+            repositoryId: entry.commit.repositoryId,
+            parents: entry.commit.parents.map((parent) =>
+              collapsedStarts.get(parentCommitKey(entry.commit.repositoryId, parent)) ?? parent
+            ),
           },
         },
   );
@@ -100,15 +122,15 @@ function isCollapsible(
   commits: CommitSummary[],
   index: number,
   childCounts: Map<string, number>,
-  selectedOid: string | null,
+  selectedKey: string | null,
 ): boolean {
   const commit = commits[index]!;
   return (
     index > 0 &&
     index < commits.length - 1 &&
-    commit.oid !== selectedOid &&
+    commitKey(commit) !== selectedKey &&
     commit.decorations.length === 0 &&
     commit.parents.length === 1 &&
-    childCounts.get(commit.oid) === 1
+    childCounts.get(commitKey(commit)) === 1
   );
 }

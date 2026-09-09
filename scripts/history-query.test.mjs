@@ -19,17 +19,41 @@ const commits = [
 test("history query identity normalizes unordered refs and authors", () => {
   const first = {
     ...defaultHistoryQuery(),
-    refs: ["refs/heads/z", "refs/heads/a", "refs/heads/a"],
+    refs: [ref("refs/heads/z"), ref("refs/heads/a"), ref("refs/heads/a")],
     authorEmails: [" grace@example.invalid ", "ada@example.invalid"],
   };
   const second = {
     ...defaultHistoryQuery(),
-    refs: ["refs/heads/a", "refs/heads/z"],
+    refs: [ref("refs/heads/a"), ref("refs/heads/z")],
     authorEmails: ["ada@example.invalid", "grace@example.invalid"],
   };
   assert.equal(historyQueryKey(first), historyQueryKey(second));
   assert.equal(isSnapshotHistoryQuery(defaultHistoryQuery()), true);
   assert.equal(isSnapshotHistoryQuery(first), false);
+});
+
+test("history query identity includes roots and root-qualified paths", () => {
+  const first = {
+    ...defaultHistoryQuery(),
+    repositoryIds: ["module", ".", "module"],
+    paths: [
+      { repositoryId: "module", path: "src" },
+      { repositoryId: ".", path: "src" },
+    ],
+  };
+  const second = {
+    ...defaultHistoryQuery(),
+    repositoryIds: [".", "module"],
+    paths: [
+      { repositoryId: ".", path: "src" },
+      { repositoryId: "module", path: "src" },
+    ],
+  };
+  assert.equal(historyQueryKey(first), historyQueryKey(second));
+  assert.notEqual(
+    historyQueryKey(first),
+    historyQueryKey({ ...first, repositoryIds: ["."] }),
+  );
 });
 
 test("text filtering supports case and regular expression modes", () => {
@@ -77,6 +101,7 @@ test("author choices aggregate exact emails and date presets are deterministic",
 
 function commit(oid, subject, authorName, authorEmail) {
   return {
+    repositoryId: ".",
     oid,
     shortOid: oid.slice(0, 7),
     parents: [],
@@ -86,4 +111,8 @@ function commit(oid, subject, authorName, authorEmail) {
     decorations: [],
     subject,
   };
+}
+
+function ref(fullName) {
+  return { repositoryId: ".", fullName };
 }

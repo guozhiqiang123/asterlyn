@@ -3,6 +3,7 @@
 pub struct RepositorySnapshot {
     pub root: String,
     pub git_dir: String,
+    pub repository_roots: Vec<GitRootDescriptor>,
     pub branch: BranchState,
     pub operation: Option<String>,
     pub changes: Vec<FileChange>,
@@ -32,7 +33,33 @@ pub struct UntrackedScan {
 pub struct ProjectFileList {
     pub root: String,
     pub paths: Vec<String>,
+    pub files: Vec<ProjectFile>,
+    pub repository_roots: Vec<GitRootDescriptor>,
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFile {
+    pub repository_id: String,
+    pub path: String,
+    pub workspace_path: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRootDescriptor {
+    pub id: String,
+    pub relative_path: String,
+    pub display_name: String,
+    pub kind: GitRootKind,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitRootKind {
+    Main,
+    Submodule,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
@@ -103,6 +130,7 @@ pub enum ChangeKind {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitSummary {
+    pub repository_id: String,
     pub oid: String,
     pub short_oid: String,
     pub parents: Vec<String>,
@@ -124,19 +152,47 @@ pub enum HistoryOrder {
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryQuery {
-    pub refs: Vec<String>,
+    pub repository_ids: Vec<String>,
+    pub refs: Vec<HistoryRef>,
     pub author_emails: Vec<String>,
     pub current_author: bool,
     pub since_epoch: Option<i64>,
-    pub path: Option<String>,
+    pub paths: Vec<HistoryPath>,
     pub first_parent: bool,
     pub exclude_merges: bool,
     pub order: HistoryOrder,
 }
 
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryRef {
+    pub repository_id: String,
+    pub full_name: String,
+}
+
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryPath {
+    pub repository_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryPage {
+    pub commits: Vec<CommitSummary>,
+    pub offset: usize,
+    pub has_more: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitDetails {
+    pub repository_id: String,
     pub oid: String,
     pub parent_oid: Option<String>,
     pub files: Vec<CommitFileChange>,
@@ -153,6 +209,7 @@ pub struct CommitFileChange {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitDiffResult {
+    pub repository_id: String,
     pub oid: String,
     pub path: String,
     pub patch: String,
@@ -163,6 +220,7 @@ pub struct CommitDiffResult {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchSummary {
+    pub repository_id: String,
     pub full_name: String,
     pub name: String,
     pub oid: String,

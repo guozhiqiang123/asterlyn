@@ -181,6 +181,7 @@ pub(crate) fn parse_commits(input: &[u8]) -> Result<Vec<CommitSummary>, GitError
         }
 
         commits.push(CommitSummary {
+            repository_id: ".".to_string(),
             oid: fields[0].to_string(),
             short_oid: fields[1].to_string(),
             parents: fields[2]
@@ -225,6 +226,7 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
         };
 
         branches.push(BranchSummary {
+            repository_id: ".".to_string(),
             full_name: fields[0].to_string(),
             name: fields[1].to_string(),
             oid: fields[2].to_string(),

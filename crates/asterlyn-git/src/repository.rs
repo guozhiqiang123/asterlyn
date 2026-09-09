@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{Read, Write};
@@ -14,13 +15,16 @@ use std::os::unix::process::CommandExt;
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
-    FileChange, HistoryOrder, HistoryQuery, ProjectFileList, RemoteSummary, RepositorySnapshot,
+    FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
+    HistoryQuery, HistoryRef, ProjectFile, ProjectFileList, RemoteSummary, RepositorySnapshot,
     UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
+const MAX_HISTORY_WINDOW: usize = 3_000;
+const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +46,12 @@ struct CurrentBranchContext {
 pub struct GitRepository {
     root: PathBuf,
     git_dir: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct DiscoveredGitRoot {
+    descriptor: GitRootDescriptor,
+    repository: GitRepository,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -97,6 +107,124 @@ impl GitRepository {
         &self.root
     }
 
+    fn main_root_descriptor(&self) -> GitRootDescriptor {
+        GitRootDescriptor {
+            id: ".".to_string(),
+            relative_path: ".".to_string(),
+            display_name: self
+                .root
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or("Repository")
+                .to_string(),
+            kind: GitRootKind::Main,
+        }
+    }
+
+    fn discovered_roots(&self) -> Result<Vec<DiscoveredGitRoot>, GitError> {
+        let canonical_main = fs::canonicalize(&self.root).map_err(|error| GitError::Io {
+            operation: "resolve main repository root".to_string(),
+            message: error.to_string(),
+        })?;
+        let main = DiscoveredGitRoot {
+            descriptor: self.main_root_descriptor(),
+            repository: self.clone(),
+        };
+        let mut roots = vec![main.clone()];
+        let mut pending = vec![main];
+        let mut seen = HashSet::from([canonical_main.clone()]);
+
+        while let Some(parent) = pending.pop() {
+            for path in parent.repository.gitlink_paths()? {
+                let candidate = parent.repository.root.join(path);
+                let Ok(canonical_candidate) = fs::canonicalize(candidate) else {
+                    continue;
+                };
+                if !canonical_candidate.starts_with(&canonical_main)
+                    || seen.contains(&canonical_candidate)
+                {
+                    continue;
+                }
+                let Ok(repository) = GitRepository::open(&canonical_candidate) else {
+                    continue;
+                };
+                let Ok(canonical_repository) = fs::canonicalize(repository.root()) else {
+                    continue;
+                };
+                if canonical_repository != canonical_candidate {
+                    continue;
+                }
+                let Ok(relative) = canonical_repository.strip_prefix(&canonical_main) else {
+                    continue;
+                };
+                let Some(relative_path) = path_to_git_string(relative) else {
+                    continue;
+                };
+                if relative_path.is_empty() {
+                    continue;
+                }
+                seen.insert(canonical_repository);
+                let discovered = DiscoveredGitRoot {
+                    descriptor: GitRootDescriptor {
+                        id: relative_path.clone(),
+                        relative_path,
+                        display_name: repository
+                            .root
+                            .file_name()
+                            .and_then(OsStr::to_str)
+                            .unwrap_or("Submodule")
+                            .to_string(),
+                        kind: GitRootKind::Submodule,
+                    },
+                    repository,
+                };
+                pending.push(discovered.clone());
+                roots.push(discovered);
+            }
+        }
+
+        roots[1..].sort_by(|left, right| left.descriptor.id.cmp(&right.descriptor.id));
+        Ok(roots)
+    }
+
+    fn gitlink_paths(&self) -> Result<Vec<String>, GitError> {
+        let output = self.run_read(
+            "discover initialized submodule candidates",
+            ["ls-files", "--stage", "-z"],
+        )?;
+        let mut paths = Vec::new();
+        for record in output.stdout.split(|byte| *byte == 0) {
+            if !record.starts_with(b"160000 ") {
+                continue;
+            }
+            let Some(tab) = record.iter().position(|byte| *byte == b'\t') else {
+                return Err(GitError::Parse {
+                    context: "Git link catalog".to_string(),
+                    message: "a staged Git link had no path separator".to_string(),
+                });
+            };
+            let path = std::str::from_utf8(&record[tab + 1..]).map_err(|_| GitError::Parse {
+                context: "Git link catalog".to_string(),
+                message: "non-UTF-8 submodule paths are not supported".to_string(),
+            })?;
+            validate_relative_path(path)?;
+            paths.push(path.to_string());
+        }
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+
+    fn resolve_history_root(&self, repository_id: &str) -> Result<DiscoveredGitRoot, GitError> {
+        self.discovered_roots()?
+            .into_iter()
+            .find(|root| root.descriptor.id == repository_id)
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "repository root".to_string(),
+                message: "select a currently initialized repository root".to_string(),
+            })
+    }
+
     pub fn snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
         let mut snapshot = self.tracked_snapshot(commit_limit)?;
         let scan = self.untracked_changes(&CancellationToken::new())?;
@@ -109,6 +237,32 @@ impl GitRepository {
     }
 
     pub fn tracked_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
+        let roots = self.discovered_roots()?;
+        let mut snapshot = self.tracked_root_snapshot(commit_limit)?;
+        snapshot.repository_roots = roots.iter().map(|root| root.descriptor.clone()).collect();
+
+        let mut histories = vec![snapshot.commits];
+        for root in roots.iter().skip(1) {
+            let child = root.repository.tracked_root_snapshot(commit_limit)?;
+            let mut branches = child.branches;
+            let mut commits = child.commits;
+            scope_branches(&mut branches, &root.descriptor.id);
+            scope_commits(&mut commits, &root.descriptor.id);
+            snapshot.branches.extend(branches);
+            histories.push(commits);
+        }
+        snapshot.branches.sort_by(|left, right| {
+            right
+                .committed_at
+                .cmp(&left.committed_at)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.full_name.cmp(&right.full_name))
+        });
+        snapshot.commits = merge_root_histories(histories, commit_limit);
+        Ok(snapshot)
+    }
+
+    fn tracked_root_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
         let status = self.run_read(
             "read working tree status",
             [
@@ -154,6 +308,7 @@ impl GitRepository {
         Ok(RepositorySnapshot {
             root: self.root.to_string_lossy().into_owned(),
             git_dir: self.git_dir.to_string_lossy().into_owned(),
+            repository_roots: vec![self.main_root_descriptor()],
             branch,
             operation: self.detect_operation(),
             changes,
@@ -162,6 +317,14 @@ impl GitRepository {
             remotes,
             untracked_state: UntrackedState::Pending,
         })
+    }
+
+    pub fn repository_roots(&self) -> Result<Vec<GitRootDescriptor>, GitError> {
+        Ok(self
+            .discovered_roots()?
+            .into_iter()
+            .map(|root| root.descriptor)
+            .collect())
     }
 
     pub fn commit_history(
@@ -185,34 +348,112 @@ impl GitRepository {
         query: &HistoryQuery,
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
+        let commit_limit = commit_limit.clamp(1, MAX_HISTORY_WINDOW);
+        Ok(self
+            .query_commit_history_page(query, 0, commit_limit)?
+            .commits)
+    }
+
+    pub fn query_commit_history_page(
+        &self,
+        query: &HistoryQuery,
+        offset: usize,
+        page_size: usize,
+    ) -> Result<HistoryPage, GitError> {
         validate_history_query(query)?;
-        let selectors = if query.refs.is_empty() {
-            self.history_tip_oids()?
-        } else {
-            let mut oids = Vec::with_capacity(query.refs.len());
-            for full_name in &query.refs {
-                let reference = validate_history_ref(full_name)?;
-                if !self.ref_is_valid(reference)? {
-                    return Err(GitError::InvalidInput {
-                        field: "history refs".to_string(),
-                        message: "select only existing branches or tags".to_string(),
-                    });
-                }
-                oids.push(self.resolve_history_ref(reference)?);
-            }
-            oids.sort_unstable();
-            oids.dedup();
-            oids
-        };
-        if selectors.is_empty() {
-            return Ok(Vec::new());
+        if offset > MAX_HISTORY_WINDOW {
+            return Err(GitError::InvalidInput {
+                field: "history offset".to_string(),
+                message: format!("must not exceed {MAX_HISTORY_WINDOW}"),
+            });
         }
-        self.run_commit_history_query(
-            "query commit history",
-            selectors.iter().map(OsString::from).collect(),
-            query,
-            commit_limit,
-        )
+        if page_size == 0 || page_size > MAX_HISTORY_PAGE_SIZE {
+            return Err(GitError::InvalidInput {
+                field: "history page size".to_string(),
+                message: format!("must be between 1 and {MAX_HISTORY_PAGE_SIZE}"),
+            });
+        }
+        if offset == MAX_HISTORY_WINDOW {
+            return Ok(HistoryPage {
+                commits: Vec::new(),
+                offset,
+                has_more: false,
+            });
+        }
+        let page_size = page_size.min(MAX_HISTORY_WINDOW - offset);
+        let requested = offset
+            .saturating_add(page_size)
+            .saturating_add(1)
+            .min(MAX_HISTORY_WINDOW + 1);
+        let roots = self.discovered_roots()?;
+        validate_query_roots(query, &roots)?;
+        let selected_roots: HashSet<&str> =
+            query.repository_ids.iter().map(String::as_str).collect();
+        let mut histories = Vec::new();
+
+        for root in roots {
+            let repository_id = root.descriptor.id.as_str();
+            if !selected_roots.is_empty() && !selected_roots.contains(repository_id) {
+                continue;
+            }
+            let refs: Vec<&HistoryRef> = query
+                .refs
+                .iter()
+                .filter(|reference| reference.repository_id == repository_id)
+                .collect();
+            let paths: Vec<&HistoryPath> = query
+                .paths
+                .iter()
+                .filter(|path| path.repository_id == repository_id)
+                .collect();
+            if (!query.refs.is_empty() && refs.is_empty())
+                || (!query.paths.is_empty() && paths.is_empty())
+            {
+                continue;
+            }
+
+            let selectors = if query.refs.is_empty() {
+                root.repository.history_tip_oids()?
+            } else {
+                let mut oids = Vec::with_capacity(refs.len());
+                for selected in refs {
+                    let reference = validate_history_ref(&selected.full_name)?;
+                    if !root.repository.ref_is_valid(reference)? {
+                        return Err(GitError::InvalidInput {
+                            field: "history refs".to_string(),
+                            message: "select only existing refs from their owning repository"
+                                .to_string(),
+                        });
+                    }
+                    oids.push(root.repository.resolve_history_ref(reference)?);
+                }
+                oids.sort_unstable();
+                oids.dedup();
+                oids
+            };
+            if selectors.is_empty() {
+                continue;
+            }
+            let path_values: Vec<String> =
+                paths.into_iter().map(|path| path.path.clone()).collect();
+            let mut commits = root.repository.run_commit_history_query(
+                "query commit history",
+                selectors.iter().map(OsString::from).collect(),
+                query,
+                &path_values,
+                requested,
+            )?;
+            scope_commits(&mut commits, repository_id);
+            histories.push(commits);
+        }
+        let merged = merge_root_histories(histories, requested);
+        let has_more = offset + page_size < MAX_HISTORY_WINDOW && merged.len() > offset + page_size;
+        let commits = merged.into_iter().skip(offset).take(page_size).collect();
+        Ok(HistoryPage {
+            commits,
+            offset,
+            has_more,
+        })
     }
 
     fn read_commit_history(
@@ -252,7 +493,13 @@ impl GitRepository {
         selectors: Vec<OsString>,
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
-        self.run_commit_history_query(operation, selectors, &HistoryQuery::default(), commit_limit)
+        self.run_commit_history_query(
+            operation,
+            selectors,
+            &HistoryQuery::default(),
+            &[],
+            commit_limit,
+        )
     }
 
     fn run_commit_history_query(
@@ -260,10 +507,12 @@ impl GitRepository {
         operation: &str,
         selectors: Vec<OsString>,
         query: &HistoryQuery,
+        paths: &[String],
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
-        let limit = commit_limit.clamp(1, 500).to_string();
+        let limit = commit_limit.clamp(1, MAX_HISTORY_WINDOW + 1).to_string();
         let mut arguments = vec![
+            OsString::from("--literal-pathspecs"),
             OsString::from("log"),
             OsString::from(match query.order {
                 HistoryOrder::Topological => "--topo-order",
@@ -296,7 +545,7 @@ impl GitRepository {
         }
         arguments.extend(selectors);
         arguments.push(OsString::from("--"));
-        if let Some(path) = query.path.as_ref() {
+        for path in paths {
             arguments.push(OsString::from(path));
         }
         let output = self.run_read_owned(operation, arguments)?;
@@ -392,8 +641,57 @@ impl GitRepository {
     }
 
     pub fn project_files(&self, limit: usize) -> Result<ProjectFileList, GitError> {
-        let output = self.run_read("list tracked project files", ["ls-files", "--cached", "-z"])?;
+        let roots = self.discovered_roots()?;
         let maximum = limit.clamp(1, 100_000);
+        let mut files = Vec::new();
+        for root in &roots {
+            for path in root.repository.project_file_paths()? {
+                let workspace_path = if root.descriptor.relative_path == "." {
+                    path.clone()
+                } else {
+                    format!("{}/{path}", root.descriptor.relative_path)
+                };
+                files.push(ProjectFile {
+                    repository_id: root.descriptor.id.clone(),
+                    path,
+                    workspace_path,
+                });
+            }
+        }
+        files.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        files.dedup_by(|left, right| {
+            left.repository_id == right.repository_id && left.path == right.path
+        });
+        let truncated = files.len() > maximum;
+        files.truncate(maximum);
+        let nested_roots: HashSet<&str> = roots
+            .iter()
+            .skip(1)
+            .map(|root| root.descriptor.relative_path.as_str())
+            .collect();
+        let mut paths: Vec<String> = files
+            .iter()
+            .filter(|file| !nested_roots.contains(file.workspace_path.as_str()))
+            .map(|file| file.workspace_path.clone())
+            .collect();
+        paths.sort();
+        paths.dedup();
+        Ok(ProjectFileList {
+            root: self.root.to_string_lossy().into_owned(),
+            paths,
+            files,
+            repository_roots: roots.into_iter().map(|root| root.descriptor).collect(),
+            truncated,
+        })
+    }
+
+    fn project_file_paths(&self) -> Result<Vec<String>, GitError> {
+        let output = self.run_read("list tracked project files", ["ls-files", "--cached", "-z"])?;
         let mut paths: Vec<_> = output
             .stdout
             .split(|byte| *byte == 0)
@@ -402,13 +700,7 @@ impl GitRepository {
             .collect();
         paths.sort();
         paths.dedup();
-        let truncated = paths.len() > maximum;
-        paths.truncate(maximum);
-        Ok(ProjectFileList {
-            root: self.root.to_string_lossy().into_owned(),
-            paths,
-            truncated,
-        })
+        Ok(paths)
     }
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
@@ -495,10 +787,22 @@ impl GitRepository {
         };
 
         Ok(CommitDetails {
+            repository_id: ".".to_string(),
             oid: oid.to_string(),
             parent_oid,
             files: parse_commit_files(&output.stdout)?,
         })
+    }
+
+    pub fn repository_commit_details(
+        &self,
+        repository_id: &str,
+        oid: &str,
+    ) -> Result<CommitDetails, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        let mut details = root.repository.commit_details(oid)?;
+        details.repository_id = root.descriptor.id;
+        Ok(details)
     }
 
     pub fn commit_diff(
@@ -553,12 +857,26 @@ impl GitRepository {
         }
 
         Ok(CommitDiffResult {
+            repository_id: ".".to_string(),
             oid: oid.to_string(),
             path: path.to_string(),
             patch: String::from_utf8_lossy(&patch).into_owned(),
             binary,
             truncated,
         })
+    }
+
+    pub fn repository_commit_diff(
+        &self,
+        repository_id: &str,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<CommitDiffResult, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        let mut diff = root.repository.commit_diff(oid, path, original_path)?;
+        diff.repository_id = root.descriptor.id;
+        Ok(diff)
     }
 
     pub fn stage(&self, paths: &[String]) -> Result<(), GitError> {
@@ -1518,6 +1836,84 @@ impl GitRepository {
     }
 }
 
+fn path_to_git_string(path: &Path) -> Option<String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        let std::path::Component::Normal(value) = component else {
+            return None;
+        };
+        parts.push(value.to_str()?);
+    }
+    Some(parts.join("/"))
+}
+
+fn scope_commits(commits: &mut [CommitSummary], repository_id: &str) {
+    for commit in commits {
+        commit.repository_id = repository_id.to_string();
+    }
+}
+
+fn scope_branches(branches: &mut [crate::model::BranchSummary], repository_id: &str) {
+    for branch in branches {
+        branch.repository_id = repository_id.to_string();
+    }
+}
+
+fn merge_root_histories(
+    histories: Vec<Vec<CommitSummary>>,
+    commit_limit: usize,
+) -> Vec<CommitSummary> {
+    let limit = commit_limit.clamp(1, MAX_HISTORY_WINDOW + 1);
+    let mut positions = vec![0_usize; histories.len()];
+    let mut merged = Vec::with_capacity(limit);
+    while merged.len() < limit {
+        let next = histories
+            .iter()
+            .enumerate()
+            .filter_map(|(index, history)| {
+                history.get(positions[index]).map(|commit| (index, commit))
+            })
+            .max_by(|(_, left), (_, right)| {
+                left.authored_at
+                    .cmp(&right.authored_at)
+                    .then_with(|| right.repository_id.cmp(&left.repository_id))
+                    .then_with(|| right.oid.cmp(&left.oid))
+            })
+            .map(|(index, _)| index);
+        let Some(index) = next else {
+            break;
+        };
+        merged.push(histories[index][positions[index]].clone());
+        positions[index] += 1;
+    }
+    merged
+}
+
+fn validate_query_roots(query: &HistoryQuery, roots: &[DiscoveredGitRoot]) -> Result<(), GitError> {
+    let available: HashSet<&str> = roots
+        .iter()
+        .map(|root| root.descriptor.id.as_str())
+        .collect();
+    let requested = query
+        .repository_ids
+        .iter()
+        .map(String::as_str)
+        .chain(
+            query
+                .refs
+                .iter()
+                .map(|reference| reference.repository_id.as_str()),
+        )
+        .chain(query.paths.iter().map(|path| path.repository_id.as_str()));
+    if requested.into_iter().any(|id| !available.contains(id)) {
+        return Err(GitError::InvalidInput {
+            field: "repository root".to_string(),
+            message: "a selected repository root is no longer initialized".to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn read_stream(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
     stream.read_to_end(&mut bytes)?;
@@ -1714,19 +2110,24 @@ fn validate_paths(paths: &[String]) -> Result<Vec<OsString>, GitError> {
 
 fn validate_relative_path(path: &str) -> Result<(), GitError> {
     let candidate = Path::new(path);
-    if path.is_empty() || path.contains('\0') || candidate.is_absolute() {
-        return Err(GitError::InvalidInput {
-            field: "path".to_string(),
-            message: "the path must be repository-relative".to_string(),
-        });
-    }
-    if candidate
-        .components()
-        .any(|component| matches!(component, std::path::Component::ParentDir))
+    if path.is_empty()
+        || path
+            .chars()
+            .any(|character| matches!(character, '\0' | '\r' | '\n' | '\\'))
+        || candidate.is_absolute()
+        || candidate.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::CurDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
     {
         return Err(GitError::InvalidInput {
             field: "path".to_string(),
-            message: "parent-directory traversal is not allowed".to_string(),
+            message: "the path must be an unambiguous repository-relative path".to_string(),
         });
     }
     Ok(())
@@ -1767,6 +2168,15 @@ fn validate_history_ref(full_name: &str) -> Result<&str, GitError> {
 }
 
 fn validate_history_query(query: &HistoryQuery) -> Result<(), GitError> {
+    if query.repository_ids.len() > 64 {
+        return Err(GitError::InvalidInput {
+            field: "repository roots".to_string(),
+            message: "select at most 64 repository roots".to_string(),
+        });
+    }
+    for repository_id in &query.repository_ids {
+        validate_repository_id(repository_id)?;
+    }
     if query.refs.len() > 256 {
         return Err(GitError::InvalidInput {
             field: "history refs".to_string(),
@@ -1774,7 +2184,8 @@ fn validate_history_query(query: &HistoryQuery) -> Result<(), GitError> {
         });
     }
     for reference in &query.refs {
-        validate_history_ref(reference)?;
+        validate_repository_id(&reference.repository_id)?;
+        validate_history_ref(&reference.full_name)?;
     }
     if query.author_emails.len() > 64 {
         return Err(GitError::InvalidInput {
@@ -1791,8 +2202,30 @@ fn validate_history_query(query: &HistoryQuery) -> Result<(), GitError> {
             message: "the lower date bound must be a positive Unix timestamp".to_string(),
         });
     }
-    if let Some(path) = query.path.as_ref() {
-        validate_relative_path(path)?;
+    if query.paths.len() > 256 {
+        return Err(GitError::InvalidInput {
+            field: "history paths".to_string(),
+            message: "select at most 256 paths".to_string(),
+        });
+    }
+    for path in &query.paths {
+        validate_repository_id(&path.repository_id)?;
+        validate_relative_path(&path.path)?;
+    }
+    Ok(())
+}
+
+fn validate_repository_id(repository_id: &str) -> Result<(), GitError> {
+    if repository_id.is_empty()
+        || repository_id.len() > 4_096
+        || repository_id
+            .chars()
+            .any(|character| matches!(character, '\0' | '\r' | '\n'))
+    {
+        return Err(GitError::InvalidInput {
+            field: "repository root".to_string(),
+            message: "select a valid repository root".to_string(),
+        });
     }
     Ok(())
 }
@@ -2015,6 +2448,20 @@ mod tests {
             &["config", "user.email", "test@asterlyn.invalid"],
         );
         directory
+    }
+
+    fn history_ref(full_name: &str) -> HistoryRef {
+        HistoryRef {
+            repository_id: ".".to_string(),
+            full_name: full_name.to_string(),
+        }
+    }
+
+    fn history_path(path: &str) -> HistoryPath {
+        HistoryPath {
+            repository_id: ".".to_string(),
+            path: path.to_string(),
+        }
     }
 
     struct RemoteFixture {
@@ -2306,7 +2753,10 @@ mod tests {
         let multi_ref = repository
             .query_commit_history(
                 &HistoryQuery {
-                    refs: vec!["refs/heads/main".to_string(), "refs/heads/side".to_string()],
+                    refs: vec![
+                        history_ref("refs/heads/main"),
+                        history_ref("refs/heads/side"),
+                    ],
                     ..HistoryQuery::default()
                 },
                 50,
@@ -2352,7 +2802,7 @@ mod tests {
         let path_history = repository
             .query_commit_history(
                 &HistoryQuery {
-                    path: Some("side.txt".to_string()),
+                    paths: vec![history_path("side.txt")],
                     ..HistoryQuery::default()
                 },
                 50,
@@ -2364,7 +2814,7 @@ mod tests {
         let first_parent = repository
             .query_commit_history(
                 &HistoryQuery {
-                    refs: vec!["refs/heads/main".to_string()],
+                    refs: vec![history_ref("refs/heads/main")],
                     first_parent: true,
                     ..HistoryQuery::default()
                 },
@@ -2421,11 +2871,11 @@ mod tests {
         let repository = GitRepository::open(directory.path()).expect("repository opens");
         let invalid_queries = [
             HistoryQuery {
-                refs: vec!["HEAD".to_string()],
+                refs: vec![history_ref("HEAD")],
                 ..HistoryQuery::default()
             },
             HistoryQuery {
-                refs: vec!["refs/heads/missing".to_string()],
+                refs: vec![history_ref("refs/heads/missing")],
                 ..HistoryQuery::default()
             },
             HistoryQuery {
@@ -2433,7 +2883,7 @@ mod tests {
                 ..HistoryQuery::default()
             },
             HistoryQuery {
-                path: Some("../outside".to_string()),
+                paths: vec![history_path("../outside")],
                 ..HistoryQuery::default()
             },
             HistoryQuery {
@@ -2446,6 +2896,56 @@ mod tests {
                 .query_commit_history(&query, 50)
                 .expect_err("invalid history query is rejected");
             assert!(matches!(error, GitError::InvalidInput { .. }));
+        }
+    }
+
+    #[test]
+    fn history_pages_are_contiguous_bounded_and_report_completion() {
+        let directory = fixture();
+        for index in 0..7 {
+            commit_file(
+                directory.path(),
+                &format!("page-{index}.txt"),
+                &format!("{index}\n"),
+                &format!("Page {index}"),
+            );
+        }
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let query = HistoryQuery::default();
+
+        let first = repository
+            .query_commit_history_page(&query, 0, 3)
+            .expect("first page loads");
+        let second = repository
+            .query_commit_history_page(&query, 3, 3)
+            .expect("second page loads");
+        let last = repository
+            .query_commit_history_page(&query, 6, 3)
+            .expect("last page loads");
+
+        assert_eq!(first.offset, 0);
+        assert_eq!(first.commits.len(), 3);
+        assert!(first.has_more);
+        assert_eq!(second.offset, 3);
+        assert_eq!(second.commits.len(), 3);
+        assert!(second.has_more);
+        assert_eq!(last.offset, 6);
+        assert_eq!(last.commits.len(), 1);
+        assert!(!last.has_more);
+        let oids: HashSet<_> = first
+            .commits
+            .iter()
+            .chain(&second.commits)
+            .chain(&last.commits)
+            .map(|commit| commit.oid.as_str())
+            .collect();
+        assert_eq!(oids.len(), 7);
+
+        for (offset, limit) in [(3_001, 3), (0, 0), (0, 3_001)] {
+            assert!(matches!(
+                repository.query_commit_history_page(&query, offset, limit),
+                Err(GitError::InvalidInput { .. })
+            ));
         }
     }
 
@@ -2466,6 +2966,118 @@ mod tests {
         let bounded = repository.project_files(1).expect("bounded files load");
         assert_eq!(bounded.paths, ["alpha.txt"]);
         assert!(bounded.truncated);
+    }
+
+    #[test]
+    fn initialized_submodule_history_is_root_qualified_and_routed() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let main = directory.path().join("main");
+        let source = directory.path().join("source");
+        fs::create_dir_all(&main).expect("main directory");
+        fs::create_dir_all(&source).expect("source directory");
+        for repository in [&main, &source] {
+            git(repository, &["init", "-b", "main"]);
+            git(repository, &["config", "user.name", "Asterlyn Test"]);
+            git(
+                repository,
+                &["config", "user.email", "test@asterlyn.invalid"],
+            );
+        }
+        fs::write(source.join("shared.txt"), "submodule content\n").expect("submodule file");
+        git(&source, &["add", "shared.txt"]);
+        git(&source, &["commit", "-m", "Submodule root"]);
+        let child_oid = git_stdout(&source, &["rev-parse", "HEAD"]);
+        fs::write(main.join("main.txt"), "main content\n").expect("main file");
+        git(&main, &["add", "main.txt"]);
+        git(&main, &["commit", "-m", "Main root"]);
+        let source_path = source.to_string_lossy().into_owned();
+        git(
+            &main,
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                &source_path,
+                "modules/library",
+            ],
+        );
+        git(&main, &["commit", "-am", "Add submodule"]);
+
+        let repository = GitRepository::open(&main).expect("main repository opens");
+        let roots = repository.repository_roots().expect("root catalog loads");
+        assert_eq!(
+            roots
+                .iter()
+                .map(|root| root.id.as_str())
+                .collect::<Vec<_>>(),
+            [".", "modules/library"]
+        );
+
+        let snapshot = repository
+            .tracked_snapshot(50)
+            .expect("workspace history loads");
+        assert!(snapshot.commits.iter().any(|commit| {
+            commit.repository_id == "modules/library" && commit.oid == child_oid
+        }));
+        assert!(snapshot.branches.iter().any(|branch| {
+            branch.repository_id == "modules/library" && branch.full_name == "refs/heads/main"
+        }));
+
+        let child_history = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    repository_ids: vec!["modules/library".to_string()],
+                    refs: vec![HistoryRef {
+                        repository_id: "modules/library".to_string(),
+                        full_name: "refs/heads/main".to_string(),
+                    }],
+                    paths: vec![HistoryPath {
+                        repository_id: "modules/library".to_string(),
+                        path: "shared.txt".to_string(),
+                    }],
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("child history loads");
+        assert!(!child_history.is_empty());
+        assert!(
+            child_history
+                .iter()
+                .all(|commit| commit.repository_id == "modules/library")
+        );
+
+        let details = repository
+            .repository_commit_details("modules/library", &child_oid)
+            .expect("child details load");
+        assert_eq!(details.repository_id, "modules/library");
+        assert_eq!(details.files[0].path, "shared.txt");
+        let diff = repository
+            .repository_commit_diff("modules/library", &child_oid, "shared.txt", None)
+            .expect("child diff loads");
+        assert_eq!(diff.repository_id, "modules/library");
+        assert!(diff.patch.contains("submodule content"));
+
+        let files = repository.project_files(50).expect("workspace files load");
+        assert!(files.files.iter().any(|file| {
+            file.repository_id == "modules/library"
+                && file.path == "shared.txt"
+                && file.workspace_path == "modules/library/shared.txt"
+        }));
+        assert!(matches!(
+            repository.repository_commit_details("../source", &child_oid),
+            Err(GitError::InvalidInput { .. })
+        ));
+
+        git(&main, &["submodule", "deinit", "-f", "modules/library"]);
+        assert_eq!(
+            repository
+                .repository_roots()
+                .expect("deinitialized catalog loads")
+                .len(),
+            1
+        );
     }
 
     #[test]

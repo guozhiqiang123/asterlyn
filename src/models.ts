@@ -39,6 +39,7 @@ export interface FileChange {
 }
 
 export interface CommitSummary {
+  repositoryId: string;
   oid: string;
   shortOid: string;
   parents: string[];
@@ -52,17 +53,35 @@ export interface CommitSummary {
 export type HistoryOrder = "topological" | "date";
 
 export interface HistoryQuery {
-  refs: string[];
+  repositoryIds: string[];
+  refs: HistoryRef[];
   authorEmails: string[];
   currentAuthor: boolean;
   sinceEpoch: number | null;
-  path: string | null;
+  paths: HistoryPath[];
   firstParent: boolean;
   excludeMerges: boolean;
   order: HistoryOrder;
 }
 
+export interface HistoryRef {
+  repositoryId: string;
+  fullName: string;
+}
+
+export interface HistoryPath {
+  repositoryId: string;
+  path: string;
+}
+
+export interface HistoryPage {
+  commits: CommitSummary[];
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface CommitDetails {
+  repositoryId: string;
   oid: string;
   parentOid: string | null;
   files: CommitFileChange[];
@@ -75,6 +94,7 @@ export interface CommitFileChange {
 }
 
 export interface CommitDiffResult {
+  repositoryId: string;
   oid: string;
   path: string;
   patch: string;
@@ -85,6 +105,7 @@ export interface CommitDiffResult {
 export type BranchKind = "local" | "remote" | "tag";
 
 export interface BranchSummary {
+  repositoryId: string;
   fullName: string;
   name: string;
   oid: string;
@@ -99,6 +120,7 @@ export interface BranchSummary {
 export interface RepositorySnapshot {
   root: string;
   gitDir: string;
+  repositoryRoots: GitRootDescriptor[];
   branch: BranchState;
   operation: string | null;
   changes: FileChange[];
@@ -116,7 +138,24 @@ export interface UntrackedScan {
 export interface ProjectFileList {
   root: string;
   paths: string[];
+  files: ProjectFile[];
+  repositoryRoots: GitRootDescriptor[];
   truncated: boolean;
+}
+
+export interface ProjectFile {
+  repositoryId: string;
+  path: string;
+  workspacePath: string;
+}
+
+export type GitRootKind = "main" | "submodule";
+
+export interface GitRootDescriptor {
+  id: string;
+  relativePath: string;
+  displayName: string;
+  kind: GitRootKind;
 }
 
 export interface DiffResult {

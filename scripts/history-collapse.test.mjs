@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { collapseLinearHistory } from "../src/workbench/history-collapse.ts";
+import { commitKey } from "../src/workbench/history-identity.ts";
 
 test("linear history collapses interior commits and rewires only the graph projection", () => {
   const commits = linearCommits(6);
@@ -21,7 +22,7 @@ test("decorated, selected, merge, and branch-point commits remain structural row
   assert.ok(decoratedEntries.some((entry) => entry.kind === "commit" && entry.commit.oid === decorated[3].oid));
 
   const selected = linearCommits(6);
-  const selectedEntries = collapseLinearHistory(selected, selected[2].oid);
+  const selectedEntries = collapseLinearHistory(selected, commitKey(selected[2]));
   assert.ok(selectedEntries.some((entry) => entry.kind === "commit" && entry.commit.oid === selected[2].oid));
 
   const merge = linearCommits(6);
@@ -37,6 +38,7 @@ test("a single eligible interior row is never replaced by a continuation", () =>
 
 function linearCommits(count) {
   return Array.from({ length: count }, (_, index) => ({
+    repositoryId: ".",
     oid: `oid-${index}`,
     shortOid: `oid-${index}`,
     parents: index + 1 < count ? [`oid-${index + 1}`] : [],

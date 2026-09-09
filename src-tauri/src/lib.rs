@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard};
 
 use asterlyn_git::{
-    CancellationToken, CommitDetails, CommitDiffResult, CommitSummary, DiffResult, GitError,
-    GitRepository, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
+    CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
+    HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
 };
 use tauri::State;
 
@@ -115,12 +115,14 @@ async fn open_repository(path: String) -> Result<RepositorySnapshot, GitError> {
 }
 
 #[tauri::command]
-async fn read_history(
+async fn read_history_page(
     repository_root: String,
     query: HistoryQuery,
-) -> Result<Vec<CommitSummary>, GitError> {
-    run_blocking("read history", move || {
-        GitRepository::open(repository_root)?.query_commit_history(&query, COMMIT_LIMIT)
+    offset: usize,
+    limit: usize,
+) -> Result<HistoryPage, GitError> {
+    run_blocking("read history page", move || {
+        GitRepository::open(repository_root)?.query_commit_history_page(&query, offset, limit)
     })
     .await
 }
@@ -199,10 +201,11 @@ async fn list_project_files(repository_root: String) -> Result<ProjectFileList, 
 #[tauri::command]
 async fn read_commit_details(
     repository_root: String,
+    repository_id: String,
     commit_oid: String,
 ) -> Result<CommitDetails, GitError> {
     run_blocking("read commit details", move || {
-        GitRepository::open(repository_root)?.commit_details(&commit_oid)
+        GitRepository::open(repository_root)?.repository_commit_details(&repository_id, &commit_oid)
     })
     .await
 }
@@ -210,12 +213,14 @@ async fn read_commit_details(
 #[tauri::command]
 async fn read_commit_diff(
     repository_root: String,
+    repository_id: String,
     commit_oid: String,
     path: String,
     original_path: Option<String>,
 ) -> Result<CommitDiffResult, GitError> {
     run_blocking("read commit diff", move || {
-        GitRepository::open(repository_root)?.commit_diff(
+        GitRepository::open(repository_root)?.repository_commit_diff(
+            &repository_id,
             &commit_oid,
             &path,
             original_path.as_deref(),
@@ -420,7 +425,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
-            read_history,
+            read_history_page,
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,

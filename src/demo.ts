@@ -13,6 +13,14 @@ import type {
 export const demoSnapshot: RepositorySnapshot = {
   root: "/workspace/asterlyn",
   gitDir: "/workspace/asterlyn/.git",
+  repositoryRoots: [
+    {
+      id: ".",
+      relativePath: ".",
+      displayName: "asterlyn",
+      kind: "main",
+    },
+  ],
   branch: {
     head: "feature/git-workbench",
     oid: "df535785471311c9cdd936ff023d7d65dafb74a3",
@@ -69,6 +77,7 @@ export const demoSnapshot: RepositorySnapshot = {
   ],
   commits: [
     {
+      repositoryId: ".",
       oid: "df535785471311c9cdd936ff023d7d65dafb74a3",
       shortOid: "df53578",
       parents: [
@@ -82,6 +91,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "merge: complete the Git workbench foundation",
     },
     {
+      repositoryId: ".",
       oid: "c333333333333333333333333333333333333333",
       shortOid: "c333333",
       parents: ["c222222222222222222222222222222222222222"],
@@ -92,6 +102,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "test(git): cover safe remote synchronization",
     },
     {
+      repositoryId: ".",
       oid: "c222222222222222222222222222222222222222",
       shortOid: "c222222",
       parents: ["c111111111111111111111111111111111111111"],
@@ -102,6 +113,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "feat(diff): link horizontal and vertical scrolling",
     },
     {
+      repositoryId: ".",
       oid: "c111111111111111111111111111111111111111",
       shortOid: "c111111",
       parents: ["a68b48279c6b51f8adcf1bb20ca7e7c61284bf31"],
@@ -112,6 +124,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "feat(workbench): add resizable Git panes",
     },
     {
+      repositoryId: ".",
       oid: "a68b48279c6b51f8adcf1bb20ca7e7c61284bf31",
       shortOid: "a68b482",
       parents: ["54978419e233f8b5f53c55197e2742a3440ef894"],
@@ -122,6 +135,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "feat(git): add tested repository core",
     },
     {
+      repositoryId: ".",
       oid: "b4c3d2e1f09876543210fedcba9876543210abcd",
       shortOid: "b4c3d2e",
       parents: ["54978419e233f8b5f53c55197e2742a3440ef894"],
@@ -132,6 +146,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "feat(history): prototype topology graph lanes",
     },
     {
+      repositoryId: ".",
       oid: "54978419e233f8b5f53c55197e2742a3440ef894",
       shortOid: "5497841",
       parents: [],
@@ -144,6 +159,7 @@ export const demoSnapshot: RepositorySnapshot = {
   ],
   branches: [
     {
+      repositoryId: ".",
       fullName: "refs/heads/feature/git-workbench",
       name: "feature/git-workbench",
       oid: "df535785471311c9cdd936ff023d7d65dafb74a3",
@@ -155,6 +171,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "merge: complete the Git workbench foundation",
     },
     {
+      repositoryId: ".",
       fullName: "refs/heads/feature/graph-rendering",
       name: "feature/graph-rendering",
       oid: "b4c3d2e1f09876543210fedcba9876543210abcd",
@@ -166,6 +183,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "feat(history): prototype topology graph lanes",
     },
     {
+      repositoryId: ".",
       fullName: "refs/heads/main",
       name: "main",
       oid: "54978419e233f8b5f53c55197e2742a3440ef894",
@@ -177,6 +195,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "docs: establish Asterlyn roadmap and architecture",
     },
     {
+      repositoryId: ".",
       fullName: "refs/remotes/origin/feature/git-workbench",
       name: "origin/feature/git-workbench",
       oid: "a68b48279c6b51f8adcf1bb20ca7e7c61284bf31",
@@ -188,6 +207,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "feat(git): add tested repository core",
     },
     {
+      repositoryId: ".",
       fullName: "refs/remotes/origin/main",
       name: "origin/main",
       oid: "54978419e233f8b5f53c55197e2742a3440ef894",
@@ -199,6 +219,7 @@ export const demoSnapshot: RepositorySnapshot = {
       subject: "docs: establish Asterlyn roadmap and architecture",
     },
     {
+      repositoryId: ".",
       fullName: "refs/tags/v0.1.0",
       name: "v0.1.0",
       oid: "54978419e233f8b5f53c55197e2742a3440ef894",
@@ -305,6 +326,7 @@ export function demoCommitDetails(oid: string): CommitDetails {
           },
         ];
   return {
+    repositoryId: ".",
     oid,
     parentOid: commit?.parents[0] ?? null,
     files,
@@ -313,6 +335,7 @@ export function demoCommitDetails(oid: string): CommitDetails {
 
 export function demoCommitDiff(oid: string, path: string): CommitDiffResult {
   return {
+    repositoryId: ".",
     oid,
     path,
     patch:
@@ -379,10 +402,13 @@ export function demoQueryHistory(
   snapshot: RepositorySnapshot,
   query: HistoryQuery,
 ): CommitSummary[] {
+  if (query.repositoryIds.length > 0 && !query.repositoryIds.includes(".")) return [];
+  const refs = query.refs.filter((reference) => reference.repositoryId === ".");
+  if (query.refs.length > 0 && refs.length === 0) return [];
   const tips =
-    query.refs.length === 0
+    refs.length === 0
       ? snapshot.branches.map((branch) => branch.oid)
-      : query.refs.map((fullName) => {
+      : refs.map(({ fullName }) => {
           const reference = snapshot.branches.find(
             (branch) => branch.fullName === fullName,
           );
@@ -398,10 +424,15 @@ export function demoQueryHistory(
   if (query.sinceEpoch !== null) {
     commits = commits.filter((commit) => commit.authoredAt >= query.sinceEpoch!);
   }
-  if (query.path) {
+  const paths = query.paths.filter((path) => path.repositoryId === ".");
+  if (query.paths.length > 0 && paths.length === 0) return [];
+  if (paths.length > 0) {
     commits = commits.filter((commit) =>
       demoCommitDetails(commit.oid).files.some(
-        (file) => file.path === query.path || file.originalPath === query.path,
+        (file) =>
+          paths.some(
+            (path) => file.path === path.path || file.originalPath === path.path,
+          ),
       ),
     );
   }
@@ -497,6 +528,7 @@ export function demoCreateBranch(
   for (const branch of next.branches) branch.current = false;
   const tip = next.commits[0];
   next.branches.unshift({
+    repositoryId: ".",
     fullName,
     name: normalized,
     oid: next.branch.oid ?? tip?.oid ?? "0".repeat(40),

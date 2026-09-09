@@ -1,4 +1,5 @@
 import type { BranchSummary, CommitFileChange, CommitSummary } from "../models";
+import { commitKey, parentCommitKey } from "./history-identity.ts";
 
 export type CommitFileView = "tree" | "flat";
 export type CommitReferenceKind = "head" | "local" | "remote" | "tag" | "other";
@@ -46,14 +47,14 @@ export interface CommitGraphProjection {
 }
 
 interface ActiveGraphLane {
-  oid: string;
+  key: string;
   color: number;
 }
 
 const GRAPH_COLOR_COUNT = 8;
 
 export function projectCommitGraph(
-  commits: Pick<CommitSummary, "oid" | "parents">[],
+  commits: Pick<CommitSummary, "repositoryId" | "oid" | "parents">[],
 ): CommitGraphProjection {
   let lanes: ActiveGraphLane[] = [];
   let nextColor = 0;
@@ -74,31 +75,32 @@ export function projectCommitGraph(
   };
 
   for (const commit of commits) {
+    const key = commitKey(commit);
     const before = [...lanes];
-    let nodeLane = before.findIndex((lane) => lane.oid === commit.oid);
+    let nodeLane = before.findIndex((lane) => lane.key === key);
     const startsLane = nodeLane < 0;
     if (startsLane) {
       nodeLane = before.length;
-      before.push({ oid: commit.oid, color: allocateColor(before) });
+      before.push({ key, color: allocateColor(before) });
     }
     const nodeColor = before[nodeLane]!.color;
-    const parents = commit.parents.filter(
+    const parents = commit.parents.map((parent) => parentCommitKey(commit.repositoryId, parent)).filter(
       (parent, index, values) => parent.length > 0 && values.indexOf(parent) === index,
     );
     const after = before.filter((_, index) => index !== nodeLane);
 
     for (const [parentIndex, parent] of parents.entries()) {
-      if (after.some((lane) => lane.oid === parent)) continue;
+      if (after.some((lane) => lane.key === parent)) continue;
       const previousParent = parentIndex > 0 ? parents[parentIndex - 1] : null;
       const previousLane = previousParent
-        ? after.findIndex((lane) => lane.oid === previousParent)
+        ? after.findIndex((lane) => lane.key === previousParent)
         : -1;
       const insertAt =
         parentIndex === 0
           ? Math.min(nodeLane, after.length)
           : Math.min(previousLane >= 0 ? previousLane + 1 : nodeLane + parentIndex, after.length);
       after.splice(insertAt, 0, {
-        oid: parent,
+        key: parent,
         color: parentIndex === 0 ? nodeColor : allocateColor(after),
       });
     }
@@ -114,7 +116,7 @@ export function projectCommitGraph(
     }
     for (const [fromLane, lane] of before.entries()) {
       if (fromLane === nodeLane) continue;
-      const toLane = after.findIndex((candidate) => candidate.oid === lane.oid);
+      const toLane = after.findIndex((candidate) => candidate.key === lane.key);
       if (toLane < 0) continue;
       segments.push({
         kind: "through",
@@ -124,7 +126,7 @@ export function projectCommitGraph(
       });
     }
     for (const [parentIndex, parent] of parents.entries()) {
-      const toLane = after.findIndex((lane) => lane.oid === parent);
+      const toLane = after.findIndex((lane) => lane.key === parent);
       if (toLane < 0) continue;
       segments.push({
         kind: "parent",

@@ -11,6 +11,7 @@ export type EditorDocument =
   | {
       kind: "commit-diff";
       repositoryRoot: string;
+      repositoryId: string;
       oid: string;
       path: string;
     };
@@ -24,7 +25,7 @@ export function editorDocumentKey(document: EditorDocument): string {
     case "working-diff":
       return `working\0${document.repositoryRoot}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":
-      return `commit\0${document.repositoryRoot}\0${document.oid}\0${document.path}`;
+      return `commit\0${document.repositoryRoot}\0${document.repositoryId}\0${document.oid}\0${document.path}`;
   }
 }
 

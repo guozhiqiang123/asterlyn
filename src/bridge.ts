@@ -20,9 +20,9 @@ import type {
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
-  CommitSummary,
   DiffResult,
   HistoryQuery,
+  HistoryPage,
   ProjectFileList,
   RepositorySnapshot,
   UntrackedScan,
@@ -73,17 +73,26 @@ export const bridge = {
     return invoke<RepositorySnapshot>("open_repository", { path });
   },
 
-  async readHistory(
+  async readHistoryPage(
     repositoryRoot: string,
     query: HistoryQuery,
-  ): Promise<CommitSummary[]> {
+    offset: number,
+    limit: number,
+  ): Promise<HistoryPage> {
     if (!isTauri) {
       await demoDelay(180);
-      return demoQueryHistory(browserSnapshot, query);
+      const commits = demoQueryHistory(browserSnapshot, query);
+      return {
+        commits: commits.slice(offset, offset + limit),
+        offset,
+        hasMore: commits.length > offset + limit,
+      };
     }
-    return invoke<CommitSummary[]>("read_history", {
+    return invoke<HistoryPage>("read_history_page", {
       repositoryRoot,
       query,
+      offset,
+      limit,
     });
   },
 
@@ -145,6 +154,12 @@ export const bridge = {
       return {
         root: repositoryRoot,
         paths: Array.from(new Set(paths)).sort(),
+        files: Array.from(new Set(paths)).sort().map((path) => ({
+          repositoryId: ".",
+          path,
+          workspacePath: path,
+        })),
+        repositoryRoots: structuredClone(browserSnapshot.repositoryRoots),
         truncated: false,
       };
     }
@@ -153,11 +168,13 @@ export const bridge = {
 
   async readCommitDetails(
     repositoryRoot: string,
+    repositoryId: string,
     commitOid: string,
   ): Promise<CommitDetails> {
     if (!isTauri) {
       await demoDelay(180);
       const details = demoCommitDetails(commitOid);
+      details.repositoryId = repositoryId;
       details.files = structuredClone(browserCommitFiles.get(commitOid) ?? details.files);
       details.parentOid =
         browserSnapshot.commits.find((commit) => commit.oid === commitOid)?.parents[0] ?? null;
@@ -165,22 +182,27 @@ export const bridge = {
     }
     return invoke<CommitDetails>("read_commit_details", {
       repositoryRoot,
+      repositoryId,
       commitOid,
     });
   },
 
   async readCommitDiff(
     repositoryRoot: string,
+    repositoryId: string,
     commitOid: string,
     path: string,
     originalPath: string | null,
   ): Promise<CommitDiffResult> {
     if (!isTauri) {
       await demoDelay(110);
-      return demoCommitDiff(commitOid, path);
+      const diff = demoCommitDiff(commitOid, path);
+      diff.repositoryId = repositoryId;
+      return diff;
     }
     return invoke<CommitDiffResult>("read_commit_diff", {
       repositoryRoot,
+      repositoryId,
       commitOid,
       path,
       originalPath,
@@ -233,6 +255,7 @@ export const bridge = {
         .filter((change) => change.worktreeStatus !== "unmodified");
       const oid = `demo${Date.now().toString(16)}`.padEnd(40, "0").slice(0, 40);
       next.commits.unshift({
+        repositoryId: ".",
         oid,
         shortOid: oid.slice(0, 7),
         parents: next.commits[0] ? [next.commits[0].oid] : [],
