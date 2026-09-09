@@ -3393,6 +3393,11 @@ textarea:focus-visible {
   box-shadow: 0 22px 70px #000d;
 }
 
+.command-surface.workspace-mode {
+  width: min(860px, calc(100vw - 54px));
+  grid-template-rows: 34px 43px 39px minmax(130px, 1fr) 27px;
+}
+
 .command-surface-tabs {
   display: flex;
   align-items: stretch;
@@ -3460,6 +3465,72 @@ textarea:focus-visible {
 .command-surface-input .spinner {
   width: 14px;
   height: 14px;
+}
+
+.workspace-search-mode {
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: 10px/1 ui-monospace, monospace;
+}
+
+.workspace-search-mode:hover,
+.workspace-search-mode[aria-pressed="true"] {
+  border-color: #5877ad;
+  background: #36598f;
+  color: white;
+}
+
+.workspace-search-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px 5px;
+  border-top: 1px solid var(--border);
+  background: #242529;
+}
+
+.workspace-search-controls label {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.workspace-search-controls input,
+.workspace-search-controls select {
+  min-width: 0;
+  height: 27px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--bg-deep);
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.workspace-search-controls input {
+  width: 100%;
+  padding: 0 7px;
+}
+
+.workspace-search-controls input:focus,
+.workspace-search-controls select:focus {
+  border-color: #658bd1;
+  box-shadow: 0 0 0 1px #658bd155;
+}
+
+.workspace-search-context {
+  grid-template-columns: auto 42px !important;
 }
 
 .command-surface-results {
@@ -3548,17 +3619,29 @@ textarea:focus-visible {
 }
 
 .workspace-search-result code {
+  display: block;
   overflow: hidden;
+  max-height: 105px;
   color: var(--text-muted);
   font: 9px/15px ui-monospace, monospace;
-  text-overflow: ellipsis;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .workspace-search-result mark {
   border-radius: 2px;
   background: #8a681f;
   color: white;
+}
+
+.workspace-search-result mark.zero-width {
+  display: inline-block;
+  width: 2px;
+  margin: 0 1px;
+  overflow: hidden;
+  background: #e4a853;
+  color: transparent;
+  vertical-align: text-bottom;
 }
 
 .workspace-search-result.selected code,

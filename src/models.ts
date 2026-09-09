@@ -183,6 +183,15 @@ export type SearchSkipReason =
   | "changedDuringRead"
   | "io";
 
+export type WorkspaceTextSearchMode = "literal" | "regex";
+
+export interface WorkspaceTextSearchOptions {
+  mode: WorkspaceTextSearchMode;
+  includeGlobs: string[];
+  excludeGlobs: string[];
+  contextLines: number;
+}
+
 export interface WorkspaceTextSearchMatch {
   repositoryId: string;
   path: string;
@@ -210,6 +219,7 @@ export interface WorkspaceTextSearchReport {
   requestId: string;
   matches: WorkspaceTextSearchMatch[];
   catalogCandidates: number;
+  eligibleCandidates: number;
   filesSearched: number;
   bytesRead: number;
   skippedCount: number;

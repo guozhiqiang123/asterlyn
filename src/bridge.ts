@@ -28,6 +28,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   UntrackedScan,
+  WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "./models";
 
@@ -191,18 +192,20 @@ export const bridge = {
     repositoryRoot: string,
     requestId: string,
     query: string,
+    options: WorkspaceTextSearchOptions,
   ): Promise<WorkspaceTextSearchReport> {
     if (!isTauri) {
       await demoDelay(220);
       if (cancelledDemoSearches.delete(searchOperationKey(repositoryRoot, requestId))) {
         throw { kind: "cancelled", message: "Workspace search was cancelled." };
       }
-      return demoWorkspaceSearch(requestId, query);
+      return demoWorkspaceSearch(requestId, query, options);
     }
     return invoke<WorkspaceTextSearchReport>("search_workspace_text", {
       repositoryRoot,
       requestId,
       query,
+      options,
     });
   },
 
@@ -538,75 +541,271 @@ function demoTextRevision(
 function demoWorkspaceSearch(
   requestId: string,
   query: string,
+  options: WorkspaceTextSearchOptions,
 ): WorkspaceTextSearchReport {
+  const encoder = new TextEncoder();
   if (
     query.length === 0 ||
     query.includes("\n") ||
     query.includes("\r") ||
     query.includes("\0") ||
-    query.length > 256 ||
-    new TextEncoder().encode(query).length > 1_024
+    encoder.encode(query).length > 4_096
   ) {
     throw {
       kind: "invalidSearch",
-      message: "Search text must be one non-empty line of at most 256 characters.",
+      message: "Search text must be one non-empty line of at most 4096 UTF-8 bytes.",
     };
   }
+  if (
+    options.contextLines < 0 ||
+    options.contextLines > 3 ||
+    !Number.isInteger(options.contextLines)
+  ) {
+    throw { kind: "invalidSearch", message: "Search context must be between 0 and 3 lines." };
+  }
+  const include = demoCompileGlobs("include", options.includeGlobs, encoder);
+  const exclude = demoCompileGlobs("exclude", options.excludeGlobs, encoder);
+  const regularExpression = options.mode === "regex" ? demoCompileRegex(query) : null;
+  const entries = Array.from(demoTextFiles.entries()).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const eligible = entries.filter(([path]) =>
+    (include.length === 0 || include.some((pattern) => pattern.test(path))) &&
+    !exclude.some((pattern) => pattern.test(path)),
+  );
   const matches: WorkspaceTextSearchReport["matches"] = [];
   let bytesRead = 0;
   let filesSearched = 0;
-  for (const [path, file] of Array.from(demoTextFiles.entries()).sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
+  for (const [path, file] of eligible) {
     const normalized = file.content.replace(/\r\n?/g, "\n");
-    bytesRead += new TextEncoder().encode(file.content).length;
+    const lines = normalized.split("\n");
+    bytesRead += encoder.encode(file.content).length;
     filesSearched += 1;
-    let cursor = 0;
-    while (cursor <= normalized.length - query.length) {
-      const from = normalized.indexOf(query, cursor);
-      if (from < 0) break;
-      const to = from + query.length;
-      const lineStart = normalized.lastIndexOf("\n", from - 1) + 1;
-      const lineEnd = normalized.indexOf("\n", to);
-      const previewEnd = lineEnd < 0 ? normalized.length : lineEnd;
-      matches.push({
-        repositoryId: ".",
-        path,
-        workspacePath: path,
-        revision: demoTextRevision(path, file),
-        fromUtf16: from,
-        toUtf16: to,
-        line: normalized.slice(0, from).split("\n").length,
-        columnUtf16: from - lineStart + 1,
-        preview: normalized.slice(lineStart, previewEnd),
-        previewFromUtf16: from - lineStart,
-        previewToUtf16: to - lineStart,
-        leadingClipped: false,
-        trailingClipped: false,
-      });
-      cursor = to;
-      if (matches.length === 500) {
-        return {
-          requestId,
-          matches,
-          catalogCandidates: demoTextFiles.size,
-          filesSearched,
-          bytesRead,
-          skippedCount: 0,
-          skippedFiles: [],
-          coverageReasons: ["matchLimit"],
-        };
+    let documentOffset = 0;
+    for (const [lineIndex, line] of lines.entries()) {
+      const ranges = regularExpression
+        ? demoRegexRanges(regularExpression, line)
+        : demoLiteralRanges(query, line);
+      for (const [fromInLine, toInLine] of ranges) {
+        const preview = demoSearchPreview(
+          lines,
+          lineIndex,
+          fromInLine,
+          toInLine,
+          options.contextLines,
+        );
+        matches.push({
+          repositoryId: ".",
+          path,
+          workspacePath: path,
+          revision: demoTextRevision(path, file),
+          fromUtf16: documentOffset + fromInLine,
+          toUtf16: documentOffset + toInLine,
+          line: lineIndex + 1,
+          columnUtf16: fromInLine + 1,
+          preview: preview.text,
+          previewFromUtf16: preview.from,
+          previewToUtf16: preview.to,
+          leadingClipped: preview.leadingClipped,
+          trailingClipped: preview.trailingClipped,
+        });
+        if (matches.length === 500) {
+          return demoSearchReport(
+            requestId,
+            matches,
+            entries.length,
+            eligible.length,
+            filesSearched,
+            bytesRead,
+            ["matchLimit"],
+          );
+        }
       }
+      documentOffset += line.length + (lineIndex + 1 < lines.length ? 1 : 0);
     }
   }
+  return demoSearchReport(
+    requestId,
+    matches,
+    entries.length,
+    eligible.length,
+    filesSearched,
+    bytesRead,
+    [],
+  );
+}
+
+function demoSearchReport(
+  requestId: string,
+  matches: WorkspaceTextSearchReport["matches"],
+  catalogCandidates: number,
+  eligibleCandidates: number,
+  filesSearched: number,
+  bytesRead: number,
+  coverageReasons: WorkspaceTextSearchReport["coverageReasons"],
+): WorkspaceTextSearchReport {
   return {
     requestId,
     matches,
-    catalogCandidates: demoTextFiles.size,
+    catalogCandidates,
+    eligibleCandidates,
     filesSearched,
     bytesRead,
     skippedCount: 0,
     skippedFiles: [],
-    coverageReasons: [],
+    coverageReasons,
   };
+}
+
+function demoCompileRegex(query: string): RegExp {
+  let source = query;
+  let flags = "gu";
+  if (source.startsWith("(?i)")) {
+    source = source.slice(4);
+    flags += "i";
+  }
+  try {
+    return new RegExp(source, flags);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw {
+      kind: "invalidSearch",
+      message: detail.toLocaleLowerCase().startsWith("invalid regular expression")
+        ? detail
+        : `Invalid regular expression: ${detail}`,
+    };
+  }
+}
+
+function demoRegexRanges(expression: RegExp, line: string): Array<[number, number]> {
+  expression.lastIndex = 0;
+  const ranges: Array<[number, number]> = [];
+  let found: RegExpExecArray | null;
+  while ((found = expression.exec(line)) !== null) {
+    ranges.push([found.index, found.index + found[0].length]);
+    if (found[0].length === 0) expression.lastIndex = nextUnicodeOffset(line, expression.lastIndex);
+  }
+  return ranges;
+}
+
+function nextUnicodeOffset(value: string, offset: number): number {
+  if (offset >= value.length) return value.length + 1;
+  const code = value.codePointAt(offset);
+  return offset + (code !== undefined && code > 0xffff ? 2 : 1);
+}
+
+function demoLiteralRanges(query: string, line: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let cursor = 0;
+  while (cursor <= line.length - query.length) {
+    const from = line.indexOf(query, cursor);
+    if (from < 0) break;
+    ranges.push([from, from + query.length]);
+    cursor = from + query.length;
+  }
+  return ranges;
+}
+
+function demoCompileGlobs(
+  kind: "include" | "exclude",
+  sources: string[],
+  encoder: TextEncoder,
+): RegExp[] {
+  if (sources.length > 32) {
+    throw { kind: "invalidSearch", message: `Search accepts at most 32 ${kind} path patterns.` };
+  }
+  return sources.map((source) => {
+    const invalidComponent = source.split("/").some((part) => part === "." || part === "..");
+    if (
+      source.length === 0 ||
+      encoder.encode(source).length > 256 ||
+      source.startsWith("/") ||
+      /[\0\r\n\\{}]/u.test(source) ||
+      source.includes("//") ||
+      invalidComponent
+    ) {
+      throw {
+        kind: "invalidSearch",
+        message: `${kind} path patterns must be relative '/'-separated globs of at most 256 bytes.`,
+      };
+    }
+    return new RegExp(`^${demoGlobSource(source)}$`, "u");
+  });
+}
+
+function demoGlobSource(pattern: string): string {
+  let result = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index]!;
+    if (character === "*") {
+      if (pattern[index + 1] === "*") {
+        result += ".*";
+        index += 1;
+      } else {
+        result += "[^/]*";
+      }
+    } else if (character === "?") {
+      result += "[^/]";
+    } else if (character === "[") {
+      const closing = pattern.indexOf("]", index + 1);
+      if (closing < 0) throw { kind: "invalidSearch", message: `Invalid path pattern '${pattern}'.` };
+      const body = pattern.slice(index + 1, closing);
+      const negated = body.startsWith("!");
+      result += `[${negated ? "^" : ""}${body.slice(negated ? 1 : 0).replaceAll("/", "\\/")}]`;
+      index = closing;
+    } else {
+      result += character.replace(/[.+^$()|]/gu, "\\$&");
+    }
+  }
+  return result;
+}
+
+function demoSearchPreview(
+  lines: string[],
+  lineIndex: number,
+  fromInLine: number,
+  toInLine: number,
+  contextLines: number,
+): { text: string; from: number; to: number; leadingClipped: boolean; trailingClipped: boolean } {
+  const firstLine = Math.max(0, lineIndex - contextLines);
+  const lastLine = Math.min(lines.length - 1, lineIndex + contextLines);
+  const beforeMatch = lines
+    .slice(firstLine, lineIndex)
+    .reduce((length, line) => length + line.length + 1, 0);
+  const window = lines.slice(firstLine, lastLine + 1).join("\n");
+  const from = beforeMatch + fromInLine;
+  const to = beforeMatch + toInLine;
+  const matched = window.slice(from, to);
+  if (matched.length > 320) {
+    const visible = safePrefixUtf16(matched, 320);
+    return {
+      text: visible,
+      from: 0,
+      to: visible.length,
+      leadingClipped: from > 0,
+      trailingClipped: true,
+    };
+  }
+  const context = 320 - matched.length;
+  const before = safeSuffixUtf16(window.slice(0, from), Math.floor(context / 2));
+  const after = safePrefixUtf16(window.slice(to), context - before.length);
+  return {
+    text: `${before}${matched}${after}`,
+    from: before.length,
+    to: before.length + matched.length,
+    leadingClipped: before.length < from,
+    trailingClipped: after.length < window.length - to,
+  };
+}
+
+function safePrefixUtf16(value: string, limit: number): string {
+  let end = Math.min(value.length, limit);
+  if (end > 0 && end < value.length && /[\uD800-\uDBFF]/u.test(value[end - 1]!)) end -= 1;
+  return value.slice(0, end);
+}
+
+function safeSuffixUtf16(value: string, limit: number): string {
+  let start = Math.max(0, value.length - limit);
+  if (start > 0 && start < value.length && /[\uDC00-\uDFFF]/u.test(value[start]!)) start += 1;
+  return value.slice(start);
 }

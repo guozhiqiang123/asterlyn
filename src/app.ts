@@ -118,10 +118,14 @@ import { evaluateSearchNavigation } from "./workbench/search-navigation";
 import {
   beginWorkspaceSearch,
   completeWorkspaceSearch,
+  createWorkspaceSearchControls,
   createWorkspaceSearchState,
   failWorkspaceSearch,
   formatWorkspaceSearchCoverage,
   invalidateWorkspaceSearch,
+  sameWorkspaceSearchOptions,
+  workspaceSearchOptions,
+  type WorkspaceSearchControls,
   type WorkspaceSearchState,
 } from "./workbench/workspace-search";
 import {
@@ -177,6 +181,7 @@ interface AppState {
   projectFilesTruncated: boolean;
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
+  workspaceSearchControls: WorkspaceSearchControls;
   selectedChange: ChangeSelection | null;
   selectedChangeKeys: Set<string>;
   changeQuery: string;
@@ -261,6 +266,7 @@ export class AsterlynApp {
     projectFilesTruncated: false,
     commandSurface: createCommandSurfaceState(),
     workspaceSearch: createWorkspaceSearchState(),
+    workspaceSearchControls: createWorkspaceSearchControls(),
     selectedChange: null,
     selectedChangeKeys: new Set(),
     changeQuery: "",
@@ -888,7 +894,7 @@ export class AsterlynApp {
     const title = commandSurfaceTitle(mode);
     const hint = commandSurfaceHint(mode);
     host.innerHTML = `
-      <section class="command-surface" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
+      <section class="command-surface ${mode === "workspace" ? "workspace-mode" : ""}" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
         <div class="command-surface-tabs" role="tablist" aria-label="Navigation mode">
           ${this.commandSurfaceTab("files", "Files")}
           ${this.commandSurfaceTab("recent", "Recent")}
@@ -896,11 +902,13 @@ export class AsterlynApp {
           ${this.commandSurfaceTab("commands", "Commands")}
           <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="Close">${icon("close", 15)}</button>
         </div>
-        <label class="command-surface-input" for="command-surface-input">
+        <div class="command-surface-input">
           ${icon("search", 17)}
           <input id="command-surface-input" type="text" value="${escapeAttribute(this.state.commandSurface.query)}" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}" />
+          ${mode === "workspace" ? `<button class="workspace-search-mode" id="workspace-search-mode" type="button" aria-label="Use regular expressions" aria-pressed="${this.state.workspaceSearchControls.mode === "regex"}" title="Regular expression">.*</button>` : ""}
           ${mode === "workspace" && this.state.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${mode === "workspace" ? "Enter to search" : "Enter"}</kbd>`}
-        </label>
+        </div>
+        ${mode === "workspace" ? this.renderWorkspaceSearchControls() : ""}
         <div class="command-surface-results" id="command-surface-results" role="listbox" aria-label="${escapeAttribute(title)}">
           ${this.renderCommandSurfaceResults(mode, selected)}
         </div>
@@ -921,6 +929,15 @@ export class AsterlynApp {
   private commandSurfaceTab(mode: NavigationMode, label: string): string {
     const active = this.state.commandSurface.mode === mode;
     return `<button type="button" role="tab" data-command-mode="${mode}" aria-selected="${active}" ${mode !== "commands" && !this.state.snapshot ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  }
+
+  private renderWorkspaceSearchControls(): string {
+    const controls = this.state.workspaceSearchControls;
+    return `<div class="workspace-search-controls" role="group" aria-label="Workspace search options">
+      <label><span>Include</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="Files to include, comma-separated full-path globs" /></label>
+      <label><span>Exclude</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="Files to exclude, comma-separated full-path globs" /></label>
+      <label class="workspace-search-context"><span>Context</span><select id="workspace-search-context" aria-label="Context lines">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select></label>
+    </div>`;
   }
 
   private renderCommandSurfaceResults(mode: NavigationMode, selected: number): string {
@@ -949,17 +966,16 @@ export class AsterlynApp {
 
   private renderWorkspaceSearchResults(selected: number): string {
     const search = this.state.workspaceSearch;
-    const query = this.state.commandSurface.query;
     if (search.status === "loading") {
       return this.commandSurfaceEmpty("Searching current project…", "The scan is bounded and cancellable.", true);
     }
-    if (search.status === "error" && search.request?.query === query) {
+    if (search.status === "error" && this.workspaceSearchRequestIsCurrent()) {
       return this.commandSurfaceEmpty("Search could not complete", search.error ?? "Try again.");
     }
-    if (search.status !== "ready" || search.request?.query !== query || !search.report) {
+    if (search.status !== "ready" || !this.workspaceSearchRequestIsCurrent() || !search.report) {
       return this.commandSurfaceEmpty(
         "Search file contents",
-        "Enter a case-sensitive literal and press Enter. Workspace results are read-only.",
+        "Enter a case-sensitive literal or regular expression, then press Enter. Results are read-only.",
       );
     }
     if (search.report.matches.length === 0) {
@@ -1008,9 +1024,12 @@ export class AsterlynApp {
     const before = match.preview.slice(0, match.previewFromUtf16);
     const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
     const after = match.preview.slice(match.previewToUtf16);
+    const highlighted = found.length > 0
+      ? `<mark>${escapeHtml(found)}</mark>`
+      : '<mark class="zero-width" aria-label="Zero-width match" title="Zero-width match">│</mark>';
     return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
       <span class="search-result-location">${escapeHtml(`${match.workspacePath}:${match.line}:${match.columnUtf16}`)}</span>
-      <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}<mark>${escapeHtml(found)}</mark>${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
+      <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
     </button>`;
   }
 
@@ -1064,6 +1083,41 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("[data-command-surface-close]")
       ?.addEventListener("click", () => this.dismissCommandSurface());
+    this.root
+      .querySelector<HTMLButtonElement>("#workspace-search-mode")
+      ?.addEventListener("click", () => {
+        const mode = this.state.workspaceSearchControls.mode === "literal" ? "regex" : "literal";
+        this.updateWorkspaceSearchControls(
+          { ...this.state.workspaceSearchControls, mode },
+          "workspace-search-mode",
+        );
+      });
+    for (const field of ["include", "exclude"] as const) {
+      const id = `workspace-search-${field}`;
+      this.root.querySelector<HTMLInputElement>(`#${id}`)?.addEventListener("input", (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        this.updateWorkspaceSearchControls(
+          {
+            ...this.state.workspaceSearchControls,
+            [field === "include" ? "includeText" : "excludeText"]: target.value,
+          },
+          id,
+          target.selectionStart ?? target.value.length,
+        );
+      });
+    }
+    this.root
+      .querySelector<HTMLSelectElement>("#workspace-search-context")
+      ?.addEventListener("change", (event) => {
+        const target = event.currentTarget as HTMLSelectElement;
+        this.updateWorkspaceSearchControls(
+          {
+            ...this.state.workspaceSearchControls,
+            contextLines: Number(target.value),
+          },
+          "workspace-search-context",
+        );
+      });
     this.root.querySelectorAll<HTMLButtonElement>("[data-command-result]").forEach((button) => {
       button.addEventListener("mousemove", () => {
         const index = Number(button.dataset.commandResult);
@@ -1079,6 +1133,24 @@ export class AsterlynApp {
         this.state.commandSurface = { ...this.state.commandSurface, selectedIndex: index };
         void this.activateCommandSurfaceSelection();
       });
+    });
+  }
+
+  private updateWorkspaceSearchControls(
+    controls: WorkspaceSearchControls,
+    focusId: string,
+    caret?: number,
+  ): void {
+    this.cancelActiveWorkspaceSearch();
+    this.state.workspaceSearchControls = controls;
+    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.renderCommandSurface();
+    queueMicrotask(() => {
+      const target = this.root.querySelector<HTMLElement>(`#${focusId}`);
+      target?.focus();
+      if (target instanceof HTMLInputElement && caret !== undefined) {
+        target.setSelectionRange(caret, caret);
+      }
     });
   }
 
@@ -1125,8 +1197,20 @@ export class AsterlynApp {
   private workspaceSearchHasCurrentResults(): boolean {
     return (
       this.state.workspaceSearch.status === "ready" &&
-      this.state.workspaceSearch.request?.query === this.state.commandSurface.query &&
+      this.workspaceSearchRequestIsCurrent() &&
       this.state.workspaceSearch.report !== null
+    );
+  }
+
+  private workspaceSearchRequestIsCurrent(): boolean {
+    const request = this.state.workspaceSearch.request;
+    return Boolean(
+      request &&
+      request.query === this.state.commandSurface.query &&
+      sameWorkspaceSearchOptions(
+        request.options,
+        workspaceSearchOptions(this.state.workspaceSearchControls),
+      ),
     );
   }
 
@@ -1210,17 +1294,19 @@ export class AsterlynApp {
     if (!snapshot || query.trim().length === 0) return;
     this.cancelActiveWorkspaceSearch();
     const requestId = `workspace-search-${Date.now()}-${++this.workspaceSearchSequence}`;
+    const options = workspaceSearchOptions(this.state.workspaceSearchControls);
     const started = beginWorkspaceSearch(
       this.state.workspaceSearch,
       this.requestGeneration,
       snapshot.root,
       requestId,
       query,
+      options,
     );
     this.state.workspaceSearch = started.state;
     this.renderCommandSurface(true);
     try {
-      const report = await bridge.searchWorkspaceText(snapshot.root, requestId, query);
+      const report = await bridge.searchWorkspaceText(snapshot.root, requestId, query, options);
       if (
         this.requestGeneration !== started.request.repositoryGeneration ||
         this.state.snapshot?.root !== started.request.repositoryRoot
@@ -5547,7 +5633,7 @@ function commandSurfaceHint(mode: NavigationMode): string {
   const hints: Record<NavigationMode, string> = {
     files: "Go to File · tracked and non-ignored project catalog",
     recent: "Recent Files · successful opens in this repository",
-    workspace: "Find in Files · case-sensitive literal search · read-only results",
+    workspace: "Find in Files · bounded literal/regex search · full-path globs · read-only results",
     commands: "Command Palette · only currently safe commands are enabled",
   };
   return hints[mode];
