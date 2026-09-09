@@ -178,6 +178,26 @@ The interaction conclusion is **improved**: the history graph now communicates r
 
 The post-U10 history-control order is based on truthfulness as well as implementation cost. Date presets, author values already present in the loaded snapshot, and case-sensitive text matching are low-cost presentation filters, but must be labelled as filtering the loaded 150 rows. Resolving `me`, first-parent/no-merge modes, and date-versus-topology order require typed Git query options and identity/config reads, so they form a second backend-aware slice. Path filtering and multi-ref selection require new query contracts; Recent/Favorites require explicit preference semantics; and linear-branch collapse requires graph-aware hidden-row composition. Those controls remain later work rather than incomplete look-alikes in U10.
 
+### U11 — History filters and graph controls
+
+U11 moves the deferred history controls ahead of Stage 3 and delivers them in two local implementation batches while retaining one stage-level package and push checkpoint.
+
+#### U11A — Query and toolbar foundation
+
+- Replace the passive history-scope label with compact `Branch`, `User`, `Date`, `Paths`, and graph-options controls beside text/hash search.
+- Let Branch select any bounded set of exact displayed local, remote-tracking, or tag refs. An empty selection means `All refs`; direct activation in the left ref tree remains a one-ref shortcut, and activating that sole ref again returns to all refs.
+- Resolve User choices by exact author email. `me` is resolved inside the Git boundary from the repository's effective `user.email`; no identity value is stored in application preferences.
+- Apply 24-hour and seven-day Date presets, one exact repository-relative Path, first-parent/no-merge options, and topological/date ordering through a typed query. Git receives only validated refs, timestamps, author values, booleans, and a path after `--`; the UI rejects stale results by the complete normalized query identity.
+- Keep text/hash matching within the returned 150-row window. Case-sensitive and regular-expression toggles affect the same fields as ordinary text search; an invalid expression presents an inline error and never runs or empties a Git query.
+
+#### U11B — Durable ref shortcuts and linear collapse
+
+- Store Favorites and a bounded most-recently-used ref list per repository. A favorite is always an explicit user choice; missing refs are not invented or sent to Git, and repository paths/ref names never enter layout persistence.
+- Collapse only maximal loaded runs whose interior commits are undecorated, unselected, single-parent commits with one loaded child. Keep structural endpoints, replace at least two successive interior commits with one activatable dotted continuation row, and rewire only that presentation projection to the first retained ancestor.
+- Expanding restores every original commit and parent edge without another Git query. Query, repository, selection, or result changes recompute collapse from immutable commits rather than mutating Git truth.
+
+U11 deliberately does not add history pagination, arbitrary revision expressions, free-form pathspecs, persisted author/date/path filters, Git-log indexing, cherry-pick, or copied JetBrains assets. Menus use original Asterlyn markup and icons. The backend filters the complete walk before applying the existing 150-commit display bound; only text/hash matching is explicitly local to those loaded rows.
+
 ## Sequencing rule
 
-U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, U6 is locally accepted as the persistent workbench contract, U7 closes the highest-friction desktop interaction mismatches, U8 closes Diff/ref navigation consistency, U9 closes compact Git information layout, and U10 closes all-ref topology presentation. Stage 3 editor foundations are next; history filter expansion follows the priority order above without displacing the editor foundation. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, U6 is locally accepted as the persistent workbench contract, U7 closes the highest-friction desktop interaction mismatches, U8 closes Diff/ref navigation consistency, U9 closes compact Git information layout, and U10 closes all-ref topology presentation. U11 history filters and graph controls are active before Stage 3 editor foundations. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
