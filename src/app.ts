@@ -120,6 +120,7 @@ import {
   completeWorkspaceSearch,
   createWorkspaceSearchState,
   failWorkspaceSearch,
+  formatWorkspaceSearchCoverage,
   invalidateWorkspaceSearch,
   type WorkspaceSearchState,
 } from "./workbench/workspace-search";
@@ -153,7 +154,6 @@ import type {
   ProjectFile,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
-  WorkspaceTextSearchReport,
 } from "./models";
 
 const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
@@ -966,13 +966,13 @@ export class AsterlynApp {
       const partial = search.report.coverageReasons.length > 0;
       return this.commandSurfaceEmpty(
         partial ? "No matches in the searched subset" : "No matches",
-        workspaceSearchCoverage(search.report),
+        formatWorkspaceSearchCoverage(search.report),
       );
     }
     const rows = search.report.matches
       .map((match, index) => this.renderWorkspaceSearchResult(match, index, selected))
       .join("");
-    return `${rows}<div class="workspace-search-summary">${escapeHtml(workspaceSearchCoverage(search.report))}</div>`;
+    return `${rows}<div class="workspace-search-summary">${escapeHtml(formatWorkspaceSearchCoverage(search.report))}</div>`;
   }
 
   private renderFileNavigationResult(
@@ -5551,25 +5551,6 @@ function commandSurfaceHint(mode: NavigationMode): string {
     commands: "Command Palette · only currently safe commands are enabled",
   };
   return hints[mode];
-}
-
-function workspaceSearchCoverage(report: WorkspaceTextSearchReport): string {
-  const size =
-    report.bytesRead < 1024
-      ? `${report.bytesRead} B`
-      : report.bytesRead < 1024 * 1024
-        ? `${Math.max(1, Math.round(report.bytesRead / 1024))} KiB`
-      : `${(report.bytesRead / (1024 * 1024)).toFixed(1)} MiB`;
-  const base = `${report.matches.length} matches · ${report.filesSearched}/${report.catalogCandidates} files · ${size}`;
-  if (report.coverageReasons.length === 0) return `${base} · complete`;
-  const labels: Record<(typeof report.coverageReasons)[number], string> = {
-    catalogTruncated: "catalog limit",
-    candidateLimit: "candidate limit",
-    byteLimit: "byte limit",
-    matchLimit: "match limit",
-    skippedFiles: `${report.skippedCount} skipped`,
-  };
-  return `${base} · partial: ${report.coverageReasons.map((reason) => labels[reason]).join(", ")}`;
 }
 
 function basename(path: string): string {

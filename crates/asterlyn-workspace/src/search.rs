@@ -319,7 +319,13 @@ fn append_matches(
     let lines: Vec<_> = normalized.split('\n').collect();
     for (line_index, line) in lines.iter().enumerate() {
         check_cancelled(cancellation)?;
-        for (from_byte, to_byte) in literal_ranges(line, query, cancellation)? {
+        let remaining_matches = limits.max_matches.saturating_sub(report.matches.len());
+        for (from_byte, to_byte) in literal_ranges(
+            line,
+            query,
+            cancellation,
+            remaining_matches.saturating_add(1),
+        )? {
             if report.matches.len() == limits.max_matches {
                 return Ok(true);
             }
@@ -353,6 +359,7 @@ fn literal_ranges(
     line: &str,
     query: &str,
     cancellation: &SearchCancellationToken,
+    max_ranges: usize,
 ) -> Result<Vec<(usize, usize)>, WorkspaceError> {
     let haystack = line.as_bytes();
     let needle = query.as_bytes();
@@ -379,6 +386,9 @@ fn literal_ranges(
             }
             let to = from + needle.len();
             ranges.push((from, to));
+            if ranges.len() == max_ranges {
+                return Ok(ranges);
+            }
             next_allowed = to;
             cursor = to;
         }
@@ -649,6 +659,27 @@ mod tests {
     }
 
     #[test]
+    fn literal_search_is_case_sensitive_and_preserves_combining_sequences() {
+        let directory = tempfile::tempdir().expect("workspace");
+        fs::write(directory.path().join("case.txt"), "Cafe\u{301} cafe CAFÉ").expect("fixture");
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let report = workspace
+            .search_literal_text(
+                "search-case",
+                &candidates(&["case.txt"]),
+                false,
+                "Cafe\u{301}",
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("search");
+
+        assert_eq!(report.matches.len(), 1);
+        assert_eq!(report.matches[0].from_utf16, 0);
+        assert_eq!(report.matches[0].to_utf16, 5);
+    }
+
+    #[test]
     fn reports_partial_coverage_for_skips_catalog_and_match_limits() {
         let directory = tempfile::tempdir().expect("workspace");
         fs::write(directory.path().join("many.txt"), "x x x").expect("fixture");
@@ -684,12 +715,13 @@ mod tests {
         let directory = tempfile::tempdir().expect("workspace");
         fs::write(directory.path().join("binary"), b"a\0b").expect("binary");
         fs::write(directory.path().join("latin"), [0xff, 0xfe]).expect("latin");
+        fs::write(directory.path().join("exact"), b"1234").expect("exact limit");
         fs::write(directory.path().join("large"), b"12345").expect("large");
         let workspace = Workspace::with_text_limit(directory.path(), 4).expect("open");
         let report = workspace
             .search_literal_text(
                 "search-4",
-                &candidates(&["binary", "latin", "large", "missing", "../escape"]),
+                &candidates(&["exact", "binary", "latin", "large", "missing", "../escape"]),
                 false,
                 "a",
                 &SearchCancellationToken::new(),
@@ -697,6 +729,7 @@ mod tests {
             )
             .expect("search");
         assert_eq!(report.skipped_count, 5);
+        assert_eq!(report.files_searched, 1);
         assert_eq!(
             report
                 .skipped_files
@@ -716,6 +749,37 @@ mod tests {
                 .coverage_reasons
                 .contains(&SearchCoverageReason::SkippedFiles)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_catalogued_symlink_without_reading_its_external_target() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().expect("workspace");
+        let outside = tempfile::tempdir().expect("outside");
+        fs::write(outside.path().join("secret"), "needle outside").expect("outside fixture");
+        symlink(
+            outside.path().join("secret"),
+            directory.path().join("linked"),
+        )
+        .expect("symlink fixture");
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let report = workspace
+            .search_literal_text(
+                "search-symlink",
+                &candidates(&["linked"]),
+                false,
+                "needle",
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("search reports the unsupported candidate");
+
+        assert!(report.matches.is_empty());
+        assert_eq!(report.skipped_count, 1);
+        assert_eq!(report.skipped_files[0].reason, SearchSkipReason::UnsafePath);
+        assert!(!report.complete());
     }
 
     #[test]
@@ -768,6 +832,32 @@ mod tests {
                 "",
                 &SearchCancellationToken::new(),
                 limits(),
+            ),
+            Err(WorkspaceError::InvalidSearch { .. })
+        ));
+        let exact_query = "a".repeat(256);
+        fs::write(directory.path().join("query"), &exact_query).expect("query fixture");
+        let mut exact_query_limits = limits();
+        exact_query_limits.max_preview_utf16 = 256;
+        let exact_query_report = workspace
+            .search_literal_text(
+                "search-query-exact",
+                &candidates(&["query"]),
+                false,
+                &exact_query,
+                &SearchCancellationToken::new(),
+                exact_query_limits,
+            )
+            .expect("256-unit query is accepted");
+        assert_eq!(exact_query_report.matches.len(), 1);
+        assert!(matches!(
+            workspace.search_literal_text(
+                "search-query-large",
+                &candidates(&["query"]),
+                false,
+                &"a".repeat(257),
+                &SearchCancellationToken::new(),
+                exact_query_limits,
             ),
             Err(WorkspaceError::InvalidSearch { .. })
         ));

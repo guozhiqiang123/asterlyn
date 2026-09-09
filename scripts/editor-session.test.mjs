@@ -89,6 +89,20 @@ test("stale loads and saves cannot replace newer tab state", () => {
   assert.equal(session.textTabs[0].saveRequest.id, "save-1");
 });
 
+test("a repository-session replacement drops an old-root load completion", () => {
+  const old = openTextDocument(createEditorSession(), document("one.ts"));
+  const replacement = createEditorSession();
+  const completed = completeTextLoad(replacement, old.tabId, old.loadEpoch, {
+    workspacePath: "one.ts",
+    content: "old root",
+    utf8Bom: false,
+    revision: "old",
+    byteLength: 8,
+  });
+  assert.equal(completed, replacement);
+  assert.equal(completed.textTabs.length, 0);
+});
+
 test("a clean tab can start a fresh guarded reload but dirty or saving tabs cannot", () => {
   let session = loaded(createEditorSession(), "one.ts");
   const tabId = session.textTabs[0].id;

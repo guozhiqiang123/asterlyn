@@ -100,3 +100,24 @@ export function matchesRequest(
     active.query === request.query
   );
 }
+
+export function formatWorkspaceSearchCoverage(
+  report: WorkspaceTextSearchReport,
+): string {
+  const size =
+    report.bytesRead < 1024
+      ? `${report.bytesRead} B`
+      : report.bytesRead < 1024 * 1024
+        ? `${Math.max(1, Math.round(report.bytesRead / 1024))} KiB`
+        : `${(report.bytesRead / (1024 * 1024)).toFixed(1)} MiB`;
+  const base = `${report.matches.length} matches · ${report.filesSearched}/${report.catalogCandidates} files · ${size}`;
+  if (report.coverageReasons.length === 0) return `${base} · complete`;
+  const labels: Record<(typeof report.coverageReasons)[number], string> = {
+    catalogTruncated: "catalog limit",
+    candidateLimit: "candidate limit",
+    byteLimit: "byte limit",
+    matchLimit: "match limit",
+    skippedFiles: `${report.skippedCount} skipped`,
+  };
+  return `${base} · partial: ${report.coverageReasons.map((reason) => labels[reason]).join(", ")}`;
+}

@@ -6,6 +6,7 @@ import {
   completeWorkspaceSearch,
   createWorkspaceSearchState,
   failWorkspaceSearch,
+  formatWorkspaceSearchCoverage,
   invalidateWorkspaceSearch,
 } from "../src/workbench/workspace-search.ts";
 
@@ -45,4 +46,29 @@ test("repository invalidation rejects late success and failure", () => {
     invalidated,
   );
   assert.equal(failWorkspaceSearch(invalidated, started.request, "late"), invalidated);
+});
+
+test("coverage copy distinguishes complete results from every partial reason", () => {
+  assert.equal(
+    formatWorkspaceSearchCoverage(report("complete")),
+    "0 matches · 1/1 files · 3 B · complete",
+  );
+  assert.equal(
+    formatWorkspaceSearchCoverage({
+      ...report("partial"),
+      matches: [{}, {}],
+      catalogCandidates: 5_000,
+      filesSearched: 1_024,
+      bytesRead: 64 * 1024 * 1024,
+      skippedCount: 7,
+      coverageReasons: [
+        "catalogTruncated",
+        "candidateLimit",
+        "byteLimit",
+        "matchLimit",
+        "skippedFiles",
+      ],
+    }),
+    "2 matches · 1024/5000 files · 64.0 MiB · partial: catalog limit, candidate limit, byte limit, match limit, 7 skipped",
+  );
 });

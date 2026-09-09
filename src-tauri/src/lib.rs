@@ -18,10 +18,14 @@ const PROJECT_FILE_LIMIT: usize = 5_000;
 const CANCELLED_SCAN_RETENTION: usize = 256;
 const CANCELLED_REMOTE_RETENTION: usize = 128;
 const CANCELLED_SEARCH_RETENTION: usize = 128;
-const SEARCH_TOTAL_BYTE_LIMIT: usize = 64 * 1024 * 1024;
-const SEARCH_MATCH_LIMIT: usize = 500;
-const SEARCH_PREVIEW_UTF16_LIMIT: usize = 320;
-const SEARCH_REPORTED_SKIP_LIMIT: usize = 100;
+
+pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
+    max_candidates: PROJECT_FILE_LIMIT,
+    max_total_bytes: 64 * 1024 * 1024,
+    max_matches: 500,
+    max_preview_utf16: 320,
+    max_reported_skips: 100,
+};
 
 #[derive(Default)]
 struct ScanRegistry {
@@ -463,13 +467,7 @@ fn search_authorized_workspace(
         catalog.truncated,
         query,
         cancellation,
-        SearchLimits {
-            max_candidates: PROJECT_FILE_LIMIT,
-            max_total_bytes: SEARCH_TOTAL_BYTE_LIMIT,
-            max_matches: SEARCH_MATCH_LIMIT,
-            max_preview_utf16: SEARCH_PREVIEW_UTF16_LIMIT,
-            max_reported_skips: SEARCH_REPORTED_SKIP_LIMIT,
-        },
+        WORKSPACE_SEARCH_LIMITS,
     )?;
 
     let matches = report
@@ -1005,6 +1003,7 @@ mod tests {
         .expect("authorized search");
         assert_eq!(first.matches.len(), 1);
         assert_eq!(first.matches[0].path, "source.txt");
+        let old_result = first.matches[0].clone();
 
         git(
             directory.path(),
@@ -1016,6 +1015,17 @@ mod tests {
         )
         .expect("updated ignore file");
         git(directory.path(), &["add", ".gitignore"]);
+
+        let old_result_open = read_authorized_text_file(
+            directory.path(),
+            &old_result.repository_id,
+            &old_result.path,
+        )
+        .expect_err("an old result must pass fresh E1 authorization");
+        assert!(matches!(
+            old_result_open,
+            WorkspaceError::NotAuthorized { .. }
+        ));
 
         let revoked = search_authorized_workspace(
             directory.path(),
