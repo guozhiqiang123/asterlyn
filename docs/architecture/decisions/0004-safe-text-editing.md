@@ -42,4 +42,4 @@ The UI can roll back by routing project files to the existing placeholder while 
 
 ## Deferred work
 
-Crash recovery, autosave, force-save, discard with recovery, file creation/deletion/rename, filesystem watching, external-change merge, language modes, large-file streaming, non-UTF-8 encodings, ACL/xattr preservation, multiple editor groups, and cross-window sessions remain later Stage 3 slices.
+Crash recovery, autosave, force-save, discard with recovery, file creation/deletion/rename, filesystem watching, external-change merge, large-file streaming, non-UTF-8 encodings, ACL/xattr preservation, multiple editor groups, and cross-window sessions remain later Stage 3 slices. Basic parser-backed syntax highlighting is an E2.2 presentation concern: the CodeMirror adapter selects by exact filename, loads parser chunks on demand, rejects stale asynchronous loads, and falls back to plain text. LSP services, semantic tokens, project models, completion, diagnostics, and other language intelligence remain Stage 4 work.

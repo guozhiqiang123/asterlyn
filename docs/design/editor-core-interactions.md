@@ -15,7 +15,7 @@ E1 replaces the project-file placeholder with a complete explicit-save loop:
 - Save through a freshly authorized, optimistic, same-directory atomic replacement. A conflict preserves the local buffer and never exposes force overwrite.
 - Preserve text tabs across repository refresh. Save All or Cancel protects repository and window transitions.
 
-E1 intentionally adds no syntax mode, watcher, autosave, draft persistence, force/discard, file creation, workspace search, split editor, terminal, or language service.
+E1 intentionally adds no syntax mode, watcher, autosave, draft persistence, force/discard, file creation, workspace search, split editor, terminal, or language service. Basic parser-backed syntax highlighting is pulled forward into E2.2 after E1 acceptance; language intelligence remains outside this stage.
 
 ### E1 acceptance
 
@@ -44,7 +44,8 @@ Add file/text search and replace, recent files, go-to-file, command palette, sym
 E2 is split so read-only discovery cannot quietly create a bulk-write surface:
 
 - **E2.1 — Command surface and bounded search:** add `Ctrl/Cmd+P` files, `Ctrl/Cmd+E` repository-scoped recents, `Ctrl/Cmd+Shift+F` cancellable workspace text search, `Ctrl/Cmd+Shift+P` commands, result-to-editor navigation, and visible active-buffer find/replace through CodeMirror.
-- **E2.2 — Search refinement:** add measured include/exclude controls, regular expressions, context expansion, and any index only after the scan implementation supplies a comparison baseline.
+- **E2.2a — On-demand syntax highlighting:** make readable editing the first follow-up by matching CodeMirror language descriptions from the exact filename, loading only the selected parser chunk, applying an Asterlyn dark highlight style, and falling back to plain text without blocking file access. Parser loads must not enter the startup path or let a late result reconfigure a subsequently opened tab.
+- **E2.2b — Search refinement:** add measured include/exclude controls, regular expressions, context expansion, and any index only after the scan implementation supplies a comparison baseline.
 - **E2.3 — Recoverable workspace replacement:** add multi-file preview and rollback/recovery only after the product can prove that interruption, conflict, partial failure, and user cancellation cannot silently lose work.
 
 E2.1 follows [`ADR-0005`](../architecture/decisions/0005-bounded-navigation-search.md). Its acceptance requires pure ranking/recent/navigation tests; bounded search tests covering Unicode, case, CRLF/bare-CR coordinates, unsupported-file accounting, every limit, and cancellation; desktop tests proving fresh Git authorization and stale repository denial; browser keyboard journeys for all four modes and result navigation; accessibility names, selection state, and focus restoration; and recorded latency, build-size, and resource evidence. Packaging and remote publication remain at the larger Stage 3 checkpoint.
@@ -55,7 +56,15 @@ E2.1 is locally accepted. One keyboard-first surface now provides Quick Open, re
 
 The complete evidence is recorded in [`E2.1 bounded navigation and search evidence`](../benchmarks/2026-09-09-e2-1-navigation-search.md). Search over the current 161-candidate checkout had a 15.908-millisecond median combined core path across ten iterations. Validation passed 13 workspace, 28 Git, seven desktop, and 83 frontend tests plus strict checks, production build, deterministic browser interaction, and native liveness. The interaction/correctness and named-fixture latency conclusions are **improved**.
 
-The frontend bundle grew 4.67% raw and 3.90% gzip in JavaScript, so bundle size is **regressed** and the existing chunk warning remains open. Three matched short-settle runs measured a 232.41 MiB median process-tree PSS, 8.02 MiB above U11.1 and above the provisional ceiling. Observed idle resources are therefore **regressed**, while attribution remains **inconclusive** because the comparison includes unmeasured E1 movement and is not the normalized 60-second protocol. Packaging and remote publication remain deferred by agreement. E2.2 read-only refinement is next; the normalized resource follow-up remains mandatory before the larger Stage 3 checkpoint.
+The frontend bundle grew 4.67% raw and 3.90% gzip in JavaScript, so bundle size is **regressed** and the existing chunk warning remains open. Three matched short-settle runs measured a 232.41 MiB median process-tree PSS, 8.02 MiB above U11.1 and above the provisional ceiling. Observed idle resources are therefore **regressed**, while attribution remains **inconclusive** because the comparison includes unmeasured E1 movement and is not the normalized 60-second protocol. Packaging and remote publication remain deferred by agreement. E2.2a on-demand syntax highlighting is next, followed by E2.2b read-only search refinement; the normalized resource follow-up remains mandatory before the larger Stage 3 checkpoint.
+
+### E2.2a local acceptance — 2026-09-09
+
+E2.2a is locally accepted as the first syntax-highlighting slice. The editor now matches the current CodeMirror catalog's 143 language descriptions by filename or extension, dynamically loads the catalog and selected parser after a text editor mounts, applies a contrast-checked Asterlyn token theme, rejects stale parser completions, and falls back to plain text without blocking editing. TypeScript and Markdown production-browser journeys confirmed visible token styles, edit/save continuity, language switching, and an empty warning/error console.
+
+The complete evidence is recorded in [`E2.2a on-demand syntax highlighting evidence`](../benchmarks/2026-09-09-e2-2a-syntax-highlighting.md). Validation passed 88 frontend, 13 workspace, 28 Git, and seven desktop tests plus formatting, strict Clippy, TypeScript checking, and the production build. Main JavaScript increased from 533.11 to 557.48 kB raw and from 156.05 to 164.41 kB gzip, so main-bundle size is **regressed**. The broad lazy catalog raises total emitted JavaScript to 1,797,976 bytes across 121 files, also **regressed**, while a clean welcome page requests no catalog or parser asset. One focused production-browser observation measured a 1.80 MiB used-JavaScript-heap increase from welcome to an active TypeScript editor, but it includes editor creation and had no forced collection, so memory impact is **inconclusive**.
+
+No native package or remote publication is produced for this sub-slice. E2.2b read-only search refinement is next. Before the larger Stage 3 package checkpoint, compare the current broad catalog with curated or separately installed language packs and run the pending normalized native resource series.
 
 ### E3 — Editor groups and preferences
 

@@ -20,7 +20,7 @@ Add graph-quality history, branch/tag/stash operations, amend, rebase/cherry-pic
 
 ## Stage 3 — Editor and workspace core (months 6–15)
 
-Build multi-file editing, tabs/splits, project tree, search/replace, command palette, settings/keymaps, autosave and crash recovery, large-file policy, terminal/task surfaces, file watching, encoding/EOL handling, and accessible navigation. CodeMirror 6 remains behind an editor capability interface.
+Build multi-file editing, on-demand syntax highlighting, tabs/splits, project tree, search/replace, command palette, settings/keymaps, autosave and crash recovery, large-file policy, terminal/task surfaces, file watching, encoding/EOL handling, and accessible navigation. CodeMirror 6 remains behind an editor capability interface; parser-backed coloring is distinct from Stage 4 language intelligence.
 
 **Exit gate:** Asterlyn is a dependable text/code editor even with all language intelligence disabled; data-loss and recovery scenarios are tested.
 
@@ -68,4 +68,3 @@ These do not wait for a later stage:
 - At the end of months 4, 9, 15, 26, 34, and 44, reassess scope using measured adoption and engineering cost.
 - Build-versus-integrate decisions are revisited annually. Rust, Tauri, and CodeMirror are replaceable implementation choices, not product identity.
 - Keep a 20–30% capacity reserve after Stage 2 for maintenance, platform churn, dependency updates, and user-reported defects.
-
