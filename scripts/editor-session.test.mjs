@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   TEXT_TAB_LIMIT,
   activatePreview,
+  beginTextReload,
   beginTextSave,
   closeTextTab,
   completeTextLoad,
@@ -86,6 +87,20 @@ test("stale loads and saves cannot replace newer tab state", () => {
     alreadySaved: false,
   });
   assert.equal(session.textTabs[0].saveRequest.id, "save-1");
+});
+
+test("a clean tab can start a fresh guarded reload but dirty or saving tabs cannot", () => {
+  let session = loaded(createEditorSession(), "one.ts");
+  const tabId = session.textTabs[0].id;
+  const reloading = beginTextReload(session, tabId);
+  assert.equal(reloading.loadEpoch, 2);
+  assert.equal(reloading.session.textTabs[0].status, "loading");
+
+  session = markTextEdited(session, tabId);
+  assert.equal(beginTextReload(session, tabId).loadEpoch, null);
+
+  const saving = beginTextSave(session, tabId, "edited", "save-1");
+  assert.equal(beginTextReload(saving.session, tabId).loadEpoch, null);
 });
 
 test("edits during save remain dirty and conflicts retain content", () => {

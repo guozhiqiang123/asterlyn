@@ -75,6 +75,30 @@ export class TextEditor {
     this.view?.focus();
   }
 
+  openFindReplace(): boolean {
+    return this.view ? openSearchPanel(this.view) : false;
+  }
+
+  selectRange(fromUtf16: number, toUtf16: number): boolean {
+    if (!this.view) return false;
+    const length = this.view.state.doc.length;
+    if (
+      !Number.isInteger(fromUtf16) ||
+      !Number.isInteger(toUtf16) ||
+      fromUtf16 < 0 ||
+      toUtf16 < fromUtf16 ||
+      toUtf16 > length
+    ) {
+      return false;
+    }
+    this.view.dispatch({
+      selection: { anchor: fromUtf16, head: toUtf16 },
+      effects: EditorView.scrollIntoView(fromUtf16, { y: "center" }),
+    });
+    this.view.focus();
+    return true;
+  }
+
   requestMeasure(): void {
     this.view?.requestMeasure();
   }

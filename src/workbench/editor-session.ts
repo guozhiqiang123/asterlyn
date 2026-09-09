@@ -151,6 +151,32 @@ export function completeTextLoad(
   );
 }
 
+export function beginTextReload(
+  session: EditorSession,
+  tabId: string,
+): { session: EditorSession; loadEpoch: number | null } {
+  const tab = session.textTabs.find((candidate) => candidate.id === tabId);
+  if (
+    !tab ||
+    tab.status !== "ready" ||
+    tab.saveRequest !== null ||
+    isTextTabDirty(tab)
+  ) {
+    return { session, loadEpoch: null };
+  }
+  const loadEpoch = tab.loadEpoch + 1;
+  return {
+    session: updateMatchingTab(session, tabId, (candidate) => ({
+      ...candidate,
+      status: "loading",
+      loadEpoch,
+      error: null,
+      conflict: false,
+    })),
+    loadEpoch,
+  };
+}
+
 export function failTextLoad(
   session: EditorSession,
   tabId: string,

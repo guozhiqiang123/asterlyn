@@ -18,6 +18,7 @@ import {
   activateWelcome,
   activeEditorDocument,
   activeTextTab,
+  beginTextReload,
   beginTextSave,
   captureTextContent,
   closePreview,
@@ -99,6 +100,30 @@ import {
   type ProjectTreeNode,
 } from "./workbench/project-tree";
 import {
+  clampCommandSurfaceSelection,
+  closeCommandSurface,
+  createCommandSurfaceState,
+  loadRecentFiles,
+  moveCommandSurfaceSelection,
+  openCommandSurface,
+  rankCommands,
+  rankProjectFiles,
+  touchRecentFile,
+  updateCommandSurfaceQuery,
+  type CommandSurfaceState,
+  type NavigationCommand,
+  type NavigationMode,
+} from "./workbench/navigation";
+import { evaluateSearchNavigation } from "./workbench/search-navigation";
+import {
+  beginWorkspaceSearch,
+  completeWorkspaceSearch,
+  createWorkspaceSearchState,
+  failWorkspaceSearch,
+  invalidateWorkspaceSearch,
+  type WorkspaceSearchState,
+} from "./workbench/workspace-search";
+import {
   buildCommitFileTree,
   commitReferences,
   groupRemoteBranches,
@@ -127,6 +152,8 @@ import type {
   HistoryRef,
   ProjectFile,
   RepositorySnapshot,
+  WorkspaceTextSearchMatch,
+  WorkspaceTextSearchReport,
 } from "./models";
 
 const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
@@ -134,6 +161,7 @@ const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const HISTORY_PAGE_SIZE = 150;
 const HISTORY_ROW_LIMIT = 3_000;
 const HISTORY_SCROLL_THRESHOLD = 72;
+const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
 
 type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
 
@@ -147,6 +175,8 @@ interface AppState {
   projectFilesLoading: boolean;
   projectFilesError: string | null;
   projectFilesTruncated: boolean;
+  commandSurface: CommandSurfaceState;
+  workspaceSearch: WorkspaceSearchState;
   selectedChange: ChangeSelection | null;
   selectedChangeKeys: Set<string>;
   changeQuery: string;
@@ -229,6 +259,8 @@ export class AsterlynApp {
     projectFilesLoading: false,
     projectFilesError: null,
     projectFilesTruncated: false,
+    commandSurface: createCommandSurfaceState(),
+    workspaceSearch: createWorkspaceSearchState(),
     selectedChange: null,
     selectedChangeKeys: new Set(),
     changeQuery: "",
@@ -306,6 +338,8 @@ export class AsterlynApp {
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private textSaveSequence = 0;
+  private workspaceSearchSequence = 0;
+  private commandSurfaceReturnFocus: HTMLElement | null = null;
   private forceWindowClose = false;
   private repositoryChooserOpen = false;
   private splitterDisposers: Array<() => void> = [];
@@ -358,6 +392,11 @@ export class AsterlynApp {
           </button>
           <div class="topbar-actions" data-tauri-drag-region>
             <span class="demo-badge ${bridge.isDemo ? "" : "hidden"}">Browser demo</span>
+            <button class="command-center-button" id="command-center-button" type="button" aria-label="Search files and commands" title="Search files and commands (Ctrl/Cmd+P)">
+              ${icon("search", 15)}
+              <span>Search</span>
+              <kbd>Ctrl P</kbd>
+            </button>
             <div class="sync-anchor" id="sync-anchor">
               <button class="icon-button sync-button" id="sync-button" type="button" aria-label="Remote sync" title="Remote sync" aria-haspopup="dialog" aria-expanded="false">
                 ${icon("sync", 17)}
@@ -487,6 +526,7 @@ export class AsterlynApp {
         </div>
 
         <div class="dialog-backdrop hidden history-dialog-backdrop" id="history-dialog" role="presentation"></div>
+        <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
       </main>
     `;
   }
@@ -514,6 +554,9 @@ export class AsterlynApp {
       this.renderRemotePopover(this.state.snapshot);
     });
     this.query("#refresh-button").addEventListener("click", () => void this.refresh());
+    this.query("#command-center-button").addEventListener("click", () => {
+      this.openCommandSurface("files");
+    });
     this.bindWindowControls();
     this.query("#toast-close").addEventListener("click", () => this.clearError());
     this.query("#dialog-close").addEventListener("click", () =>
@@ -527,6 +570,9 @@ export class AsterlynApp {
     });
     this.query("#history-dialog").addEventListener("click", (event) => {
       if (event.target === event.currentTarget) this.closeHistoryDialog();
+    });
+    this.query("#command-surface").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) this.dismissCommandSurface();
     });
     this.query<HTMLFormElement>("#repository-form").addEventListener(
       "submit",
@@ -551,7 +597,37 @@ export class AsterlynApp {
     });
     this.workspaceResizeObserver.observe(this.query("#workbench"));
     window.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        this.openCommandSurface("commands");
+        return;
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "f") {
+        if (!this.state.snapshot) return;
+        event.preventDefault();
+        this.openCommandSurface("workspace");
+        return;
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "p") {
+        if (!this.state.snapshot) return;
+        event.preventDefault();
+        this.openCommandSurface("files");
+        return;
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "e") {
+        if (!this.state.snapshot) return;
+        event.preventDefault();
+        this.openCommandSurface("recent");
+        return;
+      }
       if (event.key === "Escape") {
+        if (this.state.commandSurface.mode) {
+          event.preventDefault();
+          this.dismissCommandSurface();
+          return;
+        }
         this.closeRepositoryDialog();
         this.closeHistoryDialog();
         if (this.state.historyFilterMenu) {
@@ -577,6 +653,7 @@ export class AsterlynApp {
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "f" &&
+        !this.state.commandSurface.mode &&
         !event.defaultPrevented &&
         !(event.target instanceof Element && event.target.closest(".cm-editor"))
       ) {
@@ -589,6 +666,8 @@ export class AsterlynApp {
           this.focusHistoryFilter();
         } else if (this.state.layout.leftTool === "changes") {
           this.focusChangeFilter();
+        } else if (activeTextTab(this.state.editor)?.status === "ready") {
+          this.textEditor.openFindReplace();
         }
       }
     });
@@ -686,6 +765,11 @@ export class AsterlynApp {
     ) {
       return;
     }
+    this.cancelActiveWorkspaceSearch();
+    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
+    this.commandSurfaceReturnFocus = null;
+    this.renderCommandSurface();
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
     void this.cancelActiveRemoteOperation();
@@ -750,6 +834,430 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.loading) return;
     await this.openRepository(snapshot.root);
+  }
+
+  private openCommandSurface(mode: NavigationMode): void {
+    const snapshot = this.state.snapshot;
+    if (mode !== "commands" && !snapshot) return;
+    if (this.state.commandSurface.mode === "workspace" && mode !== "workspace") {
+      this.cancelActiveWorkspaceSearch();
+      this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    }
+    if (!this.state.commandSurface.mode) {
+      this.commandSurfaceReturnFocus =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+    const retainedQuery =
+      mode === "workspace" ? (this.state.workspaceSearch.request?.query ?? "") : "";
+    this.state.commandSurface = openCommandSurface(
+      this.state.commandSurface,
+      mode,
+      retainedQuery,
+    );
+    this.renderCommandSurface(true);
+    if (mode === "recent" && snapshot && !this.state.projectFilesLoading) {
+      void this.loadProjectFiles(snapshot.root);
+    }
+  }
+
+  private dismissCommandSurface(): void {
+    this.cancelActiveWorkspaceSearch();
+    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
+    this.renderCommandSurface();
+    const target = this.commandSurfaceReturnFocus;
+    this.commandSurfaceReturnFocus = null;
+    queueMicrotask(() => target?.focus());
+  }
+
+  private renderCommandSurface(focusInput = false): void {
+    const host = this.query("#command-surface");
+    const mode = this.state.commandSurface.mode;
+    host.classList.toggle("hidden", mode === null);
+    if (!mode) {
+      host.innerHTML = "";
+      return;
+    }
+
+    const resultCount = this.commandSurfaceResultCount();
+    this.state.commandSurface = clampCommandSurfaceSelection(
+      this.state.commandSurface,
+      resultCount,
+    );
+    const selected = this.state.commandSurface.selectedIndex;
+    const title = commandSurfaceTitle(mode);
+    const hint = commandSurfaceHint(mode);
+    host.innerHTML = `
+      <section class="command-surface" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
+        <div class="command-surface-tabs" role="tablist" aria-label="Navigation mode">
+          ${this.commandSurfaceTab("files", "Files")}
+          ${this.commandSurfaceTab("recent", "Recent")}
+          ${this.commandSurfaceTab("workspace", "Text")}
+          ${this.commandSurfaceTab("commands", "Commands")}
+          <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="Close">${icon("close", 15)}</button>
+        </div>
+        <label class="command-surface-input" for="command-surface-input">
+          ${icon("search", 17)}
+          <input id="command-surface-input" type="text" value="${escapeAttribute(this.state.commandSurface.query)}" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}" />
+          ${mode === "workspace" && this.state.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${mode === "workspace" ? "Enter to search" : "Enter"}</kbd>`}
+        </label>
+        <div class="command-surface-results" id="command-surface-results" role="listbox" aria-label="${escapeAttribute(title)}">
+          ${this.renderCommandSurfaceResults(mode, selected)}
+        </div>
+        <footer class="command-surface-footer">
+          <span id="command-surface-title">${escapeHtml(hint)}</span>
+          <span><kbd>↑↓</kbd> Navigate <kbd>Enter</kbd> Open <kbd>Esc</kbd> Close</span>
+        </footer>
+      </section>`;
+    this.bindCommandSurfaceEvents();
+    if (focusInput) this.focusCommandSurfaceInput();
+    queueMicrotask(() => {
+      this.root
+        .querySelector<HTMLElement>(`#command-result-${selected}`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  private commandSurfaceTab(mode: NavigationMode, label: string): string {
+    const active = this.state.commandSurface.mode === mode;
+    return `<button type="button" role="tab" data-command-mode="${mode}" aria-selected="${active}" ${mode !== "commands" && !this.state.snapshot ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  }
+
+  private renderCommandSurfaceResults(mode: NavigationMode, selected: number): string {
+    if (mode === "workspace") return this.renderWorkspaceSearchResults(selected);
+    if (mode === "commands") {
+      const commands = this.visibleNavigationCommands();
+      return commands.length
+        ? commands.map((command, index) => this.renderCommandResult(command, index, selected)).join("")
+        : this.commandSurfaceEmpty("No matching commands", "Try a broader command name.");
+    }
+    const files = this.visibleNavigationFiles(mode);
+    if (files.length === 0) {
+      return this.commandSurfaceEmpty(
+        mode === "recent" ? "No recent files" : "No matching files",
+        mode === "recent"
+          ? "Files appear here after they open successfully."
+          : this.state.projectFilesLoading
+            ? "The project catalog is still loading."
+            : "Try part of a filename or path.",
+      );
+    }
+    return files
+      .map((file, index) => this.renderFileNavigationResult(file, index, selected))
+      .join("");
+  }
+
+  private renderWorkspaceSearchResults(selected: number): string {
+    const search = this.state.workspaceSearch;
+    const query = this.state.commandSurface.query;
+    if (search.status === "loading") {
+      return this.commandSurfaceEmpty("Searching current project…", "The scan is bounded and cancellable.", true);
+    }
+    if (search.status === "error" && search.request?.query === query) {
+      return this.commandSurfaceEmpty("Search could not complete", search.error ?? "Try again.");
+    }
+    if (search.status !== "ready" || search.request?.query !== query || !search.report) {
+      return this.commandSurfaceEmpty(
+        "Search file contents",
+        "Enter a case-sensitive literal and press Enter. Workspace results are read-only.",
+      );
+    }
+    if (search.report.matches.length === 0) {
+      const partial = search.report.coverageReasons.length > 0;
+      return this.commandSurfaceEmpty(
+        partial ? "No matches in the searched subset" : "No matches",
+        workspaceSearchCoverage(search.report),
+      );
+    }
+    const rows = search.report.matches
+      .map((match, index) => this.renderWorkspaceSearchResult(match, index, selected))
+      .join("");
+    return `${rows}<div class="workspace-search-summary">${escapeHtml(workspaceSearchCoverage(search.report))}</div>`;
+  }
+
+  private renderFileNavigationResult(
+    file: ProjectFile,
+    index: number,
+    selected: number,
+  ): string {
+    const directory = dirname(file.workspacePath);
+    return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
+      <span class="command-result-icon">${icon("file", 15)}</span>
+      <span class="command-result-copy"><strong>${escapeHtml(basename(file.workspacePath))}</strong><small>${escapeHtml(directory || "/")}</small></span>
+      ${file.repositoryId === "." ? "" : `<span class="scope-pill">${escapeHtml(file.repositoryId)}</span>`}
+    </button>`;
+  }
+
+  private renderCommandResult(
+    command: NavigationCommand,
+    index: number,
+    selected: number,
+  ): string {
+    return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}" ${command.enabled ? "" : "disabled"}>
+      <span class="command-result-icon">${icon("search", 15)}</span>
+      <span class="command-result-copy"><strong>${escapeHtml(command.label)}</strong><small>${escapeHtml(command.detail)}</small></span>
+      ${command.shortcut ? `<kbd>${escapeHtml(command.shortcut)}</kbd>` : ""}
+    </button>`;
+  }
+
+  private renderWorkspaceSearchResult(
+    match: WorkspaceTextSearchMatch,
+    index: number,
+    selected: number,
+  ): string {
+    const before = match.preview.slice(0, match.previewFromUtf16);
+    const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
+    const after = match.preview.slice(match.previewToUtf16);
+    return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
+      <span class="search-result-location">${escapeHtml(`${match.workspacePath}:${match.line}:${match.columnUtf16}`)}</span>
+      <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}<mark>${escapeHtml(found)}</mark>${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
+    </button>`;
+  }
+
+  private commandSurfaceEmpty(title: string, detail: string, busy = false): string {
+    return `<div class="command-surface-empty">${busy ? '<span class="spinner"></span>' : ""}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>`;
+  }
+
+  private bindCommandSurfaceEvents(): void {
+    const input = this.query<HTMLInputElement>("#command-surface-input");
+    input.addEventListener("input", () => {
+      if (
+        this.state.commandSurface.mode === "workspace" &&
+        this.state.workspaceSearch.request?.query !== input.value
+      ) {
+        this.cancelActiveWorkspaceSearch();
+        this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+      }
+      this.state.commandSurface = updateCommandSurfaceQuery(
+        this.state.commandSurface,
+        input.value,
+      );
+      this.renderCommandSurface(true);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        this.state.commandSurface = moveCommandSurfaceSelection(
+          this.state.commandSurface,
+          event.key === "ArrowDown" ? 1 : -1,
+          this.commandSurfaceResultCount(),
+        );
+        this.renderCommandSurface(true);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (this.state.commandSurface.mode === "workspace" && !this.workspaceSearchHasCurrentResults()) {
+          void this.runWorkspaceSearch();
+        } else {
+          void this.activateCommandSurfaceSelection();
+        }
+      }
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-command-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.commandMode as NavigationMode;
+        this.openCommandSurface(mode);
+      });
+    });
+    this.root
+      .querySelector<HTMLButtonElement>("[data-command-surface-close]")
+      ?.addEventListener("click", () => this.dismissCommandSurface());
+    this.root.querySelectorAll<HTMLButtonElement>("[data-command-result]").forEach((button) => {
+      button.addEventListener("mousemove", () => {
+        const index = Number(button.dataset.commandResult);
+        if (Number.isInteger(index) && this.state.commandSurface.selectedIndex !== index) {
+          this.state.commandSurface = { ...this.state.commandSurface, selectedIndex: index };
+          this.root.querySelectorAll(".command-result.selected").forEach((row) => row.classList.remove("selected"));
+          button.classList.add("selected");
+        }
+      });
+      button.addEventListener("click", () => {
+        const index = Number(button.dataset.commandResult);
+        if (!Number.isInteger(index)) return;
+        this.state.commandSurface = { ...this.state.commandSurface, selectedIndex: index };
+        void this.activateCommandSurfaceSelection();
+      });
+    });
+  }
+
+  private focusCommandSurfaceInput(): void {
+    queueMicrotask(() => {
+      const input = this.root.querySelector<HTMLInputElement>("#command-surface-input");
+      input?.focus();
+      input?.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+
+  private visibleNavigationFiles(mode: "files" | "recent"): ProjectFile[] {
+    const snapshot = this.state.snapshot;
+    if (!snapshot) return [];
+    const recent = loadRecentFiles(
+      window.localStorage,
+      RECENT_FILE_KEY,
+      snapshot.root,
+      this.state.repositoryFiles,
+    );
+    return mode === "recent"
+      ? rankProjectFiles(recent, this.state.commandSurface.query)
+      : rankProjectFiles(
+          this.state.repositoryFiles,
+          this.state.commandSurface.query,
+          recent,
+        );
+  }
+
+  private visibleNavigationCommands(): NavigationCommand[] {
+    return rankCommands(this.navigationCommands(), this.state.commandSurface.query);
+  }
+
+  private commandSurfaceResultCount(): number {
+    const mode = this.state.commandSurface.mode;
+    if (mode === "files" || mode === "recent") return this.visibleNavigationFiles(mode).length;
+    if (mode === "commands") return this.visibleNavigationCommands().length;
+    if (mode === "workspace" && this.workspaceSearchHasCurrentResults()) {
+      return this.state.workspaceSearch.report?.matches.length ?? 0;
+    }
+    return 0;
+  }
+
+  private workspaceSearchHasCurrentResults(): boolean {
+    return (
+      this.state.workspaceSearch.status === "ready" &&
+      this.state.workspaceSearch.request?.query === this.state.commandSurface.query &&
+      this.state.workspaceSearch.report !== null
+    );
+  }
+
+  private async activateCommandSurfaceSelection(): Promise<void> {
+    const mode = this.state.commandSurface.mode;
+    const index = this.state.commandSurface.selectedIndex;
+    if (mode === "files" || mode === "recent") {
+      const file = this.visibleNavigationFiles(mode)[index];
+      const snapshot = this.state.snapshot;
+      if (!file || !snapshot) return;
+      this.dismissCommandSurface();
+      await this.openProjectFile(snapshot.root, file);
+      return;
+    }
+    if (mode === "commands") {
+      const command = this.visibleNavigationCommands()[index];
+      if (command?.enabled) this.executeNavigationCommand(command.id);
+      return;
+    }
+    if (mode === "workspace") {
+      const match = this.state.workspaceSearch.report?.matches[index];
+      if (match) await this.openWorkspaceSearchMatch(match);
+    }
+  }
+
+  private navigationCommands(): NavigationCommand[] {
+    const snapshot = this.state.snapshot;
+    const tab = activeTextTab(this.state.editor);
+    return [
+      { id: "open-repository", label: "Open Repository", detail: "Choose a local Git folder", shortcut: "Ctrl+O", enabled: true },
+      { id: "go-file", label: "Go to File", detail: "Open a project file by name", shortcut: "Ctrl+P", enabled: Boolean(snapshot) },
+      { id: "recent-files", label: "Recent Files", detail: "Reopen a successful file", shortcut: "Ctrl+E", enabled: Boolean(snapshot) },
+      { id: "find-workspace", label: "Find in Files", detail: "Read-only bounded workspace search", shortcut: "Ctrl+Shift+F", enabled: Boolean(snapshot) },
+      { id: "find-current", label: "Find and Replace in Current File", detail: "Undoable changes stay in the active buffer", shortcut: "Ctrl+F", enabled: Boolean(tab?.status === "ready") },
+      { id: "save-current", label: "Save Current File", detail: "Use the conflict-safe E1 save path", shortcut: "Ctrl+S", enabled: Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest) },
+      { id: "refresh", label: "Refresh Repository", detail: "Reload current Git state", shortcut: "Ctrl+R", enabled: Boolean(snapshot && !this.state.loading) },
+      { id: "toggle-files", label: "Toggle Files", detail: "Show or hide the Files tool window", enabled: Boolean(snapshot) },
+      { id: "toggle-changes", label: "Toggle Changes", detail: "Show or hide the Changes tool window", enabled: Boolean(snapshot) },
+      { id: "toggle-git", label: "Toggle Git", detail: "Show or hide Branches and Log", enabled: Boolean(snapshot) },
+    ];
+  }
+
+  private executeNavigationCommand(commandId: string): void {
+    if (commandId === "go-file" || commandId === "recent-files" || commandId === "find-workspace") {
+      this.openCommandSurface(
+        commandId === "go-file" ? "files" : commandId === "recent-files" ? "recent" : "workspace",
+      );
+      return;
+    }
+    this.dismissCommandSurface();
+    switch (commandId) {
+      case "open-repository":
+        void this.chooseRepository();
+        break;
+      case "find-current":
+        queueMicrotask(() => this.textEditor.openFindReplace());
+        break;
+      case "save-current": {
+        const tab = activeTextTab(this.state.editor);
+        if (tab) void this.saveTextTab(tab.id);
+        break;
+      }
+      case "refresh":
+        void this.refresh();
+        break;
+      case "toggle-files":
+        this.toggleTool("files");
+        break;
+      case "toggle-changes":
+        this.toggleTool("changes");
+        break;
+      case "toggle-git":
+        this.toggleTool("branches");
+        break;
+    }
+  }
+
+  private async runWorkspaceSearch(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const query = this.state.commandSurface.query;
+    if (!snapshot || query.trim().length === 0) return;
+    this.cancelActiveWorkspaceSearch();
+    const requestId = `workspace-search-${Date.now()}-${++this.workspaceSearchSequence}`;
+    const started = beginWorkspaceSearch(
+      this.state.workspaceSearch,
+      this.requestGeneration,
+      snapshot.root,
+      requestId,
+      query,
+    );
+    this.state.workspaceSearch = started.state;
+    this.renderCommandSurface(true);
+    try {
+      const report = await bridge.searchWorkspaceText(snapshot.root, requestId, query);
+      if (
+        this.requestGeneration !== started.request.repositoryGeneration ||
+        this.state.snapshot?.root !== started.request.repositoryRoot
+      ) {
+        return;
+      }
+      this.state.workspaceSearch = completeWorkspaceSearch(
+        this.state.workspaceSearch,
+        started.request,
+        report,
+      );
+      this.renderCommandSurface(true);
+    } catch (error) {
+      this.state.workspaceSearch = failWorkspaceSearch(
+        this.state.workspaceSearch,
+        started.request,
+        errorMessage(error),
+      );
+      if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface(true);
+    }
+  }
+
+  private cancelActiveWorkspaceSearch(): void {
+    const request = this.state.workspaceSearch.request;
+    if (this.state.workspaceSearch.status !== "loading" || !request) return;
+    void bridge
+      .cancelWorkspaceTextSearch(request.repositoryRoot, request.requestId)
+      .catch(() => undefined);
+  }
+
+  private async openWorkspaceSearchMatch(match: WorkspaceTextSearchMatch): Promise<void> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || snapshot.root !== this.state.workspaceSearch.request?.repositoryRoot) {
+      this.setStatus("Search result belongs to another workspace", "warning");
+      return;
+    }
+    await this.openProjectFile(snapshot.root, match, match);
   }
 
   private renderRemotePopover(snapshot: RepositorySnapshot): void {
@@ -1217,6 +1725,12 @@ export class AsterlynApp {
       this.state.projectFilesLoading = false;
       if (this.state.layout.leftTool === "files") this.renderLeftTool();
       if (
+        this.state.commandSurface.mode === "files" ||
+        this.state.commandSurface.mode === "recent"
+      ) {
+        this.renderCommandSurface(true);
+      }
+      if (
         this.state.layout.bottomTool === "branches" &&
         this.state.historyFilterMenu === "paths"
       ) {
@@ -1233,6 +1747,12 @@ export class AsterlynApp {
       this.state.projectFilesLoading = false;
       this.state.projectFilesError = errorMessage(error);
       if (this.state.layout.leftTool === "files") this.renderLeftTool();
+      if (
+        this.state.commandSurface.mode === "files" ||
+        this.state.commandSurface.mode === "recent"
+      ) {
+        this.renderCommandSurface(true);
+      }
       if (
         this.state.layout.bottomTool === "branches" &&
         this.state.historyFilterMenu === "paths"
@@ -1307,6 +1827,7 @@ export class AsterlynApp {
   private async openProjectFile(
     repositoryRoot: string,
     file: ProjectFile,
+    searchMatch?: WorkspaceTextSearchMatch,
   ): Promise<void> {
     this.captureMountedTextEditor();
     const document: ProjectFileDocument = {
@@ -1316,15 +1837,47 @@ export class AsterlynApp {
       path: file.path,
       workspacePath: file.workspacePath,
     };
-    const opened = openTextDocument(this.state.editor, document);
+    const existing = textTab(this.state.editor, editorDocumentKey(document));
+    if (searchMatch && existing && (isTextTabDirty(existing) || existing.saveRequest)) {
+      this.setStatus(
+        "Search location was not applied because this file has unsaved edits",
+        "warning",
+      );
+      return;
+    }
+    if (searchMatch && existing?.status === "loading") {
+      this.setStatus("Wait for the current file load, then run the search again", "warning");
+      return;
+    }
+    let opened = openTextDocument(this.state.editor, document);
     if (opened.limitReached) {
       this.setStatus("Close a text tab before opening another file", "warning");
       return;
     }
+    if (searchMatch && existing?.status === "ready" && opened.tabId) {
+      const reload = beginTextReload(opened.session, opened.tabId);
+      if (reload.loadEpoch === null) {
+        this.setStatus("Search location could not be refreshed safely", "warning");
+        return;
+      }
+      opened = {
+        ...opened,
+        session: reload.session,
+        loadEpoch: reload.loadEpoch,
+        needsLoad: true,
+      };
+    }
     this.state.editor = opened.session;
     this.renderLeftTool();
     this.renderEditor();
-    if (!opened.needsLoad || !opened.tabId || opened.loadEpoch === null) return;
+    if (!opened.needsLoad || !opened.tabId || opened.loadEpoch === null) {
+      const current = opened.tabId ? textTab(this.state.editor, opened.tabId) : null;
+      if (current?.status === "ready") {
+        this.rememberRecentFile(repositoryRoot, file);
+        if (searchMatch) this.applySearchNavigation(current, searchMatch);
+      }
+      return;
+    }
 
     try {
       const snapshot = await bridge.readTextFile(
@@ -1339,6 +1892,11 @@ export class AsterlynApp {
         snapshot,
       );
       this.renderEditor();
+      const current = textTab(this.state.editor, opened.tabId);
+      if (current?.status === "ready" && current.revision === snapshot.revision) {
+        this.rememberRecentFile(repositoryRoot, file);
+        if (searchMatch) this.applySearchNavigation(current, searchMatch);
+      }
     } catch (error) {
       this.state.editor = failTextLoad(
         this.state.editor,
@@ -1349,6 +1907,45 @@ export class AsterlynApp {
       this.renderEditor();
       this.showError(error);
     }
+  }
+
+  private rememberRecentFile(repositoryRoot: string, file: ProjectFile): void {
+    touchRecentFile(
+      window.localStorage,
+      RECENT_FILE_KEY,
+      repositoryRoot,
+      file,
+    );
+  }
+
+  private applySearchNavigation(
+    tab: TextTabState,
+    match: WorkspaceTextSearchMatch,
+  ): void {
+    const decision = evaluateSearchNavigation(
+      this.state.snapshot?.root ?? null,
+      tab,
+      match,
+    );
+    if (decision !== "ready") {
+      const message =
+        decision === "wrongWorkspace"
+          ? "Search result belongs to another workspace"
+          : decision === "dirty"
+            ? "Search location was not applied because this file has unsaved edits"
+            : decision === "invalidRange"
+              ? "Search location is no longer valid; run the search again"
+              : "Search result is stale; run the search again";
+      this.setStatus(message, "warning");
+      return;
+    }
+    this.dismissCommandSurface();
+    this.renderEditor();
+    queueMicrotask(() => {
+      if (!this.textEditor.selectRange(match.fromUtf16, match.toUtf16)) {
+        this.setStatus("Search location is no longer valid; run the search again", "warning");
+      }
+    });
   }
 
   private renderChangeNavigation(snapshot: RepositorySnapshot): string {
@@ -4934,6 +5531,45 @@ function changeLabel(kind: ChangeKind): string {
     unknown: "Unknown",
   };
   return labels[kind];
+}
+
+function commandSurfaceTitle(mode: NavigationMode): string {
+  const titles: Record<NavigationMode, string> = {
+    files: "Search project files",
+    recent: "Filter recent files",
+    workspace: "Search text in current project",
+    commands: "Search available commands",
+  };
+  return titles[mode];
+}
+
+function commandSurfaceHint(mode: NavigationMode): string {
+  const hints: Record<NavigationMode, string> = {
+    files: "Go to File · tracked and non-ignored project catalog",
+    recent: "Recent Files · successful opens in this repository",
+    workspace: "Find in Files · case-sensitive literal search · read-only results",
+    commands: "Command Palette · only currently safe commands are enabled",
+  };
+  return hints[mode];
+}
+
+function workspaceSearchCoverage(report: WorkspaceTextSearchReport): string {
+  const size =
+    report.bytesRead < 1024
+      ? `${report.bytesRead} B`
+      : report.bytesRead < 1024 * 1024
+        ? `${Math.max(1, Math.round(report.bytesRead / 1024))} KiB`
+      : `${(report.bytesRead / (1024 * 1024)).toFixed(1)} MiB`;
+  const base = `${report.matches.length} matches · ${report.filesSearched}/${report.catalogCandidates} files · ${size}`;
+  if (report.coverageReasons.length === 0) return `${base} · complete`;
+  const labels: Record<(typeof report.coverageReasons)[number], string> = {
+    catalogTruncated: "catalog limit",
+    candidateLimit: "candidate limit",
+    byteLimit: "byte limit",
+    matchLimit: "match limit",
+    skippedFiles: `${report.skippedCount} skipped`,
+  };
+  return `${base} · partial: ${report.coverageReasons.map((reason) => labels[reason]).join(", ")}`;
 }
 
 function basename(path: string): string {

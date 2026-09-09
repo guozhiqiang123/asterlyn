@@ -28,6 +28,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   UntrackedScan,
+  WorkspaceTextSearchReport,
 } from "./models";
 
 const isTauri = "__TAURI_INTERNALS__" in window;
@@ -35,6 +36,7 @@ let browserSnapshot = structuredClone(demoSnapshot);
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
 const cancelledDemoRemoteOperations = new Set<string>();
+const cancelledDemoSearches = new Set<string>();
 const demoTextFiles = new Map<string, { content: string; utf8Bom: boolean; revision: number }>([
   ["README.md", { content: "# Asterlyn\n\nA lightweight developer workspace.\n", utf8Bom: false, revision: 1 }],
   ["package.json", { content: '{\n  "name": "asterlyn"\n}\n', utf8Bom: false, revision: 1 }],
@@ -183,6 +185,39 @@ export const bridge = {
       };
     }
     return invoke<ProjectFileList>("list_project_files", { repositoryRoot });
+  },
+
+  async searchWorkspaceText(
+    repositoryRoot: string,
+    requestId: string,
+    query: string,
+  ): Promise<WorkspaceTextSearchReport> {
+    if (!isTauri) {
+      await demoDelay(220);
+      if (cancelledDemoSearches.delete(searchOperationKey(repositoryRoot, requestId))) {
+        throw { kind: "cancelled", message: "Workspace search was cancelled." };
+      }
+      return demoWorkspaceSearch(requestId, query);
+    }
+    return invoke<WorkspaceTextSearchReport>("search_workspace_text", {
+      repositoryRoot,
+      requestId,
+      query,
+    });
+  },
+
+  async cancelWorkspaceTextSearch(
+    repositoryRoot: string,
+    requestId: string,
+  ): Promise<void> {
+    if (!isTauri) {
+      cancelledDemoSearches.add(searchOperationKey(repositoryRoot, requestId));
+      return;
+    }
+    return invoke<void>("cancel_workspace_text_search", {
+      repositoryRoot,
+      requestId,
+    });
   },
 
   async readTextFile(
@@ -485,6 +520,10 @@ function remoteOperationKey(repositoryRoot: string, operationId: string): string
   return `${repositoryRoot}\0${operationId}`;
 }
 
+function searchOperationKey(repositoryRoot: string, requestId: string): string {
+  return `${repositoryRoot}\0${requestId}`;
+}
+
 function demoDelay(milliseconds = 160): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
@@ -494,4 +533,80 @@ function demoTextRevision(
   file: { content: string; utf8Bom: boolean; revision: number },
 ): string {
   return `demo:${path}:${file.revision}:${file.utf8Bom ? "bom" : "plain"}`;
+}
+
+function demoWorkspaceSearch(
+  requestId: string,
+  query: string,
+): WorkspaceTextSearchReport {
+  if (
+    query.length === 0 ||
+    query.includes("\n") ||
+    query.includes("\r") ||
+    query.includes("\0") ||
+    query.length > 256 ||
+    new TextEncoder().encode(query).length > 1_024
+  ) {
+    throw {
+      kind: "invalidSearch",
+      message: "Search text must be one non-empty line of at most 256 characters.",
+    };
+  }
+  const matches: WorkspaceTextSearchReport["matches"] = [];
+  let bytesRead = 0;
+  let filesSearched = 0;
+  for (const [path, file] of Array.from(demoTextFiles.entries()).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    const normalized = file.content.replace(/\r\n?/g, "\n");
+    bytesRead += new TextEncoder().encode(file.content).length;
+    filesSearched += 1;
+    let cursor = 0;
+    while (cursor <= normalized.length - query.length) {
+      const from = normalized.indexOf(query, cursor);
+      if (from < 0) break;
+      const to = from + query.length;
+      const lineStart = normalized.lastIndexOf("\n", from - 1) + 1;
+      const lineEnd = normalized.indexOf("\n", to);
+      const previewEnd = lineEnd < 0 ? normalized.length : lineEnd;
+      matches.push({
+        repositoryId: ".",
+        path,
+        workspacePath: path,
+        revision: demoTextRevision(path, file),
+        fromUtf16: from,
+        toUtf16: to,
+        line: normalized.slice(0, from).split("\n").length,
+        columnUtf16: from - lineStart + 1,
+        preview: normalized.slice(lineStart, previewEnd),
+        previewFromUtf16: from - lineStart,
+        previewToUtf16: to - lineStart,
+        leadingClipped: false,
+        trailingClipped: false,
+      });
+      cursor = to;
+      if (matches.length === 500) {
+        return {
+          requestId,
+          matches,
+          catalogCandidates: demoTextFiles.size,
+          filesSearched,
+          bytesRead,
+          skippedCount: 0,
+          skippedFiles: [],
+          coverageReasons: ["matchLimit"],
+        };
+      }
+    }
+  }
+  return {
+    requestId,
+    matches,
+    catalogCandidates: demoTextFiles.size,
+    filesSearched,
+    bytesRead,
+    skippedCount: 0,
+    skippedFiles: [],
+    coverageReasons: [],
+  };
 }

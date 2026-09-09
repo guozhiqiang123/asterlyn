@@ -165,6 +165,58 @@ export interface SaveTextFileResult {
   alreadySaved: boolean;
 }
 
+export type SearchCoverageReason =
+  | "catalogTruncated"
+  | "candidateLimit"
+  | "byteLimit"
+  | "matchLimit"
+  | "skippedFiles";
+
+export type SearchSkipReason =
+  | "tooLarge"
+  | "invalidUtf8"
+  | "binaryNul"
+  | "notFound"
+  | "permissionDenied"
+  | "unsafePath"
+  | "unsupportedType"
+  | "changedDuringRead"
+  | "io";
+
+export interface WorkspaceTextSearchMatch {
+  repositoryId: string;
+  path: string;
+  workspacePath: string;
+  revision: string;
+  fromUtf16: number;
+  toUtf16: number;
+  line: number;
+  columnUtf16: number;
+  preview: string;
+  previewFromUtf16: number;
+  previewToUtf16: number;
+  leadingClipped: boolean;
+  trailingClipped: boolean;
+}
+
+export interface WorkspaceTextSearchSkippedFile {
+  repositoryId: string;
+  path: string;
+  workspacePath: string;
+  reason: SearchSkipReason;
+}
+
+export interface WorkspaceTextSearchReport {
+  requestId: string;
+  matches: WorkspaceTextSearchMatch[];
+  catalogCandidates: number;
+  filesSearched: number;
+  bytesRead: number;
+  skippedCount: number;
+  skippedFiles: WorkspaceTextSearchSkippedFile[];
+  coverageReasons: SearchCoverageReason[];
+}
+
 export type GitRootKind = "main" | "submodule";
 
 export interface GitRootDescriptor {
