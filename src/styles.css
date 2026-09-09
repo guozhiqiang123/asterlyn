@@ -1669,6 +1669,21 @@ textarea:focus-visible {
   color: #8bb4ff;
 }
 
+.history-root-option {
+  grid-template-columns: 14px minmax(0, 1fr);
+}
+
+.history-root-option > input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.history-root-option:has(input:disabled) {
+  cursor: default;
+}
+
 .history-ref-option {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 26px;

@@ -50,6 +50,10 @@ import {
   resolveHistoryPathText,
 } from "./workbench/history-path-selection";
 import {
+  effectiveHistoryRootIds,
+  toggleHistoryRootSelection,
+} from "./workbench/history-root-selection";
+import {
   appendHistoryPage,
   matchesHistoryPageRequest,
   replaceHistoryPage,
@@ -1519,7 +1523,10 @@ export class AsterlynApp {
   private renderHistoryPathMenu(): string {
     const snapshot = this.state.snapshot!;
     const roots = snapshot.repositoryRoots;
-    const allRoots = this.state.historyRepositoryIds.size === 0;
+    const selectedRoots = effectiveHistoryRootIds(
+      roots.map((root) => root.id),
+      this.state.historyRepositoryIds,
+    );
     const recent = this.state.historyRecentPaths.flatMap((path) => {
       const candidate = historyPathCandidates(this.state.repositoryFiles).find(
         (item) => historyPathKey(item) === historyPathKey(path),
@@ -1529,17 +1536,20 @@ export class AsterlynApp {
     return `
       <button class="history-menu-option" type="button" data-history-open-dialog="paths-text"><span>Select…</span></button>
       <button class="history-menu-option" type="button" data-history-open-dialog="paths-tree"><span>Select in Tree…</span></button>
-      ${this.state.historyPaths.size > 0 || !allRoots ? `<button class="history-menu-option" type="button" data-history-clear-paths><span>Clear path and root filters</span>${icon("close", 12)}</button>` : ""}
-      ${roots.length > 1 ? `<div class="history-menu-heading">Roots</div><button class="history-menu-option" type="button" data-history-clear-roots aria-pressed="${allRoots}"><span>All roots</span>${allRoots ? icon("check", 13) : ""}</button>${roots.map((root) => this.renderHistoryRootOption(root)).join("")}` : ""}
+      ${roots.length > 1 ? `<div class="history-menu-heading">Roots</div>${roots.map((root) => this.renderHistoryRootOption(root, selectedRoots)).join("")}` : ""}
       ${recent.length > 0 ? `<div class="history-menu-heading">Recent</div>${recent.map((path) => this.renderHistoryQuickPath(path)).join("")}` : ""}
       ${this.state.projectFilesLoading ? '<div class="history-menu-note">Loading tracked paths…</div>' : ""}
       ${this.state.projectFilesError ? '<div class="history-menu-note warning">Tracked paths could not be loaded.</div>' : ""}
       ${this.state.projectFilesTruncated ? '<div class="history-menu-note">Tree selection uses the bounded project file set.</div>' : ""}`;
   }
 
-  private renderHistoryRootOption(root: GitRootDescriptor): string {
-    const selected = this.state.historyRepositoryIds.has(root.id);
-    return `<button class="history-menu-option two-line" type="button" data-history-root="${escapeAttribute(root.id)}" aria-pressed="${selected}" title="Ctrl/Cmd+Click to show only this root"><span><strong>${icon("folder", 13)}${escapeHtml(root.displayName)}</strong><small>${escapeHtml(root.relativePath)}</small></span>${selected ? icon("check", 13) : ""}</button>`;
+  private renderHistoryRootOption(
+    root: GitRootDescriptor,
+    selectedRoots: ReadonlySet<string>,
+  ): string {
+    const selected = selectedRoots.has(root.id);
+    const lastSelected = selected && selectedRoots.size === 1;
+    return `<label class="history-menu-option history-root-option two-line" title="${lastSelected ? "At least one module must remain selected" : `Include ${escapeAttribute(root.displayName)} history`}"><input type="checkbox" data-history-root="${escapeAttribute(root.id)}" ${selected ? "checked" : ""} ${lastSelected ? "disabled" : ""} /><span><strong>${icon("folder", 13)}${escapeHtml(root.displayName)}</strong><small>${escapeHtml(root.relativePath)}</small></span></label>`;
   }
 
   private renderHistoryQuickPath(path: HistoryPath): string {
@@ -2221,27 +2231,17 @@ export class AsterlynApp {
         this.applyHistoryQuery();
       });
     });
-    this.root.querySelector<HTMLButtonElement>("[data-history-clear-paths]")?.addEventListener("click", () => {
-      this.state.historyPaths.clear();
-      this.state.historyRepositoryIds.clear();
-      this.applyHistoryQuery();
-    });
-    this.root.querySelector<HTMLButtonElement>("[data-history-clear-roots]")?.addEventListener("click", () => {
-      this.state.historyRepositoryIds.clear();
-      this.applyHistoryQuery();
-    });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-history-root]").forEach((button) => {
-      button.addEventListener("click", (event) => {
-        const repositoryId = button.dataset.historyRoot;
-        if (!repositoryId) return;
-        if (event.ctrlKey || event.metaKey) {
-          this.state.historyRepositoryIds = new Set([repositoryId]);
-        } else {
-          const roots = new Set(this.state.historyRepositoryIds);
-          if (roots.has(repositoryId)) roots.delete(repositoryId);
-          else roots.add(repositoryId);
-          this.state.historyRepositoryIds = roots;
-        }
+    this.root.querySelectorAll<HTMLInputElement>("[data-history-root]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const repositoryId = checkbox.dataset.historyRoot;
+        const snapshot = this.state.snapshot;
+        if (!repositoryId || !snapshot) return;
+        this.state.historyRepositoryIds = toggleHistoryRootSelection(
+          snapshot.repositoryRoots.map((root) => root.id),
+          this.state.historyRepositoryIds,
+          repositoryId,
+          checkbox.checked,
+        );
         this.applyHistoryQuery();
       });
     });
