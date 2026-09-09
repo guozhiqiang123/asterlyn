@@ -6,10 +6,12 @@ use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
     HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
 };
+#[cfg(test)]
+use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
     SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken, SearchCandidate,
-    SearchCoverageReason, SearchLimits, SearchSkipReason, TextFileSnapshot, Workspace,
-    WorkspaceError,
+    SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason, TextFileSnapshot,
+    Workspace, WorkspaceError,
 };
 use tauri::State;
 
@@ -25,6 +27,12 @@ pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
     max_matches: 500,
     max_preview_utf16: 320,
     max_reported_skips: 100,
+    max_query_bytes: 4_096,
+    max_path_patterns_per_kind: 32,
+    max_path_pattern_bytes: 256,
+    max_context_lines: 3,
+    max_regex_size_bytes: 2 * 1024 * 1024,
+    max_regex_dfa_size_bytes: 2 * 1024 * 1024,
 };
 
 #[derive(Default)]
@@ -86,6 +94,7 @@ struct WorkspaceTextSearchReport {
     request_id: String,
     matches: Vec<WorkspaceTextSearchMatch>,
     catalog_candidates: usize,
+    eligible_candidates: usize,
     files_searched: usize,
     bytes_read: usize,
     skipped_count: usize,
@@ -393,6 +402,7 @@ async fn search_workspace_text(
     repository_root: String,
     request_id: String,
     query: String,
+    options: Option<SearchOptions>,
     active_workspace: State<'_, ActiveWorkspace>,
     searches: State<'_, WorkspaceSearchRegistry>,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
@@ -409,8 +419,15 @@ async fn search_workspace_text(
     let task_root = root.clone();
     let task_request_id = request_id.clone();
     let task_cancellation = cancellation.clone();
+    let task_options = options.unwrap_or_default();
     let result = run_workspace_blocking("search workspace text", move || {
-        search_authorized_workspace(&task_root, &task_request_id, &query, &task_cancellation)
+        search_authorized_workspace(
+            &task_root,
+            &task_request_id,
+            &query,
+            &task_options,
+            &task_cancellation,
+        )
     })
     .await;
 
@@ -446,6 +463,7 @@ fn search_authorized_workspace(
     root: &Path,
     request_id: &str,
     query: &str,
+    options: &SearchOptions,
     cancellation: &SearchCancellationToken,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
     let catalog = GitRepository::open(root)
@@ -454,6 +472,11 @@ fn search_authorized_workspace(
             operation: "load current project catalog for search".to_string(),
             message: error.to_string(),
         })?;
+    if cancellation.is_cancelled() {
+        return Err(WorkspaceError::Cancelled {
+            message: "workspace search was cancelled".to_string(),
+        });
+    }
     let candidates: Vec<_> = catalog
         .files
         .iter()
@@ -461,11 +484,12 @@ fn search_authorized_workspace(
             workspace_path: file.workspace_path.clone(),
         })
         .collect();
-    let report = Workspace::open(root)?.search_literal_text(
+    let report = Workspace::open(root)?.search_text(
         request_id,
         &candidates,
         catalog.truncated,
         query,
+        options,
         cancellation,
         WORKSPACE_SEARCH_LIMITS,
     )?;
@@ -523,6 +547,7 @@ fn search_authorized_workspace(
         request_id: report.request_id,
         matches,
         catalog_candidates: report.catalog_candidates,
+        eligible_candidates: report.eligible_candidates,
         files_searched: report.files_searched,
         bytes_read: report.bytes_read,
         skipped_count: report.skipped_count,
@@ -998,6 +1023,7 @@ mod tests {
             directory.path(),
             "native-search-1",
             "needle",
+            &SearchOptions::default(),
             &SearchCancellationToken::new(),
         )
         .expect("authorized search");
@@ -1031,10 +1057,52 @@ mod tests {
             directory.path(),
             "native-search-2",
             "needle",
+            &SearchOptions::default(),
             &SearchCancellationToken::new(),
         )
         .expect("revoked search remains valid");
         assert!(revoked.matches.is_empty());
+    }
+
+    #[test]
+    fn workspace_search_maps_regex_path_filters_and_context_through_the_desktop_boundary() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::create_dir_all(directory.path().join("src/generated")).expect("source directories");
+        fs::write(
+            directory.path().join("src/code.rs"),
+            "before\nNeedle 42\nafter\n",
+        )
+        .expect("source file");
+        fs::write(
+            directory.path().join("src/generated/code.rs"),
+            "Needle 99\n",
+        )
+        .expect("generated file");
+        fs::write(directory.path().join("README.md"), "Needle 11\n").expect("readme");
+        git(directory.path(), &["add", "."]);
+
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            include_globs: vec!["src/**".to_string()],
+            exclude_globs: vec!["src/generated/**".to_string()],
+            context_lines: 1,
+        };
+        let report = search_authorized_workspace(
+            directory.path(),
+            "native-search-options",
+            "(?i)needle [0-9]+",
+            &options,
+            &SearchCancellationToken::new(),
+        )
+        .expect("refined search");
+
+        assert_eq!(report.catalog_candidates, 3);
+        assert_eq!(report.eligible_candidates, 1);
+        assert_eq!(report.files_searched, 1);
+        assert_eq!(report.matches.len(), 1);
+        assert_eq!(report.matches[0].path, "src/code.rs");
+        assert_eq!(report.matches[0].preview, "before\nNeedle 42\nafter");
     }
 
     #[test]

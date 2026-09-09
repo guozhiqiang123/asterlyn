@@ -8,8 +8,9 @@ use sha2::{Digest, Sha256};
 mod search;
 
 pub use search::{
-    SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchSkipReason,
-    SearchSkippedFile, WorkspaceSearchMatch, WorkspaceSearchReport,
+    SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchMode,
+    SearchOptions, SearchSkipReason, SearchSkippedFile, WorkspaceSearchMatch,
+    WorkspaceSearchReport,
 };
 
 pub const DEFAULT_TEXT_LIMIT_BYTES: usize = 2 * 1024 * 1024;

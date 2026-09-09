@@ -73,7 +73,9 @@ dependencies = [
 name = "asterlyn-workspace"
 version = "0.1.0"
 dependencies = [
+ "glob",
  "memchr",
+ "regex",
  "serde",
  "sha2",
  "tempfile",

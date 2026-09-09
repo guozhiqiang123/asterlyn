@@ -6,7 +6,8 @@ use std::time::Instant;
 use asterlyn_git::GitRepository;
 use asterlyn_lib::WORKSPACE_SEARCH_LIMITS;
 use asterlyn_workspace::{
-    SearchCancellationToken, SearchCandidate, Workspace, WorkspaceSearchReport,
+    SearchCancellationToken, SearchCandidate, SearchMode, SearchOptions, Workspace,
+    WorkspaceSearchReport,
 };
 
 fn main() -> ExitCode {
@@ -21,19 +22,43 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     let mut arguments = env::args().skip(1);
-    let path = arguments.next().ok_or_else(|| {
-        "usage: inspect_search <repository> <literal-query> [iterations]".to_string()
-    })?;
-    let query = arguments.next().ok_or_else(|| {
-        "usage: inspect_search <repository> <literal-query> [iterations]".to_string()
-    })?;
-    let iterations = arguments
-        .next()
-        .map(|value| value.parse::<usize>())
-        .transpose()
-        .map_err(|error| format!("invalid iteration count: {error}"))?
-        .unwrap_or(10)
-        .clamp(1, 100);
+    let usage = "usage: inspect_search <repository> <query> [iterations] [--regex] [--include <glob>] [--exclude <glob>] [--context <0-3>]";
+    let path = arguments.next().ok_or_else(|| usage.to_string())?;
+    let query = arguments.next().ok_or_else(|| usage.to_string())?;
+    let mut remaining = arguments.collect::<Vec<_>>().into_iter().peekable();
+    let iterations = if remaining
+        .peek()
+        .is_some_and(|value| !value.starts_with("--"))
+    {
+        remaining
+            .next()
+            .expect("peeked argument exists")
+            .parse::<usize>()
+            .map_err(|error| format!("invalid iteration count: {error}"))?
+            .clamp(1, 100)
+    } else {
+        10
+    };
+    let mut options = SearchOptions::default();
+    while let Some(argument) = remaining.next() {
+        match argument.as_str() {
+            "--regex" => options.mode = SearchMode::Regex,
+            "--include" => options
+                .include_globs
+                .push(remaining.next().ok_or_else(|| usage.to_string())?),
+            "--exclude" => options
+                .exclude_globs
+                .push(remaining.next().ok_or_else(|| usage.to_string())?),
+            "--context" => {
+                options.context_lines = remaining
+                    .next()
+                    .ok_or_else(|| usage.to_string())?
+                    .parse::<usize>()
+                    .map_err(|error| format!("invalid context line count: {error}"))?;
+            }
+            _ => return Err(format!("unknown argument '{argument}'\n{usage}")),
+        }
+    }
 
     let mut catalog_micros = Vec::with_capacity(iterations);
     let mut search_micros = Vec::with_capacity(iterations);
@@ -58,11 +83,12 @@ fn run() -> Result<(), String> {
         let search_started = Instant::now();
         let report = Workspace::open(&path)
             .map_err(|error| error.to_string())?
-            .search_literal_text(
+            .search_text(
                 &format!("inspect-search-{iteration}"),
                 &candidates,
                 catalog.truncated,
                 &query,
+                &options,
                 &SearchCancellationToken::new(),
                 WORKSPACE_SEARCH_LIMITS,
             )
@@ -92,6 +118,7 @@ fn print_report(report: &WorkspaceSearchReport, iterations: usize) {
     }
     println!("iterations={iterations}");
     println!("catalog_candidates={}", report.catalog_candidates);
+    println!("eligible_candidates={}", report.eligible_candidates);
     println!("files_searched={}", report.files_searched);
     println!("bytes_read={}", report.bytes_read);
     println!("matches={}", report.matches.len());

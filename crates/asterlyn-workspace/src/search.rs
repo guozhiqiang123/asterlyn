@@ -3,7 +3,9 @@ use std::io::Read;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use glob::{MatchOptions, Pattern};
 use memchr::memmem::Finder;
+use regex::{Regex, RegexBuilder};
 
 use super::{UTF8_BOM, Workspace, WorkspaceError, revision};
 
@@ -38,6 +40,23 @@ pub struct SearchCandidate {
     pub workspace_path: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SearchMode {
+    #[default]
+    Literal,
+    Regex,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SearchOptions {
+    pub mode: SearchMode,
+    pub include_globs: Vec<String>,
+    pub exclude_globs: Vec<String>,
+    pub context_lines: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SearchLimits {
     pub max_candidates: usize,
@@ -45,6 +64,12 @@ pub struct SearchLimits {
     pub max_matches: usize,
     pub max_preview_utf16: usize,
     pub max_reported_skips: usize,
+    pub max_query_bytes: usize,
+    pub max_path_patterns_per_kind: usize,
+    pub max_path_pattern_bytes: usize,
+    pub max_context_lines: usize,
+    pub max_regex_size_bytes: usize,
+    pub max_regex_dfa_size_bytes: usize,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -102,6 +127,7 @@ pub struct WorkspaceSearchReport {
     pub request_id: String,
     pub matches: Vec<WorkspaceSearchMatch>,
     pub catalog_candidates: usize,
+    pub eligible_candidates: usize,
     pub files_searched: usize,
     pub bytes_read: usize,
     pub skipped_count: usize,
@@ -125,13 +151,50 @@ impl Workspace {
         cancellation: &SearchCancellationToken,
         limits: SearchLimits,
     ) -> Result<WorkspaceSearchReport, WorkspaceError> {
-        validate_search(request_id, query, limits)?;
+        self.search_text(
+            request_id,
+            candidates,
+            catalog_truncated,
+            query,
+            &SearchOptions::default(),
+            cancellation,
+            limits,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_text(
+        &self,
+        request_id: &str,
+        candidates: &[SearchCandidate],
+        catalog_truncated: bool,
+        query: &str,
+        options: &SearchOptions,
+        cancellation: &SearchCancellationToken,
+        limits: SearchLimits,
+    ) -> Result<WorkspaceSearchReport, WorkspaceError> {
+        validate_search(request_id, query, options, limits)?;
         check_cancelled(cancellation)?;
+        let path_filters = PathFilters::compile(options, cancellation)?;
+        let matcher = SearchMatcher::compile(query, options.mode, cancellation, limits)?;
+        let eligible_candidates = if path_filters.is_empty() {
+            candidates.len()
+        } else {
+            let mut count = 0;
+            for candidate in candidates {
+                check_cancelled(cancellation)?;
+                if path_filters.matches(&candidate.workspace_path) {
+                    count += 1;
+                }
+            }
+            count
+        };
 
         let mut report = WorkspaceSearchReport {
             request_id: request_id.to_string(),
             matches: Vec::new(),
             catalog_candidates: candidates.len(),
+            eligible_candidates,
             files_searched: 0,
             bytes_read: 0,
             skipped_count: 0,
@@ -149,6 +212,9 @@ impl Workspace {
             candidates.iter().take(limits.max_candidates).enumerate()
         {
             check_cancelled(cancellation)?;
+            if !path_filters.matches(&candidate.workspace_path) {
+                continue;
+            }
             let remaining = limits.max_total_bytes.saturating_sub(report.bytes_read);
             if remaining == 0 {
                 push_coverage(&mut report, SearchCoverageReason::ByteLimit);
@@ -253,7 +319,8 @@ impl Workspace {
                 candidate,
                 &source_revision,
                 &normalized,
-                query,
+                &matcher,
+                options.context_lines,
                 cancellation,
                 limits,
             )? {
@@ -271,6 +338,7 @@ impl Workspace {
 fn validate_search(
     request_id: &str,
     query: &str,
+    options: &SearchOptions,
     limits: SearchLimits,
 ) -> Result<(), WorkspaceError> {
     if request_id.is_empty()
@@ -283,24 +351,50 @@ fn validate_search(
     }
     if query.is_empty()
         || query.contains(['\0', '\r', '\n'])
-        || query.encode_utf16().count() > 256
-        || query.len() > 1_024
+        || query.len() > limits.max_query_bytes
     {
         return Err(WorkspaceError::InvalidSearch {
-            message: "search text must be one non-empty line of at most 256 UTF-16 units"
-                .to_string(),
+            message: format!(
+                "search text must be one non-empty line of at most {} UTF-8 bytes",
+                limits.max_query_bytes
+            ),
         });
     }
     if limits.max_candidates == 0
         || limits.max_total_bytes == 0
         || limits.max_matches == 0
-        || limits.max_preview_utf16 < query.encode_utf16().count()
+        || limits.max_preview_utf16 == 0
         || limits.max_reported_skips == 0
+        || limits.max_query_bytes == 0
+        || limits.max_path_patterns_per_kind == 0
+        || limits.max_path_pattern_bytes == 0
+        || limits.max_regex_size_bytes == 0
+        || limits.max_regex_dfa_size_bytes == 0
     {
         return Err(WorkspaceError::InvalidSearch {
-            message: "search limits must be positive and retain the complete query".to_string(),
+            message: "search limits must be positive".to_string(),
         });
     }
+    if options.context_lines > limits.max_context_lines {
+        return Err(WorkspaceError::InvalidSearch {
+            message: format!(
+                "search context must be between 0 and {} lines",
+                limits.max_context_lines
+            ),
+        });
+    }
+    validate_glob_list(
+        "include",
+        &options.include_globs,
+        limits.max_path_patterns_per_kind,
+        limits.max_path_pattern_bytes,
+    )?;
+    validate_glob_list(
+        "exclude",
+        &options.exclude_globs,
+        limits.max_path_patterns_per_kind,
+        limits.max_path_pattern_bytes,
+    )?;
     Ok(())
 }
 
@@ -311,7 +405,8 @@ fn append_matches(
     candidate: &SearchCandidate,
     source_revision: &str,
     normalized: &str,
-    query: &str,
+    matcher: &SearchMatcher<'_>,
+    context_lines: usize,
     cancellation: &SearchCancellationToken,
     limits: SearchLimits,
 ) -> Result<bool, WorkspaceError> {
@@ -320,18 +415,22 @@ fn append_matches(
     for (line_index, line) in lines.iter().enumerate() {
         check_cancelled(cancellation)?;
         let remaining_matches = limits.max_matches.saturating_sub(report.matches.len());
-        for (from_byte, to_byte) in literal_ranges(
-            line,
-            query,
-            cancellation,
-            remaining_matches.saturating_add(1),
-        )? {
+        for (from_byte, to_byte) in
+            matcher.ranges(line, cancellation, remaining_matches.saturating_add(1))?
+        {
             if report.matches.len() == limits.max_matches {
                 return Ok(true);
             }
             let from_in_line = line[..from_byte].encode_utf16().count();
             let match_utf16 = line[from_byte..to_byte].encode_utf16().count();
-            let preview = preview(line, from_byte, to_byte, limits.max_preview_utf16);
+            let preview = context_preview(
+                &lines,
+                line_index,
+                from_byte,
+                to_byte,
+                context_lines,
+                limits.max_preview_utf16,
+            );
             report.matches.push(WorkspaceSearchMatch {
                 candidate_index,
                 workspace_path: candidate.workspace_path.clone(),
@@ -353,6 +452,176 @@ fn append_matches(
         }
     }
     Ok(false)
+}
+
+enum SearchMatcher<'query> {
+    Literal(&'query str),
+    Regex(Regex),
+}
+
+impl<'query> SearchMatcher<'query> {
+    fn compile(
+        query: &'query str,
+        mode: SearchMode,
+        cancellation: &SearchCancellationToken,
+        limits: SearchLimits,
+    ) -> Result<Self, WorkspaceError> {
+        check_cancelled(cancellation)?;
+        let matcher = match mode {
+            SearchMode::Literal => Self::Literal(query),
+            SearchMode::Regex => {
+                let expression = RegexBuilder::new(query)
+                    .unicode(true)
+                    .size_limit(limits.max_regex_size_bytes)
+                    .dfa_size_limit(limits.max_regex_dfa_size_bytes)
+                    .build()
+                    .map_err(|error| WorkspaceError::InvalidSearch {
+                        message: format!("invalid regular expression: {error}"),
+                    })?;
+                Self::Regex(expression)
+            }
+        };
+        check_cancelled(cancellation)?;
+        Ok(matcher)
+    }
+
+    fn ranges(
+        &self,
+        line: &str,
+        cancellation: &SearchCancellationToken,
+        max_ranges: usize,
+    ) -> Result<Vec<(usize, usize)>, WorkspaceError> {
+        match self {
+            Self::Literal(query) => literal_ranges(line, query, cancellation, max_ranges),
+            Self::Regex(expression) => {
+                let mut ranges = Vec::new();
+                for found in expression.find_iter(line) {
+                    check_cancelled(cancellation)?;
+                    ranges.push((found.start(), found.end()));
+                    if ranges.len() == max_ranges {
+                        break;
+                    }
+                }
+                check_cancelled(cancellation)?;
+                Ok(ranges)
+            }
+        }
+    }
+}
+
+struct PathFilters {
+    include: Vec<Pattern>,
+    exclude: Vec<Pattern>,
+}
+
+impl PathFilters {
+    fn compile(
+        options: &SearchOptions,
+        cancellation: &SearchCancellationToken,
+    ) -> Result<Self, WorkspaceError> {
+        Ok(Self {
+            include: compile_globs("include", &options.include_globs, cancellation)?,
+            exclude: compile_globs("exclude", &options.exclude_globs, cancellation)?,
+        })
+    }
+
+    fn is_empty(&self) -> bool {
+        self.include.is_empty() && self.exclude.is_empty()
+    }
+
+    fn matches(&self, workspace_path: &str) -> bool {
+        let options = MatchOptions {
+            case_sensitive: true,
+            require_literal_separator: true,
+            require_literal_leading_dot: false,
+        };
+        let included = self.include.is_empty()
+            || self
+                .include
+                .iter()
+                .any(|pattern| pattern.matches_with(workspace_path, options));
+        included
+            && !self
+                .exclude
+                .iter()
+                .any(|pattern| pattern.matches_with(workspace_path, options))
+    }
+}
+
+fn validate_glob_list(
+    kind: &str,
+    patterns: &[String],
+    max_patterns: usize,
+    max_pattern_bytes: usize,
+) -> Result<(), WorkspaceError> {
+    if patterns.len() > max_patterns {
+        return Err(WorkspaceError::InvalidSearch {
+            message: format!("search accepts at most {max_patterns} {kind} path patterns"),
+        });
+    }
+    for pattern in patterns {
+        let invalid_component = pattern
+            .split('/')
+            .any(|component| component == "." || component == "..");
+        if pattern.is_empty()
+            || pattern.len() > max_pattern_bytes
+            || pattern.starts_with('/')
+            || pattern.contains(['\0', '\r', '\n', '\\', '{', '}'])
+            || pattern.contains("//")
+            || invalid_component
+        {
+            return Err(WorkspaceError::InvalidSearch {
+                message: format!(
+                    "{kind} path patterns must be relative '/'-separated globs of at most {max_pattern_bytes} bytes"
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn compile_globs(
+    kind: &str,
+    patterns: &[String],
+    cancellation: &SearchCancellationToken,
+) -> Result<Vec<Pattern>, WorkspaceError> {
+    patterns
+        .iter()
+        .map(|source| {
+            check_cancelled(cancellation)?;
+            Pattern::new(source).map_err(|error| WorkspaceError::InvalidSearch {
+                message: format!("invalid {kind} path pattern '{source}': {error}"),
+            })
+        })
+        .collect()
+}
+
+fn context_preview(
+    lines: &[&str],
+    line_index: usize,
+    from_byte: usize,
+    to_byte: usize,
+    context_lines: usize,
+    limit: usize,
+) -> Preview {
+    if context_lines == 0 {
+        return preview(lines[line_index], from_byte, to_byte, limit);
+    }
+    let first_line = line_index.saturating_sub(context_lines);
+    let last_line = line_index
+        .saturating_add(context_lines)
+        .min(lines.len().saturating_sub(1));
+    let before_match_bytes = lines[first_line..line_index]
+        .iter()
+        .map(|line| line.len() + 1)
+        .sum::<usize>();
+    let window = lines[first_line..=last_line].join("\n");
+    preview(
+        &window,
+        before_match_bytes + from_byte,
+        before_match_bytes + to_byte,
+        limit,
+    )
 }
 
 fn literal_ranges(
@@ -410,6 +679,16 @@ fn preview(line: &str, from_byte: usize, to_byte: usize, limit: usize) -> Previe
     let matched = &line[from_byte..to_byte];
     let after = &line[to_byte..];
     let match_units = matched.encode_utf16().count();
+    if match_units > limit {
+        let (matched, match_clipped) = prefix_utf16(matched, limit);
+        return Preview {
+            text: matched.to_string(),
+            from_utf16: 0,
+            to_utf16: matched.encode_utf16().count(),
+            leading_clipped: !before.is_empty(),
+            trailing_clipped: match_clipped || !after.is_empty(),
+        };
+    }
     let context = limit.saturating_sub(match_units);
     let before_budget = context / 2;
     let after_budget = context - before_budget;
@@ -582,6 +861,12 @@ mod tests {
             max_matches: 20,
             max_preview_utf16: 16,
             max_reported_skips: 10,
+            max_query_bytes: 256,
+            max_path_patterns_per_kind: 4,
+            max_path_pattern_bytes: 64,
+            max_context_lines: 3,
+            max_regex_size_bytes: 2 * 1024 * 1024,
+            max_regex_dfa_size_bytes: 2 * 1024 * 1024,
         }
     }
 
@@ -677,6 +962,226 @@ mod tests {
         assert_eq!(report.matches.len(), 1);
         assert_eq!(report.matches[0].from_utf16, 0);
         assert_eq!(report.matches[0].to_utf16, 5);
+    }
+
+    #[test]
+    fn regex_search_is_line_local_case_sensitive_and_supports_inline_flags_and_zero_width() {
+        let directory = tempfile::tempdir().expect("workspace");
+        fs::write(directory.path().join("regex.txt"), "Needle needle\nabc 123").expect("fixture");
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let regex = SearchOptions {
+            mode: SearchMode::Regex,
+            ..SearchOptions::default()
+        };
+        let report = workspace
+            .search_text(
+                "search-regex",
+                &candidates(&["regex.txt"]),
+                false,
+                "(?i)needle|^abc",
+                &regex,
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("regex search");
+        assert_eq!(
+            report
+                .matches
+                .iter()
+                .map(|found| (found.line, found.column_utf16))
+                .collect::<Vec<_>>(),
+            vec![(1, 1), (1, 8), (2, 1)]
+        );
+
+        let zero_width = workspace
+            .search_text(
+                "search-zero-width",
+                &candidates(&["regex.txt"]),
+                false,
+                "^",
+                &regex,
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("zero-width regex search");
+        assert_eq!(zero_width.matches.len(), 2);
+        assert!(
+            zero_width
+                .matches
+                .iter()
+                .all(|found| found.from_utf16 == found.to_utf16)
+        );
+    }
+
+    #[test]
+    fn path_filters_match_full_workspace_paths_and_preserve_catalog_indices() {
+        let directory = tempfile::tempdir().expect("workspace");
+        for path in [
+            "root.rs",
+            "src/lib.rs",
+            "src/generated/out.rs",
+            "module/src/lib.rs",
+        ] {
+            let path = directory.path().join(path);
+            fs::create_dir_all(path.parent().expect("parent")).expect("directory");
+            fs::write(path, "needle").expect("fixture");
+        }
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let catalog = candidates(&[
+            "root.rs",
+            "src/lib.rs",
+            "src/generated/out.rs",
+            "module/src/lib.rs",
+        ]);
+        let filtered = SearchOptions {
+            include_globs: vec!["src/**".to_string()],
+            exclude_globs: vec!["src/generated/**".to_string()],
+            ..SearchOptions::default()
+        };
+        let report = workspace
+            .search_text(
+                "search-paths",
+                &catalog,
+                false,
+                "needle",
+                &filtered,
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("filtered search");
+        assert!(report.complete());
+        assert_eq!(report.catalog_candidates, 4);
+        assert_eq!(report.eligible_candidates, 1);
+        assert_eq!(report.files_searched, 1);
+        assert_eq!(report.matches[0].candidate_index, 1);
+
+        let root_only = SearchOptions {
+            include_globs: vec!["*.rs".to_string()],
+            ..SearchOptions::default()
+        };
+        let report = workspace
+            .search_text(
+                "search-root-only",
+                &catalog,
+                false,
+                "needle",
+                &root_only,
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("root-only search");
+        assert_eq!(report.eligible_candidates, 1);
+        assert_eq!(report.matches[0].workspace_path, "root.rs");
+
+        let submodule = SearchOptions {
+            include_globs: vec!["module/**".to_string()],
+            ..SearchOptions::default()
+        };
+        let report = workspace
+            .search_text(
+                "search-submodule",
+                &catalog,
+                false,
+                "needle",
+                &submodule,
+                &SearchCancellationToken::new(),
+                limits(),
+            )
+            .expect("submodule search");
+        assert_eq!(report.matches[0].candidate_index, 3);
+    }
+
+    #[test]
+    fn context_preview_expands_lines_and_clips_an_oversized_match_safely() {
+        let directory = tempfile::tempdir().expect("workspace");
+        fs::write(
+            directory.path().join("context.txt"),
+            "first\nbefore\nneedle\nafter\nlast",
+        )
+        .expect("fixture");
+        fs::write(directory.path().join("long.txt"), "pre😀😀😀after").expect("fixture");
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let contextual = SearchOptions {
+            context_lines: 1,
+            ..SearchOptions::default()
+        };
+        let mut contextual_limits = limits();
+        contextual_limits.max_preview_utf16 = 64;
+        let report = workspace
+            .search_text(
+                "search-context",
+                &candidates(&["context.txt"]),
+                false,
+                "needle",
+                &contextual,
+                &SearchCancellationToken::new(),
+                contextual_limits,
+            )
+            .expect("context search");
+        assert_eq!(report.matches[0].preview, "before\nneedle\nafter");
+        assert_eq!(report.matches[0].preview_from_utf16, 7);
+        assert_eq!(report.matches[0].preview_to_utf16, 13);
+
+        let mut short_preview = limits();
+        short_preview.max_preview_utf16 = 4;
+        let report = workspace
+            .search_literal_text(
+                "search-long-match",
+                &candidates(&["long.txt"]),
+                false,
+                "😀😀😀",
+                &SearchCancellationToken::new(),
+                short_preview,
+            )
+            .expect("long match search");
+        let found = &report.matches[0];
+        assert_eq!(found.preview, "😀😀");
+        assert_eq!(found.preview_from_utf16, 0);
+        assert_eq!(found.preview_to_utf16, 4);
+        assert_eq!(found.to_utf16 - found.from_utf16, 6);
+        assert!(found.leading_clipped);
+        assert!(found.trailing_clipped);
+    }
+
+    #[test]
+    fn rejects_invalid_regex_globs_and_context_bounds() {
+        let directory = tempfile::tempdir().expect("workspace");
+        fs::write(directory.path().join("source.txt"), "text").expect("fixture");
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let candidate = candidates(&["source.txt"]);
+        let invalid = [
+            SearchOptions {
+                mode: SearchMode::Regex,
+                ..SearchOptions::default()
+            },
+            SearchOptions {
+                include_globs: vec!["../*.rs".to_string()],
+                ..SearchOptions::default()
+            },
+            SearchOptions {
+                exclude_globs: vec!["src/{one,two}.rs".to_string()],
+                ..SearchOptions::default()
+            },
+            SearchOptions {
+                context_lines: 4,
+                ..SearchOptions::default()
+            },
+        ];
+        for (index, options) in invalid.iter().enumerate() {
+            let query = if index == 0 { "[" } else { "text" };
+            assert!(matches!(
+                workspace.search_text(
+                    &format!("search-invalid-{index}"),
+                    &candidate,
+                    false,
+                    query,
+                    options,
+                    &SearchCancellationToken::new(),
+                    limits(),
+                ),
+                Err(WorkspaceError::InvalidSearch { .. })
+            ));
+        }
     }
 
     #[test]
