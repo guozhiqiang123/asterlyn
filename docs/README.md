@@ -34,3 +34,4 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`benchmarks/2026-09-08-m1-baseline.md`](benchmarks/2026-09-08-m1-baseline.md) — first functional, build, latency, memory, CPU, and artifact-size evidence.
 - [`benchmarks/2026-09-08-m1-1-tracked-first.md`](benchmarks/2026-09-08-m1-1-tracked-first.md) — tracked-first latency, cancellation behavior, repeated memory, native workflow, and M1.1 decision.
+- [`benchmarks/2026-09-09-e2-1-navigation-search.md`](benchmarks/2026-09-09-e2-1-navigation-search.md) — bounded search latency, interaction, build-size, resource, and E2.1 acceptance evidence.

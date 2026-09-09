@@ -49,6 +49,14 @@ E2 is split so read-only discovery cannot quietly create a bulk-write surface:
 
 E2.1 follows [`ADR-0005`](../architecture/decisions/0005-bounded-navigation-search.md). Its acceptance requires pure ranking/recent/navigation tests; bounded search tests covering Unicode, case, CRLF/bare-CR coordinates, unsupported-file accounting, every limit, and cancellation; desktop tests proving fresh Git authorization and stale repository denial; browser keyboard journeys for all four modes and result navigation; accessibility names, selection state, and focus restoration; and recorded latency, build-size, and resource evidence. Packaging and remote publication remain at the larger Stage 3 checkpoint.
 
+### E2.1 local acceptance — 2026-09-09
+
+E2.1 is locally accepted. One keyboard-first surface now provides Quick Open, repository-scoped Recent Files, read-only workspace text search, and a safe command registry. The desktop boundary regenerates the Git-authorized candidate catalog for every search; the pure workspace layer performs a cancellable bounded scan; and result activation repeats the E1 read before applying a root-qualified, revision-matched UTF-16 location. Dirty buffers, old roots, stale revisions, unsupported files, and late requests fail closed. CodeMirror exposes active-file Replace All as an undoable buffer operation, while workspace replacement remains absent.
+
+The complete evidence is recorded in [`E2.1 bounded navigation and search evidence`](../benchmarks/2026-09-09-e2-1-navigation-search.md). Search over the current 161-candidate checkout had a 15.908-millisecond median combined core path across ten iterations. Validation passed 13 workspace, 28 Git, seven desktop, and 83 frontend tests plus strict checks, production build, deterministic browser interaction, and native liveness. The interaction/correctness and named-fixture latency conclusions are **improved**.
+
+The frontend bundle grew 4.67% raw and 3.90% gzip in JavaScript, so bundle size is **regressed** and the existing chunk warning remains open. Three matched short-settle runs measured a 232.41 MiB median process-tree PSS, 8.02 MiB above U11.1 and above the provisional ceiling. Observed idle resources are therefore **regressed**, while attribution remains **inconclusive** because the comparison includes unmeasured E1 movement and is not the normalized 60-second protocol. Packaging and remote publication remain deferred by agreement. E2.2 read-only refinement is next; the normalized resource follow-up remains mandatory before the larger Stage 3 checkpoint.
+
 ### E3 — Editor groups and preferences
 
 Add splits, tab movement, settings/keymaps, language-neutral indentation, encoding/EOL controls, file watching, external-change comparison, and a measured large-file mode.

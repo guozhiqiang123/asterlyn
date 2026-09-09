@@ -54,6 +54,14 @@ Run the release inspection utility to separate interactive tracked latency from 
 cargo run --release -p asterlyn-git --example inspect -- /path/to/repository 10
 ```
 
+Measure the complete bounded workspace-search path, including a fresh Git-authorized catalog on every iteration, with:
+
+```bash
+scripts/with-linux-tauri-env.sh cargo run --release -p asterlyn --example inspect_search -- /path/to/repository 'literal query' 10
+```
+
+The utility uses the same candidate, byte, match, preview, and reported-skip limits as the desktop boundary. Record its catalog, scan, and total distributions together with candidate count, bytes read, match count, skipped files, query, repository state, and machine context.
+
 On Linux, repeat steady-state process-tree PSS, RSS, and idle CPU sampling with:
 
 ```bash
