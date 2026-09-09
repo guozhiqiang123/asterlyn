@@ -60,7 +60,7 @@ Measure the complete bounded workspace-search path, including a fresh Git-author
 scripts/with-linux-tauri-env.sh cargo run --release -p asterlyn --example inspect_search -- /path/to/repository 'literal query' 10
 ```
 
-The utility uses the same candidate, byte, match, preview, and reported-skip limits as the desktop boundary. Record its catalog, scan, and total distributions together with candidate count, bytes read, match count, skipped files, query, repository state, and machine context.
+The utility uses the same candidate, byte, match, preview, pattern, context, and reported-skip limits as the desktop boundary. Append `--regex` for line-local regular expressions, repeat `--include <glob>` or `--exclude <glob>` for full workspace-path filters, and use `--context <0-3>` for preview context. Record its catalog, scan, and total distributions together with total and eligible candidate counts, bytes read, match count, skipped files, query/options, repository state, and machine context.
 
 On Linux, repeat steady-state process-tree PSS, RSS, and idle CPU sampling with:
 

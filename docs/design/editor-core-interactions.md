@@ -66,6 +66,14 @@ The complete evidence is recorded in [`E2.2a on-demand syntax highlighting evide
 
 No native package or remote publication is produced for this sub-slice. E2.2b read-only search refinement is next. Before the larger Stage 3 package checkpoint, compare the current broad catalog with curated or separately installed language packs and run the pending normalized native resource series.
 
+### E2.2b local acceptance — 2026-09-09
+
+E2.2b is locally accepted. Find in Files now adds bounded line-local regular expressions, complete workspace-path include/exclude globs, and zero to three context lines without adding an index, cache, watcher, startup scan, or replacement surface. The default literal entry point remains compatible. Every option participates in stale-response identity, path filtering preserves the Git catalog index, intentional exclusions have a separate eligible count, and result activation still repeats E1 authorization and revision checks.
+
+The complete evidence is recorded in [`E2.2b bounded search-refinement evidence`](../benchmarks/2026-09-09-e2-2b-search-refinement.md). Validation passed 17 workspace, 28 Git, seven desktop, and 90 frontend tests plus formatting, strict Clippy, TypeScript checking, production build, native smoke, and production-browser interaction. On the current 164-candidate checkout, the unchanged literal query produced a 15.629-millisecond median combined catalog-and-scan path, 1.75% below the 15.908-millisecond E2.1 baseline despite a larger fixture; the conclusion is **no material change**. Main JavaScript increased by 6.18 kB raw and 1.89 kB gzip, so frontend size is **regressed**. The native executable is cumulatively 16.69% larger than the last retained E2.1 reference, but the missing E2.2a native measurement prevents attribution to this sub-slice. A single uncollected production-browser observation measured a 1,316,112-byte used-heap increase while opening and populating the complete search surface, so memory impact remains **inconclusive**.
+
+No native package or remote publication is produced for this sub-slice. The measured scan does not justify persistent indexing. E2.3 recoverable workspace replacement is next; language-catalog packaging and the normalized native resource series remain Stage 3 checkpoint gates.
+
 ### E3 — Editor groups and preferences
 
 Add splits, tab movement, settings/keymaps, language-neutral indentation, encoding/EOL controls, file watching, external-change comparison, and a measured large-file mode.
