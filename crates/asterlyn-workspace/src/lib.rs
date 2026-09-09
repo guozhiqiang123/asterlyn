@@ -125,6 +125,17 @@ impl Workspace {
         &self,
         request: &SaveTextFileRequest,
     ) -> Result<SaveTextFileResult, WorkspaceError> {
+        self.save_text_file_with_precommit(request, |_| Ok(()))
+    }
+
+    fn save_text_file_with_precommit<F>(
+        &self,
+        request: &SaveTextFileRequest,
+        before_flush: F,
+    ) -> Result<SaveTextFileResult, WorkspaceError>
+    where
+        F: FnOnce(&Path) -> Result<(), WorkspaceError>,
+    {
         validate_request_id(&request.request_id)?;
         let output = encode_text(&request.content, request.utf8_bom, self.text_limit_bytes)?;
         let (path, metadata) = self.resolve_regular_file(&request.workspace_path)?;
@@ -155,7 +166,13 @@ impl Workspace {
             })?;
         temporary
             .write_all(&output)
-            .and_then(|_| temporary.flush())
+            .map_err(|error| WorkspaceError::Io {
+                operation: "write durable temporary file".to_string(),
+                message: error.to_string(),
+            })?;
+        before_flush(temporary.path())?;
+        temporary
+            .flush()
             .and_then(|_| temporary.as_file().sync_all())
             .map_err(|error| WorkspaceError::Io {
                 operation: "write durable temporary file".to_string(),
@@ -559,5 +576,37 @@ mod tests {
             })
             .expect_err("changed revision conflicts");
         assert!(matches!(error, WorkspaceError::Conflict { .. }));
+    }
+
+    #[test]
+    fn injected_precommit_failure_cleans_temporary_file_and_preserves_target() {
+        let (directory, workspace) = workspace_with_file("source.rs", b"original\n");
+        let snapshot = workspace.read_text_file("source.rs").expect("text reads");
+        let mut temporary_path = None;
+        let error = workspace
+            .save_text_file_with_precommit(
+                &SaveTextFileRequest {
+                    workspace_path: "source.rs".to_string(),
+                    expected_revision: snapshot.revision,
+                    content: "replacement\n".to_string(),
+                    utf8_bom: false,
+                    request_id: "save-failure".to_string(),
+                },
+                |path| {
+                    temporary_path = Some(path.to_path_buf());
+                    Err(WorkspaceError::Io {
+                        operation: "injected temporary-file flush".to_string(),
+                        message: "test failure".to_string(),
+                    })
+                },
+            )
+            .expect_err("injected failure is returned");
+
+        assert!(matches!(error, WorkspaceError::Io { .. }));
+        assert_eq!(
+            fs::read_to_string(directory.path().join("source.rs")).expect("target text"),
+            "original\n"
+        );
+        assert!(!temporary_path.expect("temporary path captured").exists());
     }
 }

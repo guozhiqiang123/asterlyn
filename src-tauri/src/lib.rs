@@ -277,8 +277,7 @@ async fn read_text_file(
 ) -> Result<TextFileSnapshot, WorkspaceError> {
     let root = active_workspace.resolve(&repository_root)?;
     run_workspace_blocking("read text file", move || {
-        let authorized = authorize_project_file(&root, &repository_id, &path)?;
-        Workspace::open(&root)?.read_text_file(&authorized.workspace_path)
+        read_authorized_text_file(&root, &repository_id, &path)
     })
     .await
 }
@@ -304,16 +303,46 @@ async fn save_text_file(
             operation: "serialize file save".to_string(),
             message: "file-save lock was poisoned".to_string(),
         })?;
-        let authorized = authorize_project_file(&root, &repository_id, &path)?;
-        Workspace::open(&root)?.save_text_file(&SaveTextFileRequest {
-            workspace_path: authorized.workspace_path,
+        save_authorized_text_file(
+            &root,
+            &repository_id,
+            &path,
             expected_revision,
             content,
             utf8_bom,
             request_id,
-        })
+        )
     })
     .await
+}
+
+fn read_authorized_text_file(
+    root: &Path,
+    repository_id: &str,
+    path: &str,
+) -> Result<TextFileSnapshot, WorkspaceError> {
+    let authorized = authorize_project_file(root, repository_id, path)?;
+    Workspace::open(root)?.read_text_file(&authorized.workspace_path)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn save_authorized_text_file(
+    root: &Path,
+    repository_id: &str,
+    path: &str,
+    expected_revision: String,
+    content: String,
+    utf8_bom: bool,
+    request_id: String,
+) -> Result<SaveTextFileResult, WorkspaceError> {
+    let authorized = authorize_project_file(root, repository_id, path)?;
+    Workspace::open(root)?.save_text_file(&SaveTextFileRequest {
+        workspace_path: authorized.workspace_path,
+        expected_revision,
+        content,
+        utf8_bom,
+        request_id,
+    })
 }
 
 fn authorize_project_file(
@@ -598,6 +627,97 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::process::Command;
+
+    fn git(path: &Path, arguments: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(arguments)
+            .output()
+            .expect("Git starts");
+        assert!(
+            output.status.success(),
+            "Git {:?} failed: {}",
+            arguments,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn desktop_file_boundary_saves_authorized_text_and_preserves_external_changes() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::write(directory.path().join("source.txt"), "original\r\n").expect("source file");
+        fs::write(directory.path().join("ignored.txt"), "ignored\n").expect("ignored file");
+        fs::write(directory.path().join(".gitignore"), "ignored.txt\n").expect("ignore file");
+        git(directory.path(), &["add", ".gitignore", "source.txt"]);
+
+        let initial = read_authorized_text_file(directory.path(), ".", "source.txt")
+            .expect("authorized file reads");
+        let saved = save_authorized_text_file(
+            directory.path(),
+            ".",
+            "source.txt",
+            initial.revision,
+            "saved\r\n".to_string(),
+            false,
+            "native-save-1".to_string(),
+        )
+        .expect("authorized file saves");
+        assert_eq!(
+            fs::read(directory.path().join("source.txt")).expect("saved bytes"),
+            b"saved\r\n"
+        );
+
+        fs::write(directory.path().join("source.txt"), "external\n").expect("external edit");
+        let conflict = save_authorized_text_file(
+            directory.path(),
+            ".",
+            "source.txt",
+            saved.revision.clone(),
+            "local\n".to_string(),
+            false,
+            "native-save-2".to_string(),
+        )
+        .expect_err("external edit conflicts");
+        assert!(matches!(conflict, WorkspaceError::Conflict { .. }));
+        assert_eq!(
+            fs::read_to_string(directory.path().join("source.txt")).expect("external text"),
+            "external\n"
+        );
+        assert!(matches!(
+            read_authorized_text_file(directory.path(), ".", "ignored.txt"),
+            Err(WorkspaceError::NotAuthorized { .. })
+        ));
+
+        git(
+            directory.path(),
+            &["rm", "--cached", "-f", "--", "source.txt"],
+        );
+        fs::write(
+            directory.path().join(".gitignore"),
+            "ignored.txt\nsource.txt\n",
+        )
+        .expect("updated ignore file");
+        git(directory.path(), &["add", ".gitignore"]);
+        let revoked = save_authorized_text_file(
+            directory.path(),
+            ".",
+            "source.txt",
+            saved.revision,
+            "must not save\n".to_string(),
+            false,
+            "native-save-revoked".to_string(),
+        )
+        .expect_err("fresh catalog revokes ignored file authorization");
+        assert!(matches!(revoked, WorkspaceError::NotAuthorized { .. }));
+        assert_eq!(
+            fs::read_to_string(directory.path().join("source.txt")).expect("revoked file"),
+            "external\n"
+        );
+    }
 
     #[test]
     fn active_workspace_accepts_only_the_last_canonical_root() {
