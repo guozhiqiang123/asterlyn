@@ -13,8 +13,8 @@ use std::os::unix::process::CommandExt;
 
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
-    ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange,
-    ProjectFileList, RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
+    ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
+    FileChange, ProjectFileList, RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -126,21 +126,9 @@ impl GitRepository {
             branch.upstream_ref = Some(upstream.merge_ref);
         }
 
-        let commits = if branch.unborn {
-            Vec::new()
-        } else {
-            let limit = commit_limit.clamp(1, 500).to_string();
-            let output = self.run_read_owned(
-                "read commit history",
-                vec![
-                    OsString::from("log"),
-                    OsString::from("--all"),
-                    OsString::from("--decorate=short"),
-                    OsString::from(format!("--max-count={limit}")),
-                    OsString::from("--format=%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e"),
-                ],
-            )?;
-            parse_commits(&output.stdout)?
+        let commits = match branch.oid.as_deref() {
+            Some(oid) if !branch.unborn => self.read_commit_history(oid, commit_limit)?,
+            _ => Vec::new(),
         };
 
         let refs = self.run_read(
@@ -167,6 +155,43 @@ impl GitRepository {
             remotes,
             untracked_state: UntrackedState::Pending,
         })
+    }
+
+    pub fn commit_history(
+        &self,
+        full_name: &str,
+        commit_limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
+        let reference = validate_history_ref(full_name)?;
+        if !self.ref_is_valid(reference)? {
+            return Err(GitError::InvalidInput {
+                field: "history ref".to_string(),
+                message: "select a valid branch or tag".to_string(),
+            });
+        }
+        let oid = self.resolve_history_ref(reference)?;
+        self.read_commit_history(&oid, commit_limit)
+    }
+
+    fn read_commit_history(
+        &self,
+        oid: &str,
+        commit_limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
+        validate_object_id(oid)?;
+        let limit = commit_limit.clamp(1, 500).to_string();
+        let output = self.run_read_owned(
+            "read commit history",
+            vec![
+                OsString::from("log"),
+                OsString::from("--decorate=short"),
+                OsString::from(format!("--max-count={limit}")),
+                OsString::from("--format=%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e"),
+                OsString::from(oid),
+                OsString::from("--"),
+            ],
+        )?;
+        parse_commits(&output.stdout)
     }
 
     pub fn untracked_changes(
@@ -971,6 +996,32 @@ impl GitRepository {
         }
     }
 
+    fn resolve_history_ref(&self, reference: &str) -> Result<String, GitError> {
+        let expression = format!("{reference}^{{commit}}");
+        let output = run_git_output(
+            &self.root,
+            [
+                OsStr::new("rev-parse"),
+                OsStr::new("--verify"),
+                OsStr::new("--end-of-options"),
+                OsStr::new(&expression),
+            ],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "resolve history ref".to_string(),
+            message: error.to_string(),
+        })?;
+        if !output.status.success() {
+            return Err(GitError::InvalidInput {
+                field: "history ref".to_string(),
+                message: "the selected ref no longer resolves to a commit".to_string(),
+            });
+        }
+        let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        validate_object_id(&oid)?;
+        Ok(oid)
+    }
+
     fn resolve_commit(&self, reference: &str, operation: &str) -> Result<String, GitError> {
         let output = self.run_read_owned(
             operation,
@@ -1535,6 +1586,19 @@ fn validate_local_branch_ref(full_name: &str) -> Result<&str, GitError> {
     Ok(name)
 }
 
+fn validate_history_ref(full_name: &str) -> Result<&str, GitError> {
+    let suffix = ["refs/heads/", "refs/remotes/", "refs/tags/"]
+        .iter()
+        .find_map(|prefix| full_name.strip_prefix(prefix));
+    if suffix.is_none_or(|name| name.is_empty()) || full_name.contains('\0') {
+        return Err(GitError::InvalidInput {
+            field: "history ref".to_string(),
+            message: "select a complete local, remote, or tag ref".to_string(),
+        });
+    }
+    Ok(full_name)
+}
+
 fn canonical_fetch_refspec(remote: &str) -> String {
     format!("+refs/heads/*:refs/remotes/{remote}/*")
 }
@@ -1810,6 +1874,138 @@ mod tests {
         let complete = repository.snapshot(50).expect("full snapshot loads");
         assert_eq!(complete.untracked_state, UntrackedState::Complete);
         assert_eq!(complete.changes.len(), 1);
+    }
+
+    #[test]
+    fn history_is_scoped_to_head_or_an_exact_valid_ref() {
+        let directory = fixture();
+        let root = commit_file(directory.path(), "base.txt", "base\n", "Root");
+        git(directory.path(), &["switch", "-c", "feature"]);
+        let feature = commit_file(directory.path(), "feature.txt", "feature\n", "Feature only");
+        git(directory.path(), &["switch", "main"]);
+        let main = commit_file(directory.path(), "main.txt", "main\n", "Main only");
+        git(
+            directory.path(),
+            &["update-ref", "refs/remotes/origin/feature", &feature],
+        );
+        git(directory.path(), &["tag", "light", &feature]);
+        git(
+            directory.path(),
+            &["tag", "-a", "release", "-m", "Release", &root],
+        );
+        git(
+            directory.path(),
+            &["update-ref", "refs/heads/--all", &feature],
+        );
+
+        let blob_path = directory.path().join("blob.txt");
+        fs::write(&blob_path, "blob\n").expect("blob fixture");
+        let blob = git_stdout(directory.path(), &["hash-object", "-w", "blob.txt"]);
+        git(
+            directory.path(),
+            &["update-ref", "refs/tags/blob-only", &blob],
+        );
+
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let snapshot = repository
+            .tracked_snapshot(50)
+            .expect("tracked snapshot loads");
+        assert_eq!(snapshot.commits[0].oid, main);
+        assert_eq!(snapshot.commits.len(), 2);
+        assert!(!snapshot.commits.iter().any(|commit| commit.oid == feature));
+
+        let feature_history = repository
+            .commit_history("refs/heads/feature", 50)
+            .expect("local history loads");
+        assert_eq!(feature_history[0].oid, feature);
+        assert_eq!(
+            repository
+                .commit_history("refs/heads/feature", 0)
+                .expect("zero limit clamps to one")
+                .len(),
+            1
+        );
+        assert_eq!(
+            repository
+                .commit_history("refs/heads/feature", 1)
+                .expect("one-commit history loads")
+                .len(),
+            1
+        );
+        assert_eq!(
+            repository
+                .commit_history("refs/heads/feature", 150)
+                .expect("desktop history limit loads")
+                .len(),
+            2
+        );
+        assert_eq!(
+            repository
+                .commit_history("refs/heads/feature", usize::MAX)
+                .expect("excessive limit clamps safely")
+                .len(),
+            2
+        );
+        assert!(!feature_history.iter().any(|commit| commit.oid == main));
+        assert_eq!(
+            repository
+                .commit_history("refs/remotes/origin/feature", 50)
+                .expect("remote history loads")[0]
+                .oid,
+            feature
+        );
+        assert_eq!(
+            repository
+                .commit_history("refs/tags/light", 50)
+                .expect("lightweight tag history loads")[0]
+                .oid,
+            feature
+        );
+        assert_eq!(
+            repository
+                .commit_history("refs/tags/release", 50)
+                .expect("annotated tag history loads")[0]
+                .oid,
+            root
+        );
+        assert_eq!(
+            repository
+                .commit_history("refs/heads/--all", 0)
+                .expect("option-looking literal ref remains safe")
+                .len(),
+            1
+        );
+
+        for invalid in [
+            "HEAD",
+            "main",
+            "refs/notes/example",
+            "refs/heads/main~1",
+            "refs/heads/missing",
+            "refs/tags/blob-only",
+        ] {
+            let error = repository
+                .commit_history(invalid, 50)
+                .expect_err("invalid history source is rejected");
+            assert!(matches!(error, GitError::InvalidInput { .. }), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn detached_snapshot_keeps_head_history() {
+        let directory = fixture();
+        let root = commit_file(directory.path(), "base.txt", "base\n", "Root");
+        let tip = commit_file(directory.path(), "tip.txt", "tip\n", "Tip");
+        git(directory.path(), &["switch", "--detach", &root]);
+
+        let snapshot = GitRepository::open(directory.path())
+            .expect("repository opens")
+            .tracked_snapshot(50)
+            .expect("detached snapshot loads");
+        assert!(snapshot.branch.detached);
+        assert_eq!(snapshot.commits.len(), 1);
+        assert_eq!(snapshot.commits[0].oid, root);
+        assert!(!snapshot.commits.iter().any(|commit| commit.oid == tip));
     }
 
     #[test]

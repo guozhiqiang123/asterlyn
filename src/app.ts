@@ -20,6 +20,15 @@ import {
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
 import {
+  beginRefHistory,
+  completeRefHistory,
+  emptyRefHistory,
+  failRefHistory,
+  installHeadHistory,
+  type RefHistoryRequest,
+  type RefHistoryState,
+} from "./workbench/ref-history";
+import {
   buildProjectTree,
   type ProjectTreeNode,
 } from "./workbench/project-tree";
@@ -52,6 +61,7 @@ interface AppState {
   changeQuery: string;
   selectedCommit: string | null;
   historyQuery: string;
+  history: RefHistoryState;
   selectedCommitFile: string | null;
   commitDetails: CommitDetails | null;
   commitDetailsLoading: boolean;
@@ -67,6 +77,7 @@ interface AppState {
   diffLayout: DiffLayout;
   showWhitespace: boolean;
   selectedBranch: string | null;
+  collapsedBranchGroups: Set<BranchSummary["kind"]>;
   newBranchName: string;
   syncPopoverOpen: boolean;
   selectedRemote: string | null;
@@ -97,6 +108,7 @@ export class AsterlynApp {
     changeQuery: "",
     selectedCommit: null,
     historyQuery: "",
+    history: emptyRefHistory(),
     selectedCommitFile: null,
     commitDetails: null,
     commitDetailsLoading: false,
@@ -112,6 +124,7 @@ export class AsterlynApp {
     diffLayout: "split",
     showWhitespace: false,
     selectedBranch: null,
+    collapsedBranchGroups: new Set(),
     newBranchName: "",
     syncPopoverOpen: false,
     selectedRemote: null,
@@ -468,12 +481,7 @@ export class AsterlynApp {
       this.state.changeQuery = "";
       this.state.selectedChangeKeys.clear();
       this.changeSelectionAnchor = null;
-      this.state.selectedCommit = snapshot.commits[0]?.oid ?? null;
       this.state.historyQuery = "";
-      this.clearCommitInspection();
-      this.state.commitDetailsLoading =
-        this.state.layout.bottomTool === "branches" &&
-        this.state.selectedCommit !== null;
       this.state.gitDetail = "commit";
       this.state.activeDocument = { kind: "welcome" };
       this.clearWorkingDiff();
@@ -485,6 +493,10 @@ export class AsterlynApp {
         snapshot.branches.find((branch) => branch.current)?.fullName ??
         snapshot.branches[0]?.fullName ??
         null;
+      this.installSnapshotHistory(snapshot, true);
+      this.state.commitDetailsLoading =
+        this.state.layout.bottomTool === "branches" &&
+        this.state.selectedCommit !== null;
       this.state.remoteOperation = null;
       this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
       this.chooseValidChangeSelection();
@@ -667,12 +679,14 @@ export class AsterlynApp {
       snapshot.branches.find((branch) => branch.current)?.fullName ??
       snapshot.branches[0]?.fullName ??
       null;
+    this.installSnapshotHistory(snapshot);
     this.state.selectedChangeKeys.clear();
     this.state.selectedChange = null;
     this.changeSelectionAnchor = null;
     this.chooseValidChangeSelection();
     this.reconcileWorkingDocument(snapshot);
     this.renderWorkspace();
+    this.loadVisibleCommitDetails();
     if (this.state.activeDocument.kind === "working-diff") {
       void this.loadSelectedDiff();
     }
@@ -713,12 +727,7 @@ export class AsterlynApp {
     this.renderActivityRail();
     if (tool === "branches" && this.state.layout.bottomTool === "branches") {
       this.renderBottomTool();
-      if (
-        this.state.selectedCommit &&
-        this.state.commitDetails?.oid !== this.state.selectedCommit
-      ) {
-        void this.loadSelectedCommitDetails();
-      }
+      this.loadVisibleCommitDetails();
     } else if (tool !== "branches" && this.state.layout.leftTool === tool) {
       this.renderLeftTool();
     }
@@ -927,13 +936,13 @@ export class AsterlynApp {
   private renderBottomTool(): void {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.layout.bottomTool !== "branches") return;
-    const commits = this.filteredHistoryCommits(snapshot);
+    const commits = this.filteredHistoryCommits();
     this.query("#branch-count").textContent = String(snapshot.branches.length);
-    this.query("#history-count").textContent = String(commits.length);
+    this.renderHistoryCount(commits.length);
     this.query("#branch-navigation-body").innerHTML =
       this.renderBranchNavigation(snapshot);
     this.query("#history-navigation-body").innerHTML =
-      this.renderHistoryNavigation(snapshot);
+      this.renderHistoryNavigation();
     this.query("#git-detail-body").innerHTML = this.renderGitDetail(snapshot);
     this.bindBranchEvents();
     this.bindHistoryEvents();
@@ -1176,11 +1185,21 @@ export class AsterlynApp {
     `;
   }
 
-  private renderHistoryNavigation(snapshot: RepositorySnapshot): string {
-    if (snapshot.commits.length === 0) {
-      return this.emptyState("No commits yet", "The first commit will appear here.", "history", true);
-    }
-    const commits = this.filteredHistoryCommits(snapshot);
+  private renderHistoryNavigation(): string {
+    const commits = this.filteredHistoryCommits();
+    const results =
+      this.state.history.status === "loading"
+        ? this.loadingBlock("Loading selected ref history…")
+        : this.state.history.status === "error"
+          ? this.retryState(
+              "Could not load history",
+              this.state.history.error ?? "The selected ref could not be read.",
+              "retry-ref-history",
+              "history",
+            )
+          : this.state.history.commits.length === 0
+            ? `<div class="history-no-results"><strong>No commits on this ref</strong><span>The selected branch or tag has no commit history.</span></div>`
+            : this.renderHistoryRows(commits);
     return `
       <div class="history-navigation">
         <label class="history-filter" for="history-filter">
@@ -1189,7 +1208,7 @@ export class AsterlynApp {
           <span>Ctrl F</span>
         </label>
         <div class="history-results" id="history-results" aria-live="polite">
-          ${this.renderHistoryRows(commits)}
+          ${results}
         </div>
       </div>`;
   }
@@ -1214,10 +1233,10 @@ export class AsterlynApp {
       .join("")}</div>`;
   }
 
-  private filteredHistoryCommits(snapshot: RepositorySnapshot): CommitSummary[] {
+  private filteredHistoryCommits(): CommitSummary[] {
     const query = this.state.historyQuery.trim().toLocaleLowerCase();
-    if (!query) return snapshot.commits;
-    return snapshot.commits.filter((commit) =>
+    if (!query) return this.state.history.commits;
+    return this.state.history.commits.filter((commit) =>
       [
         commit.oid,
         commit.shortOid,
@@ -1242,9 +1261,16 @@ export class AsterlynApp {
       .map(([label, kind]) => {
         const branches = snapshot.branches.filter((branch) => branch.kind === kind);
         if (branches.length === 0) return "";
-        return `<section class="branch-group"><div class="group-header"><span>${label}<b>${branches.length}</b></span></div>${branches
-          .map((branch) => this.branchRow(branch))
-          .join("")}</section>`;
+        const collapsed = this.state.collapsedBranchGroups.has(kind);
+        const groupId = `branch-group-${kind}`;
+        return `<section class="branch-group">
+          <button class="group-header branch-group-toggle" type="button" data-branch-group-toggle="${kind}" aria-expanded="${!collapsed}" aria-controls="${groupId}">
+            <span><span class="branch-group-chevron">${icon("chevron", 12)}</span>${label}<b>${branches.length}</b></span>
+          </button>
+          <div id="${groupId}" role="group" ${collapsed ? "hidden" : ""}>${branches
+            .map((branch) => this.branchRow(branch))
+            .join("")}</div>
+        </section>`;
       })
       .join("");
   }
@@ -1458,6 +1484,12 @@ export class AsterlynApp {
         if (oid) this.selectCommit(oid, true);
       }
     });
+    this.root
+      .querySelector<HTMLButtonElement>("#retry-ref-history")
+      ?.addEventListener("click", () => {
+        const fullName = this.state.selectedBranch;
+        if (fullName) this.selectBranch(fullName);
+      });
     this.bindHistoryRows();
   }
 
@@ -1488,14 +1520,26 @@ export class AsterlynApp {
   }
 
   private renderHistoryResults(): void {
-    const snapshot = this.state.snapshot;
-    if (!snapshot || this.state.layout.bottomTool !== "branches") return;
-    const commits = this.filteredHistoryCommits(snapshot);
+    if (!this.state.snapshot || this.state.layout.bottomTool !== "branches") return;
+    const commits = this.filteredHistoryCommits();
+    if (this.state.history.status !== "ready") {
+      this.renderHistoryCount(commits.length);
+      return;
+    }
     this.query("#history-results").innerHTML = this.renderHistoryRows(commits);
-    const count = this.query("#history-count");
-    count.textContent = commits.length.toString();
-    count.title = `${commits.length} of ${snapshot.commits.length} commits`;
+    this.renderHistoryCount(commits.length);
     this.bindHistoryRows();
+  }
+
+  private renderHistoryCount(filteredCount: number): void {
+    const count = this.query("#history-count");
+    count.textContent =
+      this.state.history.status === "loading"
+        ? "…"
+        : this.state.history.status === "error"
+          ? "!"
+          : filteredCount.toString();
+    count.title = `${filteredCount} of ${this.state.history.commits.length} commits in the selected history`;
   }
 
   private focusHistoryFilter(): void {
@@ -1527,6 +1571,29 @@ export class AsterlynApp {
   }
 
   private bindBranchEvents(): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-branch-group-toggle]")
+      .forEach((button) => {
+        button.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          button.click();
+        });
+        button.addEventListener("click", () => {
+          const kind = button.dataset.branchGroupToggle as BranchSummary["kind"] | undefined;
+          if (!kind) return;
+          const collapsed = new Set(this.state.collapsedBranchGroups);
+          if (collapsed.has(kind)) collapsed.delete(kind);
+          else collapsed.add(kind);
+          this.state.collapsedBranchGroups = collapsed;
+          this.query("#branch-navigation-body").innerHTML =
+            this.renderBranchNavigation(this.state.snapshot!);
+          this.bindBranchEvents();
+          this.root
+            .querySelector<HTMLButtonElement>(`[data-branch-group-toggle="${kind}"]`)
+            ?.focus();
+        });
+      });
     this.root.querySelectorAll<HTMLButtonElement>("[data-branch]").forEach((row) => {
       row.addEventListener("click", () => {
         const fullName = row.dataset.branch;
@@ -1536,7 +1603,7 @@ export class AsterlynApp {
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
         const rows = Array.from(
           this.root.querySelectorAll<HTMLButtonElement>("[data-branch]"),
-        );
+        ).filter((candidate) => !candidate.closest("[hidden]"));
         const current = rows.indexOf(row);
         if (current < 0) return;
         event.preventDefault();
@@ -1553,14 +1620,53 @@ export class AsterlynApp {
   }
 
   private selectBranch(fullName: string, restoreFocus = false): void {
+    const snapshot = this.state.snapshot;
+    if (!snapshot?.branches.some((branch) => branch.fullName === fullName)) return;
     this.state.selectedBranch = fullName;
     this.state.gitDetail = "branch";
+    this.state.selectedCommit = null;
+    this.clearCommitInspection();
+    const pending = beginRefHistory(this.state.history, snapshot.root, fullName);
+    this.state.history = pending.state;
     this.renderBottomTool();
     if (restoreFocus) {
       const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
       Array.from(rows)
         .find((row) => row.dataset.branch === fullName)
         ?.focus();
+    }
+    void this.loadRefHistory(pending.request);
+  }
+
+  private async loadRefHistory(request: RefHistoryRequest): Promise<void> {
+    try {
+      const commits = await bridge.readRefHistory(request.root, request.fullName);
+      const next = completeRefHistory(this.state.history, request, commits);
+      if (
+        next === this.state.history ||
+        this.state.snapshot?.root !== request.root ||
+        this.state.selectedBranch !== request.fullName
+      ) {
+        return;
+      }
+      this.state.history = next;
+      this.state.selectedCommit = commits[0]?.oid ?? null;
+      this.clearCommitInspection();
+      this.renderBottomTool();
+    } catch (error) {
+      const next = failRefHistory(this.state.history, request, errorMessage(error));
+      if (
+        next === this.state.history ||
+        this.state.snapshot?.root !== request.root ||
+        this.state.selectedBranch !== request.fullName
+      ) {
+        return;
+      }
+      this.state.history = next;
+      this.state.selectedCommit = null;
+      this.clearCommitInspection();
+      this.renderBottomTool();
+      this.setStatus("Selected ref history could not be loaded", "warning");
     }
   }
 
@@ -1813,6 +1919,18 @@ export class AsterlynApp {
     }
   }
 
+  private loadVisibleCommitDetails(): void {
+    if (
+      this.state.layout.bottomTool === "branches" &&
+      this.state.gitDetail === "commit" &&
+      this.state.selectedCommit &&
+      !this.state.commitDetailsLoading &&
+      this.state.commitDetails?.oid !== this.state.selectedCommit
+    ) {
+      void this.loadSelectedCommitDetails();
+    }
+  }
+
   private async loadSelectedCommitDetails(): Promise<void> {
     const snapshot = this.state.snapshot;
     const oid = this.state.selectedCommit;
@@ -2022,6 +2140,34 @@ export class AsterlynApp {
     this.state.commitPatchError = null;
   }
 
+  private installSnapshotHistory(
+    snapshot: RepositorySnapshot,
+    preferTip = false,
+  ): void {
+    const previousSource = this.state.history.source;
+    const previousRoot = this.state.history.root;
+    const previousSelected = this.state.selectedCommit;
+    this.state.history = installHeadHistory(
+      this.state.history,
+      snapshot.root,
+      snapshot.commits,
+    );
+    const selected =
+      !preferTip && previousSource?.kind === "head"
+        ? snapshot.commits.find((commit) => commit.oid === previousSelected)?.oid ??
+          snapshot.commits[0]?.oid ??
+          null
+        : snapshot.commits[0]?.oid ?? null;
+    this.state.selectedCommit = selected;
+    if (
+      previousRoot !== snapshot.root ||
+      previousSource?.kind !== "head" ||
+      previousSelected !== selected
+    ) {
+      this.clearCommitInspection();
+    }
+  }
+
   private clearWorkingDiff(): void {
     this.diffGeneration += 1;
     this.state.workingPatch = null;
@@ -2081,7 +2227,7 @@ export class AsterlynApp {
         ? this.branchInspector(branch, snapshot)
         : this.inspectorPlaceholder();
     }
-    const commit = selectedCommit(snapshot, this.state.selectedCommit);
+    const commit = selectedCommit(this.state.history.commits, this.state.selectedCommit);
     if (!commit) return this.inspectorPlaceholder();
     const details =
       this.state.commitDetails?.oid === commit.oid ? this.state.commitDetails : null;
@@ -2146,6 +2292,11 @@ export class AsterlynApp {
         ? await bridge.stagePaths(snapshot.root, paths)
         : await bridge.unstagePaths(snapshot.root, paths);
       this.state.snapshot = next;
+      this.state.selectedBranch =
+        next.branches.find((branch) => branch.current)?.fullName ??
+        next.branches[0]?.fullName ??
+        null;
+      this.installSnapshotHistory(next);
       const sourcePrefix = stage ? "worktree:" : "index:";
       const migrated = new Set(this.state.selectedChangeKeys);
       for (const path of paths) {
@@ -2168,6 +2319,7 @@ export class AsterlynApp {
       this.chooseValidChangeSelection();
       this.reconcileWorkingDocument(next);
       this.renderWorkspace();
+      this.loadVisibleCommitDetails();
       if (this.state.activeDocument.kind === "working-diff") {
         void this.loadSelectedDiff();
       }
@@ -2194,11 +2346,15 @@ export class AsterlynApp {
       const next = await bridge.commitChanges(snapshot.root, message);
       this.state.snapshot = next;
       this.state.commitMessage = "";
-      this.state.selectedCommit = next.commits[0]?.oid ?? null;
-      this.clearCommitInspection();
+      this.state.selectedBranch =
+        next.branches.find((branch) => branch.current)?.fullName ??
+        next.branches[0]?.fullName ??
+        null;
+      this.installSnapshotHistory(next, true);
       this.chooseValidChangeSelection();
       this.reconcileWorkingDocument(next);
       this.renderWorkspace();
+      this.loadVisibleCommitDetails();
       if (this.state.activeDocument.kind === "working-diff") {
         void this.loadSelectedDiff();
       }
@@ -2276,6 +2432,7 @@ export class AsterlynApp {
         next.branches.find((branch) => branch.current)?.fullName ??
         next.branches[0]?.fullName ??
         null;
+      this.installSnapshotHistory(next, true);
       this.state.selectedChangeKeys.clear();
       this.state.selectedChange = null;
       this.changeSelectionAnchor = null;
@@ -2283,6 +2440,7 @@ export class AsterlynApp {
       this.state.activeDocument = { kind: "welcome" };
       this.clearWorkingDiff();
       this.renderWorkspace();
+      this.loadVisibleCommitDetails();
       void this.loadProjectFiles(next.root, generation);
       pendingRoot = next.root;
       succeeded = true;
@@ -2737,10 +2895,10 @@ function changeExists(
 }
 
 function selectedCommit(
-  snapshot: RepositorySnapshot,
+  commits: CommitSummary[],
   oid: string | null,
 ): CommitSummary | null {
-  return snapshot.commits.find((commit) => commit.oid === oid) ?? snapshot.commits[0] ?? null;
+  return commits.find((commit) => commit.oid === oid) ?? commits[0] ?? null;
 }
 
 function selectedBranch(

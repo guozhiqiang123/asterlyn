@@ -3,6 +3,7 @@ import type {
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
+  CommitSummary,
   DiffResult,
   RepositorySnapshot,
   UntrackedScan,
@@ -116,6 +117,17 @@ export const demoSnapshot: RepositorySnapshot = {
       oid: "54978419e233f8b5f53c55197e2742a3440ef894",
       current: false,
       kind: "remote",
+      upstream: null,
+      tracking: null,
+      committedAt: 1788837600,
+      subject: "docs: establish Asterlyn roadmap and architecture",
+    },
+    {
+      fullName: "refs/tags/v0.1.0",
+      name: "v0.1.0",
+      oid: "54978419e233f8b5f53c55197e2742a3440ef894",
+      current: false,
+      kind: "tag",
       upstream: null,
       tracking: null,
       committedAt: 1788837600,
@@ -267,11 +279,38 @@ export function demoTrackedSnapshot(
   snapshot: RepositorySnapshot,
 ): RepositorySnapshot {
   const next = structuredClone(snapshot);
+  next.commits = demoHistoryFromOid(snapshot, snapshot.branch.oid);
   next.changes = next.changes.filter(
     (change) => change.worktreeStatus !== "untracked",
   );
   next.untrackedState = "pending";
   return next;
+}
+
+export function demoCommitHistory(
+  snapshot: RepositorySnapshot,
+  fullName: string,
+): CommitSummary[] {
+  const reference = snapshot.branches.find((branch) => branch.fullName === fullName);
+  if (!reference) throw new Error("The selected ref no longer exists.");
+  return demoHistoryFromOid(snapshot, reference.oid);
+}
+
+function demoHistoryFromOid(
+  snapshot: RepositorySnapshot,
+  tip: string | null,
+): CommitSummary[] {
+  if (!tip) return [];
+  const byOid = new Map(snapshot.commits.map((commit) => [commit.oid, commit]));
+  const reachable = new Set<string>();
+  const pending = [tip];
+  while (pending.length > 0) {
+    const oid = pending.pop();
+    if (!oid || reachable.has(oid)) continue;
+    reachable.add(oid);
+    pending.push(...(byOid.get(oid)?.parents ?? []));
+  }
+  return structuredClone(snapshot.commits.filter((commit) => reachable.has(commit.oid)));
 }
 
 export function demoUntrackedScan(

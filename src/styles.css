@@ -908,6 +908,32 @@ textarea:focus-visible {
   font-size: 9px;
 }
 
+.branch-group-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  font: inherit;
+  text-align: left;
+}
+
+.branch-group-toggle > span {
+  display: flex;
+  align-items: center;
+}
+
+.branch-group-chevron {
+  display: inline-grid;
+  width: 16px;
+  place-items: center;
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+}
+
+.branch-group-toggle[aria-expanded="true"] .branch-group-chevron {
+  transform: rotate(90deg);
+}
+
 .group-action {
   padding: 3px 5px;
   border: 0;
@@ -972,7 +998,10 @@ textarea:focus-visible {
   background: #214283;
 }
 
-.change-row:focus-visible {
+.change-row:focus-visible,
+.history-row:focus-visible,
+.branch-row:focus-visible,
+.branch-group-toggle:focus-visible {
   outline: 1px solid #8ab4ff;
   outline-offset: -1px;
 }

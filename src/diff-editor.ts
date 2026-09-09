@@ -26,6 +26,7 @@ import {
   type SourceDiffRow,
 } from "./diff-presentation";
 import { attachSplitter } from "./workbench/splitter";
+import { linkScrollElements } from "./workbench/linked-scroll";
 
 const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
   const builder = new RangeSetBuilder<Decoration>();
@@ -162,11 +163,11 @@ export class DiffEditor {
     if (!this.parent) return;
     this.render();
     window.requestAnimationFrame(() => {
-      for (const [index, view] of this.views.entries()) {
+      for (const view of this.views) {
         const maximum = Math.max(0, view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight);
         view.scrollDOM.scrollTop = maximum * scroll.topRatio;
         view.scrollDOM.scrollLeft =
-          previousLayout === this.presentation.layout ? (scroll.left[index] ?? 0) : 0;
+          previousLayout === this.presentation.layout ? scroll.left : 0;
       }
     });
   }
@@ -227,7 +228,7 @@ export class DiffEditor {
     const oldView = this.createView(oldHost, split.oldDocument, split.rows, "old");
     const newView = this.createView(newHost, split.newDocument, split.rows, "new");
     this.views.push(oldView, newView);
-    this.scrollDispose = this.synchronizeVerticalScroll(oldView, newView);
+    this.scrollDispose = linkScrollElements(oldView.scrollDOM, newView.scrollDOM);
   }
 
   private createPane(
@@ -298,35 +299,12 @@ export class DiffEditor {
     });
   }
 
-  private synchronizeVerticalScroll(
-    first: EditorView,
-    second: EditorView,
-  ): () => void {
-    let synchronizing = false;
-    const mirror = (source: HTMLElement, target: HTMLElement) => {
-      if (synchronizing) return;
-      synchronizing = true;
-      target.scrollTop = source.scrollTop;
-      window.requestAnimationFrame(() => {
-        synchronizing = false;
-      });
-    };
-    const mirrorFirst = () => mirror(first.scrollDOM, second.scrollDOM);
-    const mirrorSecond = () => mirror(second.scrollDOM, first.scrollDOM);
-    first.scrollDOM.addEventListener("scroll", mirrorFirst);
-    second.scrollDOM.addEventListener("scroll", mirrorSecond);
-    return () => {
-      first.scrollDOM.removeEventListener("scroll", mirrorFirst);
-      second.scrollDOM.removeEventListener("scroll", mirrorSecond);
-    };
-  }
-
-  private captureScroll(): { topRatio: number; left: number[] } {
+  private captureScroll(): { topRatio: number; left: number } {
     const first = this.views[0]?.scrollDOM;
     const maximum = first ? Math.max(0, first.scrollHeight - first.clientHeight) : 0;
     return {
       topRatio: first && maximum > 0 ? first.scrollTop / maximum : 0,
-      left: this.views.map((view) => view.scrollDOM.scrollLeft),
+      left: first?.scrollLeft ?? 0,
     };
   }
 

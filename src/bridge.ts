@@ -3,6 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   demoCommitDetails,
   demoCommitDiff,
+  demoCommitHistory,
   demoCreateBranch,
   demoDiff,
   demoFetchRemote,
@@ -19,6 +20,7 @@ import type {
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
+  CommitSummary,
   DiffResult,
   ProjectFileList,
   RepositorySnapshot,
@@ -68,6 +70,20 @@ export const bridge = {
       return demoTrackedSnapshot(browserSnapshot);
     }
     return invoke<RepositorySnapshot>("open_repository", { path });
+  },
+
+  async readRefHistory(
+    repositoryRoot: string,
+    fullName: string,
+  ): Promise<CommitSummary[]> {
+    if (!isTauri) {
+      await demoDelay(180);
+      return demoCommitHistory(browserSnapshot, fullName);
+    }
+    return invoke<CommitSummary[]>("read_ref_history", {
+      repositoryRoot,
+      fullName,
+    });
   },
 
   async scanUntracked(
@@ -234,6 +250,13 @@ export const bridge = {
         })),
       );
       next.branch.ahead += 1;
+      next.branch.oid = oid;
+      const currentBranch = next.branches.find((branch) => branch.current);
+      if (currentBranch) {
+        currentBranch.oid = oid;
+        currentBranch.committedAt = next.commits[0]?.authoredAt ?? currentBranch.committedAt;
+        currentBranch.subject = next.commits[0]?.subject ?? currentBranch.subject;
+      }
       browserSnapshot = next;
       return demoTrackedSnapshot(next);
     }
