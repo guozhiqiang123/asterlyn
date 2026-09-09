@@ -25,4 +25,10 @@ export const windowControls = {
   onResized(handler: () => void): Promise<() => void> {
     return nativeWindow?.onResized(handler) ?? Promise.resolve(() => undefined);
   },
+
+  onCloseRequested(
+    handler: (event: { preventDefault(): void }) => void | Promise<void>,
+  ): Promise<() => void> {
+    return nativeWindow?.onCloseRequested(handler) ?? Promise.resolve(() => undefined);
+  },
 };

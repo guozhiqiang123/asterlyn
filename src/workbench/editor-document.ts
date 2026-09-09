@@ -1,8 +1,16 @@
 import type { ChangeSelection } from "../models";
 
+export interface ProjectFileDocument {
+  kind: "project-file";
+  repositoryRoot: string;
+  repositoryId: string;
+  path: string;
+  workspacePath: string;
+}
+
 export type EditorDocument =
   | { kind: "welcome" }
-  | { kind: "project-file"; repositoryRoot: string; path: string }
+  | ProjectFileDocument
   | {
       kind: "working-diff";
       repositoryRoot: string;
@@ -21,7 +29,7 @@ export function editorDocumentKey(document: EditorDocument): string {
     case "welcome":
       return "welcome";
     case "project-file":
-      return `file\0${document.repositoryRoot}\0${document.path}`;
+      return `file\0${document.repositoryRoot}\0${document.repositoryId}\0${document.path}`;
     case "working-diff":
       return `working\0${document.repositoryRoot}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":

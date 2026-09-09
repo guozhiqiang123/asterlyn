@@ -25,6 +25,8 @@ import type {
   HistoryPage,
   ProjectFileList,
   RepositorySnapshot,
+  SaveTextFileResult,
+  TextFileSnapshot,
   UntrackedScan,
 } from "./models";
 
@@ -33,6 +35,14 @@ let browserSnapshot = structuredClone(demoSnapshot);
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
 const cancelledDemoRemoteOperations = new Set<string>();
+const demoTextFiles = new Map<string, { content: string; utf8Bom: boolean; revision: number }>([
+  ["README.md", { content: "# Asterlyn\n\nA lightweight developer workspace.\n", utf8Bom: false, revision: 1 }],
+  ["package.json", { content: '{\n  "name": "asterlyn"\n}\n', utf8Bom: false, revision: 1 }],
+  ["src/app.ts", { content: "export class AsterlynApp {\r\n  // Browser demo\n}\r\n", utf8Bom: false, revision: 1 }],
+  ["src/bridge.ts", { content: "export const bridge = {};\n", utf8Bom: false, revision: 1 }],
+  ["src/diff-editor.ts", { content: "export class DiffEditor {}\n", utf8Bom: false, revision: 1 }],
+  ["src/styles.css", { content: ":root {\n  color-scheme: dark;\n}\n", utf8Bom: false, revision: 1 }],
+]);
 
 export type DirectoryChoice =
   | { kind: "selected"; path: string }
@@ -151,6 +161,15 @@ export const bridge = {
         "src/styles.css",
         ...browserSnapshot.changes.map((change) => change.path),
       ];
+      for (const path of paths) {
+        if (!demoTextFiles.has(path)) {
+          demoTextFiles.set(path, {
+            content: `Demo content for ${path}\n`,
+            utf8Bom: false,
+            revision: 1,
+          });
+        }
+      }
       return {
         root: repositoryRoot,
         paths: Array.from(new Set(paths)).sort(),
@@ -164,6 +183,75 @@ export const bridge = {
       };
     }
     return invoke<ProjectFileList>("list_project_files", { repositoryRoot });
+  },
+
+  async readTextFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+  ): Promise<TextFileSnapshot> {
+    if (!isTauri) {
+      await demoDelay(90);
+      const file = demoTextFiles.get(path);
+      if (repositoryId !== "." || !file) {
+        throw { kind: "notAuthorized", message: "Select a current project file." };
+      }
+      return {
+        workspacePath: path,
+        content: file.content,
+        utf8Bom: file.utf8Bom,
+        revision: demoTextRevision(path, file),
+        byteLength: new TextEncoder().encode(file.content).length + (file.utf8Bom ? 3 : 0),
+      };
+    }
+    return invoke<TextFileSnapshot>("read_text_file", {
+      repositoryRoot,
+      repositoryId,
+      path,
+    });
+  },
+
+  async saveTextFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+    expectedRevision: string,
+    content: string,
+    utf8Bom: boolean,
+    requestId: string,
+  ): Promise<SaveTextFileResult> {
+    if (!isTauri) {
+      await demoDelay(140);
+      const file = demoTextFiles.get(path);
+      if (repositoryId !== "." || !file) {
+        throw { kind: "notAuthorized", message: "Select a current project file." };
+      }
+      const currentRevision = demoTextRevision(path, file);
+      if (file.content !== content || file.utf8Bom !== utf8Bom) {
+        if (expectedRevision !== currentRevision) {
+          throw { kind: "conflict", currentRevision };
+        }
+        file.content = content;
+        file.utf8Bom = utf8Bom;
+        file.revision += 1;
+      }
+      return {
+        workspacePath: path,
+        revision: demoTextRevision(path, file),
+        byteLength: new TextEncoder().encode(content).length + (utf8Bom ? 3 : 0),
+        requestId,
+        alreadySaved: expectedRevision !== currentRevision,
+      };
+    }
+    return invoke<SaveTextFileResult>("save_text_file", {
+      repositoryRoot,
+      repositoryId,
+      path,
+      expectedRevision,
+      content,
+      utf8Bom,
+      requestId,
+    });
   },
 
   async readCommitDetails(
@@ -399,4 +487,11 @@ function remoteOperationKey(repositoryRoot: string, operationId: string): string
 
 function demoDelay(milliseconds = 160): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function demoTextRevision(
+  path: string,
+  file: { content: string; utf8Bom: boolean; revision: number },
+): string {
+  return `demo:${path}:${file.revision}:${file.utf8Bom ? "bom" : "plain"}`;
 }

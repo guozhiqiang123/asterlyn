@@ -149,6 +149,22 @@ export interface ProjectFile {
   workspacePath: string;
 }
 
+export interface TextFileSnapshot {
+  workspacePath: string;
+  content: string;
+  utf8Bom: boolean;
+  revision: string;
+  byteLength: number;
+}
+
+export interface SaveTextFileResult {
+  workspacePath: string;
+  revision: string;
+  byteLength: number;
+  requestId: string;
+  alreadySaved: boolean;
+}
+
 export type GitRootKind = "main" | "submodule";
 
 export interface GitRootDescriptor {

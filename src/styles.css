@@ -2161,12 +2161,68 @@ textarea:focus-visible {
   max-width: 280px;
   align-items: center;
   gap: 7px;
-  padding: 0 12px;
+  padding: 0 4px 0 10px;
   border-right: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.editor-tab-target {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  align-self: stretch;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.editor-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-tab-close {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  place-items: center;
+}
+
+.editor-tab:hover .editor-tab-close,
+.editor-tab.active .editor-tab-close,
+.editor-tab.dirty .editor-tab-close,
+.editor-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.editor-tab-close:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.editor-dirty-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #79a8ff;
 }
 
 .editor-tab.active {
@@ -2269,6 +2325,24 @@ textarea:focus-visible {
 
 .content-body.diff-surface {
   overflow: hidden;
+}
+
+.content-body.text-surface {
+  overflow: hidden;
+}
+
+.text-save-state {
+  color: var(--text-faint);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.text-save-state.dirty {
+  color: #a8c7fa;
+}
+
+.text-save-state.conflict {
+  color: #ef9a9a;
 }
 
 .diff-surface.split-diff {

@@ -1,14 +1,40 @@
 import { bridge } from "./bridge";
 import { BRAND } from "./brand";
 import { DiffEditor } from "./diff-editor";
+import { TextEditor } from "./text-editor";
 import { icon } from "./icons";
 import { preferredRemote, remotePolicy } from "./remote-policy";
 import { windowControls } from "./window-controls";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
+  editorDocumentKey,
   editorDocumentContentKey,
   type EditorDocument,
+  type ProjectFileDocument,
 } from "./workbench/editor-document";
+import {
+  activatePreview,
+  activateTextTab,
+  activateWelcome,
+  activeEditorDocument,
+  activeTextTab,
+  beginTextSave,
+  captureTextContent,
+  closePreview,
+  closeTextTab,
+  completeTextLoad,
+  completeTextSave,
+  createEditorSession,
+  dirtyTextTabs,
+  failTextLoad,
+  failTextSave,
+  isTextTabDirty,
+  markTextEdited,
+  openTextDocument,
+  textTab,
+  type EditorSession,
+  type TextTabState,
+} from "./workbench/editor-session";
 import {
   WORKBENCH_LAYOUT_DEFAULTS,
   WORKBENCH_LIMITS,
@@ -114,7 +140,7 @@ type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
 interface AppState {
   snapshot: RepositorySnapshot | null;
   layout: WorkbenchLayout;
-  activeDocument: EditorDocument;
+  editor: EditorSession;
   gitDetail: "branch" | "commit";
   projectFiles: string[];
   repositoryFiles: ProjectFile[];
@@ -192,10 +218,11 @@ interface AppState {
 
 export class AsterlynApp {
   private readonly diffEditor = new DiffEditor();
+  private readonly textEditor = new TextEditor();
   private readonly state: AppState = {
     snapshot: null,
     layout: loadWorkbenchLayout(window.localStorage),
-    activeDocument: { kind: "welcome" },
+    editor: createEditorSession(),
     gitDetail: "commit",
     projectFiles: [],
     repositoryFiles: [],
@@ -277,6 +304,9 @@ export class AsterlynApp {
   private historyTopRefreshArmed = false;
   private historyTopRefreshAt = 0;
   private mountedEditorKey: string | null = null;
+  private mountedTextTabId: string | null = null;
+  private textSaveSequence = 0;
+  private forceWindowClose = false;
   private repositoryChooserOpen = false;
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
@@ -537,6 +567,13 @@ export class AsterlynApp {
         event.preventDefault();
         void this.refresh();
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        const tab = activeTextTab(this.state.editor);
+        if (tab) {
+          event.preventDefault();
+          void this.saveTextTab(tab.id);
+        }
+      }
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "f" &&
@@ -574,6 +611,12 @@ export class AsterlynApp {
         if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
       }
     });
+    window.addEventListener("beforeunload", (event) => {
+      this.captureMountedTextEditor();
+      if (dirtyTextTabs(this.state.editor).length === 0) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
   }
 
   private bindWindowControls(): void {
@@ -589,13 +632,28 @@ export class AsterlynApp {
       });
     });
     this.query("#window-close").addEventListener("click", () => {
-      void this.runWindowAction(() => windowControls.close());
+      void this.requestWindowClose();
     });
 
     this.refreshMaximizeControl();
     void windowControls
       .onResized(() => this.refreshMaximizeControl())
       .catch((error) => this.showError(error));
+    void windowControls
+      .onCloseRequested((event) => {
+        if (this.forceWindowClose) return;
+        this.captureMountedTextEditor();
+        if (dirtyTextTabs(this.state.editor).length === 0) return;
+        event.preventDefault();
+        void this.requestWindowClose();
+      })
+      .catch((error) => this.showError(error));
+  }
+
+  private async requestWindowClose(): Promise<void> {
+    if (!(await this.saveDirtyTabsBefore("closing Asterlyn"))) return;
+    this.forceWindowClose = true;
+    await this.runWindowAction(() => windowControls.close());
   }
 
   private async runWindowAction(action: () => Promise<void>): Promise<void> {
@@ -620,6 +678,14 @@ export class AsterlynApp {
   }
 
   private async openRepository(path: string): Promise<void> {
+    const previousRoot = this.state.snapshot?.root ?? null;
+    if (
+      previousRoot !== null &&
+      previousRoot !== path &&
+      !(await this.saveDirtyTabsBefore("switching repositories"))
+    ) {
+      return;
+    }
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
     void this.cancelActiveRemoteOperation();
@@ -628,7 +694,14 @@ export class AsterlynApp {
     try {
       const snapshot = await bridge.openRepository(path);
       if (generation !== this.requestGeneration) return;
+      const repositoryChanged = previousRoot !== null && previousRoot !== snapshot.root;
       window.localStorage.setItem(RECENT_REPOSITORY_KEY, snapshot.root);
+      if (repositoryChanged) {
+        this.captureMountedTextEditor();
+        this.state.editor = createEditorSession();
+      } else {
+        this.state.editor = closePreview(this.state.editor);
+      }
       this.state.snapshot = snapshot;
       this.state.changeQuery = "";
       this.state.selectedChangeKeys.clear();
@@ -638,7 +711,6 @@ export class AsterlynApp {
       this.closeHistoryDialog();
       this.resetHistoryFilters();
       this.state.gitDetail = "commit";
-      this.state.activeDocument = { kind: "welcome" };
       this.clearWorkingDiff();
       this.state.projectFiles = [];
       this.state.repositoryFiles = [];
@@ -772,6 +844,9 @@ export class AsterlynApp {
     if (!actionState.enabled) return;
     const remote = kind === "push" ? policy.pushRemote : policy.selectedRemote;
     if (kind !== "pull" && !remote) return;
+    if (kind === "pull" && !(await this.saveDirtyTabsBefore("pulling changes"))) {
+      return;
+    }
 
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
@@ -798,6 +873,14 @@ export class AsterlynApp {
             : await bridge.pushCurrent(snapshot.root, remote!.name, operationId);
       if (generation !== this.requestGeneration) return;
       this.acceptRemoteSnapshot(next);
+      if (kind === "pull") {
+        this.captureMountedTextEditor();
+        if (dirtyTextTabs(this.state.editor).length === 0) {
+          this.state.editor = createEditorSession();
+        }
+        this.renderLeftTool();
+        this.renderEditor();
+      }
       pendingRoot = next.root;
       succeeded = true;
     } catch (error) {
@@ -838,7 +921,7 @@ export class AsterlynApp {
     this.reconcileWorkingDocument(snapshot);
     this.renderWorkspace();
     this.loadVisibleCommitDetails();
-    if (this.state.activeDocument.kind === "working-diff") {
+    if (this.activeDocument().kind === "working-diff") {
       void this.loadSelectedDiff();
     }
     void this.loadProjectFiles(snapshot.root);
@@ -1037,7 +1120,10 @@ export class AsterlynApp {
     this.query("#bottom-tool").toggleAttribute("hidden", !bottomOpen);
     this.query("#bottom-splitter").toggleAttribute("hidden", !bottomOpen);
     if (persist) this.persistWorkbenchLayout();
-    window.requestAnimationFrame(() => this.diffEditor.requestMeasure());
+    window.requestAnimationFrame(() => {
+      this.diffEditor.requestMeasure();
+      this.textEditor.requestMeasure();
+    });
   }
 
   private renderWorkspace(): void {
@@ -1178,7 +1264,7 @@ export class AsterlynApp {
         ? '<div class="project-tree-notice"><span class="spinner"></span><span>Refreshing files…</span></div>'
         : "",
       this.state.projectFilesTruncated
-        ? '<div class="project-tree-notice warning"><span>!</span><span>Showing the first 5,000 tracked paths.</span></div>'
+        ? '<div class="project-tree-notice warning"><span>!</span><span>Showing the first 5,000 tracked or non-ignored paths.</span></div>'
         : "",
       this.state.projectFilesError
         ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(this.state.projectFilesError)}</span></div>`
@@ -1191,9 +1277,9 @@ export class AsterlynApp {
     if (node.kind === "directory") {
       return `<details class="project-directory" ${depth < 2 ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span>${escapeHtml(node.name)}</span></summary><div role="group">${node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")}</div></details>`;
     }
+    const activeDocument = this.activeDocument();
     const selected =
-      this.state.activeDocument.kind === "project-file" &&
-      this.state.activeDocument.path === node.path;
+      activeDocument.kind === "project-file" && activeDocument.workspacePath === node.path;
     return `<button class="project-file-row ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-file="${escapeAttribute(node.path)}" aria-selected="${selected}" title="${escapeAttribute(node.path)}"><span class="project-file-glyph">${fileGlyph(node.name)}</span><span>${escapeHtml(node.name)}</span></button>`;
   }
 
@@ -1210,15 +1296,59 @@ export class AsterlynApp {
         const path = row.dataset.projectFile;
         const current = this.state.snapshot;
         if (!path || !current) return;
-        this.state.activeDocument = {
-          kind: "project-file",
-          repositoryRoot: current.root,
-          path,
-        };
-        this.renderLeftTool();
-        this.renderEditor();
+        const file = this.state.repositoryFiles.find(
+          (candidate) => candidate.workspacePath === path,
+        ) ?? { repositoryId: ".", path, workspacePath: path };
+        void this.openProjectFile(current.root, file);
       });
     });
+  }
+
+  private async openProjectFile(
+    repositoryRoot: string,
+    file: ProjectFile,
+  ): Promise<void> {
+    this.captureMountedTextEditor();
+    const document: ProjectFileDocument = {
+      kind: "project-file",
+      repositoryRoot,
+      repositoryId: file.repositoryId,
+      path: file.path,
+      workspacePath: file.workspacePath,
+    };
+    const opened = openTextDocument(this.state.editor, document);
+    if (opened.limitReached) {
+      this.setStatus("Close a text tab before opening another file", "warning");
+      return;
+    }
+    this.state.editor = opened.session;
+    this.renderLeftTool();
+    this.renderEditor();
+    if (!opened.needsLoad || !opened.tabId || opened.loadEpoch === null) return;
+
+    try {
+      const snapshot = await bridge.readTextFile(
+        repositoryRoot,
+        file.repositoryId,
+        file.path,
+      );
+      this.state.editor = completeTextLoad(
+        this.state.editor,
+        opened.tabId,
+        opened.loadEpoch,
+        snapshot,
+      );
+      this.renderEditor();
+    } catch (error) {
+      this.state.editor = failTextLoad(
+        this.state.editor,
+        opened.tabId,
+        opened.loadEpoch,
+        errorMessage(error),
+      );
+      this.renderEditor();
+      this.showError(error);
+    }
   }
 
   private renderChangeNavigation(snapshot: RepositorySnapshot): string {
@@ -2227,11 +2357,11 @@ export class AsterlynApp {
       ? changeSelectionFromKey(primaryKey)
       : null;
     if (this.state.selectedChange && this.state.snapshot) {
-      this.state.activeDocument = {
+      this.activateDiffPreview({
         kind: "working-diff",
         repositoryRoot: this.state.snapshot.root,
         selection: { ...this.state.selectedChange },
-      };
+      });
       this.clearWorkingDiff();
       this.state.workingPatchLoading = true;
     }
@@ -3012,18 +3142,19 @@ export class AsterlynApp {
   private renderEditor(): void {
     const snapshot = this.state.snapshot;
     if (!snapshot) return;
-    const document = this.state.activeDocument;
+    const document = this.activeDocument();
     const header = this.query("#content-header");
     const tabbar = this.query("#editor-tabbar");
+    tabbar.innerHTML = this.renderEditorTabs(document);
+    this.bindEditorTabEvents();
 
     if (document.kind === "welcome") {
-      tabbar.innerHTML = '<span class="editor-tab active">Welcome</span>';
       header.innerHTML = this.contentHeading(`${BRAND.name} Editor`, "Workspace");
       this.showEditorHtml(
         "welcome",
         this.emptyState(
           "Editor workspace ready",
-          "Choose a changed or committed file to open its Diff. File editing arrives in Stage 3 without changing this layout.",
+          "Open a project file to edit it, or choose a changed or committed file to inspect its Diff.",
           "folder",
         ),
       );
@@ -3031,22 +3162,50 @@ export class AsterlynApp {
     }
 
     if (document.kind === "project-file") {
-      tabbar.innerHTML = `<span class="editor-tab active">${escapeHtml(basename(document.path))}</span>`;
-      header.innerHTML = this.contentHeading(basename(document.path), document.path);
-      this.showEditorHtml(
-        editorDocumentContentKey(document, "navigation-placeholder-v1"),
-        this.emptyState(
-          "File navigation is connected",
-          "This read-only project tree establishes the editor route. File loading, editing, save, and recovery belong to Stage 3.",
-          "folder",
-        ),
-      );
+      const tab = activeTextTab(this.state.editor);
+      if (!tab) {
+        this.state.editor = activateWelcome(this.state.editor);
+        this.renderEditor();
+        return;
+      }
+      header.innerHTML = `
+        ${this.contentHeading(basename(document.workspacePath), document.workspacePath)}
+        ${this.textEditorActions(tab)}
+      `;
+      this.bindTextEditorActions(tab);
+      if (tab.status === "loading") {
+        this.showEditorHtml(
+          editorDocumentContentKey(document, `loading:${tab.loadEpoch}`),
+          this.loadingBlock("Loading text file…"),
+        );
+      } else if (tab.status === "error") {
+        this.showEditorHtml(
+          editorDocumentContentKey(document, `error:${tab.loadEpoch}:${tab.error ?? "unknown"}`),
+          this.retryState(
+            "Could not open text file",
+            tab.error ?? "The file could not be loaded.",
+            "retry-text-file",
+            "folder",
+          ),
+        );
+        this.query("#retry-text-file").addEventListener("click", () => {
+          void this.openProjectFile(document.repositoryRoot, {
+            repositoryId: document.repositoryId,
+            path: document.path,
+            workspacePath: document.workspacePath,
+          });
+        });
+      } else {
+        this.mountTextEditor(
+          editorDocumentContentKey(document, `text:${tab.loadEpoch}`),
+          tab,
+        );
+      }
       return;
     }
 
     if (document.kind === "working-diff") {
       const selected = document.selection;
-      tabbar.innerHTML = `<span class="editor-tab active">${escapeHtml(basename(selected.path))} <small>Diff</small></span>`;
       header.innerHTML = `
         ${this.contentHeading(basename(selected.path), selected.path)}
         <div class="header-actions">${this.diffControls()}<span class="scope-pill">${selected.staged ? "Staged" : "Working tree"}</span></div>
@@ -3088,7 +3247,6 @@ export class AsterlynApp {
 
     const commit = snapshot.commits.find((item) => item.oid === document.oid);
     const shortOid = commit?.shortOid ?? document.oid.slice(0, 8);
-    tabbar.innerHTML = `<span class="editor-tab active">${escapeHtml(basename(document.path))} <small>${escapeHtml(shortOid)}</small></span>`;
     header.innerHTML = `
       ${this.contentHeading(basename(document.path), document.path)}
       <div class="header-actions">${this.diffControls()}<code class="oid">${escapeHtml(shortOid)}</code></div>
@@ -3128,9 +3286,13 @@ export class AsterlynApp {
 
   private showEditorHtml(key: string, html: string): void {
     if (this.mountedEditorKey === key) return;
+    this.captureMountedTextEditor();
+    this.textEditor.destroy();
+    this.mountedTextTabId = null;
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     body.classList.remove("diff-surface");
+    body.classList.remove("text-surface");
     body.innerHTML = html;
     this.mountedEditorKey = key;
   }
@@ -3140,12 +3302,249 @@ export class AsterlynApp {
       this.diffEditor.requestMeasure();
       return;
     }
+    this.captureMountedTextEditor();
+    this.textEditor.destroy();
+    this.mountedTextTabId = null;
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     body.innerHTML = "";
+    body.classList.remove("text-surface");
     body.classList.add("diff-surface");
     this.diffEditor.mount(body, patch, this.diffPresentation());
     this.mountedEditorKey = key;
+  }
+
+  private mountTextEditor(key: string, tab: TextTabState): void {
+    if (this.mountedEditorKey === key && this.mountedTextTabId === tab.id) {
+      this.textEditor.requestMeasure();
+      return;
+    }
+    this.captureMountedTextEditor();
+    this.diffEditor.destroy();
+    this.textEditor.destroy();
+    const body = this.query("#content-body");
+    body.innerHTML = "";
+    body.classList.remove("diff-surface");
+    body.classList.add("text-surface");
+    this.mountedTextTabId = tab.id;
+    this.textEditor.mount(body, tab.content, () => {
+      if (this.mountedTextTabId !== tab.id) return;
+      const previous = textTab(this.state.editor, tab.id);
+      this.state.editor = markTextEdited(this.state.editor, tab.id);
+      if (previous && (!isTextTabDirty(previous) || previous.conflict)) {
+        this.renderEditor();
+      }
+    });
+    this.mountedEditorKey = key;
+  }
+
+  private renderEditorTabs(document: EditorDocument): string {
+    const textTabs = this.state.editor.textTabs
+      .map((tab, index) => {
+        const active = document.kind === "project-file" && editorDocumentKey(document) === tab.id;
+        const dirty = isTextTabDirty(tab);
+        const state = tab.conflict
+          ? "Conflict"
+          : tab.saveRequest
+            ? "Saving"
+            : dirty
+              ? "Unsaved"
+              : "Saved";
+        return `
+          <div class="editor-tab ${active ? "active" : ""} ${dirty ? "dirty" : ""}" role="tab" aria-selected="${active}" title="${escapeAttribute(`${tab.document.workspacePath} · ${state}`)}">
+            <button class="editor-tab-target" type="button" data-editor-tab-index="${index}">
+              <span class="editor-tab-label">${escapeHtml(basename(tab.document.workspacePath))}</span>
+              ${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}
+            </button>
+            <button class="editor-tab-close" type="button" data-close-editor-tab-index="${index}" aria-label="Close ${escapeAttribute(basename(tab.document.workspacePath))}" title="Close">${icon("close", 12)}</button>
+          </div>`;
+      })
+      .join("");
+    const preview = this.state.editor.preview;
+    const previewPath =
+      preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
+    const previewTab = preview
+      ? `<div class="editor-tab preview ${this.state.editor.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${this.state.editor.active.kind === "preview"}">
+          <button class="editor-tab-target" type="button" data-editor-preview>${escapeHtml(basename(previewPath ?? "Diff"))}<small>Diff</small></button>
+          <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="Close Diff preview" title="Close">${icon("close", 12)}</button>
+        </div>`
+      : "";
+    if (!textTabs && !previewTab) {
+      return '<span class="editor-tab active">Welcome</span>';
+    }
+    return `${textTabs}${previewTab}`;
+  }
+
+  private bindEditorTabEvents(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-editor-tab-index]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const index = Number(button.dataset.editorTabIndex);
+        const tab = this.state.editor.textTabs[index];
+        if (!tab) return;
+        this.captureMountedTextEditor();
+        this.state.editor = activateTextTab(this.state.editor, tab.id);
+        this.renderLeftTool();
+        this.renderEditor();
+      });
+    });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-close-editor-tab-index]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const index = Number(button.dataset.closeEditorTabIndex);
+          const tab = this.state.editor.textTabs[index];
+          if (tab) void this.requestCloseTextTab(tab.id);
+        });
+      });
+    this.root.querySelector<HTMLButtonElement>("[data-editor-preview]")?.addEventListener(
+      "click",
+      () => {
+        const preview = this.state.editor.preview;
+        if (!preview) return;
+        this.captureMountedTextEditor();
+        this.state.editor = activatePreview(this.state.editor, preview);
+        this.renderLeftTool();
+        this.renderEditor();
+      },
+    );
+    this.root
+      .querySelector<HTMLButtonElement>("[data-close-editor-preview]")
+      ?.addEventListener("click", () => {
+        this.captureMountedTextEditor();
+        this.state.editor = closePreview(this.state.editor);
+        this.renderEditor();
+      });
+  }
+
+  private textEditorActions(tab: TextTabState): string {
+    const dirty = isTextTabDirty(tab);
+    const label = tab.conflict
+      ? "Conflict · local buffer retained"
+      : tab.saveRequest
+        ? "Saving…"
+        : dirty
+          ? "Unsaved"
+          : "Saved";
+    return `<div class="header-actions text-editor-actions">
+      ${tab.utf8Bom ? '<span class="scope-pill">UTF-8 BOM</span>' : '<span class="scope-pill">UTF-8</span>'}
+      <span class="text-save-state ${tab.conflict ? "conflict" : dirty ? "dirty" : ""}">${escapeHtml(label)}</span>
+      <button class="secondary-button compact" id="save-text-file" type="button" ${!dirty || tab.saveRequest || tab.status !== "ready" ? "disabled" : ""}>Save</button>
+    </div>`;
+  }
+
+  private bindTextEditorActions(tab: TextTabState): void {
+    this.query<HTMLButtonElement>("#save-text-file")?.addEventListener("click", () => {
+      void this.saveTextTab(tab.id);
+    });
+  }
+
+  private captureMountedTextEditor(): void {
+    const tabId = this.mountedTextTabId;
+    if (!tabId || !textTab(this.state.editor, tabId)) return;
+    this.state.editor = captureTextContent(
+      this.state.editor,
+      tabId,
+      this.textEditor.content(),
+    );
+  }
+
+  private async saveTextTab(tabId: string): Promise<boolean> {
+    if (this.mountedTextTabId === tabId) this.captureMountedTextEditor();
+    const tab = textTab(this.state.editor, tabId);
+    if (!tab) return true;
+    const requestId = `text-save-${Date.now()}-${++this.textSaveSequence}`;
+    const prepared = beginTextSave(this.state.editor, tabId, tab.content, requestId);
+    this.state.editor = prepared.session;
+    const request = prepared.request;
+    if (!request) {
+      if (isTextTabDirty(tab)) {
+        this.setStatus("Wait for the current file operation before continuing", "warning");
+        return false;
+      }
+      return true;
+    }
+    this.renderEditor();
+    try {
+      const result = await bridge.saveTextFile(
+        request.document.repositoryRoot,
+        request.document.repositoryId,
+        request.document.path,
+        request.expectedRevision,
+        request.content,
+        request.utf8Bom,
+        request.requestId,
+      );
+      this.state.editor = completeTextSave(this.state.editor, tabId, result);
+      const current = textTab(this.state.editor, tabId);
+      this.renderEditor();
+      this.renderLeftTool();
+      if (current && !isTextTabDirty(current)) {
+        this.setStatus(`Saved ${basename(current.document.workspacePath)}`, "success");
+        return true;
+      }
+      this.setStatus("Saved captured changes; newer edits remain unsaved", "warning");
+      return false;
+    } catch (error) {
+      const conflict = isWorkspaceConflict(error);
+      this.state.editor = failTextSave(
+        this.state.editor,
+        tabId,
+        request.requestId,
+        errorMessage(error),
+        conflict,
+      );
+      this.renderEditor();
+      this.renderLeftTool();
+      this.showError(error);
+      return false;
+    }
+  }
+
+  private async requestCloseTextTab(tabId: string): Promise<void> {
+    this.captureMountedTextEditor();
+    const tab = textTab(this.state.editor, tabId);
+    if (!tab) return;
+    if (isTextTabDirty(tab) || tab.saveRequest) {
+      if (tab.saveRequest) {
+        this.setStatus("Wait for the file to finish saving", "warning");
+        return;
+      }
+      const save = window.confirm(
+        `Save changes to ${tab.document.workspacePath} before closing?\n\nCancel keeps the tab open.`,
+      );
+      if (!save || !(await this.saveTextTab(tabId))) return;
+    }
+    const closed = closeTextTab(this.state.editor, tabId);
+    this.state.editor = closed.session;
+    if (!closed.blocked) {
+      this.renderLeftTool();
+      this.renderEditor();
+    }
+  }
+
+  private async saveDirtyTabsBefore(action: string): Promise<boolean> {
+    this.captureMountedTextEditor();
+    const dirty = dirtyTextTabs(this.state.editor);
+    if (dirty.length === 0) return true;
+    const save = window.confirm(
+      `Save ${dirty.length} unsaved file${dirty.length === 1 ? "" : "s"} before ${action}?\n\nCancel keeps the current workspace open.`,
+    );
+    if (!save) return false;
+    for (const tab of dirty) {
+      if (!(await this.saveTextTab(tab.id))) return false;
+    }
+    return dirtyTextTabs(this.state.editor).length === 0;
+  }
+
+  private activeDocument(): EditorDocument {
+    return activeEditorDocument(this.state.editor);
+  }
+
+  private activateDiffPreview(
+    document: Exclude<EditorDocument, { kind: "welcome" | "project-file" }>,
+  ): void {
+    this.captureMountedTextEditor();
+    this.state.editor = activatePreview(this.state.editor, document);
   }
 
   private contentHeading(title: string, subtitle: string): string {
@@ -3207,7 +3606,7 @@ export class AsterlynApp {
 
   private async loadSelectedDiff(): Promise<void> {
     const snapshot = this.state.snapshot;
-    const document = this.state.activeDocument;
+    const document = this.activeDocument();
     if (
       !snapshot ||
       document.kind !== "working-diff" ||
@@ -3223,7 +3622,7 @@ export class AsterlynApp {
     this.renderEditor();
     try {
       const diff = await bridge.readDiff(snapshot.root, selected.path, selected.staged);
-      const current = this.state.activeDocument;
+      const current = this.activeDocument();
       if (
         generation !== this.diffGeneration ||
         current.kind !== "working-diff" ||
@@ -3241,7 +3640,7 @@ export class AsterlynApp {
       this.renderEditor();
       if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
     } catch (error) {
-      const current = this.state.activeDocument;
+      const current = this.activeDocument();
       if (
         generation !== this.diffGeneration ||
         current.kind !== "working-diff" ||
@@ -3324,7 +3723,7 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     const details = this.state.commitDetails;
     const file = details ? this.selectedCommitFile(details) : null;
-    const document = this.state.activeDocument;
+    const document = this.activeDocument();
     if (
       !snapshot ||
       !details ||
@@ -3356,15 +3755,16 @@ export class AsterlynApp {
         file.path,
         file.originalPath,
       );
+      const activeDocument = this.activeDocument();
       if (
         generation !== this.commitDiffGeneration ||
         this.state.snapshot?.root !== snapshot.root ||
         this.state.selectedCommit !== key ||
         this.state.selectedCommitFile !== file.path ||
-        this.state.activeDocument.kind !== "commit-diff" ||
-        this.state.activeDocument.repositoryId !== repositoryId ||
-        this.state.activeDocument.oid !== oid ||
-        this.state.activeDocument.path !== file.path ||
+        activeDocument.kind !== "commit-diff" ||
+        activeDocument.repositoryId !== repositoryId ||
+        activeDocument.oid !== oid ||
+        activeDocument.path !== file.path ||
         diff.repositoryId !== repositoryId ||
         diff.oid !== oid ||
         diff.path !== file.path
@@ -3379,15 +3779,16 @@ export class AsterlynApp {
       if (restoreFocus) this.focusCommitFile(file.path);
       if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
     } catch (error) {
+      const activeDocument = this.activeDocument();
       if (
         generation !== this.commitDiffGeneration ||
         this.state.snapshot?.root !== snapshot.root ||
         this.state.selectedCommit !== key ||
         this.state.selectedCommitFile !== file.path ||
-        this.state.activeDocument.kind !== "commit-diff" ||
-        this.state.activeDocument.repositoryId !== repositoryId ||
-        this.state.activeDocument.oid !== oid ||
-        this.state.activeDocument.path !== file.path
+        activeDocument.kind !== "commit-diff" ||
+        activeDocument.repositoryId !== repositoryId ||
+        activeDocument.oid !== oid ||
+        activeDocument.path !== file.path
       ) {
         return;
       }
@@ -3463,13 +3864,13 @@ export class AsterlynApp {
     }
     this.state.selectedCommitFile = path;
     this.state.gitDetail = "commit";
-    this.state.activeDocument = {
+    this.activateDiffPreview({
       kind: "commit-diff",
       repositoryRoot: snapshot.root,
       repositoryId: details.repositoryId,
       oid: details.oid,
       path,
-    };
+    });
     this.state.commitPatch = null;
     this.state.commitPatchLoading = true;
     this.state.commitPatchError = null;
@@ -3867,7 +4268,7 @@ export class AsterlynApp {
       this.reconcileWorkingDocument(next);
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
-      if (this.state.activeDocument.kind === "working-diff") {
+      if (this.activeDocument().kind === "working-diff") {
         void this.loadSelectedDiff();
       }
       pendingRoot = next.root;
@@ -3899,7 +4300,7 @@ export class AsterlynApp {
       this.reconcileWorkingDocument(next);
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
-      if (this.state.activeDocument.kind === "working-diff") {
+      if (this.activeDocument().kind === "working-diff") {
         void this.loadSelectedDiff();
       }
       this.setStatus("Commit created", "success");
@@ -3961,6 +4362,7 @@ export class AsterlynApp {
   ): Promise<void> {
     const snapshot = this.state.snapshot;
     if (!snapshot) return;
+    if (!(await this.saveDirtyTabsBefore("changing branches"))) return;
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
     this.clearError();
@@ -3978,7 +4380,10 @@ export class AsterlynApp {
       this.state.selectedChange = null;
       this.changeSelectionAnchor = null;
       this.chooseValidChangeSelection();
-      this.state.activeDocument = { kind: "welcome" };
+      this.captureMountedTextEditor();
+      if (dirtyTextTabs(this.state.editor).length === 0) {
+        this.state.editor = createEditorSession();
+      }
       this.clearWorkingDiff();
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
@@ -4128,7 +4533,7 @@ export class AsterlynApp {
   }
 
   private reconcileWorkingDocument(snapshot: RepositorySnapshot): void {
-    const document = this.state.activeDocument;
+    const document = this.activeDocument();
     if (document.kind !== "working-diff") return;
     const stillValid = snapshot.changes.some(
       (change) =>
@@ -4147,16 +4552,16 @@ export class AsterlynApp {
         ? this.state.selectedChange
         : null;
     if (replacement) {
-      this.state.activeDocument = {
+      this.activateDiffPreview({
         kind: "working-diff",
         repositoryRoot: snapshot.root,
         selection: { ...replacement },
-      };
+      });
       this.clearWorkingDiff();
       this.state.workingPatchLoading = true;
       return;
     }
-    this.state.activeDocument = { kind: "welcome" };
+    this.state.editor = closePreview(this.state.editor);
     this.clearWorkingDiff();
   }
 
@@ -4176,6 +4581,7 @@ export class AsterlynApp {
 
   private setLoading(loading: boolean, message: string): void {
     this.state.loading = loading;
+    this.textEditor.setReadOnly(loading);
     this.root.classList.toggle("is-busy", loading);
     this.query<HTMLButtonElement>("#refresh-button").disabled = loading;
     this.setStatus(message, loading ? "busy" : "normal");
@@ -4606,12 +5012,23 @@ function errorMessage(error: unknown): string {
       };
       return messages[reason] ?? fallback;
     }
+    if (value.kind === "conflict") {
+      return "This file changed outside Asterlyn. Your local buffer is still open and was not overwritten.";
+    }
     const message = typeof value.message === "string" ? value.message : null;
     const operation = typeof value.operation === "string" ? value.operation : null;
     if (message && operation) return `${operation}: ${message}`;
     if (message) return message;
   }
   return "An unexpected operation error occurred.";
+}
+
+function isWorkspaceConflict(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      (error as Record<string, unknown>).kind === "conflict",
+  );
 }
 
 function escapeHtml(value: string): string {
