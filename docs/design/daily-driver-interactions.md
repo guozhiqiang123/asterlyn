@@ -138,6 +138,17 @@ Final acceptance passed 28 frontend/delivery tests, 23 Git-core tests, one Tauri
 
 The interaction conclusion is **improved**: all three reported inconsistencies are closed, stale or ambiguous ref results cannot overwrite visible truth, and Git mutations still return the workbench to fresh current-`HEAD` state. Remaining limits are the 150-commit bound, no graph lanes or pagination, absolute scroll alignment when one pane has no further horizontal content, non-persisted disclosure state, and no new Windows/macOS interaction evidence. The next product action is Stage 3's bounded editor buffer, save, and recovery contract.
 
+### U9 — Compact Git information workspace
+
+- Remove redundant Branches and Log title rows. Put a branch-or-tag filter directly above the ref tree and keep the commit search and current ref scope in the history toolbar.
+- Present local refs, remote groups, remote refs, and tags with distinct original semantic icons. Never infer or display a favorite/default marker that Git did not report.
+- Use one compact commit row for graph position, subject, truthful ref labels, author, absolute authored time, and abbreviated object identity. Columns may progressively hide when the middle pane becomes narrow, but subject and selection remain visible.
+- Split selected-commit details into a changed-file browser above a compact commit summary. Their horizontal boundary is pointer- and keyboard-resizable, double-click resettable, viewport-clamped, and persisted only as a layout preference.
+- Add an eye-labelled view control that switches changed files between a directory tree and one flat path-sorted list. Both projections preserve the same selected repository-relative path and open the same typed commit-Diff document.
+- Show the selected commit's subject, abbreviated object identity, author name and email, absolute date, and parsed `HEAD`/local/remote/tag labels below the file browser. Raw decoration text remains presentation input rather than repository truth stored by the UI.
+
+U9 changes only presentation and versioned workbench preferences. It adds no Git queries, branch favorites, inferred default branch, history pagination, path filtering, or mutation behavior. Android Studio supplies workflow-density evidence, while Asterlyn retains original markup, icons, styles, wording, and implementation.
+
 ## Sequencing rule
 
 U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, U6 is locally accepted as the persistent workbench contract, U7 closes the highest-friction desktop interaction mismatches, and U8 closes Diff/ref navigation consistency. Stage 3 editor foundations are next. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
