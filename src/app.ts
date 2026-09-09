@@ -3924,7 +3924,7 @@ export class AsterlynApp {
     body.classList.remove("diff-surface");
     body.classList.add("text-surface");
     this.mountedTextTabId = tab.id;
-    this.textEditor.mount(body, tab.content, () => {
+    this.textEditor.mount(body, tab.content, tab.document.path, () => {
       if (this.mountedTextTabId !== tab.id) return;
       const previous = textTab(this.state.editor, tab.id);
       this.state.editor = markTextEdited(this.state.editor, tab.id);

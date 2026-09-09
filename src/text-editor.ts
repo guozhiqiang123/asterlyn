@@ -13,7 +13,11 @@ import {
   openSearchPanel,
   searchKeymap,
 } from "@codemirror/search";
-import { asterlynEditorTheme } from "./editor-theme";
+import {
+  asterlynEditorTheme,
+  asterlynSyntaxHighlighting,
+} from "./editor-theme";
+import { EditorLanguageLoader } from "./editor-language";
 import {
   applyExactTextChanges,
   decodeExactText,
@@ -27,9 +31,16 @@ export class TextEditor {
   private exactContent: ExactTextContent | null = null;
   private readonly readOnly = new Compartment();
   private readonly editable = new Compartment();
+  private readonly language = new Compartment();
+  private readonly languageLoader = new EditorLanguageLoader();
   private readOnlyValue = false;
 
-  mount(parent: HTMLElement, content: string, onChange: () => void): void {
+  mount(
+    parent: HTMLElement,
+    content: string,
+    path: string,
+    onChange: () => void,
+  ): void {
     this.destroy();
     this.exactContent = decodeExactText(content);
     this.view = new EditorView({
@@ -40,6 +51,7 @@ export class TextEditor {
           EditorState.tabSize.of(4),
           this.readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
           this.editable.of(EditorView.editable.of(!this.readOnlyValue)),
+          this.language.of([]),
           lineNumbers(),
           history(),
           drawSelection(),
@@ -47,6 +59,7 @@ export class TextEditor {
           highlightActiveLineGutter(),
           highlightSelectionMatches(),
           asterlynEditorTheme,
+          asterlynSyntaxHighlighting,
           keymap.of([
             ...defaultKeymap,
             ...historyKeymap,
@@ -64,6 +77,22 @@ export class TextEditor {
           }),
         ],
       }),
+    });
+    const mountedView = this.view;
+    mountedView.dom.dataset.language = "Plain Text";
+    mountedView.dom.dataset.languageStatus = "loading";
+    void this.languageLoader.load(path).then((result) => {
+      if (!result || this.view !== mountedView) return;
+      mountedView.dom.dataset.languageStatus = result.status;
+      if (!result.support) {
+        mountedView.dom.dataset.language =
+          result.status === "failed" ? "Plain Text" : result.name;
+        return;
+      }
+      mountedView.dom.dataset.language = result.name;
+      mountedView.dispatch({
+        effects: this.language.reconfigure(result.support),
+      });
     });
   }
 
@@ -114,6 +143,7 @@ export class TextEditor {
   }
 
   destroy(): void {
+    this.languageLoader.cancel();
     this.view?.destroy();
     this.view = null;
     this.exactContent = null;

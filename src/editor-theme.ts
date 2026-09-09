@@ -1,4 +1,96 @@
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
+
+export const ASTERLYN_SYNTAX_COLORS = {
+  comment: "#8c919b",
+  keyword: "#cf8e6d",
+  string: "#6aab73",
+  literal: "#2aacb8",
+  type: "#56a8f5",
+  property: "#c77dbb",
+  tag: "#e8bf6a",
+  punctuation: "#bcbec4",
+  link: "#42c3d4",
+  meta: "#bbb529",
+  invalid: "#ff6666",
+} as const;
+
+const asterlynHighlightStyle = HighlightStyle.define([
+  {
+    tag: tags.comment,
+    color: ASTERLYN_SYNTAX_COLORS.comment,
+    fontStyle: "italic",
+  },
+  {
+    tag: [
+      tags.keyword,
+      tags.modifier,
+      tags.controlKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+      tags.operatorKeyword,
+    ],
+    color: ASTERLYN_SYNTAX_COLORS.keyword,
+  },
+  {
+    tag: [tags.string, tags.character, tags.attributeValue],
+    color: ASTERLYN_SYNTAX_COLORS.string,
+  },
+  {
+    tag: [tags.number, tags.bool, tags.null, tags.atom],
+    color: ASTERLYN_SYNTAX_COLORS.literal,
+  },
+  {
+    tag: [tags.typeName, tags.className, tags.namespace],
+    color: ASTERLYN_SYNTAX_COLORS.type,
+  },
+  {
+    tag: [
+      tags.function(tags.variableName),
+      tags.function(tags.propertyName),
+      tags.definition(tags.variableName),
+    ],
+    color: ASTERLYN_SYNTAX_COLORS.type,
+  },
+  {
+    tag: [tags.propertyName, tags.attributeName],
+    color: ASTERLYN_SYNTAX_COLORS.property,
+  },
+  {
+    tag: [tags.tagName, tags.labelName],
+    color: ASTERLYN_SYNTAX_COLORS.tag,
+  },
+  {
+    tag: [tags.operator, tags.punctuation],
+    color: ASTERLYN_SYNTAX_COLORS.punctuation,
+  },
+  {
+    tag: [tags.regexp, tags.escape, tags.url, tags.link],
+    color: ASTERLYN_SYNTAX_COLORS.link,
+  },
+  {
+    tag: [tags.meta, tags.processingInstruction, tags.annotation],
+    color: ASTERLYN_SYNTAX_COLORS.meta,
+  },
+  {
+    tag: tags.heading,
+    color: ASTERLYN_SYNTAX_COLORS.type,
+    fontWeight: "700",
+  },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: tags.strong, fontWeight: "700" },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  {
+    tag: tags.invalid,
+    color: ASTERLYN_SYNTAX_COLORS.invalid,
+    textDecoration: "underline wavy",
+  },
+]);
+
+export const asterlynSyntaxHighlighting = syntaxHighlighting(
+  asterlynHighlightStyle,
+);
 
 export const asterlynEditorTheme = EditorView.theme(
   {
