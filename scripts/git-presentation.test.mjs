@@ -222,6 +222,25 @@ test("logical branch choices combine the same ref across selected Git roots", ()
   );
 });
 
+test("logical branch choices prefer a checked-out representative without merging ref kinds", () => {
+  const branches = [
+    { ...branch("refs/heads/dev", "dev"), repositoryId: "module", kind: "local" },
+    {
+      ...branch("refs/heads/dev", "dev"),
+      repositoryId: ".",
+      kind: "local",
+      current: true,
+    },
+    { ...branch("refs/heads/dev", "dev"), repositoryId: ".", kind: "tag" },
+  ];
+
+  const choices = uniqueLogicalBranches(branches);
+  assert.equal(choices.length, 2);
+  assert.equal(choices[0].repositoryId, ".");
+  assert.equal(choices[0].current, true);
+  assert.equal(choices[1].kind, "tag");
+});
+
 test("commit graph never connects identical object IDs across Git roots", () => {
   const graph = projectCommitGraph([
     commit("shared", ["parent"], "."),

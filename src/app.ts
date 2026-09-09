@@ -1530,6 +1530,31 @@ export class AsterlynApp {
     return matchingLogicalBranches(snapshot.branches, branch, selectedRootIds);
   }
 
+  private allMatchingHistoryBranches(
+    branch: BranchSummary,
+    snapshot: RepositorySnapshot,
+  ): BranchSummary[] {
+    return matchingLogicalBranches(
+      snapshot.branches,
+      branch,
+      new Set(snapshot.repositoryRoots.map((root) => root.id)),
+    );
+  }
+
+  private setLogicalBranchScope(
+    branch: BranchSummary,
+    snapshot: RepositorySnapshot,
+  ): void {
+    const branches = this.allMatchingHistoryBranches(branch, snapshot);
+    const references = branches.map(historyReference);
+    this.state.historyRefs = new Map(
+      references.map((reference) => [historyRefKey(reference), reference]),
+    );
+    this.state.selectedBranch = branches.length === 1 ? branchKey(branches[0]!) : null;
+    this.state.gitDetail = branches.length === 1 ? "branch" : "commit";
+    for (const reference of references) this.recordRecentHistoryRef(reference);
+  }
+
   private renderHistoryUserMenu(snapshot: RepositorySnapshot): string {
     const choices = historyAuthorChoices(snapshot.commits);
     const allSelected = !this.state.historyCurrentAuthor && this.state.historyAuthorEmails.size === 0;
@@ -1986,46 +2011,84 @@ export class AsterlynApp {
           <button class="group-header branch-group-toggle" type="button" data-branch-group-toggle="${kind}" aria-expanded="${!collapsed}" aria-controls="${groupId}">
             <span><span class="branch-group-chevron">${icon("chevron", 12)}</span>${label}<b>${branches.length}</b></span>
           </button>
-          <div id="${groupId}" role="group" ${collapsed ? "hidden" : ""}>${kind === "remote" ? this.renderRemoteBranches(branches) : branches.map((branch) => this.branchRow(branch)).join("")}</div>
+          <div id="${groupId}" role="group" ${collapsed ? "hidden" : ""}>${kind === "remote" ? this.renderRemoteBranches(branches, snapshot) : branches.map((branch) => this.branchRow(branch, snapshot)).join("")}</div>
         </section>`;
       })
       .join("");
   }
 
+  private activeBranches(snapshot: RepositorySnapshot): BranchSummary[] {
+    const selectedRootIds = effectiveHistoryRootIds(
+      snapshot.repositoryRoots.map((root) => root.id),
+      this.state.historyRepositoryIds,
+    );
+    return snapshot.branches.filter((branch) => selectedRootIds.has(branch.repositoryId));
+  }
+
+  private logicalBranches(snapshot: RepositorySnapshot): BranchSummary[] {
+    return uniqueLogicalBranches(this.activeBranches(snapshot));
+  }
+
   private filteredBranches(snapshot: RepositorySnapshot): BranchSummary[] {
     const query = this.state.branchQuery.trim().toLocaleLowerCase();
-    if (!query) return snapshot.branches;
-    return snapshot.branches.filter((branch) =>
-      [branch.name, branch.fullName, branch.subject].some((value) =>
-        value.toLocaleLowerCase().includes(query),
+    if (!query) return this.logicalBranches(snapshot);
+    return uniqueLogicalBranches(
+      this.activeBranches(snapshot).filter((branch) =>
+        [branch.name, branch.fullName, branch.subject].some((value) =>
+          value.toLocaleLowerCase().includes(query),
+        ),
       ),
     );
   }
 
-  private renderRemoteBranches(branches: BranchSummary[]): string {
+  private renderRemoteBranches(
+    branches: BranchSummary[],
+    snapshot: RepositorySnapshot,
+  ): string {
     return groupRemoteBranches(branches)
       .map(
         (group) => `
           <section class="remote-ref-group">
             <div class="remote-root-row">${icon("chevron", 11)}${icon("folder", 14)}<span>${escapeHtml(group.name)}</span><small>${group.branches.length}</small></div>
-            <div role="group">${group.branches.map(({ branch, displayName }) => this.branchRow(branch, displayName, true)).join("")}</div>
+            <div role="group">${group.branches.map(({ branch, displayName }) => this.branchRow(branch, snapshot, displayName, true)).join("")}</div>
           </section>`,
       )
       .join("");
   }
 
-  private branchRow(branch: BranchSummary, displayName = branch.name, nested = false): string {
+  private branchRow(
+    branch: BranchSummary,
+    snapshot: RepositorySnapshot,
+    displayName = branch.name,
+    nested = false,
+  ): string {
     const key = branchKey(branch);
-    const selected = this.state.historyRefs.has(key);
+    const activeMatches = this.matchingHistoryBranches(branch, snapshot);
+    const allMatches = this.allMatchingHistoryBranches(branch, snapshot);
+    const selected = activeMatches.length > 0 && activeMatches.every((candidate) =>
+      this.state.historyRefs.has(branchKey(candidate)),
+    );
+    const exclusive =
+      allMatches.length === this.state.historyRefs.size &&
+      allMatches.every((candidate) => this.state.historyRefs.has(branchKey(candidate)));
     const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
-    const title = selected
+    const title = exclusive
       ? `${branch.name} — ${branch.subject} — Activate again to show all refs`
       : `${branch.name} — ${branch.subject}`;
+    const root = snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
+    const meta = [
+      branch.current ? "HEAD" : "",
+      activeMatches.length > 1
+        ? `${activeMatches.length} roots`
+        : snapshot.repositoryRoots.length > 1
+          ? (root?.displayName ?? branch.repositoryId)
+          : "",
+    ].filter(Boolean);
     return `
       <button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" data-branch-key="${escapeAttribute(key)}" aria-pressed="${selected}" title="${escapeAttribute(title)}">
         <span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span>
         <span class="branch-name">${escapeHtml(displayName)}</span>
-        ${branch.current ? '<span class="current-label">HEAD</span>' : ""}
+        ${meta.length > 0 ? `<span class="branch-row-meta">${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span>` : ""}
       </button>`;
   }
 
@@ -2275,18 +2338,7 @@ export class AsterlynApp {
         if (!key || !branch || !snapshot) return;
         // Keep every catalog match in the query so later root-checkbox changes preserve the
         // workspace-level branch meaning; repositoryIds still controls which roots participate.
-        const branches = matchingLogicalBranches(
-          snapshot.branches,
-          branch,
-          new Set(snapshot.repositoryRoots.map((root) => root.id)),
-        );
-        const references = branches.map(historyReference);
-        this.state.historyRefs = new Map(
-          references.map((reference) => [historyRefKey(reference), reference]),
-        );
-        this.state.selectedBranch = branches.length === 1 ? branchKey(branches[0]!) : null;
-        this.state.gitDetail = branches.length === 1 ? "branch" : "commit";
-        for (const reference of references) this.recordRecentHistoryRef(reference);
+        this.setLogicalBranchScope(branch, snapshot);
         this.state.historyFilterMenu = null;
         this.state.historyBranchSubmenu = null;
         this.applyHistoryQuery(true);
@@ -2753,9 +2805,10 @@ export class AsterlynApp {
 
   private renderBranchCount(snapshot: RepositorySnapshot): void {
     const visible = this.filteredBranches(snapshot).length;
+    const total = this.logicalBranches(snapshot).length;
     const count = this.query("#branch-count");
     count.textContent = String(visible);
-    count.title = `${visible} of ${snapshot.branches.length} refs`;
+    count.title = `${visible} of ${total} logical refs`;
   }
 
   private focusHistoryFilter(): void {
@@ -2879,7 +2932,11 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     const branch = snapshot?.branches.find((candidate) => branchKey(candidate) === key);
     if (!snapshot || !branch) return;
-    if (this.state.historyRefs.size === 1 && this.state.historyRefs.has(key)) {
+    const branches = this.allMatchingHistoryBranches(branch, snapshot);
+    const selectedExclusively =
+      branches.length === this.state.historyRefs.size &&
+      branches.every((candidate) => this.state.historyRefs.has(branchKey(candidate)));
+    if (selectedExclusively) {
       this.state.historyRefs.clear();
       this.state.selectedBranch = null;
       this.state.gitDetail = "commit";
@@ -2892,11 +2949,7 @@ export class AsterlynApp {
       }
       return;
     }
-    const reference = historyReference(branch);
-    this.state.historyRefs = new Map([[key, reference]]);
-    this.state.selectedBranch = key;
-    this.state.gitDetail = "branch";
-    this.recordRecentHistoryRef(reference);
+    this.setLogicalBranchScope(branch, snapshot);
     this.applyHistoryQuery(true);
     if (restoreFocus) {
       const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");

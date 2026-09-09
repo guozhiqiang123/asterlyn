@@ -2075,9 +2075,17 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.current-label {
+.branch-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: #88d09a;
   font-size: 8px;
+  white-space: nowrap;
+}
+
+.branch-row-meta span + span {
+  color: var(--text-faint);
 }
 
 .remote-ref-group {
