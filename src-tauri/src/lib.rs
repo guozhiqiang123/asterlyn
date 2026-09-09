@@ -7,7 +7,9 @@ use asterlyn_git::{
     HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
 };
 use asterlyn_workspace::{
-    SaveTextFileRequest, SaveTextFileResult, TextFileSnapshot, Workspace, WorkspaceError,
+    SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken, SearchCandidate,
+    SearchCoverageReason, SearchLimits, SearchSkipReason, TextFileSnapshot, Workspace,
+    WorkspaceError,
 };
 use tauri::State;
 
@@ -15,6 +17,11 @@ const COMMIT_LIMIT: usize = 150;
 const PROJECT_FILE_LIMIT: usize = 5_000;
 const CANCELLED_SCAN_RETENTION: usize = 256;
 const CANCELLED_REMOTE_RETENTION: usize = 128;
+const CANCELLED_SEARCH_RETENTION: usize = 128;
+const SEARCH_TOTAL_BYTE_LIMIT: usize = 64 * 1024 * 1024;
+const SEARCH_MATCH_LIMIT: usize = 500;
+const SEARCH_PREVIEW_UTF16_LIMIT: usize = 320;
+const SEARCH_REPORTED_SKIP_LIMIT: usize = 100;
 
 #[derive(Default)]
 struct ScanRegistry {
@@ -51,6 +58,62 @@ struct ActiveWorkspace {
 #[derive(Default)]
 struct FileSaveRegistry {
     locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+#[derive(Default)]
+struct WorkspaceSearchRegistry {
+    inner: Mutex<WorkspaceSearchRegistryState>,
+}
+
+#[derive(Default)]
+struct WorkspaceSearchRegistryState {
+    active: HashMap<String, ActiveWorkspaceSearch>,
+    cancelled: HashSet<(String, String)>,
+}
+
+struct ActiveWorkspaceSearch {
+    id: String,
+    cancellation: SearchCancellationToken,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceTextSearchReport {
+    request_id: String,
+    matches: Vec<WorkspaceTextSearchMatch>,
+    catalog_candidates: usize,
+    files_searched: usize,
+    bytes_read: usize,
+    skipped_count: usize,
+    skipped_files: Vec<WorkspaceTextSearchSkippedFile>,
+    coverage_reasons: Vec<SearchCoverageReason>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceTextSearchMatch {
+    repository_id: String,
+    path: String,
+    workspace_path: String,
+    revision: String,
+    from_utf16: usize,
+    to_utf16: usize,
+    line: usize,
+    column_utf16: usize,
+    preview: String,
+    preview_from_utf16: usize,
+    preview_to_utf16: usize,
+    leading_clipped: bool,
+    trailing_clipped: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceTextSearchSkippedFile {
+    repository_id: String,
+    path: String,
+    workspace_path: String,
+    reason: SearchSkipReason,
 }
 
 impl ActiveWorkspace {
@@ -101,6 +164,59 @@ impl FileSaveRegistry {
             .entry(identity)
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone())
+    }
+}
+
+impl WorkspaceSearchRegistryState {
+    fn register(&mut self, repository_root: &str, request_id: &str) -> SearchCancellationToken {
+        if let Some(previous) = self.active.remove(repository_root) {
+            previous.cancellation.cancel();
+        }
+        let cancellation = SearchCancellationToken::new();
+        if self
+            .cancelled
+            .remove(&(repository_root.to_string(), request_id.to_string()))
+        {
+            cancellation.cancel();
+        }
+        self.active.insert(
+            repository_root.to_string(),
+            ActiveWorkspaceSearch {
+                id: request_id.to_string(),
+                cancellation: cancellation.clone(),
+            },
+        );
+        cancellation
+    }
+
+    fn cancel(&mut self, repository_root: String, request_id: String) {
+        if self
+            .active
+            .get(&repository_root)
+            .is_some_and(|active| active.id == request_id)
+        {
+            if let Some(active) = self.active.remove(&repository_root) {
+                active.cancellation.cancel();
+            }
+            return;
+        }
+        if self.cancelled.len() >= CANCELLED_SEARCH_RETENTION {
+            self.cancelled.clear();
+        }
+        self.cancelled.insert((repository_root, request_id));
+    }
+
+    fn finish(
+        &mut self,
+        repository_root: &str,
+        request_id: &str,
+        cancellation: &SearchCancellationToken,
+    ) {
+        if self.active.get(repository_root).is_some_and(|active| {
+            active.id == request_id && active.cancellation.refers_to(cancellation)
+        }) {
+            self.active.remove(repository_root);
+        }
     }
 }
 
@@ -266,6 +382,155 @@ async fn list_project_files(repository_root: String) -> Result<ProjectFileList, 
         GitRepository::open(repository_root)?.project_files(PROJECT_FILE_LIMIT)
     })
     .await
+}
+
+#[tauri::command]
+async fn search_workspace_text(
+    repository_root: String,
+    request_id: String,
+    query: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+    searches: State<'_, WorkspaceSearchRegistry>,
+) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let cancellation = searches
+        .inner
+        .lock()
+        .map_err(|_| WorkspaceError::Io {
+            operation: "start workspace search".to_string(),
+            message: "workspace-search registry lock was poisoned".to_string(),
+        })?
+        .register(&repository_root, &request_id);
+
+    let task_root = root.clone();
+    let task_request_id = request_id.clone();
+    let task_cancellation = cancellation.clone();
+    let result = run_workspace_blocking("search workspace text", move || {
+        search_authorized_workspace(&task_root, &task_request_id, &query, &task_cancellation)
+    })
+    .await;
+
+    searches
+        .inner
+        .lock()
+        .map_err(|_| WorkspaceError::Io {
+            operation: "finish workspace search".to_string(),
+            message: "workspace-search registry lock was poisoned".to_string(),
+        })?
+        .finish(&repository_root, &request_id, &cancellation);
+    result
+}
+
+#[tauri::command]
+fn cancel_workspace_text_search(
+    repository_root: String,
+    request_id: String,
+    searches: State<'_, WorkspaceSearchRegistry>,
+) -> Result<(), WorkspaceError> {
+    searches
+        .inner
+        .lock()
+        .map_err(|_| WorkspaceError::Io {
+            operation: "cancel workspace search".to_string(),
+            message: "workspace-search registry lock was poisoned".to_string(),
+        })?
+        .cancel(repository_root, request_id);
+    Ok(())
+}
+
+fn search_authorized_workspace(
+    root: &Path,
+    request_id: &str,
+    query: &str,
+    cancellation: &SearchCancellationToken,
+) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
+    let catalog = GitRepository::open(root)
+        .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+        .map_err(|error| WorkspaceError::Io {
+            operation: "load current project catalog for search".to_string(),
+            message: error.to_string(),
+        })?;
+    let candidates: Vec<_> = catalog
+        .files
+        .iter()
+        .map(|file| SearchCandidate {
+            workspace_path: file.workspace_path.clone(),
+        })
+        .collect();
+    let report = Workspace::open(root)?.search_literal_text(
+        request_id,
+        &candidates,
+        catalog.truncated,
+        query,
+        cancellation,
+        SearchLimits {
+            max_candidates: PROJECT_FILE_LIMIT,
+            max_total_bytes: SEARCH_TOTAL_BYTE_LIMIT,
+            max_matches: SEARCH_MATCH_LIMIT,
+            max_preview_utf16: SEARCH_PREVIEW_UTF16_LIMIT,
+            max_reported_skips: SEARCH_REPORTED_SKIP_LIMIT,
+        },
+    )?;
+
+    let matches = report
+        .matches
+        .into_iter()
+        .map(|found| {
+            let file =
+                catalog
+                    .files
+                    .get(found.candidate_index)
+                    .ok_or_else(|| WorkspaceError::Io {
+                        operation: "map workspace search result".to_string(),
+                        message: "search returned an unknown catalog candidate".to_string(),
+                    })?;
+            Ok(WorkspaceTextSearchMatch {
+                repository_id: file.repository_id.clone(),
+                path: file.path.clone(),
+                workspace_path: found.workspace_path,
+                revision: found.revision,
+                from_utf16: found.from_utf16,
+                to_utf16: found.to_utf16,
+                line: found.line,
+                column_utf16: found.column_utf16,
+                preview: found.preview,
+                preview_from_utf16: found.preview_from_utf16,
+                preview_to_utf16: found.preview_to_utf16,
+                leading_clipped: found.leading_clipped,
+                trailing_clipped: found.trailing_clipped,
+            })
+        })
+        .collect::<Result<Vec<_>, WorkspaceError>>()?;
+    let skipped_files =
+        report
+            .skipped_files
+            .into_iter()
+            .map(|skipped| {
+                let file = catalog.files.get(skipped.candidate_index).ok_or_else(|| {
+                    WorkspaceError::Io {
+                        operation: "map skipped workspace search file".to_string(),
+                        message: "search returned an unknown skipped candidate".to_string(),
+                    }
+                })?;
+                Ok(WorkspaceTextSearchSkippedFile {
+                    repository_id: file.repository_id.clone(),
+                    path: file.path.clone(),
+                    workspace_path: skipped.workspace_path,
+                    reason: skipped.reason,
+                })
+            })
+            .collect::<Result<Vec<_>, WorkspaceError>>()?;
+
+    Ok(WorkspaceTextSearchReport {
+        request_id: report.request_id,
+        matches,
+        catalog_candidates: report.catalog_candidates,
+        files_searched: report.files_searched,
+        bytes_read: report.bytes_read,
+        skipped_count: report.skipped_count,
+        skipped_files,
+        coverage_reasons: report.coverage_reasons,
+    })
 }
 
 #[tauri::command]
@@ -598,6 +863,7 @@ pub fn run() {
         .manage(RemoteOperationRegistry::default())
         .manage(ActiveWorkspace::default())
         .manage(FileSaveRegistry::default())
+        .manage(WorkspaceSearchRegistry::default())
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
@@ -605,6 +871,8 @@ pub fn run() {
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,
+            search_workspace_text,
+            cancel_workspace_text_search,
             read_text_file,
             save_text_file,
             read_diff,
@@ -720,6 +988,46 @@ mod tests {
     }
 
     #[test]
+    fn workspace_search_uses_a_fresh_git_authorized_catalog() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::write(directory.path().join("source.txt"), "authorized needle\n").expect("source file");
+        fs::write(directory.path().join("ignored.txt"), "ignored needle\n").expect("ignored file");
+        fs::write(directory.path().join(".gitignore"), "ignored.txt\n").expect("ignore file");
+        git(directory.path(), &["add", ".gitignore", "source.txt"]);
+
+        let first = search_authorized_workspace(
+            directory.path(),
+            "native-search-1",
+            "needle",
+            &SearchCancellationToken::new(),
+        )
+        .expect("authorized search");
+        assert_eq!(first.matches.len(), 1);
+        assert_eq!(first.matches[0].path, "source.txt");
+
+        git(
+            directory.path(),
+            &["rm", "--cached", "-f", "--", "source.txt"],
+        );
+        fs::write(
+            directory.path().join(".gitignore"),
+            "ignored.txt\nsource.txt\n",
+        )
+        .expect("updated ignore file");
+        git(directory.path(), &["add", ".gitignore"]);
+
+        let revoked = search_authorized_workspace(
+            directory.path(),
+            "native-search-2",
+            "needle",
+            &SearchCancellationToken::new(),
+        )
+        .expect("revoked search remains valid");
+        assert!(revoked.matches.is_empty());
+    }
+
+    #[test]
     fn active_workspace_accepts_only_the_last_canonical_root() {
         let active = ActiveWorkspace::default();
         let first = tempfile::tempdir().expect("first workspace");
@@ -788,6 +1096,34 @@ mod tests {
         let queued = registry
             .register("/future", "queued", "pull")
             .expect("pre-cancelled operation registers as cancelled");
+        assert!(queued.is_cancelled());
+    }
+
+    #[test]
+    fn workspace_search_registry_supersedes_and_finishes_exact_requests() {
+        let mut registry = WorkspaceSearchRegistryState::default();
+        let first = registry.register("/repo", "one");
+        let second = registry.register("/repo", "two");
+        assert!(first.is_cancelled());
+        assert!(!second.is_cancelled());
+
+        registry.finish("/repo", "one", &first);
+        assert_eq!(
+            registry
+                .active
+                .get("/repo")
+                .map(|active| active.id.as_str()),
+            Some("two")
+        );
+
+        registry.cancel("/repo".to_string(), "wrong".to_string());
+        assert!(!second.is_cancelled());
+        registry.cancel("/repo".to_string(), "two".to_string());
+        assert!(second.is_cancelled());
+        assert!(!registry.active.contains_key("/repo"));
+
+        registry.cancel("/future".to_string(), "queued".to_string());
+        let queued = registry.register("/future", "queued");
         assert!(queued.is_cancelled());
     }
 }
