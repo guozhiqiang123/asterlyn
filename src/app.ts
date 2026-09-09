@@ -1723,9 +1723,11 @@ export class AsterlynApp {
     if (this.state.history.commits.length >= HISTORY_ROW_LIMIT) {
       return `<div class="history-page-status">Showing the newest ${HISTORY_ROW_LIMIT.toLocaleString()} commits (session limit)</div>`;
     }
-    return this.state.historyHasMore
-      ? '<div class="history-page-status muted">Scroll to load older commits</div>'
-      : '<div class="history-page-status muted">Beginning of history</div>';
+    if (this.state.historyHasMore) {
+      return '<div class="history-page-status muted">Scroll to load older commits</div>';
+    }
+    const count = this.state.history.commits.length;
+    return `<div class="history-page-status muted" title="No older commits are available for the current filters.">All history loaded · ${count.toLocaleString()} ${count === 1 ? "commit" : "commits"}</div>`;
   }
 
   private renderCommitGraph(
