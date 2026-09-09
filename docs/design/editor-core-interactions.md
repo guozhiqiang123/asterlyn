@@ -41,6 +41,14 @@ Known limits are UTF-8 text up to two MiB, 20 text tabs, explicit save only, and
 
 Add file/text search and replace, recent files, go-to-file, command palette, symbol-free navigation, and keyboard-first result traversal over bounded workspace services.
 
+E2 is split so read-only discovery cannot quietly create a bulk-write surface:
+
+- **E2.1 — Command surface and bounded search:** add `Ctrl/Cmd+P` files, `Ctrl/Cmd+E` repository-scoped recents, `Ctrl/Cmd+Shift+F` cancellable workspace text search, `Ctrl/Cmd+Shift+P` commands, result-to-editor navigation, and visible active-buffer find/replace through CodeMirror.
+- **E2.2 — Search refinement:** add measured include/exclude controls, regular expressions, context expansion, and any index only after the scan implementation supplies a comparison baseline.
+- **E2.3 — Recoverable workspace replacement:** add multi-file preview and rollback/recovery only after the product can prove that interruption, conflict, partial failure, and user cancellation cannot silently lose work.
+
+E2.1 follows [`ADR-0005`](../architecture/decisions/0005-bounded-navigation-search.md). Its acceptance requires pure ranking/recent/navigation tests; bounded search tests covering Unicode, case, CRLF/bare-CR coordinates, unsupported-file accounting, every limit, and cancellation; desktop tests proving fresh Git authorization and stale repository denial; browser keyboard journeys for all four modes and result navigation; accessibility names, selection state, and focus restoration; and recorded latency, build-size, and resource evidence. Packaging and remote publication remain at the larger Stage 3 checkpoint.
+
 ### E3 — Editor groups and preferences
 
 Add splits, tab movement, settings/keymaps, language-neutral indentation, encoding/EOL controls, file watching, external-change comparison, and a measured large-file mode.
