@@ -9,6 +9,7 @@ export interface WorkbenchLayout {
   bottomHeight: number;
   branchTreeWidth: number;
   branchDetailsWidth: number;
+  commitSummaryHeight: number;
   diffBeforePercent: number;
 }
 
@@ -22,6 +23,7 @@ export type WorkbenchLayoutAction =
         | "bottomHeight"
         | "branchTreeWidth"
         | "branchDetailsWidth"
+        | "commitSummaryHeight"
         | "diffBeforePercent";
       value: number;
     }
@@ -41,6 +43,7 @@ export const WORKBENCH_LAYOUT_DEFAULTS: WorkbenchLayout = Object.freeze({
   bottomHeight: 340,
   branchTreeWidth: 270,
   branchDetailsWidth: 320,
+  commitSummaryHeight: 145,
   diffBeforePercent: 50,
 });
 
@@ -52,6 +55,9 @@ export const WORKBENCH_LIMITS = Object.freeze({
   branchTreeMin: 190,
   branchCommitMin: 320,
   branchDetailsMin: 230,
+  commitFilesMin: 80,
+  commitSummaryMin: 90,
+  bottomHeaderSize: 30,
   separatorSize: 5,
   diffPercentMin: 25,
   diffPercentMax: 75,
@@ -100,6 +106,11 @@ export function clampWorkbenchLayout(
     WORKBENCH_LIMITS.bottomMin,
     height - WORKBENCH_LIMITS.editorHeightMin - WORKBENCH_LIMITS.separatorSize,
   );
+  const bottomHeight = clamp(
+    finiteOr(layout.bottomHeight, WORKBENCH_LAYOUT_DEFAULTS.bottomHeight),
+    WORKBENCH_LIMITS.bottomMin,
+    maximumBottom,
+  );
   const availableBranchWidth = Math.max(
     WORKBENCH_LIMITS.branchTreeMin +
       WORKBENCH_LIMITS.branchCommitMin +
@@ -136,11 +147,7 @@ export function clampWorkbenchLayout(
       WORKBENCH_LIMITS.leftMin,
       maximumLeft,
     ),
-    bottomHeight: clamp(
-      finiteOr(layout.bottomHeight, WORKBENCH_LAYOUT_DEFAULTS.bottomHeight),
-      WORKBENCH_LIMITS.bottomMin,
-      maximumBottom,
-    ),
+    bottomHeight,
     branchTreeWidth,
     branchDetailsWidth: clamp(
       finiteOr(
@@ -149,6 +156,20 @@ export function clampWorkbenchLayout(
       ),
       WORKBENCH_LIMITS.branchDetailsMin,
       maximumDetails,
+    ),
+    commitSummaryHeight: clamp(
+      finiteOr(
+        layout.commitSummaryHeight,
+        WORKBENCH_LAYOUT_DEFAULTS.commitSummaryHeight,
+      ),
+      WORKBENCH_LIMITS.commitSummaryMin,
+      Math.max(
+        WORKBENCH_LIMITS.commitSummaryMin,
+        bottomHeight -
+          WORKBENCH_LIMITS.bottomHeaderSize -
+          WORKBENCH_LIMITS.commitFilesMin -
+          WORKBENCH_LIMITS.separatorSize,
+      ),
     ),
     diffBeforePercent: clamp(
       finiteOr(

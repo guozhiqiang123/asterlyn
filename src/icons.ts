@@ -5,6 +5,7 @@ const paths: Record<string, string> = {
     '<path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="11" cy="18" r="1.6"/>',
   history:
     '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2M4.7 5.4 3 5.2l.2 1.7"/>',
+  head: '<path d="M5 20V5m0 1h10l4 4-4 4H5"/>',
   refresh:
     '<path d="M18.4 8A7 7 0 1 0 19 14M18.5 4.5V8h-3.6"/>',
   sync: '<path d="M7 7h11l-3-3M17 17H6l3 3M18 7l-3 3M6 17l3-3"/>',
@@ -13,6 +14,9 @@ const paths: Record<string, string> = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/>',
   folder:
     '<path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9h17"/>',
+  eye: '<path d="M3 12s3.4-6 9-6 9 6 9 6-3.4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/>',
+  tag: '<path d="M4 5v6.5L12.5 20 20 12.5 11.5 4H5a1 1 0 0 0-1 1Z"/><circle cx="8" cy="8" r="1"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   chevron: '<path d="m9 7 5 5-5 5"/>',

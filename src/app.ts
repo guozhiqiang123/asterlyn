@@ -32,6 +32,14 @@ import {
   buildProjectTree,
   type ProjectTreeNode,
 } from "./workbench/project-tree";
+import {
+  buildCommitFileTree,
+  commitReferences,
+  groupRemoteBranches,
+  type CommitFileTreeNode,
+  type CommitFileView,
+  type CommitReference,
+} from "./workbench/git-presentation";
 import type {
   BranchSummary,
   ChangeKind,
@@ -46,6 +54,7 @@ import type {
 } from "./models";
 
 const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
+const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 
 interface AppState {
   snapshot: RepositorySnapshot | null;
@@ -61,8 +70,10 @@ interface AppState {
   changeQuery: string;
   selectedCommit: string | null;
   historyQuery: string;
+  branchQuery: string;
   history: RefHistoryState;
   selectedCommitFile: string | null;
+  commitFileView: CommitFileView;
   commitDetails: CommitDetails | null;
   commitDetailsLoading: boolean;
   commitDetailsError: string | null;
@@ -108,8 +119,10 @@ export class AsterlynApp {
     changeQuery: "",
     selectedCommit: null,
     historyQuery: "",
+    branchQuery: "",
     history: emptyRefHistory(),
     selectedCommitFile: null,
+    commitFileView: loadCommitFileView(window.localStorage),
     commitDetails: null,
     commitDetailsLoading: false,
     commitDetailsError: null,
@@ -144,6 +157,7 @@ export class AsterlynApp {
   private mountedEditorKey: string | null = null;
   private repositoryChooserOpen = false;
   private splitterDisposers: Array<() => void> = [];
+  private commitDetailSplitterDisposer: (() => void) | null = null;
   private workspaceResizeObserver: ResizeObserver | null = null;
   private activeUntrackedScan: {
     id: string;
@@ -270,12 +284,10 @@ export class AsterlynApp {
               </div>
               <div class="git-tool-grid" id="git-tool-grid">
                 <section class="git-tool-pane branch-tree-pane" aria-label="Branches">
-                  <div class="git-pane-header"><strong>Branches</strong><span id="branch-count">0</span></div>
                   <div class="git-pane-body" id="branch-navigation-body"></div>
                 </section>
                 <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="Resize branch tree"></div>
                 <section class="git-tool-pane commit-log-pane" aria-label="Commit log">
-                  <div class="git-pane-header"><strong>Log</strong><span id="history-count">0</span></div>
                   <div class="git-pane-body" id="history-navigation-body"></div>
                 </section>
                 <div class="workbench-splitter vertical" id="branch-details-splitter" aria-label="Resize Git details"></div>
@@ -838,6 +850,7 @@ export class AsterlynApp {
       | "bottomHeight"
       | "branchTreeWidth"
       | "branchDetailsWidth"
+      | "commitSummaryHeight"
       | "diffBeforePercent",
     value: number,
   ): void {
@@ -871,6 +884,10 @@ export class AsterlynApp {
     workbench.style.setProperty(
       "--branch-details-width",
       `${this.state.layout.branchDetailsWidth}px`,
+    );
+    workbench.style.setProperty(
+      "--commit-summary-height",
+      `${this.state.layout.commitSummaryHeight}px`,
     );
     const leftOpen = this.state.layout.leftTool !== null;
     const bottomOpen = this.state.layout.bottomTool !== null;
@@ -937,13 +954,15 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
-    this.query("#branch-count").textContent = String(snapshot.branches.length);
-    this.renderHistoryCount(commits.length);
+    this.commitDetailSplitterDisposer?.();
+    this.commitDetailSplitterDisposer = null;
     this.query("#branch-navigation-body").innerHTML =
       this.renderBranchNavigation(snapshot);
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
     this.query("#git-detail-body").innerHTML = this.renderGitDetail(snapshot);
+    this.renderBranchCount(snapshot);
+    this.renderHistoryCount(commits.length);
     this.bindBranchEvents();
     this.bindHistoryEvents();
     this.bindGitDetailEvents(snapshot);
@@ -1187,6 +1206,7 @@ export class AsterlynApp {
 
   private renderHistoryNavigation(): string {
     const commits = this.filteredHistoryCommits();
+    const scope = this.historyScope();
     const results =
       this.state.history.status === "loading"
         ? this.loadingBlock("Loading selected ref history…")
@@ -1202,11 +1222,15 @@ export class AsterlynApp {
             : this.renderHistoryRows(commits);
     return `
       <div class="history-navigation">
-        <label class="history-filter" for="history-filter">
-          ${icon("search", 14)}
-          <input id="history-filter" type="search" value="${escapeAttribute(this.state.historyQuery)}" placeholder="Filter message, author, hash…" autocomplete="off" spellcheck="false" aria-label="Filter commit history" aria-keyshortcuts="Control+F Meta+F" />
-          <span>Ctrl F</span>
-        </label>
+        <div class="history-toolbar">
+          <label class="history-filter" for="history-filter">
+            ${icon("search", 14)}
+            <input id="history-filter" type="search" value="${escapeAttribute(this.state.historyQuery)}" placeholder="Text or hash" autocomplete="off" spellcheck="false" aria-label="Filter commit history" aria-keyshortcuts="Control+F Meta+F" />
+            <span>Ctrl F</span>
+          </label>
+          <span class="history-scope" title="${escapeAttribute(scope.title)}">${icon(scope.icon, 13)}<span>${escapeHtml(scope.label)}</span></span>
+          <span class="compact-count" id="history-count">0</span>
+        </div>
         <div class="history-results" id="history-results" aria-live="polite">
           ${results}
         </div>
@@ -1217,20 +1241,56 @@ export class AsterlynApp {
     if (commits.length === 0) {
       return `<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>`;
     }
-    return `<div class="history-list">${commits
+    return `<div class="history-list" role="listbox" aria-label="Commit history">${commits
       .map((commit) => {
         const selected = commit.oid === this.state.selectedCommit;
+        const references = this.commitReferenceBadges(commit.decorations, 2);
         return `
-          <button class="history-row ${selected ? "selected" : ""}" type="button" data-commit="${commit.oid}" aria-pressed="${selected}">
+          <button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${commit.oid}" aria-selected="${selected}" title="${escapeAttribute(commit.subject)}">
             <span class="graph-dot ${commit.parents.length > 1 ? "merge" : ""}"></span>
-            <span class="history-copy">
-              <span class="history-subject">${escapeHtml(commit.subject)}</span>
-              <span class="history-meta">${escapeHtml(commit.authorName)} · ${formatRelative(commit.authoredAt)}</span>
-            </span>
-            <code>${escapeHtml(commit.shortOid)}</code>
+            <span class="history-subject">${escapeHtml(commit.subject)}</span>
+            <span class="history-references">${references}</span>
+            <span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span>
+            <time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time>
+            <code class="history-oid" title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.shortOid)}</code>
           </button>`;
       })
       .join("")}</div>`;
+  }
+
+  private historyScope(): {
+    icon: "head" | "branch" | "tag";
+    label: string;
+    title: string;
+  } {
+    const source = this.state.history.source;
+    if (source?.kind !== "ref") {
+      return { icon: "head", label: "HEAD", title: "History from the observed HEAD" };
+    }
+    const branch = this.state.snapshot?.branches.find(
+      (candidate) => candidate.fullName === source.fullName,
+    );
+    return {
+      icon: branch?.kind === "tag" ? "tag" : "branch",
+      label: branch?.name ?? source.fullName,
+      title: source.fullName,
+    };
+  }
+
+  private commitReferenceBadges(decorations: string[], limit: number): string {
+    const references = commitReferences(
+      decorations,
+      this.state.snapshot?.branches ?? [],
+    );
+    if (references.length === 0) return "";
+    const visible = references.slice(0, limit);
+    const remaining = references.length - visible.length;
+    return `${visible.map((reference) => this.commitReferenceBadge(reference)).join("")}${remaining > 0 ? `<span class="commit-reference-more" title="${escapeAttribute(references.map((reference) => reference.label).join(", "))}">+${remaining}</span>` : ""}`;
+  }
+
+  private commitReferenceBadge(reference: CommitReference): string {
+    const iconName = reference.kind === "head" ? "head" : reference.kind === "tag" || reference.kind === "other" ? "tag" : "branch";
+    return `<span class="commit-reference ${reference.kind}" title="${escapeAttribute(capitalize(reference.kind))}: ${escapeAttribute(reference.label)}">${icon(iconName, 12)}<span>${escapeHtml(reference.label)}</span></span>`;
   }
 
   private filteredHistoryCommits(): CommitSummary[] {
@@ -1252,6 +1312,22 @@ export class AsterlynApp {
     if (snapshot.branches.length === 0) {
       return this.emptyState("No refs", "Branches and tags will appear here.", "branch", true);
     }
+    return `
+      <div class="branch-navigation">
+        <label class="branch-filter" for="branch-filter">
+          ${icon("search", 14)}
+          <input id="branch-filter" type="search" value="${escapeAttribute(this.state.branchQuery)}" placeholder="Branch or tag" autocomplete="off" spellcheck="false" aria-label="Filter branches and tags" />
+          <span class="compact-count" id="branch-count">0</span>
+        </label>
+        <div class="branch-results" id="branch-results">${this.renderBranchGroups(snapshot)}</div>
+      </div>`;
+  }
+
+  private renderBranchGroups(snapshot: RepositorySnapshot): string {
+    const visible = this.filteredBranches(snapshot);
+    if (visible.length === 0) {
+      return `<div class="branch-no-results"><strong>No matching refs</strong><span>Try another branch, remote, or tag name.</span></div>`;
+    }
     const groups: Array<[string, BranchSummary["kind"]]> = [
       ["Local", "local"],
       ["Remote", "remote"],
@@ -1259,7 +1335,7 @@ export class AsterlynApp {
     ];
     return groups
       .map(([label, kind]) => {
-        const branches = snapshot.branches.filter((branch) => branch.kind === kind);
+        const branches = visible.filter((branch) => branch.kind === kind);
         if (branches.length === 0) return "";
         const collapsed = this.state.collapsedBranchGroups.has(kind);
         const groupId = `branch-group-${kind}`;
@@ -1267,24 +1343,42 @@ export class AsterlynApp {
           <button class="group-header branch-group-toggle" type="button" data-branch-group-toggle="${kind}" aria-expanded="${!collapsed}" aria-controls="${groupId}">
             <span><span class="branch-group-chevron">${icon("chevron", 12)}</span>${label}<b>${branches.length}</b></span>
           </button>
-          <div id="${groupId}" role="group" ${collapsed ? "hidden" : ""}>${branches
-            .map((branch) => this.branchRow(branch))
-            .join("")}</div>
+          <div id="${groupId}" role="group" ${collapsed ? "hidden" : ""}>${kind === "remote" ? this.renderRemoteBranches(branches) : branches.map((branch) => this.branchRow(branch)).join("")}</div>
         </section>`;
       })
       .join("");
   }
 
-  private branchRow(branch: BranchSummary): string {
+  private filteredBranches(snapshot: RepositorySnapshot): BranchSummary[] {
+    const query = this.state.branchQuery.trim().toLocaleLowerCase();
+    if (!query) return snapshot.branches;
+    return snapshot.branches.filter((branch) =>
+      [branch.name, branch.fullName, branch.subject].some((value) =>
+        value.toLocaleLowerCase().includes(query),
+      ),
+    );
+  }
+
+  private renderRemoteBranches(branches: BranchSummary[]): string {
+    return groupRemoteBranches(branches)
+      .map(
+        (group) => `
+          <section class="remote-ref-group">
+            <div class="remote-root-row">${icon("chevron", 11)}${icon("folder", 14)}<span>${escapeHtml(group.name)}</span><small>${group.branches.length}</small></div>
+            <div role="group">${group.branches.map(({ branch, displayName }) => this.branchRow(branch, displayName, true)).join("")}</div>
+          </section>`,
+      )
+      .join("");
+  }
+
+  private branchRow(branch: BranchSummary, displayName = branch.name, nested = false): string {
     const selected = branch.fullName === this.state.selectedBranch;
+    const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
     return `
-      <button class="branch-row ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" aria-pressed="${selected}">
-        <span class="branch-glyph ${branch.current ? "current" : ""}">${icon("branch", 15)}</span>
-        <span class="branch-copy">
-          <span>${escapeHtml(branch.name)}</span>
-          <small>${escapeHtml(branch.subject)}</small>
-        </span>
-        ${branch.current ? '<span class="current-pill">Current</span>' : ""}
+      <button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" aria-pressed="${selected}" title="${escapeAttribute(`${branch.name} — ${branch.subject}`)}">
+        <span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span>
+        <span class="branch-name">${escapeHtml(displayName)}</span>
+        ${branch.current ? '<span class="current-label">HEAD</span>' : ""}
       </button>`;
   }
 
@@ -1542,6 +1636,13 @@ export class AsterlynApp {
     count.title = `${filteredCount} of ${this.state.history.commits.length} commits in the selected history`;
   }
 
+  private renderBranchCount(snapshot: RepositorySnapshot): void {
+    const visible = this.filteredBranches(snapshot).length;
+    const count = this.query("#branch-count");
+    count.textContent = String(visible);
+    count.title = `${visible} of ${snapshot.branches.length} refs`;
+  }
+
   private focusHistoryFilter(): void {
     const input = this.root.querySelector<HTMLInputElement>("#history-filter");
     input?.focus();
@@ -1571,6 +1672,39 @@ export class AsterlynApp {
   }
 
   private bindBranchEvents(): void {
+    const input = this.root.querySelector<HTMLInputElement>("#branch-filter");
+    input?.addEventListener("input", () => {
+      const snapshot = this.state.snapshot;
+      if (!snapshot) return;
+      this.state.branchQuery = input.value;
+      this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
+      this.renderBranchCount(snapshot);
+      this.bindBranchRows();
+    });
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && input.value) {
+        event.preventDefault();
+        input.value = "";
+        this.state.branchQuery = "";
+        const snapshot = this.state.snapshot;
+        if (!snapshot) return;
+        this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
+        this.renderBranchCount(snapshot);
+        this.bindBranchRows();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "ArrowDown") {
+        const first = this.root.querySelector<HTMLButtonElement>("[data-branch]");
+        if (!first) return;
+        event.preventDefault();
+        const fullName = first.dataset.branch;
+        if (fullName) this.selectBranch(fullName, true);
+      }
+    });
+    this.bindBranchRows();
+  }
+
+  private bindBranchRows(): void {
     this.root
       .querySelectorAll<HTMLButtonElement>("[data-branch-group-toggle]")
       .forEach((button) => {
@@ -1588,6 +1722,7 @@ export class AsterlynApp {
           this.state.collapsedBranchGroups = collapsed;
           this.query("#branch-navigation-body").innerHTML =
             this.renderBranchNavigation(this.state.snapshot!);
+          this.renderBranchCount(this.state.snapshot!);
           this.bindBranchEvents();
           this.root
             .querySelector<HTMLButtonElement>(`[data-branch-group-toggle="${kind}"]`)
@@ -2048,17 +2183,30 @@ export class AsterlynApp {
     }
   }
 
-  private commitFileRow(file: CommitFileChange, selected: boolean): string {
+  private renderCommitFileTreeNode(node: CommitFileTreeNode, depth: number): string {
+    if (node.kind === "directory") {
+      return `<details class="commit-file-directory" open><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countCommitTreeFiles(node)}</small></summary><div role="group">${node.children.map((child) => this.renderCommitFileTreeNode(child, depth + 1)).join("")}</div></details>`;
+    }
+    return this.commitFileRow(node.file!, node.file!.path === this.state.selectedCommitFile, depth);
+  }
+
+  private commitFileRow(
+    file: CommitFileChange,
+    selected: boolean,
+    depth: number | null = null,
+  ): string {
     const previous = file.originalPath
       ? `<span class="commit-file-origin">${escapeHtml(file.originalPath)} →</span>`
       : "";
+    const tree = depth !== null;
     return `
-      <button class="commit-file-row ${selected ? "selected" : ""}" type="button" data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
+      <button class="commit-file-row ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" ${tree ? `style="--tree-depth:${depth}"` : ""} data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
         <span class="change-status status-${file.status}" title="${escapeAttribute(changeLabel(file.status))}">${changeCode(file.status)}</span>
+        <span class="commit-file-glyph">${fileGlyph(file.path)}</span>
         <span class="change-path">
           ${previous}
           <span class="file-name">${escapeHtml(basename(file.path))}</span>
-          <span class="file-directory">${escapeHtml(dirname(file.path))}</span>
+          ${tree ? "" : `<span class="file-directory">${escapeHtml(dirname(file.path))}</span>`}
         </span>
       </button>`;
   }
@@ -2247,23 +2395,38 @@ export class AsterlynApp {
           )
         : details
           ? details.files.length
-            ? details.files
-                .map((file) =>
-                  this.commitFileRow(
-                    file,
-                    file.path === this.state.selectedCommitFile,
-                  ),
-                )
-                .join("")
+            ? this.state.commitFileView === "tree"
+              ? `<div class="commit-file-tree" role="tree" aria-label="Changed files by directory">
+                  <details class="commit-file-directory commit-file-root" open>
+                    <summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(basename(snapshot.root))}</span><small>${details.files.length} ${details.files.length === 1 ? "file" : "files"}</small></summary>
+                    <div role="group">${buildCommitFileTree(details.files).map((node) => this.renderCommitFileTreeNode(node, 1)).join("")}</div>
+                  </details>
+                </div>`
+              : `<div class="commit-file-flat-list" role="listbox" aria-label="Changed files as a flat list">${[...details.files]
+                  .sort((left, right) => left.path.localeCompare(right.path))
+                  .map((file) =>
+                    this.commitFileRow(
+                      file,
+                      file.path === this.state.selectedCommitFile,
+                    ),
+                  )
+                  .join("")}</div>`
             : '<div class="group-empty">No first-parent changes</div>'
           : this.loadingBlock("Loading changed files…");
+    const nextView = this.state.commitFileView === "tree" ? "flat list" : "directory tree";
     return `
       <div class="commit-detail-layout">
-        <div class="inspector-header commit-detail-header"><span class="panel-eyebrow">Commit</span><h2>${escapeHtml(commit.shortOid)}</h2></div>
         <section class="git-detail-files" aria-label="Changed files">
-          <div class="commit-files-header"><span>Changed files</span><b>${fileCount}</b></div>
-          <div class="commit-file-list">${fileRows}</div>
+          <div class="commit-files-toolbar">
+            <span class="commit-files-label">${icon("folder", 13)}<span>Files</span><b>${fileCount}</b></span>
+            <button class="compact-icon-button" id="commit-file-view-toggle" type="button" aria-label="Show changed files as a ${nextView}" aria-pressed="${this.state.commitFileView === "tree"}" title="Show as ${nextView}">
+              ${icon("eye", 14)}
+            </button>
+            <span class="commit-file-view-kind" aria-hidden="true">${icon(this.state.commitFileView === "tree" ? "folder" : "list", 13)}</span>
+          </div>
+          <div class="commit-file-list ${this.state.commitFileView}">${fileRows}</div>
         </section>
+        <div class="workbench-splitter horizontal commit-summary-splitter" id="commit-summary-splitter" aria-label="Resize commit message and details"></div>
         ${this.commitInspector(commit)}
       </div>`;
   }
@@ -2276,8 +2439,41 @@ export class AsterlynApp {
     }
     this.bindCommitFileEvents();
     this.root
+      .querySelector<HTMLButtonElement>("#commit-file-view-toggle")
+      ?.addEventListener("click", () => {
+        this.state.commitFileView = this.state.commitFileView === "tree" ? "flat" : "tree";
+        saveCommitFileView(window.localStorage, this.state.commitFileView);
+        this.renderBottomTool();
+        this.root.querySelector<HTMLButtonElement>("#commit-file-view-toggle")?.focus();
+      });
+    this.root
       .querySelector<HTMLButtonElement>("#retry-commit-details")
       ?.addEventListener("click", () => void this.loadSelectedCommitDetails());
+    const splitter = this.root.querySelector<HTMLElement>("#commit-summary-splitter");
+    const layout = this.root.querySelector<HTMLElement>(".commit-detail-layout");
+    if (splitter && layout) {
+      this.commitDetailSplitterDisposer = attachSplitter(splitter, {
+        orientation: "horizontal",
+        direction: -1,
+        getValue: () => this.state.layout.commitSummaryHeight,
+        getRange: () => ({
+          minimum: WORKBENCH_LIMITS.commitSummaryMin,
+          maximum: Math.max(
+            WORKBENCH_LIMITS.commitSummaryMin,
+            layout.clientHeight -
+              WORKBENCH_LIMITS.commitFilesMin -
+              WORKBENCH_LIMITS.separatorSize,
+          ),
+        }),
+        onChange: (value) => this.resizeWorkbench("commitSummaryHeight", value),
+        onCommit: () => this.persistWorkbenchLayout(),
+        onReset: () =>
+          this.resizeWorkbench(
+            "commitSummaryHeight",
+            WORKBENCH_LAYOUT_DEFAULTS.commitSummaryHeight,
+          ),
+      });
+    }
   }
 
   private async mutatePaths(stage: boolean, paths: string[]): Promise<void> {
@@ -2701,22 +2897,30 @@ export class AsterlynApp {
     const comparison = details
       ? details.parentOid?.slice(0, 10) ?? "Empty tree"
       : commit.parents[0]?.slice(0, 10) ?? "Empty tree";
+    const references = commitReferences(
+      commit.decorations,
+      this.state.snapshot?.branches ?? [],
+    );
+    const referenceRows = references
+      .map((reference) => this.commitReferenceBadge(reference))
+      .join("");
+    const referenceSummary = references
+      .slice(0, 3)
+      .map((reference) => reference.label)
+      .join(", ");
     return `
-      <details class="commit-information">
-        <summary>
-          <span class="commit-information-label">${icon("chevron", 13)} Commit information</span>
-          <span class="commit-information-preview">${escapeHtml(commit.authorName)} · ${formatRelative(commit.authoredAt)}</span>
-        </summary>
-        <div class="message-card"><span>Message</span><p>${escapeHtml(commit.subject)}</p></div>
-        <dl class="metadata-list">
-          <div><dt>Author</dt><dd>${escapeHtml(commit.authorName)}</dd></div>
-          <div><dt>Email</dt><dd>${escapeHtml(commit.authorEmail)}</dd></div>
-          <div><dt>Date</dt><dd>${formatAbsolute(commit.authoredAt)}</dd></div>
-          <div><dt>Object</dt><dd title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.oid)}</dd></div>
-          <div><dt>Parents</dt><dd>${commit.parents.length || "None"}</dd></div>
-          <div><dt>Compared with</dt><dd>${escapeHtml(comparison)}</dd></div>
-        </dl>
-      </details>`;
+      <section class="commit-information" aria-label="Commit message and details">
+        <h2>${escapeHtml(commit.subject)}</h2>
+        <p class="commit-authorship">
+          <code title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.shortOid)}</code>
+          <span>${escapeHtml(commit.authorName)}</span>
+          <span class="commit-email">&lt;${escapeHtml(commit.authorEmail)}&gt;</span>
+          <span>on</span>
+          <time datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time>
+        </p>
+        ${references.length === 0 ? '<span class="commit-no-references">No named refs point to this commit</span>' : references.length <= 3 ? `<div class="commit-reference-list">${referenceRows}</div>` : `<details class="commit-reference-overflow"><summary><span>In ${references.length} refs: ${escapeHtml(referenceSummary)}…</span><b>Show all</b></summary><div class="commit-reference-list">${referenceRows}</div></details>`}
+        <span class="commit-comparison" title="First-parent comparison">Compared with ${escapeHtml(comparison)}</span>
+      </section>`;
   }
 
   private branchInspector(
@@ -2892,6 +3096,30 @@ function changeExists(
     (change) =>
       change.path === path && (staged ? hasStagedChange(change) : hasWorktreeChange(change)),
   );
+}
+
+function countCommitTreeFiles(node: CommitFileTreeNode): number {
+  if (node.kind === "file") return 1;
+  return node.children.reduce((total, child) => total + countCommitTreeFiles(child), 0);
+}
+
+function loadCommitFileView(storage: Pick<Storage, "getItem">): CommitFileView {
+  try {
+    return storage.getItem(COMMIT_FILE_VIEW_KEY) === "flat" ? "flat" : "tree";
+  } catch {
+    return "tree";
+  }
+}
+
+function saveCommitFileView(
+  storage: Pick<Storage, "setItem">,
+  view: CommitFileView,
+): void {
+  try {
+    storage.setItem(COMMIT_FILE_VIEW_KEY, view);
+  } catch {
+    // A denied preference write must not affect commit inspection.
+  }
 }
 
 function selectedCommit(
