@@ -52,10 +52,12 @@ name = "asterlyn"
 version = "0.1.0"
 dependencies = [
  "asterlyn-git",
+ "asterlyn-workspace",
  "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tempfile",
 ]
 
 [[package]]
@@ -64,6 +66,15 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "asterlyn-workspace"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "sha2",
  "tempfile",
 ]
 

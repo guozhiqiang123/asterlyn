@@ -690,8 +690,35 @@ impl GitRepository {
         })
     }
 
+    pub fn authorize_project_file(
+        &self,
+        repository_id: &str,
+        path: &str,
+        limit: usize,
+    ) -> Result<ProjectFile, GitError> {
+        validate_relative_path(path)?;
+        self.project_files(limit)?
+            .files
+            .into_iter()
+            .find(|file| file.repository_id == repository_id && file.path == path)
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "project file".to_string(),
+                message: "select a tracked or non-ignored untracked file from the current project catalog"
+                    .to_string(),
+            })
+    }
+
     fn project_file_paths(&self) -> Result<Vec<String>, GitError> {
-        let output = self.run_read("list tracked project files", ["ls-files", "--cached", "-z"])?;
+        let output = self.run_read(
+            "list project files",
+            [
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            ],
+        )?;
         let mut paths: Vec<_> = output
             .stdout
             .split(|byte| *byte == 0)
@@ -2950,22 +2977,49 @@ mod tests {
     }
 
     #[test]
-    fn project_file_list_is_sorted_bounded_and_tracked_only() {
+    fn project_file_list_is_sorted_bounded_and_authorizes_visible_files_only() {
         let directory = fixture();
         fs::create_dir_all(directory.path().join("src")).expect("fixture directory");
         fs::write(directory.path().join("src/zeta.rs"), "zeta\n").expect("tracked file");
         fs::write(directory.path().join("alpha.txt"), "alpha\n").expect("tracked file");
         fs::write(directory.path().join("untracked.txt"), "later\n").expect("untracked file");
-        git(directory.path(), &["add", "alpha.txt", "src/zeta.rs"]);
+        fs::write(directory.path().join("ignored.txt"), "hidden\n").expect("ignored file");
+        fs::write(directory.path().join(".gitignore"), "ignored.txt\n").expect("ignore file");
+        git(
+            directory.path(),
+            &["add", ".gitignore", "alpha.txt", "src/zeta.rs"],
+        );
         let repository = GitRepository::open(directory.path()).expect("repository opens");
 
         let complete = repository.project_files(10).expect("project files load");
-        assert_eq!(complete.paths, ["alpha.txt", "src/zeta.rs"]);
+        assert_eq!(
+            complete.paths,
+            [".gitignore", "alpha.txt", "src/zeta.rs", "untracked.txt"]
+        );
         assert!(!complete.truncated);
+        assert_eq!(
+            repository
+                .authorize_project_file(".", "untracked.txt", 10)
+                .expect("visible untracked file is authorized")
+                .workspace_path,
+            "untracked.txt"
+        );
+        assert!(matches!(
+            repository.authorize_project_file(".", "ignored.txt", 10),
+            Err(GitError::InvalidInput { .. })
+        ));
+        assert!(matches!(
+            repository.authorize_project_file(".", "../outside", 10),
+            Err(GitError::InvalidInput { .. })
+        ));
 
         let bounded = repository.project_files(1).expect("bounded files load");
-        assert_eq!(bounded.paths, ["alpha.txt"]);
+        assert_eq!(bounded.paths, [".gitignore"]);
         assert!(bounded.truncated);
+        assert!(matches!(
+            repository.authorize_project_file(".", "untracked.txt", 1),
+            Err(GitError::InvalidInput { .. })
+        ));
     }
 
     #[test]
@@ -3065,6 +3119,13 @@ mod tests {
                 && file.path == "shared.txt"
                 && file.workspace_path == "modules/library/shared.txt"
         }));
+        assert_eq!(
+            repository
+                .authorize_project_file("modules/library", "shared.txt", 50)
+                .expect("child file is freshly authorized")
+                .workspace_path,
+            "modules/library/shared.txt"
+        );
         assert!(matches!(
             repository.repository_commit_details("../source", &child_oid),
             Err(GitError::InvalidInput { .. })

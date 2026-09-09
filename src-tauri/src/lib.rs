@@ -1,9 +1,13 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, MutexGuard};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
     HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
+};
+use asterlyn_workspace::{
+    SaveTextFileRequest, SaveTextFileResult, TextFileSnapshot, Workspace, WorkspaceError,
 };
 use tauri::State;
 
@@ -37,6 +41,67 @@ struct RemoteOperationRegistryState {
 struct ActiveRemoteOperation {
     id: String,
     cancellation: CancellationToken,
+}
+
+#[derive(Default)]
+struct ActiveWorkspace {
+    root: Mutex<Option<PathBuf>>,
+}
+
+#[derive(Default)]
+struct FileSaveRegistry {
+    locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+impl ActiveWorkspace {
+    fn activate(&self, root: &str) -> Result<(), GitError> {
+        let canonical = std::fs::canonicalize(root).map_err(|error| GitError::Io {
+            operation: "activate workspace".to_string(),
+            message: error.to_string(),
+        })?;
+        *self.root.lock().map_err(|_| GitError::Io {
+            operation: "activate workspace".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })? = Some(canonical);
+        Ok(())
+    }
+
+    fn resolve(&self, requested: &str) -> Result<PathBuf, WorkspaceError> {
+        let requested =
+            std::fs::canonicalize(requested).map_err(|error| WorkspaceError::NotAuthorized {
+                message: format!("the requested workspace is unavailable: {error}"),
+            })?;
+        let active = self
+            .root
+            .lock()
+            .map_err(|_| WorkspaceError::Io {
+                operation: "authorize active workspace".to_string(),
+                message: "active workspace lock was poisoned".to_string(),
+            })?
+            .clone()
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "open a repository before reading or saving files".to_string(),
+            })?;
+        if requested != active {
+            return Err(WorkspaceError::NotAuthorized {
+                message: "the file does not belong to the active repository".to_string(),
+            });
+        }
+        Ok(active)
+    }
+}
+
+impl FileSaveRegistry {
+    fn lock_for(&self, identity: String) -> Result<Arc<Mutex<()>>, WorkspaceError> {
+        let mut locks = self.locks.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize file saves".to_string(),
+            message: "file-save registry lock was poisoned".to_string(),
+        })?;
+        Ok(locks
+            .entry(identity)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
+    }
 }
 
 impl RemoteOperationRegistryState {
@@ -107,11 +172,16 @@ fn initial_repository() -> Option<String> {
 }
 
 #[tauri::command]
-async fn open_repository(path: String) -> Result<RepositorySnapshot, GitError> {
-    run_blocking("open repository", move || {
+async fn open_repository(
+    path: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+) -> Result<RepositorySnapshot, GitError> {
+    let snapshot = run_blocking("open repository", move || {
         GitRepository::open(path)?.tracked_snapshot(COMMIT_LIMIT)
     })
-    .await
+    .await?;
+    active_workspace.activate(&snapshot.root)?;
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -196,6 +266,68 @@ async fn list_project_files(repository_root: String) -> Result<ProjectFileList, 
         GitRepository::open(repository_root)?.project_files(PROJECT_FILE_LIMIT)
     })
     .await
+}
+
+#[tauri::command]
+async fn read_text_file(
+    repository_root: String,
+    repository_id: String,
+    path: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+) -> Result<TextFileSnapshot, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    run_workspace_blocking("read text file", move || {
+        let authorized = authorize_project_file(&root, &repository_id, &path)?;
+        Workspace::open(&root)?.read_text_file(&authorized.workspace_path)
+    })
+    .await
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn save_text_file(
+    repository_root: String,
+    repository_id: String,
+    path: String,
+    expected_revision: String,
+    content: String,
+    utf8_bom: bool,
+    request_id: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+    save_registry: State<'_, FileSaveRegistry>,
+) -> Result<SaveTextFileResult, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let identity = format!("{}\0{}\0{}", root.display(), repository_id, path);
+    let save_lock = save_registry.lock_for(identity)?;
+    run_workspace_blocking("save text file", move || {
+        let _guard = save_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize file save".to_string(),
+            message: "file-save lock was poisoned".to_string(),
+        })?;
+        let authorized = authorize_project_file(&root, &repository_id, &path)?;
+        Workspace::open(&root)?.save_text_file(&SaveTextFileRequest {
+            workspace_path: authorized.workspace_path,
+            expected_revision,
+            content,
+            utf8_bom,
+            request_id,
+        })
+    })
+    .await
+}
+
+fn authorize_project_file(
+    root: &Path,
+    repository_id: &str,
+    path: &str,
+) -> Result<asterlyn_git::ProjectFile, WorkspaceError> {
+    GitRepository::open(root)
+        .and_then(|repository| {
+            repository.authorize_project_file(repository_id, path, PROJECT_FILE_LIMIT)
+        })
+        .map_err(|_| WorkspaceError::NotAuthorized {
+            message: "select a current tracked or non-ignored project file".to_string(),
+        })
 }
 
 #[tauri::command]
@@ -416,12 +548,27 @@ where
         })?
 }
 
+async fn run_workspace_blocking<T, F>(operation: &str, task: F) -> Result<T, WorkspaceError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, WorkspaceError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|error| WorkspaceError::Io {
+            operation: operation.to_string(),
+            message: format!("background task could not complete: {error}"),
+        })?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
         .manage(RemoteOperationRegistry::default())
+        .manage(ActiveWorkspace::default())
+        .manage(FileSaveRegistry::default())
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
@@ -429,6 +576,8 @@ pub fn run() {
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,
+            read_text_file,
+            save_text_file,
             read_diff,
             read_commit_details,
             read_commit_diff,
@@ -449,6 +598,48 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_workspace_accepts_only_the_last_canonical_root() {
+        let active = ActiveWorkspace::default();
+        let first = tempfile::tempdir().expect("first workspace");
+        let second = tempfile::tempdir().expect("second workspace");
+        let first_path = first.path().to_string_lossy();
+        let second_path = second.path().to_string_lossy();
+
+        assert!(matches!(
+            active.resolve(&first_path),
+            Err(WorkspaceError::NotAuthorized { .. })
+        ));
+        active
+            .activate(&first_path)
+            .expect("first workspace activates");
+        assert_eq!(
+            active.resolve(&first_path).expect("active root resolves"),
+            std::fs::canonicalize(first.path()).expect("canonical first root")
+        );
+        assert!(matches!(
+            active.resolve(&second_path),
+            Err(WorkspaceError::NotAuthorized { .. })
+        ));
+    }
+
+    #[test]
+    fn file_save_registry_reuses_only_matching_identity_locks() {
+        let registry = FileSaveRegistry::default();
+        let first = registry
+            .lock_for("root\0.\0file".to_string())
+            .expect("lock");
+        let same = registry
+            .lock_for("root\0.\0file".to_string())
+            .expect("same lock");
+        let other = registry
+            .lock_for("root\0.\0other".to_string())
+            .expect("other lock");
+
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &other));
+    }
 
     #[test]
     fn remote_registry_serializes_by_repository_and_cancels_exact_ids() {
