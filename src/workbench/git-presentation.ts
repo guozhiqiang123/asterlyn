@@ -46,6 +46,10 @@ export interface CommitGraphProjection {
   rows: CommitGraphRow[];
 }
 
+export interface CommitGraphOptions {
+  bridgeOmittedParents?: boolean;
+}
+
 interface ActiveGraphLane {
   key: string;
   color: number;
@@ -55,11 +59,23 @@ const GRAPH_COLOR_COUNT = 8;
 
 export function projectCommitGraph(
   commits: Pick<CommitSummary, "repositoryId" | "oid" | "parents">[],
+  options: CommitGraphOptions = {},
 ): CommitGraphProjection {
   let lanes: ActiveGraphLane[] = [];
   let nextColor = 0;
   let laneCount = 1;
   const rows: CommitGraphRow[] = [];
+  // Git reports physical parents even when a query hides those commits. Only visible parents may
+  // own durable lanes; otherwise each filtered row would leak another unresolved lane.
+  const visibleKeys = new Set(commits.map(commitKey));
+  const nextVisibleByIndex = new Map<number, string>();
+  const nextVisibleByRoot = new Map<string, string>();
+  for (let index = commits.length - 1; index >= 0; index -= 1) {
+    const commit = commits[index]!;
+    const next = nextVisibleByRoot.get(commit.repositoryId);
+    if (next) nextVisibleByIndex.set(index, next);
+    nextVisibleByRoot.set(commit.repositoryId, commit.oid);
+  }
 
   const allocateColor = (active: ActiveGraphLane[]): number => {
     const used = new Set(active.map((lane) => lane.color));
@@ -74,7 +90,7 @@ export function projectCommitGraph(
     return candidate;
   };
 
-  for (const commit of commits) {
+  for (const [commitIndex, commit] of commits.entries()) {
     const key = commitKey(commit);
     const before = [...lanes];
     let nodeLane = before.findIndex((lane) => lane.key === key);
@@ -84,9 +100,19 @@ export function projectCommitGraph(
       before.push({ key, color: allocateColor(before) });
     }
     const nodeColor = before[nodeLane]!.color;
-    const parents = commit.parents.map((parent) => parentCommitKey(commit.repositoryId, parent)).filter(
-      (parent, index, values) => parent.length > 0 && values.indexOf(parent) === index,
-    );
+    const actualParents = commit.parents
+      .map((parent) => parentCommitKey(commit.repositoryId, parent))
+      .filter((parent, index, values) => parent.length > 0 && values.indexOf(parent) === index);
+    let parents = actualParents.filter((parent) => visibleKeys.has(parent));
+    if (
+      parents.length === 0 &&
+      actualParents.length > 0 &&
+      options.bridgeOmittedParents
+    ) {
+      // A single-ref filtered walk has one unambiguous visible continuation per repository.
+      const nextVisible = nextVisibleByIndex.get(commitIndex);
+      if (nextVisible) parents = [parentCommitKey(commit.repositoryId, nextVisible)];
+    }
     const after = before.filter((_, index) => index !== nodeLane);
 
     for (const [parentIndex, parent] of parents.entries()) {
@@ -143,7 +169,7 @@ export function projectCommitGraph(
       nodeLane,
       nodeColor,
       laneCount: rowLaneCount,
-      parentCount: parents.length,
+      parentCount: actualParents.length,
       startsLane,
       segments,
     });
@@ -151,6 +177,29 @@ export function projectCommitGraph(
   }
 
   return { laneCount, rows };
+}
+
+export function uniqueLogicalBranches(branches: BranchSummary[]): BranchSummary[] {
+  const unique = new Map<string, BranchSummary>();
+  for (const branch of branches) {
+    const key = `${branch.kind}\u0000${branch.fullName}`;
+    const existing = unique.get(key);
+    if (!existing || (!existing.current && branch.current)) unique.set(key, branch);
+  }
+  return Array.from(unique.values());
+}
+
+export function matchingLogicalBranches(
+  branches: BranchSummary[],
+  selected: Pick<BranchSummary, "kind" | "fullName">,
+  repositoryIds: ReadonlySet<string>,
+): BranchSummary[] {
+  return branches.filter(
+    (branch) =>
+      repositoryIds.has(branch.repositoryId) &&
+      branch.kind === selected.kind &&
+      branch.fullName === selected.fullName,
+  );
 }
 
 export function commitReferences(

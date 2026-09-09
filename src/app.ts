@@ -76,7 +76,9 @@ import {
   buildCommitFileTree,
   commitReferences,
   groupRemoteBranches,
+  matchingLogicalBranches,
   projectCommitGraph,
+  uniqueLogicalBranches,
   type CommitGraphRow,
   type CommitGraphSegment,
   type CommitFileTreeNode,
@@ -1436,19 +1438,34 @@ export class AsterlynApp {
   }
 
   private renderHistoryBranchMenu(snapshot: RepositorySnapshot): string {
+    const selectedRootIds = effectiveHistoryRootIds(
+      snapshot.repositoryRoots.map((root) => root.id),
+      this.state.historyRepositoryIds,
+    );
+    const activeBranches = snapshot.branches.filter((branch) =>
+      selectedRootIds.has(branch.repositoryId),
+    );
     const available = new Map(snapshot.branches.map((branch) => [branchKey(branch), branch]));
-    const favorites = Array.from(this.state.historyFavoriteRefs.keys()).flatMap((key) => {
-      const branch = available.get(key);
-      return branch ? [branch] : [];
-    });
-    const recent = this.state.historyRecentRefs.flatMap((reference) => {
-      const branch = available.get(historyRefKey(reference));
-      return branch ? [branch] : [];
-    });
-    const local = snapshot.branches.filter((branch) => branch.kind === "local");
-    const tags = snapshot.branches.filter((branch) => branch.kind === "tag");
+    const favorites = uniqueLogicalBranches(
+      Array.from(this.state.historyFavoriteRefs.keys()).flatMap((key) => {
+        const branch = available.get(key);
+        return branch && selectedRootIds.has(branch.repositoryId) ? [branch] : [];
+      }),
+    );
+    const recent = uniqueLogicalBranches(
+      this.state.historyRecentRefs.flatMap((reference) => {
+        const branch = available.get(historyRefKey(reference));
+        return branch && selectedRootIds.has(branch.repositoryId) ? [branch] : [];
+      }),
+    );
+    const local = uniqueLogicalBranches(
+      activeBranches.filter((branch) => branch.kind === "local"),
+    );
+    const tags = uniqueLogicalBranches(
+      activeBranches.filter((branch) => branch.kind === "tag"),
+    );
     const remotes = groupRemoteBranches(
-      snapshot.branches.filter((branch) => branch.kind === "remote"),
+      uniqueLogicalBranches(activeBranches.filter((branch) => branch.kind === "remote")),
     );
     const submenu = this.renderHistoryBranchSubmenu(snapshot, recent, local, tags, remotes);
     return `
@@ -1488,11 +1505,29 @@ export class AsterlynApp {
   }
 
   private renderHistoryQuickRef(branch: BranchSummary, snapshot: RepositorySnapshot): string {
-    const selected = this.state.historyRefs.has(branchKey(branch));
+    const matches = this.matchingHistoryBranches(branch, snapshot);
+    const selected = matches.length > 0 && matches.every((candidate) =>
+      this.state.historyRefs.has(branchKey(candidate)),
+    );
     const glyph = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
     const root = snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
-    const suffix = snapshot.repositoryRoots.length > 1 ? `<small>${escapeHtml(root?.displayName ?? branch.repositoryId)}</small>` : "";
+    const suffix = matches.length > 1
+      ? `<small>${matches.length} roots</small>`
+      : snapshot.repositoryRoots.length > 1
+        ? `<small>${escapeHtml(root?.displayName ?? branch.repositoryId)}</small>`
+        : "";
     return `<button class="history-menu-option two-line" type="button" data-history-quick-ref="${escapeAttribute(branchKey(branch))}" aria-pressed="${selected}" title="${escapeAttribute(branch.fullName)}"><span><strong>${icon(glyph, 13)}${escapeHtml(branch.name)}</strong>${suffix}</span>${selected ? icon("check", 13) : ""}</button>`;
+  }
+
+  private matchingHistoryBranches(
+    branch: BranchSummary,
+    snapshot: RepositorySnapshot,
+  ): BranchSummary[] {
+    const selectedRootIds = effectiveHistoryRootIds(
+      snapshot.repositoryRoots.map((root) => root.id),
+      this.state.historyRepositoryIds,
+    );
+    return matchingLogicalBranches(snapshot.branches, branch, selectedRootIds);
   }
 
   private renderHistoryUserMenu(snapshot: RepositorySnapshot): string {
@@ -1690,7 +1725,9 @@ export class AsterlynApp {
     const entries: HistoryDisplayEntry[] = this.state.historyCollapseLinear
       ? collapseLinearHistory(commits, this.state.selectedCommit)
       : commits.map((commit) => ({ kind: "commit", commit, graphCommit: commit }));
-    const graph = projectCommitGraph(entries.map((entry) => entry.graphCommit));
+    const graph = projectCommitGraph(entries.map((entry) => entry.graphCommit), {
+      bridgeOmittedParents: this.shouldBridgeOmittedGraphParents(commits),
+    });
     const graphWidth = Math.max(22, 14 + (graph.laneCount - 1) * 12);
     return `${textError ? `<div class="history-text-error" role="status">Invalid expression: ${escapeHtml(textError)}. Showing the unfiltered result.</div>` : ""}<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${entries
       .map((entry, index) => {
@@ -1721,6 +1758,28 @@ export class AsterlynApp {
           </button>`;
       })
       .join("")}</div>${this.renderHistoryPagingStatus()}`;
+  }
+
+  private shouldBridgeOmittedGraphParents(commits: CommitSummary[]): boolean {
+    const source = this.state.history.source;
+    const query = source?.kind === "query" ? source.query : null;
+    const omitsIntermediateCommits =
+      commits.length < this.state.history.commits.length ||
+      Boolean(
+        query &&
+          (query.authorEmails.length > 0 ||
+            query.currentAuthor ||
+            query.paths.length > 0 ||
+            query.excludeMerges),
+      );
+    if (!query || !omitsIntermediateCommits || query.refs.length === 0) return false;
+    const refsByRoot = new Map<string, number>();
+    for (const reference of query.refs) {
+      refsByRoot.set(reference.repositoryId, (refsByRoot.get(reference.repositoryId) ?? 0) + 1);
+    }
+    return Array.from(new Set(commits.map((commit) => commit.repositoryId))).every(
+      (repositoryId) => refsByRoot.get(repositoryId) === 1,
+    );
   }
 
   private renderHistoryPagingStatus(): string {
@@ -1782,7 +1841,7 @@ export class AsterlynApp {
     label: string;
     title: string;
   } {
-    const refs = Array.from(this.state.historyRefs.values());
+    let refs = Array.from(this.state.historyRefs.values());
     if (refs.length === 0) {
       return {
         icon: "branch",
@@ -1790,11 +1849,38 @@ export class AsterlynApp {
         title: "History from local branches, remote-tracking branches, and tags",
       };
     }
+    const snapshot = this.state.snapshot;
+    if (snapshot) {
+      const selectedRootIds = effectiveHistoryRootIds(
+        snapshot.repositoryRoots.map((root) => root.id),
+        this.state.historyRepositoryIds,
+      );
+      const activeRefs = refs.filter((reference) =>
+        selectedRootIds.has(reference.repositoryId),
+      );
+      if (activeRefs.length > 0) refs = activeRefs;
+    }
+    const fullNames = new Set(refs.map((reference) => reference.fullName));
+    if (fullNames.size === 1) {
+      const reference = refs[0]!;
+      const branch = this.state.snapshot?.branches.find(
+        (candidate) => branchKey(candidate) === historyRefKey(reference),
+      );
+      return {
+        icon: branch?.kind === "tag" ? "tag" : "branch",
+        label: branch?.name ?? reference.fullName,
+        title: refs.length === 1
+          ? `${reference.fullName} — ${reference.repositoryId}`
+          : `${reference.fullName} — ${refs.length} Git roots`,
+      };
+    }
     if (refs.length > 1) {
       return {
         icon: "branch",
         label: `Branch ${refs.length}`,
-        title: refs.join(", "),
+        title: refs
+          .map((reference) => `${reference.fullName} — ${reference.repositoryId}`)
+          .join(", "),
       };
     }
     const reference = refs[0]!;
@@ -2185,12 +2271,22 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const key = button.dataset.historyQuickRef;
         const branch = key ? this.branchForKey(key) : null;
-        if (!key || !branch) return;
-        const reference = historyReference(branch);
-        this.state.historyRefs = new Map([[key, reference]]);
-        this.state.selectedBranch = key;
-        this.state.gitDetail = "branch";
-        this.recordRecentHistoryRef(reference);
+        const snapshot = this.state.snapshot;
+        if (!key || !branch || !snapshot) return;
+        // Keep every catalog match in the query so later root-checkbox changes preserve the
+        // workspace-level branch meaning; repositoryIds still controls which roots participate.
+        const branches = matchingLogicalBranches(
+          snapshot.branches,
+          branch,
+          new Set(snapshot.repositoryRoots.map((root) => root.id)),
+        );
+        const references = branches.map(historyReference);
+        this.state.historyRefs = new Map(
+          references.map((reference) => [historyRefKey(reference), reference]),
+        );
+        this.state.selectedBranch = branches.length === 1 ? branchKey(branches[0]!) : null;
+        this.state.gitDetail = branches.length === 1 ? "branch" : "commit";
+        for (const reference of references) this.recordRecentHistoryRef(reference);
         this.state.historyFilterMenu = null;
         this.state.historyBranchSubmenu = null;
         this.applyHistoryQuery(true);

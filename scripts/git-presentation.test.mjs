@@ -5,7 +5,9 @@ import {
   buildCommitFileTree,
   commitReferences,
   groupRemoteBranches,
+  matchingLogicalBranches,
   projectCommitGraph,
+  uniqueLogicalBranches,
 } from "../src/workbench/git-presentation.ts";
 
 test("commit decorations become truthful semantic references", () => {
@@ -159,12 +161,64 @@ test("commit graph does not infer ancestry from adjacent unrelated rows", () => 
   ]);
 
   assert.equal(graph.rows[1].startsLane, true);
-  assert.equal(graph.rows[1].nodeLane, 1);
+  assert.equal(graph.rows[1].nodeLane, 0);
   assert.equal(
     graph.rows[1].segments.some(
       ({ kind, fromLane }) => kind === "parent" && fromLane === 0,
     ),
     false,
+  );
+  assert.equal(graph.laneCount, 1);
+});
+
+test("commit graph retires omitted parents instead of accumulating phantom lanes", () => {
+  const commits = Array.from({ length: 150 }, (_, index) =>
+    commit(`visible-${index}`, [`hidden-${index}`]),
+  );
+  const graph = projectCommitGraph(commits);
+
+  assert.equal(graph.laneCount, 1);
+  assert.ok(graph.rows.every(({ startsLane }) => startsLane));
+});
+
+test("single-ref filtered graph bridges omitted parents through visible commits", () => {
+  const graph = projectCommitGraph(
+    [
+      commit("newest", ["hidden-a"]),
+      commit("middle", ["hidden-b"]),
+      commit("oldest", []),
+    ],
+    { bridgeOmittedParents: true },
+  );
+
+  assert.equal(graph.laneCount, 1);
+  assert.deepEqual(graph.rows.map(({ startsLane }) => startsLane), [true, false, false]);
+  assert.ok(graph.rows[0].segments.some(({ kind }) => kind === "parent"));
+  assert.ok(graph.rows[1].segments.some(({ kind }) => kind === "parent"));
+});
+
+test("logical branch choices combine the same ref across selected Git roots", () => {
+  const branches = [
+    { ...branch("refs/heads/dev", "dev"), repositoryId: ".", kind: "local" },
+    { ...branch("refs/heads/dev", "dev"), repositoryId: "module", kind: "local" },
+    { ...branch("refs/heads/other", "other"), repositoryId: "module", kind: "local" },
+  ];
+
+  assert.deepEqual(
+    uniqueLogicalBranches(branches).map(({ fullName }) => fullName),
+    ["refs/heads/dev", "refs/heads/other"],
+  );
+  assert.deepEqual(
+    matchingLogicalBranches(branches, branches[0], new Set([".", "module"])).map(
+      ({ repositoryId }) => repositoryId,
+    ),
+    [".", "module"],
+  );
+  assert.deepEqual(
+    matchingLogicalBranches(branches, branches[0], new Set(["module"])).map(
+      ({ repositoryId }) => repositoryId,
+    ),
+    ["module"],
   );
 });
 
