@@ -160,12 +160,13 @@ The interaction conclusion is **improved**: the three columns now carry material
 ### U10 — Topology-complete commit graph
 
 - Remove the visible abbreviated object-ID column from history rows. Full and abbreviated IDs remain accepted by history filtering and remain available in commit details, where text selection is possible; the compact list does not spend permanent width on a non-interactive revision value.
-- Request commit history in topological order so every displayed child precedes its displayed parents, including both sides of a merge.
+- Make no ref selection the explicit `All refs` scope: the bounded history includes commits reachable from local branches, remote-tracking branches, and tags. Selecting a ref narrows the same column to that exact ref; activating the selected row again clears it and restores the snapshot's all-refs history.
+- Request both all-refs and exact-ref history in topological order so every displayed child precedes its displayed parents, including both sides of a merge.
 - Project the real ordered parent-object relationships into stable graph lanes. A merge commit fans out to every reported parent, non-current lanes continue through intervening rows, and lanes converge or retire only when the underlying parent graph requires it.
 - Keep graph calculation in a pure presentation module and render original vector lines and nodes. Branch names, decorations, dates, and row adjacency must never invent ancestry.
 - Give each graph row an accessible summary of its lane and parent count while preserving the existing compact row height, selection model, ref scoping, 150-commit bound, and stale-response rejection.
 
-U10 is a history-read and presentation correction. It adds no all-refs query, pagination, arbitrary revision expressions, mutation behavior, copied assets, or inferred relationship between unrelated refs. A boundary lane may continue beyond the loaded 150-commit snapshot; that continuation is an honest indication of omitted history rather than a fabricated endpoint. When filtering hides intermediate commits, visible nodes retain only relationships backed by their own parent IDs and may therefore appear disconnected.
+U10 is a history-read and presentation correction. Its one new history scope is the fixed local/remote/tag all-refs set; it adds no pagination, arbitrary revision expressions, mutation behavior, copied assets, or inferred relationship between unrelated refs. Repository refresh and successful mutations return to `All refs` so the ref list and graph cannot imply a narrower stale selection. A boundary lane may continue beyond the loaded 150-commit snapshot; that continuation is an honest indication of omitted history rather than a fabricated endpoint. When filtering hides intermediate commits, visible nodes retain only relationships backed by their own parent IDs and may therefore appear disconnected. User, date, path, and compound branch-filter controls remain a separate follow-up after the scope and topology contract are proven.
 
 ## Sequencing rule
 
