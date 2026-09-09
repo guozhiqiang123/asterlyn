@@ -25,6 +25,16 @@ E1 intentionally adds no syntax mode, watcher, autosave, draft persistence, forc
 - Native Linux interaction covers one real read, save, external conflict, and retry-safe result against a disposable repository. Existing working and commit Diff journeys remain usable.
 - Acceptance records absolute build/resource results, limitations, and next action. Packaging and remote publication wait for the agreed larger Stage 3 checkpoint.
 
+### E1 local acceptance — 2026-09-09
+
+E1 is locally accepted as the first Stage 3 slice. Compared with the previous read-only project-file placeholder and single volatile Diff document, the center workbench now keeps up to 20 persistent text tabs alongside one replaceable Diff preview, preserves exact text while switching and refreshing, and protects dirty buffers with explicit Save-or-Cancel transitions.
+
+The absolute local evidence is six `asterlyn-workspace` tests, 28 `asterlyn-git` tests, four desktop-library tests, and 68 frontend script tests. TypeScript checking and the production frontend build pass. The deterministic browser journey opened and switched between two files, edited and saved with `Ctrl/Cmd+S`, closed a clean tab, kept text tabs beside a Diff preview, retained an unsaved buffer across repository refresh, and kept a dirty tab open when close was cancelled. A native Linux debug executable remained alive for the six-second smoke interval against a disposable repository. The desktop-library boundary additionally performed a real tracked-file read/save, preserved an external edit on revision conflict, rejected an ignored file, and freshly revoked save authorization after a formerly tracked file became ignored.
+
+The production build emitted 50.40 kB CSS (10.00 kB gzip) and 509.34 kB JavaScript (150.19 kB gzip), with a 2,048.12 kB JavaScript source map. No comparable pre-E1 asset measurement is retained, and the agreed phase checkpoint defers packaging and the normalized 60-second resource series. The interaction and correctness conclusion is **improved**; bundle-size movement, startup, and memory impact are **inconclusive**. Vite's greater-than-500-kB main-chunk warning remains visible rather than being treated as an accepted performance result.
+
+Known limits are UTF-8 text up to two MiB, 20 text tabs, explicit save only, and no syntax modes, file watching, recovery, autosave, safe discard, file creation/rename/delete, or durable undo history for an unmounted editor adapter. Atomic replacement preserves ordinary file permissions but not ACLs or extended attributes. The final validation-to-replacement interval retains a documented local path-substitution race, and non-Unix hard-link parity is not yet accepted. Windows/macOS installed interaction also remains deferred. The next product action is E2's bounded, keyboard-first navigation and search surface.
+
 ## Later Stage 3 slices
 
 ### E2 — Navigation and search
