@@ -80,6 +80,14 @@ The memory helper launches only the supplied local binary and repository, waits 
 
 ## Packaging policy
 
+- Every completed local project task ends with a fresh Debian acceptance package after its required checks pass:
+
+  ```bash
+  scripts/with-linux-tauri-env.sh npm run tauri -- build --bundles deb
+  sha256sum target/release/bundle/deb/*.deb
+  ```
+
+  Report the exact package path, byte size, and SHA-256 digest for manual acceptance. This local package does not imply a remote push, release publication, signing, or cross-platform acceptance.
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.
 - The preview matrix and its trust boundary are documented in [`ci.md`](ci.md).
 - Signing/notarization credentials belong in protected CI facilities, never repository files.

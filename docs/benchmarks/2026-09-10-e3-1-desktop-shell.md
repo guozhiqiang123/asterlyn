@@ -2,7 +2,7 @@
 
 ## Scope and decision
 
-This bounded correction follows E3.1 without advancing the editor milestone. It fixes the shell scale and title-bar hierarchy, overflowing editor-tab interaction, occupied-window project selection, per-window workspace authorization, and stale launch-icon output reported during manual review. It produces no installer and makes no remote push.
+This bounded correction follows E3.1 without advancing the editor milestone. It fixes the shell scale and title-bar hierarchy, overflowing editor-tab interaction, occupied-window project selection, per-window workspace authorization, and stale launch-icon output reported during manual review. A local Debian package is produced for manual acceptance under the task-end packaging rule; no remote push is made.
 
 The local machine remains Deepin 23.1 on Linux 6.12 with an AMD Ryzen 5 3600X, 19 GiB RAM, Rust 1.98.1, Node.js 24.19.0, and Git 2.47.2. The installed Android Studio build is `AI-261.26222.65.2614.16204760`; its active new-UI profile contains no application- or editor-font override, so published defaults rather than a user customization are the comparison baseline.
 
@@ -42,6 +42,8 @@ Validation passes 102 frontend script tests, 28 `asterlyn-git` tests, 23 `asterl
 | Linux release executable | 16,185,584 bytes | 18,185,584 bytes | +2,000,000 bytes / +12.36% |
 
 The frontend movement is **no material change**. The release executable movement is **regressed**: dynamic native-window construction pulled additional Tauri window-creation code into the binary. The increase is accepted for the required independently authorized multi-project mode, but remains visible for later link/profile inspection. No matched process-tree PSS/RSS series or forced browser-heap series was run, so memory impact is **inconclusive** and this correction makes no memory-reduction claim.
+
+The task-end Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,201,556 bytes, with SHA-256 `fff154470e61a945370eba1d72846ca2a1dc3743524502a5f28aec31a5eaea66`. `dpkg-deb` inspection confirms package version 0.1.0, `amd64` architecture, the native executable, desktop entry, and 32/48/128/256/512 icon representations. It is a local unsigned acceptance artifact, not a release candidate.
 
 ## Limits and next action
 
