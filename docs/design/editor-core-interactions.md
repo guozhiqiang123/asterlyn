@@ -74,6 +74,14 @@ The complete evidence is recorded in [`E2.2b bounded search-refinement evidence`
 
 No native package or remote publication is produced for this sub-slice. The measured scan does not justify persistent indexing. E2.3 recoverable workspace replacement is next; language-catalog packaging and the normalized native resource series remain Stage 3 checkpoint gates.
 
+### E2.3 local acceptance — 2026-09-10
+
+E2.3 is locally accepted and completes E2. Find in Files now builds a fresh non-mutating before/after plan, defaults every changed file to selected, applies only the reviewed file selection, and retains exact application-local recovery until explicit keep or rollback. The workspace core blocks structurally incomplete previews, preflights all revisions, journals before the first write, uses E1 atomic saves, automatically restores after cancellation or partial failure, and preserves independently edited files instead of forcing rollback. Open dirty target tabs block mutation; successful apply and rollback reconcile clean tabs, search results, and the Changes snapshot without replacing the active editor or Git-history query.
+
+The complete evidence is recorded in [`E2.3 recoverable workspace-replacement evidence`](../benchmarks/2026-09-10-e2-3-recoverable-replacement.md). Validation passed 23 workspace, 28 Git, nine desktop, and 93 frontend tests plus strict checks, production build, browser apply/rollback/keep journeys, and native liveness. Complete planning on the current 169-candidate checkout had a 22.446-millisecond median for 35 files/91 matches and 12.416 milliseconds for five files/17 matches under `src/**`. Interaction and recovery correctness are **improved**; frontend size is **regressed**; focused memory remains **inconclusive**.
+
+No package or remote publication is produced for this sub-slice. E3 editor groups and preferences is next. Broad language-catalog packaging, normalized native resources, and installed Windows/macOS interaction remain open for the larger Stage 3 checkpoint.
+
 ### E3 — Editor groups and preferences
 
 Add splits, tab movement, settings/keymaps, language-neutral indentation, encoding/EOL controls, file watching, external-change comparison, and a measured large-file mode.

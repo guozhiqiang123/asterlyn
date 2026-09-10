@@ -558,6 +558,11 @@ fn validate_replacement_request(
     limits: ReplacementLimits,
 ) -> Result<(), WorkspaceError> {
     validate_request_id(plan_id)?;
+    if plan_id.len() > 96 {
+        return Err(WorkspaceError::InvalidReplacement {
+            message: "replacement plan IDs must contain at most 96 bytes".to_string(),
+        });
+    }
     if limits.max_files == 0
         || limits.max_plan_bytes == 0
         || limits.max_replacement_bytes == 0
@@ -971,6 +976,27 @@ mod tests {
                 REPLACEMENT_LIMITS,
             )
             .expect("replacement plans")
+    }
+
+    #[test]
+    fn reserves_request_id_space_for_atomic_apply_and_rollback_steps() {
+        let (_directory, _recovery, workspace) = fixture();
+        let error = workspace
+            .plan_text_replacement(
+                &"x".repeat(97),
+                &[SearchCandidate {
+                    workspace_path: "one.txt".to_string(),
+                }],
+                false,
+                "needle",
+                "found",
+                &SearchOptions::default(),
+                &SearchCancellationToken::new(),
+                SEARCH_LIMITS,
+                REPLACEMENT_LIMITS,
+            )
+            .expect_err("replacement plan ID leaves suffix capacity");
+        assert!(matches!(error, WorkspaceError::InvalidReplacement { .. }));
     }
 
     #[test]

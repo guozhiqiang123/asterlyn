@@ -227,6 +227,42 @@ export interface WorkspaceTextSearchReport {
   coverageReasons: SearchCoverageReason[];
 }
 
+export interface WorkspaceReplacementFilePreview {
+  repositoryId: string;
+  path: string;
+  workspacePath: string;
+  matchCount: number;
+  byteDelta: number;
+  beforePreview: string;
+  afterPreview: string;
+}
+
+export interface WorkspaceReplacementPreview {
+  planId: string;
+  files: WorkspaceReplacementFilePreview[];
+  totalMatches: number;
+  skippedCount: number;
+  coverageReasons: SearchCoverageReason[];
+}
+
+export type ReplacementRecoveryStatus = "applied" | "rolledBack" | "needsRecovery";
+export type ReplacementFileState = "original" | "replaced" | "conflict" | "unavailable";
+
+export interface ReplacementRecoveryFile {
+  workspacePath: string;
+  state: ReplacementFileState;
+}
+
+export interface ReplacementRecoverySummary {
+  recoveryId: string;
+  status: ReplacementRecoveryStatus;
+  files: ReplacementRecoveryFile[];
+}
+
+export interface ReplacementApplyResult extends ReplacementRecoverySummary {
+  message: string | null;
+}
+
 export type GitRootKind = "main" | "submodule";
 
 export interface GitRootDescriptor {

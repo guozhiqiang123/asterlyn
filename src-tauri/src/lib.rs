@@ -273,6 +273,13 @@ impl WorkspaceReplacementRegistryState {
     }
 
     fn cancel(&mut self, repository_root: String, operation_id: String) {
+        let removed_plan = self
+            .plans
+            .get(&operation_id)
+            .is_some_and(|stored| stored.root == Path::new(&repository_root));
+        if removed_plan {
+            self.plans.remove(&operation_id);
+        }
         if self
             .active
             .get(&repository_root)
@@ -281,6 +288,9 @@ impl WorkspaceReplacementRegistryState {
             if let Some(active) = self.active.remove(&repository_root) {
                 active.cancellation.cancel();
             }
+            return;
+        }
+        if removed_plan {
             return;
         }
         if self.cancelled.len() >= CANCELLED_SEARCH_RETENTION {
@@ -728,6 +738,11 @@ async fn preview_workspace_replacement(
     registry.finish(&repository_root, &plan_id, &cancellation);
     match result {
         Ok((stored, preview)) => {
+            if cancellation.is_cancelled() {
+                return Err(WorkspaceError::Cancelled {
+                    message: "workspace replacement preview was cancelled".to_string(),
+                });
+            }
             registry.store(stored);
             Ok(preview)
         }
@@ -1642,6 +1657,12 @@ mod tests {
         registry.store(second);
         assert!(registry.plan(&canonical, "plan-one").is_err());
         assert!(registry.plan(&canonical, "plan-two").is_ok());
+        registry.cancel(
+            canonical.to_string_lossy().to_string(),
+            "plan-two".to_string(),
+        );
+        assert!(registry.plan(&canonical, "plan-two").is_err());
+        assert!(registry.cancelled.is_empty());
 
         registry.cancel("/repo".to_string(), "cancelled".to_string());
         assert!(registry.register("/repo", "cancelled").is_cancelled());

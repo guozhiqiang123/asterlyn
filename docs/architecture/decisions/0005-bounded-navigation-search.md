@@ -1,6 +1,6 @@
 # ADR-0005: Bounded navigation and workspace search
 
-- **Status:** Accepted through E2.2b; E2.3 recovery contract approved, interaction pending
+- **Status:** Accepted through E2.3
 - **Date:** 2026-09-09
 
 ## Context
@@ -17,7 +17,7 @@ File and command ranking is a pure presentation operation over the already loade
 
 Workspace text search is a lazy application service. The desktop boundary first resolves the active canonical workspace and regenerates the Git-authorized project catalog. It passes only those exact identities and workspace paths to `asterlyn-workspace`; the workspace crate never imports Git or Tauri and never enumerates arbitrary files.
 
-The E2.1 default search is case-sensitive literal text. E2.2b preserves that entry point and fast path while adding an explicit options contract for line-local Rust regular expressions, include/exclude path globs, and zero to three preview-context lines. Regex matching is Unicode, leftmost-first, and non-overlapping; inline flags such as `(?i)` are allowed, while matches never cross a normalized newline. Zero-width results remain valid positions.
+The E2.1 default search is case-sensitive literal text. E2.2b preserves that entry point and fast path while adding an explicit options contract for line-local Rust regular expressions, include/exclude path globs, and zero to three preview-context lines. Regex matching is Unicode, leftmost-first, and non-overlapping; inline flags such as `(?i)` are allowed, while matches never cross a normalized newline. Zero-width results remain valid positions. E2.3 reuses these exact semantics for a separately reviewed replacement transaction.
 
 Path globs match the complete case-sensitive `/`-separated workspace-relative path, including initialized-submodule prefixes. Includes are ORed and empty means all; excludes are ORed and take precedence. `*` does not cross a separator while `**` can. Invalid, absolute, backslash-containing, parent/current-component, brace-expanded, or excessive patterns fail closed. Filtering retains the original catalog index and reports both eligible and total catalog counts; intentional exclusion is not incomplete coverage, while catalog truncation remains incomplete.
 
@@ -39,7 +39,7 @@ A completely applied transaction remains recoverable across restart until the us
 
 Quick navigation stays instant after the existing catalog load, while workspace search consumes resources only when requested and remains bounded. Search results can be incomplete, but the UI reports eligible/scanned/skipped counts and truncation explicitly. A repository with many unsupported or very large files remains usable. The E2.2b default-path median remains within 1.75% of the E2.1 fixture baseline, so an index remains unjustified.
 
-The navigation surface can be removed without changing repository or file formats. The workspace search API remains read-only and can later be replaced by a measured index behind the same result contract. Replacement recovery has an explicitly versioned private manifest and exact byte blobs outside the repository; removing the E2.3 UI must first resolve or preserve any listed recovery rather than silently deleting it.
+The navigation surface can be removed without changing repository or file formats. The workspace search API remains read-only and can later be replaced by a measured index behind the same result contract. Replacement recovery has an explicitly versioned private manifest and exact byte blobs outside the repository; removing the E2.3 UI must first resolve or preserve any listed recovery rather than silently deleting it. On the accepted 169-candidate fixture, complete replacement planning had a 22.446-millisecond median for 35 files/91 matches and 12.416 milliseconds when filtered to five `src/**` files, so no index is justified by this slice.
 
 ## Deferred work
 

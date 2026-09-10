@@ -62,6 +62,14 @@ scripts/with-linux-tauri-env.sh cargo run --release -p asterlyn --example inspec
 
 The utility uses the same candidate, byte, match, preview, pattern, context, and reported-skip limits as the desktop boundary. Append `--regex` for line-local regular expressions, repeat `--include <glob>` or `--exclude <glob>` for full workspace-path filters, and use `--context <0-3>` for preview context. Record its catalog, scan, and total distributions together with total and eligible candidate counts, bytes read, match count, skipped files, query/options, repository state, and machine context.
 
+Measure non-mutating workspace-replacement planning, including the fresh Git catalog, bounded search, exact reread, replacement encoding, and preview construction, with:
+
+```bash
+scripts/with-linux-tauri-env.sh cargo run --release -p asterlyn --example inspect_replacement -- /path/to/repository 'literal query' 'replacement text' 10
+```
+
+It accepts the same regex, include, exclude, and context flags as `inspect_search`, uses production limits, and never applies the plan. Record replacement-file/match counts, skips, coverage, and catalog/plan/total distributions. A structural coverage limit intentionally makes the command fail because the product would also refuse to present an incomplete replacement as safe.
+
 On Linux, repeat steady-state process-tree PSS, RSS, and idle CPU sampling with:
 
 ```bash

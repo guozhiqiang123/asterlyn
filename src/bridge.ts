@@ -24,12 +24,15 @@ import type {
   HistoryQuery,
   HistoryPage,
   ProjectFileList,
+  ReplacementApplyResult,
+  ReplacementRecoverySummary,
   RepositorySnapshot,
   SaveTextFileResult,
   TextFileSnapshot,
   UntrackedScan,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
+  WorkspaceReplacementPreview,
 } from "./models";
 
 const isTauri = "__TAURI_INTERNALS__" in window;
@@ -38,6 +41,9 @@ const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
 const cancelledDemoRemoteOperations = new Set<string>();
 const cancelledDemoSearches = new Set<string>();
+const cancelledDemoReplacements = new Set<string>();
+const demoReplacementPlans = new Map<string, DemoReplacementPlan>();
+const demoReplacementRecoveries = new Map<string, DemoReplacementRecovery>();
 const demoTextFiles = new Map<string, { content: string; utf8Bom: boolean; revision: number }>([
   ["README.md", { content: "# Asterlyn\n\nA lightweight developer workspace.\n", utf8Bom: false, revision: 1 }],
   ["package.json", { content: '{\n  "name": "asterlyn"\n}\n', utf8Bom: false, revision: 1 }],
@@ -46,6 +52,23 @@ const demoTextFiles = new Map<string, { content: string; utf8Bom: boolean; revis
   ["src/diff-editor.ts", { content: "export class DiffEditor {}\n", utf8Bom: false, revision: 1 }],
   ["src/styles.css", { content: ":root {\n  color-scheme: dark;\n}\n", utf8Bom: false, revision: 1 }],
 ]);
+
+interface DemoReplacementFile {
+  workspacePath: string;
+  originalContent: string;
+  replacementContent: string;
+  utf8Bom: boolean;
+  originalRevision: number;
+}
+
+interface DemoReplacementPlan {
+  planId: string;
+  files: DemoReplacementFile[];
+}
+
+interface DemoReplacementRecovery extends DemoReplacementPlan {
+  selectedPaths: string[];
+}
 
 export type DirectoryChoice =
   | { kind: "selected"; path: string }
@@ -220,6 +243,104 @@ export const bridge = {
     return invoke<void>("cancel_workspace_text_search", {
       repositoryRoot,
       requestId,
+    });
+  },
+
+  async previewWorkspaceReplacement(
+    repositoryRoot: string,
+    planId: string,
+    query: string,
+    replacement: string,
+    options: WorkspaceTextSearchOptions,
+  ): Promise<WorkspaceReplacementPreview> {
+    if (!isTauri) {
+      await demoDelay(240);
+      if (cancelledDemoReplacements.delete(searchOperationKey(repositoryRoot, planId))) {
+        throw { kind: "cancelled", message: "Workspace replacement preview was cancelled." };
+      }
+      return demoReplacementPreview(planId, query, replacement, options);
+    }
+    return invoke<WorkspaceReplacementPreview>("preview_workspace_replacement", {
+      repositoryRoot,
+      planId,
+      query,
+      replacement,
+      options,
+    });
+  },
+
+  async applyWorkspaceReplacement(
+    repositoryRoot: string,
+    planId: string,
+    selectedPaths: string[],
+  ): Promise<ReplacementApplyResult> {
+    if (!isTauri) {
+      await demoDelay(260);
+      if (cancelledDemoReplacements.delete(searchOperationKey(repositoryRoot, planId))) {
+        throw { kind: "cancelled", message: "Workspace replacement was cancelled." };
+      }
+      return demoApplyReplacement(planId, selectedPaths);
+    }
+    return invoke<ReplacementApplyResult>("apply_workspace_replacement", {
+      repositoryRoot,
+      planId,
+      selectedPaths,
+    });
+  },
+
+  async cancelWorkspaceReplacement(
+    repositoryRoot: string,
+    operationId: string,
+  ): Promise<void> {
+    if (!isTauri) {
+      if (demoReplacementPlans.delete(operationId)) return;
+      cancelledDemoReplacements.add(searchOperationKey(repositoryRoot, operationId));
+      return;
+    }
+    return invoke<void>("cancel_workspace_replacement", {
+      repositoryRoot,
+      operationId,
+    });
+  },
+
+  async listWorkspaceReplacementRecoveries(
+    repositoryRoot: string,
+  ): Promise<ReplacementRecoverySummary[]> {
+    if (!isTauri) {
+      await demoDelay(40);
+      return Array.from(demoReplacementRecoveries.values()).map(demoRecoverySummary);
+    }
+    return invoke<ReplacementRecoverySummary[]>("list_workspace_replacement_recoveries", {
+      repositoryRoot,
+    });
+  },
+
+  async rollbackWorkspaceReplacement(
+    repositoryRoot: string,
+    recoveryId: string,
+  ): Promise<ReplacementApplyResult> {
+    if (!isTauri) {
+      await demoDelay(180);
+      return demoRollbackReplacement(recoveryId);
+    }
+    return invoke<ReplacementApplyResult>("rollback_workspace_replacement", {
+      repositoryRoot,
+      recoveryId,
+    });
+  },
+
+  async finalizeWorkspaceReplacement(
+    repositoryRoot: string,
+    recoveryId: string,
+  ): Promise<void> {
+    if (!isTauri) {
+      await demoDelay(100);
+      demoFinalizeReplacement(recoveryId);
+      return;
+    }
+    return invoke<void>("finalize_workspace_replacement", {
+      repositoryRoot,
+      recoveryId,
     });
   },
 
@@ -655,6 +776,210 @@ function demoSearchReport(
     skippedFiles: [],
     coverageReasons,
   };
+}
+
+function demoReplacementPreview(
+  planId: string,
+  query: string,
+  replacement: string,
+  options: WorkspaceTextSearchOptions,
+): WorkspaceReplacementPreview {
+  if (new TextEncoder().encode(replacement).length > 16 * 1024 || replacement.includes("\0")) {
+    throw {
+      kind: "invalidReplacement",
+      message: "Replacement text must contain no NUL and be at most 16384 UTF-8 bytes.",
+    };
+  }
+  const report = demoWorkspaceSearch(planId, query, options);
+  if (report.coverageReasons.some((reason) => reason !== "skippedFiles")) {
+    throw {
+      kind: "invalidReplacement",
+      message: "Replacement preview requires complete candidate and match coverage.",
+    };
+  }
+  const matchesByPath = new Map<string, number>();
+  for (const match of report.matches) {
+    matchesByPath.set(match.workspacePath, (matchesByPath.get(match.workspacePath) ?? 0) + 1);
+  }
+  const files: DemoReplacementFile[] = [];
+  const previews: WorkspaceReplacementPreview["files"] = [];
+  const encoder = new TextEncoder();
+  for (const [workspacePath, matchCount] of matchesByPath) {
+    const file = demoTextFiles.get(workspacePath);
+    if (!file) continue;
+    const replacementContent = demoReplaceLineLocal(file.content, query, replacement, options.mode);
+    if (replacementContent === file.content) continue;
+    const [beforePreview, afterPreview] = demoChangePreview(file.content, replacementContent);
+    files.push({
+      workspacePath,
+      originalContent: file.content,
+      replacementContent,
+      utf8Bom: file.utf8Bom,
+      originalRevision: file.revision,
+    });
+    previews.push({
+      repositoryId: ".",
+      path: workspacePath,
+      workspacePath,
+      matchCount,
+      byteDelta:
+        encoder.encode(replacementContent).length - encoder.encode(file.content).length,
+      beforePreview,
+      afterPreview,
+    });
+  }
+  if (previews.length === 0) {
+    throw { kind: "invalidReplacement", message: "The replacement would not change any file." };
+  }
+  if (previews.length > 200) {
+    throw { kind: "invalidReplacement", message: "Replacement preview accepts at most 200 files." };
+  }
+  demoReplacementPlans.clear();
+  demoReplacementPlans.set(planId, { planId, files });
+  return {
+    planId,
+    files: previews,
+    totalMatches: previews.reduce((total, file) => total + file.matchCount, 0),
+    skippedCount: report.skippedCount,
+    coverageReasons: report.coverageReasons,
+  };
+}
+
+function demoApplyReplacement(
+  planId: string,
+  selectedPaths: string[],
+): ReplacementApplyResult {
+  const plan = demoReplacementPlans.get(planId);
+  const selected = new Set(selectedPaths);
+  if (!plan || selected.size === 0 || selected.size !== selectedPaths.length) {
+    throw { kind: "invalidReplacement", message: "Replacement preview is stale or empty." };
+  }
+  const files = plan.files.filter((file) => selected.has(file.workspacePath));
+  if (files.length !== selected.size) {
+    throw { kind: "invalidReplacement", message: "Selection is outside the reviewed preview." };
+  }
+  for (const planned of files) {
+    const current = demoTextFiles.get(planned.workspacePath);
+    if (
+      !current ||
+      current.revision !== planned.originalRevision ||
+      current.content !== planned.originalContent ||
+      current.utf8Bom !== planned.utf8Bom
+    ) {
+      throw { kind: "conflict", currentRevision: current?.revision.toString() ?? "missing" };
+    }
+  }
+  const recovery: DemoReplacementRecovery = { ...plan, files, selectedPaths: [...selectedPaths] };
+  demoReplacementRecoveries.set(planId, recovery);
+  for (const planned of files) {
+    const current = demoTextFiles.get(planned.workspacePath)!;
+    current.content = planned.replacementContent;
+    current.revision += 1;
+  }
+  demoReplacementPlans.delete(planId);
+  return {
+    ...demoRecoverySummary(recovery),
+    message: null,
+  };
+}
+
+function demoRollbackReplacement(recoveryId: string): ReplacementApplyResult {
+  const recovery = demoReplacementRecoveries.get(recoveryId);
+  if (!recovery) {
+    throw { kind: "invalidReplacement", message: "Replacement recovery is unavailable." };
+  }
+  for (const planned of recovery.files) {
+    const current = demoTextFiles.get(planned.workspacePath);
+    if (!current) continue;
+    if (current.content === planned.replacementContent && current.utf8Bom === planned.utf8Bom) {
+      current.content = planned.originalContent;
+      current.revision += 1;
+    }
+  }
+  const summary = demoRecoverySummary(recovery);
+  if (summary.files.every((file) => file.state === "original")) {
+    demoReplacementRecoveries.delete(recoveryId);
+    return { ...summary, status: "rolledBack", message: null };
+  }
+  return { ...summary, status: "needsRecovery", message: null };
+}
+
+function demoFinalizeReplacement(recoveryId: string): void {
+  const recovery = demoReplacementRecoveries.get(recoveryId);
+  if (!recovery) {
+    throw { kind: "invalidReplacement", message: "Replacement recovery is unavailable." };
+  }
+  const summary = demoRecoverySummary(recovery);
+  if (!summary.files.every((file) => file.state === "replaced")) {
+    throw {
+      kind: "invalidReplacement",
+      message: "Recovery can be kept only while every file still contains the reviewed replacement.",
+    };
+  }
+  demoReplacementRecoveries.delete(recoveryId);
+}
+
+function demoRecoverySummary(recovery: DemoReplacementRecovery): ReplacementRecoverySummary {
+  return {
+    recoveryId: recovery.planId,
+    status: recovery.files.every((planned) => {
+      const current = demoTextFiles.get(planned.workspacePath);
+      return current?.content === planned.replacementContent && current.utf8Bom === planned.utf8Bom;
+    })
+      ? "applied"
+      : "needsRecovery",
+    files: recovery.files.map((planned) => {
+      const current = demoTextFiles.get(planned.workspacePath);
+      const state = !current
+        ? "unavailable"
+        : current.content === planned.originalContent && current.utf8Bom === planned.utf8Bom
+          ? "original"
+          : current.content === planned.replacementContent && current.utf8Bom === planned.utf8Bom
+            ? "replaced"
+            : "conflict";
+      return { workspacePath: planned.workspacePath, state };
+    }),
+  };
+}
+
+function demoReplaceLineLocal(
+  content: string,
+  query: string,
+  replacement: string,
+  mode: WorkspaceTextSearchOptions["mode"],
+): string {
+  const separator = demoDominantSeparator(content);
+  const inserted = replacement.replace(/\r\n?|\n/gu, "\n").replaceAll("\n", separator);
+  const parts = content.split(/(\r\n|\r|\n)/u);
+  const expression = mode === "regex" ? demoCompileRegex(query) : null;
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1) return part;
+      return expression ? part.replace(expression, inserted) : part.split(query).join(inserted);
+    })
+    .join("");
+}
+
+function demoDominantSeparator(content: string): string {
+  const separators = content.match(/\r\n|\r|\n/gu) ?? [];
+  const counts = new Map<string, number>();
+  for (const separator of separators) counts.set(separator, (counts.get(separator) ?? 0) + 1);
+  return [...counts].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "\n";
+}
+
+function demoChangePreview(before: string, after: string): [string, string] {
+  let offset = 0;
+  while (offset < before.length && offset < after.length && before[offset] === after[offset]) {
+    offset += 1;
+  }
+  const line = (value: string) => {
+    const start = Math.max(value.lastIndexOf("\n", offset - 1), value.lastIndexOf("\r", offset - 1)) + 1;
+    const endings = [value.indexOf("\n", offset), value.indexOf("\r", offset)].filter((index) => index >= 0);
+    const end = endings.length > 0 ? Math.min(...endings) : value.length;
+    const text = value.slice(start, end);
+    return text.length > 320 ? `${safePrefixUtf16(text, 320)}…` : text;
+  };
+  return [line(before), line(after)];
 }
 
 function demoCompileRegex(query: string): RegExp {

@@ -129,6 +129,19 @@ import {
   type WorkspaceSearchState,
 } from "./workbench/workspace-search";
 import {
+  beginReplacementApply,
+  beginReplacementPreview,
+  closeReplacementPreview,
+  completeReplacementApply,
+  completeReplacementPreview,
+  createWorkspaceReplacementState,
+  failReplacement,
+  selectAllReplacementFiles,
+  setReplacementRecoveries,
+  toggleReplacementFile,
+  type WorkspaceReplacementState,
+} from "./workbench/workspace-replacement";
+import {
   buildCommitFileTree,
   commitReferences,
   groupRemoteBranches,
@@ -156,8 +169,10 @@ import type {
   HistoryQuery,
   HistoryRef,
   ProjectFile,
+  ReplacementApplyResult,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
+  ReplacementRecoverySummary,
 } from "./models";
 
 const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
@@ -182,6 +197,10 @@ interface AppState {
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
   workspaceSearchControls: WorkspaceSearchControls;
+  workspaceReplacement: WorkspaceReplacementState;
+  replacementText: string;
+  replacementDialog: "preview" | "recovery" | null;
+  replacementRecoveryBusy: { id: string; action: "keep" | "rollback" } | null;
   selectedChange: ChangeSelection | null;
   selectedChangeKeys: Set<string>;
   changeQuery: string;
@@ -267,6 +286,10 @@ export class AsterlynApp {
     commandSurface: createCommandSurfaceState(),
     workspaceSearch: createWorkspaceSearchState(),
     workspaceSearchControls: createWorkspaceSearchControls(),
+    workspaceReplacement: createWorkspaceReplacementState(),
+    replacementText: "",
+    replacementDialog: null,
+    replacementRecoveryBusy: null,
     selectedChange: null,
     selectedChangeKeys: new Set(),
     changeQuery: "",
@@ -345,6 +368,7 @@ export class AsterlynApp {
   private mountedTextTabId: string | null = null;
   private textSaveSequence = 0;
   private workspaceSearchSequence = 0;
+  private workspaceReplacementSequence = 0;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private forceWindowClose = false;
   private repositoryChooserOpen = false;
@@ -533,6 +557,7 @@ export class AsterlynApp {
 
         <div class="dialog-backdrop hidden history-dialog-backdrop" id="history-dialog" role="presentation"></div>
         <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
+        <div class="dialog-backdrop hidden replacement-dialog-backdrop" id="workspace-replacement-dialog" role="presentation"></div>
       </main>
     `;
   }
@@ -579,6 +604,15 @@ export class AsterlynApp {
     });
     this.query("#command-surface").addEventListener("click", (event) => {
       if (event.target === event.currentTarget) this.dismissCommandSurface();
+    });
+    this.query("#workspace-replacement-dialog").addEventListener("click", (event) => {
+      if (
+        event.target === event.currentTarget &&
+        this.state.workspaceReplacement.status !== "applying" &&
+        !this.state.replacementRecoveryBusy
+      ) {
+        this.closeWorkspaceReplacementDialog();
+      }
     });
     this.query<HTMLFormElement>("#repository-form").addEventListener(
       "submit",
@@ -629,6 +663,15 @@ export class AsterlynApp {
         return;
       }
       if (event.key === "Escape") {
+        if (
+          this.state.replacementDialog &&
+          this.state.workspaceReplacement.status !== "applying" &&
+          !this.state.replacementRecoveryBusy
+        ) {
+          event.preventDefault();
+          this.closeWorkspaceReplacementDialog();
+          return;
+        }
         if (this.state.commandSurface.mode) {
           event.preventDefault();
           this.dismissCommandSurface();
@@ -772,7 +815,11 @@ export class AsterlynApp {
       return;
     }
     this.cancelActiveWorkspaceSearch();
+    this.cancelActiveWorkspaceReplacement();
     this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.state.workspaceReplacement = createWorkspaceReplacementState();
+    this.state.replacementDialog = null;
+    this.state.replacementRecoveryBusy = null;
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
@@ -823,6 +870,7 @@ export class AsterlynApp {
         void this.loadSelectedCommitDetails();
       }
       void this.loadProjectFiles(snapshot.root, generation);
+      void this.loadReplacementRecoveries(snapshot.root, generation);
       pendingRoot = snapshot.root;
     } catch (error) {
       if (generation !== this.requestGeneration) return;
@@ -933,10 +981,15 @@ export class AsterlynApp {
 
   private renderWorkspaceSearchControls(): string {
     const controls = this.state.workspaceSearchControls;
+    const hasResults = this.workspaceSearchHasCurrentResults() && Boolean(this.state.workspaceSearch.report?.matches.length);
+    const recoveryCount = this.state.workspaceReplacement.recoveries.length;
     return `<div class="workspace-search-controls" role="group" aria-label="Workspace search options">
       <label><span>Include</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="Files to include, comma-separated full-path globs" /></label>
       <label><span>Exclude</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="Files to exclude, comma-separated full-path globs" /></label>
       <label class="workspace-search-context"><span>Context</span><select id="workspace-search-context" aria-label="Context lines">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select></label>
+      <label class="workspace-replacement-input"><span>Replace</span><input id="workspace-replacement-text" type="text" value="${escapeAttribute(this.state.replacementText)}" placeholder="Replacement text" autocomplete="off" spellcheck="false" aria-label="Replacement text" /></label>
+      <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"}>Preview Replace</button>
+      ${recoveryCount > 0 ? `<button class="workspace-recovery-button" id="workspace-recovery-open" type="button" aria-label="Review ${recoveryCount} replacement recoveries">${recoveryCount} recovery ${recoveryCount === 1 ? "record" : "records"}</button>` : ""}
     </div>`;
   }
 
@@ -975,7 +1028,7 @@ export class AsterlynApp {
     if (search.status !== "ready" || !this.workspaceSearchRequestIsCurrent() || !search.report) {
       return this.commandSurfaceEmpty(
         "Search file contents",
-        "Enter a case-sensitive literal or regular expression, then press Enter. Results are read-only.",
+        "Enter a case-sensitive literal or regular expression, then press Enter. Replacement always requires a separate preview.",
       );
     }
     if (search.report.matches.length === 0) {
@@ -1046,6 +1099,7 @@ export class AsterlynApp {
       ) {
         this.cancelActiveWorkspaceSearch();
         this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+        this.invalidateWorkspaceReplacementPreview();
       }
       this.state.commandSurface = updateCommandSurfaceQuery(
         this.state.commandSurface,
@@ -1118,6 +1172,22 @@ export class AsterlynApp {
           "workspace-search-context",
         );
       });
+    this.root
+      .querySelector<HTMLInputElement>("#workspace-replacement-text")
+      ?.addEventListener("input", (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        this.state.replacementText = target.value;
+        this.invalidateWorkspaceReplacementPreview();
+      });
+    this.root
+      .querySelector<HTMLButtonElement>("#workspace-replacement-preview")
+      ?.addEventListener("click", () => void this.previewWorkspaceReplacement());
+    this.root
+      .querySelector<HTMLButtonElement>("#workspace-recovery-open")
+      ?.addEventListener("click", () => {
+        this.state.replacementDialog = "recovery";
+        this.renderWorkspaceReplacementDialog();
+      });
     this.root.querySelectorAll<HTMLButtonElement>("[data-command-result]").forEach((button) => {
       button.addEventListener("mousemove", () => {
         const index = Number(button.dataset.commandResult);
@@ -1142,6 +1212,7 @@ export class AsterlynApp {
     caret?: number,
   ): void {
     this.cancelActiveWorkspaceSearch();
+    this.invalidateWorkspaceReplacementPreview();
     this.state.workspaceSearchControls = controls;
     this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
     this.renderCommandSurface();
@@ -1243,7 +1314,7 @@ export class AsterlynApp {
       { id: "open-repository", label: "Open Repository", detail: "Choose a local Git folder", shortcut: "Ctrl+O", enabled: true },
       { id: "go-file", label: "Go to File", detail: "Open a project file by name", shortcut: "Ctrl+P", enabled: Boolean(snapshot) },
       { id: "recent-files", label: "Recent Files", detail: "Reopen a successful file", shortcut: "Ctrl+E", enabled: Boolean(snapshot) },
-      { id: "find-workspace", label: "Find in Files", detail: "Read-only bounded workspace search", shortcut: "Ctrl+Shift+F", enabled: Boolean(snapshot) },
+      { id: "find-workspace", label: "Find in Files", detail: "Bounded search with reviewed replacement", shortcut: "Ctrl+Shift+F", enabled: Boolean(snapshot) },
       { id: "find-current", label: "Find and Replace in Current File", detail: "Undoable changes stay in the active buffer", shortcut: "Ctrl+F", enabled: Boolean(tab?.status === "ready") },
       { id: "save-current", label: "Save Current File", detail: "Use the conflict-safe E1 save path", shortcut: "Ctrl+S", enabled: Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest) },
       { id: "refresh", label: "Refresh Repository", detail: "Reload current Git state", shortcut: "Ctrl+R", enabled: Boolean(snapshot && !this.state.loading) },
@@ -1335,6 +1406,489 @@ export class AsterlynApp {
     void bridge
       .cancelWorkspaceTextSearch(request.repositoryRoot, request.requestId)
       .catch(() => undefined);
+  }
+
+  private invalidateWorkspaceReplacementPreview(): void {
+    if (this.state.workspaceReplacement.status === "applying") return;
+    this.cancelActiveWorkspaceReplacement();
+    this.state.workspaceReplacement = closeReplacementPreview(this.state.workspaceReplacement);
+    if (this.state.replacementDialog === "preview") {
+      this.state.replacementDialog = null;
+      this.renderWorkspaceReplacementDialog();
+    }
+  }
+
+  private cancelActiveWorkspaceReplacement(): void {
+    const replacement = this.state.workspaceReplacement;
+    if (
+      (replacement.status !== "previewing" &&
+        replacement.status !== "ready" &&
+        replacement.status !== "applying") ||
+      !replacement.request
+    ) {
+      return;
+    }
+    void bridge
+      .cancelWorkspaceReplacement(
+        replacement.request.repositoryRoot,
+        replacement.request.operationId,
+      )
+      .catch(() => undefined);
+  }
+
+  private async previewWorkspaceReplacement(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const searchRequest = this.state.workspaceSearch.request;
+    const report = this.state.workspaceSearch.report;
+    if (
+      !snapshot ||
+      !searchRequest ||
+      !report ||
+      !this.workspaceSearchHasCurrentResults() ||
+      report.matches.length === 0
+    ) {
+      return;
+    }
+    this.cancelActiveWorkspaceReplacement();
+    const planId = `workspace-replace-${Date.now()}-${++this.workspaceReplacementSequence}`;
+    const started = beginReplacementPreview(
+      this.state.workspaceReplacement,
+      this.requestGeneration,
+      snapshot.root,
+      planId,
+      searchRequest.query,
+      this.state.replacementText,
+      searchRequest.options,
+    );
+    this.state.workspaceReplacement = started.state;
+    this.state.replacementDialog = "preview";
+    this.renderWorkspaceReplacementDialog();
+    try {
+      const preview = await bridge.previewWorkspaceReplacement(
+        snapshot.root,
+        planId,
+        searchRequest.query,
+        this.state.replacementText,
+        searchRequest.options,
+      );
+      if (
+        this.requestGeneration !== started.request.repositoryGeneration ||
+        this.state.snapshot?.root !== started.request.repositoryRoot
+      ) {
+        return;
+      }
+      this.state.workspaceReplacement = completeReplacementPreview(
+        this.state.workspaceReplacement,
+        started.request,
+        preview,
+      );
+      this.renderWorkspaceReplacementDialog();
+    } catch (error) {
+      this.state.workspaceReplacement = failReplacement(
+        this.state.workspaceReplacement,
+        started.request,
+        errorMessage(error),
+      );
+      this.renderWorkspaceReplacementDialog();
+    }
+  }
+
+  private renderWorkspaceReplacementDialog(): void {
+    const host = this.query("#workspace-replacement-dialog");
+    const mode = this.state.replacementDialog;
+    host.classList.toggle("hidden", mode === null);
+    if (!mode) {
+      host.innerHTML = "";
+      return;
+    }
+    if (mode === "recovery") {
+      host.innerHTML = this.renderReplacementRecoveries();
+      this.bindWorkspaceReplacementDialogEvents();
+      return;
+    }
+
+    const replacement = this.state.workspaceReplacement;
+    if (replacement.status === "previewing") {
+      host.innerHTML = `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
+        <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Preparing replacement preview</h2></div></div>
+        ${this.loadingBlock("Re-reading the Git-authorized files…")}
+        <div class="dialog-actions"><button class="secondary-button" id="replacement-cancel-operation" type="button">Cancel</button></div>
+      </section>`;
+      this.bindWorkspaceReplacementDialogEvents();
+      return;
+    }
+    if (replacement.status === "error" || !replacement.preview) {
+      host.innerHTML = `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
+        <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Replacement preview unavailable</h2></div><button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button></div>
+        <div class="replacement-error" role="alert">${escapeHtml(replacement.error ?? "Create a new search and preview.")}</div>
+        <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button">Close</button></div>
+      </section>`;
+      this.bindWorkspaceReplacementDialogEvents();
+      return;
+    }
+
+    const preview = replacement.preview;
+    const selected = replacement.selectedPaths;
+    const selectedFiles = preview.files.filter((file) => selected.has(file.workspacePath));
+    const selectedMatches = selectedFiles.reduce((total, file) => total + file.matchCount, 0);
+    const applying = replacement.status === "applying";
+    const allSelected = selected.size === preview.files.length;
+    const rows = preview.files.map((file) => {
+      const checked = selected.has(file.workspacePath);
+      const openTab = this.state.editor.textTabs.find(
+        (tab) => tab.document.workspacePath === file.workspacePath,
+      );
+      const blocked = Boolean(openTab && (isTextTabDirty(openTab) || openTab.saveRequest));
+      const delta = file.byteDelta === 0 ? "same size" : `${file.byteDelta > 0 ? "+" : ""}${file.byteDelta} B`;
+      return `<article class="replacement-file ${checked ? "selected" : ""}">
+        <label class="replacement-file-heading">
+          <input type="checkbox" data-replacement-file="${escapeAttribute(file.workspacePath)}" ${checked ? "checked" : ""} ${applying ? "disabled" : ""} />
+          <span><strong>${escapeHtml(file.workspacePath)}</strong><small>${file.matchCount} ${file.matchCount === 1 ? "match" : "matches"} · ${escapeHtml(delta)}${blocked ? " · save or unselect the open edited file" : ""}</small></span>
+        </label>
+        <div class="replacement-comparison" aria-label="Before and after preview for ${escapeAttribute(file.workspacePath)}">
+          <code class="before"><span>Before</span>${escapeHtml(file.beforePreview)}</code>
+          <code class="after"><span>After</span>${escapeHtml(file.afterPreview)}</code>
+        </div>
+      </article>`;
+    }).join("");
+    const warning = preview.skippedCount > 0
+      ? `<div class="replacement-warning">${preview.skippedCount} unsupported or unreadable files remain outside this reviewed replacement.</div>`
+      : "";
+    host.innerHTML = `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
+      <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Review Replace in Files</h2></div>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button>`}</div>
+      <p>${preview.totalMatches} reviewed replacements across ${preview.files.length} files. Only checked files will change.</p>
+      ${replacement.error ? `<div class="replacement-error" role="alert">${escapeHtml(replacement.error)}</div>` : ""}
+      ${warning}
+      <label class="replacement-select-all"><input id="replacement-select-all" type="checkbox" ${allSelected ? "checked" : ""} ${applying ? "disabled" : ""} /> Select all files</label>
+      <div class="replacement-file-list">${rows}</div>
+      <div class="dialog-actions">
+        ${applying ? `<button class="secondary-button" id="replacement-cancel-operation" type="button">Cancel and restore</button><button class="primary-button" type="button" disabled><span class="spinner"></span> Applying safely…</button>` : `<button class="secondary-button" data-replacement-close type="button">Cancel</button><button class="primary-button" id="replacement-apply" type="button" ${selected.size > 0 ? "" : "disabled"}>Replace ${selectedMatches} in ${selected.size} ${selected.size === 1 ? "file" : "files"}</button>`}
+      </div>
+    </section>`;
+    this.bindWorkspaceReplacementDialogEvents();
+  }
+
+  private renderReplacementRecoveries(): string {
+    const state = this.state.workspaceReplacement;
+    const cards = state.recoveries.length === 0
+      ? `<div class="command-surface-empty"><strong>No pending replacement recovery</strong><span>Reviewed backups have been resolved.</span></div>`
+      : state.recoveries.map((recovery) => {
+          const busy = this.state.replacementRecoveryBusy?.id === recovery.recoveryId;
+          const conflicts = recovery.files.filter((file) => file.state === "conflict" || file.state === "unavailable").length;
+          const replaced = recovery.files.filter((file) => file.state === "replaced").length;
+          const files = recovery.files.map((file) => `<li><span>${escapeHtml(file.workspacePath)}</span><span class="recovery-state ${file.state}">${escapeHtml(replacementFileStateLabel(file.state))}</span></li>`).join("");
+          return `<article class="recovery-card">
+            <div class="recovery-card-heading"><div><strong>${escapeHtml(recovery.recoveryId)}</strong><small>${replaced}/${recovery.files.length} files contain the reviewed replacement${conflicts ? ` · ${conflicts} need manual review` : ""}</small></div><span class="scope-pill">${escapeHtml(replacementRecoveryLabel(recovery))}</span></div>
+            <ul>${files}</ul>
+            <div class="recovery-actions">
+              <button class="secondary-button" data-recovery-rollback="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy ? "disabled" : ""}>${busy && this.state.replacementRecoveryBusy?.action === "rollback" ? "Restoring…" : "Roll back"}</button>
+              <button class="primary-button" data-recovery-keep="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy || recovery.status !== "applied" ? "disabled" : ""}>${busy && this.state.replacementRecoveryBusy?.action === "keep" ? "Keeping…" : "Keep changes"}</button>
+            </div>
+          </article>`;
+        }).join("");
+    return `<section class="dialog replacement-dialog recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-recovery-title">
+      <div class="dialog-heading"><div><span class="panel-eyebrow">Crash-safe history</span><h2 id="replacement-recovery-title">Replacement recovery</h2></div>${this.state.replacementRecoveryBusy ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button>`}</div>
+      <p>Backups remain until you verify and keep the reviewed changes, or restore the exact originals.</p>
+      <div class="recovery-list">${cards}</div>
+      <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button" ${this.state.replacementRecoveryBusy ? "disabled" : ""}>Close</button></div>
+    </section>`;
+  }
+
+  private bindWorkspaceReplacementDialogEvents(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-replacement-close]").forEach((button) => {
+      button.addEventListener("click", () => this.closeWorkspaceReplacementDialog());
+    });
+    this.root
+      .querySelector<HTMLButtonElement>("#replacement-cancel-operation")
+      ?.addEventListener("click", () => this.requestWorkspaceReplacementCancellation());
+    this.root
+      .querySelector<HTMLInputElement>("#replacement-select-all")
+      ?.addEventListener("change", (event) => {
+        this.state.workspaceReplacement = selectAllReplacementFiles(
+          this.state.workspaceReplacement,
+          (event.currentTarget as HTMLInputElement).checked,
+        );
+        this.renderWorkspaceReplacementDialog();
+      });
+    this.root.querySelectorAll<HTMLInputElement>("[data-replacement-file]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const path = checkbox.dataset.replacementFile;
+        if (!path) return;
+        this.state.workspaceReplacement = toggleReplacementFile(
+          this.state.workspaceReplacement,
+          path,
+        );
+        this.renderWorkspaceReplacementDialog();
+      });
+    });
+    this.root
+      .querySelector<HTMLButtonElement>("#replacement-apply")
+      ?.addEventListener("click", () => void this.applyWorkspaceReplacement());
+    this.root.querySelectorAll<HTMLButtonElement>("[data-recovery-rollback]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const id = button.dataset.recoveryRollback;
+        if (id) void this.resolveWorkspaceReplacementRecovery(id, "rollback");
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-recovery-keep]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const id = button.dataset.recoveryKeep;
+        if (id) void this.resolveWorkspaceReplacementRecovery(id, "keep");
+      });
+    });
+  }
+
+  private closeWorkspaceReplacementDialog(): void {
+    this.cancelActiveWorkspaceReplacement();
+    this.state.workspaceReplacement = closeReplacementPreview(this.state.workspaceReplacement);
+    this.state.replacementDialog = null;
+    this.renderWorkspaceReplacementDialog();
+  }
+
+  private requestWorkspaceReplacementCancellation(): void {
+    if (this.state.workspaceReplacement.status === "previewing") {
+      this.closeWorkspaceReplacementDialog();
+      return;
+    }
+    if (this.state.workspaceReplacement.status !== "applying") return;
+    this.cancelActiveWorkspaceReplacement();
+    this.state.workspaceReplacement = {
+      ...this.state.workspaceReplacement,
+      error: "Cancellation requested. Restoring any files already changed…",
+    };
+    this.renderWorkspaceReplacementDialog();
+  }
+
+  private async applyWorkspaceReplacement(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const request = this.state.workspaceReplacement.request;
+    const preview = this.state.workspaceReplacement.preview;
+    if (!snapshot || !request || !preview || this.state.workspaceReplacement.status !== "ready") return;
+    this.captureMountedTextEditor();
+    const selectedPaths = [...this.state.workspaceReplacement.selectedPaths];
+    const blocked = this.state.editor.textTabs.filter(
+      (tab) =>
+        selectedPaths.includes(tab.document.workspacePath) &&
+        (tab.status !== "ready" || isTextTabDirty(tab) || tab.saveRequest !== null),
+    );
+    if (blocked.length > 0) {
+      this.state.workspaceReplacement = {
+        ...this.state.workspaceReplacement,
+        error: `Save, close, or unselect ${blocked.map((tab) => tab.document.workspacePath).join(", ")} before replacing.`,
+      };
+      this.setStatus("Replacement blocked by an open edited file", "warning");
+      this.renderWorkspaceReplacementDialog();
+      return;
+    }
+    this.state.workspaceReplacement = beginReplacementApply(this.state.workspaceReplacement);
+    this.renderWorkspaceReplacementDialog();
+    try {
+      const result = await bridge.applyWorkspaceReplacement(snapshot.root, preview.planId, selectedPaths);
+      if (
+        this.requestGeneration !== request.repositoryGeneration ||
+        this.state.snapshot?.root !== request.repositoryRoot
+      ) {
+        return;
+      }
+      this.state.workspaceReplacement = completeReplacementApply(
+        this.state.workspaceReplacement,
+        request,
+        result,
+      );
+      await this.reloadReplacementFiles(selectedPaths);
+      await this.refreshWorkspaceAfterReplacement(snapshot.root, request.repositoryGeneration);
+      this.refreshWorkspaceSearchAfterReplacement();
+      await this.loadReplacementRecoveries(snapshot.root, this.requestGeneration);
+      if (result.status === "rolledBack") {
+        this.state.replacementDialog = null;
+        this.setStatus("Replacement stopped; every changed file was restored", "success");
+      } else {
+        this.state.replacementDialog = "recovery";
+        this.setStatus(
+          result.status === "applied"
+            ? "Replacement applied; recovery retained until you keep or roll back"
+            : "Replacement needs recovery review",
+          result.status === "applied" ? "success" : "warning",
+        );
+      }
+      this.renderWorkspaceReplacementDialog();
+    } catch (error) {
+      this.state.workspaceReplacement = failReplacement(
+        this.state.workspaceReplacement,
+        request,
+        errorMessage(error),
+      );
+      await this.loadReplacementRecoveries(snapshot.root, this.requestGeneration);
+      if (this.state.workspaceReplacement.recoveries.length > 0) {
+        this.state.replacementDialog = "recovery";
+      }
+      this.renderWorkspaceReplacementDialog();
+      this.showError(error);
+    }
+  }
+
+  private async loadReplacementRecoveries(
+    repositoryRoot: string,
+    generation = this.requestGeneration,
+  ): Promise<void> {
+    this.state.workspaceReplacement = {
+      ...this.state.workspaceReplacement,
+      recoveriesLoading: true,
+    };
+    try {
+      const recoveries = await bridge.listWorkspaceReplacementRecoveries(repositoryRoot);
+      if (generation !== this.requestGeneration || this.state.snapshot?.root !== repositoryRoot) return;
+      this.state.workspaceReplacement = setReplacementRecoveries(
+        this.state.workspaceReplacement,
+        recoveries,
+      );
+      if (recoveries.length > 0 && !this.state.loading) {
+        this.setStatus(
+          `${recoveries.length} replacement recovery ${recoveries.length === 1 ? "record needs" : "records need"} review`,
+          "warning",
+        );
+      }
+      if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface();
+      if (this.state.replacementDialog === "recovery") this.renderWorkspaceReplacementDialog();
+    } catch (error) {
+      if (generation !== this.requestGeneration) return;
+      this.state.workspaceReplacement = {
+        ...this.state.workspaceReplacement,
+        recoveriesLoading: false,
+      };
+      this.setStatus("Replacement recovery could not be inspected", "warning");
+      this.showError(error);
+    }
+  }
+
+  private refreshWorkspaceSearchAfterReplacement(): void {
+    this.cancelActiveWorkspaceSearch();
+    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    if (
+      this.state.commandSurface.mode === "workspace" &&
+      this.state.commandSurface.query.trim().length > 0
+    ) {
+      void this.runWorkspaceSearch();
+    } else {
+      this.renderCommandSurface();
+    }
+  }
+
+  private async resolveWorkspaceReplacementRecovery(
+    recoveryId: string,
+    action: "keep" | "rollback",
+  ): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const recovery = this.state.workspaceReplacement.recoveries.find(
+      (candidate) => candidate.recoveryId === recoveryId,
+    );
+    if (!snapshot || !recovery || this.state.replacementRecoveryBusy) return;
+    this.captureMountedTextEditor();
+    const paths = recovery.files.map((file) => file.workspacePath);
+    const blocked = this.state.editor.textTabs.filter(
+      (tab) =>
+        paths.includes(tab.document.workspacePath) &&
+        (tab.status !== "ready" || isTextTabDirty(tab) || tab.saveRequest !== null),
+    );
+    if (action === "rollback" && blocked.length > 0) {
+      this.setStatus(
+        `Save or close edited recovery files before rollback: ${blocked.map((tab) => tab.document.workspacePath).join(", ")}`,
+        "warning",
+      );
+      return;
+    }
+    this.state.replacementRecoveryBusy = { id: recoveryId, action };
+    this.renderWorkspaceReplacementDialog();
+    try {
+      let rollbackResult: ReplacementApplyResult | null = null;
+      if (action === "keep") {
+        await bridge.finalizeWorkspaceReplacement(snapshot.root, recoveryId);
+      } else {
+        rollbackResult = await bridge.rollbackWorkspaceReplacement(snapshot.root, recoveryId);
+        await this.reloadReplacementFiles(paths);
+      }
+      this.state.replacementRecoveryBusy = null;
+      if (action === "rollback") {
+        await this.refreshWorkspaceAfterReplacement(snapshot.root, this.requestGeneration);
+        this.refreshWorkspaceSearchAfterReplacement();
+      }
+      if (this.state.snapshot?.root !== snapshot.root) return;
+      await this.loadReplacementRecoveries(snapshot.root, this.requestGeneration);
+      const unresolved = this.state.workspaceReplacement.recoveries.length;
+      if (unresolved > 0) {
+        this.state.replacementDialog = "recovery";
+        this.setStatus(
+          rollbackResult?.status === "needsRecovery"
+            ? "Some files changed outside Asterlyn and were preserved; recovery still needs review"
+            : `${unresolved} replacement recovery ${unresolved === 1 ? "record needs" : "records need"} review`,
+          "warning",
+        );
+      } else {
+        this.state.replacementDialog = null;
+        this.setStatus(
+          action === "keep" ? "Replacement changes kept" : "Replacement originals restored",
+          "success",
+        );
+      }
+      this.renderWorkspaceReplacementDialog();
+    } catch (error) {
+      this.state.replacementRecoveryBusy = null;
+      await this.loadReplacementRecoveries(snapshot.root, this.requestGeneration);
+      this.renderWorkspaceReplacementDialog();
+      this.showError(error);
+    }
+  }
+
+  private async refreshWorkspaceAfterReplacement(
+    repositoryRoot: string,
+    generation: number,
+  ): Promise<void> {
+    const current = this.state.snapshot;
+    if (!current || current.root !== repositoryRoot || generation !== this.requestGeneration) return;
+    this.cancelActiveUntrackedScan();
+    const refreshed = await bridge.openRepository(repositoryRoot);
+    if (
+      generation !== this.requestGeneration ||
+      this.state.snapshot?.root !== repositoryRoot ||
+      refreshed.root !== repositoryRoot
+    ) {
+      return;
+    }
+    this.state.snapshot = { ...refreshed, commits: current.commits };
+    this.chooseValidChangeSelection();
+    this.renderWorkspace();
+    await this.completeUntrackedScan(repositoryRoot, generation);
+  }
+
+  private async reloadReplacementFiles(workspacePaths: string[]): Promise<void> {
+    const selected = new Set(workspacePaths);
+    const tabs = this.state.editor.textTabs.filter((tab) => selected.has(tab.document.workspacePath));
+    for (const tab of tabs) {
+      const reload = beginTextReload(this.state.editor, tab.id);
+      if (reload.loadEpoch === null) continue;
+      this.state.editor = reload.session;
+      try {
+        const snapshot = await bridge.readTextFile(
+          tab.document.repositoryRoot,
+          tab.document.repositoryId,
+          tab.document.path,
+        );
+        this.state.editor = completeTextLoad(
+          this.state.editor,
+          tab.id,
+          reload.loadEpoch,
+          snapshot,
+        );
+      } catch (error) {
+        this.state.editor = failTextLoad(
+          this.state.editor,
+          tab.id,
+          reload.loadEpoch,
+          errorMessage(error),
+        );
+      }
+    }
+    this.renderEditor();
   }
 
   private async openWorkspaceSearchMatch(match: WorkspaceTextSearchMatch): Promise<void> {
@@ -5143,7 +5697,15 @@ export class AsterlynApp {
     } finally {
       if (this.activeUntrackedScan === scan) {
         this.activeUntrackedScan = null;
-        if (completed) this.setStatus("Ready", "normal");
+        if (completed) {
+          const recoveries = this.state.workspaceReplacement.recoveries.length;
+          this.setStatus(
+            recoveries > 0
+              ? `${recoveries} replacement recovery ${recoveries === 1 ? "record needs" : "records need"} review`
+              : "Ready",
+            recoveries > 0 ? "warning" : "normal",
+          );
+        }
       }
     }
   }
@@ -5633,10 +6195,26 @@ function commandSurfaceHint(mode: NavigationMode): string {
   const hints: Record<NavigationMode, string> = {
     files: "Go to File · tracked and non-ignored project catalog",
     recent: "Recent Files · successful opens in this repository",
-    workspace: "Find in Files · bounded literal/regex search · full-path globs · read-only results",
+    workspace: "Find in Files · bounded search · reviewed recoverable replacement",
     commands: "Command Palette · only currently safe commands are enabled",
   };
   return hints[mode];
+}
+
+function replacementRecoveryLabel(recovery: ReplacementRecoverySummary): string {
+  return recovery.status === "applied" ? "Ready to verify" : "Needs recovery";
+}
+
+function replacementFileStateLabel(
+  state: ReplacementRecoverySummary["files"][number]["state"],
+): string {
+  const labels: Record<ReplacementRecoverySummary["files"][number]["state"], string> = {
+    original: "Original",
+    replaced: "Replaced",
+    conflict: "Changed externally",
+    unavailable: "Unavailable",
+  };
+  return labels[state];
 }
 
 function basename(path: string): string {
