@@ -72,57 +72,28 @@ textarea:focus-visible {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr) 25px;
+  grid-template-rows: 48px minmax(0, 1fr) 25px;
   width: 100%;
   height: 100%;
   min-width: 920px;
   background: var(--bg-deep);
+  font-size: var(--ui-font-size, 13px);
 }
 
 .topbar {
   display: grid;
-  grid-template-columns: 310px minmax(300px, 1fr) 310px;
+  grid-template-columns: minmax(280px, 520px) minmax(0, 1fr);
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: #242529;
   user-select: none;
 }
 
-.brand,
 .topbar-actions {
   display: flex;
   align-items: center;
   height: 100%;
   gap: 9px;
-}
-
-.brand {
-  padding: 0 12px;
-}
-
-.brand-mark {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 6px;
-  background:
-    linear-gradient(145deg, #4f88f3 0 46%, transparent 46%),
-    linear-gradient(325deg, #4aab73 0 43%, #25272a 43%);
-  box-shadow: inset 0 0 0 1px #ffffff16;
-}
-
-.brand-mark span {
-  color: white;
-  font-size: 12px;
-  font-weight: 760;
-  text-shadow: 0 1px 2px #0008;
-}
-
-.brand-name {
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
 }
 
 .milestone-pill,
@@ -143,12 +114,13 @@ textarea:focus-visible {
 
 .repository-switcher {
   display: grid;
-  grid-template-columns: 20px auto minmax(80px, 1fr);
+  grid-template-columns: 22px auto minmax(80px, 1fr);
   align-items: center;
-  justify-self: center;
-  min-width: 340px;
-  max-width: min(620px, 100%);
-  height: 30px;
+  justify-self: start;
+  width: min(500px, calc(100% - 16px));
+  min-width: 0;
+  height: 34px;
+  margin-left: 8px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -181,14 +153,15 @@ textarea:focus-visible {
 }
 
 .topbar-actions {
+  grid-column: 2;
   justify-content: flex-end;
   padding-left: 12px;
 }
 
 .command-center-button {
   display: grid;
-  height: 28px;
-  grid-template-columns: 17px auto auto;
+  height: 32px;
+  grid-template-columns: 20px auto auto;
   align-items: center;
   gap: 6px;
   padding: 0 7px;
@@ -197,7 +170,7 @@ textarea:focus-visible {
   background: var(--bg-deep);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--ui-font-size, 13px);
 }
 
 .command-center-button:hover {
@@ -225,8 +198,8 @@ textarea:focus-visible {
 
 .icon-button {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   padding: 0;
   border: 0;
@@ -274,7 +247,7 @@ textarea:focus-visible {
 .sync-popover {
   position: absolute;
   z-index: 45;
-  top: 39px;
+  top: 45px;
   right: -42px;
   width: min(430px, calc(100vw - 28px));
   padding: 14px;
@@ -450,8 +423,8 @@ textarea:focus-visible {
 
 .window-control-button {
   display: inline-grid;
-  width: 44px;
-  height: 43px;
+  width: 46px;
+  height: 47px;
   place-items: center;
   padding: 0;
   border: 0;
@@ -516,7 +489,7 @@ textarea:focus-visible {
 
 .settings-page-header h1 {
   margin: 1px 0 0;
-  font-size: calc(var(--ui-font-size, 11px) + 4px);
+  font-size: calc(var(--ui-font-size, 13px) + 4px);
   font-weight: 650;
 }
 
@@ -561,14 +534,14 @@ textarea:focus-visible {
 }
 
 .settings-navigation-item strong {
-  font-size: var(--ui-font-size, 11px);
+  font-size: var(--ui-font-size, 13px);
   font-weight: 620;
 }
 
 .settings-navigation-item span {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: calc(var(--ui-font-size, 11px) - 2px);
+  font-size: calc(var(--ui-font-size, 13px) - 2px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -593,14 +566,14 @@ textarea:focus-visible {
 
 .settings-group h2 {
   margin: 3px 0 7px;
-  font-size: calc(var(--ui-font-size, 11px) + 9px);
+  font-size: calc(var(--ui-font-size, 13px) + 9px);
   font-weight: 650;
 }
 
 .settings-group header p {
   margin: 0;
   color: var(--text-muted);
-  font-size: var(--ui-font-size, 11px);
+  font-size: var(--ui-font-size, 13px);
   line-height: 1.55;
 }
 
@@ -633,13 +606,13 @@ textarea:focus-visible {
 }
 
 .settings-row strong {
-  font-size: var(--ui-font-size, 11px);
+  font-size: var(--ui-font-size, 13px);
   font-weight: 620;
 }
 
 .settings-row > div:first-child > span {
   color: var(--text-muted);
-  font-size: calc(var(--ui-font-size, 11px) - 1px);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
   line-height: 1.45;
 }
 
@@ -664,7 +637,7 @@ textarea:focus-visible {
 .setting-planned {
   border-radius: 999px;
   padding: 4px 8px;
-  font-size: calc(var(--ui-font-size, 11px) - 1px);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
   white-space: nowrap;
 }
 
@@ -2497,7 +2470,7 @@ textarea:focus-visible {
 
 .content-panel {
   display: grid;
-  grid-template-rows: 31px 48px minmax(0, 1fr);
+  grid-template-rows: 36px 50px minmax(0, 1fr);
   background: var(--bg-deep);
 }
 
@@ -2509,11 +2482,18 @@ textarea:focus-visible {
 
 .editor-tabbar {
   display: flex;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-width: 0;
   align-items: stretch;
   border-bottom: 1px solid var(--border);
   background: #242529;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.editor-tabbar::-webkit-scrollbar {
+  display: none;
 }
 
 .editor-tab {
@@ -3700,6 +3680,19 @@ textarea:focus-visible {
   margin-top: 12px;
 }
 
+.repository-target-path {
+  display: block;
+  overflow: hidden;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-deep);
+  color: var(--text-soft);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .history-dialog-backdrop {
   z-index: 60;
 }
@@ -4499,7 +4492,6 @@ textarea:focus-visible {
   width: 18px;
 }
 
-.app-shell .brand-name,
 .app-shell .repository-name,
 .app-shell .command-center-button,
 .app-shell .project-directory > summary,
@@ -4511,12 +4503,12 @@ textarea:focus-visible {
 .app-shell .editor-tab,
 .app-shell .bottom-tool-header,
 .app-shell .statusbar {
-  font-size: var(--ui-font-size, 11px);
+  font-size: var(--ui-font-size, 13px);
 }
 
 .app-shell .panel-header h1,
 .app-shell .content-header h2 {
-  font-size: calc(var(--ui-font-size, 11px) + 2px);
+  font-size: calc(var(--ui-font-size, 13px) + 2px);
 }
 
 .app-shell .panel-eyebrow,
@@ -4525,7 +4517,7 @@ textarea:focus-visible {
 .app-shell .history-meta,
 .app-shell .branch-copy small,
 .app-shell .commit-file-row .file-directory {
-  font-size: max(8px, calc(var(--ui-font-size, 11px) - 2px));
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
 }
 
 ::-webkit-scrollbar {
@@ -4557,7 +4549,7 @@ textarea:focus-visible {
 
 @media (max-width: 1120px) {
   .topbar {
-    grid-template-columns: 250px minmax(300px, 1fr) 250px;
+    grid-template-columns: minmax(240px, 420px) minmax(0, 1fr);
   }
 
   .settings-page-layout {

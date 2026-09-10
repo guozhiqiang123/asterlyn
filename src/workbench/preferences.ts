@@ -3,7 +3,7 @@ import type { DiffLayout } from "../diff-presentation";
 export const APP_PREFERENCES_KEY = "asterlyn.preferences.v1";
 export const UI_FONT_SIZES = [10, 11, 12, 13, 14] as const;
 export const EDITOR_FONT_SIZES = [11, 12, 13, 14, 16, 18, 20, 22, 24] as const;
-export const EDITOR_LINE_HEIGHTS = [1.35, 1.5, 1.62, 1.8, 2] as const;
+export const EDITOR_LINE_HEIGHTS = [1.2, 1.35, 1.5, 1.62, 1.8, 2] as const;
 export const EDITOR_TAB_SIZES = [2, 4, 8] as const;
 
 export interface AppPreferences {
@@ -16,9 +16,9 @@ export interface AppPreferences {
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
-  uiFontSize: 11,
-  editorFontSize: 12,
-  editorLineHeight: 1.62,
+  uiFontSize: 13,
+  editorFontSize: 13,
+  editorLineHeight: 1.2,
   editorTabSize: 4,
   diffLayout: "split",
   showWhitespace: false,
@@ -37,21 +37,26 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
     const raw = storage.getItem(APP_PREFERENCES_KEY);
     if (!raw) return { ...DEFAULT_APP_PREFERENCES };
     const value = JSON.parse(raw) as { version?: unknown; preferences?: unknown };
-    if (value.version !== 1 || !isRecord(value.preferences)) {
+    if ((value.version !== 1 && value.version !== 2) || !isRecord(value.preferences)) {
       return { ...DEFAULT_APP_PREFERENCES };
     }
     const preferences = value.preferences;
+    const legacyDefaults = value.version === 1;
     return {
-      uiFontSize: allowedNumber(preferences.uiFontSize, UI_FONT_SIZES, 11),
+      uiFontSize: allowedNumber(
+        migrateLegacyDefault(preferences.uiFontSize, legacyDefaults, 11, 13),
+        UI_FONT_SIZES,
+        13,
+      ),
       editorFontSize: allowedNumber(
-        preferences.editorFontSize,
+        migrateLegacyDefault(preferences.editorFontSize, legacyDefaults, 12, 13),
         EDITOR_FONT_SIZES,
-        12,
+        13,
       ),
       editorLineHeight: allowedNumber(
-        preferences.editorLineHeight,
+        migrateLegacyDefault(preferences.editorLineHeight, legacyDefaults, 1.62, 1.2),
         EDITOR_LINE_HEIGHTS,
-        1.62,
+        1.2,
       ),
       editorTabSize: allowedNumber(
         preferences.editorTabSize,
@@ -78,7 +83,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 1, preferences }),
+    JSON.stringify({ version: 2, preferences }),
   );
 }
 
@@ -121,6 +126,15 @@ function allowedNumber<T extends number>(
   fallback: number,
 ): number {
   return typeof value === "number" && allowed.includes(value as T) ? value : fallback;
+}
+
+function migrateLegacyDefault(
+  value: unknown,
+  legacy: boolean,
+  previousDefault: number,
+  nextDefault: number,
+): unknown {
+  return legacy && value === previousDefault ? nextDefault : value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

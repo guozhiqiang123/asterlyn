@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
@@ -14,7 +15,7 @@ use asterlyn_workspace::{
     SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions,
     SearchSkipReason, TextFileSnapshot, Workspace, WorkspaceError,
 };
-use tauri::{Manager, State};
+use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const COMMIT_LIMIT: usize = 150;
 const PROJECT_FILE_LIMIT: usize = 5_000;
@@ -51,8 +52,8 @@ struct ScanRegistry {
 
 #[derive(Default)]
 struct ScanRegistryState {
-    active: HashMap<String, CancellationToken>,
-    cancelled: HashSet<String>,
+    active: HashMap<(String, String), CancellationToken>,
+    cancelled: HashSet<(String, String)>,
 }
 
 #[derive(Default)]
@@ -71,9 +72,31 @@ struct ActiveRemoteOperation {
     cancellation: CancellationToken,
 }
 
+impl ScanRegistry {
+    fn remove_window(&self, window_label: &str) {
+        if let Ok(mut state) = self.inner.lock() {
+            state.active.retain(|(label, _), cancellation| {
+                if label == window_label {
+                    cancellation.cancel();
+                    false
+                } else {
+                    true
+                }
+            });
+            state.cancelled.retain(|(label, _)| label != window_label);
+        }
+    }
+}
+
 #[derive(Default)]
-struct ActiveWorkspace {
-    root: Mutex<Option<PathBuf>>,
+struct ActiveWorkspaces {
+    roots: Mutex<HashMap<String, PathBuf>>,
+}
+
+#[derive(Default)]
+struct PendingRepositoryWindows {
+    paths: Mutex<HashMap<String, PathBuf>>,
+    sequence: AtomicU64,
 }
 
 #[derive(Default)]
@@ -88,9 +111,9 @@ struct WorkspaceReplacementRegistry {
 
 #[derive(Default)]
 struct WorkspaceReplacementRegistryState {
-    plans: HashMap<String, StoredReplacementPlan>,
-    active: HashMap<String, ActiveWorkspaceSearch>,
-    cancelled: HashSet<(String, String)>,
+    plans: HashMap<(String, String), StoredReplacementPlan>,
+    active: HashMap<(String, String), ActiveWorkspaceSearch>,
+    cancelled: HashSet<(String, String, String)>,
 }
 
 #[derive(Clone)]
@@ -114,8 +137,8 @@ struct WorkspaceSearchRegistry {
 
 #[derive(Default)]
 struct WorkspaceSearchRegistryState {
-    active: HashMap<String, ActiveWorkspaceSearch>,
-    cancelled: HashSet<(String, String)>,
+    active: HashMap<(String, String), ActiveWorkspaceSearch>,
+    cancelled: HashSet<(String, String, String)>,
 }
 
 struct ActiveWorkspaceSearch {
@@ -186,32 +209,36 @@ struct WorkspaceReplacementFilePreview {
     after_preview: String,
 }
 
-impl ActiveWorkspace {
-    fn activate(&self, root: &str) -> Result<(), GitError> {
+impl ActiveWorkspaces {
+    fn activate(&self, window_label: &str, root: &str) -> Result<(), GitError> {
         let canonical = std::fs::canonicalize(root).map_err(|error| GitError::Io {
             operation: "activate workspace".to_string(),
             message: error.to_string(),
         })?;
-        *self.root.lock().map_err(|_| GitError::Io {
-            operation: "activate workspace".to_string(),
-            message: "active workspace lock was poisoned".to_string(),
-        })? = Some(canonical);
+        self.roots
+            .lock()
+            .map_err(|_| GitError::Io {
+                operation: "activate workspace".to_string(),
+                message: "active workspace lock was poisoned".to_string(),
+            })?
+            .insert(window_label.to_string(), canonical);
         Ok(())
     }
 
-    fn resolve(&self, requested: &str) -> Result<PathBuf, WorkspaceError> {
+    fn resolve(&self, window_label: &str, requested: &str) -> Result<PathBuf, WorkspaceError> {
         let requested =
             std::fs::canonicalize(requested).map_err(|error| WorkspaceError::NotAuthorized {
                 message: format!("the requested workspace is unavailable: {error}"),
             })?;
         let active = self
-            .root
+            .roots
             .lock()
             .map_err(|_| WorkspaceError::Io {
                 operation: "authorize active workspace".to_string(),
                 message: "active workspace lock was poisoned".to_string(),
             })?
-            .clone()
+            .get(window_label)
+            .cloned()
             .ok_or_else(|| WorkspaceError::NotAuthorized {
                 message: "open a repository before reading or saving files".to_string(),
             })?;
@@ -221,6 +248,47 @@ impl ActiveWorkspace {
             });
         }
         Ok(active)
+    }
+
+    fn remove(&self, window_label: &str) {
+        if let Ok(mut roots) = self.roots.lock() {
+            roots.remove(window_label);
+        }
+    }
+}
+
+impl PendingRepositoryWindows {
+    fn reserve(&self, path: PathBuf) -> Result<String, GitError> {
+        let label = format!(
+            "project-{}",
+            self.sequence.fetch_add(1, Ordering::Relaxed) + 1
+        );
+        self.paths
+            .lock()
+            .map_err(|_| GitError::Io {
+                operation: "open repository window".to_string(),
+                message: "pending repository window lock was poisoned".to_string(),
+            })?
+            .insert(label.clone(), path);
+        Ok(label)
+    }
+
+    fn take(&self, window_label: &str) -> Result<Option<String>, GitError> {
+        Ok(self
+            .paths
+            .lock()
+            .map_err(|_| GitError::Io {
+                operation: "initialize repository window".to_string(),
+                message: "pending repository window lock was poisoned".to_string(),
+            })?
+            .remove(window_label)
+            .map(|path| path.to_string_lossy().into_owned()))
+    }
+
+    fn remove(&self, window_label: &str) {
+        if let Ok(mut paths) = self.paths.lock() {
+            paths.remove(window_label);
+        }
     }
 }
 
@@ -238,19 +306,26 @@ impl WorkspaceWriteRegistry {
 }
 
 impl WorkspaceReplacementRegistryState {
-    fn register(&mut self, repository_root: &str, operation_id: &str) -> SearchCancellationToken {
-        if let Some(previous) = self.active.remove(repository_root) {
+    fn register(
+        &mut self,
+        window_label: &str,
+        repository_root: &str,
+        operation_id: &str,
+    ) -> SearchCancellationToken {
+        let scope = (window_label.to_string(), repository_root.to_string());
+        if let Some(previous) = self.active.remove(&scope) {
             previous.cancellation.cancel();
         }
         let cancellation = SearchCancellationToken::new();
-        if self
-            .cancelled
-            .remove(&(repository_root.to_string(), operation_id.to_string()))
-        {
+        if self.cancelled.remove(&(
+            window_label.to_string(),
+            repository_root.to_string(),
+            operation_id.to_string(),
+        )) {
             cancellation.cancel();
         }
         self.active.insert(
-            repository_root.to_string(),
+            scope,
             ActiveWorkspaceSearch {
                 id: operation_id.to_string(),
                 cancellation: cancellation.clone(),
@@ -261,31 +336,35 @@ impl WorkspaceReplacementRegistryState {
 
     fn finish(
         &mut self,
+        window_label: &str,
         repository_root: &str,
         operation_id: &str,
         cancellation: &SearchCancellationToken,
     ) {
-        if self.active.get(repository_root).is_some_and(|active| {
+        let scope = (window_label.to_string(), repository_root.to_string());
+        if self.active.get(&scope).is_some_and(|active| {
             active.id == operation_id && active.cancellation.refers_to(cancellation)
         }) {
-            self.active.remove(repository_root);
+            self.active.remove(&scope);
         }
     }
 
-    fn cancel(&mut self, repository_root: String, operation_id: String) {
+    fn cancel(&mut self, window_label: String, repository_root: String, operation_id: String) {
+        let plan_key = (window_label.clone(), operation_id.clone());
         let removed_plan = self
             .plans
-            .get(&operation_id)
+            .get(&plan_key)
             .is_some_and(|stored| stored.root == Path::new(&repository_root));
         if removed_plan {
-            self.plans.remove(&operation_id);
+            self.plans.remove(&plan_key);
         }
+        let scope = (window_label.clone(), repository_root.clone());
         if self
             .active
-            .get(&repository_root)
+            .get(&scope)
             .is_some_and(|active| active.id == operation_id)
         {
-            if let Some(active) = self.active.remove(&repository_root) {
+            if let Some(active) = self.active.remove(&scope) {
                 active.cancellation.cancel();
             }
             return;
@@ -296,21 +375,30 @@ impl WorkspaceReplacementRegistryState {
         if self.cancelled.len() >= CANCELLED_SEARCH_RETENTION {
             self.cancelled.clear();
         }
-        self.cancelled.insert((repository_root, operation_id));
+        self.cancelled
+            .insert((window_label, repository_root, operation_id));
     }
 
-    fn store(&mut self, stored: StoredReplacementPlan) {
+    fn store(&mut self, window_label: &str, stored: StoredReplacementPlan) {
         if self.plans.len() >= REPLACEMENT_PLAN_RETENTION {
             self.plans.clear();
         }
         self.plans
-            .retain(|_, existing| existing.root != stored.root);
-        self.plans.insert(stored.plan.plan_id().to_string(), stored);
+            .retain(|(label, _), existing| label != window_label || existing.root != stored.root);
+        self.plans.insert(
+            (window_label.to_string(), stored.plan.plan_id().to_string()),
+            stored,
+        );
     }
 
-    fn plan(&self, root: &Path, plan_id: &str) -> Result<StoredReplacementPlan, WorkspaceError> {
+    fn plan(
+        &self,
+        window_label: &str,
+        root: &Path,
+        plan_id: &str,
+    ) -> Result<StoredReplacementPlan, WorkspaceError> {
         self.plans
-            .get(plan_id)
+            .get(&(window_label.to_string(), plan_id.to_string()))
             .filter(|stored| stored.root == root)
             .cloned()
             .ok_or_else(|| WorkspaceError::InvalidReplacement {
@@ -318,25 +406,46 @@ impl WorkspaceReplacementRegistryState {
             })
     }
 
-    fn remove_plan(&mut self, plan_id: &str) {
-        self.plans.remove(plan_id);
+    fn remove_plan(&mut self, window_label: &str, plan_id: &str) {
+        self.plans
+            .remove(&(window_label.to_string(), plan_id.to_string()));
+    }
+
+    fn remove_window(&mut self, window_label: &str) {
+        self.plans.retain(|(label, _), _| label != window_label);
+        self.active.retain(|(label, _), active| {
+            if label == window_label {
+                active.cancellation.cancel();
+                false
+            } else {
+                true
+            }
+        });
+        self.cancelled.retain(|(label, _, _)| label != window_label);
     }
 }
 
 impl WorkspaceSearchRegistryState {
-    fn register(&mut self, repository_root: &str, request_id: &str) -> SearchCancellationToken {
-        if let Some(previous) = self.active.remove(repository_root) {
+    fn register(
+        &mut self,
+        window_label: &str,
+        repository_root: &str,
+        request_id: &str,
+    ) -> SearchCancellationToken {
+        let scope = (window_label.to_string(), repository_root.to_string());
+        if let Some(previous) = self.active.remove(&scope) {
             previous.cancellation.cancel();
         }
         let cancellation = SearchCancellationToken::new();
-        if self
-            .cancelled
-            .remove(&(repository_root.to_string(), request_id.to_string()))
-        {
+        if self.cancelled.remove(&(
+            window_label.to_string(),
+            repository_root.to_string(),
+            request_id.to_string(),
+        )) {
             cancellation.cancel();
         }
         self.active.insert(
-            repository_root.to_string(),
+            scope,
             ActiveWorkspaceSearch {
                 id: request_id.to_string(),
                 cancellation: cancellation.clone(),
@@ -345,13 +454,14 @@ impl WorkspaceSearchRegistryState {
         cancellation
     }
 
-    fn cancel(&mut self, repository_root: String, request_id: String) {
+    fn cancel(&mut self, window_label: String, repository_root: String, request_id: String) {
+        let scope = (window_label.clone(), repository_root.clone());
         if self
             .active
-            .get(&repository_root)
+            .get(&scope)
             .is_some_and(|active| active.id == request_id)
         {
-            if let Some(active) = self.active.remove(&repository_root) {
+            if let Some(active) = self.active.remove(&scope) {
                 active.cancellation.cancel();
             }
             return;
@@ -359,20 +469,35 @@ impl WorkspaceSearchRegistryState {
         if self.cancelled.len() >= CANCELLED_SEARCH_RETENTION {
             self.cancelled.clear();
         }
-        self.cancelled.insert((repository_root, request_id));
+        self.cancelled
+            .insert((window_label, repository_root, request_id));
     }
 
     fn finish(
         &mut self,
+        window_label: &str,
         repository_root: &str,
         request_id: &str,
         cancellation: &SearchCancellationToken,
     ) {
-        if self.active.get(repository_root).is_some_and(|active| {
+        let scope = (window_label.to_string(), repository_root.to_string());
+        if self.active.get(&scope).is_some_and(|active| {
             active.id == request_id && active.cancellation.refers_to(cancellation)
         }) {
-            self.active.remove(repository_root);
+            self.active.remove(&scope);
         }
+    }
+
+    fn remove_window(&mut self, window_label: &str) {
+        self.active.retain(|(label, _), active| {
+            if label == window_label {
+                active.cancellation.cancel();
+                false
+            } else {
+                true
+            }
+        });
+        self.cancelled.retain(|(label, _, _)| label != window_label);
     }
 }
 
@@ -436,24 +561,66 @@ impl RemoteOperationRegistryState {
 }
 
 #[tauri::command]
-fn initial_repository() -> Option<String> {
-    std::env::args_os()
+fn initial_repository(
+    window: tauri::WebviewWindow,
+    pending: State<'_, PendingRepositoryWindows>,
+) -> Result<Option<String>, GitError> {
+    if let Some(path) = pending.take(window.label())? {
+        return Ok(Some(path));
+    }
+    Ok(std::env::args_os()
         .skip(1)
         .find(|argument| !argument.to_string_lossy().starts_with('-'))
-        .map(|argument| argument.to_string_lossy().into_owned())
+        .map(|argument| argument.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
 async fn open_repository(
     path: String,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
     let snapshot = run_blocking("open repository", move || {
         GitRepository::open(path)?.tracked_snapshot(COMMIT_LIMIT)
     })
     .await?;
-    active_workspace.activate(&snapshot.root)?;
+    active_workspaces.activate(window.label(), &snapshot.root)?;
     Ok(snapshot)
+}
+
+#[tauri::command]
+fn open_repository_window(
+    path: String,
+    app: tauri::AppHandle,
+    pending: State<'_, PendingRepositoryWindows>,
+) -> Result<String, GitError> {
+    let canonical = std::fs::canonicalize(&path).map_err(|error| GitError::Io {
+        operation: "open repository window".to_string(),
+        message: error.to_string(),
+    })?;
+    GitRepository::open(&canonical)?;
+    let label = pending.reserve(canonical.clone())?;
+    let title = canonical
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| format!("Asterlyn — {name}"))
+        .unwrap_or_else(|| "Asterlyn".to_string());
+    let result =
+        WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App("index.html".into()))
+            .title(title)
+            .inner_size(1320.0, 820.0)
+            .min_inner_size(920.0, 600.0)
+            .decorations(false)
+            .center()
+            .build();
+    if let Err(error) = result {
+        pending.remove(&label);
+        return Err(GitError::Io {
+            operation: "open repository window".to_string(),
+            message: error.to_string(),
+        });
+    }
+    Ok(label)
 }
 
 #[tauri::command]
@@ -473,17 +640,19 @@ async fn read_history_page(
 async fn scan_untracked(
     repository_root: String,
     scan_id: String,
+    window: tauri::WebviewWindow,
     scans: State<'_, ScanRegistry>,
 ) -> Result<UntrackedScan, GitError> {
     let cancellation = CancellationToken::new();
+    let scan_key = (window.label().to_string(), scan_id);
     {
         let mut registry = lock_scan_registry(scans.inner())?;
-        if registry.cancelled.remove(&scan_id) {
+        if registry.cancelled.remove(&scan_key) {
             cancellation.cancel();
         }
         if let Some(previous) = registry
             .active
-            .insert(scan_id.clone(), cancellation.clone())
+            .insert(scan_key.clone(), cancellation.clone())
         {
             previous.cancel();
         }
@@ -498,24 +667,29 @@ async fn scan_untracked(
     let mut registry = lock_scan_registry(scans.inner())?;
     if registry
         .active
-        .get(&scan_id)
+        .get(&scan_key)
         .is_some_and(|active| active.refers_to(&cancellation))
     {
-        registry.active.remove(&scan_id);
+        registry.active.remove(&scan_key);
     }
     result
 }
 
 #[tauri::command]
-fn cancel_untracked_scan(scan_id: String, scans: State<'_, ScanRegistry>) -> Result<(), GitError> {
+fn cancel_untracked_scan(
+    scan_id: String,
+    window: tauri::WebviewWindow,
+    scans: State<'_, ScanRegistry>,
+) -> Result<(), GitError> {
     let mut registry = lock_scan_registry(scans.inner())?;
-    if let Some(cancellation) = registry.active.remove(&scan_id) {
+    let scan_key = (window.label().to_string(), scan_id);
+    if let Some(cancellation) = registry.active.remove(&scan_key) {
         cancellation.cancel();
     } else {
         if registry.cancelled.len() >= CANCELLED_SCAN_RETENTION {
             registry.cancelled.clear();
         }
-        registry.cancelled.insert(scan_id);
+        registry.cancelled.insert(scan_key);
     }
     Ok(())
 }
@@ -546,10 +720,12 @@ async fn search_workspace_text(
     request_id: String,
     query: String,
     options: Option<SearchOptions>,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     searches: State<'_, WorkspaceSearchRegistry>,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let window_label = window.label().to_string();
+    let root = active_workspaces.resolve(&window_label, &repository_root)?;
     let cancellation = searches
         .inner
         .lock()
@@ -557,7 +733,7 @@ async fn search_workspace_text(
             operation: "start workspace search".to_string(),
             message: "workspace-search registry lock was poisoned".to_string(),
         })?
-        .register(&repository_root, &request_id);
+        .register(&window_label, &repository_root, &request_id);
 
     let task_root = root.clone();
     let task_request_id = request_id.clone();
@@ -581,7 +757,7 @@ async fn search_workspace_text(
             operation: "finish workspace search".to_string(),
             message: "workspace-search registry lock was poisoned".to_string(),
         })?
-        .finish(&repository_root, &request_id, &cancellation);
+        .finish(&window_label, &repository_root, &request_id, &cancellation);
     result
 }
 
@@ -589,6 +765,7 @@ async fn search_workspace_text(
 fn cancel_workspace_text_search(
     repository_root: String,
     request_id: String,
+    window: tauri::WebviewWindow,
     searches: State<'_, WorkspaceSearchRegistry>,
 ) -> Result<(), WorkspaceError> {
     searches
@@ -598,7 +775,7 @@ fn cancel_workspace_text_search(
             operation: "cancel workspace search".to_string(),
             message: "workspace-search registry lock was poisoned".to_string(),
         })?
-        .cancel(repository_root, request_id);
+        .cancel(window.label().to_string(), repository_root, request_id);
     Ok(())
 }
 
@@ -707,15 +884,17 @@ async fn preview_workspace_replacement(
     query: String,
     replacement: String,
     options: SearchOptions,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     replacements: State<'_, WorkspaceReplacementRegistry>,
 ) -> Result<WorkspaceReplacementPreview, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let window_label = window.label().to_string();
+    let root = active_workspaces.resolve(&window_label, &repository_root)?;
     let cancellation = replacements
         .inner
         .lock()
         .map_err(|_| replacement_registry_error("start replacement preview"))?
-        .register(&repository_root, &plan_id);
+        .register(&window_label, &repository_root, &plan_id);
     let task_root = root.clone();
     let task_plan_id = plan_id.clone();
     let task_cancellation = cancellation.clone();
@@ -735,7 +914,7 @@ async fn preview_workspace_replacement(
         .inner
         .lock()
         .map_err(|_| replacement_registry_error("finish replacement preview"))?;
-    registry.finish(&repository_root, &plan_id, &cancellation);
+    registry.finish(&window_label, &repository_root, &plan_id, &cancellation);
     match result {
         Ok((stored, preview)) => {
             if cancellation.is_cancelled() {
@@ -743,7 +922,7 @@ async fn preview_workspace_replacement(
                     message: "workspace replacement preview was cancelled".to_string(),
                 });
             }
-            registry.store(stored);
+            registry.store(&window_label, stored);
             Ok(preview)
         }
         Err(error) => Err(error),
@@ -751,23 +930,26 @@ async fn preview_workspace_replacement(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn apply_workspace_replacement(
     repository_root: String,
     plan_id: String,
     selected_paths: Vec<String>,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     writes: State<'_, WorkspaceWriteRegistry>,
     replacements: State<'_, WorkspaceReplacementRegistry>,
     app: tauri::AppHandle,
 ) -> Result<ReplacementApplyResult, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let window_label = window.label().to_string();
+    let root = active_workspaces.resolve(&window_label, &repository_root)?;
     let (stored, cancellation) = {
         let mut registry = replacements
             .inner
             .lock()
             .map_err(|_| replacement_registry_error("start workspace replacement"))?;
-        let stored = registry.plan(&root, &plan_id)?;
-        let cancellation = registry.register(&repository_root, &plan_id);
+        let stored = registry.plan(&window_label, &root, &plan_id)?;
+        let cancellation = registry.register(&window_label, &repository_root, &plan_id);
         (stored, cancellation)
     };
     let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
@@ -794,8 +976,8 @@ async fn apply_workspace_replacement(
         .inner
         .lock()
         .map_err(|_| replacement_registry_error("finish workspace replacement"))?;
-    registry.finish(&repository_root, &plan_id, &cancellation);
-    registry.remove_plan(&plan_id);
+    registry.finish(&window_label, &repository_root, &plan_id, &cancellation);
+    registry.remove_plan(&window_label, &plan_id);
     result
 }
 
@@ -803,23 +985,25 @@ async fn apply_workspace_replacement(
 fn cancel_workspace_replacement(
     repository_root: String,
     operation_id: String,
+    window: tauri::WebviewWindow,
     replacements: State<'_, WorkspaceReplacementRegistry>,
 ) -> Result<(), WorkspaceError> {
     replacements
         .inner
         .lock()
         .map_err(|_| replacement_registry_error("cancel workspace replacement"))?
-        .cancel(repository_root, operation_id);
+        .cancel(window.label().to_string(), repository_root, operation_id);
     Ok(())
 }
 
 #[tauri::command]
 async fn list_workspace_replacement_recoveries(
     repository_root: String,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     app: tauri::AppHandle,
 ) -> Result<Vec<ReplacementRecoverySummary>, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let recovery_root = replacement_recovery_root(&app)?;
     run_workspace_blocking("list replacement recoveries", move || {
         Workspace::open(root)?.list_replacement_recoveries(&recovery_root)
@@ -831,11 +1015,12 @@ async fn list_workspace_replacement_recoveries(
 async fn rollback_workspace_replacement(
     repository_root: String,
     recovery_id: String,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     writes: State<'_, WorkspaceWriteRegistry>,
     app: tauri::AppHandle,
 ) -> Result<ReplacementApplyResult, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
     let recovery_root = replacement_recovery_root(&app)?;
     run_workspace_blocking("rollback workspace replacement", move || {
@@ -852,11 +1037,12 @@ async fn rollback_workspace_replacement(
 async fn finalize_workspace_replacement(
     repository_root: String,
     recovery_id: String,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     writes: State<'_, WorkspaceWriteRegistry>,
     app: tauri::AppHandle,
 ) -> Result<(), WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
     let recovery_root = replacement_recovery_root(&app)?;
     run_workspace_blocking("finalize workspace replacement", move || {
@@ -1018,9 +1204,10 @@ async fn read_text_file(
     repository_root: String,
     repository_id: String,
     path: String,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<TextFileSnapshot, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
     run_workspace_blocking("read text file", move || {
         read_authorized_text_file(&root, &repository_id, &path)
     })
@@ -1037,10 +1224,11 @@ async fn save_text_file(
     content: String,
     utf8_bom: bool,
     request_id: String,
-    active_workspace: State<'_, ActiveWorkspace>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
     writes: State<'_, WorkspaceWriteRegistry>,
 ) -> Result<SaveTextFileResult, WorkspaceError> {
-    let root = active_workspace.resolve(&repository_root)?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
     run_workspace_blocking("save text file", move || {
         let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
@@ -1340,13 +1528,32 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
         .manage(RemoteOperationRegistry::default())
-        .manage(ActiveWorkspace::default())
+        .manage(ActiveWorkspaces::default())
+        .manage(PendingRepositoryWindows::default())
         .manage(WorkspaceWriteRegistry::default())
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
+        .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Destroyed) {
+                window.state::<ScanRegistry>().remove_window(window.label());
+                window.state::<ActiveWorkspaces>().remove(window.label());
+                window
+                    .state::<PendingRepositoryWindows>()
+                    .remove(window.label());
+                if let Ok(mut searches) = window.state::<WorkspaceSearchRegistry>().inner.lock() {
+                    searches.remove_window(window.label());
+                }
+                if let Ok(mut replacements) =
+                    window.state::<WorkspaceReplacementRegistry>().inner.lock()
+                {
+                    replacements.remove_window(window.label());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
+            open_repository_window,
             read_history_page,
             scan_untracked,
             cancel_untracked_scan,
@@ -1653,47 +1860,118 @@ mod tests {
         .expect("second plan");
         let canonical = std::fs::canonicalize(directory.path()).unwrap();
         let mut registry = WorkspaceReplacementRegistryState::default();
-        registry.store(first);
-        registry.store(second);
-        assert!(registry.plan(&canonical, "plan-one").is_err());
-        assert!(registry.plan(&canonical, "plan-two").is_ok());
+        registry.store("main", first);
+        registry.store("main", second.clone());
+        registry.store("project-1", second);
+        assert!(registry.plan("main", &canonical, "plan-one").is_err());
+        assert!(registry.plan("main", &canonical, "plan-two").is_ok());
+        assert!(registry.plan("project-1", &canonical, "plan-two").is_ok());
         registry.cancel(
+            "main".to_string(),
             canonical.to_string_lossy().to_string(),
             "plan-two".to_string(),
         );
-        assert!(registry.plan(&canonical, "plan-two").is_err());
+        assert!(registry.plan("main", &canonical, "plan-two").is_err());
+        assert!(registry.plan("project-1", &canonical, "plan-two").is_ok());
         assert!(registry.cancelled.is_empty());
 
-        registry.cancel("/repo".to_string(), "cancelled".to_string());
-        assert!(registry.register("/repo", "cancelled").is_cancelled());
-        let active = registry.register("/repo", "active");
-        registry.cancel("/repo".to_string(), "active".to_string());
+        registry.cancel(
+            "main".to_string(),
+            "/repo".to_string(),
+            "cancelled".to_string(),
+        );
+        assert!(
+            registry
+                .register("main", "/repo", "cancelled")
+                .is_cancelled()
+        );
+        let active = registry.register("main", "/repo", "active");
+        registry.cancel(
+            "main".to_string(),
+            "/repo".to_string(),
+            "active".to_string(),
+        );
         assert!(active.is_cancelled());
+        registry.remove_window("project-1");
+        assert!(registry.plan("project-1", &canonical, "plan-two").is_err());
     }
 
     #[test]
-    fn active_workspace_accepts_only_the_last_canonical_root() {
-        let active = ActiveWorkspace::default();
+    fn active_workspaces_isolate_authorization_by_window() {
+        let active = ActiveWorkspaces::default();
         let first = tempfile::tempdir().expect("first workspace");
         let second = tempfile::tempdir().expect("second workspace");
         let first_path = first.path().to_string_lossy();
         let second_path = second.path().to_string_lossy();
 
         assert!(matches!(
-            active.resolve(&first_path),
+            active.resolve("main", &first_path),
             Err(WorkspaceError::NotAuthorized { .. })
         ));
         active
-            .activate(&first_path)
+            .activate("main", &first_path)
             .expect("first workspace activates");
+        active
+            .activate("project-1", &second_path)
+            .expect("second workspace activates");
         assert_eq!(
-            active.resolve(&first_path).expect("active root resolves"),
+            active
+                .resolve("main", &first_path)
+                .expect("first root resolves"),
             std::fs::canonicalize(first.path()).expect("canonical first root")
         );
+        assert_eq!(
+            active
+                .resolve("project-1", &second_path)
+                .expect("second root resolves"),
+            std::fs::canonicalize(second.path()).expect("canonical second root")
+        );
         assert!(matches!(
-            active.resolve(&second_path),
+            active.resolve("main", &second_path),
             Err(WorkspaceError::NotAuthorized { .. })
         ));
+        active.remove("main");
+        assert!(matches!(
+            active.resolve("main", &first_path),
+            Err(WorkspaceError::NotAuthorized { .. })
+        ));
+    }
+
+    #[test]
+    fn pending_repository_windows_are_unique_and_consumed_once() {
+        let pending = PendingRepositoryWindows::default();
+        let first = pending
+            .reserve(PathBuf::from("/repo/first"))
+            .expect("first window");
+        let second = pending
+            .reserve(PathBuf::from("/repo/second"))
+            .expect("second window");
+        assert_ne!(first, second);
+        assert_eq!(
+            pending.take(&first).expect("pending path"),
+            Some("/repo/first".to_string())
+        );
+        assert_eq!(pending.take(&first).expect("path consumed"), None);
+    }
+
+    #[test]
+    fn scan_registry_isolates_and_cleans_window_requests() {
+        let scans = ScanRegistry::default();
+        let main = CancellationToken::new();
+        let second = CancellationToken::new();
+        {
+            let mut state = scans.inner.lock().expect("scan registry");
+            state
+                .active
+                .insert(("main".to_string(), "1-1".to_string()), main.clone());
+            state
+                .active
+                .insert(("project-1".to_string(), "1-1".to_string()), second.clone());
+        }
+        scans.remove_window("main");
+        assert!(main.is_cancelled());
+        assert!(!second.is_cancelled());
+        assert_eq!(scans.inner.lock().expect("scan registry").active.len(), 1);
     }
 
     #[test]
@@ -1740,28 +2018,47 @@ mod tests {
     #[test]
     fn workspace_search_registry_supersedes_and_finishes_exact_requests() {
         let mut registry = WorkspaceSearchRegistryState::default();
-        let first = registry.register("/repo", "one");
-        let second = registry.register("/repo", "two");
+        let first = registry.register("main", "/repo", "one");
+        let second = registry.register("main", "/repo", "two");
+        let other_window = registry.register("project-1", "/repo", "one");
         assert!(first.is_cancelled());
         assert!(!second.is_cancelled());
+        assert!(!other_window.is_cancelled());
 
-        registry.finish("/repo", "one", &first);
+        registry.finish("main", "/repo", "one", &first);
         assert_eq!(
             registry
                 .active
-                .get("/repo")
+                .get(&("main".to_string(), "/repo".to_string()))
                 .map(|active| active.id.as_str()),
             Some("two")
         );
 
-        registry.cancel("/repo".to_string(), "wrong".to_string());
+        registry.cancel("main".to_string(), "/repo".to_string(), "wrong".to_string());
         assert!(!second.is_cancelled());
-        registry.cancel("/repo".to_string(), "two".to_string());
+        assert!(!other_window.is_cancelled());
+        registry.cancel("main".to_string(), "/repo".to_string(), "two".to_string());
         assert!(second.is_cancelled());
-        assert!(!registry.active.contains_key("/repo"));
+        assert!(
+            !registry
+                .active
+                .contains_key(&("main".to_string(), "/repo".to_string()))
+        );
+        assert!(
+            registry
+                .active
+                .contains_key(&("project-1".to_string(), "/repo".to_string()))
+        );
 
-        registry.cancel("/future".to_string(), "queued".to_string());
-        let queued = registry.register("/future", "queued");
+        registry.cancel(
+            "main".to_string(),
+            "/future".to_string(),
+            "queued".to_string(),
+        );
+        let queued = registry.register("main", "/future", "queued");
         assert!(queued.is_cancelled());
+
+        registry.remove_window("project-1");
+        assert!(other_window.is_cancelled());
     }
 }

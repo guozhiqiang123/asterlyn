@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -8,7 +8,7 @@ const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 test("desktop PNG icons keep their generated dimensions", () => {
   const expected = new Map([
     ["src-tauri/icons/32x32.png", [32, 32]],
-    ["src-tauri/icons/64x64.png", [64, 64]],
+    ["src-tauri/icons/48x48.png", [48, 48]],
     ["src-tauri/icons/128x128.png", [128, 128]],
     ["src-tauri/icons/128x128@2x.png", [256, 256]],
     ["src-tauri/icons/icon.png", [512, 512]],
@@ -51,10 +51,23 @@ test("macOS icon contains modern Retina frames", () => {
   }
 });
 
-test("the original SVG declares the shared transparent safe area", () => {
+test("the source SVG uses the full canvas without legacy transparent padding", () => {
   const source = read("assets/asterlyn-mark.svg").toString("utf8");
-  assert.match(source, /data-safe-inset="40"/);
-  assert.match(source, /transform="translate\(40 40\) scale\(0\.84375\)"/);
+  assert.match(source, /data-canvas-fit="full-bleed"/);
+  assert.doesNotMatch(source, /data-safe-inset|translate\(40 40\)/);
+});
+
+test("only the maintained desktop icon set remains", () => {
+  const maintained = [
+    "32x32.png",
+    "48x48.png",
+    "128x128.png",
+    "128x128@2x.png",
+    "icon.png",
+    "icon.ico",
+    "icon.icns",
+  ];
+  assert.deepEqual(readDirectory("src-tauri/icons").sort(), maintained.sort());
 });
 
 function readPngDimensions(path) {
@@ -65,4 +78,10 @@ function readPngDimensions(path) {
 
 function read(path) {
   return readFileSync(`${repositoryRoot}${path}`);
+}
+
+function readDirectory(path) {
+  return readdirSync(`${repositoryRoot}${path}`, { withFileTypes: true }).map(
+    (entry) => entry.name,
+  );
 }

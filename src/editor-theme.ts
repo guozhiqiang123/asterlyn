@@ -98,7 +98,7 @@ export const asterlynEditorTheme = EditorView.theme(
       height: "100%",
       color: "#dfe1e5",
       backgroundColor: "#1e1f22",
-      fontSize: "var(--editor-font-size, 12px)",
+      fontSize: "var(--editor-font-size, 13px)",
     },
     ".cm-content": {
       fontFamily:
@@ -109,7 +109,7 @@ export const asterlynEditorTheme = EditorView.theme(
     ".cm-line": { padding: "0 14px" },
     ".cm-scroller": {
       overflow: "auto",
-      lineHeight: "var(--editor-line-height, 1.62)",
+      lineHeight: "var(--editor-line-height, 1.2)",
     },
     ".cm-gutters": {
       color: "#6f737b",

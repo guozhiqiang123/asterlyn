@@ -46,6 +46,7 @@ import {
   type WorkbenchLayout,
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
+import { scrollTabStrip } from "./workbench/tab-strip";
 import {
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
@@ -404,6 +405,7 @@ export class AsterlynApp {
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private forceWindowClose = false;
   private repositoryChooserOpen = false;
+  private repositoryTargetPath: string | null = null;
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private workspaceResizeObserver: ResizeObserver | null = null;
@@ -443,45 +445,40 @@ export class AsterlynApp {
     this.root.innerHTML = `
       <main class="app-shell">
         <header class="topbar" data-tauri-drag-region>
-          <div class="brand" data-tauri-drag-region>
-            <span class="brand-mark" aria-hidden="true"><span>A</span></span>
-            <span class="brand-name">${BRAND.name}</span>
-            <span class="milestone-pill">${BRAND.milestone}</span>
-          </div>
           <button class="repository-switcher" id="repository-switcher" type="button" aria-label="Open repository">
-            ${icon("folder", 16)}
+            ${icon("folder", 20)}
             <span class="repository-name" id="repository-name">No repository</span>
             <span class="repository-path" id="repository-path">Open a local folder</span>
           </button>
           <div class="topbar-actions" data-tauri-drag-region>
             <span class="demo-badge ${bridge.isDemo ? "" : "hidden"}">Browser demo</span>
             <button class="command-center-button" id="command-center-button" type="button" aria-label="Search files and commands" title="Search files and commands (Ctrl/Cmd+P)">
-              ${icon("search", 15)}
+              ${icon("search", 18)}
               <span>Search</span>
               <kbd>Ctrl P</kbd>
             </button>
             <div class="sync-anchor" id="sync-anchor">
               <button class="icon-button sync-button" id="sync-button" type="button" aria-label="Remote sync" title="Remote sync" aria-haspopup="dialog" aria-expanded="false">
-                ${icon("sync", 17)}
+                ${icon("sync", 20)}
                 <span class="sync-badge hidden" id="sync-badge"></span>
               </button>
               <section class="sync-popover hidden" id="sync-popover" role="dialog" aria-label="Remote sync"></section>
             </div>
             <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh repository" title="Refresh (Ctrl/Cmd+R)">
-              ${icon("refresh", 17)}
+              ${icon("refresh", 20)}
             </button>
             <button class="icon-button" id="settings-button" type="button" aria-label="Open settings" title="Settings" aria-pressed="false">
-              ${icon("settings", 17)}
+              ${icon("settings", 20)}
             </button>
             <div class="window-controls ${windowControls.available ? "" : "hidden"}" role="group" aria-label="Window controls">
               <button class="window-control-button" id="window-minimize" type="button" aria-label="Minimize window" title="Minimize">
-                ${icon("minimize", 15)}
+                ${icon("minimize", 16)}
               </button>
               <button class="window-control-button" id="window-maximize" type="button" aria-label="Maximize window" title="Maximize">
-                ${icon("maximize", 14)}
+                ${icon("maximize", 16)}
               </button>
               <button class="window-control-button close" id="window-close" type="button" aria-label="Close window" title="Close">
-                ${icon("close", 15)}
+                ${icon("close", 16)}
               </button>
             </div>
           </div>
@@ -608,6 +605,25 @@ export class AsterlynApp {
           </section>
         </div>
 
+        <div class="dialog-backdrop hidden" id="repository-target-dialog" role="presentation">
+          <section class="dialog repository-target-dialog" role="dialog" aria-modal="true" aria-labelledby="repository-target-title">
+            <div class="dialog-heading">
+              <div>
+                <span class="panel-eyebrow">Open project</span>
+                <h2 id="repository-target-title">Where should this project open?</h2>
+              </div>
+              <button class="icon-button" id="repository-target-close" type="button" aria-label="Cancel opening project">${icon("close", 18)}</button>
+            </div>
+            <p>The current window already contains a project. Open the selected folder here or keep this workspace and open another window.</p>
+            <code class="repository-target-path" id="repository-target-path"></code>
+            <div class="dialog-actions">
+              <button class="secondary-button" id="repository-target-cancel" type="button">Cancel</button>
+              <button class="secondary-button" id="repository-target-current" type="button">Current window</button>
+              <button class="primary-button" id="repository-target-new" type="button">New window</button>
+            </div>
+          </section>
+        </div>
+
         <div class="dialog-backdrop hidden history-dialog-backdrop" id="history-dialog" role="presentation"></div>
         <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
         <div class="dialog-backdrop hidden replacement-dialog-backdrop" id="workspace-replacement-dialog" role="presentation"></div>
@@ -654,6 +670,23 @@ export class AsterlynApp {
     this.query("#repository-dialog").addEventListener("click", (event) => {
       if (event.target === event.currentTarget) this.closeRepositoryDialog();
     });
+    this.query("#repository-target-close").addEventListener("click", () =>
+      this.closeRepositoryTargetDialog(),
+    );
+    this.query("#repository-target-cancel").addEventListener("click", () =>
+      this.closeRepositoryTargetDialog(),
+    );
+    this.query("#repository-target-current").addEventListener("click", () => {
+      const path = this.takeRepositoryTargetPath();
+      if (path) void this.openRepository(path);
+    });
+    this.query("#repository-target-new").addEventListener("click", () => {
+      const path = this.takeRepositoryTargetPath();
+      if (path) void this.openRepositoryInNewWindow(path);
+    });
+    this.query("#repository-target-dialog").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) this.closeRepositoryTargetDialog();
+    });
     this.query("#history-dialog").addEventListener("click", (event) => {
       if (event.target === event.currentTarget) this.closeHistoryDialog();
     });
@@ -674,8 +707,18 @@ export class AsterlynApp {
       (event) => {
         event.preventDefault();
         const path = this.query<HTMLInputElement>("#repository-input").value.trim();
-        if (path) void this.openRepository(path);
+        if (path) void this.requestRepositoryTarget(path);
       },
+    );
+    const editorTabbar = this.query<HTMLElement>("#editor-tabbar");
+    editorTabbar.addEventListener(
+      "wheel",
+      (event) => {
+        if (scrollTabStrip(editorTabbar, event.deltaX, event.deltaY)) {
+          event.preventDefault();
+        }
+      },
+      { passive: false },
     );
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -718,6 +761,11 @@ export class AsterlynApp {
         return;
       }
       if (event.key === "Escape") {
+        if (!this.query("#repository-target-dialog").classList.contains("hidden")) {
+          event.preventDefault();
+          this.closeRepositoryTargetDialog();
+          return;
+        }
         if (this.state.activePage === "settings") {
           event.preventDefault();
           this.closeSettings();
@@ -1067,7 +1115,7 @@ export class AsterlynApp {
     const label = maximized ? "Restore window" : "Maximize window";
     button.setAttribute("aria-label", label);
     button.title = maximized ? "Restore" : "Maximize";
-    button.innerHTML = icon(maximized ? "restore" : "maximize", 14);
+    button.innerHTML = icon(maximized ? "restore" : "maximize", 16);
   }
 
   private refreshMaximizeControl(): void {
@@ -6291,7 +6339,7 @@ export class AsterlynApp {
         this.state.snapshot?.root ?? null,
       );
       if (choice.kind === "selected") {
-        await this.openRepository(choice.path);
+        await this.requestRepositoryTarget(choice.path);
       } else if (choice.kind === "unsupported") {
         this.openRepositoryDialog();
       }
@@ -6301,6 +6349,43 @@ export class AsterlynApp {
       this.repositoryChooserOpen = false;
       switcher.disabled = false;
     }
+  }
+
+  private async requestRepositoryTarget(path: string): Promise<void> {
+    this.closeRepositoryDialog();
+    const currentRoot = this.state.snapshot?.root;
+    if (!currentRoot || currentRoot === path) {
+      await this.openRepository(path);
+      return;
+    }
+    this.repositoryTargetPath = path;
+    this.query("#repository-target-path").textContent = path;
+    this.query("#repository-target-dialog").classList.remove("hidden");
+    window.setTimeout(
+      () => this.query<HTMLButtonElement>("#repository-target-new").focus(),
+      0,
+    );
+  }
+
+  private async openRepositoryInNewWindow(path: string): Promise<void> {
+    try {
+      await bridge.openRepositoryWindow(path);
+      this.setStatus("Project opened in a new window", "success");
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  private takeRepositoryTargetPath(): string | null {
+    const path = this.repositoryTargetPath;
+    this.closeRepositoryTargetDialog();
+    return path;
+  }
+
+  private closeRepositoryTargetDialog(): void {
+    this.repositoryTargetPath = null;
+    this.query("#repository-target-dialog").classList.add("hidden");
+    this.query<HTMLButtonElement>("#repository-switcher").focus();
   }
 
   private openRepositoryDialog(path = ""): void {

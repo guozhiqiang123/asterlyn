@@ -69,3 +69,18 @@ test("preferences update only through bounded choices and round trip by version"
     16,
   );
 });
+
+test("version one defaults migrate to the JetBrains-aligned typography baseline", () => {
+  const persisted = JSON.stringify({
+    version: 1,
+    preferences: {
+      uiFontSize: 11,
+      editorFontSize: 12,
+      editorLineHeight: 1.62,
+      editorTabSize: 4,
+      diffLayout: "split",
+      showWhitespace: false,
+    },
+  });
+  assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), DEFAULT_APP_PREFERENCES);
+});

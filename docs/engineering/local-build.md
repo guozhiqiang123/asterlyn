@@ -37,14 +37,14 @@ Deepin 23 may expose a GPU render node while denying the KMS buffer operation us
 
 ## Platform icon generation
 
-[`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. Its transparent safe area is shared across targets so the mark keeps a comparable optical size when Windows, macOS, and Linux apply different frames or masks. Regenerate the complete platform set atomically with the repository-pinned Tauri CLI:
+[`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. The mark uses the complete square canvas; target containers, masks, and raster sizes are generated rather than simulated with one cross-platform transparent inset. Regenerate the maintained desktop set atomically with the repository-pinned helper:
 
 ```bash
-npm run tauri -- icon assets/asterlyn-mark.svg
+npm run icons:generate
 npm run test:scripts
 ```
 
-Do not retouch files under `src-tauri/icons/` individually. The script tests verify the desktop PNG dimensions, required Windows ICO frames, modern macOS ICNS frames, and the declared source safe area.
+Do not retouch files under `src-tauri/icons/` individually. The helper generates into a temporary directory and then replaces that directory with only the targets declared by the current desktop bundle: 32, 48, 128, 256, and 512 pixel PNGs, one Windows ICO containing 16/24/32/48/64/256 pixel frames, and one macOS ICNS containing modern Retina frames. Mobile launcher sets and Windows Store/AppX tiles are deliberately discarded because Asterlyn does not ship those targets. Adding a mobile or AppX target must add its platform-specific source and validation in the same change instead of retaining unused generated history.
 
 ## Local performance evidence
 

@@ -101,6 +101,14 @@ The complete evidence is recorded in [`E3.1 workbench navigation and preference 
 
 No installer or remote publication is produced for this sub-slice. E3.2 editor groups and tab movement is next; settings cannot grow new writable controls until their underlying service boundary is implemented.
 
+### E3.1 desktop-shell correction — 2026-09-10
+
+The E3.1 shell follow-up aligns the default visual scale with the locally installed Android Studio new UI and the published JetBrains guidance: application and editor defaults are 13 px, editor line height is 1.20, the custom title/menu bar is 48 px high, primary shell actions use 18–20 px artwork, and standard window-control glyphs remain 16 px. Version-two preference loading migrates untouched former defaults but preserves deliberate custom values. The project identity control is now the first title-bar item; the duplicate brand block is removed.
+
+The first project selection still replaces the empty current window. Selecting a different project from an occupied window now requires an explicit current-window or new-window choice. New windows receive independent Rust-side workspace authorization, pending launch paths, and cancellable scan identities keyed by window label. Editor tabs also accept a vertical mouse wheel as bounded horizontal movement without exposing a second visible scrollbar.
+
+Desktop icons are regenerated from one full-canvas source and the repository retains only the current desktop bundle set. The complete evidence is recorded in [`E3.1 desktop-shell correction evidence`](../benchmarks/2026-09-10-e3-1-desktop-shell.md). Validation passed 102 frontend tests, 28 Git tests, 23 workspace tests, 12 desktop tests, strict checks, a production frontend build, a release native build, deterministic browser interaction, and six-second native liveness. Interaction and platform-asset consistency are **improved**. Frontend size has **no material change**; the native executable is **regressed** by 12.36% after linking dynamic native-window construction; memory remains **inconclusive** because no matched resource series was run. No installer or remote push is made, and E3.2 remains next.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

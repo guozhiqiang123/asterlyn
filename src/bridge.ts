@@ -109,6 +109,13 @@ export const bridge = {
     return invoke<RepositorySnapshot>("open_repository", { path });
   },
 
+  async openRepositoryWindow(path: string): Promise<string> {
+    if (!isTauri) {
+      throw new Error("Opening another application window requires the desktop build.");
+    }
+    return invoke<string>("open_repository_window", { path });
+  },
+
   async readHistoryPage(
     repositoryRoot: string,
     query: HistoryQuery,

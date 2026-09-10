@@ -10,7 +10,7 @@
       <stop offset="1" stop-color="#59A869" stop-opacity="0.38"/>
     </linearGradient>
   </defs>
-  <g data-safe-inset="40" transform="translate(40 40) scale(0.84375)">
+  <g data-canvas-fit="full-bleed">
     <rect width="512" height="512" rx="112" fill="#1E1F22"/>
     <path d="M256 72 426 170v172L256 440 86 342V170L256 72Z" fill="url(#base)"/>
     <path d="m256 72 170 98-170 98L86 170l170-98Z" fill="url(#facet)"/>
