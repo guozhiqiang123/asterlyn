@@ -31,6 +31,10 @@ U6 keeps the activity rail fixed-width. Every content boundary is resizable by p
 
 Ordinary text editing uses one compact, horizontally scrollable tab row without a duplicate path/title/save header. A fixed trailing menu lists every bounded open text tab plus the replaceable Diff preview and selecting an item reveals its tab in the strip. File-tab label colors project the same Git status tokens as the Files tree, while selection and dirty markers remain independent state. The active loaded text tab publishes its encoding to the bottom status bar. Diff documents retain their contextual presentation toolbar because unified/split and whitespace controls belong to the Diff projection.
 
+Code folding belongs inside the CodeMirror adapter and consumes the parser already loaded for highlighting. The gutter and standard fold/unfold keymap remain unavailable where no language fold service can identify a structural range; no parallel outline or index is introduced.
+
+Markdown files may choose Source, Split, or Preview from a compact control in the existing tab row. The choice is transient per text tab and does not create another document owner. Split mode mounts the same CodeMirror buffer beside a `markdown-it` projection and adds one independently resizable divider; Preview mode unmounts CodeMirror but keeps the exact in-memory buffer, dirty baseline, save contract, and tab identity. The renderer is lazy, generation-guarded, and limited to 512 KiB. Raw HTML is escaped, image fetches are replaced by placeholders, and links do not navigate from the preview. Supporting trusted HTML, workspace-relative media, link routing, scroll synchronization, and persisted presentation state requires a later explicit trust and lifecycle decision.
+
 The initial Files tree is a read-only list of tracked and non-ignored untracked repository paths. Navigation and exact file authorization accept up to 100,000 files; workspace search and replacement retain a separate 5,000-candidate scan budget. The complete in-memory hierarchy is projected lazily so a closed directory does not mount its descendants. A same-root refresh keeps the prior tree visible, merges the next catalog by stable path identity, retains valid disclosure, selection, and scroll state, and removes state for paths that no longer exist. A repository switch still resets this repository-owned presentation state. The tree does not introduce file mutation, watching, save, encoding, or recovery semantics before Stage 3. The initial side-by-side Diff remains a projection of Asterlyn's bounded canonical patch. It shows hunk-derived source line numbers, aligned spacer rows, explicit omitted ranges, and conservative intraline highlights, but never claims to contain the complete source file.
 
 ## State and ownership invariants
@@ -46,6 +50,8 @@ The initial Files tree is a read-only list of tracked and non-ignored untracked 
 9. A same-root refresh reconciles project-tree presentation by exact path and kind; it never interprets row position as identity.
 10. A text tab is dirty exactly when current exact content differs from its last successful load/save baseline; edit count alone cannot keep an undone buffer dirty.
 11. Selecting from the open-document menu changes only active editor identity and tab-strip presentation; it never reloads or duplicates the document.
+12. Markdown mode switching never copies, normalizes, saves, or discards buffer content; source and rendered views project one text-tab state.
+13. A late Markdown render cannot update another tab or a newer presentation mode, and rendered content cannot initiate HTML execution, image loading, or navigation.
 
 ## Migration sequence
 

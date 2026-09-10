@@ -32,8 +32,10 @@ import {
   isTextTabDirty,
   markTextEdited,
   openTextDocument,
+  setTextTabMarkdownMode,
   textTab,
   type EditorSession,
+  type MarkdownEditorMode,
   type TextTabState,
 } from "./workbench/editor-session";
 import {
@@ -46,6 +48,11 @@ import {
   type WorkbenchLayout,
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
+import {
+  MARKDOWN_PREVIEW_MAX_BYTES,
+  isMarkdownPath,
+  renderMarkdownPreview,
+} from "./workbench/markdown-preview";
 import { revealTabInStrip, scrollTabStrip } from "./workbench/tab-strip";
 import {
   showCustomWindowControls,
@@ -403,6 +410,15 @@ export class AsterlynApp {
   private mountedTextTabId: string | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private editorTabMenuOpen = false;
+  private markdownSourcePercent = 50;
+  private markdownSplitterDisposer: (() => void) | null = null;
+  private markdownPreviewTimer: number | null = null;
+  private markdownPreviewSequence = 0;
+  private markdownPreviewPending: {
+    tabId: string;
+    content: string;
+    request: number;
+  } | null = null;
   private textSaveSequence = 0;
   private workspaceSearchSequence = 0;
   private workspaceReplacementSequence = 0;
@@ -530,6 +546,7 @@ export class AsterlynApp {
                   <div class="editor-tabbar" id="editor-tabbar">
                     <span class="editor-tab active">Welcome</span>
                   </div>
+                  <div class="editor-context-actions" id="editor-context-actions"></div>
                   <div class="editor-tab-menu-anchor" id="editor-tab-menu-anchor">
                     <button class="editor-tab-menu-toggle" id="editor-tab-menu-toggle" type="button" aria-label="Show open files" title="Show open files" aria-haspopup="menu" aria-expanded="false" disabled>
                       ${icon("chevron-down", 15)}
@@ -5052,6 +5069,7 @@ export class AsterlynApp {
     const revealActiveTab = activeKey !== this.lastRenderedEditorDocumentKey;
     this.lastRenderedEditorDocumentKey = activeKey;
     tabbar.innerHTML = this.renderEditorTabs(document);
+    this.renderEditorContextActions(document);
     this.renderEditorTabMenu();
     this.bindEditorTabEvents();
     this.renderDocumentStatus();
@@ -5103,10 +5121,16 @@ export class AsterlynApp {
           });
         });
       } else {
-        this.mountTextEditor(
-          editorDocumentContentKey(document, `text:${tab.loadEpoch}`),
-          tab,
+        const markdown = isMarkdownPath(tab.document.path);
+        const key = editorDocumentContentKey(
+          document,
+          `text:${tab.loadEpoch}:${markdown ? tab.markdownMode : "source"}`,
         );
+        if (markdown) {
+          this.mountMarkdownEditor(key, tab);
+        } else {
+          this.mountTextEditor(key, tab);
+        }
       }
       return;
     }
@@ -5196,12 +5220,12 @@ export class AsterlynApp {
   private showEditorHtml(key: string, html: string): void {
     if (this.mountedEditorKey === key) return;
     this.captureMountedTextEditor();
+    this.disposeMarkdownSurface();
     this.textEditor.destroy();
     this.mountedTextTabId = null;
     this.diffEditor.destroy();
     const body = this.query("#content-body");
-    body.classList.remove("diff-surface");
-    body.classList.remove("text-surface");
+    this.resetEditorBodyClasses(body);
     body.innerHTML = html;
     this.mountedEditorKey = key;
   }
@@ -5212,12 +5236,13 @@ export class AsterlynApp {
       return;
     }
     this.captureMountedTextEditor();
+    this.disposeMarkdownSurface();
     this.textEditor.destroy();
     this.mountedTextTabId = null;
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     body.innerHTML = "";
-    body.classList.remove("text-surface");
+    this.resetEditorBodyClasses(body);
     body.classList.add("diff-surface");
     this.diffEditor.mount(
       body,
@@ -5235,15 +5260,84 @@ export class AsterlynApp {
       return;
     }
     this.captureMountedTextEditor();
+    this.disposeMarkdownSurface();
     this.diffEditor.destroy();
     this.textEditor.destroy();
     const body = this.query("#content-body");
     body.innerHTML = "";
-    body.classList.remove("diff-surface");
+    this.resetEditorBodyClasses(body);
     body.classList.add("text-surface");
     this.mountedTextTabId = tab.id;
+    this.mountTextEditorSurface(body, tab);
+    this.mountedEditorKey = key;
+  }
+
+  private mountMarkdownEditor(key: string, tab: TextTabState): void {
+    if (this.mountedEditorKey === key) {
+      this.textEditor.requestMeasure();
+      return;
+    }
+    this.captureMountedTextEditor();
+    this.disposeMarkdownSurface();
+    this.diffEditor.destroy();
+    this.textEditor.destroy();
+    const body = this.query("#content-body");
+    body.innerHTML = "";
+    this.resetEditorBodyClasses(body);
+    body.classList.add("text-surface", "markdown-surface");
+
+    if (tab.markdownMode === "source") {
+      body.classList.add("markdown-source-surface");
+      this.mountedTextTabId = tab.id;
+      this.mountTextEditorSurface(body, tab);
+    } else if (tab.markdownMode === "split") {
+      body.classList.add("markdown-split-surface");
+      body.innerHTML = `
+        <div class="markdown-split-layout" id="markdown-split-layout" style="--markdown-source-width: ${this.markdownSourcePercent}%">
+          <div class="markdown-source-pane" id="markdown-source-pane" aria-label="Markdown source editor"></div>
+          <div class="workbench-splitter vertical markdown-splitter" id="markdown-splitter" aria-label="Resize Markdown source and preview"></div>
+          <section class="markdown-preview-pane" id="markdown-preview" aria-label="Markdown preview">
+            ${this.markdownPreviewLoadingBlock()}
+          </section>
+        </div>`;
+      this.mountedTextTabId = tab.id;
+      this.mountTextEditorSurface(this.query("#markdown-source-pane"), tab);
+      const layout = this.query("#markdown-split-layout");
+      this.markdownSplitterDisposer = attachSplitter(
+        this.query("#markdown-splitter"),
+        {
+          orientation: "vertical",
+          getValue: () => this.query("#markdown-source-pane").getBoundingClientRect().width,
+          getRange: () => markdownSplitRange(layout.clientWidth),
+          onChange: (value) => {
+            if (layout.clientWidth <= 0) return;
+            this.markdownSourcePercent = (value / layout.clientWidth) * 100;
+            layout.style.setProperty(
+              "--markdown-source-width",
+              `${this.markdownSourcePercent}%`,
+            );
+            this.scheduleEditorMeasure();
+          },
+          onReset: () => {
+            this.markdownSourcePercent = 50;
+            layout.style.setProperty("--markdown-source-width", "50%");
+            this.scheduleEditorMeasure();
+          },
+        },
+      );
+      this.queueMarkdownPreview(tab.id, tab.content, true);
+    } else {
+      body.classList.add("markdown-preview-surface");
+      this.mountedTextTabId = null;
+      body.innerHTML = `<section class="markdown-preview-pane full" id="markdown-preview" aria-label="Markdown preview">${this.markdownPreviewLoadingBlock()}</section>`;
+      this.queueMarkdownPreview(tab.id, tab.content, true);
+    }
+    this.mountedEditorKey = key;
+  }
+
+  private mountTextEditorSurface(parent: HTMLElement, tab: TextTabState): void {
     this.textEditor.mount(
-      body,
+      parent,
       tab.content,
       tab.document.path,
       this.state.preferences,
@@ -5253,6 +5347,9 @@ export class AsterlynApp {
         const wasDirty = previous ? isTextTabDirty(previous) : false;
         this.state.editor = markTextEdited(this.state.editor, tab.id, content);
         const current = textTab(this.state.editor, tab.id);
+        if (current?.markdownMode === "split") {
+          this.queueMarkdownPreview(tab.id, content);
+        }
         if (
           previous &&
           current &&
@@ -5262,7 +5359,119 @@ export class AsterlynApp {
         }
       },
     );
-    this.mountedEditorKey = key;
+  }
+
+  private queueMarkdownPreview(
+    tabId: string,
+    content: string,
+    immediate = false,
+  ): void {
+    const request = ++this.markdownPreviewSequence;
+    this.markdownPreviewPending = { tabId, content, request };
+    if (immediate) {
+      if (this.markdownPreviewTimer !== null) {
+        window.clearTimeout(this.markdownPreviewTimer);
+        this.markdownPreviewTimer = null;
+      }
+      this.markdownPreviewPending = null;
+      void this.updateMarkdownPreview({ tabId, content, request });
+      return;
+    }
+    if (this.markdownPreviewTimer !== null) return;
+    this.markdownPreviewTimer = window.setTimeout(() => {
+      this.markdownPreviewTimer = null;
+      const pending = this.markdownPreviewPending;
+      this.markdownPreviewPending = null;
+      if (pending) void this.updateMarkdownPreview(pending);
+    }, 40);
+  }
+
+  private async updateMarkdownPreview(request: {
+    tabId: string;
+    content: string;
+    request: number;
+  }): Promise<void> {
+    try {
+      const result = await renderMarkdownPreview(request.content);
+      if (request.request !== this.markdownPreviewSequence) return;
+      const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
+      const active = activeTextTab(this.state.editor);
+      if (
+        !preview ||
+        active?.id !== request.tabId ||
+        active.markdownMode === "source"
+      ) {
+        return;
+      }
+      preview.innerHTML =
+        result.status === "ready"
+          ? `<article class="markdown-rendered">${result.html}</article>`
+          : `<div class="markdown-preview-message" role="status"><strong>Preview paused for this large file</strong><span>The document is ${(result.byteLength / (1024 * 1024)).toFixed(1)} MiB. Live preview is limited to ${MARKDOWN_PREVIEW_MAX_BYTES / (1024 * 1024)} MiB; source editing and saving remain available.</span></div>`;
+    } catch (error) {
+      if (request.request !== this.markdownPreviewSequence) return;
+      const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
+      const active = activeTextTab(this.state.editor);
+      if (!preview || active?.id !== request.tabId) return;
+      preview.innerHTML = `<div class="markdown-preview-message error" role="alert"><strong>Markdown preview failed</strong><span>${escapeHtml(errorMessage(error))}</span></div>`;
+    }
+  }
+
+  private markdownPreviewLoadingBlock(): string {
+    return '<div class="markdown-preview-message" role="status"><strong>Rendering Markdown…</strong><span>The editor remains available while the preview engine loads.</span></div>';
+  }
+
+  private disposeMarkdownSurface(): void {
+    this.markdownSplitterDisposer?.();
+    this.markdownSplitterDisposer = null;
+    if (this.markdownPreviewTimer !== null) {
+      window.clearTimeout(this.markdownPreviewTimer);
+      this.markdownPreviewTimer = null;
+    }
+    this.markdownPreviewPending = null;
+    this.markdownPreviewSequence += 1;
+  }
+
+  private resetEditorBodyClasses(body: HTMLElement): void {
+    body.classList.remove(
+      "diff-surface",
+      "text-surface",
+      "markdown-surface",
+      "markdown-source-surface",
+      "markdown-split-surface",
+      "markdown-preview-surface",
+    );
+  }
+
+  private renderEditorContextActions(document: EditorDocument): void {
+    const host = this.query("#editor-context-actions");
+    const tab = document.kind === "project-file" ? activeTextTab(this.state.editor) : null;
+    if (!tab || tab.status !== "ready" || !isMarkdownPath(tab.document.path)) {
+      host.innerHTML = "";
+      return;
+    }
+    const modes: Array<[MarkdownEditorMode, string]> = [
+      ["source", "Source"],
+      ["split", "Split"],
+      ["preview", "Preview"],
+    ];
+    host.innerHTML = `<div class="markdown-mode-controls" role="group" aria-label="Markdown editor mode">${modes
+      .map(
+        ([mode, label]) =>
+          `<button type="button" data-markdown-mode="${mode}" aria-pressed="${tab.markdownMode === mode}" title="${label} Markdown">${label}</button>`,
+      )
+      .join("")}</div>`;
+    host
+      .querySelectorAll<HTMLButtonElement>("[data-markdown-mode]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const active = activeTextTab(this.state.editor);
+          const mode = button.dataset.markdownMode as MarkdownEditorMode;
+          if (!active || active.id !== tab.id || active.markdownMode === mode) return;
+          this.captureMountedTextEditor();
+          this.state.editor = setTextTabMarkdownMode(this.state.editor, tab.id, mode);
+          this.renderEditor();
+        });
+      });
   }
 
   private renderEditorTabs(document: EditorDocument): string {
@@ -7016,6 +7225,15 @@ function replacementFileStateLabel(
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/").replace(/\/$/, "");
   return normalized.split("/").pop() || normalized;
+}
+
+function markdownSplitRange(width: number): { minimum: number; maximum: number } {
+  const usableWidth = Math.max(0, width - 5);
+  const minimum = Math.min(220, usableWidth / 2);
+  return {
+    minimum,
+    maximum: Math.max(minimum, usableWidth - minimum),
+  };
 }
 
 function dirname(path: string): string {

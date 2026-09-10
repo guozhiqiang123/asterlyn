@@ -14,6 +14,10 @@ import {
   searchKeymap,
 } from "@codemirror/search";
 import {
+  foldGutter,
+  foldKeymap,
+} from "@codemirror/language";
+import {
   asterlynEditorTheme,
   asterlynSyntaxHighlighting,
 } from "./editor-theme";
@@ -56,6 +60,7 @@ export class TextEditor {
           this.editable.of(EditorView.editable.of(!this.readOnlyValue)),
           this.language.of([]),
           lineNumbers(),
+          foldGutter(),
           history(),
           drawSelection(),
           highlightActiveLine(),
@@ -64,6 +69,7 @@ export class TextEditor {
           asterlynEditorTheme,
           asterlynSyntaxHighlighting,
           keymap.of([
+            ...foldKeymap,
             ...defaultKeymap,
             ...historyKeymap,
             ...searchKeymap,

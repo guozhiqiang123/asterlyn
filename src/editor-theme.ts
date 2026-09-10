@@ -117,6 +117,18 @@ export const asterlynEditorTheme = EditorView.theme(
       borderRight: "1px solid #2b2d30",
     },
     ".cm-activeLineGutter": { backgroundColor: "#26282c" },
+    ".cm-foldGutter": { width: "13px" },
+    ".cm-foldGutter span": {
+      color: "#858a94",
+      fontSize: "12px",
+      lineHeight: "1",
+    },
+    ".cm-foldGutter span:hover": { color: "#b9d0ff" },
+    ".cm-foldPlaceholder": {
+      border: "1px solid #4e5157",
+      backgroundColor: "#2b2d30",
+      color: "#a8c7fa",
+    },
     ".cm-activeLine": { backgroundColor: "#26282c80" },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
       backgroundColor: "#214283 !important",

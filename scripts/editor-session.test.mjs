@@ -14,6 +14,7 @@ import {
   failTextSave,
   markTextEdited,
   openTextDocument,
+  setTextTabMarkdownMode,
 } from "../src/workbench/editor-session.ts";
 
 function document(path) {
@@ -57,6 +58,19 @@ test("text tabs deduplicate while one diff preview is replaced", () => {
   });
   assert.equal(session.textTabs.length, 1);
   assert.equal(session.preview.kind, "commit-diff");
+});
+
+test("Markdown presentation mode belongs to one text tab", () => {
+  let session = loaded(createEditorSession(), "README.md");
+  session = loaded(session, "notes.md");
+  const firstId = session.textTabs[0].id;
+
+  session = setTextTabMarkdownMode(session, firstId, "split");
+  assert.equal(session.textTabs[0].markdownMode, "split");
+  assert.equal(session.textTabs[1].markdownMode, "source");
+
+  const unchanged = setTextTabMarkdownMode(session, firstId, "split");
+  assert.equal(unchanged, session);
 });
 
 test("stale loads and saves cannot replace newer tab state", () => {

@@ -131,6 +131,14 @@ The left splitter also owns an explicit pointer drag lifetime. It consumes movem
 
 The updated evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Correctness and interaction are **improved**; frontend size is **regressed** by the open-document menu, native and package movement are **no material change**, and memory impact remains **inconclusive** because no matched resource series was run. The task produces one local Debian package without a remote push; E3.2 remains next.
 
+### E3.1 code-folding and Markdown-presentation correction — 2026-09-10
+
+Parser-backed source files now expose CodeMirror's fold gutter and standard fold, unfold, fold-all, and unfold-all shortcuts. This reuses the parser already selected for syntax highlighting and adds no language service, index, watcher, or repository query.
+
+Markdown text tabs now own a transient Source, Split, or Preview presentation mode. Split mode keeps the authoritative editable buffer beside a live `markdown-it` projection and provides a pointer- and keyboard-resizable divider; Preview mode unmounts only the CodeMirror widget while preserving tab identity, exact buffer content, dirty state, and explicit-save behavior. Switching files or modes rejects stale preview completions. The renderer loads on first preview use, escapes raw HTML, displays non-fetching image placeholders, and keeps links non-navigating. Preview is bounded to 512 KiB; larger Markdown remains fully editable through the existing two-MiB text path.
+
+The updated evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Browser interaction proves folding and unfolding, all three Markdown modes, live buffer-to-preview updates, exact content retention, and separator keyboard adjustment. Functionality and interaction are **improved**; frontend, executable, and package sizes are **regressed**, and memory remains **inconclusive** without a matched resource series. The task produces one refreshed local Debian package without a remote push; trusted media/link routing, Markdown scroll synchronization, persisted preview choices, and E3.2 editor groups remain later work.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

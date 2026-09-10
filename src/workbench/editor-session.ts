@@ -9,6 +9,8 @@ export const TEXT_TAB_LIMIT = 20;
 
 type PreviewDocument = Exclude<EditorDocument, { kind: "welcome" | "project-file" }>;
 
+export type MarkdownEditorMode = "source" | "split" | "preview";
+
 export interface TextTabState {
   id: string;
   document: ProjectFileDocument;
@@ -27,6 +29,7 @@ export interface TextTabState {
   } | null;
   error: string | null;
   conflict: boolean;
+  markdownMode: MarkdownEditorMode;
 }
 
 export interface EditorSession {
@@ -120,6 +123,7 @@ export function openTextDocument(
     saveRequest: null,
     error: null,
     conflict: false,
+    markdownMode: "source",
   };
   return {
     session: {
@@ -229,6 +233,16 @@ export function markTextEdited(
           error: null,
           conflict: false,
         },
+  );
+}
+
+export function setTextTabMarkdownMode(
+  session: EditorSession,
+  tabId: string,
+  markdownMode: MarkdownEditorMode,
+): EditorSession {
+  return updateMatchingTab(session, tabId, (tab) =>
+    tab.markdownMode === markdownMode ? tab : { ...tab, markdownMode },
   );
 }
 

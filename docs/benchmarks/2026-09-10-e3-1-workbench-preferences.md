@@ -101,3 +101,31 @@ Validation passes 120 frontend script tests, 14 desktop tests, 28 Git-core tests
 CSS and frontend JavaScript size are **regressed**, primarily from the bounded dropdown presentation. Native executable and Debian package movement are **no material change**. No watcher, index, polling service, or background task was added. No matched process-tree PSS/RSS series or forced browser-heap series was run, so memory impact remains **inconclusive**.
 
 The refreshed local Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,219,400 bytes, with SHA-256 `db6468d67aa8ffa8cdabdb810e15d29c0bae7367de8daf6cfe4095bd298d86ee`. Package inspection confirms version 0.1.0, `amd64`, the native executable, desktop entry, and maintained icon set. It is a local unsigned acceptance artifact, not a release candidate, and no remote push is made.
+
+## Code-folding and Markdown-presentation correction
+
+The next manual editor request adds two presentation capabilities without advancing into the E3.2 multi-group model. The CodeMirror adapter now installs its syntax-tree fold gutter and default fold keymap. Folding and highlighting consume the same lazily selected language support and do not create a second parser, index, workspace scan, or service process.
+
+Markdown tabs add Source, Split, and Preview choices in the single existing tab row. Each tab retains its own transient mode. Split keeps the authoritative CodeMirror buffer on the left, renders that exact in-memory content on the right after a 40-millisecond coalescing interval, and exposes a standard pointer/keyboard divider. Preview removes only the editor widget. Switching back to Source reconstructs the widget from the unchanged session buffer, so mode changes never save, normalize, or discard text. An implementation defect found during browser acceptance was corrected: the internal tab identity contains a non-HTML separator and therefore must never round-trip through a DOM attribute; preview acceptance now compares only in-memory request and active-tab identities.
+
+`markdown-it` 15.0.1 is a separate lazy chunk and is requested only when Split or Preview is first used. The parser runs with raw HTML disabled. Its image rule produces a text placeholder instead of an `img` element, and its link rules produce styled non-navigating spans instead of anchors. This prevents a repository document from executing embedded HTML, fetching local/remote images, or navigating the application shell. Live preview accepts at most 512 KiB; a larger Markdown file retains normal source editing and saving with an explicit preview-limit message.
+
+Focused tests cover per-tab mode ownership, recognized Markdown extensions, MDX exclusion, headings/lists, raw-HTML escaping, non-fetching images, non-navigating links, and the render bound. The complete frontend suite passes 125 tests. Browser interaction opened Markdown in Source, switched through Split and Preview, edited the split source and observed the heading and strong-text projection update, returned to Source with exact content retained, and changed the split width from 463 to 479 pixels through the accessible separator. A TypeScript editor exposed fold markers; `Ctrl+Shift+[` reduced the class body to one fold placeholder and `Ctrl+Shift+]` restored it. Mode controls expose a named group with pressed state, preview is a named region, and the splitter publishes separator orientation and current value. No warning or error console entries were observed.
+
+A generated Markdown fixture records absolute parser cost on this machine. A 10,240-byte warm render had a 3.824-millisecond median across 30 iterations (2.791–8.472 milliseconds). A 102,400-byte warm render had a 39.623-millisecond median across 20 iterations (31.114–62.443 milliseconds), while its cold module-import-plus-render observation was 139.557 milliseconds. There was no previous renderer for a normalized latency comparison, and Node execution is not a native-webview resource benchmark; preview latency impact is therefore **inconclusive** beyond these absolute fixtures. The 40-millisecond coalescing and 512-KiB cap are retained until representative long-document interaction motivates a worker boundary.
+
+| Output | Editor-tab correction | Markdown correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 68.60 kB | 72.44 kB | +3.84 kB / +5.60% |
+| CSS gzip | 12.97 kB | 13.72 kB | +0.75 kB / +5.78% |
+| Main JavaScript | 621.13 kB | 634.03 kB | +12.90 kB / +2.08% |
+| Main JavaScript gzip | 179.10 kB | 182.84 kB | +3.74 kB / +2.09% |
+| Main JavaScript source map | 2,313.46 kB | 2,338.88 kB | +25.42 kB / +1.10% |
+| Lazy `markdown-it` JavaScript | absent | 97.28 kB | +97.28 kB |
+| Lazy `markdown-it` gzip | absent | 40.86 kB | +40.86 kB |
+| Linux release executable | 18,258,960 bytes | 18,396,848 bytes | +137,888 bytes / +0.76% |
+| Debian package | 6,219,400 bytes | 6,357,474 bytes | +138,074 bytes / +2.22% |
+
+Frontend, executable, and package size are **regressed** by the new capability. The renderer's independent lazy chunk keeps its 97.28 kB out of initial JavaScript loading, but the existing greater-than-500-kB main-chunk warning remains open and the presentation/controller additions still enlarge the main bundle. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory impact is **inconclusive** and no memory-reduction claim is made.
+
+Formatting, strict all-target Clippy, TypeScript checking, production frontend build, 14 desktop tests, 28 Git tests, 23 workspace tests, Debian package inspection, and six-second release-executable liveness pass. The first packaging attempt encountered a transient local open-file limit while the development preview infrastructure was still active; retrying after closing that infrastructure completed without a code or configuration change. The refreshed unsigned local package is `Asterlyn_0.1.0_amd64.deb`, 6,357,474 bytes, with SHA-256 `8dcf6d2f76b5d6a4081399e732b0c9274ff2934ce28f084ad77784f659ac1fc6`. Functionality and interaction are **improved**; size is **regressed**; parser latency and memory are **inconclusive**. No remote push is made.
