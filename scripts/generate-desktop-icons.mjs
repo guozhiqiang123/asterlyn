@@ -29,6 +29,7 @@ const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const maintained = [
   "32x32.png",
   "48x48.png",
+  "64x64.png",
   "128x128.png",
   "128x128@2x.png",
   "icon.png",

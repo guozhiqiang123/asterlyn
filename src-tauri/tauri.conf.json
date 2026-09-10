@@ -25,11 +25,46 @@
       "icons/128x128.png",
       "icons/32x32.png",
       "icons/48x48.png",
+      "icons/64x64.png",
       "icons/128x128@2x.png",
       "icons/icon.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "linux": {
+      "appimage": {
+        "files": {
+          "/usr/share/icons/hicolor/32x32/apps/dev.asterlyn.desktop.png": "icons/32x32.png",
+          "/usr/share/icons/hicolor/48x48/apps/dev.asterlyn.desktop.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/dev.asterlyn.desktop.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/128x128/apps/dev.asterlyn.desktop.png": "icons/128x128.png",
+          "/usr/share/icons/hicolor/256x256/apps/dev.asterlyn.desktop.png": "icons/128x128@2x.png",
+          "/usr/share/icons/hicolor/512x512/apps/dev.asterlyn.desktop.png": "icons/icon.png"
+        }
+      },
+      "deb": {
+        "desktopTemplate": "linux/asterlyn.desktop",
+        "files": {
+          "/usr/share/icons/hicolor/32x32/apps/dev.asterlyn.desktop.png": "icons/32x32.png",
+          "/usr/share/icons/hicolor/48x48/apps/dev.asterlyn.desktop.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/dev.asterlyn.desktop.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/128x128/apps/dev.asterlyn.desktop.png": "icons/128x128.png",
+          "/usr/share/icons/hicolor/256x256/apps/dev.asterlyn.desktop.png": "icons/128x128@2x.png",
+          "/usr/share/icons/hicolor/512x512/apps/dev.asterlyn.desktop.png": "icons/icon.png"
+        }
+      },
+      "rpm": {
+        "desktopTemplate": "linux/asterlyn.desktop",
+        "files": {
+          "/usr/share/icons/hicolor/32x32/apps/dev.asterlyn.desktop.png": "icons/32x32.png",
+          "/usr/share/icons/hicolor/48x48/apps/dev.asterlyn.desktop.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/dev.asterlyn.desktop.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/128x128/apps/dev.asterlyn.desktop.png": "icons/128x128.png",
+          "/usr/share/icons/hicolor/256x256/apps/dev.asterlyn.desktop.png": "icons/128x128@2x.png",
+          "/usr/share/icons/hicolor/512x512/apps/dev.asterlyn.desktop.png": "icons/icon.png"
+        }
+      }
+    },
     "macOS": {
       "hardenedRuntime": true
     }

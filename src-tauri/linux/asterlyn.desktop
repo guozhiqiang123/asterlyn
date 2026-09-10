@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories={{categories}}
+Comment={{comment}}
+Exec={{exec}}
+StartupWMClass=asterlyn
+Icon=dev.asterlyn.desktop
+Name={{name}}
+Terminal=false
+Type=Application

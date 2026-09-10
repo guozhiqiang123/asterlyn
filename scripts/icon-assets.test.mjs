@@ -10,6 +10,7 @@ test("desktop PNG icons keep their generated dimensions", () => {
   const expected = new Map([
     ["src-tauri/icons/32x32.png", [32, 32]],
     ["src-tauri/icons/48x48.png", [48, 48]],
+    ["src-tauri/icons/64x64.png", [64, 64]],
     ["src-tauri/icons/128x128.png", [128, 128]],
     ["src-tauri/icons/128x128@2x.png", [256, 256]],
     ["src-tauri/icons/icon.png", [512, 512]],
@@ -67,6 +68,42 @@ test("Linux runtime window icon is not the 32 pixel bundle entry", () => {
   assert.equal(runtimePng, "icons/128x128.png");
 });
 
+test("Linux bundle includes the exact 64 pixel Deepin dock source", () => {
+  const config = JSON.parse(read("src-tauri/tauri.conf.json").toString("utf8"));
+  assert.ok(config.bundle.icon.includes("icons/64x64.png"));
+});
+
+test("Linux bundles use a cache-safe namespaced desktop icon", () => {
+  const config = JSON.parse(read("src-tauri/tauri.conf.json").toString("utf8"));
+  const expectedFiles = {
+    "/usr/share/icons/hicolor/32x32/apps/dev.asterlyn.desktop.png":
+      "icons/32x32.png",
+    "/usr/share/icons/hicolor/48x48/apps/dev.asterlyn.desktop.png":
+      "icons/48x48.png",
+    "/usr/share/icons/hicolor/64x64/apps/dev.asterlyn.desktop.png":
+      "icons/64x64.png",
+    "/usr/share/icons/hicolor/128x128/apps/dev.asterlyn.desktop.png":
+      "icons/128x128.png",
+    "/usr/share/icons/hicolor/256x256/apps/dev.asterlyn.desktop.png":
+      "icons/128x128@2x.png",
+    "/usr/share/icons/hicolor/512x512/apps/dev.asterlyn.desktop.png":
+      "icons/icon.png",
+  };
+
+  assert.deepEqual(config.bundle.linux.appimage.files, expectedFiles);
+  for (const target of ["deb", "rpm"]) {
+    assert.equal(
+      config.bundle.linux[target].desktopTemplate,
+      "linux/asterlyn.desktop",
+    );
+    assert.deepEqual(config.bundle.linux[target].files, expectedFiles);
+  }
+
+  const desktop = read("src-tauri/linux/asterlyn.desktop").toString("utf8");
+  assert.match(desktop, /^Icon=dev\.asterlyn\.desktop$/m);
+  assert.match(desktop, /^StartupWMClass=asterlyn$/m);
+});
+
 test("the source SVG uses the full canvas without legacy transparent padding", () => {
   const source = read("assets/asterlyn-mark.svg").toString("utf8");
   assert.match(source, /data-canvas-fit="full-bleed"/);
@@ -77,6 +114,7 @@ test("only the maintained desktop icon set remains", () => {
   const maintained = [
     "32x32.png",
     "48x48.png",
+    "64x64.png",
     "128x128.png",
     "128x128@2x.png",
     "icon.png",
