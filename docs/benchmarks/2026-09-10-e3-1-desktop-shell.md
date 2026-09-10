@@ -43,7 +43,13 @@ Validation passes 102 frontend script tests, 28 `asterlyn-git` tests, 23 `asterl
 
 The frontend movement is **no material change**. The release executable movement is **regressed**: dynamic native-window construction pulled additional Tauri window-creation code into the binary. The increase is accepted for the required independently authorized multi-project mode, but remains visible for later link/profile inspection. No matched process-tree PSS/RSS series or forced browser-heap series was run, so memory impact is **inconclusive** and this correction makes no memory-reduction claim.
 
-The task-end Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,201,556 bytes, with SHA-256 `fff154470e61a945370eba1d72846ca2a1dc3743524502a5f28aec31a5eaea66`. `dpkg-deb` inspection confirms package version 0.1.0, `amd64` architecture, the native executable, desktop entry, and 32/48/128/256/512 icon representations. It is a local unsigned acceptance artifact, not a release candidate.
+## Close-control regression correction
+
+Manual acceptance found that neither the custom close button nor `Alt+F4` could close a project window. The behavior was reproduced against the release executable. Tauri's `onCloseRequested` helper destroys the window after a non-prevented event, but the project-window capability granted `allow-close` without the separately required `allow-destroy`; the permission failure left the window alive. The confirmed application close path also issued another close request after dirty-buffer handling instead of directly destroying the already-approved current window.
+
+The capability now grants destroy only to Asterlyn project windows, and the confirmed path invokes `destroy()` after the existing save-or-cancel gate. Two regression tests require both the destroy call and capability. The complete frontend suite increased from 102 to 104 passing tests. A rebuilt release window was exercised twice against the current checkout: a real pointer click on the custom close control removed the window and process within one second, and a separate run did the same through `Alt+F4`. The native executable is 18,186,416 bytes, 832 bytes or less than 0.01% above the pre-fix shell build, so native-size movement for this correction is **no material change**.
+
+The refreshed task-end Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,201,666 bytes, with SHA-256 `26bc388238d4b619a7aa09e656b7f2b35b7154479e4bb738fd86498ddfa7df6a`. `dpkg-deb` inspection confirms package version 0.1.0, `amd64` architecture, the native executable, desktop entry, and 32/48/128/256/512 icon representations. It is a local unsigned acceptance artifact, not a release candidate.
 
 ## Limits and next action
 

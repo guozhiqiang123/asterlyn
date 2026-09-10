@@ -109,6 +109,8 @@ The first project selection still replaces the empty current window. Selecting a
 
 Desktop icons are regenerated from one full-canvas source and the repository retains only the current desktop bundle set. The complete evidence is recorded in [`E3.1 desktop-shell correction evidence`](../benchmarks/2026-09-10-e3-1-desktop-shell.md). Validation passed 102 frontend tests, 28 Git tests, 23 workspace tests, 12 desktop tests, strict checks, a production frontend build, a release native build, deterministic browser interaction, six-second native liveness, and Debian package inspection. Interaction and platform-asset consistency are **improved**. Frontend size has **no material change**; the native executable is **regressed** by 12.36% after linking dynamic native-window construction; memory remains **inconclusive** because no matched resource series was run. One local Debian acceptance package is produced without a remote push, and E3.2 remains next.
 
+Manual acceptance then exposed a shell permission regression that blocked both the custom close control and operating-system close requests. The correction grants the destroy operation to project windows and uses it only after the existing dirty-buffer save-or-cancel gate. Two focused tests, a real pointer-close run, a separate `Alt+F4` run, and the refreshed Debian package are recorded in the same evidence page. Close behavior is **improved** and the correction's executable-size movement is **no material change**.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

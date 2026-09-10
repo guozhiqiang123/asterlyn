@@ -403,7 +403,6 @@ export class AsterlynApp {
   private workspaceSearchSequence = 0;
   private workspaceReplacementSequence = 0;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
-  private forceWindowClose = false;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private splitterDisposers: Array<() => void> = [];
@@ -1086,7 +1085,6 @@ export class AsterlynApp {
       .catch((error) => this.showError(error));
     void windowControls
       .onCloseRequested((event) => {
-        if (this.forceWindowClose) return;
         this.captureMountedTextEditor();
         if (dirtyTextTabs(this.state.editor).length === 0) return;
         event.preventDefault();
@@ -1097,7 +1095,6 @@ export class AsterlynApp {
 
   private async requestWindowClose(): Promise<void> {
     if (!(await this.saveDirtyTabsBefore("closing Asterlyn"))) return;
-    this.forceWindowClose = true;
     await this.runWindowAction(() => windowControls.close());
   }
 
