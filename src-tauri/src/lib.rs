@@ -9,17 +9,19 @@ use asterlyn_git::{
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
-    SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken, SearchCandidate,
-    SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason, TextFileSnapshot,
-    Workspace, WorkspaceError,
+    PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
+    ReplacementLimits, ReplacementRecoverySummary, SaveTextFileRequest, SaveTextFileResult,
+    SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions,
+    SearchSkipReason, TextFileSnapshot, Workspace, WorkspaceError,
 };
-use tauri::State;
+use tauri::{Manager, State};
 
 const COMMIT_LIMIT: usize = 150;
 const PROJECT_FILE_LIMIT: usize = 5_000;
 const CANCELLED_SCAN_RETENTION: usize = 256;
 const CANCELLED_REMOTE_RETENTION: usize = 128;
 const CANCELLED_SEARCH_RETENTION: usize = 128;
+const REPLACEMENT_PLAN_RETENTION: usize = 16;
 
 pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
     max_candidates: PROJECT_FILE_LIMIT,
@@ -33,6 +35,13 @@ pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
     max_context_lines: 3,
     max_regex_size_bytes: 2 * 1024 * 1024,
     max_regex_dfa_size_bytes: 2 * 1024 * 1024,
+};
+
+pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
+    max_files: 200,
+    max_plan_bytes: 64 * 1024 * 1024,
+    max_replacement_bytes: 16 * 1024,
+    max_preview_utf16: 320,
 };
 
 #[derive(Default)]
@@ -68,8 +77,34 @@ struct ActiveWorkspace {
 }
 
 #[derive(Default)]
-struct FileSaveRegistry {
+struct WorkspaceWriteRegistry {
     locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+#[derive(Default)]
+struct WorkspaceReplacementRegistry {
+    inner: Mutex<WorkspaceReplacementRegistryState>,
+}
+
+#[derive(Default)]
+struct WorkspaceReplacementRegistryState {
+    plans: HashMap<String, StoredReplacementPlan>,
+    active: HashMap<String, ActiveWorkspaceSearch>,
+    cancelled: HashSet<(String, String)>,
+}
+
+#[derive(Clone)]
+struct StoredReplacementPlan {
+    root: PathBuf,
+    plan: PreparedWorkspaceReplacement,
+    files: Vec<AuthorizedReplacementFile>,
+}
+
+#[derive(Clone)]
+struct AuthorizedReplacementFile {
+    repository_id: String,
+    path: String,
+    workspace_path: String,
 }
 
 #[derive(Default)]
@@ -129,6 +164,28 @@ struct WorkspaceTextSearchSkippedFile {
     reason: SearchSkipReason,
 }
 
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceReplacementPreview {
+    plan_id: String,
+    files: Vec<WorkspaceReplacementFilePreview>,
+    total_matches: usize,
+    skipped_count: usize,
+    coverage_reasons: Vec<SearchCoverageReason>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceReplacementFilePreview {
+    repository_id: String,
+    path: String,
+    workspace_path: String,
+    match_count: usize,
+    byte_delta: i64,
+    before_preview: String,
+    after_preview: String,
+}
+
 impl ActiveWorkspace {
     fn activate(&self, root: &str) -> Result<(), GitError> {
         let canonical = std::fs::canonicalize(root).map_err(|error| GitError::Io {
@@ -167,7 +224,7 @@ impl ActiveWorkspace {
     }
 }
 
-impl FileSaveRegistry {
+impl WorkspaceWriteRegistry {
     fn lock_for(&self, identity: String) -> Result<Arc<Mutex<()>>, WorkspaceError> {
         let mut locks = self.locks.lock().map_err(|_| WorkspaceError::Io {
             operation: "serialize file saves".to_string(),
@@ -177,6 +234,82 @@ impl FileSaveRegistry {
             .entry(identity)
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone())
+    }
+}
+
+impl WorkspaceReplacementRegistryState {
+    fn register(&mut self, repository_root: &str, operation_id: &str) -> SearchCancellationToken {
+        if let Some(previous) = self.active.remove(repository_root) {
+            previous.cancellation.cancel();
+        }
+        let cancellation = SearchCancellationToken::new();
+        if self
+            .cancelled
+            .remove(&(repository_root.to_string(), operation_id.to_string()))
+        {
+            cancellation.cancel();
+        }
+        self.active.insert(
+            repository_root.to_string(),
+            ActiveWorkspaceSearch {
+                id: operation_id.to_string(),
+                cancellation: cancellation.clone(),
+            },
+        );
+        cancellation
+    }
+
+    fn finish(
+        &mut self,
+        repository_root: &str,
+        operation_id: &str,
+        cancellation: &SearchCancellationToken,
+    ) {
+        if self.active.get(repository_root).is_some_and(|active| {
+            active.id == operation_id && active.cancellation.refers_to(cancellation)
+        }) {
+            self.active.remove(repository_root);
+        }
+    }
+
+    fn cancel(&mut self, repository_root: String, operation_id: String) {
+        if self
+            .active
+            .get(&repository_root)
+            .is_some_and(|active| active.id == operation_id)
+        {
+            if let Some(active) = self.active.remove(&repository_root) {
+                active.cancellation.cancel();
+            }
+            return;
+        }
+        if self.cancelled.len() >= CANCELLED_SEARCH_RETENTION {
+            self.cancelled.clear();
+        }
+        self.cancelled.insert((repository_root, operation_id));
+    }
+
+    fn store(&mut self, stored: StoredReplacementPlan) {
+        if self.plans.len() >= REPLACEMENT_PLAN_RETENTION {
+            self.plans.clear();
+        }
+        self.plans
+            .retain(|_, existing| existing.root != stored.root);
+        self.plans.insert(stored.plan.plan_id().to_string(), stored);
+    }
+
+    fn plan(&self, root: &Path, plan_id: &str) -> Result<StoredReplacementPlan, WorkspaceError> {
+        self.plans
+            .get(plan_id)
+            .filter(|stored| stored.root == root)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::InvalidReplacement {
+                message: "replacement preview is stale; create a new preview".to_string(),
+            })
+    }
+
+    fn remove_plan(&mut self, plan_id: &str) {
+        self.plans.remove(plan_id);
     }
 }
 
@@ -557,6 +690,315 @@ fn search_authorized_workspace(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn preview_workspace_replacement(
+    repository_root: String,
+    plan_id: String,
+    query: String,
+    replacement: String,
+    options: SearchOptions,
+    active_workspace: State<'_, ActiveWorkspace>,
+    replacements: State<'_, WorkspaceReplacementRegistry>,
+) -> Result<WorkspaceReplacementPreview, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let cancellation = replacements
+        .inner
+        .lock()
+        .map_err(|_| replacement_registry_error("start replacement preview"))?
+        .register(&repository_root, &plan_id);
+    let task_root = root.clone();
+    let task_plan_id = plan_id.clone();
+    let task_cancellation = cancellation.clone();
+    let result = run_workspace_blocking("preview workspace replacement", move || {
+        prepare_authorized_replacement(
+            &task_root,
+            &task_plan_id,
+            &query,
+            &replacement,
+            &options,
+            &task_cancellation,
+        )
+    })
+    .await;
+
+    let mut registry = replacements
+        .inner
+        .lock()
+        .map_err(|_| replacement_registry_error("finish replacement preview"))?;
+    registry.finish(&repository_root, &plan_id, &cancellation);
+    match result {
+        Ok((stored, preview)) => {
+            registry.store(stored);
+            Ok(preview)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+#[tauri::command]
+async fn apply_workspace_replacement(
+    repository_root: String,
+    plan_id: String,
+    selected_paths: Vec<String>,
+    active_workspace: State<'_, ActiveWorkspace>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+    replacements: State<'_, WorkspaceReplacementRegistry>,
+    app: tauri::AppHandle,
+) -> Result<ReplacementApplyResult, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let (stored, cancellation) = {
+        let mut registry = replacements
+            .inner
+            .lock()
+            .map_err(|_| replacement_registry_error("start workspace replacement"))?;
+        let stored = registry.plan(&root, &plan_id)?;
+        let cancellation = registry.register(&repository_root, &plan_id);
+        (stored, cancellation)
+    };
+    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let recovery_root = replacement_recovery_root(&app)?;
+    let task_plan = stored.plan.clone();
+    let task_stored = stored.clone();
+    let task_cancellation = cancellation.clone();
+    let result = run_workspace_blocking("apply workspace replacement", move || {
+        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize workspace writes".to_string(),
+            message: "workspace-write lock was poisoned".to_string(),
+        })?;
+        authorize_replacement_selection(&root, &task_stored, &selected_paths)?;
+        Workspace::open(&root)?.apply_replacement_plan(
+            &recovery_root,
+            &task_plan,
+            &selected_paths,
+            &task_cancellation,
+        )
+    })
+    .await;
+
+    let mut registry = replacements
+        .inner
+        .lock()
+        .map_err(|_| replacement_registry_error("finish workspace replacement"))?;
+    registry.finish(&repository_root, &plan_id, &cancellation);
+    registry.remove_plan(&plan_id);
+    result
+}
+
+#[tauri::command]
+fn cancel_workspace_replacement(
+    repository_root: String,
+    operation_id: String,
+    replacements: State<'_, WorkspaceReplacementRegistry>,
+) -> Result<(), WorkspaceError> {
+    replacements
+        .inner
+        .lock()
+        .map_err(|_| replacement_registry_error("cancel workspace replacement"))?
+        .cancel(repository_root, operation_id);
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_workspace_replacement_recoveries(
+    repository_root: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+    app: tauri::AppHandle,
+) -> Result<Vec<ReplacementRecoverySummary>, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let recovery_root = replacement_recovery_root(&app)?;
+    run_workspace_blocking("list replacement recoveries", move || {
+        Workspace::open(root)?.list_replacement_recoveries(&recovery_root)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn rollback_workspace_replacement(
+    repository_root: String,
+    recovery_id: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+    app: tauri::AppHandle,
+) -> Result<ReplacementApplyResult, WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let recovery_root = replacement_recovery_root(&app)?;
+    run_workspace_blocking("rollback workspace replacement", move || {
+        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize workspace writes".to_string(),
+            message: "workspace-write lock was poisoned".to_string(),
+        })?;
+        Workspace::open(root)?.rollback_replacement(&recovery_root, &recovery_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn finalize_workspace_replacement(
+    repository_root: String,
+    recovery_id: String,
+    active_workspace: State<'_, ActiveWorkspace>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+    app: tauri::AppHandle,
+) -> Result<(), WorkspaceError> {
+    let root = active_workspace.resolve(&repository_root)?;
+    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let recovery_root = replacement_recovery_root(&app)?;
+    run_workspace_blocking("finalize workspace replacement", move || {
+        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize workspace writes".to_string(),
+            message: "workspace-write lock was poisoned".to_string(),
+        })?;
+        Workspace::open(root)?.finalize_replacement(&recovery_root, &recovery_id)
+    })
+    .await
+}
+
+fn prepare_authorized_replacement(
+    root: &Path,
+    plan_id: &str,
+    query: &str,
+    replacement: &str,
+    options: &SearchOptions,
+    cancellation: &SearchCancellationToken,
+) -> Result<(StoredReplacementPlan, WorkspaceReplacementPreview), WorkspaceError> {
+    let catalog = GitRepository::open(root)
+        .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+        .map_err(|error| WorkspaceError::Io {
+            operation: "load current project catalog for replacement".to_string(),
+            message: error.to_string(),
+        })?;
+    if cancellation.is_cancelled() {
+        return Err(WorkspaceError::Cancelled {
+            message: "workspace replacement preview was cancelled".to_string(),
+        });
+    }
+    let candidates: Vec<_> = catalog
+        .files
+        .iter()
+        .map(|file| SearchCandidate {
+            workspace_path: file.workspace_path.clone(),
+        })
+        .collect();
+    let plan = Workspace::open(root)?.plan_text_replacement(
+        plan_id,
+        &candidates,
+        catalog.truncated,
+        query,
+        replacement,
+        options,
+        cancellation,
+        WORKSPACE_SEARCH_LIMITS,
+        WORKSPACE_REPLACEMENT_LIMITS,
+    )?;
+    let mut authorized_files = Vec::new();
+    let mut preview_files = Vec::new();
+    for preview in &plan.preview().files {
+        let file = catalog
+            .files
+            .iter()
+            .find(|file| file.workspace_path == preview.workspace_path)
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "replacement preview returned an unauthorized file".to_string(),
+            })?;
+        authorized_files.push(AuthorizedReplacementFile {
+            repository_id: file.repository_id.clone(),
+            path: file.path.clone(),
+            workspace_path: file.workspace_path.clone(),
+        });
+        preview_files.push(map_replacement_preview(file, preview));
+    }
+    let preview = WorkspaceReplacementPreview {
+        plan_id: plan.plan_id().to_string(),
+        files: preview_files,
+        total_matches: plan.preview().total_matches,
+        skipped_count: plan.preview().skipped_count,
+        coverage_reasons: plan.preview().coverage_reasons.clone(),
+    };
+    Ok((
+        StoredReplacementPlan {
+            root: root.to_path_buf(),
+            plan,
+            files: authorized_files,
+        },
+        preview,
+    ))
+}
+
+fn map_replacement_preview(
+    file: &asterlyn_git::ProjectFile,
+    preview: &ReplacementFilePreview,
+) -> WorkspaceReplacementFilePreview {
+    WorkspaceReplacementFilePreview {
+        repository_id: file.repository_id.clone(),
+        path: file.path.clone(),
+        workspace_path: file.workspace_path.clone(),
+        match_count: preview.match_count,
+        byte_delta: preview.byte_delta,
+        before_preview: preview.before_preview.clone(),
+        after_preview: preview.after_preview.clone(),
+    }
+}
+
+fn authorize_replacement_selection(
+    root: &Path,
+    stored: &StoredReplacementPlan,
+    selected_paths: &[String],
+) -> Result<(), WorkspaceError> {
+    let selected: HashSet<_> = selected_paths.iter().map(String::as_str).collect();
+    if selected.is_empty() || selected.len() != selected_paths.len() {
+        return Err(WorkspaceError::InvalidReplacement {
+            message: "select one or more unique previewed files".to_string(),
+        });
+    }
+    let current = GitRepository::open(root)
+        .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+        .map_err(|error| WorkspaceError::Io {
+            operation: "reauthorize replacement files".to_string(),
+            message: error.to_string(),
+        })?;
+    for selected_path in selected {
+        let planned = stored
+            .files
+            .iter()
+            .find(|file| file.workspace_path == selected_path)
+            .ok_or_else(|| WorkspaceError::InvalidReplacement {
+                message: "replacement selection is outside the reviewed plan".to_string(),
+            })?;
+        if !current.files.iter().any(|file| {
+            file.repository_id == planned.repository_id
+                && file.path == planned.path
+                && file.workspace_path == planned.workspace_path
+        }) {
+            return Err(WorkspaceError::NotAuthorized {
+                message: format!(
+                    "{} is no longer an authorized project file",
+                    planned.workspace_path
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn replacement_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, WorkspaceError> {
+    app.path()
+        .app_local_data_dir()
+        .map(|path| path.join("replacement-recovery-v1"))
+        .map_err(|error| WorkspaceError::Io {
+            operation: "resolve replacement recovery location".to_string(),
+            message: error.to_string(),
+        })
+}
+
+fn replacement_registry_error(operation: &str) -> WorkspaceError {
+    WorkspaceError::Io {
+        operation: operation.to_string(),
+        message: "workspace-replacement registry lock was poisoned".to_string(),
+    }
+}
+
+#[tauri::command]
 async fn read_text_file(
     repository_root: String,
     repository_id: String,
@@ -581,15 +1023,14 @@ async fn save_text_file(
     utf8_bom: bool,
     request_id: String,
     active_workspace: State<'_, ActiveWorkspace>,
-    save_registry: State<'_, FileSaveRegistry>,
+    writes: State<'_, WorkspaceWriteRegistry>,
 ) -> Result<SaveTextFileResult, WorkspaceError> {
     let root = active_workspace.resolve(&repository_root)?;
-    let identity = format!("{}\0{}\0{}", root.display(), repository_id, path);
-    let save_lock = save_registry.lock_for(identity)?;
+    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
     run_workspace_blocking("save text file", move || {
-        let _guard = save_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize file save".to_string(),
-            message: "file-save lock was poisoned".to_string(),
+        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize workspace writes".to_string(),
+            message: "workspace-write lock was poisoned".to_string(),
         })?;
         save_authorized_text_file(
             &root,
@@ -885,8 +1326,9 @@ pub fn run() {
         .manage(ScanRegistry::default())
         .manage(RemoteOperationRegistry::default())
         .manage(ActiveWorkspace::default())
-        .manage(FileSaveRegistry::default())
+        .manage(WorkspaceWriteRegistry::default())
         .manage(WorkspaceSearchRegistry::default())
+        .manage(WorkspaceReplacementRegistry::default())
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             open_repository,
@@ -896,6 +1338,12 @@ pub fn run() {
             list_project_files,
             search_workspace_text,
             cancel_workspace_text_search,
+            preview_workspace_replacement,
+            apply_workspace_replacement,
+            cancel_workspace_replacement,
+            list_workspace_replacement_recoveries,
+            rollback_workspace_replacement,
+            finalize_workspace_replacement,
             read_text_file,
             save_text_file,
             read_diff,
@@ -1106,6 +1554,103 @@ mod tests {
     }
 
     #[test]
+    fn workspace_replacement_preview_maps_git_identities_and_reauthorizes_apply() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        let recovery = tempfile::tempdir().expect("recovery directory");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::write(directory.path().join("tracked.txt"), "needle tracked\n").expect("tracked file");
+        fs::write(directory.path().join("untracked.txt"), "needle untracked\n")
+            .expect("untracked file");
+        fs::write(directory.path().join(".gitignore"), "").expect("ignore file");
+        git(directory.path(), &["add", ".gitignore", "tracked.txt"]);
+
+        let (stored, preview) = prepare_authorized_replacement(
+            directory.path(),
+            "native-replace-preview",
+            "needle",
+            "found",
+            &SearchOptions::default(),
+            &SearchCancellationToken::new(),
+        )
+        .expect("replacement preview");
+        assert_eq!(preview.total_matches, 2);
+        assert_eq!(preview.files.len(), 2);
+        assert!(preview.files.iter().all(|file| file.repository_id == "."));
+
+        authorize_replacement_selection(directory.path(), &stored, &["tracked.txt".to_string()])
+            .expect("tracked selection remains authorized");
+        let applied = Workspace::open(directory.path())
+            .unwrap()
+            .apply_replacement_plan(
+                recovery.path(),
+                &stored.plan,
+                &["tracked.txt".to_string()],
+                &SearchCancellationToken::new(),
+            )
+            .expect("selected replacement applies");
+        assert_eq!(
+            applied.status,
+            asterlyn_workspace::ReplacementRecoveryStatus::Applied
+        );
+        assert_eq!(
+            fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+            "found tracked\n"
+        );
+        assert_eq!(
+            fs::read_to_string(directory.path().join("untracked.txt")).unwrap(),
+            "needle untracked\n"
+        );
+
+        fs::write(directory.path().join(".gitignore"), "untracked.txt\n")
+            .expect("ignore untracked file");
+        let revoked = authorize_replacement_selection(
+            directory.path(),
+            &stored,
+            &["untracked.txt".to_string()],
+        )
+        .expect_err("fresh catalog revokes replacement authorization");
+        assert!(matches!(revoked, WorkspaceError::NotAuthorized { .. }));
+    }
+
+    #[test]
+    fn replacement_registry_supersedes_plans_by_workspace_and_cancels_exact_operations() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::write(directory.path().join("source.txt"), "needle\n").expect("source file");
+        git(directory.path(), &["add", "source.txt"]);
+        let (first, _) = prepare_authorized_replacement(
+            directory.path(),
+            "plan-one",
+            "needle",
+            "one",
+            &SearchOptions::default(),
+            &SearchCancellationToken::new(),
+        )
+        .expect("first plan");
+        let (second, _) = prepare_authorized_replacement(
+            directory.path(),
+            "plan-two",
+            "needle",
+            "two",
+            &SearchOptions::default(),
+            &SearchCancellationToken::new(),
+        )
+        .expect("second plan");
+        let canonical = std::fs::canonicalize(directory.path()).unwrap();
+        let mut registry = WorkspaceReplacementRegistryState::default();
+        registry.store(first);
+        registry.store(second);
+        assert!(registry.plan(&canonical, "plan-one").is_err());
+        assert!(registry.plan(&canonical, "plan-two").is_ok());
+
+        registry.cancel("/repo".to_string(), "cancelled".to_string());
+        assert!(registry.register("/repo", "cancelled").is_cancelled());
+        let active = registry.register("/repo", "active");
+        registry.cancel("/repo".to_string(), "active".to_string());
+        assert!(active.is_cancelled());
+    }
+
+    #[test]
     fn active_workspace_accepts_only_the_last_canonical_root() {
         let active = ActiveWorkspace::default();
         let first = tempfile::tempdir().expect("first workspace");
@@ -1131,17 +1676,11 @@ mod tests {
     }
 
     #[test]
-    fn file_save_registry_reuses_only_matching_identity_locks() {
-        let registry = FileSaveRegistry::default();
-        let first = registry
-            .lock_for("root\0.\0file".to_string())
-            .expect("lock");
-        let same = registry
-            .lock_for("root\0.\0file".to_string())
-            .expect("same lock");
-        let other = registry
-            .lock_for("root\0.\0other".to_string())
-            .expect("other lock");
+    fn workspace_write_registry_reuses_only_matching_root_locks() {
+        let registry = WorkspaceWriteRegistry::default();
+        let first = registry.lock_for("root-a".to_string()).expect("lock");
+        let same = registry.lock_for("root-a".to_string()).expect("same lock");
+        let other = registry.lock_for("root-b".to_string()).expect("other lock");
 
         assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &other));
