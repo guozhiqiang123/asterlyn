@@ -42,7 +42,7 @@ export class TextEditor {
     content: string,
     path: string,
     preferences: AppPreferences,
-    onChange: () => void,
+    onChange: (content: string) => void,
   ): void {
     this.destroy();
     this.exactContent = decodeExactText(content);
@@ -76,7 +76,7 @@ export class TextEditor {
               changes.push({ from, to, insert: inserted.toString() });
             });
             this.exactContent = applyExactTextChanges(this.exactContent, changes);
-            onChange();
+            onChange(this.content());
           }),
         ],
       }),

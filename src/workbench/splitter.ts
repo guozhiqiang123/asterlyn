@@ -12,6 +12,7 @@ export interface SplitterOptions {
   getValue(): number;
   getRange(): SplitterRange;
   onChange(value: number): void;
+  onDragStateChange?(dragging: boolean): void;
   onCommit?(): void;
   onReset?(): void;
 }
@@ -69,6 +70,18 @@ export function attachSplitter(
   const direction = options.direction ?? 1;
   const step = options.step ?? 16;
   let activePointerDispose: (() => void) | null = null;
+  let dragging = false;
+
+  const setDragging = (next: boolean) => {
+    if (dragging === next) return;
+    dragging = next;
+    options.onDragStateChange?.(next);
+  };
+  const disposeActivePointer = () => {
+    const dispose = activePointerDispose;
+    activePointerDispose = null;
+    dispose?.();
+  };
 
   element.setAttribute("role", "separator");
   element.setAttribute("aria-orientation", options.orientation);
@@ -89,13 +102,13 @@ export function attachSplitter(
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    activePointerDispose?.();
-    activePointerDispose = null;
+    disposeActivePointer();
     const startCoordinate = pointerCoordinate(event, options.orientation);
     const startValue = options.getValue();
     const dragRange = normalizeRange(options.getRange());
     const updates = createLatestFrameQueue(update);
     element.classList.add("dragging");
+    setDragging(true);
     element.setPointerCapture(event.pointerId);
 
     const onPointerMove = (moveEvent: PointerEvent) => {
@@ -107,23 +120,36 @@ export function attachSplitter(
     const finish = (finishEvent: PointerEvent) => {
       if (finishEvent.pointerId !== event.pointerId) return;
       updates.flush();
-      activePointerDispose?.();
-      activePointerDispose = null;
+      disposeActivePointer();
+      options.onCommit?.();
+    };
+    const onLostPointerCapture = (lostEvent: PointerEvent) => {
+      if (
+        lostEvent.pointerId !== event.pointerId ||
+        activePointerDispose === null
+      ) {
+        return;
+      }
+      updates.flush();
+      disposeActivePointer();
       options.onCommit?.();
     };
     activePointerDispose = () => {
       updates.cancel();
       element.classList.remove("dragging");
+      setDragging(false);
       if (element.hasPointerCapture(event.pointerId)) {
         element.releasePointerCapture(event.pointerId);
       }
-      element.removeEventListener("pointermove", onPointerMove);
-      element.removeEventListener("pointerup", finish);
-      element.removeEventListener("pointercancel", finish);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      element.removeEventListener("lostpointercapture", onLostPointerCapture);
     };
-    element.addEventListener("pointermove", onPointerMove);
-    element.addEventListener("pointerup", finish);
-    element.addEventListener("pointercancel", finish);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    element.addEventListener("lostpointercapture", onLostPointerCapture);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -162,8 +188,7 @@ export function attachSplitter(
     element.removeEventListener("pointerdown", onPointerDown);
     element.removeEventListener("keydown", onKeyDown);
     element.removeEventListener("dblclick", onDoubleClick);
-    activePointerDispose?.();
-    activePointerDispose = null;
+    disposeActivePointer();
   };
 }
 

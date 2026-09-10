@@ -15,6 +15,7 @@ function tab(overrides = {}) {
     },
     status: "ready",
     content: "alpha Browser omega",
+    persistedContent: "alpha Browser omega",
     utf8Bom: false,
     revision: "revision-1",
     loadEpoch: 2,
@@ -64,13 +65,23 @@ test("search navigation rejects another workspace or document identity", () => {
 
 test("search navigation never applies disk offsets to dirty, saving, or stale tabs", () => {
   assert.equal(
-    evaluateSearchNavigation("/repo", tab({ editVersion: 1 }), match()),
+    evaluateSearchNavigation(
+      "/repo",
+      tab({ content: "changed Browser omega", editVersion: 1 }),
+      match(),
+    ),
     "dirty",
   );
   assert.equal(
     evaluateSearchNavigation(
       "/repo",
-      tab({ saveRequest: { id: "save-1", capturedVersion: 0 } }),
+      tab({
+        saveRequest: {
+          id: "save-1",
+          capturedVersion: 0,
+          capturedContent: "alpha Browser omega",
+        },
+      }),
       match(),
     ),
     "dirty",

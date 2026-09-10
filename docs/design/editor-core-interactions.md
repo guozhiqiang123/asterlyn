@@ -121,6 +121,16 @@ Refreshing the same repository no longer invokes the repository-switch reset pat
 
 The updated acceptance evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Interaction and catalog coverage are **improved**; frontend, native, and package-size movements are **no material change**; memory remains **inconclusive** because no matched process-tree resource series was run. The task ends with one fresh local Debian package and no remote push.
 
+### E3.1 editor-tab and status correction — 2026-09-10
+
+The ordinary text editor now starts immediately below its tab row instead of repeating path, title, save state, and a Save button in a second header. Explicit save remains available through `Ctrl/Cmd+S` and the command surface. The active loaded text file's UTF-8/BOM encoding moves to the bottom status bar immediately before branch state; Diff documents retain their compact contextual presentation toolbar.
+
+Dirty state now compares the current exact buffer with the most recent successfully loaded or saved exact content. Undoing back to that baseline removes the dirty marker, and a completed save advances only to the request's captured content so later edits remain dirty. Text and working-Diff tabs project the same Git status classes as the Files tree. A fixed trailing tab-menu button lists every open text tab and the bounded Diff preview; selecting an item activates the existing document and scrolls its tab into view.
+
+The left splitter also owns an explicit pointer drag lifetime. It consumes movement and release at the window boundary, safely finalizes lost pointer capture, clips the Files pane, and suppresses its overlay scrollbar only while dragging. This targets the macOS WebKit compositor artifact in which the scrollbar remained at the old pane edge while the divider moved. Local browser interaction proves final divider/pane alignment and scrollbar restoration; installed macOS visual confirmation remains part of manual acceptance.
+
+The updated evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Correctness and interaction are **improved**; frontend size is **regressed** by the open-document menu, native and package movement are **no material change**, and memory impact remains **inconclusive** because no matched resource series was run. The task produces one local Debian package without a remote push; E3.2 remains next.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

@@ -46,7 +46,7 @@ import {
   type WorkbenchLayout,
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
-import { scrollTabStrip } from "./workbench/tab-strip";
+import { revealTabInStrip, scrollTabStrip } from "./workbench/tab-strip";
 import {
   showCustomWindowControls,
   windowChromeClass,
@@ -401,6 +401,8 @@ export class AsterlynApp {
   private historyTopRefreshAt = 0;
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
+  private lastRenderedEditorDocumentKey: string | null = null;
+  private editorTabMenuOpen = false;
   private textSaveSequence = 0;
   private workspaceSearchSequence = 0;
   private workspaceReplacementSequence = 0;
@@ -524,8 +526,16 @@ export class AsterlynApp {
               <div class="workbench-splitter vertical" id="left-splitter" aria-label="Resize left tool window"></div>
 
               <section class="content-panel editor-panel" id="editor-panel" aria-label="Editor">
-                <div class="editor-tabbar" id="editor-tabbar">
-                  <span class="editor-tab active">Welcome</span>
+                <div class="editor-tabbar-shell">
+                  <div class="editor-tabbar" id="editor-tabbar">
+                    <span class="editor-tab active">Welcome</span>
+                  </div>
+                  <div class="editor-tab-menu-anchor" id="editor-tab-menu-anchor">
+                    <button class="editor-tab-menu-toggle" id="editor-tab-menu-toggle" type="button" aria-label="Show open files" title="Show open files" aria-haspopup="menu" aria-expanded="false" disabled>
+                      ${icon("chevron-down", 15)}
+                    </button>
+                    <div class="editor-tab-menu hidden" id="editor-tab-menu" role="menu" aria-label="Open files"></div>
+                  </div>
                 </div>
                 <div class="content-header" id="content-header">
                   <div class="content-title-group">
@@ -585,7 +595,10 @@ export class AsterlynApp {
             <span class="status-indicator" id="status-indicator"></span>
             <span id="status-message">Ready</span>
           </div>
-          <div class="status-right" id="branch-status"></div>
+          <div class="status-right">
+            <span class="document-encoding hidden" id="document-encoding" aria-label="Current file encoding"></span>
+            <div class="branch-status" id="branch-status"></div>
+          </div>
         </footer>
 
         <div class="toast hidden" id="toast" role="status" aria-live="polite">
@@ -730,6 +743,18 @@ export class AsterlynApp {
       },
       { passive: false },
     );
+    this.query("#editor-tab-menu-toggle").addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (
+        this.state.editor.textTabs.length === 0 &&
+        this.state.editor.preview === null
+      ) {
+        return;
+      }
+      this.editorTabMenuOpen = !this.editorTabMenuOpen;
+      this.renderEditorTabMenu();
+      this.bindEditorTabMenuEvents();
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         const tool = button.dataset.tool as "files" | "branches" | "changes";
@@ -771,6 +796,12 @@ export class AsterlynApp {
         return;
       }
       if (event.key === "Escape") {
+        if (this.editorTabMenuOpen) {
+          event.preventDefault();
+          this.editorTabMenuOpen = false;
+          this.renderEditorTabMenu();
+          return;
+        }
         if (!this.query("#repository-target-dialog").classList.contains("hidden")) {
           event.preventDefault();
           this.closeRepositoryTargetDialog();
@@ -839,6 +870,14 @@ export class AsterlynApp {
       }
     });
     window.addEventListener("pointerdown", (event) => {
+      if (
+        this.editorTabMenuOpen &&
+        event.target instanceof Element &&
+        !event.target.closest("#editor-tab-menu-anchor")
+      ) {
+        this.editorTabMenuOpen = false;
+        this.renderEditorTabMenu();
+      }
       if (
         this.state.historyFilterMenu &&
         event.target instanceof Element &&
@@ -2546,6 +2585,12 @@ export class AsterlynApp {
           ),
         }),
         onChange: (value) => this.resizeWorkbench("leftWidth", value),
+        onDragStateChange: (dragging) => {
+          this.query("#workbench").classList.toggle(
+            "resizing-left-tool",
+            dragging,
+          );
+        },
         onCommit: () => this.persistWorkbenchLayout(),
         onReset: () =>
           this.resizeWorkbench("leftWidth", WORKBENCH_LAYOUT_DEFAULTS.leftWidth),
@@ -5000,13 +5045,23 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     if (!snapshot) return;
     const document = this.activeDocument();
+    const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
     const tabbar = this.query("#editor-tabbar");
+    const activeKey = editorDocumentKey(document);
+    const revealActiveTab = activeKey !== this.lastRenderedEditorDocumentKey;
+    this.lastRenderedEditorDocumentKey = activeKey;
     tabbar.innerHTML = this.renderEditorTabs(document);
+    this.renderEditorTabMenu();
     this.bindEditorTabEvents();
+    this.renderDocumentStatus();
+    const showContextHeader =
+      document.kind === "working-diff" || document.kind === "commit-diff";
+    editorPanel.classList.toggle("show-context-header", showContextHeader);
+    if (!showContextHeader) header.innerHTML = "";
+    if (revealActiveTab) this.revealActiveEditorTab();
 
     if (document.kind === "welcome") {
-      header.innerHTML = this.contentHeading(`${BRAND.name} Editor`, "Workspace");
       this.showEditorHtml(
         "welcome",
         this.emptyState(
@@ -5025,11 +5080,6 @@ export class AsterlynApp {
         this.renderEditor();
         return;
       }
-      header.innerHTML = `
-        ${this.contentHeading(basename(document.workspacePath), document.workspacePath)}
-        ${this.textEditorActions(tab)}
-      `;
-      this.bindTextEditorActions(tab);
       if (tab.status === "loading") {
         this.showEditorHtml(
           editorDocumentContentKey(document, `loading:${tab.loadEpoch}`),
@@ -5197,11 +5247,17 @@ export class AsterlynApp {
       tab.content,
       tab.document.path,
       this.state.preferences,
-      () => {
+      (content) => {
         if (this.mountedTextTabId !== tab.id) return;
         const previous = textTab(this.state.editor, tab.id);
-        this.state.editor = markTextEdited(this.state.editor, tab.id);
-        if (previous && (!isTextTabDirty(previous) || previous.conflict)) {
+        const wasDirty = previous ? isTextTabDirty(previous) : false;
+        this.state.editor = markTextEdited(this.state.editor, tab.id, content);
+        const current = textTab(this.state.editor, tab.id);
+        if (
+          previous &&
+          current &&
+          (wasDirty !== isTextTabDirty(current) || previous.conflict)
+        ) {
           this.renderEditor();
         }
       },
@@ -5222,7 +5278,7 @@ export class AsterlynApp {
               ? "Unsaved"
               : "Saved";
         return `
-          <div class="editor-tab ${active ? "active" : ""} ${dirty ? "dirty" : ""}" role="tab" aria-selected="${active}" title="${escapeAttribute(`${tab.document.workspacePath} · ${state}`)}">
+          <div class="editor-tab ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""} ${dirty ? "dirty" : ""}" role="tab" aria-selected="${active}" data-editor-tab="${index}" title="${escapeAttribute(`${tab.document.workspacePath} · ${state}`)}">
             <button class="editor-tab-target" type="button" data-editor-tab-index="${index}">
               <span class="editor-tab-label">${escapeHtml(basename(tab.document.workspacePath))}</span>
               ${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}
@@ -5235,7 +5291,7 @@ export class AsterlynApp {
     const previewPath =
       preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
     const previewTab = preview
-      ? `<div class="editor-tab preview ${this.state.editor.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${this.state.editor.active.kind === "preview"}">
+      ? `<div class="editor-tab preview ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : ""} ${this.state.editor.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${this.state.editor.active.kind === "preview"}">
           <button class="editor-tab-target" type="button" data-editor-preview>${escapeHtml(basename(previewPath ?? "Diff"))}<small>Diff</small></button>
           <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="Close Diff preview" title="Close">${icon("close", 12)}</button>
         </div>`
@@ -5246,16 +5302,107 @@ export class AsterlynApp {
     return `${textTabs}${previewTab}`;
   }
 
+  private renderEditorTabMenu(): void {
+    const toggle = this.query<HTMLButtonElement>("#editor-tab-menu-toggle");
+    const menu = this.query("#editor-tab-menu");
+    const hasDocuments =
+      this.state.editor.textTabs.length > 0 || this.state.editor.preview !== null;
+    if (!hasDocuments) this.editorTabMenuOpen = false;
+    toggle.disabled = !hasDocuments;
+    toggle.setAttribute("aria-expanded", String(this.editorTabMenuOpen));
+    menu.classList.toggle("hidden", !this.editorTabMenuOpen);
+    if (!this.editorTabMenuOpen) {
+      menu.innerHTML = "";
+      return;
+    }
+    const textItems = this.state.editor.textTabs
+      .map((tab, index) => {
+        const active =
+          this.state.editor.active.kind === "text" &&
+          this.state.editor.active.id === tab.id;
+        const dirty = isTextTabDirty(tab);
+        return `<button class="editor-tab-menu-item ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileGlyph(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}${active ? icon("check", 14) : ""}</button>`;
+      })
+      .join("");
+    const preview = this.state.editor.preview;
+    const previewPath =
+      preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
+    const previewItem = preview
+      ? `<button class="editor-tab-menu-item ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : ""} ${this.state.editor.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? "Diff")}"><span class="editor-tab-menu-glyph">${icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? "Diff"))}</strong><small>Diff preview</small></span>${this.state.editor.active.kind === "preview" ? icon("check", 14) : ""}</button>`
+      : "";
+    menu.innerHTML = `${textItems}${previewItem}`;
+  }
+
+  private bindEditorTabMenuEvents(): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-editor-menu-tab-index]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const index = Number(button.dataset.editorMenuTabIndex);
+          const tab = this.state.editor.textTabs[index];
+          if (!tab) return;
+          this.editorTabMenuOpen = false;
+          this.activateEditorTextTab(tab, true);
+        });
+      });
+    this.root
+      .querySelector<HTMLButtonElement>("[data-editor-menu-preview]")
+      ?.addEventListener("click", () => {
+        const preview = this.state.editor.preview;
+        if (!preview) return;
+        this.editorTabMenuOpen = false;
+        this.captureMountedTextEditor();
+        this.state.editor = activatePreview(this.state.editor, preview);
+        this.renderLeftTool();
+        this.renderEditor();
+        this.revealActiveEditorTab();
+      });
+  }
+
+  private editorTabFileStatusClass(workspacePath: string): string {
+    const node = findProjectTreeNode(this.projectTree(), workspacePath);
+    return `file-status-${node?.status ?? "unmodified"}`;
+  }
+
+  private renderDocumentStatus(): void {
+    const encoding = this.query("#document-encoding");
+    const tab = activeTextTab(this.state.editor);
+    const visible = tab?.status === "ready";
+    const label = visible ? (tab.utf8Bom ? "UTF-8 BOM" : "UTF-8") : "";
+    encoding.textContent = label;
+    encoding.setAttribute(
+      "title",
+      visible ? `Current file encoding: ${label}` : "Current file encoding",
+    );
+    encoding.classList.toggle("hidden", !visible);
+  }
+
+  private revealActiveEditorTab(): void {
+    window.requestAnimationFrame(() => {
+      const tabbar = this.query<HTMLElement>("#editor-tabbar");
+      const active = tabbar.querySelector<HTMLElement>(
+        '.editor-tab[aria-selected="true"]',
+      );
+      if (!active) return;
+      revealTabInStrip(tabbar, active);
+    });
+  }
+
+  private activateEditorTextTab(tab: TextTabState, forceReveal = false): void {
+    this.captureMountedTextEditor();
+    this.state.editor = activateTextTab(this.state.editor, tab.id);
+    this.renderLeftTool();
+    this.renderEditor();
+    if (forceReveal) this.revealActiveEditorTab();
+  }
+
   private bindEditorTabEvents(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-editor-tab-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const index = Number(button.dataset.editorTabIndex);
         const tab = this.state.editor.textTabs[index];
         if (!tab) return;
-        this.captureMountedTextEditor();
-        this.state.editor = activateTextTab(this.state.editor, tab.id);
-        this.renderLeftTool();
-        this.renderEditor();
+        this.activateEditorTextTab(tab);
       });
     });
     this.root
@@ -5285,28 +5432,7 @@ export class AsterlynApp {
         this.state.editor = closePreview(this.state.editor);
         this.renderEditor();
       });
-  }
-
-  private textEditorActions(tab: TextTabState): string {
-    const dirty = isTextTabDirty(tab);
-    const label = tab.conflict
-      ? "Conflict · local buffer retained"
-      : tab.saveRequest
-        ? "Saving…"
-        : dirty
-          ? "Unsaved"
-          : "Saved";
-    return `<div class="header-actions text-editor-actions">
-      ${tab.utf8Bom ? '<span class="scope-pill">UTF-8 BOM</span>' : '<span class="scope-pill">UTF-8</span>'}
-      <span class="text-save-state ${tab.conflict ? "conflict" : dirty ? "dirty" : ""}">${escapeHtml(label)}</span>
-      <button class="secondary-button compact" id="save-text-file" type="button" ${!dirty || tab.saveRequest || tab.status !== "ready" ? "disabled" : ""}>Save</button>
-    </div>`;
-  }
-
-  private bindTextEditorActions(tab: TextTabState): void {
-    this.query<HTMLButtonElement>("#save-text-file")?.addEventListener("click", () => {
-      void this.saveTextTab(tab.id);
-    });
+    this.bindEditorTabMenuEvents();
   }
 
   private captureMountedTextEditor(): void {

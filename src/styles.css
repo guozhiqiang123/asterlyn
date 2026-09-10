@@ -854,6 +854,7 @@ textarea:focus-visible {
 .navigator {
   display: grid;
   grid-template-rows: 62px minmax(0, 1fr);
+  contain: paint;
   background: var(--bg-panel);
 }
 
@@ -929,6 +930,15 @@ textarea:focus-visible {
 .navigator-body {
   overflow: auto;
   min-height: 0;
+}
+
+.workbench.resizing-left-tool,
+.workbench.resizing-left-tool .workbench-splitter.vertical {
+  cursor: col-resize;
+}
+
+.workbench.resizing-left-tool .navigator-body {
+  overflow: hidden;
 }
 
 .changes-tool-layout {
@@ -2474,14 +2484,25 @@ textarea:focus-visible {
 
 .content-panel {
   display: grid;
-  grid-template-rows: 36px 50px minmax(0, 1fr);
+  grid-template-rows: 36px minmax(0, 1fr);
   background: var(--bg-deep);
+}
+
+.content-panel.show-context-header {
+  grid-template-rows: 36px 50px minmax(0, 1fr);
 }
 
 .editor-panel {
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+}
+
+.editor-tabbar-shell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 34px;
 }
 
 .editor-tabbar {
@@ -2494,6 +2515,108 @@ textarea:focus-visible {
   background: #242529;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
+}
+
+.editor-tab-menu-anchor {
+  position: relative;
+  min-width: 0;
+}
+
+.editor-tab-menu-toggle {
+  display: grid;
+  width: 34px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  background: #242529;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.editor-tab-menu-toggle:hover,
+.editor-tab-menu-toggle[aria-expanded="true"] {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.editor-tab-menu-toggle:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.editor-tab-menu {
+  position: absolute;
+  z-index: 30;
+  top: 36px;
+  right: 0;
+  overflow: auto;
+  width: min(360px, calc(100vw - 82px));
+  max-height: min(480px, calc(100vh - 130px));
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0 0 6px 6px;
+  background: #292a2e;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 32%);
+}
+
+.editor-tab-menu-item {
+  display: grid;
+  width: 100%;
+  min-height: 42px;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.editor-tab-menu-item:hover,
+.editor-tab-menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.editor-tab-menu-item.active {
+  background: #214283;
+}
+
+.editor-tab-menu-glyph {
+  display: grid;
+  place-items: center;
+}
+
+.editor-tab-menu-copy {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.editor-tab-menu-copy strong,
+.editor-tab-menu-copy small {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-tab-menu-copy strong {
+  font-size: var(--ui-font-size, 13px);
+  font-weight: 500;
+}
+
+.editor-tab-menu-copy small {
+  color: var(--text-faint);
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
 }
 
 .editor-tabbar::-webkit-scrollbar {
@@ -2577,6 +2700,37 @@ textarea:focus-visible {
   color: var(--text);
 }
 
+.editor-tab.file-status-added,
+.editor-tab.file-status-untracked,
+.editor-tab-menu-item.file-status-added,
+.editor-tab-menu-item.file-status-untracked {
+  color: var(--file-added);
+}
+
+.editor-tab.file-status-modified,
+.editor-tab.file-status-typeChanged,
+.editor-tab-menu-item.file-status-modified,
+.editor-tab-menu-item.file-status-typeChanged {
+  color: var(--file-modified);
+}
+
+.editor-tab.file-status-deleted,
+.editor-tab-menu-item.file-status-deleted {
+  color: var(--file-deleted);
+}
+
+.editor-tab.file-status-renamed,
+.editor-tab.file-status-copied,
+.editor-tab-menu-item.file-status-renamed,
+.editor-tab-menu-item.file-status-copied {
+  color: var(--file-renamed);
+}
+
+.editor-tab.file-status-unmerged,
+.editor-tab-menu-item.file-status-unmerged {
+  color: var(--file-conflict);
+}
+
 .editor-tab small {
   color: var(--text-faint);
   font-family: ui-monospace, monospace;
@@ -2584,12 +2738,16 @@ textarea:focus-visible {
 }
 
 .content-header {
-  display: flex;
+  display: none;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+.content-panel.show-context-header .content-header {
+  display: flex;
 }
 
 .content-title-group {
@@ -3547,6 +3705,19 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.branch-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.document-encoding {
+  padding: 0 6px;
+  border-right: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
 }
 
 .status-indicator {

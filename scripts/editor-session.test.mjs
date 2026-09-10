@@ -77,7 +77,7 @@ test("stale loads and saves cannot replace newer tab state", () => {
     revision: "one",
     byteLength: 5,
   });
-  session = markTextEdited(session, opened.tabId);
+  session = markTextEdited(session, opened.tabId, "edited");
   const saving = beginTextSave(session, opened.tabId, "edited", "save-1");
   session = completeTextSave(saving.session, opened.tabId, {
     workspacePath: "one.ts",
@@ -110,7 +110,7 @@ test("a clean tab can start a fresh guarded reload but dirty or saving tabs cann
   assert.equal(reloading.loadEpoch, 2);
   assert.equal(reloading.session.textTabs[0].status, "loading");
 
-  session = markTextEdited(session, tabId);
+  session = markTextEdited(session, tabId, "edited");
   assert.equal(beginTextReload(session, tabId).loadEpoch, null);
 
   const saving = beginTextSave(session, tabId, "edited", "save-1");
@@ -120,9 +120,9 @@ test("a clean tab can start a fresh guarded reload but dirty or saving tabs cann
 test("edits during save remain dirty and conflicts retain content", () => {
   let session = loaded(createEditorSession(), "one.ts");
   const tabId = session.textTabs[0].id;
-  session = markTextEdited(session, tabId);
+  session = markTextEdited(session, tabId, "first edit");
   let saving = beginTextSave(session, tabId, "first edit", "save-1");
-  session = markTextEdited(saving.session, tabId);
+  session = markTextEdited(saving.session, tabId, "second edit");
   session = completeTextSave(session, tabId, {
     workspacePath: "one.ts",
     revision: "revision-two",
@@ -143,6 +143,38 @@ test("edits during save remain dirty and conflicts retain content", () => {
   assert.equal(session.textTabs[0].content, "second edit");
   assert.equal(session.textTabs[0].conflict, true);
   assert.equal(closeTextTab(session, tabId).blocked, true);
+});
+
+test("undoing exactly to the persisted content clears the dirty state", () => {
+  let session = loaded(createEditorSession(), "one.ts");
+  const tabId = session.textTabs[0].id;
+  const original = session.textTabs[0].content;
+
+  session = markTextEdited(session, tabId, "changed\n");
+  assert.equal(dirtyTextTabs(session).length, 1);
+
+  session = markTextEdited(session, tabId, original);
+  assert.equal(dirtyTextTabs(session).length, 0);
+  assert.equal(beginTextSave(session, tabId, original, "save-after-undo").request, null);
+});
+
+test("save completion advances the content baseline captured by that request", () => {
+  let session = loaded(createEditorSession(), "one.ts");
+  const tabId = session.textTabs[0].id;
+  session = markTextEdited(session, tabId, "captured edit");
+  const saving = beginTextSave(session, tabId, "captured edit", "save-1");
+  session = markTextEdited(saving.session, tabId, "newer edit");
+  session = completeTextSave(session, tabId, {
+    workspacePath: "one.ts",
+    revision: "revision-two",
+    byteLength: 13,
+    requestId: "save-1",
+    alreadySaved: false,
+  });
+
+  assert.equal(session.textTabs[0].persistedContent, "captured edit");
+  assert.equal(session.textTabs[0].content, "newer edit");
+  assert.equal(dirtyTextTabs(session).length, 1);
 });
 
 test("clean tabs close and the session enforces its text-tab bound", () => {

@@ -14,12 +14,17 @@ export interface TextTabState {
   document: ProjectFileDocument;
   status: "loading" | "ready" | "error";
   content: string;
+  persistedContent: string;
   utf8Bom: boolean;
   revision: string | null;
   loadEpoch: number;
   editVersion: number;
   persistedVersion: number;
-  saveRequest: { id: string; capturedVersion: number } | null;
+  saveRequest: {
+    id: string;
+    capturedVersion: number;
+    capturedContent: string;
+  } | null;
   error: string | null;
   conflict: boolean;
 }
@@ -106,6 +111,7 @@ export function openTextDocument(
     document,
     status: "loading",
     content: "",
+    persistedContent: "",
     utf8Bom: false,
     revision: null,
     loadEpoch: 1,
@@ -141,6 +147,7 @@ export function completeTextLoad(
           ...tab,
           status: "ready",
           content: snapshot.content,
+          persistedContent: snapshot.content,
           utf8Bom: snapshot.utf8Bom,
           revision: snapshot.revision,
           editVersion: 0,
@@ -207,11 +214,21 @@ export function activateWelcome(session: EditorSession): EditorSession {
   return { ...session, active: { kind: "welcome" } };
 }
 
-export function markTextEdited(session: EditorSession, tabId: string): EditorSession {
+export function markTextEdited(
+  session: EditorSession,
+  tabId: string,
+  content: string,
+): EditorSession {
   return updateMatchingTab(session, tabId, (tab) =>
     tab.status !== "ready"
       ? tab
-      : { ...tab, editVersion: tab.editVersion + 1, error: null, conflict: false },
+      : {
+          ...tab,
+          content,
+          editVersion: tab.editVersion + 1,
+          error: null,
+          conflict: false,
+        },
   );
 }
 
@@ -253,7 +270,7 @@ export function beginTextSave(
     session: updateMatchingTab(session, tabId, (candidate) => ({
       ...candidate,
       content,
-      saveRequest: { id: requestId, capturedVersion },
+      saveRequest: { id: requestId, capturedVersion, capturedContent: content },
       error: null,
       conflict: false,
     })),
@@ -276,6 +293,7 @@ export function completeTextSave(
     return {
       ...tab,
       revision: result.revision,
+      persistedContent: tab.saveRequest.capturedContent,
       persistedVersion: tab.saveRequest.capturedVersion,
       saveRequest: null,
       error: null,
@@ -347,7 +365,7 @@ export function dirtyTextTabs(session: EditorSession): TextTabState[] {
 }
 
 export function isTextTabDirty(tab: TextTabState): boolean {
-  return tab.editVersion !== tab.persistedVersion;
+  return tab.content !== tab.persistedContent;
 }
 
 function updateMatchingTab(

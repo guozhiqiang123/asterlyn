@@ -73,3 +73,31 @@ In the deterministic browser workbench, closing `crates` reduced mounted project
 All size movements are **no material change**. No watcher, persistent index, polling service, or background worker was added. No matched native process-tree PSS/RSS series or forced browser-heap series was run, so memory impact remains **inconclusive** and this correction makes no memory-reduction claim. Ignored directories remain intentionally opaque collapsed entries, and the 100,000-file navigation ceiling is still a disclosed bound rather than a claim of an unlimited filesystem browser.
 
 The refreshed local Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,216,932 bytes, with SHA-256 `c3defe2cec6b1f4838d9631b888100cc0d3a7081519aa18930861ebaf3490a4b`. Package inspection confirms version 0.1.0, `amd64`, the desktop entry, native executable, and the maintained icon-size set. This is a local unsigned acceptance artifact, not a release candidate, and no remote push is made.
+
+## Editor-tab, exact-dirty-state, and macOS splitter correction
+
+Manual editor acceptance exposed six presentation/state defects: a redundant text metadata header, encoding in the wrong region, an edit-counter dirty marker that survived an exact undo, neutral tab labels for Git-changed files, no bounded open-file chooser, and a macOS overlay scrollbar layer that could lag behind the moving left divider.
+
+The correction removes the metadata header for welcome and editable text documents while retaining the Diff-only context toolbar. `Ctrl/Cmd+S` and the command surface remain the explicit save entry points. The bottom-right status area now shows `UTF-8` or `UTF-8 BOM` only for an active loaded text tab, immediately before branch state. Text tabs and working-Diff preview tabs resolve their current workspace path through the cached project tree and reuse its added, untracked, modified, deleted, renamed, copied, and conflicted color tokens.
+
+The editor-session baseline is now exact content, not only monotonically increasing edit and persisted versions. A save request retains the exact content it captured; completion advances the baseline to that captured value while preserving any newer buffer. Focused tests prove edit-to-dirty, exact undo-to-clean, no-op save after undo, and edits-during-save remaining dirty. Search navigation fixtures use the same exact-content invariant.
+
+The fixed trailing open-document control lists all six documents opened in the deterministic browser journey and identifies the active one. At a 601-pixel tab viewport with 720 pixels of tab content, choosing the final item moved horizontal position from 0 to 119 pixels so its right edge equalled the visible edge; choosing the first item returned position to 0. The same journey observed the text content grid as a 36-pixel tab row plus editor body, a hidden ordinary content header, `UTF-8` in the status bar, one dirty marker after editing, zero after `Ctrl+Z`, and no warning/error console entries.
+
+The left splitter now listens through the window for move/release, finalizes lost pointer capture, exposes one drag-state callback, clips the Files pane, and hides its overflow layer only during active dragging. In the production-like browser journey, a 70-pixel pointer drag changed the Files pane to 306 pixels; after release the pane right edge and divider left edge were both 350 pixels, drag state was false, and overflow had returned to `auto`. This validates lifecycle and final geometry on Linux Chromium. The original defect is macOS WebKit compositor-specific, so installed macOS confirmation remains a manual limitation rather than an automated cross-platform claim.
+
+Validation passes 120 frontend script tests, 14 desktop tests, 28 Git-core tests, and 23 workspace tests. TypeScript checking, the production frontend build, Rust formatting, all-workspace tests, strict all-target Clippy, Debian packaging and six-second release-executable liveness pass.
+
+| Output | Project-tree correction | Editor-tab correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 65.68 kB | 68.60 kB | +2.92 kB / +4.45% |
+| CSS gzip | 12.54 kB | 12.97 kB | +0.43 kB / +3.43% |
+| Main JavaScript | 616.47 kB | 621.13 kB | +4.66 kB / +0.76% |
+| Main JavaScript gzip | 178.16 kB | 179.10 kB | +0.94 kB / +0.53% |
+| Main JavaScript source map | 2,301.70 kB | 2,313.46 kB | +11.76 kB / +0.51% |
+| Linux release executable | 18,255,888 bytes | 18,258,960 bytes | +3,072 bytes / +0.02% |
+| Debian package | 6,216,932 bytes | 6,219,400 bytes | +2,468 bytes / +0.04% |
+
+CSS and frontend JavaScript size are **regressed**, primarily from the bounded dropdown presentation. Native executable and Debian package movement are **no material change**. No watcher, index, polling service, or background task was added. No matched process-tree PSS/RSS series or forced browser-heap series was run, so memory impact remains **inconclusive**.
+
+The refreshed local Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,219,400 bytes, with SHA-256 `db6468d67aa8ffa8cdabdb810e15d29c0bae7367de8daf6cfe4095bd298d86ee`. Package inspection confirms version 0.1.0, `amd64`, the native executable, desktop entry, and maintained icon set. It is a local unsigned acceptance artifact, not a release candidate, and no remote push is made.
