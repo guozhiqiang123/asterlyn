@@ -45,3 +45,31 @@ The rebuilt Linux release executable is 16,185,584 bytes, 17,544 bytes or 0.11% 
 The settings route currently supports one dark English interface. It is not yet a localization catalog, theme engine, formatter registry, or complete keymap editor. Tab width is a visual CodeMirror indentation unit and does not rewrite existing content. Semantic file colors describe the current Git snapshot and can be stale until refresh. Ignored directories are intentionally opaque collapsed entries, and both authorized and ignored catalogs retain independent bounds. A deleted commit path that no longer exists in the current project catalog cannot be located in the tree. Project-tree disclosure and selection are session-only, while application preferences are local to the webview profile and are not synchronized.
 
 Interaction and consistency are **improved**, frontend footprint is **regressed**, native size has **no material change**, and memory remains **inconclusive**. E3.2 adds the typed editor-group model, horizontal and vertical splits, group focus, and tab movement while preserving one owner for dirty buffers. A matched normalized native resource series, language-catalog packaging work, and installed Windows/macOS interaction remain larger Stage 3 checkpoint gates.
+
+## Project-tree refresh and resize correction
+
+Manual acceptance on Linux and macOS exposed three coupled problems after E3.1: the left splitter processed every pointer event with repeated range and editor-layout work, the project catalog stopped at 5,000 files, and the toolbar refresh reused repository switching and consequently cleared project-tree disclosure and selection.
+
+The correction keeps the Git-derived model and security boundary but changes their presentation lifecycle:
+
+- Pointer bursts retain only their latest value in one animation frame. Interactive resizing writes only the affected CSS property, while left-width and bottom-height changes share one pending editor-measure callback. The frame queue flushes the final pointer value before layout persistence, and keyboard resizing keeps the same range and commit semantics.
+- Navigation and exact file authorization now admit up to 100,000 tracked or non-ignored untracked files. Search and replacement remain separately limited to 5,000 scan candidates, 64 MiB, and 500 matches. A generated repository with 5,001 files distributed across 51 directories returned every file without truncation through the production Git catalog; this specifically guards against restoring the old shared 5,000 limit.
+- The complete tree remains an in-memory projection, but closed directories no longer mount their descendants. Repeated renders reuse one cached projection for the exact file/change/ignored arrays. A same-root refresh leaves the previous tree visible during the asynchronous catalog request and reconciles expanded directories and selection by exact path and kind. It preserves the scroll container offset; only missing paths are removed. A different repository still initializes a new disclosure set.
+
+The frontend suite passes 117 tests. Its focused splitter test reduces three queued pointer values to one frame callback carrying only the last value, then proves commit-time flush. Project-tree tests retain valid expansion and selection while pruning removed identities. The desktop suite adds a real 5,001-file Git-catalog test and now passes 14 tests across the library and executable targets; all 28 Git-core and 23 workspace tests also pass. Rust formatting, strict all-target Clippy, TypeScript checking, production build, Debian packaging, and a six-second release-executable liveness smoke check pass.
+
+In the deterministic browser workbench, closing `crates` reduced mounted project rows from 17 to 15, reopening it restored the descendants, and refreshing while it was selected and closed retained both `aria-selected="true"` and the closed state. Keyboard resizing changed the visible left pane from 220 to 236 pixels, and the page reported no warning or error. A single standalone 100,000-path tree construction took 276.36 milliseconds and ended at 82.69 MiB JavaScript heap on this machine; that is an upper-bound capacity observation including the generated input array, not a representative interaction latency or process-memory benchmark. The cache prevents that projection from being rebuilt repeatedly for unchanged arrays, but repositories near the ceiling still require later worker/progressive-loading evaluation.
+
+| Output | Previous task-end package | Correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 65.68 kB | 65.68 kB | 0.00 kB / 0.00% |
+| CSS gzip | 12.54 kB | 12.54 kB | 0.00 kB / 0.00% |
+| Main JavaScript | 612.43 kB | 616.47 kB | +4.04 kB / +0.66% |
+| Main JavaScript gzip | 177.18 kB | 178.16 kB | +0.98 kB / +0.55% |
+| Main JavaScript source map | 2,289.68 kB | 2,301.70 kB | +12.02 kB / +0.52% |
+| Linux release executable | 18,253,992 bytes | 18,255,888 bytes | +1,896 bytes / +0.01% |
+| Debian package | 6,214,414 bytes | 6,216,932 bytes | +2,518 bytes / +0.04% |
+
+All size movements are **no material change**. No watcher, persistent index, polling service, or background worker was added. No matched native process-tree PSS/RSS series or forced browser-heap series was run, so memory impact remains **inconclusive** and this correction makes no memory-reduction claim. Ignored directories remain intentionally opaque collapsed entries, and the 100,000-file navigation ceiling is still a disclosed bound rather than a claim of an unlimited filesystem browser.
+
+The refreshed local Debian acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,216,932 bytes, with SHA-256 `c3defe2cec6b1f4838d9631b888100cc0d3a7081519aa18930861ebaf3490a4b`. Package inspection confirms version 0.1.0, `amd64`, the desktop entry, native executable, and the maintained icon-size set. This is a local unsigned acceptance artifact, not a release candidate, and no remote push is made.

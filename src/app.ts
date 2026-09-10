@@ -118,7 +118,9 @@ import {
   descendantProjectDirectories,
   findProjectTreeNode,
   projectTreeEntries,
+  reconcileProjectTreeState,
   type ProjectTreeNode,
+  type ProjectTreeSelection,
 } from "./workbench/project-tree";
 import {
   clampCommandSurfaceSelection,
@@ -206,11 +208,6 @@ const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
 
 type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
 type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "languages";
-
-interface ProjectTreeSelection {
-  path: string;
-  kind: "directory" | "file";
-}
 
 interface AppState {
   snapshot: RepositorySnapshot | null;
@@ -414,6 +411,13 @@ export class AsterlynApp {
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private workspaceResizeObserver: ResizeObserver | null = null;
+  private editorMeasureFrame: number | null = null;
+  private projectTreeCache: {
+    files: ProjectFile[];
+    changes: FileChange[];
+    ignoredEntries: ProjectIgnoredEntry[];
+    nodes: ProjectTreeNode[];
+  } | null = null;
   private activeUntrackedScan: {
     id: string;
     generation: number;
@@ -1212,7 +1216,81 @@ export class AsterlynApp {
   private async refresh(): Promise<void> {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.loading) return;
-    await this.openRepository(snapshot.root);
+    this.cancelActiveWorkspaceSearch();
+    this.cancelActiveWorkspaceReplacement();
+    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.state.workspaceReplacement = createWorkspaceReplacementState();
+    this.state.replacementDialog = null;
+    this.state.replacementRecoveryBusy = null;
+    this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
+    this.commandSurfaceReturnFocus = null;
+    this.renderCommandSurface();
+    const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    void this.cancelActiveRemoteOperation();
+    let pendingRoot: string | null = null;
+    let historyRequest: RefHistoryRequest | null = null;
+    this.clearError();
+    this.setLoading(true, "Refreshing repository…");
+    try {
+      const next = await bridge.openRepository(snapshot.root);
+      if (generation !== this.requestGeneration) return;
+      this.state.snapshot = next;
+      this.state.selectedRemote = preferredRemote(next, this.state.selectedRemote);
+      this.reconcileHistoryScope(next);
+      this.chooseValidChangeSelection();
+      this.reconcileWorkingDocument(next);
+
+      const query = this.activeHistoryQuery();
+      if (isSnapshotHistoryQuery(query)) {
+        this.installSnapshotHistory(next, false, true);
+      } else {
+        const pending = beginHistoryQuery(this.state.history, next.root, query);
+        this.state.history = pending.state;
+        historyRequest = pending.request;
+        this.state.selectedCommit = null;
+        this.clearCommitInspection();
+        this.resetHistoryPaging();
+      }
+
+      this.renderWorkspace();
+      if (historyRequest) void this.loadHistory(historyRequest);
+      else this.loadVisibleCommitDetails();
+      if (this.activeDocument().kind === "working-diff") {
+        void this.loadSelectedDiff();
+      }
+      void this.loadProjectFiles(next.root, generation);
+      pendingRoot = next.root;
+    } catch (error) {
+      if (generation !== this.requestGeneration) return;
+      this.showError(error);
+    } finally {
+      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+    }
+    if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
+    }
+  }
+
+  private reconcileHistoryScope(snapshot: RepositorySnapshot): void {
+    const refKeys = new Set(snapshot.branches.map((branch) => branchKey(branch)));
+    this.state.historyRefs = new Map(
+      Array.from(this.state.historyRefs).filter(([key]) => refKeys.has(key)),
+    );
+    if (this.state.selectedBranch && !refKeys.has(this.state.selectedBranch)) {
+      this.state.selectedBranch = null;
+      this.state.gitDetail = "commit";
+    }
+    const repositoryIds = new Set(snapshot.repositoryRoots.map((root) => root.id));
+    this.state.historyRepositoryIds = new Set(
+      Array.from(this.state.historyRepositoryIds).filter((id) => repositoryIds.has(id)),
+    );
+    this.state.historyPaths = new Map(
+      Array.from(this.state.historyPaths).filter(([, path]) =>
+        repositoryIds.has(path.repositoryId),
+      ),
+    );
+    this.closeHistoryDialog();
   }
 
   private openCommandSurface(mode: NavigationMode): void {
@@ -2554,7 +2632,23 @@ export class AsterlynApp {
       dimension,
       value,
     });
-    this.applyWorkbenchLayout(false);
+    const property = {
+      leftWidth: "--left-tool-width",
+      bottomHeight: "--bottom-tool-height",
+      branchTreeWidth: "--branch-tree-width",
+      branchDetailsWidth: "--branch-details-width",
+      commitSummaryHeight: "--commit-summary-height",
+      diffBeforePercent: null,
+    }[dimension];
+    if (property) {
+      this.query("#workbench").style.setProperty(
+        property,
+        `${this.state.layout[dimension]}px`,
+      );
+    }
+    if (dimension === "leftWidth" || dimension === "bottomHeight") {
+      this.scheduleEditorMeasure();
+    }
   }
 
   private persistWorkbenchLayout(): void {
@@ -2593,7 +2687,13 @@ export class AsterlynApp {
     this.query("#bottom-tool").toggleAttribute("hidden", !bottomOpen);
     this.query("#bottom-splitter").toggleAttribute("hidden", !bottomOpen);
     if (persist) this.persistWorkbenchLayout();
-    window.requestAnimationFrame(() => {
+    this.scheduleEditorMeasure();
+  }
+
+  private scheduleEditorMeasure(): void {
+    if (this.editorMeasureFrame !== null) return;
+    this.editorMeasureFrame = window.requestAnimationFrame(() => {
+      this.editorMeasureFrame = null;
       this.diffEditor.requestMeasure();
       this.textEditor.requestMeasure();
     });
@@ -2628,6 +2728,7 @@ export class AsterlynApp {
     const body = this.query("#navigator-body");
 
     if (this.state.layout.leftTool === "changes") {
+      body.dataset.navigatorView = "changes";
       eyebrow.textContent = "Version control";
       title.textContent = "Changes";
       const filtered = this.filteredChanges(snapshot);
@@ -2647,9 +2748,18 @@ export class AsterlynApp {
     const visibleEntries = this.state.repositoryFiles.length + this.state.ignoredProjectEntries.length;
     count.textContent = visibleEntries.toString();
     count.title = `${this.state.repositoryFiles.length} editable files and ${this.state.ignoredProjectEntries.length} ignored entries`;
-    actions.innerHTML = this.renderProjectToolbar(snapshot);
-    body.innerHTML = this.renderProjectNavigation(snapshot);
+    const preserveScroll = body.dataset.navigatorView === "files";
+    const scrollTop = body.scrollTop;
+    const scrollLeft = body.scrollLeft;
+    const tree = this.projectTree(snapshot);
+    body.dataset.navigatorView = "files";
+    actions.innerHTML = this.renderProjectToolbar(snapshot, tree);
+    body.innerHTML = this.renderProjectNavigation(tree);
     this.bindProjectEvents();
+    if (preserveScroll) {
+      body.scrollTop = scrollTop;
+      body.scrollLeft = scrollLeft;
+    }
   }
 
   private renderBottomTool(): void {
@@ -2693,12 +2803,21 @@ export class AsterlynApp {
       this.state.ignoredProjectEntries = result.ignoredEntries;
       this.state.projectFilesTruncated = result.truncated;
       this.state.projectFilesLoading = false;
+      const tree = this.projectTree(this.state.snapshot);
       if (this.state.projectTreeRoot !== result.root) {
         this.state.projectTreeRoot = result.root;
         this.state.projectTreeSelection = null;
         this.state.expandedProjectDirectories = defaultExpandedProjectDirectories(
-          this.projectTree(this.state.snapshot),
+          tree,
         );
+      } else {
+        const reconciled = reconcileProjectTreeState(
+          tree,
+          this.state.expandedProjectDirectories,
+          this.state.projectTreeSelection,
+        );
+        this.state.expandedProjectDirectories = reconciled.expandedDirectories;
+        this.state.projectTreeSelection = reconciled.selection;
       }
       if (this.state.layout.leftTool === "files") this.renderLeftTool();
       if (
@@ -2741,19 +2860,39 @@ export class AsterlynApp {
   }
 
   private projectTree(snapshot: RepositorySnapshot | null = this.state.snapshot): ProjectTreeNode[] {
-    return buildProjectTree(
+    if (!snapshot) return [];
+    const cached = this.projectTreeCache;
+    if (
+      cached &&
+      cached.files === this.state.repositoryFiles &&
+      cached.changes === snapshot.changes &&
+      cached.ignoredEntries === this.state.ignoredProjectEntries
+    ) {
+      return cached.nodes;
+    }
+    const nodes = buildProjectTree(
       projectTreeEntries(
         this.state.repositoryFiles,
-        snapshot?.changes ?? [],
+        snapshot.changes,
         this.state.ignoredProjectEntries,
       ),
     );
+    this.projectTreeCache = {
+      files: this.state.repositoryFiles,
+      changes: snapshot.changes,
+      ignoredEntries: this.state.ignoredProjectEntries,
+      nodes,
+    };
+    return nodes;
   }
 
-  private renderProjectToolbar(snapshot: RepositorySnapshot): string {
+  private renderProjectToolbar(
+    snapshot: RepositorySnapshot,
+    tree = this.projectTree(snapshot),
+  ): string {
     const activePath = this.activeProjectWorkspacePath(snapshot);
     const canLocate = Boolean(
-      activePath && findProjectTreeNode(this.projectTree(snapshot), activePath),
+      activePath && findProjectTreeNode(tree, activePath),
     );
     const canChangeSubtree = this.state.projectTreeSelection?.kind === "directory";
     return `
@@ -2762,8 +2901,7 @@ export class AsterlynApp {
       <button class="compact-icon-button" id="collapse-project-folder" type="button" aria-label="Collapse selected folder" title="Collapse selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
   }
 
-  private renderProjectNavigation(snapshot: RepositorySnapshot): string {
-    const tree = this.projectTree(snapshot);
+  private renderProjectNavigation(tree: ProjectTreeNode[]): string {
     if (tree.length === 0 && this.state.projectFilesLoading) {
       return this.loadingBlock("Loading project files…");
     }
@@ -2796,7 +2934,10 @@ export class AsterlynApp {
     const statusClass = `file-status-${node.status}`;
     if (node.kind === "directory") {
       const expanded = this.state.expandedProjectDirectories.has(node.path);
-      return `<details class="project-directory ${statusClass}" data-project-directory-container="${escapeAttribute(node.path)}" ${expanded ? "open" : ""}><summary class="project-node-row ${selected ? "selected" : ""}" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-directory="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-expanded="${expanded}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></summary><div role="group">${node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")}</div></details>`;
+      const children = expanded
+        ? node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")
+        : "";
+      return `<details class="project-directory ${statusClass}" data-project-directory-container="${escapeAttribute(node.path)}" data-project-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary class="project-node-row ${selected ? "selected" : ""}" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-directory="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-expanded="${expanded}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></summary><div role="group">${children}</div></details>`;
     }
     return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-file="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="project-file-glyph">${fileGlyph(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
   }
@@ -2824,11 +2965,22 @@ export class AsterlynApp {
         details.addEventListener("toggle", () => {
           const path = details.dataset.projectDirectoryContainer;
           if (!path) return;
+          const renderedExpanded = details.dataset.projectRenderedExpanded === "true";
           if (details.open) this.state.expandedProjectDirectories.add(path);
           else this.state.expandedProjectDirectories.delete(path);
           details
             .querySelector<HTMLElement>(":scope > summary")
             ?.setAttribute("aria-expanded", String(details.open));
+          if (details.open !== renderedExpanded) {
+            this.renderLeftTool();
+            queueMicrotask(() => {
+              Array.from(
+                this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
+              )
+                .find((row) => row.dataset.projectDirectory === path)
+                ?.focus();
+            });
+          }
         });
       });
     this.root
@@ -5627,11 +5779,12 @@ export class AsterlynApp {
   private installSnapshotHistory(
     snapshot: RepositorySnapshot,
     preferTip = false,
+    preserveFilters = false,
   ): void {
     const previousSource = this.state.history.source;
     const previousRoot = this.state.history.root;
     const previousSelected = this.state.selectedCommit;
-    this.resetHistoryFilters();
+    if (!preserveFilters) this.resetHistoryFilters();
     this.state.history = installSnapshotHistory(
       this.state.history,
       snapshot.root,

@@ -16,6 +16,16 @@ export interface ProjectTreeNode extends ProjectTreeEntry {
   children: ProjectTreeNode[];
 }
 
+export interface ProjectTreeSelection {
+  path: string;
+  kind: "directory" | "file";
+}
+
+export interface ReconciledProjectTreeState {
+  expandedDirectories: Set<string>;
+  selection: ProjectTreeSelection | null;
+}
+
 const STATUS_PRIORITY: Record<ChangeKind, number> = {
   unmodified: 0,
   ignored: 1,
@@ -159,6 +169,31 @@ export function findProjectTreeNode(
     if (found) return found;
   }
   return null;
+}
+
+export function reconcileProjectTreeState(
+  nodes: ProjectTreeNode[],
+  expandedDirectories: ReadonlySet<string>,
+  selection: ProjectTreeSelection | null,
+): ReconciledProjectTreeState {
+  const availableDirectories = new Set<string>();
+  let selectionAvailable = selection === null;
+  visitProjectTree(nodes, (node) => {
+    if (node.kind === "directory") availableDirectories.add(node.path);
+    if (
+      selection &&
+      node.path === selection.path &&
+      node.kind === selection.kind
+    ) {
+      selectionAvailable = true;
+    }
+  });
+  return {
+    expandedDirectories: new Set(
+      Array.from(expandedDirectories).filter((path) => availableDirectories.has(path)),
+    ),
+    selection: selectionAvailable ? selection : null,
+  };
 }
 
 function mergeEntry(

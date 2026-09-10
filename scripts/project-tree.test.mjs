@@ -8,6 +8,7 @@ import {
   descendantProjectDirectories,
   findProjectTreeNode,
   projectTreeEntries,
+  reconcileProjectTreeState,
 } from "../src/workbench/project-tree.ts";
 
 test("project tree groups paths and sorts directories before files", () => {
@@ -86,4 +87,29 @@ test("project tree helpers reveal ancestors and expand or collapse a selected su
   const source = findProjectTreeNode(tree, "src");
   assert.ok(source);
   assert.deepEqual(descendantProjectDirectories(source), ["src", "src/app", "src/shared"]);
+});
+
+test("project tree refresh retains valid disclosure and selection identities", () => {
+  const tree = buildProjectTree([
+    "docs/guide.md",
+    "src/app/main.ts",
+    "src/new/value.ts",
+  ]);
+  const reconciled = reconcileProjectTreeState(
+    tree,
+    new Set(["src", "src/app", "removed", "removed/nested"]),
+    { path: "src/app/main.ts", kind: "file" },
+  );
+  assert.deepEqual([...reconciled.expandedDirectories], ["src", "src/app"]);
+  assert.deepEqual(reconciled.selection, {
+    path: "src/app/main.ts",
+    kind: "file",
+  });
+
+  const removed = reconcileProjectTreeState(
+    tree,
+    reconciled.expandedDirectories,
+    { path: "src/old.ts", kind: "file" },
+  );
+  assert.equal(removed.selection, null);
 });

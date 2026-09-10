@@ -16,6 +16,52 @@ export interface SplitterOptions {
   onReset?(): void;
 }
 
+export interface FrameScheduler {
+  request(callback: () => void): number;
+  cancel(handle: number): void;
+}
+
+export interface LatestFrameQueue<T> {
+  enqueue(value: T): void;
+  flush(): void;
+  cancel(): void;
+}
+
+export function createLatestFrameQueue<T>(
+  apply: (value: T) => void,
+  scheduler: FrameScheduler = {
+    request: (callback) => window.requestAnimationFrame(callback),
+    cancel: (handle) => window.cancelAnimationFrame(handle),
+  },
+): LatestFrameQueue<T> {
+  let frame: number | null = null;
+  let pending: T | undefined;
+
+  const applyPending = () => {
+    frame = null;
+    if (pending === undefined) return;
+    const value = pending;
+    pending = undefined;
+    apply(value);
+  };
+
+  return {
+    enqueue(value) {
+      pending = value;
+      if (frame === null) frame = scheduler.request(applyPending);
+    },
+    flush() {
+      if (frame !== null) scheduler.cancel(frame);
+      applyPending();
+    },
+    cancel() {
+      if (frame !== null) scheduler.cancel(frame);
+      frame = null;
+      pending = undefined;
+    },
+  };
+}
+
 export function attachSplitter(
   element: HTMLElement,
   options: SplitterOptions,
@@ -47,6 +93,8 @@ export function attachSplitter(
     activePointerDispose = null;
     const startCoordinate = pointerCoordinate(event, options.orientation);
     const startValue = options.getValue();
+    const dragRange = normalizeRange(options.getRange());
+    const updates = createLatestFrameQueue(update);
     element.classList.add("dragging");
     element.setPointerCapture(event.pointerId);
 
@@ -54,17 +102,17 @@ export function attachSplitter(
       if (moveEvent.pointerId !== event.pointerId) return;
       const delta =
         pointerCoordinate(moveEvent, options.orientation) - startCoordinate;
-      update(
-        resizeValue(startValue, delta, direction, options.getRange()),
-      );
+      updates.enqueue(resizeValue(startValue, delta, direction, dragRange));
     };
     const finish = (finishEvent: PointerEvent) => {
       if (finishEvent.pointerId !== event.pointerId) return;
+      updates.flush();
       activePointerDispose?.();
       activePointerDispose = null;
       options.onCommit?.();
     };
     activePointerDispose = () => {
+      updates.cancel();
       element.classList.remove("dragging");
       if (element.hasPointerCapture(event.pointerId)) {
         element.releasePointerCapture(event.pointerId);

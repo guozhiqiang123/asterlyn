@@ -113,6 +113,14 @@ Manual acceptance then exposed a shell permission regression that blocked both t
 
 The platform-chrome follow-up replaces the one-style-fits-all undecorated window with one shared native-window factory. macOS now retains its operating-system title-bar decorations, left-side traffic lights, and overlay integration while hiding Asterlyn's duplicate custom controls; Windows and Linux retain the existing compact right-side custom controls. Both the initial and additional project windows use this policy. Linux release-window maximize and close paths passed, while drag/minimize automation and installed macOS visual interaction remain explicit manual-acceptance items. This changes shell presentation only and leaves the dirty-buffer gate and per-window workspace ownership intact.
 
+### E3.1 project-tree refresh and resize correction — 2026-09-10
+
+The Files tool now separates its 100,000-file navigation and exact-authorization catalog from the existing 5,000-candidate workspace-search budget. Closed directories retain their model nodes but mount no descendant rows until opened, and the tree projection is cached for one exact snapshot. Splitter pointer bursts apply only the latest value in each animation frame, write only the affected layout property, and request editor measurement only when the editor viewport changes.
+
+Refreshing the same repository no longer invokes the repository-switch reset path. The previous catalog remains visible while the replacement loads; exact path-and-kind reconciliation retains valid selected and expanded nodes plus the tree scroll offset, while removed identities are discarded. Repository switching still resets project-tree state. The same correction preserves valid history filters and editor tabs while maintaining generation checks, search/replacement invalidation, and fresh Git truth.
+
+The updated acceptance evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Interaction and catalog coverage are **improved**; frontend, native, and package-size movements are **no material change**; memory remains **inconclusive** because no matched process-tree resource series was run. The task ends with one fresh local Debian package and no remote push.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

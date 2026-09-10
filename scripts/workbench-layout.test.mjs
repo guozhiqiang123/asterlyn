@@ -13,7 +13,10 @@ import {
   editorDocumentContentKey,
   editorDocumentKey,
 } from "../src/workbench/editor-document.ts";
-import { resizeValue } from "../src/workbench/splitter.ts";
+import {
+  createLatestFrameQueue,
+  resizeValue,
+} from "../src/workbench/splitter.ts";
 
 test("left and bottom tools toggle independently", () => {
   const filesClosed = reduceWorkbenchLayout(WORKBENCH_LAYOUT_DEFAULTS, {
@@ -91,6 +94,39 @@ test("splitter values honor direction and range", () => {
   assert.equal(resizeValue(300, 80, -1, range), 220);
   assert.equal(resizeValue(300, 800, 1, range), 500);
   assert.equal(resizeValue(300, 800, -1, range), 200);
+});
+
+test("splitter pointer bursts apply only the latest value per animation frame", () => {
+  const callbacks = new Map();
+  const cancelled = [];
+  let nextHandle = 0;
+  const applied = [];
+  const queue = createLatestFrameQueue((value) => applied.push(value), {
+    request(callback) {
+      const handle = ++nextHandle;
+      callbacks.set(handle, callback);
+      return handle;
+    },
+    cancel(handle) {
+      cancelled.push(handle);
+      callbacks.delete(handle);
+    },
+  });
+
+  queue.enqueue(301);
+  queue.enqueue(317);
+  queue.enqueue(342);
+  assert.equal(callbacks.size, 1);
+  const firstFrame = callbacks.get(1);
+  callbacks.delete(1);
+  firstFrame();
+  assert.deepEqual(applied, [342]);
+
+  queue.enqueue(355);
+  queue.flush();
+  assert.deepEqual(applied, [342, 355]);
+  assert.deepEqual(cancelled, [2]);
+  assert.equal(callbacks.size, 0);
 });
 
 test("same working Diff identity remounts for each content revision", () => {

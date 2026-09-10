@@ -20,7 +20,8 @@ use tauri::TitleBarStyle;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const COMMIT_LIMIT: usize = 150;
-const PROJECT_FILE_LIMIT: usize = 5_000;
+const PROJECT_FILE_LIMIT: usize = 100_000;
+const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 5_000;
 const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
 const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
 const PROJECT_WINDOW_MIN_WIDTH: f64 = 920.0;
@@ -31,7 +32,7 @@ const CANCELLED_SEARCH_RETENTION: usize = 128;
 const REPLACEMENT_PLAN_RETENTION: usize = 16;
 
 pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
-    max_candidates: PROJECT_FILE_LIMIT,
+    max_candidates: WORKSPACE_SEARCH_CANDIDATE_LIMIT,
     max_total_bytes: 64 * 1024 * 1024,
     max_matches: 500,
     max_preview_utf16: 320,
@@ -1644,6 +1645,32 @@ mod tests {
             arguments,
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[test]
+    fn project_navigation_catalog_exceeds_the_search_scan_budget() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        git(directory.path(), &["init", "-b", "main"]);
+        for module in 0..51 {
+            let module_path = directory.path().join(format!("module-{module:02}"));
+            fs::create_dir(&module_path).expect("module directory");
+            let file_count = if module == 50 { 1 } else { 100 };
+            for file in 0..file_count {
+                fs::write(
+                    module_path.join(format!("source-{file:03}.txt")),
+                    b"fixture\n",
+                )
+                .expect("project file");
+            }
+        }
+
+        let catalog = GitRepository::open(directory.path())
+            .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+            .expect("navigation catalog");
+        assert_eq!(catalog.files.len(), 5_001);
+        assert!(!catalog.truncated);
+        assert_eq!(WORKSPACE_SEARCH_LIMITS.max_candidates, 5_000);
+        assert!(catalog.files.len() > WORKSPACE_SEARCH_LIMITS.max_candidates);
     }
 
     #[test]

@@ -27,9 +27,9 @@ The bottom Branches tool has three independently resizable columns: branch/ref n
 
 Persist only a versioned layout preference document containing dock visibility and validated dimensions. Repository identity, selections, pending operations, async generations, and editor widgets are transient session state. Unknown or malformed persisted versions reset to safe defaults, and all dimensions are clamped against both component minima and the current viewport.
 
-U6 keeps the activity rail fixed-width. Every content boundary is resizable by pointer and keyboard: left dock/editor, editor/bottom dock, the two internal Branches dividers, and the side-by-side Diff divider. Resizing changes layout state only and schedules editor measurement; it never refreshes repository data.
+U6 keeps the activity rail fixed-width. Every content boundary is resizable by pointer and keyboard: left dock/editor, editor/bottom dock, the two internal Branches dividers, and the side-by-side Diff divider. Pointer-move bursts retain only the latest value for each animation frame. That value updates the affected CSS layout property directly; only dimensions that change the editor viewport request one coalesced editor measurement. Resizing changes layout state only and never refreshes repository data.
 
-The initial Files tree is a read-only list of tracked and non-ignored untracked repository paths. It does not introduce editing, file mutation, watching, save, encoding, or recovery semantics before Stage 3. The initial side-by-side Diff remains a projection of Asterlyn's bounded canonical patch. It shows hunk-derived source line numbers, aligned spacer rows, explicit omitted ranges, and conservative intraline highlights, but never claims to contain the complete source file.
+The initial Files tree is a read-only list of tracked and non-ignored untracked repository paths. Navigation and exact file authorization accept up to 100,000 files; workspace search and replacement retain a separate 5,000-candidate scan budget. The complete in-memory hierarchy is projected lazily so a closed directory does not mount its descendants. A same-root refresh keeps the prior tree visible, merges the next catalog by stable path identity, retains valid disclosure, selection, and scroll state, and removes state for paths that no longer exist. A repository switch still resets this repository-owned presentation state. The tree does not introduce file mutation, watching, save, encoding, or recovery semantics before Stage 3. The initial side-by-side Diff remains a projection of Asterlyn's bounded canonical patch. It shows hunk-derived source line numbers, aligned spacer rows, explicit omitted ranges, and conservative intraline highlights, but never claims to contain the complete source file.
 
 ## State and ownership invariants
 
@@ -41,6 +41,7 @@ The initial Files tree is a read-only list of tracked and non-ignored untracked 
 6. Git mutations continue to refresh canonical repository state before selections are reconciled.
 7. Views communicate through typed actions and current state, not direct cross-zone DOM calls or callbacks that capture stale selections.
 8. Each mounted view owns disposal of its listeners, observers, subscriptions, and cancellation handles.
+9. A same-root refresh reconciles project-tree presentation by exact path and kind; it never interprets row position as identity.
 
 ## Migration sequence
 
