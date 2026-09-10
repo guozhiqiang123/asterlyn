@@ -48,6 +48,11 @@ import {
 import { attachSplitter } from "./workbench/splitter";
 import { scrollTabStrip } from "./workbench/tab-strip";
 import {
+  showCustomWindowControls,
+  windowChromeClass,
+  type WindowChromeMode,
+} from "./workbench/window-chrome";
+import {
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
   EDITOR_TAB_SIZES,
@@ -405,6 +410,7 @@ export class AsterlynApp {
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
+  private windowChromeMode: WindowChromeMode = "custom-right";
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private workspaceResizeObserver: ResizeObserver | null = null;
@@ -417,6 +423,7 @@ export class AsterlynApp {
   constructor(private readonly root: HTMLElement) {}
 
   async start(): Promise<void> {
+    this.windowChromeMode = await bridge.windowChromeMode();
     this.renderShell();
     this.applyAppPreferences();
     this.bindShellEvents();
@@ -442,7 +449,7 @@ export class AsterlynApp {
 
   private renderShell(): void {
     this.root.innerHTML = `
-      <main class="app-shell">
+      <main class="app-shell ${windowChromeClass(this.windowChromeMode)}">
         <header class="topbar" data-tauri-drag-region>
           <button class="repository-switcher" id="repository-switcher" type="button" aria-label="Open repository">
             ${icon("folder", 20)}
@@ -469,7 +476,7 @@ export class AsterlynApp {
             <button class="icon-button" id="settings-button" type="button" aria-label="Open settings" title="Settings" aria-pressed="false">
               ${icon("settings", 20)}
             </button>
-            <div class="window-controls ${windowControls.available ? "" : "hidden"}" role="group" aria-label="Window controls">
+            <div class="window-controls ${showCustomWindowControls(this.windowChromeMode, windowControls.available) ? "" : "hidden"}" role="group" aria-label="Window controls">
               <button class="window-control-button" id="window-minimize" type="button" aria-label="Minimize window" title="Minimize">
                 ${icon("minimize", 16)}
               </button>

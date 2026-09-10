@@ -111,6 +111,8 @@ Desktop icons are regenerated from one full-canvas source and the repository ret
 
 Manual acceptance then exposed a shell permission regression that blocked both the custom close control and operating-system close requests. The correction grants the destroy operation to project windows and uses it only after the existing dirty-buffer save-or-cancel gate. Two focused tests, a real pointer-close run, a separate `Alt+F4` run, and the refreshed Debian package are recorded in the same evidence page. Close behavior is **improved** and the correction's executable-size movement is **no material change**.
 
+The platform-chrome follow-up replaces the one-style-fits-all undecorated window with one shared native-window factory. macOS now retains its operating-system title-bar decorations, left-side traffic lights, and overlay integration while hiding Asterlyn's duplicate custom controls; Windows and Linux retain the existing compact right-side custom controls. Both the initial and additional project windows use this policy. Linux release-window maximize and close paths passed, while drag/minimize automation and installed macOS visual interaction remain explicit manual-acceptance items. This changes shell presentation only and leaves the dirty-buffer gate and per-window workspace ownership intact.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

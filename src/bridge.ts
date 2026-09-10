@@ -34,6 +34,10 @@ import type {
   WorkspaceTextSearchReport,
   WorkspaceReplacementPreview,
 } from "./models";
+import {
+  parseWindowChromeMode,
+  type WindowChromeMode,
+} from "./workbench/window-chrome";
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 let browserSnapshot = structuredClone(demoSnapshot);
@@ -77,6 +81,11 @@ export type DirectoryChoice =
 
 export const bridge = {
   isDemo: !isTauri,
+
+  async windowChromeMode(): Promise<WindowChromeMode> {
+    if (!isTauri) return "custom-right";
+    return parseWindowChromeMode(await invoke<unknown>("window_chrome_mode"));
+  },
 
   async initialRepository(): Promise<string | null> {
     if (!isTauri) return null;

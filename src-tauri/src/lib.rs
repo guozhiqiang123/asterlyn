@@ -15,10 +15,16 @@ use asterlyn_workspace::{
     SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions,
     SearchSkipReason, TextFileSnapshot, Workspace, WorkspaceError,
 };
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const COMMIT_LIMIT: usize = 150;
 const PROJECT_FILE_LIMIT: usize = 5_000;
+const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
+const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
+const PROJECT_WINDOW_MIN_WIDTH: f64 = 920.0;
+const PROJECT_WINDOW_MIN_HEIGHT: f64 = 600.0;
 const CANCELLED_SCAN_RETENTION: usize = 256;
 const CANCELLED_REMOTE_RETENTION: usize = 128;
 const CANCELLED_SEARCH_RETENTION: usize = 128;
@@ -574,6 +580,42 @@ fn initial_repository(
         .map(|argument| argument.to_string_lossy().into_owned()))
 }
 
+fn window_chrome_mode_for(is_macos: bool) -> &'static str {
+    if is_macos {
+        "macos-native"
+    } else {
+        "custom-right"
+    }
+}
+
+#[tauri::command]
+fn window_chrome_mode() -> &'static str {
+    window_chrome_mode_for(cfg!(target_os = "macos"))
+}
+
+fn build_project_window(
+    app: &tauri::AppHandle,
+    label: impl Into<String>,
+    title: impl Into<String>,
+) -> tauri::Result<tauri::WebviewWindow> {
+    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(PROJECT_WINDOW_WIDTH, PROJECT_WINDOW_HEIGHT)
+        .min_inner_size(PROJECT_WINDOW_MIN_WIDTH, PROJECT_WINDOW_MIN_HEIGHT)
+        .center();
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .decorations(true)
+        .title_bar_style(TitleBarStyle::Overlay)
+        .hidden_title(true);
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.decorations(false);
+
+    builder.build()
+}
+
 #[tauri::command]
 async fn open_repository(
     path: String,
@@ -605,14 +647,7 @@ fn open_repository_window(
         .and_then(|name| name.to_str())
         .map(|name| format!("Asterlyn — {name}"))
         .unwrap_or_else(|| "Asterlyn".to_string());
-    let result =
-        WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App("index.html".into()))
-            .title(title)
-            .inner_size(1320.0, 820.0)
-            .min_inner_size(920.0, 600.0)
-            .decorations(false)
-            .center()
-            .build();
+    let result = build_project_window(&app, label.clone(), title);
     if let Err(error) = result {
         pending.remove(&label);
         return Err(GitError::Io {
@@ -1533,6 +1568,10 @@ pub fn run() {
         .manage(WorkspaceWriteRegistry::default())
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
+        .setup(|app| {
+            build_project_window(app.handle(), "main", "Asterlyn")?;
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::Destroyed) {
                 window.state::<ScanRegistry>().remove_window(window.label());
@@ -1552,6 +1591,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             initial_repository,
+            window_chrome_mode,
             open_repository,
             open_repository_window,
             read_history_page,
@@ -1952,6 +1992,12 @@ mod tests {
             Some("/repo/first".to_string())
         );
         assert_eq!(pending.take(&first).expect("path consumed"), None);
+    }
+
+    #[test]
+    fn window_chrome_mode_matches_native_control_ownership() {
+        assert_eq!(window_chrome_mode_for(true), "macos-native");
+        assert_eq!(window_chrome_mode_for(false), "custom-right");
     }
 
     #[test]

@@ -89,6 +89,10 @@ textarea:focus-visible {
   user-select: none;
 }
 
+.platform-macos-native .topbar {
+  padding-left: 76px;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
