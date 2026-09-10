@@ -25,6 +25,7 @@ import {
   type ExactTextContent,
   type TextChange,
 } from "./workbench/text-content";
+import type { AppPreferences } from "./workbench/preferences";
 
 export class TextEditor {
   private view: EditorView | null = null;
@@ -32,6 +33,7 @@ export class TextEditor {
   private readonly readOnly = new Compartment();
   private readonly editable = new Compartment();
   private readonly language = new Compartment();
+  private readonly tabSize = new Compartment();
   private readonly languageLoader = new EditorLanguageLoader();
   private readOnlyValue = false;
 
@@ -39,6 +41,7 @@ export class TextEditor {
     parent: HTMLElement,
     content: string,
     path: string,
+    preferences: AppPreferences,
     onChange: () => void,
   ): void {
     this.destroy();
@@ -48,7 +51,7 @@ export class TextEditor {
       state: EditorState.create({
         doc: this.exactContent.text,
         extensions: [
-          EditorState.tabSize.of(4),
+          this.tabSize.of(EditorState.tabSize.of(preferences.editorTabSize)),
           this.readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
           this.editable.of(EditorView.editable.of(!this.readOnlyValue)),
           this.language.of([]),
@@ -79,6 +82,7 @@ export class TextEditor {
       }),
     });
     const mountedView = this.view;
+    applyEditorPreferences(mountedView, preferences);
     mountedView.dom.dataset.language = "Plain Text";
     mountedView.dom.dataset.languageStatus = "loading";
     void this.languageLoader.load(path).then((result) => {
@@ -142,10 +146,31 @@ export class TextEditor {
     });
   }
 
+  setPreferences(preferences: AppPreferences): void {
+    if (!this.view) return;
+    applyEditorPreferences(this.view, preferences);
+    this.view.dispatch({
+      effects: this.tabSize.reconfigure(
+        EditorState.tabSize.of(preferences.editorTabSize),
+      ),
+    });
+  }
+
   destroy(): void {
     this.languageLoader.cancel();
     this.view?.destroy();
     this.view = null;
     this.exactContent = null;
   }
+}
+
+function applyEditorPreferences(
+  view: EditorView,
+  preferences: AppPreferences,
+): void {
+  view.dom.style.setProperty("--editor-font-size", `${preferences.editorFontSize}px`);
+  view.dom.style.setProperty(
+    "--editor-line-height",
+    preferences.editorLineHeight.toString(),
+  );
 }

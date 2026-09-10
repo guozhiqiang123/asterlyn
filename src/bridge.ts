@@ -204,6 +204,10 @@ export const bridge = {
           path,
           workspacePath: path,
         })),
+        ignoredEntries: [
+          { workspacePath: ".cache", kind: "directory" },
+          { workspacePath: "local.settings", kind: "file" },
+        ],
         repositoryRoots: structuredClone(browserSnapshot.repositoryRoots),
         truncated: false,
       };

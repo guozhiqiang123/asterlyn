@@ -70,7 +70,9 @@ fn run() -> Result<(), String> {
         let total_started = Instant::now();
         let catalog_started = Instant::now();
         let catalog = GitRepository::open(&path)
-            .and_then(|repository| repository.project_files(WORKSPACE_SEARCH_LIMITS.max_candidates))
+            .and_then(|repository| {
+                repository.authorized_project_files(WORKSPACE_SEARCH_LIMITS.max_candidates)
+            })
             .map_err(|error| error.to_string())?;
         catalog_micros.push(catalog_started.elapsed().as_micros());
         let candidates = catalog

@@ -34,6 +34,7 @@ pub struct ProjectFileList {
     pub root: String,
     pub paths: Vec<String>,
     pub files: Vec<ProjectFile>,
+    pub ignored_entries: Vec<ProjectIgnoredEntry>,
     pub repository_roots: Vec<GitRootDescriptor>,
     pub truncated: bool,
 }
@@ -44,6 +45,20 @@ pub struct ProjectFile {
     pub repository_id: String,
     pub path: String,
     pub workspace_path: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectIgnoredEntry {
+    pub workspace_path: String,
+    pub kind: ProjectEntryKind,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ProjectEntryKind {
+    File,
+    Directory,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

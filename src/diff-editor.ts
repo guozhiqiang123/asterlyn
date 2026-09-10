@@ -1,9 +1,11 @@
 import {
+  Compartment,
   EditorState,
   RangeSetBuilder,
   type Extension,
   type Range,
 } from "@codemirror/state";
+import type { LanguageSupport } from "@codemirror/language";
 import {
   Decoration,
   EditorView,
@@ -27,7 +29,15 @@ import {
 } from "./diff-presentation";
 import { attachSplitter } from "./workbench/splitter";
 import { linkScrollElements } from "./workbench/linked-scroll";
-import { asterlynEditorTheme } from "./editor-theme";
+import {
+  asterlynEditorTheme,
+  asterlynSyntaxHighlighting,
+} from "./editor-theme";
+import { EditorLanguageLoader } from "./editor-language";
+import {
+  DEFAULT_APP_PREFERENCES,
+  type AppPreferences,
+} from "./workbench/preferences";
 
 const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
   const builder = new RangeSetBuilder<Decoration>();
@@ -61,8 +71,19 @@ const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) =
 
 export class DiffEditor {
   private readonly views: EditorView[] = [];
+  private readonly languageBindings: Array<{
+    view: EditorView;
+    compartment: Compartment;
+    tabSize: Compartment;
+  }> = [];
+  private readonly languageLoader = new EditorLanguageLoader();
   private parent: HTMLElement | null = null;
   private sourceDocument = "";
+  private sourcePath = "";
+  private languageSupport: LanguageSupport | null = null;
+  private languageName = "Plain Text";
+  private languageStatus = "loading";
+  private editorPreferences: AppPreferences = { ...DEFAULT_APP_PREFERENCES };
   private presentation: DiffPresentation = {
     layout: "split",
     showWhitespace: false,
@@ -73,13 +94,18 @@ export class DiffEditor {
   mount(
     parent: HTMLElement,
     document: string,
+    path: string,
+    preferences: AppPreferences,
     presentation: DiffPresentation = this.presentation,
   ): void {
     this.destroy();
     this.parent = parent;
     this.sourceDocument = document;
+    this.sourcePath = path;
+    this.editorPreferences = { ...preferences };
     this.presentation = { ...presentation };
     this.render();
+    void this.loadLanguage(parent, path);
   }
 
   setPresentation(presentation: DiffPresentation): void {
@@ -100,6 +126,18 @@ export class DiffEditor {
 
   requestMeasure(): void {
     for (const view of this.views) view.requestMeasure();
+  }
+
+  setPreferences(preferences: AppPreferences): void {
+    this.editorPreferences = { ...preferences };
+    for (const binding of this.languageBindings) {
+      applyEditorPreferences(binding.view, preferences);
+      binding.view.dispatch({
+        effects: binding.tabSize.reconfigure(
+          EditorState.tabSize.of(preferences.editorTabSize),
+        ),
+      });
+    }
   }
 
   private render(): void {
@@ -181,15 +219,19 @@ export class DiffEditor {
     rows?: SourceDiffRow[],
     side?: "old" | "new",
   ): EditorView {
+    const language = new Compartment();
+    const tabSize = new Compartment();
     const extensions: Extension[] = [
       EditorState.readOnly.of(true),
-      EditorState.tabSize.of(4),
+      tabSize.of(EditorState.tabSize.of(this.editorPreferences.editorTabSize)),
       EditorView.editable.of(false),
       drawSelection(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
       highlightSelectionMatches(),
       asterlynEditorTheme,
+      asterlynSyntaxHighlighting,
+      language.of(this.languageSupport ?? []),
       keymap.of([
         ...searchKeymap,
         {
@@ -216,13 +258,38 @@ export class DiffEditor {
       extensions.push(highlightWhitespace(), highlightTrailingWhitespace());
     }
 
-    return new EditorView({
+    const view = new EditorView({
       parent,
       state: EditorState.create({
         doc: document,
         extensions,
       }),
     });
+    this.languageBindings.push({ view, compartment: language, tabSize });
+    applyEditorPreferences(view, this.editorPreferences);
+    this.describeLanguage(view);
+    return view;
+  }
+
+  private async loadLanguage(parent: HTMLElement, path: string): Promise<void> {
+    const result = await this.languageLoader.load(path);
+    if (!result || this.parent !== parent || this.sourcePath !== path) return;
+    this.languageSupport = result.support;
+    this.languageName = result.name;
+    this.languageStatus = result.status;
+    for (const binding of this.languageBindings) {
+      this.describeLanguage(binding.view);
+      if (result.support) {
+        binding.view.dispatch({
+          effects: binding.compartment.reconfigure(result.support),
+        });
+      }
+    }
+  }
+
+  private describeLanguage(view: EditorView): void {
+    view.dom.dataset.language = this.languageName;
+    view.dom.dataset.languageStatus = this.languageStatus;
   }
 
   private captureScroll(): { topRatio: number; left: number } {
@@ -241,14 +308,31 @@ export class DiffEditor {
     this.splitDispose = null;
     for (const view of this.views) view.destroy();
     this.views.length = 0;
+    this.languageBindings.length = 0;
   }
 
   destroy(): void {
+    this.languageLoader.cancel();
     this.destroyViews();
     this.parent?.classList.remove("split-diff");
     this.parent = null;
     this.sourceDocument = "";
+    this.sourcePath = "";
+    this.languageSupport = null;
+    this.languageName = "Plain Text";
+    this.languageStatus = "loading";
   }
+}
+
+function applyEditorPreferences(
+  view: EditorView,
+  preferences: AppPreferences,
+): void {
+  view.dom.style.setProperty("--editor-font-size", `${preferences.editorFontSize}px`);
+  view.dom.style.setProperty(
+    "--editor-line-height",
+    preferences.editorLineHeight.toString(),
+  );
 }
 
 function sourceLineDecorations(

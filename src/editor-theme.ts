@@ -98,7 +98,7 @@ export const asterlynEditorTheme = EditorView.theme(
       height: "100%",
       color: "#dfe1e5",
       backgroundColor: "#1e1f22",
-      fontSize: "12px",
+      fontSize: "var(--editor-font-size, 12px)",
     },
     ".cm-content": {
       fontFamily:
@@ -107,7 +107,10 @@ export const asterlynEditorTheme = EditorView.theme(
       caretColor: "#a8c7fa",
     },
     ".cm-line": { padding: "0 14px" },
-    ".cm-scroller": { overflow: "auto", lineHeight: "1.62" },
+    ".cm-scroller": {
+      overflow: "auto",
+      lineHeight: "var(--editor-line-height, 1.62)",
+    },
     ".cm-gutters": {
       color: "#6f737b",
       backgroundColor: "#1e1f22",
@@ -140,6 +143,10 @@ export const asterlynEditorTheme = EditorView.theme(
     ".cm-diff-removed": { backgroundColor: "#5b2d3266", color: "#f0b8bd" },
     ".cm-diff-hunk": { backgroundColor: "#233d6166", color: "#a8c7fa" },
     ".cm-diff-meta": { color: "#858a94", fontStyle: "italic" },
+    ".cm-diff-meta span, .cm-diff-hunk span": {
+      color: "inherit !important",
+      fontStyle: "inherit",
+    },
     ".cm-source-added": { backgroundColor: "#29443670" },
     ".cm-source-removed": { backgroundColor: "#5b2d3270" },
     ".cm-source-spacer": {

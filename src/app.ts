@@ -47,6 +47,16 @@ import {
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
 import {
+  EDITOR_FONT_SIZES,
+  EDITOR_LINE_HEIGHTS,
+  EDITOR_TAB_SIZES,
+  UI_FONT_SIZES,
+  loadAppPreferences,
+  saveAppPreferences,
+  updateAppPreferences,
+  type AppPreferences,
+} from "./workbench/preferences";
+import {
   beginHistoryQuery,
   completeRefHistory,
   emptyRefHistory,
@@ -96,7 +106,12 @@ import {
   type HistoryDisplayEntry,
 } from "./workbench/history-collapse";
 import {
+  ancestorProjectDirectories,
   buildProjectTree,
+  defaultExpandedProjectDirectories,
+  descendantProjectDirectories,
+  findProjectTreeNode,
+  projectTreeEntries,
   type ProjectTreeNode,
 } from "./workbench/project-tree";
 import {
@@ -169,6 +184,7 @@ import type {
   HistoryQuery,
   HistoryRef,
   ProjectFile,
+  ProjectIgnoredEntry,
   ReplacementApplyResult,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
@@ -183,17 +199,30 @@ const HISTORY_SCROLL_THRESHOLD = 72;
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
 
 type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
+type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "languages";
+
+interface ProjectTreeSelection {
+  path: string;
+  kind: "directory" | "file";
+}
 
 interface AppState {
   snapshot: RepositorySnapshot | null;
+  activePage: "workbench" | "settings";
+  settingsSection: SettingsSection;
+  preferences: AppPreferences;
   layout: WorkbenchLayout;
   editor: EditorSession;
   gitDetail: "branch" | "commit";
   projectFiles: string[];
   repositoryFiles: ProjectFile[];
+  ignoredProjectEntries: ProjectIgnoredEntry[];
   projectFilesLoading: boolean;
   projectFilesError: string | null;
   projectFilesTruncated: boolean;
+  projectTreeRoot: string | null;
+  projectTreeSelection: ProjectTreeSelection | null;
+  expandedProjectDirectories: Set<string>;
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
   workspaceSearchControls: WorkspaceSearchControls;
@@ -252,8 +281,6 @@ interface AppState {
   workingPatchLoading: boolean;
   workingPatchError: string | null;
   workingPatchVersion: number;
-  diffLayout: DiffLayout;
-  showWhitespace: boolean;
   selectedBranch: string | null;
   collapsedBranchGroups: Set<BranchSummary["kind"]>;
   newBranchName: string;
@@ -275,14 +302,21 @@ export class AsterlynApp {
   private readonly textEditor = new TextEditor();
   private readonly state: AppState = {
     snapshot: null,
+    activePage: "workbench",
+    settingsSection: "general",
+    preferences: loadAppPreferences(window.localStorage),
     layout: loadWorkbenchLayout(window.localStorage),
     editor: createEditorSession(),
     gitDetail: "commit",
     projectFiles: [],
     repositoryFiles: [],
+    ignoredProjectEntries: [],
     projectFilesLoading: false,
     projectFilesError: null,
     projectFilesTruncated: false,
+    projectTreeRoot: null,
+    projectTreeSelection: null,
+    expandedProjectDirectories: new Set(),
     commandSurface: createCommandSurfaceState(),
     workspaceSearch: createWorkspaceSearchState(),
     workspaceSearchControls: createWorkspaceSearchControls(),
@@ -341,8 +375,6 @@ export class AsterlynApp {
     workingPatchLoading: false,
     workingPatchError: null,
     workingPatchVersion: 0,
-    diffLayout: "split",
-    showWhitespace: false,
     selectedBranch: null,
     collapsedBranchGroups: new Set(),
     newBranchName: "",
@@ -385,6 +417,7 @@ export class AsterlynApp {
 
   async start(): Promise<void> {
     this.renderShell();
+    this.applyAppPreferences();
     this.bindShellEvents();
 
     if (bridge.isDemo) {
@@ -437,6 +470,9 @@ export class AsterlynApp {
             <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh repository" title="Refresh (Ctrl/Cmd+R)">
               ${icon("refresh", 17)}
             </button>
+            <button class="icon-button" id="settings-button" type="button" aria-label="Open settings" title="Settings" aria-pressed="false">
+              ${icon("settings", 17)}
+            </button>
             <div class="window-controls ${windowControls.available ? "" : "hidden"}" role="group" aria-label="Window controls">
               <button class="window-control-button" id="window-minimize" type="button" aria-label="Minimize window" title="Minimize">
                 ${icon("minimize", 15)}
@@ -468,7 +504,10 @@ export class AsterlynApp {
                     <span class="panel-eyebrow" id="navigator-eyebrow">Repository</span>
                     <h1 id="navigator-title">Files</h1>
                   </div>
-                  <span class="panel-count" id="navigator-count">0</span>
+                  <div class="navigator-header-actions">
+                    <div class="navigator-context-actions" id="navigator-actions"></div>
+                    <span class="panel-count" id="navigator-count">0</span>
+                  </div>
                 </div>
                 <div class="navigator-body" id="navigator-body">
                   ${this.loadingBlock("Waiting for a repository")}
@@ -517,6 +556,20 @@ export class AsterlynApp {
                 </aside>
               </div>
             </section>
+          </section>
+
+          <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">
+            <header class="settings-page-header">
+              <button class="icon-button" id="settings-back" type="button" aria-label="Return to workbench" title="Back to workbench">${icon("back", 17)}</button>
+              <div>
+                <span class="panel-eyebrow">Application</span>
+                <h1 id="settings-page-title">Settings</h1>
+              </div>
+            </header>
+            <div class="settings-page-layout">
+              <nav class="settings-navigation" id="settings-navigation" aria-label="Settings groups"></nav>
+              <div class="settings-content" id="settings-content"></div>
+            </div>
           </section>
         </div>
 
@@ -585,6 +638,8 @@ export class AsterlynApp {
       this.renderRemotePopover(this.state.snapshot);
     });
     this.query("#refresh-button").addEventListener("click", () => void this.refresh());
+    this.query("#settings-button").addEventListener("click", () => this.openSettings());
+    this.query("#settings-back").addEventListener("click", () => this.closeSettings());
     this.query("#command-center-button").addEventListener("click", () => {
       this.openCommandSurface("files");
     });
@@ -663,6 +718,11 @@ export class AsterlynApp {
         return;
       }
       if (event.key === "Escape") {
+        if (this.state.activePage === "settings") {
+          event.preventDefault();
+          this.closeSettings();
+          return;
+        }
         if (
           this.state.replacementDialog &&
           this.state.workspaceReplacement.status !== "applying" &&
@@ -745,6 +805,215 @@ export class AsterlynApp {
       event.preventDefault();
       event.returnValue = "";
     });
+  }
+
+  private openSettings(): void {
+    if (this.state.activePage === "settings") return;
+    this.captureMountedTextEditor();
+    if (this.state.commandSurface.mode) this.dismissCommandSurface();
+    this.closeHistoryDialog();
+    this.state.syncPopoverOpen = false;
+    if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
+    this.state.activePage = "settings";
+    this.query("#workspace").classList.add("settings-mode");
+    this.query("#workbench").classList.add("hidden");
+    this.query("#settings-page").classList.remove("hidden");
+    this.query("#settings-button").setAttribute("aria-pressed", "true");
+    this.renderSettingsPage();
+    queueMicrotask(() => this.query<HTMLButtonElement>("#settings-back").focus());
+  }
+
+  private closeSettings(): void {
+    if (this.state.activePage !== "settings") return;
+    this.state.activePage = "workbench";
+    this.query("#workspace").classList.remove("settings-mode");
+    this.query("#settings-page").classList.add("hidden");
+    this.query("#workbench").classList.remove("hidden");
+    this.query("#settings-button").setAttribute("aria-pressed", "false");
+    this.applyWorkbenchLayout(false);
+    window.requestAnimationFrame(() => {
+      this.textEditor.requestMeasure();
+      this.diffEditor.requestMeasure();
+      this.query<HTMLButtonElement>("#settings-button").focus();
+    });
+  }
+
+  private renderSettingsPage(): void {
+    const sections: Array<[SettingsSection, string, string]> = [
+      ["general", "General", "Language and application behavior"],
+      ["appearance", "Appearance", "Theme and interface typography"],
+      ["editor", "Editor", "Text display and indentation defaults"],
+      ["version-control", "Version Control", "Diff presentation defaults"],
+      ["languages", "Languages", "Language-specific formatting services"],
+    ];
+    this.query("#settings-navigation").innerHTML = sections
+      .map(([id, label, detail]) => {
+        const selected = this.state.settingsSection === id;
+        return `<button class="settings-navigation-item ${selected ? "selected" : ""}" type="button" data-settings-section="${id}" aria-current="${selected ? "page" : "false"}"><strong>${label}</strong><span>${detail}</span></button>`;
+      })
+      .join("");
+    this.query("#settings-content").innerHTML = this.renderSettingsSection();
+    this.bindSettingsEvents();
+  }
+
+  private renderSettingsSection(): string {
+    const preferences = this.state.preferences;
+    switch (this.state.settingsSection) {
+      case "general":
+        return this.settingsGroup(
+          "General",
+          "Application-wide behavior with explicit support status.",
+          `
+            ${this.settingsRow("Application language", "English is the only complete interface language in this build.", '<span class="setting-value-pill">English · Current</span>')}
+            ${this.settingsRow("简体中文", "Planned after every visible string moves into the localization catalog.", '<span class="setting-planned">Planned</span>')}
+          `,
+        );
+      case "appearance":
+        return this.settingsGroup(
+          "Appearance",
+          "Interface color and application-menu typography.",
+          `
+            ${this.settingsRow("Theme", "Dark is implemented. Light and system-following themes remain explicit future work.", '<span class="setting-value-pill">Dark · Current</span><span class="setting-planned">Light/System planned</span>')}
+            ${this.settingsRow("Application menu font", "Changes navigation, toolbar, tabs, settings, and status text without scaling the editor.", this.settingsSelect("setting-ui-font", "Application menu font size", "uiFontSize", UI_FONT_SIZES, preferences.uiFontSize, (value) => `${value} px`))}
+          `,
+        );
+      case "editor":
+        return this.settingsGroup(
+          "Editor",
+          "Shared defaults for text editors and source-aware Diff panes.",
+          `
+            ${this.settingsRow("Editor font size", "Applies immediately to text files and Diff code.", this.settingsSelect("setting-editor-font", "Editor font size", "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}
+            ${this.settingsRow("Editor line height", "Controls vertical density without changing file content.", this.settingsSelect("setting-editor-line-height", "Editor line height", "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}
+            ${this.settingsRow("Default tab width", "Language-neutral visual indentation. It does not rewrite existing whitespace.", this.settingsSelect("setting-editor-tab", "Default tab width", "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, (value) => `${value} spaces`))}
+          `,
+        );
+      case "version-control":
+        return this.settingsGroup(
+          "Version Control",
+          "Defaults shared by working-tree and commit Diff views.",
+          `
+            ${this.settingsRow("Diff layout", "Choose the default presentation used by every Diff preview.", `<div class="setting-segmented" role="group" aria-label="Default Diff layout"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">Side by side</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">Unified</button></div>`)}
+            ${this.settingsRow("Whitespace", "Show spaces and tabs in Diff panes.", `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>Show whitespace characters</span></label>`)}
+          `,
+        );
+      case "languages":
+        return this.settingsGroup(
+          "Languages",
+          "Language-specific behavior is introduced only when its service boundary is real.",
+          `
+            ${this.settingsRow("Syntax highlighting", "CodeMirror language packages load on demand for editors and Diff panes.", '<span class="setting-value-pill success">Available</span>')}
+            ${this.settingsRow("Per-language formatting", "Formatter choice, style profiles, and format-on-save need the future language-service boundary.", '<span class="setting-planned">Planned</span>')}
+          `,
+        );
+    }
+  }
+
+  private settingsGroup(title: string, description: string, rows: string): string {
+    return `<section class="settings-group"><header><span class="panel-eyebrow">Preferences</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></header><div class="settings-list">${rows}</div></section>`;
+  }
+
+  private settingsRow(label: string, description: string, control: string): string {
+    return `<div class="settings-row"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(description)}</span></div><div class="settings-control">${control}</div></div>`;
+  }
+
+  private settingsSelect(
+    id: string,
+    ariaLabel: string,
+    field: keyof Pick<
+      AppPreferences,
+      "uiFontSize" | "editorFontSize" | "editorLineHeight" | "editorTabSize"
+    >,
+    values: readonly number[],
+    selected: number,
+    label: (value: number) => string,
+  ): string {
+    return `<select id="${id}" data-setting-number="${field}" aria-label="${escapeAttribute(ariaLabel)}">${values.map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${escapeHtml(label(value))}</option>`).join("")}</select>`;
+  }
+
+  private bindSettingsEvents(): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-settings-section]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const section = button.dataset.settingsSection as SettingsSection;
+          this.state.settingsSection = section;
+          this.renderSettingsPage();
+          queueMicrotask(() =>
+            this.root
+              .querySelector<HTMLButtonElement>(`[data-settings-section="${section}"]`)
+              ?.focus(),
+          );
+        });
+      });
+    this.root.querySelectorAll<HTMLSelectElement>("[data-setting-number]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const field = select.dataset.settingNumber as keyof Pick<
+          AppPreferences,
+          "uiFontSize" | "editorFontSize" | "editorLineHeight" | "editorTabSize"
+        >;
+        this.updatePreferences({ [field]: Number(select.value) }, select.id);
+      });
+    });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-setting-diff-layout]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const layout = button.dataset.settingDiffLayout as DiffLayout;
+          this.updatePreferences({ diffLayout: layout }, `setting-diff-${layout}`);
+        });
+      });
+    this.root
+      .querySelector<HTMLInputElement>("#setting-show-whitespace")
+      ?.addEventListener("change", (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        this.updatePreferences({ showWhitespace: target.checked }, target.id);
+      });
+  }
+
+  private updatePreferences(
+    patch: Partial<AppPreferences>,
+    restoreFocusId?: string,
+  ): void {
+    const previous = this.state.preferences;
+    const next = updateAppPreferences(previous, patch);
+    this.state.preferences = next;
+    try {
+      saveAppPreferences(window.localStorage, next);
+    } catch (error) {
+      this.showError(error);
+    }
+    this.applyAppPreferences();
+    if (
+      previous.diffLayout !== next.diffLayout ||
+      previous.showWhitespace !== next.showWhitespace
+    ) {
+      this.diffEditor.setPresentation(this.diffPresentation());
+      this.syncDiffControls();
+    }
+    if (this.state.activePage === "settings") {
+      this.renderSettingsPage();
+      if (restoreFocusId) {
+        queueMicrotask(() => {
+          if (restoreFocusId.startsWith("setting-diff-")) {
+            const layout = restoreFocusId.slice("setting-diff-".length);
+            this.root
+              .querySelector<HTMLButtonElement>(`[data-setting-diff-layout="${layout}"]`)
+              ?.focus();
+          } else {
+            this.root.querySelector<HTMLElement>(`#${restoreFocusId}`)?.focus();
+          }
+        });
+      }
+    }
+  }
+
+  private applyAppPreferences(): void {
+    this.query(".app-shell").style.setProperty(
+      "--ui-font-size",
+      `${this.state.preferences.uiFontSize}px`,
+    );
+    this.textEditor.setPreferences(this.state.preferences);
+    this.diffEditor.setPreferences(this.state.preferences);
   }
 
   private bindWindowControls(): void {
@@ -851,9 +1120,13 @@ export class AsterlynApp {
       this.clearWorkingDiff();
       this.state.projectFiles = [];
       this.state.repositoryFiles = [];
+      this.state.ignoredProjectEntries = [];
       this.state.projectFilesLoading = true;
       this.state.projectFilesError = null;
       this.state.projectFilesTruncated = false;
+      this.state.projectTreeRoot = null;
+      this.state.projectTreeSelection = null;
+      this.state.expandedProjectDirectories.clear();
       this.state.selectedBranch = null;
       this.installSnapshotHistory(snapshot, true);
       this.loadHistoryPreferences(snapshot);
@@ -2299,6 +2572,7 @@ export class AsterlynApp {
     const eyebrow = this.query("#navigator-eyebrow");
     const title = this.query("#navigator-title");
     const count = this.query("#navigator-count");
+    const actions = this.query("#navigator-actions");
     const body = this.query("#navigator-body");
 
     if (this.state.layout.leftTool === "changes") {
@@ -2309,6 +2583,7 @@ export class AsterlynApp {
       count.title = this.state.changeQuery
         ? `${filtered.length} of ${snapshot.changes.length} changed files`
         : `${snapshot.changes.length} changed files`;
+      actions.innerHTML = "";
       body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${this.renderChangeNavigation(snapshot)}</div>${this.renderCommitComposer(snapshot)}</div>`;
       this.bindChangeEvents();
       this.bindCommitComposer(snapshot);
@@ -2317,8 +2592,10 @@ export class AsterlynApp {
 
     eyebrow.textContent = "Project";
     title.textContent = basename(snapshot.root);
-    count.textContent = this.state.projectFiles.length.toString();
-    count.title = `${this.state.projectFiles.length} repository files`;
+    const visibleEntries = this.state.repositoryFiles.length + this.state.ignoredProjectEntries.length;
+    count.textContent = visibleEntries.toString();
+    count.title = `${this.state.repositoryFiles.length} editable files and ${this.state.ignoredProjectEntries.length} ignored entries`;
+    actions.innerHTML = this.renderProjectToolbar(snapshot);
     body.innerHTML = this.renderProjectNavigation(snapshot);
     this.bindProjectEvents();
   }
@@ -2361,8 +2638,16 @@ export class AsterlynApp {
       }
       this.state.projectFiles = result.paths;
       this.state.repositoryFiles = result.files;
+      this.state.ignoredProjectEntries = result.ignoredEntries;
       this.state.projectFilesTruncated = result.truncated;
       this.state.projectFilesLoading = false;
+      if (this.state.projectTreeRoot !== result.root) {
+        this.state.projectTreeRoot = result.root;
+        this.state.projectTreeSelection = null;
+        this.state.expandedProjectDirectories = defaultExpandedProjectDirectories(
+          this.projectTree(this.state.snapshot),
+        );
+      }
       if (this.state.layout.leftTool === "files") this.renderLeftTool();
       if (
         this.state.commandSurface.mode === "files" ||
@@ -2403,15 +2688,34 @@ export class AsterlynApp {
     }
   }
 
+  private projectTree(snapshot: RepositorySnapshot | null = this.state.snapshot): ProjectTreeNode[] {
+    return buildProjectTree(
+      projectTreeEntries(
+        this.state.repositoryFiles,
+        snapshot?.changes ?? [],
+        this.state.ignoredProjectEntries,
+      ),
+    );
+  }
+
+  private renderProjectToolbar(snapshot: RepositorySnapshot): string {
+    const activePath = this.activeProjectWorkspacePath(snapshot);
+    const canLocate = Boolean(
+      activePath && findProjectTreeNode(this.projectTree(snapshot), activePath),
+    );
+    const canChangeSubtree = this.state.projectTreeSelection?.kind === "directory";
+    return `
+      <button class="compact-icon-button" id="locate-project-file" type="button" aria-label="Locate current file in project" title="Locate current file" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
+      <button class="compact-icon-button" id="expand-project-folder" type="button" aria-label="Expand selected folder" title="Expand selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("expand", 14)}</button>
+      <button class="compact-icon-button" id="collapse-project-folder" type="button" aria-label="Collapse selected folder" title="Collapse selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
+  }
+
   private renderProjectNavigation(snapshot: RepositorySnapshot): string {
-    const untracked = snapshot.changes
-      .filter((change) => change.worktreeStatus === "untracked")
-      .map((change) => change.path);
-    const paths = Array.from(new Set([...this.state.projectFiles, ...untracked]));
-    if (paths.length === 0 && this.state.projectFilesLoading) {
+    const tree = this.projectTree(snapshot);
+    if (tree.length === 0 && this.state.projectFilesLoading) {
       return this.loadingBlock("Loading project files…");
     }
-    if (paths.length === 0 && this.state.projectFilesError) {
+    if (tree.length === 0 && this.state.projectFilesError) {
       return this.retryState(
         "Could not list project files",
         this.state.projectFilesError,
@@ -2424,23 +2728,25 @@ export class AsterlynApp {
         ? '<div class="project-tree-notice"><span class="spinner"></span><span>Refreshing files…</span></div>'
         : "",
       this.state.projectFilesTruncated
-        ? '<div class="project-tree-notice warning"><span>!</span><span>Showing the first 5,000 tracked or non-ignored paths.</span></div>'
+        ? '<div class="project-tree-notice warning"><span>!</span><span>Showing a bounded project catalog; some paths were omitted.</span></div>'
         : "",
       this.state.projectFilesError
         ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(this.state.projectFilesError)}</span></div>`
         : "",
     ].join("");
-    return `<div class="project-tree" role="tree" aria-label="Project files">${buildProjectTree(paths).map((node) => this.renderProjectNode(node, 0)).join("")}</div>${notices}`;
+    return `<div class="project-tree" role="tree" aria-label="Project files">${tree.map((node) => this.renderProjectNode(node, 0)).join("")}</div>${notices}`;
   }
 
   private renderProjectNode(node: ProjectTreeNode, depth: number): string {
-    if (node.kind === "directory") {
-      return `<details class="project-directory" ${depth < 2 ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span>${escapeHtml(node.name)}</span></summary><div role="group">${node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")}</div></details>`;
-    }
-    const activeDocument = this.activeDocument();
     const selected =
-      activeDocument.kind === "project-file" && activeDocument.workspacePath === node.path;
-    return `<button class="project-file-row ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-file="${escapeAttribute(node.path)}" aria-selected="${selected}" title="${escapeAttribute(node.path)}"><span class="project-file-glyph">${fileGlyph(node.name)}</span><span>${escapeHtml(node.name)}</span></button>`;
+      this.state.projectTreeSelection?.path === node.path &&
+      this.state.projectTreeSelection.kind === node.kind;
+    const statusClass = `file-status-${node.status}`;
+    if (node.kind === "directory") {
+      const expanded = this.state.expandedProjectDirectories.has(node.path);
+      return `<details class="project-directory ${statusClass}" data-project-directory-container="${escapeAttribute(node.path)}" ${expanded ? "open" : ""}><summary class="project-node-row ${selected ? "selected" : ""}" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-directory="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-expanded="${expanded}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></summary><div role="group">${node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")}</div></details>`;
+    }
+    return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-file="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="project-file-glyph">${fileGlyph(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
   }
 
   private bindProjectEvents(): void {
@@ -2451,16 +2757,126 @@ export class AsterlynApp {
       ?.addEventListener("click", () => {
         void this.loadProjectFiles(snapshot.root);
       });
+    this.root
+      .querySelector<HTMLButtonElement>("#locate-project-file")
+      ?.addEventListener("click", () => this.locateCurrentProjectFile());
+    this.root
+      .querySelector<HTMLButtonElement>("#expand-project-folder")
+      ?.addEventListener("click", () => this.setSelectedProjectFolderExpanded(true));
+    this.root
+      .querySelector<HTMLButtonElement>("#collapse-project-folder")
+      ?.addEventListener("click", () => this.setSelectedProjectFolderExpanded(false));
+    this.root
+      .querySelectorAll<HTMLDetailsElement>("[data-project-directory-container]")
+      .forEach((details) => {
+        details.addEventListener("toggle", () => {
+          const path = details.dataset.projectDirectoryContainer;
+          if (!path) return;
+          if (details.open) this.state.expandedProjectDirectories.add(path);
+          else this.state.expandedProjectDirectories.delete(path);
+          details
+            .querySelector<HTMLElement>(":scope > summary")
+            ?.setAttribute("aria-expanded", String(details.open));
+        });
+      });
+    this.root
+      .querySelectorAll<HTMLElement>("[data-project-directory]")
+      .forEach((row) => {
+        row.addEventListener("click", () => {
+          const path = row.dataset.projectDirectory;
+          if (!path) return;
+          this.state.projectTreeSelection = { path, kind: "directory" };
+          this.markProjectTreeSelection(path);
+        });
+      });
     this.root.querySelectorAll<HTMLButtonElement>("[data-project-file]").forEach((row) => {
       row.addEventListener("click", () => {
         const path = row.dataset.projectFile;
         const current = this.state.snapshot;
         if (!path || !current) return;
+        this.state.projectTreeSelection = { path, kind: "file" };
+        this.markProjectTreeSelection(path);
+        if (row.dataset.projectStatus === "ignored") {
+          this.setStatus("Ignored entries are shown for context and are not opened", "normal");
+          return;
+        }
         const file = this.state.repositoryFiles.find(
           (candidate) => candidate.workspacePath === path,
         ) ?? { repositoryId: ".", path, workspacePath: path };
         void this.openProjectFile(current.root, file);
       });
+    });
+  }
+
+  private markProjectTreeSelection(path: string): void {
+    this.root.querySelectorAll<HTMLElement>("[data-project-node]").forEach((row) => {
+      const selected = row.dataset.projectNode === path;
+      row.classList.toggle("selected", selected);
+      row.setAttribute("aria-selected", String(selected));
+    });
+    const directorySelected = this.state.projectTreeSelection?.kind === "directory";
+    this.root.querySelectorAll<HTMLButtonElement>(
+      "#expand-project-folder, #collapse-project-folder",
+    ).forEach((button) => {
+      button.disabled = !directorySelected;
+    });
+  }
+
+  private locateCurrentProjectFile(): void {
+    const snapshot = this.state.snapshot;
+    if (!snapshot) return;
+    const activePath = this.activeProjectWorkspacePath(snapshot);
+    if (!activePath) return;
+    if (!findProjectTreeNode(this.projectTree(snapshot), activePath)) {
+      this.setStatus("The current file is outside the bounded project tree", "warning");
+      return;
+    }
+    for (const path of ancestorProjectDirectories(activePath)) {
+      this.state.expandedProjectDirectories.add(path);
+    }
+    this.state.projectTreeSelection = {
+      path: activePath,
+      kind: "file",
+    };
+    this.renderLeftTool();
+    queueMicrotask(() => {
+      const target = Array.from(
+        this.root.querySelectorAll<HTMLElement>("[data-project-node]"),
+      ).find((row) => row.dataset.projectNode === activePath);
+      target?.scrollIntoView({ block: "center" });
+      target?.focus();
+    });
+  }
+
+  private activeProjectWorkspacePath(snapshot: RepositorySnapshot): string | null {
+    const active = this.activeDocument();
+    if (active.kind === "welcome" || active.repositoryRoot !== snapshot.root) return null;
+    if (active.kind === "project-file") return active.workspacePath;
+    if (active.kind === "working-diff") return active.selection.path;
+    return (
+      this.state.repositoryFiles.find(
+        (file) => file.repositoryId === active.repositoryId && file.path === active.path,
+      )?.workspacePath ?? null
+    );
+  }
+
+  private setSelectedProjectFolderExpanded(expanded: boolean): void {
+    const selection = this.state.projectTreeSelection;
+    const snapshot = this.state.snapshot;
+    if (!selection || selection.kind !== "directory" || !snapshot) return;
+    const node = findProjectTreeNode(this.projectTree(snapshot), selection.path);
+    if (!node || node.kind !== "directory") return;
+    for (const path of descendantProjectDirectories(node)) {
+      if (expanded) this.state.expandedProjectDirectories.add(path);
+      else this.state.expandedProjectDirectories.delete(path);
+    }
+    this.renderLeftTool();
+    queueMicrotask(() => {
+      const target = Array.from(
+        this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
+      ).find((row) => row.dataset.projectDirectory === selection.path);
+      target?.scrollIntoView({ block: "nearest" });
+      target?.focus();
     });
   }
 
@@ -2711,7 +3127,7 @@ export class AsterlynApp {
       this.state.selectedChange.staged === staged;
     const actionLabel = staged ? "Unstage" : "Stage";
     return `
-      <div class="change-row ${selected ? "selected" : ""} ${primary ? "primary" : ""}" role="option" tabindex="0" data-change-key="${escapeAttribute(key)}" data-change-path="${escapeAttribute(change.path)}" data-staged="${staged}" aria-selected="${selected}" aria-label="${selected ? "Selected, " : ""}view ${staged ? "staged" : "working tree"} diff for ${escapeAttribute(change.path)}">
+      <div class="change-row file-status-${kind} ${selected ? "selected" : ""} ${primary ? "primary" : ""}" role="option" tabindex="0" data-change-key="${escapeAttribute(key)}" data-change-path="${escapeAttribute(change.path)}" data-staged="${staged}" aria-selected="${selected}" aria-label="${selected ? "Selected, " : ""}view ${staged ? "staged" : "working tree"} diff for ${escapeAttribute(change.path)}">
         <span class="change-status status-${kind}" title="${changeLabel(kind)}">${changeCode(kind)}</span>
         <span class="change-path">
           <span class="file-name">${escapeHtml(basename(change.path))}</span>
@@ -4477,6 +4893,7 @@ export class AsterlynApp {
           ),
           this.state.workingPatch.patch ||
             "No textual diff is available for this selection.",
+          selected.path,
         );
       }
       return;
@@ -4517,6 +4934,7 @@ export class AsterlynApp {
           `patch:${this.state.commitPatchVersion}`,
         ),
         this.state.commitPatch.patch || "No textual diff is available for this file.",
+        document.path,
       );
     }
   }
@@ -4534,7 +4952,7 @@ export class AsterlynApp {
     this.mountedEditorKey = key;
   }
 
-  private mountEditorDiff(key: string, patch: string): void {
+  private mountEditorDiff(key: string, patch: string, path: string): void {
     if (this.mountedEditorKey === key) {
       this.diffEditor.requestMeasure();
       return;
@@ -4547,7 +4965,13 @@ export class AsterlynApp {
     body.innerHTML = "";
     body.classList.remove("text-surface");
     body.classList.add("diff-surface");
-    this.diffEditor.mount(body, patch, this.diffPresentation());
+    this.diffEditor.mount(
+      body,
+      patch,
+      path,
+      this.state.preferences,
+      this.diffPresentation(),
+    );
     this.mountedEditorKey = key;
   }
 
@@ -4564,14 +4988,20 @@ export class AsterlynApp {
     body.classList.remove("diff-surface");
     body.classList.add("text-surface");
     this.mountedTextTabId = tab.id;
-    this.textEditor.mount(body, tab.content, tab.document.path, () => {
-      if (this.mountedTextTabId !== tab.id) return;
-      const previous = textTab(this.state.editor, tab.id);
-      this.state.editor = markTextEdited(this.state.editor, tab.id);
-      if (previous && (!isTextTabDirty(previous) || previous.conflict)) {
-        this.renderEditor();
-      }
-    });
+    this.textEditor.mount(
+      body,
+      tab.content,
+      tab.document.path,
+      this.state.preferences,
+      () => {
+        if (this.mountedTextTabId !== tab.id) return;
+        const previous = textTab(this.state.editor, tab.id);
+        this.state.editor = markTextEdited(this.state.editor, tab.id);
+        if (previous && (!isTextTabDirty(previous) || previous.conflict)) {
+          this.renderEditor();
+        }
+      },
+    );
     this.mountedEditorKey = key;
   }
 
@@ -4791,9 +5221,9 @@ export class AsterlynApp {
   private diffControls(): string {
     return `
       <div class="diff-controls" role="group" aria-label="Diff presentation">
-        <button type="button" data-diff-layout="unified" aria-pressed="${this.state.diffLayout === "unified"}" title="Unified diff">Unified</button>
-        <button type="button" data-diff-layout="split" aria-pressed="${this.state.diffLayout === "split"}" title="Side-by-side diff">Split</button>
-        <button type="button" data-diff-whitespace aria-pressed="${this.state.showWhitespace}" title="Show whitespace characters">Whitespace</button>
+        <button type="button" data-diff-layout="unified" aria-pressed="${this.state.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
+        <button type="button" data-diff-layout="split" aria-pressed="${this.state.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
+        <button type="button" data-diff-whitespace aria-pressed="${this.state.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
       </div>`;
   }
 
@@ -4801,18 +5231,16 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
       button.addEventListener("click", () => {
         const layout = button.dataset.diffLayout as DiffLayout;
-        if (layout === this.state.diffLayout) return;
-        this.state.diffLayout = layout;
-        this.syncDiffControls();
-        this.diffEditor.setPresentation(this.diffPresentation());
+        if (layout === this.state.preferences.diffLayout) return;
+        this.updatePreferences({ diffLayout: layout });
       });
     });
     this.root.querySelector<HTMLButtonElement>("[data-diff-whitespace]")?.addEventListener(
       "click",
       () => {
-        this.state.showWhitespace = !this.state.showWhitespace;
-        this.syncDiffControls();
-        this.diffEditor.setPresentation(this.diffPresentation());
+        this.updatePreferences({
+          showWhitespace: !this.state.preferences.showWhitespace,
+        });
       },
     );
   }
@@ -4821,18 +5249,18 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
       button.setAttribute(
         "aria-pressed",
-        String(button.dataset.diffLayout === this.state.diffLayout),
+        String(button.dataset.diffLayout === this.state.preferences.diffLayout),
       );
     });
     this.root
       .querySelector<HTMLButtonElement>("[data-diff-whitespace]")
-      ?.setAttribute("aria-pressed", String(this.state.showWhitespace));
+      ?.setAttribute("aria-pressed", String(this.state.preferences.showWhitespace));
   }
 
   private diffPresentation(): DiffPresentation {
     return {
-      layout: this.state.diffLayout,
-      showWhitespace: this.state.showWhitespace,
+      layout: this.state.preferences.diffLayout,
+      showWhitespace: this.state.preferences.showWhitespace,
       splitPercentage: this.state.layout.diffBeforePercent,
       onSplitPercentageChange: (value, committed) => {
         this.resizeWorkbench("diffBeforePercent", value);
@@ -5055,7 +5483,7 @@ export class AsterlynApp {
       : "";
     const tree = depth !== null;
     return `
-      <button class="commit-file-row ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" ${tree ? `style="--tree-depth:${depth}"` : ""} data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
+      <button class="commit-file-row file-status-${file.status} ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" ${tree ? `style="--tree-depth:${depth}"` : ""} data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
         <span class="change-status status-${file.status}" title="${escapeAttribute(changeLabel(file.status))}">${changeCode(file.status)}</span>
         <span class="commit-file-glyph">${fileGlyph(file.path)}</span>
         <span class="change-path">

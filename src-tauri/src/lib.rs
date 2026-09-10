@@ -610,7 +610,7 @@ fn search_authorized_workspace(
     cancellation: &SearchCancellationToken,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
     let catalog = GitRepository::open(root)
-        .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+        .and_then(|repository| repository.authorized_project_files(PROJECT_FILE_LIMIT))
         .map_err(|error| WorkspaceError::Io {
             operation: "load current project catalog for search".to_string(),
             message: error.to_string(),
@@ -878,7 +878,7 @@ fn prepare_authorized_replacement(
     cancellation: &SearchCancellationToken,
 ) -> Result<(StoredReplacementPlan, WorkspaceReplacementPreview), WorkspaceError> {
     let catalog = GitRepository::open(root)
-        .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+        .and_then(|repository| repository.authorized_project_files(PROJECT_FILE_LIMIT))
         .map_err(|error| WorkspaceError::Io {
             operation: "load current project catalog for replacement".to_string(),
             message: error.to_string(),
@@ -967,7 +967,7 @@ fn authorize_replacement_selection(
         });
     }
     let current = GitRepository::open(root)
-        .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+        .and_then(|repository| repository.authorized_project_files(PROJECT_FILE_LIMIT))
         .map_err(|error| WorkspaceError::Io {
             operation: "reauthorize replacement files".to_string(),
             message: error.to_string(),

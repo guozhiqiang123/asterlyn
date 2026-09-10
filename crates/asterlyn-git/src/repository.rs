@@ -16,8 +16,8 @@ use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
     FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
-    HistoryQuery, HistoryRef, ProjectFile, ProjectFileList, RemoteSummary, RepositorySnapshot,
-    UntrackedScan, UntrackedState,
+    HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
+    RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -26,6 +26,13 @@ const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
+
+fn project_entry_kind_order(kind: ProjectEntryKind) -> u8 {
+    match kind {
+        ProjectEntryKind::Directory => 0,
+        ProjectEntryKind::File => 1,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct UpstreamTarget {
@@ -641,9 +648,22 @@ impl GitRepository {
     }
 
     pub fn project_files(&self, limit: usize) -> Result<ProjectFileList, GitError> {
+        self.project_files_with_ignored(limit, true)
+    }
+
+    pub fn authorized_project_files(&self, limit: usize) -> Result<ProjectFileList, GitError> {
+        self.project_files_with_ignored(limit, false)
+    }
+
+    fn project_files_with_ignored(
+        &self,
+        limit: usize,
+        include_ignored: bool,
+    ) -> Result<ProjectFileList, GitError> {
         let roots = self.discovered_roots()?;
         let maximum = limit.clamp(1, 100_000);
         let mut files = Vec::new();
+        let mut ignored_entries = Vec::new();
         for root in &roots {
             for path in root.repository.project_file_paths()? {
                 let workspace_path = if root.descriptor.relative_path == "." {
@@ -657,6 +677,19 @@ impl GitRepository {
                     workspace_path,
                 });
             }
+            if include_ignored {
+                for entry in root.repository.project_ignored_entries()? {
+                    let workspace_path = if root.descriptor.relative_path == "." {
+                        entry.workspace_path
+                    } else {
+                        format!("{}/{}", root.descriptor.relative_path, entry.workspace_path)
+                    };
+                    ignored_entries.push(ProjectIgnoredEntry {
+                        workspace_path,
+                        kind: entry.kind,
+                    });
+                }
+            }
         }
         files.sort_by(|left, right| {
             left.workspace_path
@@ -667,8 +700,18 @@ impl GitRepository {
         files.dedup_by(|left, right| {
             left.repository_id == right.repository_id && left.path == right.path
         });
-        let truncated = files.len() > maximum;
+        let files_truncated = files.len() > maximum;
         files.truncate(maximum);
+        ignored_entries.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| {
+                    project_entry_kind_order(left.kind).cmp(&project_entry_kind_order(right.kind))
+                })
+        });
+        ignored_entries.dedup();
+        let ignored_truncated = ignored_entries.len() > maximum;
+        ignored_entries.truncate(maximum);
         let nested_roots: HashSet<&str> = roots
             .iter()
             .skip(1)
@@ -685,8 +728,9 @@ impl GitRepository {
             root: self.root.to_string_lossy().into_owned(),
             paths,
             files,
+            ignored_entries,
             repository_roots: roots.into_iter().map(|root| root.descriptor).collect(),
-            truncated,
+            truncated: files_truncated || ignored_truncated,
         })
     }
 
@@ -697,7 +741,7 @@ impl GitRepository {
         limit: usize,
     ) -> Result<ProjectFile, GitError> {
         validate_relative_path(path)?;
-        self.project_files(limit)?
+        self.authorized_project_files(limit)?
             .files
             .into_iter()
             .find(|file| file.repository_id == repository_id && file.path == path)
@@ -728,6 +772,51 @@ impl GitRepository {
         paths.sort();
         paths.dedup();
         Ok(paths)
+    }
+
+    fn project_ignored_entries(&self) -> Result<Vec<ProjectIgnoredEntry>, GitError> {
+        let output = self.run_read(
+            "list ignored project entries",
+            [
+                "ls-files",
+                "--others",
+                "--ignored",
+                "--exclude-standard",
+                "--directory",
+                "--no-empty-directory",
+                "-z",
+            ],
+        )?;
+        let mut entries = Vec::new();
+        for raw_path in output.stdout.split(|byte| *byte == 0) {
+            if raw_path.is_empty() {
+                continue;
+            }
+            let value = String::from_utf8_lossy(raw_path);
+            let kind = if value.ends_with('/') {
+                ProjectEntryKind::Directory
+            } else {
+                ProjectEntryKind::File
+            };
+            let path = value.trim_end_matches('/');
+            if path.is_empty() {
+                continue;
+            }
+            validate_relative_path(path)?;
+            entries.push(ProjectIgnoredEntry {
+                workspace_path: path.to_string(),
+                kind,
+            });
+        }
+        entries.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| {
+                    project_entry_kind_order(left.kind).cmp(&project_entry_kind_order(right.kind))
+                })
+        });
+        entries.dedup();
+        Ok(entries)
     }
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
@@ -2980,11 +3069,21 @@ mod tests {
     fn project_file_list_is_sorted_bounded_and_authorizes_visible_files_only() {
         let directory = fixture();
         fs::create_dir_all(directory.path().join("src")).expect("fixture directory");
+        fs::create_dir_all(directory.path().join("ignored-dir")).expect("ignored directory");
         fs::write(directory.path().join("src/zeta.rs"), "zeta\n").expect("tracked file");
         fs::write(directory.path().join("alpha.txt"), "alpha\n").expect("tracked file");
         fs::write(directory.path().join("untracked.txt"), "later\n").expect("untracked file");
         fs::write(directory.path().join("ignored.txt"), "hidden\n").expect("ignored file");
-        fs::write(directory.path().join(".gitignore"), "ignored.txt\n").expect("ignore file");
+        fs::write(
+            directory.path().join("ignored-dir/cache.bin"),
+            "hidden directory content\n",
+        )
+        .expect("ignored directory content");
+        fs::write(
+            directory.path().join(".gitignore"),
+            "ignored.txt\nignored-dir/\n",
+        )
+        .expect("ignore file");
         git(
             directory.path(),
             &["add", ".gitignore", "alpha.txt", "src/zeta.rs"],
@@ -2996,7 +3095,24 @@ mod tests {
             complete.paths,
             [".gitignore", "alpha.txt", "src/zeta.rs", "untracked.txt"]
         );
+        assert_eq!(
+            complete.ignored_entries,
+            [
+                ProjectIgnoredEntry {
+                    workspace_path: "ignored-dir".to_string(),
+                    kind: ProjectEntryKind::Directory,
+                },
+                ProjectIgnoredEntry {
+                    workspace_path: "ignored.txt".to_string(),
+                    kind: ProjectEntryKind::File,
+                },
+            ]
+        );
         assert!(!complete.truncated);
+        let authorized = repository
+            .authorized_project_files(10)
+            .expect("authorization catalog loads without ignored display entries");
+        assert!(authorized.ignored_entries.is_empty());
         assert_eq!(
             repository
                 .authorize_project_file(".", "untracked.txt", 10)

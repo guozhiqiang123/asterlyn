@@ -84,7 +84,22 @@ No package or remote publication is produced for this sub-slice. E3 editor group
 
 ### E3 — Editor groups and preferences
 
-Add splits, tab movement, settings/keymaps, language-neutral indentation, encoding/EOL controls, file watching, external-change comparison, and a measured large-file mode.
+E3 is split into four independently reversible slices so a settings shell does not imply that every future preference already works:
+
+- **E3.1 — Workbench navigation and preference foundation:** add explicit project-tree file/folder selection, locate-current-file, recursive expand/collapse, Git-derived semantic path colors, display-only ignored entries, shared text/Diff syntax presentation, and a full settings route. Persist only the implemented bounded choices: application font, editor font and line height, tab display width, Diff layout, and whitespace visibility. Mark localization, light/system themes, and per-language formatting as planned.
+- **E3.2 — Editor groups and tab movement:** add a typed editor-group model, horizontal and vertical splits, keyboard group focus, tab movement, split restoration, and explicit close/dirty-buffer rules without duplicating document ownership.
+- **E3.3 — Text and keymap controls:** add keymap conflict handling, per-language indentation and formatting adapters, encoding/EOL inspection and conversion, and format-on-save only after the formatter boundary and recovery behavior are testable.
+- **E3.4 — External change and scale policy:** add file watching as coalesced hints, external-change comparison, measured large-file modes, parser/service cutoffs, and resource gates before E3 closes.
+
+### E3.1 local acceptance — 2026-09-10
+
+E3.1 is locally accepted. The Files tool now has compact locate, recursive-expand, and recursive-collapse actions. File and directory rows share one explicit selected state, and locating works for editable files, working-tree Diff, and commit Diff whenever the path still exists in the bounded tree. Current change kinds and Git-ignored entries receive semantic colors while retaining textual or glyph status. Ignored paths are obtained through a separate bounded display query and remain excluded from every read, save, search, and replacement authorization catalog.
+
+The Diff adapter now uses the same on-demand filename-to-parser loader and token palette as the text editor in unified and split layouts. The new Settings route keeps the workbench mounted and groups General, Appearance, Editor, Version Control, and Languages. It persists only six implemented preference fields and updates mounted editors immediately; unavailable localization, theme, and language-formatting services are explicitly labelled planned.
+
+The complete evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Validation passed 97 frontend, 28 Git, 23 workspace, and ten desktop tests plus formatting, strict Clippy, TypeScript checking, production build, browser interaction, and six-second native liveness. Interaction and presentation consistency are **improved**. CSS and frontend JavaScript size are **regressed**, the native executable has **no material change**, and memory impact is **inconclusive** because no matched native resource series was run.
+
+No installer or remote publication is produced for this sub-slice. E3.2 editor groups and tab movement is next; settings cannot grow new writable controls until their underlying service boundary is implemented.
 
 ### E4 — Recovery and task surfaces
 

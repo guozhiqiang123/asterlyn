@@ -139,6 +139,7 @@ export interface ProjectFileList {
   root: string;
   paths: string[];
   files: ProjectFile[];
+  ignoredEntries: ProjectIgnoredEntry[];
   repositoryRoots: GitRootDescriptor[];
   truncated: boolean;
 }
@@ -147,6 +148,11 @@ export interface ProjectFile {
   repositoryId: string;
   path: string;
   workspacePath: string;
+}
+
+export interface ProjectIgnoredEntry {
+  workspacePath: string;
+  kind: "file" | "directory";
 }
 
 export interface TextFileSnapshot {
