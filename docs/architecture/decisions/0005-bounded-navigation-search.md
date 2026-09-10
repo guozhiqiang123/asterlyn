@@ -1,6 +1,6 @@
 # ADR-0005: Bounded navigation and workspace search
 
-- **Status:** Accepted through E2.2b; review before multi-file replacement or indexing
+- **Status:** Accepted through E2.2b; E2.3 recovery contract approved, interaction pending
 - **Date:** 2026-09-09
 
 ## Context
@@ -29,12 +29,18 @@ Each match returns the exact authorized candidate identity, workspace path, E1-c
 
 E2.1 intentionally limits replacement to CodeMirror's active-buffer find/replace controls. This is honest search-and-replace capability: changes remain in one visible undoable buffer and reach disk only through E1 Save. Workspace-wide replacement is deferred until recoverable drafts or an equivalent preview-and-rollback design exists; it must not be simulated by sequential hidden saves.
 
+E2.3 introduces replacement as a separate review-and-recovery transaction, not as a mutation attached to individual search-result buttons. Preparing a plan reruns the current bounded search against a fresh Git-authorized catalog, rereads every matching text file, and retains exact original and proposed bytes in a bounded in-memory plan. Catalog, candidate, byte, or match truncation blocks planning because unseen matches could change the meaning of `Replace`; unsupported files remain explicitly reported and outside the reviewed scope. The plan previews every changed file and permits file-level selection only. Literal replacement is exact; regular-expression replacement uses the same line-local expression and Rust capture expansion. Newlines entered in replacement text use each target's dominant separator while untouched separators and UTF-8 BOM policy remain exact.
+
+Applying a reviewed selection first reauthorizes the active workspace, serializes workspace writes, and verifies every selected original revision before writing anything. It then durably records each exact original and proposed file in the application's local-data recovery area and publishes the manifest before the first workspace mutation. Every target continues through E1's same-directory atomic, optimistic save path. Cancellation or a partial failure triggers conservative automatic rollback: a file is restored only while it still contains the reviewed replacement. An independently changed file is never overwritten and leaves a visible `needs recovery` record.
+
+A completely applied transaction remains recoverable across restart until the user explicitly keeps the changes or rolls them back. Keeping changes deletes recovery data only after every target still equals the reviewed replacement. Successful rollback deletes it only after every target equals the exact original. Corrupt recovery metadata fails visibly instead of being ignored. Recovery blobs can contain source text, live only under application-local data, are never repository truth, and are removed after verified keep or rollback. There is no force-apply, force-rollback, unattended replacement, ignored-file replacement, or cross-line expression in E2.3.
+
 ## Consequences and rollback
 
 Quick navigation stays instant after the existing catalog load, while workspace search consumes resources only when requested and remains bounded. Search results can be incomplete, but the UI reports eligible/scanned/skipped counts and truncation explicitly. A repository with many unsupported or very large files remains usable. The E2.2b default-path median remains within 1.75% of the E2.1 fixture baseline, so an index remains unjustified.
 
-The navigation surface can be removed without changing repository or file formats. The workspace search API is read-only, owns no persistent state, and can later be replaced by a measured index behind the same result contract.
+The navigation surface can be removed without changing repository or file formats. The workspace search API remains read-only and can later be replaced by a measured index behind the same result contract. Replacement recovery has an explicitly versioned private manifest and exact byte blobs outside the repository; removing the E2.3 UI must first resolve or preserve any listed recovery rather than silently deleting it.
 
 ## Deferred work
 
-Dedicated case-insensitive controls, cross-line regular expressions, ignored-file search, persistent indexing, multi-root result grouping controls, symbol search, multi-file replacement, replacement recovery, and search-result persistence remain later slices.
+Dedicated case-insensitive controls, cross-line regular expressions, ignored-file search and replacement, persistent indexing, multi-root result grouping controls, match-level replacement selection, symbol search, replacement editing after preview, and search-result persistence remain later slices.

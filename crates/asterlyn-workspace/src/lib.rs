@@ -5,8 +5,14 @@ use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+mod replacement;
 mod search;
 
+pub use replacement::{
+    PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
+    ReplacementFileState, ReplacementLimits, ReplacementRecoveryStatus, ReplacementRecoverySummary,
+    WorkspaceReplacementPreview,
+};
 pub use search::{
     SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchMode,
     SearchOptions, SearchSkipReason, SearchSkippedFile, WorkspaceSearchMatch,
@@ -60,6 +66,7 @@ pub enum WorkspaceError {
     Busy { message: String },
     InvalidSearch { message: String },
     Cancelled { message: String },
+    InvalidReplacement { message: String },
     Io { operation: String, message: String },
 }
 
@@ -75,6 +82,7 @@ impl Display for WorkspaceError {
             | Self::Busy { message }
             | Self::InvalidSearch { message }
             | Self::Cancelled { message } => formatter.write_str(message),
+            Self::InvalidReplacement { message } => formatter.write_str(message),
             Self::FileTooLarge { limit_bytes } => {
                 write!(
                     formatter,

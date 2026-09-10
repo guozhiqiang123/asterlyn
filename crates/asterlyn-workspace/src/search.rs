@@ -459,6 +459,108 @@ enum SearchMatcher<'query> {
     Regex(Regex),
 }
 
+pub(crate) fn replace_text_line_local(
+    content: &str,
+    query: &str,
+    replacement: &str,
+    mode: SearchMode,
+    cancellation: &SearchCancellationToken,
+    limits: SearchLimits,
+) -> Result<(String, usize), WorkspaceError> {
+    let matcher = SearchMatcher::compile(query, mode, cancellation, limits)?;
+    let normalized_replacement = replacement.replace("\r\n", "\n").replace('\r', "\n");
+    let separator = dominant_separator(content);
+    let file_replacement = normalized_replacement.replace('\n', separator);
+    let mut output = String::with_capacity(content.len());
+    let mut match_count = 0;
+
+    for line in source_lines(content) {
+        check_cancelled(cancellation)?;
+        match &matcher {
+            SearchMatcher::Literal(literal) => {
+                let ranges = literal_ranges(line.text, literal, cancellation, usize::MAX)?;
+                match_count += ranges.len();
+                output.push_str(&line.text.replace(literal, &file_replacement));
+            }
+            SearchMatcher::Regex(expression) => {
+                for _ in expression.find_iter(line.text) {
+                    check_cancelled(cancellation)?;
+                    match_count += 1;
+                }
+                output.push_str(&expression.replace_all(line.text, file_replacement.as_str()));
+            }
+        }
+        output.push_str(line.separator);
+    }
+    check_cancelled(cancellation)?;
+    Ok((output, match_count))
+}
+
+struct SourceLine<'source> {
+    text: &'source str,
+    separator: &'source str,
+}
+
+fn source_lines(content: &str) -> Vec<SourceLine<'_>> {
+    let bytes = content.as_bytes();
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let separator_length = match bytes[cursor] {
+            b'\r' if bytes.get(cursor + 1) == Some(&b'\n') => 2,
+            b'\r' | b'\n' => 1,
+            _ => {
+                cursor += 1;
+                continue;
+            }
+        };
+        lines.push(SourceLine {
+            text: &content[start..cursor],
+            separator: &content[cursor..cursor + separator_length],
+        });
+        cursor += separator_length;
+        start = cursor;
+    }
+    lines.push(SourceLine {
+        text: &content[start..],
+        separator: "",
+    });
+    lines
+}
+
+fn dominant_separator(content: &str) -> &'static str {
+    let mut crlf = 0;
+    let mut lf = 0;
+    let mut cr = 0;
+    let bytes = content.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            b'\r' if bytes.get(cursor + 1) == Some(&b'\n') => {
+                crlf += 1;
+                cursor += 2;
+            }
+            b'\r' => {
+                cr += 1;
+                cursor += 1;
+            }
+            b'\n' => {
+                lf += 1;
+                cursor += 1;
+            }
+            _ => cursor += 1,
+        }
+    }
+    if crlf >= lf && crlf >= cr && crlf > 0 {
+        "\r\n"
+    } else if cr > lf && cr > 0 {
+        "\r"
+    } else {
+        "\n"
+    }
+}
+
 impl<'query> SearchMatcher<'query> {
     fn compile(
         query: &'query str,
