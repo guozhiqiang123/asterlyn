@@ -37,14 +37,14 @@ Deepin 23 may expose a GPU render node while denying the KMS buffer operation us
 
 ## Platform icon generation
 
-[`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. The mark uses the complete square canvas; target containers, masks, and raster sizes are generated rather than simulated with one cross-platform transparent inset. Regenerate the maintained desktop set atomically with the repository-pinned helper:
+[`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. The mark uses the complete square canvas. The generator preserves that full-canvas artwork for Windows and Linux, then derives a centered macOS-only representation whose visible alpha bounds occupy approximately 82% of the ICNS canvas. This keeps the same mark while matching the visual safe area used by neighboring macOS Launchpad icons instead of shrinking every platform. Regenerate the maintained desktop set atomically with the repository-pinned helper:
 
 ```bash
 npm run icons:generate
 npm run test:scripts
 ```
 
-Do not retouch files under `src-tauri/icons/` individually. The helper generates into a temporary directory and then replaces that directory with only the targets declared by the current desktop bundle: 32, 48, 128, 256, and 512 pixel PNGs, one Windows ICO containing 16/24/32/48/64/256 pixel frames, and one macOS ICNS containing modern Retina frames. Mobile launcher sets and Windows Store/AppX tiles are deliberately discarded because Asterlyn does not ship those targets. Adding a mobile or AppX target must add its platform-specific source and validation in the same change instead of retaining unused generated history.
+Do not retouch files under `src-tauri/icons/` individually. The helper generates into a temporary directory and then replaces that directory with only the targets declared by the current desktop bundle: 32, 48, 128, 256, and 512 pixel PNGs, one Windows ICO containing 16/24/32/48/64/256 pixel frames, and one macOS ICNS containing modern Retina frames. The 128-pixel PNG intentionally appears first in `bundle.icon`: the locked Tauri Unix runtime selects the first PNG for the native window icon, so leading with 32 pixels makes Linux docks upscale a visibly small/soft source even though larger package icons exist. Script tests lock both this ordering and the macOS visual envelope. Mobile launcher sets and Windows Store/AppX tiles are deliberately discarded because Asterlyn does not ship those targets. Adding a mobile or AppX target must add its platform-specific source and validation in the same change instead of retaining unused generated history.
 
 ## Local performance evidence
 

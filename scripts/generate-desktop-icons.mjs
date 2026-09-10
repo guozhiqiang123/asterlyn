@@ -3,8 +3,10 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   renameSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -17,6 +19,8 @@ const destination = join(repositoryRoot, "src-tauri", "icons");
 const temporary = mkdtempSync(join(tmpdir(), "asterlyn-icons-"));
 const generated = join(temporary, "generated");
 const generated48 = join(temporary, "generated-48");
+const generatedMacos = join(temporary, "generated-macos");
+const macosSource = join(temporary, "asterlyn-mark-macos.svg");
 const destinationParent = dirname(destination);
 mkdirSync(destinationParent, { recursive: true });
 const staged = mkdtempSync(join(destinationParent, ".icons-next-"));
@@ -33,6 +37,19 @@ const maintained = [
 ];
 
 try {
+  const canonicalSource = readFileSync(source, "utf8");
+  const fullBleedGroup = '<g data-canvas-fit="full-bleed">';
+  if (!canonicalSource.includes(fullBleedGroup)) {
+    throw new Error("Canonical icon is missing its full-bleed group");
+  }
+  writeFileSync(
+    macosSource,
+    canonicalSource.replace(
+      fullBleedGroup,
+      '<g data-canvas-fit="macos-safe-area" transform="translate(46.08 46.08) scale(0.82)">',
+    ),
+  );
+
   execFileSync(npm, ["run", "tauri", "--", "icon", source, "-o", generated], {
     cwd: repositoryRoot,
     stdio: "inherit",
@@ -42,9 +59,19 @@ try {
     ["run", "tauri", "--", "icon", source, "-o", generated48, "--png", "48"],
     { cwd: repositoryRoot, stdio: "inherit" },
   );
+  execFileSync(
+    npm,
+    ["run", "tauri", "--", "icon", macosSource, "-o", generatedMacos],
+    { cwd: repositoryRoot, stdio: "inherit" },
+  );
 
   for (const name of maintained) {
-    const sourceDirectory = name === "48x48.png" ? generated48 : generated;
+    const sourceDirectory =
+      name === "icon.icns"
+        ? generatedMacos
+        : name === "48x48.png"
+          ? generated48
+          : generated;
     const from = join(sourceDirectory, name);
     const to = join(staged, name);
     mkdirSync(dirname(to), { recursive: true });

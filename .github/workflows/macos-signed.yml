@@ -1,0 +1,356 @@
+name: Signed macOS package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-signing-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  source-gate:
+    name: Require main source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Reject untrusted refs
+        env:
+          ASTERLYN_SIGNING_REF: ${{ github.ref }}
+          ASTERLYN_SIGNING_SHA: ${{ github.sha }}
+        run: |
+          if [ "$ASTERLYN_SIGNING_REF" != "refs/heads/main" ]; then
+            echo "Signed packages may only be dispatched from main." >&2
+            exit 1
+          fi
+          if ! printf '%s' "$ASTERLYN_SIGNING_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "The source revision is not an immutable commit SHA." >&2
+            exit 1
+          fi
+
+  package:
+    name: Sign and notarize ${{ matrix.label }}
+    needs: source-gate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    environment: macos-signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Apple Silicon
+            runner: macos-15
+            target: aarch64-apple-darwin
+            architecture: arm64
+            bundle_root: target/aarch64-apple-darwin/release/bundle
+          - label: Intel
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            architecture: x86_64
+            bundle_root: target/x86_64-apple-darwin/release/bundle
+
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Set up Rust target
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+          targets: ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Require Apple distribution credentials
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID
+          do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'Missing macos-signing values: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID Application certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          certificate_path="$RUNNER_TEMP/asterlyn-developer-id.p12"
+          keychain_path="$RUNNER_TEMP/asterlyn-signing.keychain-db"
+          original_keychains_path="$RUNNER_TEMP/asterlyn-original-keychains.txt"
+          keychain_password=$(openssl rand -base64 32)
+          echo "::add-mask::$keychain_password"
+          security list-keychains -d user > "$original_keychains_path"
+
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          original_keychains=()
+          while IFS= read -r keychain; do
+            keychain=${keychain#*\"}
+            keychain=${keychain%\"*}
+            if [ -n "$keychain" ]; then original_keychains+=("$keychain"); fi
+          done < "$original_keychains_path"
+          security list-keychains -d user -s "$keychain_path" "${original_keychains[@]}"
+          rm -f "$certificate_path"
+
+          identity_lines=$(security find-identity -v -p codesigning "$keychain_path" | grep '"Developer ID Application:' || true)
+          identity_count=$(printf '%s\n' "$identity_lines" | grep -c . || true)
+          if [ "$identity_count" -ne 1 ]; then
+            echo "Expected exactly one Developer ID Application identity; found $identity_count." >&2
+            exit 1
+          fi
+          identity=${identity_lines#*\"}
+          identity=${identity%%\"*}
+          case "$identity" in
+            *"($APPLE_TEAM_ID)") ;;
+            *)
+              echo "The Developer ID Application identity does not match APPLE_TEAM_ID." >&2
+              exit 1
+              ;;
+          esac
+          if [ "$identity" = "-" ]; then
+            echo "Ad-hoc signing is forbidden in the signed workflow." >&2
+            exit 1
+          fi
+          printf 'APPLE_SIGNING_IDENTITY=%s\n' "$identity" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          rm -rf "${{ matrix.bundle_root }}"
+          npm run tauri -- build --target "${{ matrix.target }}"
+
+      - name: Notarize and staple distribution image
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          shopt -s nullglob
+          dmgs=("${{ matrix.bundle_root }}"/dmg/*.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "Expected exactly one DMG before notarization." >&2
+            exit 1
+          fi
+          result="$RUNNER_TEMP/asterlyn-dmg-notarization.json"
+          xcrun notarytool submit "${dmgs[0]}" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait \
+            --output-format json \
+            > "$result"
+          node -e \
+            'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(r.status!=="Accepted")throw new Error(`DMG notarization ended with ${r.status??"unknown"}`)' \
+            "$result"
+          xcrun stapler staple "${dmgs[0]}"
+
+      - name: Verify installed-form signed distribution
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+          EXPECTED_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          shopt -s nullglob
+          apps=("${{ matrix.bundle_root }}"/macos/*.app)
+          dmgs=("${{ matrix.bundle_root }}"/dmg/*.dmg)
+          if [ "${#apps[@]}" -ne 1 ] || [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "Expected one application and one DMG; found ${#apps[@]} and ${#dmgs[@]}." >&2
+            exit 1
+          fi
+          app_path=${apps[0]}
+          dmg_path=${dmgs[0]}
+          executable_path="$app_path/Contents/MacOS/asterlyn"
+
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          signature=$(codesign --display --verbose=4 "$app_path" 2>&1)
+          printf '%s\n' "$signature" | grep -F 'Authority=Developer ID Application:'
+          printf '%s\n' "$signature" | grep -F "TeamIdentifier=$EXPECTED_TEAM_ID"
+          printf '%s\n' "$signature" | grep -E 'flags=.*\(runtime\)'
+          timestamp=$(printf '%s\n' "$signature" | grep -E '^Timestamp=' || true)
+          if [ -z "$timestamp" ] || [ "$timestamp" = 'Timestamp=none' ]; then
+            echo "The application is missing a secure signing timestamp." >&2
+            exit 1
+          fi
+          if printf '%s\n' "$signature" | grep -Fq 'Signature=adhoc'; then
+            echo "The application has an ad-hoc signature." >&2
+            exit 1
+          fi
+          lipo -verify_arch "$EXPECTED_ARCHITECTURE" "$executable_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+          xcrun stapler validate "$app_path"
+          xcrun stapler validate "$dmg_path"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
+
+          mount_point="$RUNNER_TEMP/asterlyn-dmg"
+          copied_root="$RUNNER_TEMP/asterlyn-installed-form"
+          mkdir -p "$mount_point" "$copied_root"
+          mounted=false
+          cleanup_mount() {
+            if [ "$mounted" = true ]; then hdiutil detach "$mount_point" || true; fi
+          }
+          trap cleanup_mount EXIT
+          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          mounted=true
+          mounted_apps=("$mount_point"/*.app)
+          if [ "${#mounted_apps[@]}" -ne 1 ]; then
+            echo "Expected exactly one application in the DMG." >&2
+            exit 1
+          fi
+          copied_app="$copied_root/Asterlyn.app"
+          ditto "${mounted_apps[0]}" "$copied_app"
+          hdiutil detach "$mount_point"
+          mounted=false
+          trap - EXIT
+          codesign --verify --deep --strict --verbose=2 "$copied_app"
+          spctl --assess --type execute --verbose=4 "$copied_app"
+          xcrun stapler validate "$copied_app"
+          lipo -verify_arch "$EXPECTED_ARCHITECTURE" "$copied_app/Contents/MacOS/asterlyn"
+          node scripts/smoke-native-app.mjs "$copied_app/Contents/MacOS/asterlyn"
+
+      - name: Generate checksums
+        run: node scripts/hash-release-artifacts.mjs "${{ matrix.bundle_root }}" "ci-artifacts/${{ matrix.target }}.sha256"
+
+      - name: Upload verified signed DMG and checksum
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asterlyn-signed-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            ${{ matrix.bundle_root }}/dmg/*.dmg
+            ci-artifacts/${{ matrix.target }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          certificate_path="$RUNNER_TEMP/asterlyn-developer-id.p12"
+          keychain_path="$RUNNER_TEMP/asterlyn-signing.keychain-db"
+          original_keychains_path="$RUNNER_TEMP/asterlyn-original-keychains.txt"
+          notarization_result="$RUNNER_TEMP/asterlyn-dmg-notarization.json"
+          rm -f "$certificate_path" "$notarization_result"
+          if [ -f "$original_keychains_path" ]; then
+            keychains=()
+            while IFS= read -r keychain; do
+              keychain=${keychain#*\"}
+              keychain=${keychain%\"*}
+              if [ -n "$keychain" ]; then keychains+=("$keychain"); fi
+            done < "$original_keychains_path"
+            if [ "${#keychains[@]}" -ne 0 ]; then
+              security list-keychains -d user -s "${keychains[@]}"
+            fi
+          fi
+          if [ -f "$keychain_path" ]; then
+            security delete-keychain "$keychain_path"
+          fi
+          rm -f "$original_keychains_path"
+
+  manifest:
+    name: Combine verified checksums
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download verified packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: asterlyn-signed-*-${{ github.sha }}
+          path: signed-packages
+          merge-multiple: true
+
+      - name: Verify the complete architecture set
+        run: |
+          dmg_count=$(find signed-packages -type f -name '*.dmg' | wc -l | tr -d ' ')
+          checksum_count=$(find signed-packages -type f -name '*.sha256' | wc -l | tr -d ' ')
+          if [ "$dmg_count" -ne 2 ] || [ "$checksum_count" -ne 2 ]; then
+            echo "Expected two signed DMGs and two checksum manifests." >&2
+            exit 1
+          fi
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            target_count=$(find signed-packages -type f -name "$target.sha256" | wc -l | tr -d ' ')
+            if [ "$target_count" -ne 1 ]; then
+              echo "Expected one checksum manifest for $target." >&2
+              exit 1
+            fi
+          done
+          while IFS= read -r checksum_file; do
+            entry_count=$(grep -Ec '^[0-9a-f]{64}  .+\.dmg$' "$checksum_file" || true)
+            if [ "$entry_count" -ne 1 ]; then
+              echo "Expected exactly one DMG entry in ${checksum_file##*/}." >&2
+              exit 1
+            fi
+            while read -r expected relative_path; do
+              artifacts=()
+              while IFS= read -r -d '' artifact; do artifacts+=("$artifact"); done \
+                < <(find signed-packages -type f -name "${relative_path##*/}" -print0)
+              if [ "${#artifacts[@]}" -ne 1 ]; then
+                echo "Expected exactly one downloaded ${relative_path##*/}." >&2
+                exit 1
+              fi
+              artifact=${artifacts[0]}
+              actual=$(sha256sum "$artifact" | cut -d ' ' -f 1)
+              if [ "$actual" != "$expected" ]; then
+                echo "Checksum mismatch for ${artifact##*/}." >&2
+                exit 1
+              fi
+            done < "$checksum_file"
+          done < <(find signed-packages -type f -name '*.sha256' | sort)
+          while IFS= read -r -d '' dmg; do
+            digest=$(sha256sum "$dmg" | cut -d ' ' -f 1)
+            printf '%s  %s\n' "$digest" "${dmg#signed-packages/}"
+          done < <(find signed-packages -type f -name '*.dmg' -print0 | sort -z) \
+            > "asterlyn-macos-${{ github.sha }}.sha256"
+
+      - name: Upload combined checksum manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asterlyn-signed-macos-${{ github.sha }}-checksums
+          path: asterlyn-macos-${{ github.sha }}.sha256
+          if-no-files-found: error
+          retention-days: 14

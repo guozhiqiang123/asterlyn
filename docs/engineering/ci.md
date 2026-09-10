@@ -19,13 +19,32 @@ After bundling, each target launches its freshly built native executable against
 - Pull requests use `pull_request`, never the privileged `pull_request_target` event.
 - External actions are pinned to immutable commit hashes. The adjacent version comments document the reviewed upstream release.
 - Dependency installation uses `npm ci` and Cargo's committed lock file.
-- Signing and release publication require a separate workflow, protected environment, explicit version tag, and documented recovery process before they may be introduced.
+- Signing and release publication use separate workflows. Signing requires the protected `macos-signing` environment and an explicitly approved manual dispatch from `main`; release publication remains outside both packaging workflows.
 
 ## Evidence policy
 
 A green matrix proves that compilation, bundling, and bounded process-liveness smoke checks succeeded on the named hosted-runner images. It does not prove that the window painted correctly or that user interaction worked. Before an artifact becomes a release candidate, record its hash and perform a launch/workflow smoke test on real hardware or a declared equivalent interactive environment. Unsigned macOS artifacts use ad-hoc signing only to preserve bundle integrity; they are not notarized and should not be presented as end-user releases.
 
 When a pinned action is updated, review its release notes and source provenance, change the hash and version comment together, and treat the resulting workflow run as new acceptance evidence.
+
+## Signed macOS distribution
+
+`Signed macOS package` is isolated from pull requests, ordinary pushes, preview packaging, and release publication. It accepts only a manual dispatch whose source is `refs/heads/main`, checks out `github.sha` without persisted credentials, and has repository-content read permission. The `macos-signing` environment must require release-maintainer approval, prevent self-review, restrict deployment to protected `main`, and disable administrative bypass where the repository plan supports those controls. Apple Silicon runs on `macos-15`; Intel runs on `macos-15-intel`, so each package is compiled and tested on matching hardware rather than cross-built on one runner.
+
+Configure four environment secrets without committing or pasting them into project files:
+
+- `APPLE_CERTIFICATE`: the base64-encoded `.p12` containing a **Developer ID Application** certificate and its private key.
+- `APPLE_CERTIFICATE_PASSWORD`: the `.p12` export password.
+- `APPLE_ID`: the Apple Developer account used for notarization.
+- `APPLE_PASSWORD`: an app-specific Apple password, not the account password.
+
+Configure `APPLE_TEAM_ID` as a protected environment variable. The workflow generates a one-run keychain password, imports exactly one Developer ID Application identity, checks that its team matches `APPLE_TEAM_ID`, and never falls back to ad-hoc signing. Certificate material is removed and the runner's keychain search list is restored even after failure.
+
+Tauri signs with hardened runtime, submits the application to Apple, and staples the accepted ticket before constructing the DMG. The workflow uploads nothing unless it can verify the Developer ID authority, expected team, secure timestamp, hardened-runtime flag, architecture, nested signatures, Gatekeeper assessment, and stapled tickets. It then mounts the DMG, copies the application with `ditto`, repeats signature/Gatekeeper/ticket checks on that installed form, and runs the native liveness smoke check. Both architectures must pass before a combined checksum manifest is emitted. The workflow deliberately does not create or modify a GitHub Release.
+
+The related [AndroidLogDesktop configuration](https://github.com/yifanfengshun930115-afk/AndroidLogDesktop/blob/master/src-tauri/tauri.conf.json) was inspected because a transferred package did not show the reported warning. It declares only `signingIdentity: "-"`; its [packaging workflow](https://github.com/yifanfengshun930115-afk/AndroidLogDesktop/blob/master/.github/workflows/desktop-packages.yml) has no Developer ID or notarization credentials and performs no Gatekeeper verification. That is useful ad-hoc preview behavior but cannot establish Apple trust. A difference caused by download quarantine, prior user approval, or transfer route must not be treated as a release-signing guarantee.
+
+As of 2026-09-10, the repository has no `macos-signing` environment, signing secrets, protected `main` rule, or accepted signed run. The workflow and fail-closed checks are ready, but the macOS warning is not accepted as fixed until those controls are provisioned and the resulting DMG passes a clean-machine install/open test. Do not weaken Gatekeeper with `xattr`, instruct users to bypass it, or present the ad-hoc preview DMG as the signed artifact.
 
 ## Accepted packaging evidence — 2026-09-08
 
