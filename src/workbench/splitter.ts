@@ -87,16 +87,16 @@ export function attachSplitter(
   element.setAttribute("aria-orientation", options.orientation);
   element.tabIndex = 0;
 
-  const syncAria = () => {
-    const range = normalizeRange(options.getRange());
+  const syncAria = (knownRange?: SplitterRange) => {
+    const range = knownRange ?? normalizeRange(options.getRange());
     element.setAttribute("aria-valuemin", String(Math.round(range.minimum)));
     element.setAttribute("aria-valuemax", String(Math.round(range.maximum)));
     element.setAttribute("aria-valuenow", String(Math.round(options.getValue())));
   };
-  const update = (value: number) => {
-    const range = normalizeRange(options.getRange());
+  const update = (value: number, knownRange?: SplitterRange) => {
+    const range = knownRange ?? normalizeRange(options.getRange());
     options.onChange(resizeValue(value, 0, 1, range));
-    syncAria();
+    syncAria(range);
   };
 
   const onPointerDown = (event: PointerEvent) => {
@@ -106,7 +106,10 @@ export function attachSplitter(
     const startCoordinate = pointerCoordinate(event, options.orientation);
     const startValue = options.getValue();
     const dragRange = normalizeRange(options.getRange());
-    const updates = createLatestFrameQueue(update);
+    // Keep one stable range for the complete pointer gesture. Reading clientWidth/clientHeight
+    // after every CSS-variable write forces synchronous layout and makes content-heavy panes
+    // visibly trail the pointer, especially in WebKit. A new gesture recomputes the range.
+    const updates = createLatestFrameQueue((value: number) => update(value, dragRange));
     element.classList.add("dragging");
     setDragging(true);
     element.setPointerCapture(event.pointerId);

@@ -127,6 +127,7 @@ import {
   matchesHistoryPageRequest,
   replaceHistoryPage,
 } from "./workbench/history-paging";
+import { RecentValueCache } from "./workbench/recent-value-cache";
 import {
   loadHistoryRefPreferences,
   saveHistoryRefPreferences,
@@ -230,6 +231,7 @@ const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const HISTORY_PAGE_SIZE = 150;
 const HISTORY_ROW_LIMIT = 3_000;
 const HISTORY_SCROLL_THRESHOLD = 72;
+const COMMIT_DETAILS_CACHE_LIMIT = 48;
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
 
 type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
@@ -460,6 +462,9 @@ export class AsterlynApp {
   private windowChromeMode: WindowChromeMode = "custom-right";
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
+  private readonly commitDetailsCache = new RecentValueCache<CommitDetails>(
+    COMMIT_DETAILS_CACHE_LIMIT,
+  );
   private workspaceResizeObserver: ResizeObserver | null = null;
   private editorMeasureFrame: number | null = null;
   private projectTreeCache: {
@@ -2814,6 +2819,9 @@ export class AsterlynApp {
           ),
         }),
         onChange: (value) => this.resizeWorkbench("branchTreeWidth", value),
+        onDragStateChange: (dragging) => {
+          this.query("#git-tool-grid").classList.toggle("resizing-columns", dragging);
+        },
         onCommit: () => this.persistWorkbenchLayout(),
         onReset: () =>
           this.resizeWorkbench(
@@ -2836,6 +2844,9 @@ export class AsterlynApp {
           ),
         }),
         onChange: (value) => this.resizeWorkbench("branchDetailsWidth", value),
+        onDragStateChange: (dragging) => {
+          this.query("#git-tool-grid").classList.toggle("resizing-columns", dragging);
+        },
         onCommit: () => this.persistWorkbenchLayout(),
         onReset: () =>
           this.resizeWorkbench(
@@ -3051,18 +3062,33 @@ export class AsterlynApp {
   private renderBottomTool(): void {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.layout.bottomTool !== "branches") return;
-    const commits = this.filteredHistoryCommits();
-    this.commitDetailSplitterDisposer?.();
-    this.commitDetailSplitterDisposer = null;
+    this.renderBranchPane(snapshot);
+    this.renderHistoryPane();
+    this.renderGitDetailPane(snapshot);
+  }
+
+  private renderBranchPane(snapshot: RepositorySnapshot): void {
+    if (this.state.layout.bottomTool !== "branches") return;
     this.query("#branch-navigation-body").innerHTML =
       this.renderBranchNavigation(snapshot);
+    this.renderBranchCount(snapshot);
+    this.bindBranchEvents();
+  }
+
+  private renderHistoryPane(): void {
+    if (!this.state.snapshot || this.state.layout.bottomTool !== "branches") return;
+    const commits = this.filteredHistoryCommits();
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
-    this.query("#git-detail-body").innerHTML = this.renderGitDetail(snapshot);
-    this.renderBranchCount(snapshot);
     this.renderHistoryCount(commits.length);
-    this.bindBranchEvents();
     this.bindHistoryEvents();
+  }
+
+  private renderGitDetailPane(snapshot = this.state.snapshot): void {
+    if (!snapshot || this.state.layout.bottomTool !== "branches") return;
+    this.commitDetailSplitterDisposer?.();
+    this.commitDetailSplitterDisposer = null;
+    this.query("#git-detail-body").innerHTML = this.renderGitDetail(snapshot);
     this.bindGitDetailEvents(snapshot);
   }
 
@@ -5109,17 +5135,34 @@ export class AsterlynApp {
       this.state.commitDetails.repositoryId === commit.repositoryId
     ) {
       this.state.gitDetail = "commit";
-      this.renderBottomTool();
+      this.updateHistoryCommitSelection(key);
+      this.renderGitDetailPane();
+      if (restoreFocus) this.focusHistoryCommit(key);
+      return;
+    }
+    if (key === this.state.selectedCommit && this.state.commitDetailsLoading) {
+      this.state.gitDetail = "commit";
+      this.updateHistoryCommitSelection(key);
+      this.renderGitDetailPane();
       if (restoreFocus) this.focusHistoryCommit(key);
       return;
     }
     this.state.selectedCommit = key;
     this.state.gitDetail = "commit";
     this.clearCommitInspection();
-    this.state.commitDetailsLoading = true;
-    this.renderBottomTool();
+    this.updateHistoryCommitSelection(key);
     if (restoreFocus) this.focusHistoryCommit(key);
     void this.loadSelectedCommitDetails();
+  }
+
+  private updateHistoryCommitSelection(key: string): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>("#history-results [data-commit-key]")
+      .forEach((row) => {
+        const selected = row.dataset.commitKey === key;
+        row.classList.toggle("selected", selected);
+        row.setAttribute("aria-selected", String(selected));
+      });
   }
 
   private focusHistoryCommit(key: string): void {
@@ -5270,8 +5313,6 @@ export class AsterlynApp {
       this.state.historyPagingRetry = null;
       this.state.selectedCommit = page.commits[0] ? commitKey(page.commits[0]) : null;
       this.clearCommitInspection();
-      this.state.commitDetailsLoading =
-        this.state.gitDetail === "commit" && this.state.selectedCommit !== null;
       this.renderBottomTool();
       this.loadVisibleCommitDetails();
     } catch (error) {
@@ -6205,7 +6246,16 @@ export class AsterlynApp {
     this.state.commitPatch = null;
     this.state.commitPatchLoading = false;
     this.state.commitPatchError = null;
-    this.renderBottomTool();
+    const cacheKey = this.commitDetailsCacheKey(snapshot.root, repositoryId, oid);
+    const cached = this.commitDetailsCache.get(cacheKey);
+    if (cached) {
+      this.state.commitDetails = cached;
+      this.state.commitDetailsLoading = false;
+      this.state.selectedCommitFile = cached.files[0]?.path ?? null;
+      this.renderGitDetailPane(snapshot);
+      return;
+    }
+    this.renderGitDetailPane(snapshot);
 
     try {
       const details = await bridge.readCommitDetails(snapshot.root, repositoryId, oid);
@@ -6218,10 +6268,11 @@ export class AsterlynApp {
       ) {
         return;
       }
+      this.commitDetailsCache.set(cacheKey, details);
       this.state.commitDetails = details;
       this.state.commitDetailsLoading = false;
       this.state.selectedCommitFile = details.files[0]?.path ?? null;
-      this.renderBottomTool();
+      this.renderGitDetailPane(snapshot);
     } catch (error) {
       if (
         generation !== this.commitDetailsGeneration ||
@@ -6232,9 +6283,17 @@ export class AsterlynApp {
       }
       this.state.commitDetailsLoading = false;
       this.state.commitDetailsError = errorMessage(error);
-      this.renderBottomTool();
+      this.renderGitDetailPane(snapshot);
       this.showError(error);
     }
+  }
+
+  private commitDetailsCacheKey(
+    repositoryRoot: string,
+    repositoryId: string,
+    oid: string,
+  ): string {
+    return `${repositoryRoot}\u0000${repositoryId}\u0000${oid}`;
   }
 
   private async loadSelectedCommitDiff(restoreFocus = false): Promise<void> {
@@ -6262,7 +6321,6 @@ export class AsterlynApp {
     this.state.commitPatchLoading = true;
     this.state.commitPatchError = null;
     this.renderEditor();
-    this.renderBottomTool();
     if (restoreFocus) this.focusCommitFile(file.path);
 
     try {
@@ -6293,7 +6351,6 @@ export class AsterlynApp {
       this.state.commitPatchLoading = false;
       this.state.commitPatchVersion = generation;
       this.renderEditor();
-      this.renderBottomTool();
       if (restoreFocus) this.focusCommitFile(file.path);
       if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
     } catch (error) {
@@ -6313,7 +6370,6 @@ export class AsterlynApp {
       this.state.commitPatchLoading = false;
       this.state.commitPatchError = errorMessage(error);
       this.renderEditor();
-      this.renderBottomTool();
       if (restoreFocus) this.focusCommitFile(file.path);
       this.showError(error);
     }
@@ -6392,10 +6448,19 @@ export class AsterlynApp {
     this.state.commitPatch = null;
     this.state.commitPatchLoading = true;
     this.state.commitPatchError = null;
-    this.renderBottomTool();
-    this.renderEditor();
+    this.updateCommitFileSelection(path);
     if (restoreFocus) this.focusCommitFile(path);
     void this.loadSelectedCommitDiff(restoreFocus);
+  }
+
+  private updateCommitFileSelection(path: string): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>("#git-detail-body [data-commit-file]")
+      .forEach((row) => {
+        const selected = row.dataset.commitFile === path;
+        row.classList.toggle("selected", selected);
+        row.setAttribute("aria-pressed", String(selected));
+      });
   }
 
   private focusCommitFile(path: string): void {
@@ -6717,7 +6782,7 @@ export class AsterlynApp {
       ?.addEventListener("click", () => {
         this.state.commitFileView = this.state.commitFileView === "tree" ? "flat" : "tree";
         saveCommitFileView(window.localStorage, this.state.commitFileView);
-        this.renderBottomTool();
+        this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#commit-file-view-toggle")?.focus();
       });
     this.root
