@@ -14,7 +14,27 @@ export function linkScrollElements(
   first: LinkedScrollElement,
   second: LinkedScrollElement,
 ): () => void {
-  type Position = { top: number; left: number };
+  return linkMappedScrollElements(first, second, absolutePosition, false);
+}
+
+export function linkVerticalScrollProportionally(
+  first: LinkedScrollElement,
+  second: LinkedScrollElement,
+): () => void {
+  return linkMappedScrollElements(first, second, proportionalVerticalPosition, true);
+}
+
+type Position = { top: number; left: number };
+
+function linkMappedScrollElements(
+  first: LinkedScrollElement,
+  second: LinkedScrollElement,
+  mapPosition: (
+    source: LinkedScrollElement,
+    target: LinkedScrollElement,
+  ) => Position,
+  synchronizeImmediately: boolean,
+): () => void {
   let suppressedFirst: Position | null = null;
   let suppressedSecond: Position | null = null;
   const consumeSuppressed = (
@@ -34,16 +54,7 @@ export function linkScrollElements(
     target: LinkedScrollElement,
     suppressTarget: (position: Position) => void,
   ) => {
-    const position = {
-      top: Math.min(
-        source.scrollTop,
-        Math.max(0, target.scrollHeight - target.clientHeight),
-      ),
-      left: Math.min(
-        source.scrollLeft,
-        Math.max(0, target.scrollWidth - target.clientWidth),
-      ),
-    };
+    const position = mapPosition(source, target);
     suppressTarget(position);
     target.scrollTo(position.left, position.top);
   };
@@ -73,8 +84,40 @@ export function linkScrollElements(
   };
   first.addEventListener("scroll", mirrorFirst);
   second.addEventListener("scroll", mirrorSecond);
+  if (synchronizeImmediately) mirrorFirst();
   return () => {
     first.removeEventListener("scroll", mirrorFirst);
     second.removeEventListener("scroll", mirrorSecond);
+  };
+}
+
+function absolutePosition(
+  source: LinkedScrollElement,
+  target: LinkedScrollElement,
+): Position {
+  return {
+    top: Math.min(
+      source.scrollTop,
+      Math.max(0, target.scrollHeight - target.clientHeight),
+    ),
+    left: Math.min(
+      source.scrollLeft,
+      Math.max(0, target.scrollWidth - target.clientWidth),
+    ),
+  };
+}
+
+function proportionalVerticalPosition(
+  source: LinkedScrollElement,
+  target: LinkedScrollElement,
+): Position {
+  const sourceMaximum = Math.max(0, source.scrollHeight - source.clientHeight);
+  const targetMaximum = Math.max(0, target.scrollHeight - target.clientHeight);
+  const progress = sourceMaximum > 0
+    ? Math.min(1, Math.max(0, source.scrollTop / sourceMaximum))
+    : 0;
+  return {
+    top: progress * targetMaximum,
+    left: target.scrollLeft,
   };
 }

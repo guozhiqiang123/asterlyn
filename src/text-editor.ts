@@ -1,5 +1,9 @@
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { foldGutter, foldKeymap } from "@codemirror/language";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+} from "@codemirror/commands";
+import { foldGutter, foldKeymap, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorState, type TransactionSpec } from "@codemirror/state";
 import {
@@ -13,6 +17,7 @@ import {
 import { withEditorFolding } from "./editor-folding";
 import { EditorLanguageLoader, type EditorLanguageStatus } from "./editor-language";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme";
+import { linkVerticalScrollProportionally } from "./workbench/linked-scroll";
 import type { AppPreferences } from "./workbench/preferences";
 import {
   applyExactTextChanges,
@@ -35,6 +40,7 @@ interface CachedTextEditor {
   readOnly: Compartment;
   editable: Compartment;
   language: Compartment;
+  indent: Compartment;
   tabSize: Compartment;
   languageLoader: EditorLanguageLoader;
   languageName: string;
@@ -154,6 +160,13 @@ export class TextEditor {
     this.activeEntry()?.view?.requestMeasure();
   }
 
+  linkVerticalScroll(peer: HTMLElement): () => void {
+    const source = this.activeEntry()?.view?.scrollDOM;
+    return source
+      ? linkVerticalScrollProportionally(source, peer)
+      : () => undefined;
+  }
+
   setReadOnly(readOnly: boolean): void {
     this.readOnlyValue = readOnly;
     for (const entry of this.entries.values()) {
@@ -169,9 +182,14 @@ export class TextEditor {
       if (entry.view) applyEditorPreferences(entry.view, preferences);
       this.dispatchEffects(
         entry,
-        entry.tabSize.reconfigure(
-          EditorState.tabSize.of(preferences.editorTabSize),
-        ),
+        [
+          entry.tabSize.reconfigure(
+            EditorState.tabSize.of(preferences.editorTabSize),
+          ),
+          entry.indent.reconfigure(
+            indentUnit.of(" ".repeat(preferences.editorIndentSize)),
+          ),
+        ],
       );
     }
   }
@@ -229,6 +247,7 @@ export class TextEditor {
     const readOnly = new Compartment();
     const editable = new Compartment();
     const language = new Compartment();
+    const indent = new Compartment();
     const tabSize = new Compartment();
     const entry: CachedTextEditor = {
       id,
@@ -243,6 +262,7 @@ export class TextEditor {
       readOnly,
       editable,
       language,
+      indent,
       tabSize,
       languageLoader: new EditorLanguageLoader(),
       languageName: "Plain Text",
@@ -255,6 +275,7 @@ export class TextEditor {
       doc: entry.exactContent.text,
       extensions: [
         tabSize.of(EditorState.tabSize.of(preferences.editorTabSize)),
+        indent.of(indentUnit.of(" ".repeat(preferences.editorIndentSize))),
         readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
         editable.of(EditorView.editable.of(!this.readOnlyValue)),
         language.of([]),
@@ -369,5 +390,9 @@ function applyEditorPreferences(
   view.dom.style.setProperty(
     "--editor-line-height",
     preferences.editorLineHeight.toString(),
+  );
+  view.dom.style.setProperty(
+    "--editor-letter-spacing",
+    `${preferences.editorLetterSpacing}px`,
   );
 }

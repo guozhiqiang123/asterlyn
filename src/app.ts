@@ -61,6 +61,8 @@ import {
   type WindowChromeMode,
 } from "./workbench/window-chrome";
 import {
+  EDITOR_INDENT_SIZES,
+  EDITOR_LETTER_SPACINGS,
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
   EDITOR_TAB_SIZES,
@@ -70,6 +72,10 @@ import {
   updateAppPreferences,
   type AppPreferences,
 } from "./workbench/preferences";
+import {
+  RECENT_REPOSITORY_KEY,
+  restoreRecentRepository,
+} from "./workbench/startup-repository";
 import {
   beginHistoryQuery,
   completeRefHistory,
@@ -207,7 +213,6 @@ import type {
   ReplacementRecoverySummary,
 } from "./models";
 
-const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const HISTORY_PAGE_SIZE = 150;
 const HISTORY_ROW_LIMIT = 3_000;
@@ -215,7 +220,7 @@ const HISTORY_SCROLL_THRESHOLD = 72;
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
 
 type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
-type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "languages";
+type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "code";
 
 interface AppState {
   snapshot: RepositorySnapshot | null;
@@ -413,6 +418,7 @@ export class AsterlynApp {
   private editorTabMenuOpen = false;
   private markdownSourcePercent = 50;
   private markdownSplitterDisposer: (() => void) | null = null;
+  private markdownScrollDisposer: (() => void) | null = null;
   private markdownPreviewTimer: number | null = null;
   private markdownPreviewSequence = 0;
   private markdownPreviewPending: {
@@ -462,12 +468,11 @@ export class AsterlynApp {
       return;
     }
 
-    const recent = window.localStorage.getItem(RECENT_REPOSITORY_KEY);
-    if (recent) {
-      await this.openRepository(recent);
-    } else {
-      await this.chooseRepository();
-    }
+    await restoreRecentRepository(
+      window.localStorage,
+      (recent) => this.openRepository(recent, false),
+      () => this.chooseRepository(),
+    );
   }
 
   private renderShell(): void {
@@ -596,10 +601,7 @@ export class AsterlynApp {
           <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">
             <header class="settings-page-header">
               <button class="icon-button" id="settings-back" type="button" aria-label="Return to workbench" title="Back to workbench">${icon("back", 17)}</button>
-              <div>
-                <span class="panel-eyebrow">Application</span>
-                <h1 id="settings-page-title">Settings</h1>
-              </div>
+              <h1 id="settings-page-title">Settings</h1>
             </header>
             <div class="settings-page-layout">
               <nav class="settings-navigation" id="settings-navigation" aria-label="Settings groups"></nav>
@@ -954,17 +956,17 @@ export class AsterlynApp {
   }
 
   private renderSettingsPage(): void {
-    const sections: Array<[SettingsSection, string, string]> = [
-      ["general", "General", "Language and application behavior"],
-      ["appearance", "Appearance", "Theme and interface typography"],
-      ["editor", "Editor", "Text display and indentation defaults"],
-      ["version-control", "Version Control", "Diff presentation defaults"],
-      ["languages", "Languages", "Language-specific formatting services"],
+    const sections: Array<[SettingsSection, string]> = [
+      ["general", "General"],
+      ["appearance", "Appearance"],
+      ["editor", "Editor"],
+      ["version-control", "Version Control"],
+      ["code", "Code"],
     ];
     this.query("#settings-navigation").innerHTML = sections
-      .map(([id, label, detail]) => {
+      .map(([id, label]) => {
         const selected = this.state.settingsSection === id;
-        return `<button class="settings-navigation-item ${selected ? "selected" : ""}" type="button" data-settings-section="${id}" aria-current="${selected ? "page" : "false"}"><strong>${label}</strong><span>${detail}</span></button>`;
+        return `<button class="settings-navigation-item ${selected ? "selected" : ""}" type="button" data-settings-section="${id}" aria-current="${selected ? "page" : "false"}">${label}</button>`;
       })
       .join("");
     this.query("#settings-content").innerHTML = this.renderSettingsSection();
@@ -998,8 +1000,10 @@ export class AsterlynApp {
           "Shared defaults for text editors and source-aware Diff panes.",
           `
             ${this.settingsRow("Editor font size", "Applies immediately to text files and Diff code.", this.settingsSelect("setting-editor-font", "Editor font size", "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}
-            ${this.settingsRow("Editor line height", "Controls vertical density without changing file content.", this.settingsSelect("setting-editor-line-height", "Editor line height", "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}
-            ${this.settingsRow("Default tab width", "Language-neutral visual indentation. It does not rewrite existing whitespace.", this.settingsSelect("setting-editor-tab", "Default tab width", "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, (value) => `${value} spaces`))}
+            ${this.settingsRow("Line spacing", "Controls vertical code density without changing file content.", this.settingsSelect("setting-editor-line-height", "Editor line spacing", "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}
+            ${this.settingsRow("Letter spacing", "Adjusts horizontal spacing between code glyphs. Android Studio's editor default is represented by 0 px.", this.settingsSelect("setting-editor-letter-spacing", "Editor letter spacing", "editorLetterSpacing", EDITOR_LETTER_SPACINGS, preferences.editorLetterSpacing, (value) => value === 0 ? "Default · 0 px" : `${value > 0 ? "+" : ""}${value} px`))}
+            ${this.settingsRow("Indent size", "Sets the spaces inserted for one editor indentation level.", this.settingsSelect("setting-editor-indent", "Editor indent size", "editorIndentSize", EDITOR_INDENT_SIZES, preferences.editorIndentSize, (value) => `${value} spaces`))}
+            ${this.settingsRow("Tab width", "Controls the visual width of an existing tab character without rewriting content.", this.settingsSelect("setting-editor-tab", "Editor tab width", "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, (value) => `${value} spaces`))}
           `,
         );
       case "version-control":
@@ -1011,10 +1015,10 @@ export class AsterlynApp {
             ${this.settingsRow("Whitespace", "Show spaces and tabs in Diff panes.", `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>Show whitespace characters</span></label>`)}
           `,
         );
-      case "languages":
+      case "code":
         return this.settingsGroup(
-          "Languages",
-          "Language-specific behavior is introduced only when its service boundary is real.",
+          "Code",
+          "Syntax and language-specific services are introduced only when their boundaries are real.",
           `
             ${this.settingsRow("Syntax highlighting", "CodeMirror language packages load on demand for editors and Diff panes.", '<span class="setting-value-pill success">Available</span>')}
             ${this.settingsRow("Per-language formatting", "Formatter choice, style profiles, and format-on-save need the future language-service boundary.", '<span class="setting-planned">Planned</span>')}
@@ -1024,7 +1028,7 @@ export class AsterlynApp {
   }
 
   private settingsGroup(title: string, description: string, rows: string): string {
-    return `<section class="settings-group"><header><span class="panel-eyebrow">Preferences</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></header><div class="settings-list">${rows}</div></section>`;
+    return `<section class="settings-group"><header><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></header><div class="settings-list">${rows}</div></section>`;
   }
 
   private settingsRow(label: string, description: string, control: string): string {
@@ -1036,7 +1040,12 @@ export class AsterlynApp {
     ariaLabel: string,
     field: keyof Pick<
       AppPreferences,
-      "uiFontSize" | "editorFontSize" | "editorLineHeight" | "editorTabSize"
+      | "uiFontSize"
+      | "editorFontSize"
+      | "editorLineHeight"
+      | "editorLetterSpacing"
+      | "editorIndentSize"
+      | "editorTabSize"
     >,
     values: readonly number[],
     selected: number,
@@ -1064,7 +1073,12 @@ export class AsterlynApp {
       select.addEventListener("change", () => {
         const field = select.dataset.settingNumber as keyof Pick<
           AppPreferences,
-          "uiFontSize" | "editorFontSize" | "editorLineHeight" | "editorTabSize"
+          | "uiFontSize"
+          | "editorFontSize"
+          | "editorLineHeight"
+          | "editorLetterSpacing"
+          | "editorIndentSize"
+          | "editorTabSize"
         >;
         this.updatePreferences({ [field]: Number(select.value) }, select.id);
       });
@@ -1187,14 +1201,14 @@ export class AsterlynApp {
     void this.syncMaximizeControl().catch((error) => this.showError(error));
   }
 
-  private async openRepository(path: string): Promise<void> {
+  private async openRepository(path: string, reportError = true): Promise<boolean> {
     const previousRoot = this.state.snapshot?.root ?? null;
     if (
       previousRoot !== null &&
       previousRoot !== path &&
       !(await this.saveDirtyTabsBefore("switching repositories"))
     ) {
-      return;
+      return false;
     }
     this.cancelActiveWorkspaceSearch();
     this.cancelActiveWorkspaceReplacement();
@@ -1212,7 +1226,7 @@ export class AsterlynApp {
     this.setLoading(true, "Opening repository…");
     try {
       const snapshot = await bridge.openRepository(path);
-      if (generation !== this.requestGeneration) return;
+      if (generation !== this.requestGeneration) return false;
       const repositoryChanged = previousRoot !== null && previousRoot !== snapshot.root;
       window.localStorage.setItem(RECENT_REPOSITORY_KEY, snapshot.root);
       if (repositoryChanged) {
@@ -1259,15 +1273,17 @@ export class AsterlynApp {
       void this.loadReplacementRecoveries(snapshot.root, generation);
       pendingRoot = snapshot.root;
     } catch (error) {
-      if (generation !== this.requestGeneration) return;
-      this.showError(error);
+      if (generation !== this.requestGeneration) return false;
+      if (reportError) this.showError(error);
       if (!this.state.snapshot && bridge.isDemo) this.openRepositoryDialog(path);
+      return false;
     } finally {
       if (generation === this.requestGeneration) this.setLoading(false, "Ready");
     }
     if (pendingRoot && generation === this.requestGeneration) {
       void this.completeUntrackedScan(pendingRoot, generation);
     }
+    return pendingRoot !== null;
   }
 
   private async refresh(): Promise<void> {
@@ -5410,6 +5426,7 @@ export class AsterlynApp {
         result.status === "ready"
           ? `<article class="markdown-rendered">${result.html}</article>`
           : `<div class="markdown-preview-message" role="status"><strong>Preview paused for this large file</strong><span>The document is ${(result.byteLength / (1024 * 1024)).toFixed(1)} MiB. Live preview is limited to ${MARKDOWN_PREVIEW_MAX_BYTES / (1024 * 1024)} MiB; source editing and saving remain available.</span></div>`;
+      this.attachMarkdownScrollSync();
     } catch (error) {
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
@@ -5423,7 +5440,19 @@ export class AsterlynApp {
     return '<div class="markdown-preview-message" role="status"><strong>Rendering Markdown…</strong><span>The editor remains available while the preview engine loads.</span></div>';
   }
 
+  private attachMarkdownScrollSync(): void {
+    this.markdownScrollDisposer?.();
+    this.markdownScrollDisposer = null;
+    const active = activeTextTab(this.state.editor);
+    const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
+    if (!preview || active?.markdownMode !== "split") return;
+    preview.dataset.scrollSync = "proportional";
+    this.markdownScrollDisposer = this.textEditor.linkVerticalScroll(preview);
+  }
+
   private disposeMarkdownSurface(): void {
+    this.markdownScrollDisposer?.();
+    this.markdownScrollDisposer = null;
     this.markdownSplitterDisposer?.();
     this.markdownSplitterDisposer = null;
     if (this.markdownPreviewTimer !== null) {

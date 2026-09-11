@@ -333,6 +333,10 @@ function applyEditorPreferences(
     "--editor-line-height",
     preferences.editorLineHeight.toString(),
   );
+  view.dom.style.setProperty(
+    "--editor-letter-spacing",
+    `${preferences.editorLetterSpacing}px`,
+  );
 }
 
 function sourceLineDecorations(

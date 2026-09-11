@@ -103,6 +103,7 @@ export const asterlynEditorTheme = EditorView.theme(
     ".cm-content": {
       fontFamily:
         '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+      letterSpacing: "var(--editor-letter-spacing, 0px)",
       padding: "10px 0 40px",
       caretColor: "#a8c7fa",
     },

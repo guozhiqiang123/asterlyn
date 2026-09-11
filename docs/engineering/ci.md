@@ -10,7 +10,7 @@
 
 The workflow uploads unsigned, short-lived workflow artifacts plus a SHA-256 manifest for every target. It does not create a Git tag or GitHub Release and does not receive signing, notarization, updater, or publishing credentials.
 
-After bundling, each target launches its freshly built native executable against a disposable Git repository containing both tracked and untracked changes. The process must remain alive for a six-second observation window and is then terminated as a process tree. Linux runs under a temporary Xvfb display; Windows and macOS run directly on their hosted runners. An early exit fails the target and reports bounded stdout/stderr diagnostics.
+After bundling, each target launches its freshly built native executable against a disposable Git repository containing both tracked and untracked changes. The process must remain alive for a six-second observation window and is then terminated as a process tree. The launcher gives Linux a disposable XDG application profile so its temporary repository cannot enter an installed user's recent-project state. Linux runs under a temporary Xvfb display; Windows and macOS run directly on their hosted runners. An early exit fails the target and reports bounded stdout/stderr diagnostics.
 
 ## Trust boundary
 

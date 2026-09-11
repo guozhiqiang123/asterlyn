@@ -3,13 +3,17 @@ import type { DiffLayout } from "../diff-presentation";
 export const APP_PREFERENCES_KEY = "asterlyn.preferences.v1";
 export const UI_FONT_SIZES = [10, 11, 12, 13, 14] as const;
 export const EDITOR_FONT_SIZES = [11, 12, 13, 14, 16, 18, 20, 22, 24] as const;
-export const EDITOR_LINE_HEIGHTS = [1.2, 1.35, 1.5, 1.62, 1.8, 2] as const;
+export const EDITOR_LINE_HEIGHTS = [1, 1.1, 1.2, 1.35, 1.5, 1.62, 1.8, 2] as const;
+export const EDITOR_LETTER_SPACINGS = [-0.5, -0.25, 0, 0.25, 0.5, 1] as const;
+export const EDITOR_INDENT_SIZES = [2, 4, 8] as const;
 export const EDITOR_TAB_SIZES = [2, 4, 8] as const;
 
 export interface AppPreferences {
   uiFontSize: number;
   editorFontSize: number;
   editorLineHeight: number;
+  editorLetterSpacing: number;
+  editorIndentSize: number;
   editorTabSize: number;
   diffLayout: DiffLayout;
   showWhitespace: boolean;
@@ -19,6 +23,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   uiFontSize: 13,
   editorFontSize: 13,
   editorLineHeight: 1.2,
+  editorLetterSpacing: 0,
+  editorIndentSize: 4,
   editorTabSize: 4,
   diffLayout: "split",
   showWhitespace: false,
@@ -37,7 +43,10 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
     const raw = storage.getItem(APP_PREFERENCES_KEY);
     if (!raw) return { ...DEFAULT_APP_PREFERENCES };
     const value = JSON.parse(raw) as { version?: unknown; preferences?: unknown };
-    if ((value.version !== 1 && value.version !== 2) || !isRecord(value.preferences)) {
+    if (
+      (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
+      !isRecord(value.preferences)
+    ) {
       return { ...DEFAULT_APP_PREFERENCES };
     }
     const preferences = value.preferences;
@@ -57,6 +66,16 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         migrateLegacyDefault(preferences.editorLineHeight, legacyDefaults, 1.62, 1.2),
         EDITOR_LINE_HEIGHTS,
         1.2,
+      ),
+      editorLetterSpacing: allowedNumber(
+        preferences.editorLetterSpacing,
+        EDITOR_LETTER_SPACINGS,
+        0,
+      ),
+      editorIndentSize: allowedNumber(
+        preferences.editorIndentSize,
+        EDITOR_INDENT_SIZES,
+        4,
       ),
       editorTabSize: allowedNumber(
         preferences.editorTabSize,
@@ -83,7 +102,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 2, preferences }),
+    JSON.stringify({ version: 3, preferences }),
   );
 }
 
@@ -103,6 +122,16 @@ export function updateAppPreferences(
       candidate.editorLineHeight,
       EDITOR_LINE_HEIGHTS,
       current.editorLineHeight,
+    ),
+    editorLetterSpacing: allowedNumber(
+      candidate.editorLetterSpacing,
+      EDITOR_LETTER_SPACINGS,
+      current.editorLetterSpacing,
+    ),
+    editorIndentSize: allowedNumber(
+      candidate.editorIndentSize,
+      EDITOR_INDENT_SIZES,
+      current.editorIndentSize,
     ),
     editorTabSize: allowedNumber(
       candidate.editorTabSize,

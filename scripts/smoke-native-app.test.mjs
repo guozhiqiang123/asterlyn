@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   createRepositoryFixture,
+  isolatedDesktopEnvironment,
   smokeProcess,
 } from "./smoke-native-app.mjs";
 
@@ -52,4 +53,19 @@ test("creates an isolated repository with tracked and untracked changes", async 
   } finally {
     await rm(fixture, { force: true, recursive: true });
   }
+});
+
+test("isolates desktop persistence without replacing the user home", () => {
+  const environment = isolatedDesktopEnvironment("/tmp/asterlyn-profile", {
+    HOME: "/home/person",
+    XDG_DATA_HOME: "/home/person/.local/share",
+    KEEP_ME: "yes",
+  });
+
+  assert.equal(environment.HOME, "/home/person");
+  assert.equal(environment.KEEP_ME, "yes");
+  assert.equal(environment.XDG_CACHE_HOME, "/tmp/asterlyn-profile/cache");
+  assert.equal(environment.XDG_CONFIG_HOME, "/tmp/asterlyn-profile/config");
+  assert.equal(environment.XDG_DATA_HOME, "/tmp/asterlyn-profile/data");
+  assert.equal(environment.XDG_STATE_HOME, "/tmp/asterlyn-profile/state");
 });

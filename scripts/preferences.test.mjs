@@ -58,6 +58,8 @@ test("preferences update only through bounded choices and round trip by version"
     uiFontSize: 13,
     editorFontSize: 16,
     editorLineHeight: 1.8,
+    editorLetterSpacing: 0.5,
+    editorIndentSize: 2,
     editorTabSize: 2,
     diffLayout: "unified",
     showWhitespace: true,
@@ -67,6 +69,14 @@ test("preferences update only through bounded choices and round trip by version"
   assert.equal(
     updateAppPreferences(updated, { editorFontSize: 200 }).editorFontSize,
     16,
+  );
+  assert.equal(
+    updateAppPreferences(updated, { editorLetterSpacing: 20 }).editorLetterSpacing,
+    0.5,
+  );
+  assert.equal(
+    updateAppPreferences(updated, { editorIndentSize: 3 }).editorIndentSize,
+    2,
   );
 });
 
@@ -83,4 +93,27 @@ test("version one defaults migrate to the JetBrains-aligned typography baseline"
     },
   });
   assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), DEFAULT_APP_PREFERENCES);
+});
+
+test("version two preferences gain Android Studio-aligned spacing defaults", () => {
+  const persisted = JSON.stringify({
+    version: 2,
+    preferences: {
+      uiFontSize: 14,
+      editorFontSize: 18,
+      editorLineHeight: 1.5,
+      editorTabSize: 8,
+      diffLayout: "unified",
+      showWhitespace: true,
+    },
+  });
+  assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), {
+    ...DEFAULT_APP_PREFERENCES,
+    uiFontSize: 14,
+    editorFontSize: 18,
+    editorLineHeight: 1.5,
+    editorTabSize: 8,
+    diffLayout: "unified",
+    showWhitespace: true,
+  });
 });

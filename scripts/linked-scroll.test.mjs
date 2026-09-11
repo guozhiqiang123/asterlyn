@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { linkScrollElements } from "../src/workbench/linked-scroll.ts";
+import {
+  linkScrollElements,
+  linkVerticalScrollProportionally,
+} from "../src/workbench/linked-scroll.ts";
 
 class FakeScroller {
   scrollTop = 0;
@@ -88,4 +91,25 @@ test("delayed and alternating scroll events settle without feedback", () => {
   dispose();
   first.userScroll(10, 10);
   assert.deepEqual([second.scrollLeft, second.scrollTop], [65, 60]);
+});
+
+test("proportional vertical linking maps unequal document heights in both directions", () => {
+  const source = new FakeScroller(500, 500);
+  const preview = new FakeScroller(800, 1_100);
+  source.scrollTop = 100;
+  preview.scrollLeft = 45;
+  const dispose = linkVerticalScrollProportionally(source, preview);
+
+  assert.equal(preview.scrollTop, 250);
+  assert.equal(preview.scrollLeft, 45);
+  preview.flush();
+
+  preview.userScroll(45, 750);
+  source.flush();
+  assert.equal(source.scrollTop, 300);
+  assert.equal(source.scrollLeft, 0);
+
+  dispose();
+  source.userScroll(0, 40);
+  assert.equal(preview.scrollTop, 750);
 });

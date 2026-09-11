@@ -85,6 +85,16 @@ export async function createRepositoryFixture() {
   }
 }
 
+export function isolatedDesktopEnvironment(root, environment = process.env) {
+  return {
+    ...environment,
+    XDG_CACHE_HOME: join(root, "cache"),
+    XDG_CONFIG_HOME: join(root, "config"),
+    XDG_DATA_HOME: join(root, "data"),
+    XDG_STATE_HOME: join(root, "state"),
+  };
+}
+
 async function runNativeSmoke(executableArgument) {
   const executable = resolve(executableArgument);
   const executableStat = await stat(executable).catch(() => null);
@@ -92,8 +102,10 @@ async function runNativeSmoke(executableArgument) {
     throw new Error(`Native executable was not found: ${executable}`);
   }
 
-  const fixture = await createRepositoryFixture();
+  const profile = await mkdtemp(join(tmpdir(), "asterlyn-native-smoke-profile-"));
+  let fixture = null;
   try {
+    fixture = await createRepositoryFixture();
     const observationMs = readPositiveDuration(
       process.env.ASTERLYN_SMOKE_OBSERVATION_MS,
       DEFAULT_OBSERVATION_MS,
@@ -103,7 +115,7 @@ async function runNativeSmoke(executableArgument) {
       args: [fixture],
       observationMs,
       environment: {
-        ...process.env,
+        ...isolatedDesktopEnvironment(profile),
         RUST_BACKTRACE: "1",
       },
     });
@@ -111,7 +123,8 @@ async function runNativeSmoke(executableArgument) {
       `Native smoke passed: ${basename(executable)} remained alive for ${result.observationMs} ms.`,
     );
   } finally {
-    await rm(fixture, { force: true, recursive: true });
+    if (fixture) await rm(fixture, { force: true, recursive: true });
+    await rm(profile, { force: true, recursive: true });
   }
 }
 

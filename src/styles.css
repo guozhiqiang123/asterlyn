@@ -515,16 +515,16 @@ textarea:focus-visible {
 .settings-navigation-item {
   display: flex;
   width: 100%;
-  min-height: 49px;
-  flex-direction: column;
+  min-height: 38px;
   justify-content: center;
-  gap: 3px;
-  padding: 7px 10px;
+  padding: 7px 12px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
+  font-size: var(--ui-font-size, 13px);
+  font-weight: 620;
   text-align: left;
 }
 
@@ -535,23 +535,6 @@ textarea:focus-visible {
 .settings-navigation-item.selected {
   background: #214283;
   color: #f0f5ff;
-}
-
-.settings-navigation-item strong {
-  font-size: var(--ui-font-size, 13px);
-  font-weight: 620;
-}
-
-.settings-navigation-item span {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: calc(var(--ui-font-size, 13px) - 2px);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-navigation-item.selected span {
-  color: #b8caed;
 }
 
 .settings-content {
@@ -569,7 +552,7 @@ textarea:focus-visible {
 }
 
 .settings-group h2 {
-  margin: 3px 0 7px;
+  margin: 0 0 7px;
   font-size: calc(var(--ui-font-size, 13px) + 9px);
   font-weight: 650;
 }

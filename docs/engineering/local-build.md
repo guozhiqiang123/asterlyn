@@ -35,6 +35,8 @@ Deepin 23 may expose a GPU render node while denying the KMS buffer operation us
 
 `npm run dev` starts the interface in browser demo mode when the Tauri bridge is absent. Demo mode is deliberately visible in the title bar and never claims to read or mutate the entered repository. It exists for fast layout, interaction, and accessibility work; native behavior is accepted only through Rust integration tests and a desktop smoke test.
 
+The native smoke launcher must not share Linux desktop persistence with an installed Asterlyn profile. It overrides only XDG cache, configuration, data, and state roots below a disposable smoke-profile directory, preserves the user's real home, and removes that profile together with its temporary Git repository. Application startup independently treats an unreadable recent-project hint as recoverable and returns to the system folder chooser. These are complementary boundaries: profile isolation prevents test pollution, while startup recovery handles paths removed outside Asterlyn.
+
 ## Platform icon generation
 
 [`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. The mark uses the complete square canvas. The generator preserves that full-canvas artwork for Windows and Linux, then derives a centered macOS-only representation whose visible alpha bounds occupy approximately 82% of the ICNS canvas. This keeps the same mark while matching the visual safe area used by neighboring macOS Launchpad icons instead of shrinking every platform. Regenerate the maintained desktop set atomically with the repository-pinned helper:
