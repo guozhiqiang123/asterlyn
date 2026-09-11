@@ -229,3 +229,27 @@ The complete frontend suite passes 138 tests, TypeScript checking succeeds, the 
 All output movements are **no material change**. The change adds one listener pair only while an active Markdown Split surface exists and two primitive preference fields; it adds no watcher, index, worker, parser, service process, polling task, or repository query. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory impact remains **inconclusive** and no memory-reduction claim is made. Exact heading/source anchors, installed macOS WebKit scrolling, and `.editorconfig` or language-specific indentation remain explicit later acceptance work.
 
 The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,366,752 bytes, with SHA-256 `cb705a666ccbb52fad22f646bb072abde59c72a3375fec24bba0c471e500e831`. Package inspection confirms version 0.1.0, `amd64`, the native executable, desktop entry, and maintained Linux icon-size set. No remote push is made.
+
+## Project chrome and hide-action correction
+
+Manual review on 2026-09-11 found four shell consistency gaps. The title bar permanently consumed space for the active path and offered no recent-project menu; the Files/Changes header duplicated an eyebrow and title while separating its count; only the bottom Git dock had an in-context Hide action; and an ignored-directory status was present in the tree model but lost to the directory row's more-specific base color. The recursive-collapse icon also drew two converging chevrons through the same compact center and appeared as an unrelated cross.
+
+The corrected project control renders only the active basename and disclosure arrow. Its native tooltip contains the absolute path, while its menu contains `Open…` and at most eight deduplicated, most-recently-used successful project paths. The active project is represented by the control and is excluded from the menu; no `Open Projects` section is introduced. Successful opens update both the compatible startup hint and the bounded recent list, and startup recovery removes a stale path from both. Files and Changes now expose one heading with the count as its immediate sibling. Both left-tool modes and the Git tool expose named top-right Hide actions through their existing persisted layout transitions.
+
+The production-like browser journey observed `sample-app` as the project control's entire visible text, `/workspace/sample-app` as its tooltip, and zero legacy path nodes. After opening that project through the normal target dialog, the menu exposed `asterlyn` with `/workspace/asterlyn` under `Recent Projects` and contained no current-project section. The Files header measured 44 pixels high, contained one heading and no eyebrow, and placed count `11` immediately after `sample-app`; Changes produced the equivalent single line `Changes 5`. Activating `Hide Files tool window` removed the dock and changed the activity button to `aria-pressed="false"`; reopening Files restored the same tool. The ignored `.cache` directory computed to `rgb(183, 138, 112)`, matching `--file-ignored: #b78a70`, while its title still identified the semantic `Ignored` state so color remains supplementary. Project-menu items use menu/menuitem roles, the disclosure publishes `aria-expanded`, and both Hide controls have purpose-specific accessible names. The browser reported no warning or error.
+
+The complete frontend suite passes 141 tests, TypeScript checking succeeds, the production build succeeds, Debian packaging completes, and the release executable remains alive for the six-second isolated native smoke interval. Recent-project work is bounded to eight strings and runs only when a menu opens or a project succeeds; it adds no watcher, filesystem probe, Git query, worker, polling task, or editor render dependency. No frame-time series was captured, so interaction performance remains **inconclusive** rather than a speed claim. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory impact also remains **inconclusive**.
+
+| Output | Startup/scroll/settings correction | Project-chrome correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 73.56 kB | 75.44 kB | +1.88 kB / +2.56% |
+| CSS gzip | 14.18 kB | 14.49 kB | +0.31 kB / +2.19% |
+| Main JavaScript | 644.14 kB | 647.57 kB | +3.43 kB / +0.53% |
+| Main JavaScript gzip | 186.10 kB | 186.82 kB | +0.72 kB / +0.39% |
+| Main JavaScript source map | 2,372.31 kB | 2,381.53 kB | +9.22 kB / +0.39% |
+| Linux release executable | 18,407,024 bytes | 18,409,648 bytes | +2,624 bytes / +0.014% |
+| Debian package | 6,366,752 bytes | 6,369,564 bytes | +2,812 bytes / +0.044% |
+
+The menu styling makes CSS size **regressed**; JavaScript, native executable, and Debian movements are **no material change**. Header hierarchy, project switching discoverability, tool-window closure consistency, ignored-directory truthfulness, and compact icon legibility are **improved**. Installed Linux/macOS placement and native tooltip timing remain manual acceptance items. The next shell change must reuse the documented one-title and top-right Hide invariants instead of adding a second label or an activity-rail-only close path.
+
+The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,369,564 bytes, with SHA-256 `d8d686da184b7844294bcc7ad40101680e86f84eaaba0578d66b39efec6bd6db`. Package inspection confirms version 0.1.0 and `amd64`; the release executable passed the isolated native smoke. No remote push is made.

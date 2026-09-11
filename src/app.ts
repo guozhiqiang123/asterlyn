@@ -73,8 +73,9 @@ import {
   type AppPreferences,
 } from "./workbench/preferences";
 import {
-  RECENT_REPOSITORY_KEY,
+  loadRecentRepositories,
   restoreRecentRepository,
+  touchRecentRepository,
 } from "./workbench/startup-repository";
 import {
   beginHistoryQuery,
@@ -416,6 +417,7 @@ export class AsterlynApp {
   private mountedTextTabId: string | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private editorTabMenuOpen = false;
+  private repositoryMenuOpen = false;
   private markdownSourcePercent = 50;
   private markdownSplitterDisposer: (() => void) | null = null;
   private markdownScrollDisposer: (() => void) | null = null;
@@ -456,6 +458,7 @@ export class AsterlynApp {
     this.renderShell();
     this.applyAppPreferences();
     this.bindShellEvents();
+    this.renderRepositoryMenu();
 
     if (bridge.isDemo) {
       await this.openRepository("/workspace/asterlyn");
@@ -479,11 +482,13 @@ export class AsterlynApp {
     this.root.innerHTML = `
       <main class="app-shell ${windowChromeClass(this.windowChromeMode)}">
         <header class="topbar" data-tauri-drag-region>
-          <button class="repository-switcher" id="repository-switcher" type="button" aria-label="Open repository">
-            ${icon("folder", 20)}
-            <span class="repository-name" id="repository-name">No repository</span>
-            <span class="repository-path" id="repository-path">Open a local folder</span>
-          </button>
+          <div class="repository-switcher-anchor" id="repository-switcher-anchor">
+            <button class="repository-switcher" id="repository-switcher" type="button" aria-label="Project menu" aria-haspopup="menu" aria-controls="repository-menu" aria-expanded="false" title="Open a project">
+              <span class="repository-name" id="repository-name">No project</span>
+              ${icon("chevron-down", 13)}
+            </button>
+            <div class="repository-menu hidden" id="repository-menu" role="menu" aria-label="Project menu"></div>
+          </div>
           <div class="topbar-actions" data-tauri-drag-region>
             <span class="demo-badge ${bridge.isDemo ? "" : "hidden"}">Browser demo</span>
             <button class="command-center-button" id="command-center-button" type="button" aria-label="Search files and commands" title="Search files and commands (Ctrl/Cmd+P)">
@@ -531,13 +536,15 @@ export class AsterlynApp {
             <div class="editor-row" id="editor-row">
               <aside class="navigator tool-window" id="left-tool" aria-label="Left tool window">
                 <div class="panel-header">
-                  <div>
-                    <span class="panel-eyebrow" id="navigator-eyebrow">Repository</span>
+                  <div class="navigator-title-group">
                     <h1 id="navigator-title">Files</h1>
+                    <span class="panel-count" id="navigator-count">0</span>
                   </div>
                   <div class="navigator-header-actions">
                     <div class="navigator-context-actions" id="navigator-actions"></div>
-                    <span class="panel-count" id="navigator-count">0</span>
+                    <button class="compact-icon-button tool-window-hide" id="hide-left-tool" type="button" aria-label="Hide Files tool window" title="Hide Files tool window">
+                      ${icon("close", 14)}
+                    </button>
                   </div>
                 </div>
                 <div class="navigator-body" id="navigator-body">
@@ -579,7 +586,7 @@ export class AsterlynApp {
                 <strong>Git</strong>
                 <span>Branches and Log</span>
                 <button class="bottom-tool-hide" id="hide-git-tool" type="button" aria-label="Hide Git tool window" title="Hide Git tool window">
-                  ${icon("minimize", 14)}
+                  ${icon("close", 14)}
                 </button>
               </div>
               <div class="git-tool-grid" id="git-tool-grid">
@@ -687,9 +694,11 @@ export class AsterlynApp {
   }
 
   private bindShellEvents(): void {
-    this.query("#repository-switcher").addEventListener("click", () =>
-      void this.chooseRepository(),
-    );
+    this.query("#repository-switcher").addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.repositoryMenuOpen = !this.repositoryMenuOpen;
+      this.renderRepositoryMenu();
+    });
     this.query("#sync-button").addEventListener("click", (event) => {
       event.stopPropagation();
       if (!this.state.snapshot) return;
@@ -784,6 +793,10 @@ export class AsterlynApp {
     this.query("#hide-git-tool").addEventListener("click", () => {
       this.toggleTool("branches");
     });
+    this.query("#hide-left-tool").addEventListener("click", () => {
+      const tool = this.state.layout.leftTool;
+      if (tool) this.toggleTool(tool);
+    });
     this.bindWorkbenchSplitters();
     this.workspaceResizeObserver = new ResizeObserver(() => {
       this.applyWorkbenchLayout(false);
@@ -816,6 +829,13 @@ export class AsterlynApp {
         return;
       }
       if (event.key === "Escape") {
+        if (this.repositoryMenuOpen) {
+          event.preventDefault();
+          this.repositoryMenuOpen = false;
+          this.renderRepositoryMenu();
+          this.query<HTMLButtonElement>("#repository-switcher").focus();
+          return;
+        }
         if (this.editorTabMenuOpen) {
           event.preventDefault();
           this.editorTabMenuOpen = false;
@@ -890,6 +910,14 @@ export class AsterlynApp {
       }
     });
     window.addEventListener("pointerdown", (event) => {
+      if (
+        this.repositoryMenuOpen &&
+        event.target instanceof Element &&
+        !event.target.closest("#repository-switcher-anchor")
+      ) {
+        this.repositoryMenuOpen = false;
+        this.renderRepositoryMenu();
+      }
       if (
         this.editorTabMenuOpen &&
         event.target instanceof Element &&
@@ -1228,7 +1256,7 @@ export class AsterlynApp {
       const snapshot = await bridge.openRepository(path);
       if (generation !== this.requestGeneration) return false;
       const repositoryChanged = previousRoot !== null && previousRoot !== snapshot.root;
-      window.localStorage.setItem(RECENT_REPOSITORY_KEY, snapshot.root);
+      touchRecentRepository(window.localStorage, snapshot.root);
       if (repositoryChanged) {
         this.captureMountedTextEditor();
         this.state.editor = createEditorSession();
@@ -2791,25 +2819,81 @@ export class AsterlynApp {
   }
 
   private renderTopbar(snapshot: RepositorySnapshot): void {
-    this.query("#repository-name").textContent = basename(snapshot.root);
-    this.query("#repository-path").textContent = snapshot.root;
+    this.renderRepositoryMenu(snapshot);
     this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
     this.renderRemotePopover(snapshot);
+  }
+
+  private renderRepositoryMenu(snapshot = this.state.snapshot): void {
+    const button = this.query<HTMLButtonElement>("#repository-switcher");
+    const menu = this.query("#repository-menu");
+    const currentRoot = snapshot?.root ?? null;
+    const currentName = currentRoot ? basename(currentRoot) : "No project";
+    this.query("#repository-name").textContent = currentName;
+    button.title = currentRoot ?? "Open a project";
+    button.setAttribute(
+      "aria-label",
+      currentRoot ? `Project menu for ${currentName}` : "Open project menu",
+    );
+    button.setAttribute("aria-expanded", String(this.repositoryMenuOpen));
+    menu.classList.toggle("hidden", !this.repositoryMenuOpen);
+    if (!this.repositoryMenuOpen) {
+      menu.innerHTML = "";
+      return;
+    }
+
+    const recent = loadRecentRepositories(window.localStorage).filter(
+      (path) => path !== currentRoot,
+    );
+    menu.innerHTML = `
+      <button class="repository-menu-action" id="choose-repository-from-menu" type="button" role="menuitem">
+        ${icon("folder", 16)}<span>Open…</span>
+      </button>
+      <div class="repository-menu-separator" role="separator"></div>
+      <div class="repository-menu-heading">Recent Projects</div>
+      ${
+        recent.length > 0
+          ? recent
+              .map(
+                (path) => `<button class="repository-menu-project" type="button" role="menuitem" data-recent-repository="${escapeAttribute(path)}" title="${escapeAttribute(path)}"><span class="repository-menu-project-mark">${escapeHtml(projectMonogram(path))}</span><span class="repository-menu-project-copy"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></span></button>`,
+              )
+              .join("")
+          : '<div class="repository-menu-empty">No other recent projects</div>'
+      }`;
+    this.root
+      .querySelector<HTMLButtonElement>("#choose-repository-from-menu")
+      ?.addEventListener("click", () => {
+        this.repositoryMenuOpen = false;
+        this.renderRepositoryMenu();
+        void this.chooseRepository();
+      });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-recent-repository]")
+      .forEach((item) => {
+        item.addEventListener("click", () => {
+          const path = item.dataset.recentRepository;
+          if (!path) return;
+          this.repositoryMenuOpen = false;
+          this.renderRepositoryMenu();
+          void this.requestRepositoryTarget(path);
+        });
+      });
   }
 
   private renderLeftTool(): void {
     const snapshot = this.state.snapshot;
     if (!snapshot || !this.state.layout.leftTool) return;
-    const eyebrow = this.query("#navigator-eyebrow");
     const title = this.query("#navigator-title");
     const count = this.query("#navigator-count");
     const actions = this.query("#navigator-actions");
+    const hide = this.query<HTMLButtonElement>("#hide-left-tool");
     const body = this.query("#navigator-body");
 
     if (this.state.layout.leftTool === "changes") {
       body.dataset.navigatorView = "changes";
-      eyebrow.textContent = "Version control";
       title.textContent = "Changes";
+      hide.setAttribute("aria-label", "Hide Changes tool window");
+      hide.title = "Hide Changes tool window";
       const filtered = this.filteredChanges(snapshot);
       count.textContent = filtered.length.toString();
       count.title = this.state.changeQuery
@@ -2822,8 +2906,9 @@ export class AsterlynApp {
       return;
     }
 
-    eyebrow.textContent = "Project";
     title.textContent = basename(snapshot.root);
+    hide.setAttribute("aria-label", "Hide Files tool window");
+    hide.title = "Hide Files tool window";
     const visibleEntries = this.state.repositoryFiles.length + this.state.ignoredProjectEntries.length;
     count.textContent = visibleEntries.toString();
     count.title = `${this.state.repositoryFiles.length} editable files and ${this.state.ignoredProjectEntries.length} ignored entries`;
@@ -7259,6 +7344,11 @@ function replacementFileStateLabel(
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/").replace(/\/$/, "");
   return normalized.split("/").pop() || normalized;
+}
+
+function projectMonogram(path: string): string {
+  const name = basename(path).trim();
+  return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
 }
 
 function markdownSplitRange(width: number): { minimum: number; maximum: number } {

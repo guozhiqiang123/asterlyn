@@ -25,6 +25,8 @@ Files and Changes share the left dock and therefore replace one another. Branche
 
 The bottom Branches tool has three independently resizable columns: branch/ref navigation, commit history, and commit/file details. Selecting a working-tree file or commit file dispatches a typed editor-document action; tool views do not call another tool's DOM or CodeMirror lifecycle directly.
 
+The window header presents only the active project's display name plus a disclosure control. Its absolute path is tooltip metadata rather than permanent chrome. The project menu contains the system-folder Open action and at most eight successfully opened recent projects, each with its display name and absolute path; the active project is already represented by the header and is not repeated in an `Open Projects` section. Left-tool headers contain one primary title with the bounded item count immediately adjacent. Every independently hideable tool window exposes a named Hide button at its top-right edge and routes that action through the same persisted layout transition as its activity-rail control. Hiding a tool cannot close, replace, or reload the active editor document.
+
 Persist only a versioned layout preference document containing dock visibility and validated dimensions. Repository identity, selections, pending operations, async generations, and editor widgets are transient session state. Unknown or malformed persisted versions reset to safe defaults, and all dimensions are clamped against both component minima and the current viewport.
 
 U6 keeps the activity rail fixed-width. Every content boundary is resizable by pointer and keyboard: left dock/editor, editor/bottom dock, the two internal Branches dividers, and the side-by-side Diff divider. Pointer-move bursts retain only the latest value for each animation frame. That value updates the affected CSS layout property directly; only dimensions that change the editor viewport request one coalesced editor measurement. The splitter controller reports an explicit drag lifetime, observes movement and release at the window boundary, and finalizes lost pointer capture. The Files pane suppresses its composited overlay scrollbar only during a left-divider drag, then restores it at the final pane width; this prevents a stale macOS WebKit scrollbar layer from visually separating from the divider. Resizing changes layout state only and never refreshes repository data.
@@ -59,6 +61,7 @@ The initial Files tree is a read-only list of tracked and non-ignored untracked 
 12. Markdown mode switching never copies, normalizes, saves, or discards buffer content; source and rendered views project one text-tab state.
 13. A late Markdown render cannot update another tab or a newer presentation mode, and rendered content cannot initiate HTML execution, image loading, or navigation.
 14. Linked Markdown scrolling changes viewport state only; it cannot move a cursor, edit content, save a file, or alter the per-tab Markdown mode.
+15. A hideable tool window always exposes a visible, keyboard-operable Hide action in its own top-right header; activity-rail toggles are not its only close path.
 
 ## Migration sequence
 

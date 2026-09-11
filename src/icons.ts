@@ -13,9 +13,9 @@ const paths: Record<string, string> = {
   locate:
     '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   expand:
-    '<path d="m8 9 4-4 4 4M8 15l4 4 4-4"/>',
+    '<path d="m8 6 4 4 4-4M8 12l4 4 4-4"/>',
   collapse:
-    '<path d="m8 7 4 4 4-4M8 17l4-4 4 4"/>',
+    '<path d="m8 12 4-4 4 4M8 18l4-4 4 4"/>',
   back: '<path d="m14.5 5-7 7 7 7"/>',
   sync: '<path d="M7 7h11l-3-3M17 17H6l3 3M18 7l-3 3M6 17l3-3"/>',
   download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/>',
