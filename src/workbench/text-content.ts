@@ -55,7 +55,8 @@ export function applyExactTextChanges(
   content: ExactTextContent,
   changes: readonly TextChange[],
 ): ExactTextContent {
-  let exact = encodeExactText(content);
+  let text = content.text;
+  const separators = [...content.separators];
   const ordered = [...changes].sort((left, right) => right.from - left.from);
   for (const change of ordered) {
     if (
@@ -65,29 +66,32 @@ export function applyExactTextChanges(
     ) {
       throw new RangeError("Text changes must address the current normalized document.");
     }
-    const from = exactOffset(content, change.from);
-    const to = exactOffset(content, change.to);
-    const inserted = decodeExactText(change.insert).text.replaceAll(
-      "\n",
-      content.dominantSeparator,
+    const separatorStart = countNewlines(text, 0, change.from);
+    const removedSeparators = countNewlines(text, change.from, change.to);
+    const inserted = decodeExactText(change.insert);
+    const insertedSeparators = inserted.separators.map(
+      () => content.dominantSeparator,
     );
-    exact = `${exact.slice(0, from)}${inserted}${exact.slice(to)}`;
+    text = `${text.slice(0, change.from)}${inserted.text}${text.slice(change.to)}`;
+    separators.splice(
+      separatorStart,
+      removedSeparators,
+      ...insertedSeparators,
+    );
   }
-  return decodeExactText(exact);
+  return {
+    text,
+    separators,
+    dominantSeparator: dominantSeparator(separators),
+  };
 }
 
-function exactOffset(content: ExactTextContent, normalizedOffset: number): number {
-  let exact = 0;
-  let separatorIndex = 0;
-  for (let index = 0; index < normalizedOffset; index += 1) {
-    if (content.text[index] === "\n") {
-      exact += (content.separators[separatorIndex] ?? content.dominantSeparator).length;
-      separatorIndex += 1;
-    } else {
-      exact += 1;
-    }
+function countNewlines(text: string, from: number, to: number): number {
+  let count = 0;
+  for (let index = from; index < to; index += 1) {
+    if (text[index] === "\n") count += 1;
   }
-  return exact;
+  return count;
 }
 
 function dominantSeparator(separators: LineSeparator[]): LineSeparator {

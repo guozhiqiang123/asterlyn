@@ -2,6 +2,7 @@ import { bridge } from "./bridge";
 import { BRAND } from "./brand";
 import { DiffEditor } from "./diff-editor";
 import { TextEditor } from "./text-editor";
+import { fileTypeIcon } from "./file-icons";
 import { icon } from "./icons";
 import { preferredRemote, remotePolicy } from "./remote-policy";
 import { windowControls } from "./window-controls";
@@ -3001,7 +3002,7 @@ export class AsterlynApp {
         : "";
       return `<details class="project-directory ${statusClass}" data-project-directory-container="${escapeAttribute(node.path)}" data-project-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary class="project-node-row ${selected ? "selected" : ""}" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-directory="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-expanded="${expanded}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></summary><div role="group">${children}</div></details>`;
     }
-    return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-file="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="project-file-glyph">${fileGlyph(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
+    return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-file="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="project-file-glyph">${fileTypeIcon(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
   }
 
   private bindProjectEvents(): void {
@@ -3190,7 +3191,6 @@ export class AsterlynApp {
       };
     }
     this.state.editor = opened.session;
-    this.renderLeftTool();
     this.renderEditor();
     if (!opened.needsLoad || !opened.tabId || opened.loadEpoch === null) {
       const current = opened.tabId ? textTab(this.state.editor, opened.tabId) : null;
@@ -5061,6 +5061,7 @@ export class AsterlynApp {
   private renderEditor(): void {
     const snapshot = this.state.snapshot;
     if (!snapshot) return;
+    this.textEditor.retain(this.state.editor.textTabs.map((tab) => tab.id));
     const document = this.activeDocument();
     const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
@@ -5221,7 +5222,7 @@ export class AsterlynApp {
     if (this.mountedEditorKey === key) return;
     this.captureMountedTextEditor();
     this.disposeMarkdownSurface();
-    this.textEditor.destroy();
+    this.textEditor.detach();
     this.mountedTextTabId = null;
     this.diffEditor.destroy();
     const body = this.query("#content-body");
@@ -5237,7 +5238,7 @@ export class AsterlynApp {
     }
     this.captureMountedTextEditor();
     this.disposeMarkdownSurface();
-    this.textEditor.destroy();
+    this.textEditor.detach();
     this.mountedTextTabId = null;
     this.diffEditor.destroy();
     const body = this.query("#content-body");
@@ -5262,7 +5263,7 @@ export class AsterlynApp {
     this.captureMountedTextEditor();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
-    this.textEditor.destroy();
+    this.textEditor.detach();
     const body = this.query("#content-body");
     body.innerHTML = "";
     this.resetEditorBodyClasses(body);
@@ -5280,7 +5281,7 @@ export class AsterlynApp {
     this.captureMountedTextEditor();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
-    this.textEditor.destroy();
+    this.textEditor.detach();
     const body = this.query("#content-body");
     body.innerHTML = "";
     this.resetEditorBodyClasses(body);
@@ -5338,6 +5339,8 @@ export class AsterlynApp {
   private mountTextEditorSurface(parent: HTMLElement, tab: TextTabState): void {
     this.textEditor.mount(
       parent,
+      tab.id,
+      tab.loadEpoch,
       tab.content,
       tab.document.path,
       this.state.preferences,
@@ -5489,6 +5492,7 @@ export class AsterlynApp {
         return `
           <div class="editor-tab ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""} ${dirty ? "dirty" : ""}" role="tab" aria-selected="${active}" data-editor-tab="${index}" title="${escapeAttribute(`${tab.document.workspacePath} · ${state}`)}">
             <button class="editor-tab-target" type="button" data-editor-tab-index="${index}">
+              <span class="editor-tab-file-icon">${fileTypeIcon(tab.document.workspacePath)}</span>
               <span class="editor-tab-label">${escapeHtml(basename(tab.document.workspacePath))}</span>
               ${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}
             </button>
@@ -5530,7 +5534,7 @@ export class AsterlynApp {
           this.state.editor.active.kind === "text" &&
           this.state.editor.active.id === tab.id;
         const dirty = isTextTabDirty(tab);
-        return `<button class="editor-tab-menu-item ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileGlyph(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}${active ? icon("check", 14) : ""}</button>`;
+        return `<button class="editor-tab-menu-item ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}${active ? icon("check", 14) : ""}</button>`;
       })
       .join("");
     const preview = this.state.editor.preview;
@@ -5600,7 +5604,6 @@ export class AsterlynApp {
   private activateEditorTextTab(tab: TextTabState, forceReveal = false): void {
     this.captureMountedTextEditor();
     this.state.editor = activateTextTab(this.state.editor, tab.id);
-    this.renderLeftTool();
     this.renderEditor();
     if (forceReveal) this.revealActiveEditorTab();
   }
@@ -5647,6 +5650,7 @@ export class AsterlynApp {
   private captureMountedTextEditor(): void {
     const tabId = this.mountedTextTabId;
     if (!tabId || !textTab(this.state.editor, tabId)) return;
+    this.textEditor.flushChanges();
     this.state.editor = captureTextContent(
       this.state.editor,
       tabId,
@@ -5723,6 +5727,7 @@ export class AsterlynApp {
     const closed = closeTextTab(this.state.editor, tabId);
     this.state.editor = closed.session;
     if (!closed.blocked) {
+      this.textEditor.dispose(tabId);
       this.renderLeftTool();
       this.renderEditor();
     }
@@ -6024,7 +6029,7 @@ export class AsterlynApp {
     return `
       <button class="commit-file-row file-status-${file.status} ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" ${tree ? `style="--tree-depth:${depth}"` : ""} data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
         <span class="change-status status-${file.status}" title="${escapeAttribute(changeLabel(file.status))}">${changeCode(file.status)}</span>
-        <span class="commit-file-glyph">${fileGlyph(file.path)}</span>
+        <span class="commit-file-glyph">${fileTypeIcon(file.path)}</span>
         <span class="change-path">
           ${previous}
           <span class="file-name">${escapeHtml(basename(file.path))}</span>
@@ -7240,21 +7245,6 @@ function dirname(path: string): string {
   const normalized = path.replaceAll("\\", "/");
   const offset = normalized.lastIndexOf("/");
   return offset < 0 ? "" : normalized.slice(0, offset);
-}
-
-function fileGlyph(name: string): string {
-  const extension = name.includes(".") ? name.split(".").pop()?.toLocaleUpperCase() : null;
-  const labels: Record<string, string> = {
-    CSS: "#",
-    HTML: "<>",
-    JS: "JS",
-    JSON: "{}",
-    MD: "M",
-    RS: "R",
-    TS: "TS",
-    TOML: "T",
-  };
-  return extension ? (labels[extension] ?? "·") : "·";
 }
 
 function formatRelative(epochSeconds: number): string {

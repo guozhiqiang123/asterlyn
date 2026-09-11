@@ -106,7 +106,7 @@ export const asterlynEditorTheme = EditorView.theme(
       padding: "10px 0 40px",
       caretColor: "#a8c7fa",
     },
-    ".cm-line": { padding: "0 14px" },
+    ".cm-line": { padding: "0 14px 0 0" },
     ".cm-scroller": {
       overflow: "auto",
       lineHeight: "var(--editor-line-height, 1.2)",

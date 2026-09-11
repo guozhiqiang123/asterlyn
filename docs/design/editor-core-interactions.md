@@ -153,6 +153,12 @@ Language folding now follows [`ADR-0006`](../architecture/decisions/0006-languag
 
 This correction does not introduce Tree-sitter, LSP, completion, navigation, diagnostics, formatting, symbol extraction, a worker, or an index. Those remain separately gated Stage 4 work. Focused fixtures cover Kotlin classes/functions/conditions, Groovy Gradle blocks, false braces in strings/comments, multiline Android XML, and the large-file cutoff. The updated evidence remains in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md).
 
+### E3.1 editor response and file-icon correction — 2026-09-11
+
+Text-tab activation now preserves the tab's CodeMirror state instead of recreating a plain document and reloading its language on every switch. Only one editor view remains mounted, so the bounded state cache retains parsing, selection, undo, and scroll continuity without keeping 20 hidden editor DOM trees. Consecutive tree selections avoid rebuilding the Files tool; asynchronous file and language completions remain identity-guarded so the final selection wins. Exact-content publication is coalesced to a frame and the mixed-line-ending adapter updates only the normalized text and separator slice addressed by a transaction.
+
+The editor line begins directly after the structural gutters with no additional left padding. Project files, text tabs, the open-file menu, and commit files share an original 16-pixel document-icon family. Static filename classification covers the common languages and project/configuration formats already relevant to Asterlyn; a neutral document remains the explicit fallback. Icons are decorative, while filename text, Git-status color, selection, and accessible labels remain authoritative. The updated evidence remains in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

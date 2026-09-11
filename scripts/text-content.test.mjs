@@ -35,3 +35,12 @@ test("deleting and replacing normalized ranges removes only addressed separators
     RangeError,
   );
 });
+
+test("multiple descending edits retain untouched mixed separators", () => {
+  const source = decodeExactText("one\r\ntwo\nthree\r\nfour");
+  const edited = applyExactTextChanges(source, [
+    { from: 0, to: 3, insert: "ONE" },
+    { from: 8, to: 13, insert: "THREE\n3.5" },
+  ]);
+  assert.equal(encodeExactText(edited), "ONE\r\ntwo\nTHREE\r\n3.5\r\nfour");
+});

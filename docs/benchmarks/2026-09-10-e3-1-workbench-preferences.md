@@ -173,3 +173,33 @@ A generated 102,400-code-unit Kotlin document measured the first fold query of 2
 Every output movement is **no material change**. Folding availability and XML control placement are **improved**. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory remains **inconclusive** and no memory-reduction claim is made. The fallback is intentionally brace-structural rather than grammar-complete and disables itself above one MiB; richer syntax structure remains a separately gated Stage 4 language-pack decision.
 
 The refreshed unsigned local package is `Asterlyn_0.1.0_amd64.deb`, 6,360,536 bytes, with SHA-256 `7da24c5ef29421352b1b6b6bea5cc1550dd9590ede78d81eaf38ad94a3d1fefb`. Package inspection confirms version 0.1.0, `amd64`, the native executable, desktop entry, and maintained icon-size set. The release executable remained alive for the six-second native smoke interval. No remote push is made.
+
+## Editor response and file-icon correction
+
+Manual interaction on 2026-09-11 exposed a coupled editor hot path rather than an isolated paint defect. Every Files-tree activation rebuilt the complete visible tree, destroyed the current CodeMirror view, reconstructed a new editor state, and restarted lazy language installation. Repeated selections could therefore queue obsolete work quickly enough that the visible editor appeared to stop following the final selected file. Every document change also reconstructed exact mixed-line-ending content through a complete encode/offset/mutate/decode pass.
+
+The correction gives each of the at most 20 open text tabs one bounded CodeMirror state owner while retaining exactly one mounted `EditorView`. Switching tabs detaches the active view and mounts the selected cached state, preserving its parsed syntax tree, selection, fold state, undo history, and scroll position. Tab close, repository exit, and a changed load epoch dispose the corresponding state. Asynchronous language installation is guarded by tab identity and load epoch, so an older request cannot replace the final selection. Files-tree activation patches selection in place and no longer reconstructs the tree DOM. Change notifications are coalesced to one animation frame, with a synchronous flush at capture/save/lifecycle boundaries, and exact line-ending metadata is now spliced only across changed ranges.
+
+The editor content line begins immediately after the line-number/fold gutters with zero left padding. Project rows, editor tabs, the open-document chooser, and commit-file rows now share one original 16-by-16 SVG file-icon system. It classifies common source, build, configuration, data, document, image, archive, and script names or extensions, then falls back to a neutral document mark. Icons are decorative and `aria-hidden`; the filename remains the authoritative accessible label. Git status color remains on the filename, so file type and repository state are independent signals.
+
+Focused exact-content tests retain mixed CRLF/LF separators across multiple changes, and file-icon tests cover representative static names, compound extensions, common languages, fallback behavior, fixed geometry, and non-reflection of an unsafe path. The complete frontend suite passes 132 tests, TypeScript checking passes, and the production frontend build succeeds.
+
+In a production-like Chromium workbench, 40 rapid Files-tree selections across four source files ended on `styles.css`, displayed its expected content, reported CSS language support ready, retained 17 tree rows, and mounted exactly one CodeMirror editor. A generated 300-line buffer produced an 8,804-pixel editor scroll extent inside a 386-pixel viewport; ten page movements advanced to 4,209 pixels without losing the editor. A fresh session edited `app.ts`, switched away and back, then used Undo to recover the exact clean baseline while retaining ready language state. The project tree exposed nine 16-by-16 file icons across five computed colors, the editor line reported zero left padding, and neither journey emitted a browser warning or error.
+
+A 514,579-code-unit, approximately 512-KiB CRLF fixture measured one middle insertion across 30 Node.js runs. The previous complete-content path had a 7.446-millisecond median (6.076 minimum, 12.160 maximum); the changed-range path had a 0.698-millisecond median (0.669 minimum, 1.645 maximum), a 90.63% median reduction. This result classifies the measured edit-synchronization path as **improved**. It is not a macOS WebKit frame-time series and does not by itself establish general scrolling latency.
+
+| Output | Language-fold correction | Editor-response correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 72.54 kB | 73.84 kB | +1.30 kB / +1.79% |
+| CSS gzip | 13.74 kB | 14.21 kB | +0.47 kB / +3.42% |
+| Main JavaScript | 636.34 kB | 642.25 kB | +5.91 kB / +0.93% |
+| Main JavaScript gzip | 183.79 kB | 185.53 kB | +1.74 kB / +0.95% |
+| Main JavaScript source map | 2,347.54 kB | 2,364.90 kB | +17.36 kB / +0.74% |
+| Linux release executable | 18,399,664 bytes | 18,405,360 bytes | +5,696 bytes / +0.03% |
+| Debian package | 6,360,536 bytes | 6,366,172 bytes | +5,636 bytes / +0.09% |
+
+Frontend size is **regressed**, chiefly from the explicit file-icon catalog and editor-state lifecycle. Native executable and Debian movement are **no material change**. Retaining up to 20 inactive editor states can retain more JavaScript heap than the previous single-state implementation, although only one DOM editor exists and closed tabs are released. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory impact is **inconclusive** and no memory-reduction claim is made.
+
+The browser evidence uses the production frontend in Chromium rather than an installed macOS WebKit bundle, and the automated interaction does not replace manual compositor and high-resolution trackpad acceptance. The existing greater-than-500-kB main-chunk warning also remains open. Functionality, final-selection correctness, measured edit synchronization, state continuity, and icon consistency are **improved**; frontend size is **regressed**; native package size has **no material change**; memory and cross-platform scroll-frame impact remain **inconclusive**.
+
+The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,366,172 bytes, with SHA-256 `295ada2eae73078f9a6fd24634e2476400ad8487a8b0fb0ba4b0d2100cefbc8e`. Package inspection confirms version 0.1.0, `amd64`, the native executable, desktop entry, and maintained Linux icon-size set. The release executable remained alive for the six-second native smoke interval. No remote push is made.

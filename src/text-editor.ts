@@ -1,5 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Compartment, EditorState } from "@codemirror/state";
+import { foldGutter, foldKeymap } from "@codemirror/language";
+import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
+import { Compartment, EditorState, type TransactionSpec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -8,21 +10,10 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import {
-  highlightSelectionMatches,
-  openSearchPanel,
-  searchKeymap,
-} from "@codemirror/search";
-import {
-  foldGutter,
-  foldKeymap,
-} from "@codemirror/language";
-import {
-  asterlynEditorTheme,
-  asterlynSyntaxHighlighting,
-} from "./editor-theme";
-import { EditorLanguageLoader } from "./editor-language";
 import { withEditorFolding } from "./editor-folding";
+import { EditorLanguageLoader, type EditorLanguageStatus } from "./editor-language";
+import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme";
+import type { AppPreferences } from "./workbench/preferences";
 import {
   applyExactTextChanges,
   decodeExactText,
@@ -30,100 +21,118 @@ import {
   type ExactTextContent,
   type TextChange,
 } from "./workbench/text-content";
-import type { AppPreferences } from "./workbench/preferences";
 
+interface CachedTextEditor {
+  id: string;
+  loadEpoch: number;
+  path: string;
+  exactContent: ExactTextContent;
+  serializedContent: string | null;
+  state: EditorState;
+  view: EditorView | null;
+  scrollLeft: number;
+  scrollTop: number;
+  readOnly: Compartment;
+  editable: Compartment;
+  language: Compartment;
+  tabSize: Compartment;
+  languageLoader: EditorLanguageLoader;
+  languageName: string;
+  languageStatus: EditorLanguageStatus | "loading";
+  onChange: (content: string) => void;
+  changePending: boolean;
+  changeFrame: number | null;
+}
+
+/**
+ * Owns one bounded CodeMirror state per open text tab while mounting only the
+ * active view. Tab switches preserve parsing, history, selection, and scroll
+ * state without retaining a hidden DOM editor for every file.
+ */
 export class TextEditor {
-  private view: EditorView | null = null;
-  private exactContent: ExactTextContent | null = null;
-  private readonly readOnly = new Compartment();
-  private readonly editable = new Compartment();
-  private readonly language = new Compartment();
-  private readonly tabSize = new Compartment();
-  private readonly languageLoader = new EditorLanguageLoader();
+  private readonly entries = new Map<string, CachedTextEditor>();
+  private activeId: string | null = null;
   private readOnlyValue = false;
 
   mount(
     parent: HTMLElement,
+    tabId: string,
+    loadEpoch: number,
     content: string,
     path: string,
     preferences: AppPreferences,
     onChange: (content: string) => void,
   ): void {
-    this.destroy();
-    this.exactContent = decodeExactText(content);
-    this.view = new EditorView({
-      parent,
-      state: EditorState.create({
-        doc: this.exactContent.text,
-        extensions: [
-          this.tabSize.of(EditorState.tabSize.of(preferences.editorTabSize)),
-          this.readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
-          this.editable.of(EditorView.editable.of(!this.readOnlyValue)),
-          this.language.of([]),
-          lineNumbers(),
-          foldGutter({ markerDOM: createFoldMarker }),
-          history(),
-          drawSelection(),
-          highlightActiveLine(),
-          highlightActiveLineGutter(),
-          highlightSelectionMatches(),
-          asterlynEditorTheme,
-          asterlynSyntaxHighlighting,
-          keymap.of([
-            ...foldKeymap,
-            ...defaultKeymap,
-            ...historyKeymap,
-            ...searchKeymap,
-            { key: "Mod-f", run: openSearchPanel },
-          ]),
-          EditorView.updateListener.of((update) => {
-            if (!update.docChanged || !this.exactContent) return;
-            const changes: TextChange[] = [];
-            update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
-              changes.push({ from, to, insert: inserted.toString() });
-            });
-            this.exactContent = applyExactTextChanges(this.exactContent, changes);
-            onChange(this.content());
-          }),
-        ],
-      }),
-    });
-    const mountedView = this.view;
-    applyEditorPreferences(mountedView, preferences);
-    mountedView.dom.dataset.language = "Plain Text";
-    mountedView.dom.dataset.languageStatus = "loading";
-    void this.languageLoader.load(path).then((result) => {
-      if (!result || this.view !== mountedView) return;
-      mountedView.dom.dataset.languageStatus = result.status;
-      if (!result.support) {
-        mountedView.dom.dataset.language =
-          result.status === "failed" ? "Plain Text" : result.name;
-        return;
-      }
-      mountedView.dom.dataset.language = result.name;
-      mountedView.dispatch({
-        effects: this.language.reconfigure(
-          withEditorFolding(result.name, result.support),
-        ),
-      });
+    const active = this.activeEntry();
+    if (
+      active?.id === tabId &&
+      active.loadEpoch === loadEpoch &&
+      active.view?.dom.parentElement === parent
+    ) {
+      active.onChange = onChange;
+      applyEditorPreferences(active.view, preferences);
+      active.view.requestMeasure();
+      return;
+    }
+
+    this.detach();
+    let entry = this.entries.get(tabId);
+    if (entry && (entry.loadEpoch !== loadEpoch || entry.path !== path)) {
+      this.dispose(tabId);
+      entry = undefined;
+    }
+    if (!entry) {
+      entry = this.createEntry(tabId, loadEpoch, content, path, preferences, onChange);
+      this.entries.set(tabId, entry);
+      this.loadLanguage(entry);
+    } else {
+      entry.onChange = onChange;
+    }
+
+    const mountedEntry = entry;
+    const view = new EditorView({ parent, state: mountedEntry.state });
+    mountedEntry.view = view;
+    this.activeId = tabId;
+    applyEditorPreferences(view, preferences);
+    this.updateLanguageDataset(mountedEntry);
+    view.scrollDOM.scrollLeft = mountedEntry.scrollLeft;
+    view.scrollDOM.scrollTop = mountedEntry.scrollTop;
+    window.requestAnimationFrame(() => {
+      if (mountedEntry.view !== view || this.activeId !== tabId) return;
+      view.scrollDOM.scrollLeft = mountedEntry.scrollLeft;
+      view.scrollDOM.scrollTop = mountedEntry.scrollTop;
+      view.requestMeasure();
     });
   }
 
-  content(): string {
-    return this.exactContent ? encodeExactText(this.exactContent) : "";
+  content(tabId = this.activeId): string {
+    if (!tabId) return "";
+    const entry = this.entries.get(tabId);
+    if (!entry) return "";
+    if (entry.serializedContent === null) {
+      entry.serializedContent = encodeExactText(entry.exactContent);
+    }
+    return entry.serializedContent;
+  }
+
+  flushChanges(): void {
+    const entry = this.activeEntry();
+    if (entry) this.flushEntryChange(entry);
   }
 
   focus(): void {
-    this.view?.focus();
+    this.activeEntry()?.view?.focus();
   }
 
   openFindReplace(): boolean {
-    return this.view ? openSearchPanel(this.view) : false;
+    const view = this.activeEntry()?.view;
+    return view ? openSearchPanel(view) : false;
   }
 
   selectRange(fromUtf16: number, toUtf16: number): boolean {
-    if (!this.view) return false;
-    const length = this.view.state.doc.length;
+    const view = this.activeEntry()?.view;
+    if (!view) return false;
+    const length = view.state.doc.length;
     if (
       !Number.isInteger(fromUtf16) ||
       !Number.isInteger(toUtf16) ||
@@ -133,43 +142,213 @@ export class TextEditor {
     ) {
       return false;
     }
-    this.view.dispatch({
+    view.dispatch({
       selection: { anchor: fromUtf16, head: toUtf16 },
       effects: EditorView.scrollIntoView(fromUtf16, { y: "center" }),
     });
-    this.view.focus();
+    view.focus();
     return true;
   }
 
   requestMeasure(): void {
-    this.view?.requestMeasure();
+    this.activeEntry()?.view?.requestMeasure();
   }
 
   setReadOnly(readOnly: boolean): void {
     this.readOnlyValue = readOnly;
-    this.view?.dispatch({
-      effects: [
-        this.readOnly.reconfigure(EditorState.readOnly.of(readOnly)),
-        this.editable.reconfigure(EditorView.editable.of(!readOnly)),
-      ],
-    });
+    for (const entry of this.entries.values()) {
+      this.dispatchEffects(entry, [
+        entry.readOnly.reconfigure(EditorState.readOnly.of(readOnly)),
+        entry.editable.reconfigure(EditorView.editable.of(!readOnly)),
+      ]);
+    }
   }
 
   setPreferences(preferences: AppPreferences): void {
-    if (!this.view) return;
-    applyEditorPreferences(this.view, preferences);
-    this.view.dispatch({
-      effects: this.tabSize.reconfigure(
-        EditorState.tabSize.of(preferences.editorTabSize),
-      ),
-    });
+    for (const entry of this.entries.values()) {
+      if (entry.view) applyEditorPreferences(entry.view, preferences);
+      this.dispatchEffects(
+        entry,
+        entry.tabSize.reconfigure(
+          EditorState.tabSize.of(preferences.editorTabSize),
+        ),
+      );
+    }
+  }
+
+  detach(): void {
+    const entry = this.activeEntry();
+    if (!entry?.view) {
+      this.activeId = null;
+      return;
+    }
+    this.flushEntryChange(entry);
+    entry.scrollLeft = entry.view.scrollDOM.scrollLeft;
+    entry.scrollTop = entry.view.scrollDOM.scrollTop;
+    entry.state = entry.view.state;
+    const dom = entry.view.dom;
+    entry.view.destroy();
+    entry.view = null;
+    dom.remove();
+    this.activeId = null;
+  }
+
+  retain(tabIds: readonly string[]): void {
+    const retained = new Set(tabIds);
+    for (const tabId of this.entries.keys()) {
+      if (!retained.has(tabId)) this.dispose(tabId);
+    }
+  }
+
+  dispose(tabId: string): void {
+    const entry = this.entries.get(tabId);
+    if (!entry) return;
+    if (this.activeId === tabId) this.detach();
+    if (entry.changeFrame !== null) window.cancelAnimationFrame(entry.changeFrame);
+    entry.languageLoader.cancel();
+    if (entry.view) {
+      const dom = entry.view.dom;
+      entry.view.destroy();
+      dom.remove();
+    }
+    this.entries.delete(tabId);
   }
 
   destroy(): void {
-    this.languageLoader.cancel();
-    this.view?.destroy();
-    this.view = null;
-    this.exactContent = null;
+    for (const tabId of [...this.entries.keys()]) this.dispose(tabId);
+  }
+
+  private createEntry(
+    id: string,
+    loadEpoch: number,
+    content: string,
+    path: string,
+    preferences: AppPreferences,
+    onChange: (content: string) => void,
+  ): CachedTextEditor {
+    const readOnly = new Compartment();
+    const editable = new Compartment();
+    const language = new Compartment();
+    const tabSize = new Compartment();
+    const entry: CachedTextEditor = {
+      id,
+      loadEpoch,
+      path,
+      exactContent: decodeExactText(content),
+      serializedContent: content,
+      state: null as unknown as EditorState,
+      view: null,
+      scrollLeft: 0,
+      scrollTop: 0,
+      readOnly,
+      editable,
+      language,
+      tabSize,
+      languageLoader: new EditorLanguageLoader(),
+      languageName: "Plain Text",
+      languageStatus: "loading",
+      onChange,
+      changePending: false,
+      changeFrame: null,
+    };
+    entry.state = EditorState.create({
+      doc: entry.exactContent.text,
+      extensions: [
+        tabSize.of(EditorState.tabSize.of(preferences.editorTabSize)),
+        readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
+        editable.of(EditorView.editable.of(!this.readOnlyValue)),
+        language.of([]),
+        lineNumbers(),
+        foldGutter({ markerDOM: createFoldMarker }),
+        history(),
+        drawSelection(),
+        highlightActiveLine(),
+        highlightActiveLineGutter(),
+        highlightSelectionMatches(),
+        asterlynEditorTheme,
+        asterlynSyntaxHighlighting,
+        keymap.of([
+          ...foldKeymap,
+          ...defaultKeymap,
+          ...historyKeymap,
+          ...searchKeymap,
+          { key: "Mod-f", run: openSearchPanel },
+        ]),
+        EditorView.updateListener.of((update) => {
+          entry.state = update.state;
+          if (!update.docChanged) return;
+          const changes: TextChange[] = [];
+          update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+            changes.push({ from, to, insert: inserted.toString() });
+          });
+          entry.exactContent = applyExactTextChanges(entry.exactContent, changes);
+          entry.serializedContent = null;
+          entry.changePending = true;
+          this.scheduleEntryChange(entry);
+        }),
+      ],
+    });
+    return entry;
+  }
+
+  private loadLanguage(entry: CachedTextEditor): void {
+    void entry.languageLoader.load(entry.path).then((result) => {
+      if (!result || this.entries.get(entry.id) !== entry) return;
+      entry.languageStatus = result.status;
+      if (!result.support) {
+        entry.languageName =
+          result.status === "failed" ? "Plain Text" : result.name;
+        this.updateLanguageDataset(entry);
+        return;
+      }
+      entry.languageName = result.name;
+      this.dispatchEffects(
+        entry,
+        entry.language.reconfigure(
+          withEditorFolding(result.name, result.support),
+        ),
+      );
+      this.updateLanguageDataset(entry);
+    });
+  }
+
+  private scheduleEntryChange(entry: CachedTextEditor): void {
+    if (entry.changeFrame !== null) return;
+    entry.changeFrame = window.requestAnimationFrame(() => {
+      entry.changeFrame = null;
+      this.flushEntryChange(entry);
+    });
+  }
+
+  private flushEntryChange(entry: CachedTextEditor): void {
+    if (entry.changeFrame !== null) {
+      window.cancelAnimationFrame(entry.changeFrame);
+      entry.changeFrame = null;
+    }
+    if (!entry.changePending) return;
+    entry.changePending = false;
+    entry.onChange(this.content(entry.id));
+  }
+
+  private dispatchEffects(
+    entry: CachedTextEditor,
+    effects: NonNullable<TransactionSpec["effects"]>,
+  ): void {
+    if (entry.view) {
+      entry.view.dispatch({ effects });
+    } else {
+      entry.state = entry.state.update({ effects }).state;
+    }
+  }
+
+  private updateLanguageDataset(entry: CachedTextEditor): void {
+    if (!entry.view) return;
+    entry.view.dom.dataset.language = entry.languageName;
+    entry.view.dom.dataset.languageStatus = entry.languageStatus;
+  }
+
+  private activeEntry(): CachedTextEditor | null {
+    return this.activeId ? (this.entries.get(this.activeId) ?? null) : null;
   }
 }
 

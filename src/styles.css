@@ -1041,13 +1041,71 @@ textarea:focus-visible {
   display: inline-grid;
   width: 17px;
   height: 17px;
+  flex: 0 0 17px;
   place-items: center;
-  border-radius: 3px;
-  background: #34363b;
-  color: #90b5f8;
-  font-family: ui-monospace, monospace;
-  font-size: 7px;
-  font-weight: 700;
+}
+
+.file-type-icon {
+  display: block;
+  overflow: visible;
+  flex: 0 0 auto;
+  color: #9aa0aa;
+  shape-rendering: geometricPrecision;
+}
+
+.file-type-icon-sheet {
+  fill: currentColor;
+  fill-opacity: 0.11;
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 1.15;
+}
+
+.file-type-icon-fold,
+.file-type-icon-mark {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.05;
+}
+
+.file-type-icon-label {
+  fill: currentColor;
+  font-family: Inter, "Noto Sans", sans-serif;
+  font-size: 5.1px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  text-anchor: middle;
+}
+
+.file-icon-typescript { color: #68a9e8; }
+.file-icon-javascript { color: #d8c35a; }
+.file-icon-kotlin { color: #b28ae8; }
+.file-icon-java { color: #e39768; }
+.file-icon-groovy { color: #75b6c7; }
+.file-icon-rust { color: #d69872; }
+.file-icon-python { color: #6fa8d8; }
+.file-icon-go { color: #55b7c9; }
+.file-icon-dart { color: #62b7dc; }
+.file-icon-swift { color: #e88368; }
+.file-icon-native { color: #7ea5d8; }
+.file-icon-markup { color: #dfa265; }
+.file-icon-styles { color: #8f91dc; }
+.file-icon-markdown { color: #71a7dc; }
+.file-icon-config { color: #b2a36f; }
+.file-icon-build { color: #8eb784; }
+.file-icon-git { color: #d47d66; }
+.file-icon-docker { color: #62a8dd; }
+.file-icon-shell { color: #79b879; }
+.file-icon-data { color: #b58acb; }
+.file-icon-image { color: #79b786; }
+.file-icon-archive { color: #c39c68; }
+.file-icon-text { color: #969da8; }
+.file-icon-generic { color: #858b95; }
+
+.file-status-ignored .file-type-icon {
+  color: var(--file-ignored);
 }
 
 .project-node-label,
@@ -2697,6 +2755,14 @@ textarea:focus-visible {
   font: inherit;
 }
 
+.editor-tab-file-icon {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+}
+
 .editor-tab-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3228,10 +3294,10 @@ textarea:focus-visible {
 }
 
 .commit-file-glyph {
-  color: #8daee8;
-  font-family: ui-monospace, monospace;
-  font-size: 8px;
-  font-weight: 700;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
 }
 
 .commit-file-row .change-path {
