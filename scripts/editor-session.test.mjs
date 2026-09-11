@@ -191,17 +191,42 @@ test("save completion advances the content baseline captured by that request", (
   assert.equal(dirtyTextTabs(session).length, 1);
 });
 
-test("clean tabs close and the session enforces its text-tab bound", () => {
+test("opening beyond the tab bound retires the oldest inactive clean tab", () => {
   let session = createEditorSession();
   for (let index = 0; index < TEXT_TAB_LIMIT; index += 1) {
     session = loaded(session, `${index}.ts`);
   }
   const overflow = openTextDocument(session, document("overflow.ts"));
-  assert.equal(overflow.limitReached, true);
+  assert.equal(overflow.limitReached, false);
   assert.equal(overflow.session.textTabs.length, TEXT_TAB_LIMIT);
+  assert.equal(
+    overflow.session.textTabs.some((tab) => tab.document.path === "0.ts"),
+    false,
+  );
+  assert.equal(
+    overflow.session.textTabs.at(-1).document.path,
+    "overflow.ts",
+  );
 
-  const first = session.textTabs[0].id;
-  const closed = closeTextTab(session, first);
+  const first = overflow.session.textTabs[0].id;
+  const closed = closeTextTab(overflow.session, first);
   assert.equal(closed.blocked, false);
   assert.equal(closed.session.textTabs.length, TEXT_TAB_LIMIT - 1);
+});
+
+test("the tab bound refuses a new file only when every buffer must be retained", () => {
+  let session = createEditorSession();
+  for (let index = 0; index < TEXT_TAB_LIMIT; index += 1) {
+    session = loaded(session, `${index}.ts`);
+    const tabId = session.textTabs.at(-1).id;
+    session = markTextEdited(session, tabId, `dirty-${index}`);
+  }
+  const overflow = openTextDocument(session, document("overflow.ts"));
+  assert.equal(overflow.limitReached, true);
+  assert.equal(overflow.session, session);
+  assert.equal(overflow.session.textTabs.length, TEXT_TAB_LIMIT);
+
+  const existing = openTextDocument(session, document("0.ts"));
+  assert.equal(existing.limitReached, false);
+  assert.equal(existing.session.active.id, session.textTabs[0].id);
 });

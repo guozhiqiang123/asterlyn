@@ -9,7 +9,7 @@ Stage 3 makes Asterlyn dependable as a text/code editor with language intelligen
 E1 replaces the project-file placeholder with a complete explicit-save loop:
 
 - Open tracked or non-ignored untracked files from the bounded project tree using an exact Git-root-qualified identity.
-- Keep up to 20 heterogeneous tabs: persistent editable text tabs plus one replaceable read-only Diff preview.
+- Keep up to 20 retained editable text tabs plus one replaceable read-only Diff preview. Opening beyond the retained-state bound automatically retires the oldest inactive clean tab; dirty or saving buffers remain protected.
 - Deduplicate repeated file opens, switch tabs without losing exact content, close clean tabs, and retain dirty tabs until Save succeeds or the user cancels.
 - Edit UTF-8 text up to two MiB in the CodeMirror adapter, preserving BOM, LF/CRLF/mixed separators, bare CR, and final-newline state.
 - Save through a freshly authorized, optimistic, same-directory atomic replacement. A conflict preserves the local buffer and never exposes force overwrite.
@@ -20,7 +20,7 @@ E1 intentionally adds no syntax mode, watcher, autosave, draft persistence, forc
 ### E1 acceptance
 
 - Rust tests cover authorized tracked/untracked identity, path escape and link rejection, text/size/encoding policy, exact byte round trips, permission preservation, conflict safety, idempotent retry, and concurrent-save serialization.
-- TypeScript tests cover tab deduplication, Diff preview replacement, stale load/save rejection, edits during save, exact mixed-line-ending composition, dirty transition guards, and the 20-tab bound.
+- TypeScript tests cover tab deduplication, Diff preview replacement, stale load/save rejection, edits during save, exact mixed-line-ending composition, dirty transition guards, clean-tab retirement at the 20-state bound, and refusal when all retained buffers are dirty.
 - Browser interaction covers opening and switching at least two files, editing, dirty markers, `Ctrl/Cmd+S`, clean close, Diff preview coexistence, and refresh retention using the deterministic bridge.
 - Native Linux interaction covers one real read, save, external conflict, and retry-safe result against a disposable repository. Existing working and commit Diff journeys remain usable.
 - Acceptance records absolute build/resource results, limitations, and next action. Packaging and remote publication wait for the agreed larger Stage 3 checkpoint.
@@ -33,7 +33,7 @@ The absolute local evidence is six `asterlyn-workspace` tests, 28 `asterlyn-git`
 
 The production build emitted 50.40 kB CSS (10.00 kB gzip) and 509.34 kB JavaScript (150.19 kB gzip), with a 2,048.12 kB JavaScript source map. No comparable pre-E1 asset measurement is retained, and the agreed phase checkpoint defers packaging and the normalized 60-second resource series. The interaction and correctness conclusion is **improved**; bundle-size movement, startup, and memory impact are **inconclusive**. Vite's greater-than-500-kB main-chunk warning remains visible rather than being treated as an accepted performance result.
 
-Known limits are UTF-8 text up to two MiB, 20 text tabs, explicit save only, and no syntax modes, file watching, recovery, autosave, safe discard, file creation/rename/delete, or durable undo history for an unmounted editor adapter. Atomic replacement preserves ordinary file permissions but not ACLs or extended attributes. The final validation-to-replacement interval retains a documented local path-substitution race, and non-Unix hard-link parity is not yet accepted. Windows/macOS installed interaction also remains deferred. The next product action is E2's bounded, keyboard-first navigation and search surface.
+Known limits are UTF-8 text up to two MiB, at most 20 retained text states with automatic clean-tab retirement, explicit save only, and no syntax modes, file watching, recovery, autosave, safe discard, file creation/rename/delete, or durable undo history for a released editor session. When all 20 buffers are dirty or saving, another file cannot open until the user saves or closes one. Atomic replacement preserves ordinary file permissions but not ACLs or extended attributes. The final validation-to-replacement interval retains a documented local path-substitution race, and non-Unix hard-link parity is not yet accepted. Windows/macOS installed interaction also remains deferred. The next product action is E2's bounded, keyboard-first navigation and search surface.
 
 ## Later Stage 3 slices
 
@@ -172,6 +172,12 @@ Editor settings now separate line spacing, letter spacing, inserted-space indent
 Manual comparison showed that matching Android Studio's published numeric size and spacing did not match its rendered density. Android Studio's JBR metrics are not available to a Tauri WebView, and the former CSS family list silently selected different installed fonts by platform. Asterlyn now bundles the standalone open-source JetBrains Mono variable font from a pinned Fontsource package under the OFL; it does not read or redistribute the copy inside Android Studio. The font applies to code, Diff content, line numbers, and rendered Markdown code. The CodeMirror-specific baseline remains 14 pixels at 1.35 line height, normal zero letter spacing, 400 weight, no synthetic faces, and no discretionary or contextual ligatures. Uncovered scripts use a system monospace fallback without changing the Latin glyph source.
 
 Version-five preferences add a bounded family identifier and migrate every older profile to bundled JetBrains Mono while preserving its explicit size and spacing choices. The JetBrains Mono OFL text is emitted into every frontend and native distribution. Cascadia Code, Fira Code, Source Code Pro, and IBM Plex Mono appear in the same Editor setting but are downloaded only after selection. Their exact versioned WOFF2 URLs and SHA-256 values form a closed catalog; successful bytes are verified, cached in the user profile when available, and loaded through the browser font API. Download, integrity, or decode failure cannot replace the working font; cache failure is reported and limits the verified face to the current window. Validation and package evidence remain on the existing [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md) page.
+
+### E3.1 rapid file-activation correction — 2026-09-11
+
+Repeated Files-tree activation must always converge on the last selected file. Ordinary XML, Java, Kotlin, and other source switches reuse the mounted CodeMirror view and exchange only the retained tab state. Lazy language installation yields one paint of the plain document and is cancelled when its owning tab loses activation, preventing an obsolete XML parser installation from competing with the next file's visible mount.
+
+The 20-state ceiling remains a memory bound rather than a hidden navigation failure. Opening another file automatically retires the oldest inactive clean tab. Dirty buffers and active saves are never evicted; only the exceptional all-protected case refuses the open, restores the tree selection to the visible document, and explains the required save-or-close action. Focused session fixtures, the production-like rapid-switch journey, real `superboost` parser fixtures, complete validation, and package evidence are recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md).
 
 ### E4 — Recovery and task surfaces
 

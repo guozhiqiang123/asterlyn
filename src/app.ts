@@ -3393,7 +3393,18 @@ export class AsterlynApp {
     }
     let opened = openTextDocument(this.state.editor, document);
     if (opened.limitReached) {
-      this.setStatus("Close a text tab before opening another file", "warning");
+      const currentSnapshot = this.state.snapshot;
+      const activePath = currentSnapshot
+        ? this.activeProjectWorkspacePath(currentSnapshot)
+        : null;
+      if (activePath) {
+        this.state.projectTreeSelection = { path: activePath, kind: "file" };
+        this.markProjectTreeSelection(activePath);
+      }
+      this.setStatus(
+        "All 20 open files contain unsaved changes; save or close one before opening another",
+        "warning",
+      );
       return;
     }
     if (searchMatch && existing?.status === "ready" && opened.tabId) {
@@ -5479,12 +5490,15 @@ export class AsterlynApp {
       this.textEditor.requestMeasure();
       return;
     }
+    const body = this.query("#content-body");
+    const reuseTextSurface = this.textEditor.isMountedIn(body);
     this.captureMountedTextEditor();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
-    this.textEditor.detach();
-    const body = this.query("#content-body");
-    body.innerHTML = "";
+    if (!reuseTextSurface) {
+      this.textEditor.detach();
+      body.innerHTML = "";
+    }
     this.resetEditorBodyClasses(body);
     body.classList.add("text-surface");
     this.mountedTextTabId = tab.id;

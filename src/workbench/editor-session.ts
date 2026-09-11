@@ -100,7 +100,28 @@ export function openTextDocument(
       limitReached: false,
     };
   }
-  if (session.textTabs.length >= TEXT_TAB_LIMIT) {
+  let textTabs = session.textTabs;
+  if (textTabs.length >= TEXT_TAB_LIMIT) {
+    // The bound limits retained editor state, not navigation. Retire an old
+    // clean buffer automatically, while dirty and in-flight saves remain
+    // non-evictable data-loss boundaries.
+    const inactiveCleanIndex = textTabs.findIndex(
+      (tab) =>
+        (session.active.kind !== "text" || session.active.id !== tab.id) &&
+        tab.saveRequest === null &&
+        !isTextTabDirty(tab),
+    );
+    const cleanIndex =
+      inactiveCleanIndex >= 0
+        ? inactiveCleanIndex
+        : textTabs.findIndex(
+            (tab) => tab.saveRequest === null && !isTextTabDirty(tab),
+          );
+    if (cleanIndex >= 0) {
+      textTabs = textTabs.filter((_tab, index) => index !== cleanIndex);
+    }
+  }
+  if (textTabs.length >= TEXT_TAB_LIMIT) {
     return {
       session,
       tabId: null,
@@ -128,7 +149,7 @@ export function openTextDocument(
   return {
     session: {
       ...session,
-      textTabs: [...session.textTabs, tab],
+      textTabs: [...textTabs, tab],
       active: { kind: "text", id },
     },
     tabId: id,

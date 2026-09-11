@@ -43,6 +43,7 @@ interface CachedTextEditor {
   indent: Compartment;
   tabSize: Compartment;
   languageLoader: EditorLanguageLoader;
+  languageActivation: number;
   languageName: string;
   languageStatus: EditorLanguageStatus | "loading";
   onChange: (content: string) => void;
@@ -52,8 +53,9 @@ interface CachedTextEditor {
 
 /**
  * Owns one bounded CodeMirror state per open text tab while mounting only the
- * active view. Tab switches preserve parsing, history, selection, and scroll
- * state without retaining a hidden DOM editor for every file.
+ * active view. Ordinary text-tab switches reuse that view and replace only its
+ * state, preserving parsing, history, selection, and scroll state without
+ * retaining a hidden DOM editor for every file.
  */
 export class TextEditor {
   private readonly entries = new Map<string, CachedTextEditor>();
@@ -81,7 +83,10 @@ export class TextEditor {
       return;
     }
 
-    this.detach();
+    const reusableView =
+      active?.view?.dom.parentElement === parent
+        ? this.releaseActiveView(true)
+        : (this.detach(), null);
     let entry = this.entries.get(tabId);
     if (entry && (entry.loadEpoch !== loadEpoch || entry.path !== path)) {
       this.dispose(tabId);
@@ -90,13 +95,13 @@ export class TextEditor {
     if (!entry) {
       entry = this.createEntry(tabId, loadEpoch, content, path, preferences, onChange);
       this.entries.set(tabId, entry);
-      this.loadLanguage(entry);
     } else {
       entry.onChange = onChange;
     }
 
     const mountedEntry = entry;
-    const view = new EditorView({ parent, state: mountedEntry.state });
+    const view = reusableView ?? new EditorView({ parent, state: mountedEntry.state });
+    if (reusableView) view.setState(mountedEntry.state);
     mountedEntry.view = view;
     this.activeId = tabId;
     applyEditorPreferences(view, preferences);
@@ -109,6 +114,13 @@ export class TextEditor {
       view.scrollDOM.scrollTop = mountedEntry.scrollTop;
       view.requestMeasure();
     });
+    if (mountedEntry.languageStatus === "loading") {
+      this.loadLanguage(mountedEntry);
+    }
+  }
+
+  isMountedIn(parent: HTMLElement): boolean {
+    return this.activeEntry()?.view?.dom.parentElement === parent;
   }
 
   content(tabId = this.activeId): string {
@@ -195,20 +207,33 @@ export class TextEditor {
   }
 
   detach(): void {
+    this.releaseActiveView(false);
+  }
+
+  private releaseActiveView(reuse: true): EditorView | null;
+  private releaseActiveView(reuse: false): null;
+  private releaseActiveView(reuse: boolean): EditorView | null {
     const entry = this.activeEntry();
     if (!entry?.view) {
       this.activeId = null;
-      return;
+      return null;
     }
     this.flushEntryChange(entry);
     entry.scrollLeft = entry.view.scrollDOM.scrollLeft;
     entry.scrollTop = entry.view.scrollDOM.scrollTop;
     entry.state = entry.view.state;
-    const dom = entry.view.dom;
-    entry.view.destroy();
+    const view = entry.view;
     entry.view = null;
-    dom.remove();
     this.activeId = null;
+    if (entry.languageStatus === "loading") {
+      entry.languageActivation += 1;
+      entry.languageLoader.cancel();
+    }
+    if (reuse) return view;
+    const dom = view.dom;
+    view.destroy();
+    dom.remove();
+    return null;
   }
 
   retain(tabIds: readonly string[]): void {
@@ -223,6 +248,7 @@ export class TextEditor {
     if (!entry) return;
     if (this.activeId === tabId) this.detach();
     if (entry.changeFrame !== null) window.cancelAnimationFrame(entry.changeFrame);
+    entry.languageActivation += 1;
     entry.languageLoader.cancel();
     if (entry.view) {
       const dom = entry.view.dom;
@@ -265,6 +291,7 @@ export class TextEditor {
       indent,
       tabSize,
       languageLoader: new EditorLanguageLoader(),
+      languageActivation: 0,
       languageName: "Plain Text",
       languageStatus: "loading",
       onChange,
@@ -313,8 +340,16 @@ export class TextEditor {
   }
 
   private loadLanguage(entry: CachedTextEditor): void {
-    void entry.languageLoader.load(entry.path).then((result) => {
-      if (!result || this.entries.get(entry.id) !== entry) return;
+    const activation = ++entry.languageActivation;
+    void entry.languageLoader.load(entry.path).then(async (result) => {
+      if (!result || !this.canInstallLanguage(entry, activation)) return;
+      if (result.support) {
+        // Let the plain document paint before parser installation. A rapid
+        // selection change cancels this activation instead of parsing a file
+        // that is no longer visible on the UI thread.
+        await afterNextEditorPaint();
+        if (!this.canInstallLanguage(entry, activation)) return;
+      }
       entry.languageStatus = result.status;
       if (!result.support) {
         entry.languageName =
@@ -331,6 +366,18 @@ export class TextEditor {
       );
       this.updateLanguageDataset(entry);
     });
+  }
+
+  private canInstallLanguage(
+    entry: CachedTextEditor,
+    activation: number,
+  ): boolean {
+    return (
+      entry.languageActivation === activation &&
+      this.entries.get(entry.id) === entry &&
+      this.activeId === entry.id &&
+      entry.view !== null
+    );
   }
 
   private scheduleEntryChange(entry: CachedTextEditor): void {
@@ -371,6 +418,14 @@ export class TextEditor {
   private activeEntry(): CachedTextEditor | null {
     return this.activeId ? (this.entries.get(this.activeId) ?? null) : null;
   }
+}
+
+function afterNextEditorPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0);
+    });
+  });
 }
 
 function createFoldMarker(open: boolean): HTMLElement {
