@@ -60,7 +60,7 @@ export class TextEditor {
           this.editable.of(EditorView.editable.of(!this.readOnlyValue)),
           this.language.of([]),
           lineNumbers(),
-          foldGutter(),
+          foldGutter({ markerDOM: createFoldMarker }),
           history(),
           drawSelection(),
           highlightActiveLine(),
@@ -168,6 +168,15 @@ export class TextEditor {
     this.view = null;
     this.exactContent = null;
   }
+}
+
+function createFoldMarker(open: boolean): HTMLElement {
+  const marker = document.createElement("span");
+  marker.className = `asterlyn-fold-marker ${open ? "open" : "closed"}`;
+  marker.title = open ? "Fold code region" : "Unfold code region";
+  marker.setAttribute("aria-hidden", "true");
+  marker.innerHTML = `<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="${open ? "M3.5 5.5 8 10l4.5-4.5" : "M5.5 3.5 10 8l-4.5 4.5"}" /></svg>`;
+  return marker;
 }
 
 function applyEditorPreferences(

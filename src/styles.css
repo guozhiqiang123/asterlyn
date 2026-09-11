@@ -2878,6 +2878,12 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
+.content-body.markdown-preview-surface {
+  display: grid;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .markdown-surface,
 .markdown-source-pane,
 .markdown-preview-pane {

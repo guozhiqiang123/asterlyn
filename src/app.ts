@@ -5449,15 +5449,15 @@ export class AsterlynApp {
       host.innerHTML = "";
       return;
     }
-    const modes: Array<[MarkdownEditorMode, string]> = [
-      ["source", "Source"],
-      ["split", "Split"],
-      ["preview", "Preview"],
+    const modes: Array<[MarkdownEditorMode, string, string]> = [
+      ["source", "Source", "Edit Markdown source"],
+      ["split", "Split", "Edit source with live preview"],
+      ["preview", "Preview", "Rendered preview (read-only)"],
     ];
     host.innerHTML = `<div class="markdown-mode-controls" role="group" aria-label="Markdown editor mode">${modes
       .map(
-        ([mode, label]) =>
-          `<button type="button" data-markdown-mode="${mode}" aria-pressed="${tab.markdownMode === mode}" title="${label} Markdown">${label}</button>`,
+        ([mode, label, title]) =>
+          `<button type="button" data-markdown-mode="${mode}" aria-pressed="${tab.markdownMode === mode}" title="${title}">${label}</button>`,
       )
       .join("")}</div>`;
     host

@@ -139,6 +139,14 @@ Markdown text tabs now own a transient Source, Split, or Preview presentation mo
 
 The updated evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Browser interaction proves folding and unfolding, all three Markdown modes, live buffer-to-preview updates, exact content retention, and separator keyboard adjustment. Functionality and interaction are **improved**; frontend, executable, and package sizes are **regressed**, and memory remains **inconclusive** without a matched resource series. The task produces one refreshed local Debian package without a remote push; trusted media/link routing, Markdown scroll synchronization, persisted preview choices, and E3.2 editor groups remain later work.
 
+### E3.1 Markdown-scroll and fold-control correction — 2026-09-11
+
+Full Markdown Preview now occupies the editor body's bounded grid track instead of sizing itself from rendered content inside a clipped parent. The preview region owns vertical overflow, so short documents fill the available editor while long documents scroll independently without moving the workbench. Preview remains deliberately read-only: `markdown-it` is a renderer rather than a structured Markdown editor, and making rendered HTML editable would require an explicit bidirectional source-mapping, selection, undo, and save design. Source and Split remain the supported editing modes, and the Preview control identifies its read-only behavior in its tooltip.
+
+The parser-backed CodeMirror fold gutter now uses original high-contrast SVG chevrons in a 19-pixel gutter with a 17-by-18-pixel pointer target and hover state. A downward chevron folds a structural region and the resulting rightward chevron unfolds it; the existing standard keyboard fold/unfold commands remain available. This is a presentation correction over the existing fold service and adds no parser, index, watcher, or language-service work.
+
+The updated evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Long-preview wheel scrolling and pointer fold/unfold pass in a production-like browser journey, the frontend suite remains green, and native liveness passes. Functionality and discoverability are **improved**; output-size movement is **no material change** and memory remains **inconclusive** because no matched resource series was run. One refreshed local Debian package is produced without a remote push.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

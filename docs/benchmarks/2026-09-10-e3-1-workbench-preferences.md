@@ -129,3 +129,25 @@ A generated Markdown fixture records absolute parser cost on this machine. A 10,
 Frontend, executable, and package size are **regressed** by the new capability. The renderer's independent lazy chunk keeps its 97.28 kB out of initial JavaScript loading, but the existing greater-than-500-kB main-chunk warning remains open and the presentation/controller additions still enlarge the main bundle. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory impact is **inconclusive** and no memory-reduction claim is made.
 
 Formatting, strict all-target Clippy, TypeScript checking, production frontend build, 14 desktop tests, 28 Git tests, 23 workspace tests, Debian package inspection, and six-second release-executable liveness pass. The first packaging attempt encountered a transient local open-file limit while the development preview infrastructure was still active; retrying after closing that infrastructure completed without a code or configuration change. The refreshed unsigned local package is `Asterlyn_0.1.0_amd64.deb`, 6,357,474 bytes, with SHA-256 `8dcf6d2f76b5d6a4081399e732b0c9274ff2934ce28f084ad77784f659ac1fc6`. Functionality and interaction are **improved**; size is **regressed**; parser latency and memory are **inconclusive**. No remote push is made.
+
+## Markdown-scroll and fold-control correction
+
+Manual acceptance on 2026-09-11 exposed two presentation defects in the previous slice. Full Preview placed an auto-height article inside the editor body's clipped block layout, so a long document grew beyond the visible editor without creating a scrollable viewport. Code folding was functional through the keymap and CodeMirror's default character markers, but the 13-pixel low-contrast gutter did not provide a discoverable Android Studio-like pointer control.
+
+The Preview body now contributes one bounded `minmax(0, 1fr)` grid track and the preview region remains its only overflow owner. In the production-like browser journey, a generated 80-section Markdown document produced a 7,895-pixel scroll extent inside a 386-pixel viewport. A wheel movement changed its own `scrollTop` from 0 to 650 while the workbench stayed fixed. A short document used the same full 386-pixel viewport rather than collapsing to its 169-pixel rendered height.
+
+The fold gutter now supplies original SVG down/right chevrons in a 19-pixel gutter. The visible marker measured 17 by 18 pixels and exposes a hover state and a Fold/Unfold title. An actual pointer click created one CodeMirror fold placeholder and replaced the down chevron with a right chevron; clicking the right chevron restored the region and removed the placeholder. The standard fold/unfold keymap remains the keyboard path, and decorative SVG content is hidden from accessibility APIs. Preview's mode button now declares `Rendered preview (read-only)` in its tooltip. `markdown-it` supplies HTML rendering only; rendered-document editing remains intentionally absent until a source-mapped editing, selection, history, and save contract is designed.
+
+The complete frontend suite passes 125 tests, TypeScript checking and the production build pass, the Debian bundle completes, and the release executable remains alive for the six-second smoke interval. Browser interaction produced no warning or error console entries. No new parser, renderer, background task, watcher, index, or repository query was added, so no new latency fixture is meaningful for this CSS and marker correction. No matched process-tree PSS/RSS or browser-heap series was run, therefore memory impact remains **inconclusive**.
+
+| Output | Markdown correction | Scroll/fold correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 72.44 kB | 72.54 kB | +0.10 kB / +0.14% |
+| CSS gzip | 13.72 kB | 13.74 kB | +0.02 kB / +0.15% |
+| Main JavaScript | 634.03 kB | 634.92 kB | +0.89 kB / +0.14% |
+| Main JavaScript gzip | 182.84 kB | 183.23 kB | +0.39 kB / +0.21% |
+| Main JavaScript source map | 2,338.88 kB | 2,340.68 kB | +1.80 kB / +0.08% |
+| Linux release executable | 18,396,848 bytes | 18,397,552 bytes | +704 bytes / +0.004% |
+| Debian package | 6,357,474 bytes | 6,358,216 bytes | +742 bytes / +0.012% |
+
+Every output movement is **no material change**. Functionality and fold discoverability are **improved**; performance has **no material change** at this correction's scope; memory remains **inconclusive**. The refreshed unsigned local package is `Asterlyn_0.1.0_amd64.deb`, 6,358,216 bytes, with SHA-256 `05618a26a897bb448d4218a9d5846a1c989fc1746502752166e1dd5f8d33aa14`. Package inspection confirms version 0.1.0 and `amd64`. No remote push is made.
