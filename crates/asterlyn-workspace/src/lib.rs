@@ -32,6 +32,21 @@ pub struct TextFileSnapshot {
     pub byte_length: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BinaryFileSnapshot {
+    pub workspace_path: String,
+    pub bytes: Vec<u8>,
+    pub revision: String,
+    pub byte_length: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceFileCatalog {
+    pub paths: Vec<String>,
+    pub truncated: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveTextFileRequest {
@@ -139,6 +154,36 @@ impl Workspace {
         let (path, metadata) = self.resolve_regular_file(workspace_path)?;
         let bytes = read_bounded(&path, self.text_limit_bytes)?;
         decode_snapshot(workspace_path, bytes, &metadata)
+    }
+
+    pub fn read_binary_file(
+        &self,
+        workspace_path: &str,
+        limit_bytes: usize,
+    ) -> Result<BinaryFileSnapshot, WorkspaceError> {
+        if limit_bytes == 0 {
+            return Err(WorkspaceError::FileTooLarge { limit_bytes: 0 });
+        }
+        let (path, metadata) = self.resolve_regular_file(workspace_path)?;
+        let bytes = read_bounded(&path, limit_bytes)?;
+        Ok(BinaryFileSnapshot {
+            workspace_path: workspace_path.to_string(),
+            revision: revision(&bytes, &metadata),
+            byte_length: bytes.len(),
+            bytes,
+        })
+    }
+
+    pub fn list_files(&self, limit: usize) -> Result<WorkspaceFileCatalog, WorkspaceError> {
+        if limit == 0 {
+            return Err(WorkspaceError::InvalidPath {
+                message: "the project file limit must be greater than zero".to_string(),
+            });
+        }
+        let mut paths = Vec::with_capacity(limit.min(4_096));
+        let mut truncated = false;
+        collect_workspace_files(&self.root, Path::new(""), limit, &mut paths, &mut truncated)?;
+        Ok(WorkspaceFileCatalog { paths, truncated })
     }
 
     pub fn save_text_file(
@@ -277,6 +322,77 @@ impl Workspace {
             message: "a file path is required".to_string(),
         })
     }
+}
+
+fn collect_workspace_files(
+    root: &Path,
+    relative_directory: &Path,
+    limit: usize,
+    paths: &mut Vec<String>,
+    truncated: &mut bool,
+) -> Result<(), WorkspaceError> {
+    if *truncated {
+        return Ok(());
+    }
+    let directory = root.join(relative_directory);
+    let mut entries = fs::read_dir(&directory)
+        .map_err(|error| WorkspaceError::Io {
+            operation: "list workspace directory".to_string(),
+            message: error.to_string(),
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| WorkspaceError::Io {
+            operation: "list workspace directory".to_string(),
+            message: error.to_string(),
+        })?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let relative = relative_directory.join(name);
+        let file_type = entry.file_type().map_err(|error| WorkspaceError::Io {
+            operation: "inspect workspace entry".to_string(),
+            message: error.to_string(),
+        })?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            if name != ".git" {
+                collect_workspace_files(root, &relative, limit, paths, truncated)?;
+            }
+            if *truncated {
+                return Ok(());
+            }
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        if paths.len() == limit {
+            *truncated = true;
+            return Ok(());
+        }
+        let Some(path) = workspace_path_string(&relative) else {
+            continue;
+        };
+        paths.push(path);
+    }
+    Ok(())
+}
+
+fn workspace_path_string(path: &Path) -> Option<String> {
+    let parts = path
+        .components()
+        .map(|component| match component {
+            Component::Normal(value) => value.to_str(),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(parts.join("/"))
 }
 
 fn validate_relative_path(path: &str) -> Result<&Path, WorkspaceError> {
@@ -464,6 +580,76 @@ mod tests {
             fs::read(directory.path().join("mixed.txt")).expect("file bytes"),
             b"\xef\xbb\xbffirst\r\nsecond\nlast\r"
         );
+    }
+
+    #[test]
+    fn lists_an_ordinary_workspace_deterministically_without_following_links() {
+        let directory = tempfile::tempdir().expect("temporary workspace");
+        fs::create_dir_all(directory.path().join("src/nested")).expect("source directories");
+        fs::create_dir(directory.path().join(".git")).expect("Git metadata directory");
+        fs::write(directory.path().join("z.txt"), b"z").expect("root file");
+        fs::write(directory.path().join("src/a.txt"), b"a").expect("source file");
+        fs::write(directory.path().join("src/nested/b.txt"), b"b").expect("nested file");
+        fs::write(directory.path().join(".git/config"), b"private").expect("metadata file");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            directory.path().join("src"),
+            directory.path().join("linked-src"),
+        )
+        .expect("directory link");
+
+        let workspace = Workspace::open(directory.path()).expect("workspace opens");
+        assert_eq!(
+            workspace.list_files(10).expect("catalog loads"),
+            WorkspaceFileCatalog {
+                paths: vec![
+                    "src/a.txt".to_string(),
+                    "src/nested/b.txt".to_string(),
+                    "z.txt".to_string(),
+                ],
+                truncated: false,
+            }
+        );
+        assert_eq!(
+            workspace.list_files(2).expect("bounded catalog loads"),
+            WorkspaceFileCatalog {
+                paths: vec!["src/a.txt".to_string(), "src/nested/b.txt".to_string()],
+                truncated: true,
+            }
+        );
+    }
+
+    #[test]
+    fn reads_a_bounded_binary_snapshot_without_weakening_path_checks() {
+        let (directory, workspace) = workspace_with_file("pixel.png", b"\x89PNG\r\n\x1a\nbytes");
+        let snapshot = workspace
+            .read_binary_file("pixel.png", 32)
+            .expect("binary file reads");
+        assert_eq!(snapshot.workspace_path, "pixel.png");
+        assert_eq!(snapshot.bytes, b"\x89PNG\r\n\x1a\nbytes");
+        assert_eq!(snapshot.byte_length, 13);
+        assert!(matches!(
+            workspace.read_binary_file("pixel.png", 4),
+            Err(WorkspaceError::FileTooLarge { limit_bytes: 4 })
+        ));
+        assert!(matches!(
+            workspace.read_binary_file("../pixel.png", 32),
+            Err(WorkspaceError::InvalidPath { .. })
+        ));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                directory.path().join("pixel.png"),
+                directory.path().join("pixel-link.png"),
+            )
+            .expect("binary symlink fixture");
+            assert!(matches!(
+                workspace.read_binary_file("pixel-link.png", 32),
+                Err(WorkspaceError::OutsideWorkspace { .. })
+            ));
+        }
+        assert!(!snapshot.revision.is_empty());
+        assert!(directory.path().join("pixel.png").is_file());
     }
 
     #[test]

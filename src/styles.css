@@ -1489,6 +1489,11 @@ textarea:focus-visible {
   gap: 5px;
   color: var(--text-muted);
   font-size: 9px;
+  margin-right: auto;
+}
+
+.commit-files-toolbar .compact-icon-button {
+  margin-left: 0;
 }
 
 .commit-files-label b {
@@ -1809,12 +1814,67 @@ textarea:focus-visible {
   opacity: 0.56;
 }
 
-.change-checkbox {
+.app-shell input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
   width: 14px;
   height: 14px;
+  flex: 0 0 14px;
+  place-content: center;
   margin: 0;
-  accent-color: var(--accent);
+  border: 1px solid #72767e;
+  border-radius: 3px;
+  background: #2b2d31;
+  color: white;
   cursor: pointer;
+  transition: border-color 80ms ease, background-color 80ms ease;
+}
+
+.app-shell input[type="checkbox"]::before {
+  width: 7px;
+  height: 4px;
+  border-bottom: 1.7px solid currentColor;
+  border-left: 1.7px solid currentColor;
+  content: "";
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transform-origin: center;
+}
+
+.app-shell input[type="checkbox"]:hover:not(:disabled) {
+  border-color: #a8acb4;
+}
+
+.app-shell input[type="checkbox"]:checked,
+.app-shell input[type="checkbox"]:indeterminate {
+  border-color: #4f8cff;
+  background: #3574e6;
+}
+
+.app-shell input[type="checkbox"]:checked::before {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+.app-shell input[type="checkbox"]:indeterminate::before {
+  width: 7px;
+  height: 2px;
+  border: 0;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scale(1);
+}
+
+.app-shell input[type="checkbox"]:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
+.app-shell input[type="checkbox"]:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.change-checkbox {
+  align-self: center;
 }
 
 .change-row:focus-visible,
@@ -3243,6 +3303,112 @@ textarea:focus-visible {
 
 .content-body.text-surface {
   overflow: hidden;
+}
+
+.content-body.image-surface {
+  overflow: auto;
+  background: #18191c;
+}
+
+.image-preview-surface,
+.image-diff-surface {
+  box-sizing: border-box;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.image-preview-surface {
+  display: grid;
+  padding: 16px;
+}
+
+.image-diff-surface {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+}
+
+.image-preview-card {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  grid-template-rows: 31px minmax(240px, 1fr);
+  border-right: 1px solid var(--border);
+  background: #1e1f22;
+}
+
+.image-preview-surface .image-preview-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.image-preview-card:last-child {
+  border-right: 0;
+}
+
+.image-preview-card figcaption,
+.image-preview-card > header {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.image-preview-card figcaption strong,
+.image-preview-card > header strong {
+  color: var(--text-soft);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.image-preview-canvas {
+  display: flex;
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: #222327;
+  background-image:
+    linear-gradient(45deg, #292b30 25%, transparent 25%),
+    linear-gradient(-45deg, #292b30 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #292b30 75%),
+    linear-gradient(-45deg, transparent 75%, #292b30 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.image-preview-canvas img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 180px);
+  object-fit: contain;
+  image-orientation: from-image;
+  user-select: none;
+}
+
+.image-preview-empty {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+@media (max-width: 760px) {
+  .image-diff-surface {
+    grid-template-columns: minmax(280px, 1fr);
+  }
+
+  .image-preview-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
 }
 
 .content-body.markdown-preview-surface {

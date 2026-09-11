@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, FileChange, GitError,
-    GitRepository, HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot,
+    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, RepositorySnapshot,
     TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
@@ -16,12 +16,16 @@ use asterlyn_workspace::{
     SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions,
     SearchSkipReason, TextFileSnapshot, Workspace, WorkspaceError,
 };
+use base64::Engine;
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const COMMIT_LIMIT: usize = 150;
 const PROJECT_FILE_LIMIT: usize = 100_000;
+const IMAGE_PREVIEW_LIMIT_BYTES: usize = 16 * 1024 * 1024;
+const IMAGE_PREVIEW_LIMIT_PIXELS: u64 = 16_000_000;
+const IMAGE_DIFF_LIMIT_PIXELS: u64 = 24_000_000;
 const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 5_000;
 const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
 const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
@@ -98,7 +102,13 @@ impl ScanRegistry {
 
 #[derive(Default)]
 struct ActiveWorkspaces {
-    roots: Mutex<HashMap<String, PathBuf>>,
+    roots: Mutex<HashMap<String, ActiveWorkspace>>,
+}
+
+#[derive(Clone)]
+struct ActiveWorkspace {
+    root: PathBuf,
+    git_enabled: bool,
 }
 
 #[derive(Default)]
@@ -124,6 +134,32 @@ struct CommitSelectedResult {
     snapshot: Option<RepositorySnapshot>,
     refresh_error: Option<String>,
     verification_warning: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenedProject {
+    root: String,
+    repository: Option<RepositorySnapshot>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ImagePreview {
+    path: String,
+    media_type: String,
+    data_url: String,
+    width: u32,
+    height: u32,
+    byte_length: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ImageDiffPreview {
+    path: String,
+    before: Option<ImagePreview>,
+    after: Option<ImagePreview>,
 }
 
 #[derive(Default)]
@@ -232,18 +268,29 @@ struct WorkspaceReplacementFilePreview {
 }
 
 impl ActiveWorkspaces {
-    fn activate(&self, window_label: &str, root: &str) -> Result<(), GitError> {
-        let canonical = std::fs::canonicalize(root).map_err(|error| GitError::Io {
+    fn activate(
+        &self,
+        window_label: &str,
+        root: &Path,
+        git_enabled: bool,
+    ) -> Result<(), WorkspaceError> {
+        let canonical = std::fs::canonicalize(root).map_err(|error| WorkspaceError::Io {
             operation: "activate workspace".to_string(),
             message: error.to_string(),
         })?;
         self.roots
             .lock()
-            .map_err(|_| GitError::Io {
+            .map_err(|_| WorkspaceError::Io {
                 operation: "activate workspace".to_string(),
                 message: "active workspace lock was poisoned".to_string(),
             })?
-            .insert(window_label.to_string(), canonical);
+            .insert(
+                window_label.to_string(),
+                ActiveWorkspace {
+                    root: canonical,
+                    git_enabled,
+                },
+            );
         Ok(())
     }
 
@@ -262,14 +309,42 @@ impl ActiveWorkspaces {
             .get(window_label)
             .cloned()
             .ok_or_else(|| WorkspaceError::NotAuthorized {
-                message: "open a repository before reading or saving files".to_string(),
+                message: "open a project folder before reading or saving files".to_string(),
             })?;
-        if requested != active {
+        if requested != active.root {
             return Err(WorkspaceError::NotAuthorized {
-                message: "the file does not belong to the active repository".to_string(),
+                message: "the file does not belong to the active project".to_string(),
             });
         }
-        Ok(active)
+        Ok(active.root)
+    }
+
+    fn require_git(&self, window_label: &str, requested: &str) -> Result<PathBuf, GitError> {
+        let requested =
+            std::fs::canonicalize(requested).map_err(|error| GitError::InvalidInput {
+                field: "repository root".to_string(),
+                message: format!("the requested project is unavailable: {error}"),
+            })?;
+        let active = self
+            .roots
+            .lock()
+            .map_err(|_| GitError::Io {
+                operation: "authorize Git workspace".to_string(),
+                message: "active workspace lock was poisoned".to_string(),
+            })?
+            .get(window_label)
+            .cloned()
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "repository root".to_string(),
+                message: "open a Git project before using Git features".to_string(),
+            })?;
+        if requested != active.root || !active.git_enabled {
+            return Err(GitError::InvalidInput {
+                field: "repository root".to_string(),
+                message: "Git features are unavailable for this ordinary folder".to_string(),
+            });
+        }
+        Ok(active.root)
     }
 
     fn remove(&self, window_label: &str) {
@@ -646,17 +721,54 @@ fn build_project_window(
 }
 
 #[tauri::command]
-async fn open_repository(
+async fn open_project(
     path: String,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let snapshot = run_blocking("open repository", move || {
-        GitRepository::open(path)?.tracked_snapshot(COMMIT_LIMIT)
+) -> Result<OpenedProject, WorkspaceError> {
+    let project = run_workspace_blocking("open project", move || {
+        let workspace = Workspace::open(path)?;
+        let root = workspace.root().to_path_buf();
+        let repository = exact_git_repository(&root)?
+            .map(|repository| {
+                repository
+                    .tracked_snapshot(COMMIT_LIMIT)
+                    .map_err(|error| WorkspaceError::Io {
+                        operation: "read Git project".to_string(),
+                        message: error.to_string(),
+                    })
+            })
+            .transpose()?;
+        Ok(OpenedProject {
+            root: root.to_string_lossy().into_owned(),
+            repository,
+        })
     })
     .await?;
-    active_workspaces.activate(window.label(), &snapshot.root)?;
-    Ok(snapshot)
+    active_workspaces.activate(
+        window.label(),
+        Path::new(&project.root),
+        project.repository.is_some(),
+    )?;
+    Ok(project)
+}
+
+fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceError> {
+    match GitRepository::open(root) {
+        Ok(repository) => {
+            let discovered =
+                std::fs::canonicalize(repository.root()).map_err(|error| WorkspaceError::Io {
+                    operation: "resolve discovered Git root".to_string(),
+                    message: error.to_string(),
+                })?;
+            Ok((discovered == root).then_some(repository))
+        }
+        Err(error) if root.join(".git").exists() => Err(WorkspaceError::Io {
+            operation: "open Git project".to_string(),
+            message: error.to_string(),
+        }),
+        Err(_) => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -665,12 +777,7 @@ async fn read_tracked_changes(
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<TrackedChangeScan, GitError> {
-    let root = active_workspaces
-        .resolve(window.label(), &repository_root)
-        .map_err(|_| GitError::InvalidInput {
-            field: "repository root".to_string(),
-            message: "refresh the active repository".to_string(),
-        })?;
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read tracked changes", move || {
         GitRepository::open(root)?.tracked_changes()
     })
@@ -687,7 +794,10 @@ fn open_repository_window(
         operation: "open repository window".to_string(),
         message: error.to_string(),
     })?;
-    GitRepository::open(&canonical)?;
+    Workspace::open(&canonical).map_err(|error| GitError::InvalidInput {
+        field: "project path".to_string(),
+        message: error.to_string(),
+    })?;
     let label = pending.reserve(canonical.clone())?;
     let title = canonical
         .file_name()
@@ -711,9 +821,12 @@ async fn read_history_page(
     query: HistoryQuery,
     offset: usize,
     limit: usize,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<HistoryPage, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read history page", move || {
-        GitRepository::open(repository_root)?.query_commit_history_page(&query, offset, limit)
+        GitRepository::open(root)?.query_commit_history_page(&query, offset, limit)
     })
     .await
 }
@@ -724,7 +837,9 @@ async fn scan_untracked(
     scan_id: String,
     window: tauri::WebviewWindow,
     scans: State<'_, ScanRegistry>,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<UntrackedScan, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     let cancellation = CancellationToken::new();
     let scan_key = (window.label().to_string(), scan_id);
     {
@@ -742,7 +857,7 @@ async fn scan_untracked(
 
     let task_cancellation = cancellation.clone();
     let result = run_blocking("scan untracked files", move || {
-        GitRepository::open(repository_root)?.untracked_changes(&task_cancellation)
+        GitRepository::open(root)?.untracked_changes(&task_cancellation)
     })
     .await;
 
@@ -781,9 +896,12 @@ async fn read_diff(
     repository_root: String,
     path: String,
     staged: bool,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<DiffResult, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read diff", move || {
-        GitRepository::open(repository_root)?.diff(&path, staged)
+        GitRepository::open(root)?.diff(&path, staged)
     })
     .await
 }
@@ -792,19 +910,54 @@ async fn read_diff(
 async fn read_local_diff(
     repository_root: String,
     selected: FileChange,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<DiffResult, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read complete local diff", move || {
-        GitRepository::open(repository_root)?.local_diff(&selected)
+        GitRepository::open(root)?.local_diff(&selected)
     })
     .await
 }
 
 #[tauri::command]
-async fn list_project_files(repository_root: String) -> Result<ProjectFileList, GitError> {
-    run_blocking("list project files", move || {
-        GitRepository::open(repository_root)?.project_files(PROJECT_FILE_LIMIT)
+async fn list_project_files(
+    repository_root: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<ProjectFileList, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    run_workspace_blocking("list project files", move || load_project_catalog(&root)).await
+}
+
+fn load_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> {
+    if let Some(repository) = exact_git_repository(root)? {
+        return repository
+            .project_files(PROJECT_FILE_LIMIT)
+            .map_err(|error| WorkspaceError::Io {
+                operation: "list Git project files".to_string(),
+                message: error.to_string(),
+            });
+    }
+    let catalog = Workspace::open(root)?.list_files(PROJECT_FILE_LIMIT)?;
+    let root = root.to_string_lossy().into_owned();
+    let files = catalog
+        .paths
+        .iter()
+        .map(|path| ProjectFile {
+            repository_id: "workspace".to_string(),
+            path: path.clone(),
+            workspace_path: path.clone(),
+        })
+        .collect();
+    Ok(ProjectFileList {
+        root,
+        paths: catalog.paths,
+        files,
+        ignored_entries: Vec::new(),
+        repository_roots: Vec::new(),
+        truncated: catalog.truncated,
     })
-    .await
 }
 
 #[tauri::command]
@@ -879,12 +1032,7 @@ fn search_authorized_workspace(
     options: &SearchOptions,
     cancellation: &SearchCancellationToken,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
-    let catalog = GitRepository::open(root)
-        .and_then(|repository| repository.authorized_project_files(PROJECT_FILE_LIMIT))
-        .map_err(|error| WorkspaceError::Io {
-            operation: "load current project catalog for search".to_string(),
-            message: error.to_string(),
-        })?;
+    let catalog = load_project_catalog(root)?;
     if cancellation.is_cancelled() {
         return Err(WorkspaceError::Cancelled {
             message: "workspace search was cancelled".to_string(),
@@ -1156,12 +1304,7 @@ fn prepare_authorized_replacement(
     options: &SearchOptions,
     cancellation: &SearchCancellationToken,
 ) -> Result<(StoredReplacementPlan, WorkspaceReplacementPreview), WorkspaceError> {
-    let catalog = GitRepository::open(root)
-        .and_then(|repository| repository.authorized_project_files(PROJECT_FILE_LIMIT))
-        .map_err(|error| WorkspaceError::Io {
-            operation: "load current project catalog for replacement".to_string(),
-            message: error.to_string(),
-        })?;
+    let catalog = load_project_catalog(root)?;
     if cancellation.is_cancelled() {
         return Err(WorkspaceError::Cancelled {
             message: "workspace replacement preview was cancelled".to_string(),
@@ -1245,12 +1388,7 @@ fn authorize_replacement_selection(
             message: "select one or more unique previewed files".to_string(),
         });
     }
-    let current = GitRepository::open(root)
-        .and_then(|repository| repository.authorized_project_files(PROJECT_FILE_LIMIT))
-        .map_err(|error| WorkspaceError::Io {
-            operation: "reauthorize replacement files".to_string(),
-            message: error.to_string(),
-        })?;
+    let current = load_project_catalog(root)?;
     for selected_path in selected {
         let planned = stored
             .files
@@ -1305,6 +1443,363 @@ async fn read_text_file(
         read_authorized_text_file(&root, &repository_id, &path)
     })
     .await
+}
+
+#[tauri::command]
+async fn read_image_file(
+    repository_root: String,
+    repository_id: String,
+    path: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<ImagePreview, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    run_workspace_blocking("read image file", move || {
+        let authorized = authorize_project_file(&root, &repository_id, &path)?;
+        let snapshot = Workspace::open(&root)?
+            .read_binary_file(&authorized.workspace_path, IMAGE_PREVIEW_LIMIT_BYTES)?;
+        encode_image_preview(&snapshot.workspace_path, snapshot.bytes)
+            .map_err(|message| WorkspaceError::UnsupportedFile { message })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_local_image_diff(
+    repository_root: String,
+    selected: FileChange,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<ImageDiffPreview, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read local image diff", move || {
+        let diff = GitRepository::open(root)?.local_binary_diff(&selected)?;
+        encode_image_diff(diff.path, diff.before, diff.after)
+    })
+    .await
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn read_commit_image_diff(
+    repository_root: String,
+    repository_id: String,
+    commit_oid: String,
+    path: String,
+    original_path: Option<String>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<ImageDiffPreview, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read commit image diff", move || {
+        let diff = GitRepository::open(root)?.repository_commit_binary_diff(
+            &repository_id,
+            &commit_oid,
+            &path,
+            original_path.as_deref(),
+        )?;
+        encode_image_diff(diff.path, diff.before, diff.after)
+    })
+    .await
+}
+
+fn encode_image_diff(
+    path: String,
+    before: Option<Vec<u8>>,
+    after: Option<Vec<u8>>,
+) -> Result<ImageDiffPreview, GitError> {
+    let before = before
+        .map(|bytes| encode_image_preview(&path, bytes))
+        .transpose()
+        .map_err(image_preview_git_error)?;
+    let after = after
+        .map(|bytes| encode_image_preview(&path, bytes))
+        .transpose()
+        .map_err(image_preview_git_error)?;
+    let pixels = before
+        .as_ref()
+        .map(image_pixels)
+        .unwrap_or(0)
+        .saturating_add(after.as_ref().map(image_pixels).unwrap_or(0));
+    if pixels > IMAGE_DIFF_LIMIT_PIXELS {
+        return Err(image_preview_git_error(format!(
+            "image Diff is limited to {IMAGE_DIFF_LIMIT_PIXELS} decoded pixels across both sides"
+        )));
+    }
+    Ok(ImageDiffPreview {
+        path,
+        before,
+        after,
+    })
+}
+
+fn image_preview_git_error(message: String) -> GitError {
+    GitError::InvalidInput {
+        field: "image preview".to_string(),
+        message,
+    }
+}
+
+fn image_pixels(image: &ImagePreview) -> u64 {
+    u64::from(image.width).saturating_mul(u64::from(image.height))
+}
+
+fn encode_image_preview(path: &str, bytes: Vec<u8>) -> Result<ImagePreview, String> {
+    if bytes.len() > IMAGE_PREVIEW_LIMIT_BYTES {
+        return Err(format!(
+            "image preview is limited to {IMAGE_PREVIEW_LIMIT_BYTES} bytes per file"
+        ));
+    }
+    let (media_type, width, height) = inspect_image(&bytes)?;
+    let pixels = u64::from(width).saturating_mul(u64::from(height));
+    if width == 0 || height == 0 || pixels > IMAGE_PREVIEW_LIMIT_PIXELS {
+        return Err(format!(
+            "image preview is limited to {IMAGE_PREVIEW_LIMIT_PIXELS} decoded pixels per file"
+        ));
+    }
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(ImagePreview {
+        path: path.to_string(),
+        media_type: media_type.to_string(),
+        data_url: format!("data:{media_type};base64,{encoded}"),
+        width,
+        height,
+        byte_length: bytes.len(),
+    })
+}
+
+fn inspect_image(bytes: &[u8]) -> Result<(&'static str, u32, u32), String> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.len() >= 24 {
+        if png_has_animation(bytes)? {
+            return Err("animated PNG preview is not supported".to_string());
+        }
+        return Ok((
+            "image/png",
+            u32::from_be_bytes(bytes[16..20].try_into().expect("PNG width slice")),
+            u32::from_be_bytes(bytes[20..24].try_into().expect("PNG height slice")),
+        ));
+    }
+    if bytes.starts_with(b"\xff\xd8") {
+        let (width, height) = jpeg_dimensions(bytes)?;
+        return Ok(("image/jpeg", width, height));
+    }
+    if (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) && bytes.len() >= 13 {
+        if gif_frame_count(bytes)? > 1 {
+            return Err("animated GIF preview is not supported".to_string());
+        }
+        return Ok((
+            "image/gif",
+            u32::from(u16::from_le_bytes([bytes[6], bytes[7]])),
+            u32::from(u16::from_le_bytes([bytes[8], bytes[9]])),
+        ));
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        let (width, height, animated) = webp_dimensions(bytes)?;
+        if animated {
+            return Err("animated WebP preview is not supported".to_string());
+        }
+        return Ok(("image/webp", width, height));
+    }
+    if bytes.starts_with(b"BM") && bytes.len() >= 26 {
+        let width = i32::from_le_bytes(bytes[18..22].try_into().expect("BMP width slice"));
+        let height = i32::from_le_bytes(bytes[22..26].try_into().expect("BMP height slice"));
+        return Ok(("image/bmp", width.unsigned_abs(), height.unsigned_abs()));
+    }
+    if bytes.starts_with(b"\0\0\x01\0") && bytes.len() >= 6 {
+        let count = usize::from(u16::from_le_bytes([bytes[4], bytes[5]]));
+        if count == 0 || bytes.len() < 6 + count.saturating_mul(16) {
+            return Err("the ICO directory is incomplete".to_string());
+        }
+        let mut width = 0_u32;
+        let mut height = 0_u32;
+        for entry in bytes[6..6 + count * 16].chunks_exact(16) {
+            width = width.max(if entry[0] == 0 {
+                256
+            } else {
+                u32::from(entry[0])
+            });
+            height = height.max(if entry[1] == 0 {
+                256
+            } else {
+                u32::from(entry[1])
+            });
+        }
+        return Ok(("image/x-icon", width, height));
+    }
+    Err("supported image formats are PNG, JPEG, static GIF, static WebP, BMP, and ICO".to_string())
+}
+
+fn png_has_animation(bytes: &[u8]) -> Result<bool, String> {
+    let mut cursor = 8_usize;
+    while cursor + 12 <= bytes.len() {
+        let length = u32::from_be_bytes(
+            bytes[cursor..cursor + 4]
+                .try_into()
+                .expect("PNG chunk length slice"),
+        ) as usize;
+        let end = cursor.saturating_add(12).saturating_add(length);
+        if end > bytes.len() {
+            return Err("the PNG chunk table is incomplete".to_string());
+        }
+        let kind = &bytes[cursor + 4..cursor + 8];
+        if kind == b"acTL" {
+            return Ok(true);
+        }
+        cursor = end;
+        if kind == b"IEND" {
+            return Ok(false);
+        }
+    }
+    Err("the PNG end marker is missing".to_string())
+}
+
+fn jpeg_dimensions(bytes: &[u8]) -> Result<(u32, u32), String> {
+    let mut cursor = 2_usize;
+    while cursor + 4 <= bytes.len() {
+        if bytes[cursor] != 0xff {
+            cursor += 1;
+            continue;
+        }
+        while cursor < bytes.len() && bytes[cursor] == 0xff {
+            cursor += 1;
+        }
+        if cursor >= bytes.len() {
+            break;
+        }
+        let marker = bytes[cursor];
+        cursor += 1;
+        if marker == 0xd9 || marker == 0xda {
+            break;
+        }
+        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            continue;
+        }
+        if cursor + 2 > bytes.len() {
+            break;
+        }
+        let length = usize::from(u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]));
+        if length < 2 || cursor + length > bytes.len() {
+            return Err("the JPEG segment table is incomplete".to_string());
+        }
+        if matches!(marker, 0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf) {
+            if length < 7 {
+                return Err("the JPEG size segment is incomplete".to_string());
+            }
+            let height = u32::from(u16::from_be_bytes([bytes[cursor + 3], bytes[cursor + 4]]));
+            let width = u32::from(u16::from_be_bytes([bytes[cursor + 5], bytes[cursor + 6]]));
+            return Ok((width, height));
+        }
+        cursor += length;
+    }
+    Err("the JPEG dimensions could not be read".to_string())
+}
+
+fn gif_frame_count(bytes: &[u8]) -> Result<usize, String> {
+    let packed = bytes[10];
+    let table_bytes = if packed & 0x80 != 0 {
+        3_usize << ((packed & 0x07) + 1)
+    } else {
+        0
+    };
+    let mut cursor = 13_usize.saturating_add(table_bytes);
+    let mut frames = 0_usize;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            0x3b => return Ok(frames),
+            0x2c => {
+                frames += 1;
+                if frames > 1 {
+                    return Ok(frames);
+                }
+                if cursor + 10 > bytes.len() {
+                    return Err("the GIF image descriptor is incomplete".to_string());
+                }
+                let local = bytes[cursor + 9];
+                cursor += 10;
+                if local & 0x80 != 0 {
+                    cursor = cursor.saturating_add(3_usize << ((local & 0x07) + 1));
+                }
+                if cursor >= bytes.len() {
+                    return Err("the GIF image data is incomplete".to_string());
+                }
+                cursor += 1;
+                cursor = skip_gif_sub_blocks(bytes, cursor)?;
+            }
+            0x21 => {
+                if cursor + 2 > bytes.len() {
+                    return Err("the GIF extension is incomplete".to_string());
+                }
+                cursor = skip_gif_sub_blocks(bytes, cursor + 2)?;
+            }
+            _ => return Err("the GIF block stream is invalid".to_string()),
+        }
+    }
+    Err("the GIF trailer is missing".to_string())
+}
+
+fn skip_gif_sub_blocks(bytes: &[u8], mut cursor: usize) -> Result<usize, String> {
+    loop {
+        let Some(&length) = bytes.get(cursor) else {
+            return Err("the GIF data blocks are incomplete".to_string());
+        };
+        cursor += 1;
+        if length == 0 {
+            return Ok(cursor);
+        }
+        cursor = cursor.saturating_add(usize::from(length));
+        if cursor > bytes.len() {
+            return Err("the GIF data blocks are incomplete".to_string());
+        }
+    }
+}
+
+fn webp_dimensions(bytes: &[u8]) -> Result<(u32, u32, bool), String> {
+    let mut cursor = 12_usize;
+    let mut dimensions = None;
+    let mut animated = false;
+    while cursor + 8 <= bytes.len() {
+        let kind = &bytes[cursor..cursor + 4];
+        let length = u32::from_le_bytes(
+            bytes[cursor + 4..cursor + 8]
+                .try_into()
+                .expect("WebP length slice"),
+        ) as usize;
+        let body = cursor + 8;
+        let end = body.saturating_add(length);
+        if end > bytes.len() {
+            return Err("the WebP chunk table is incomplete".to_string());
+        }
+        if kind == b"ANIM" {
+            animated = true;
+        } else if kind == b"VP8X" && length >= 10 {
+            animated |= bytes[body] & 0x02 != 0;
+            let width = 1
+                + u32::from(bytes[body + 4])
+                + (u32::from(bytes[body + 5]) << 8)
+                + (u32::from(bytes[body + 6]) << 16);
+            let height = 1
+                + u32::from(bytes[body + 7])
+                + (u32::from(bytes[body + 8]) << 8)
+                + (u32::from(bytes[body + 9]) << 16);
+            dimensions = Some((width, height));
+        } else if kind == b"VP8 " && length >= 10 && bytes[body + 3..body + 6] == [0x9d, 0x01, 0x2a]
+        {
+            let width = u32::from(u16::from_le_bytes([bytes[body + 6], bytes[body + 7]]) & 0x3fff);
+            let height = u32::from(u16::from_le_bytes([bytes[body + 8], bytes[body + 9]]) & 0x3fff);
+            dimensions.get_or_insert((width, height));
+        } else if kind == b"VP8L" && length >= 5 && bytes[body] == 0x2f {
+            let width = 1 + u32::from(bytes[body + 1]) + (u32::from(bytes[body + 2] & 0x3f) << 8);
+            let height = 1
+                + u32::from(bytes[body + 2] >> 6)
+                + (u32::from(bytes[body + 3]) << 2)
+                + (u32::from(bytes[body + 4] & 0x0f) << 10);
+            dimensions.get_or_insert((width, height));
+        }
+        cursor = end.saturating_add(length & 1);
+    }
+    dimensions
+        .map(|(width, height)| (width, height, animated))
+        .ok_or_else(|| "the WebP dimensions could not be read".to_string())
 }
 
 #[tauri::command]
@@ -1375,13 +1870,29 @@ fn authorize_project_file(
     repository_id: &str,
     path: &str,
 ) -> Result<asterlyn_git::ProjectFile, WorkspaceError> {
-    GitRepository::open(root)
-        .and_then(|repository| {
-            repository.authorize_project_file(repository_id, path, PROJECT_FILE_LIMIT)
-        })
-        .map_err(|_| WorkspaceError::NotAuthorized {
-            message: "select a current tracked or non-ignored project file".to_string(),
-        })
+    if let Some(repository) = exact_git_repository(root)? {
+        return repository
+            .authorize_project_file(repository_id, path, PROJECT_FILE_LIMIT)
+            .map_err(|_| WorkspaceError::NotAuthorized {
+                message: "select a current tracked or non-ignored project file".to_string(),
+            });
+    }
+    if repository_id != "workspace" {
+        return Err(WorkspaceError::NotAuthorized {
+            message: "select a current file from the active ordinary folder".to_string(),
+        });
+    }
+    let catalog = Workspace::open(root)?.list_files(PROJECT_FILE_LIMIT)?;
+    if !catalog.paths.iter().any(|candidate| candidate == path) {
+        return Err(WorkspaceError::NotAuthorized {
+            message: "select a current file from the active ordinary folder catalog".to_string(),
+        });
+    }
+    Ok(ProjectFile {
+        repository_id: repository_id.to_string(),
+        path: path.to_string(),
+        workspace_path: path.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -1389,9 +1900,12 @@ async fn read_commit_details(
     repository_root: String,
     repository_id: String,
     commit_oid: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<CommitDetails, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read commit details", move || {
-        GitRepository::open(repository_root)?.repository_commit_details(&repository_id, &commit_oid)
+        GitRepository::open(root)?.repository_commit_details(&repository_id, &commit_oid)
     })
     .await
 }
@@ -1403,9 +1917,12 @@ async fn read_commit_diff(
     commit_oid: String,
     path: String,
     original_path: Option<String>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<CommitDiffResult, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read commit diff", move || {
-        GitRepository::open(repository_root)?.repository_commit_diff(
+        GitRepository::open(root)?.repository_commit_diff(
             &repository_id,
             &commit_oid,
             &path,
@@ -1420,7 +1937,13 @@ async fn stage_paths(
     repository_root: String,
     paths: Vec<String>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_local_git_mutation(
         repository_root,
         mutations.inner(),
@@ -1438,7 +1961,13 @@ async fn unstage_paths(
     repository_root: String,
     paths: Vec<String>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_local_git_mutation(
         repository_root,
         mutations.inner(),
@@ -1457,7 +1986,13 @@ async fn commit_changes(
     message: String,
     selected: Vec<FileChange>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<CommitSelectedResult, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_local_git_mutation(
         repository_root,
         mutations.inner(),
@@ -1488,7 +2023,13 @@ async fn revert_changes(
     repository_root: String,
     selected: Vec<FileChange>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_local_git_mutation(
         repository_root,
         mutations.inner(),
@@ -1506,7 +2047,13 @@ async fn switch_branch(
     repository_root: String,
     target_full_name: String,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_local_git_mutation(
         repository_root,
         mutations.inner(),
@@ -1524,7 +2071,13 @@ async fn create_branch(
     repository_root: String,
     name: String,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_local_git_mutation(
         repository_root,
         mutations.inner(),
@@ -1544,7 +2097,13 @@ async fn fetch_remote(
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_remote_action(
         repository_root,
         operation_id,
@@ -1562,7 +2121,13 @@ async fn pull_current(
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_remote_action(
         repository_root,
         operation_id,
@@ -1581,7 +2146,13 @@ async fn push_current(
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
     mutations: State<'_, GitMutationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RepositorySnapshot, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
     run_remote_action(
         repository_root,
         operation_id,
@@ -1598,7 +2169,10 @@ fn cancel_remote_operation(
     repository_root: String,
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<(), GitError> {
+    active_workspaces.require_git(window.label(), &repository_root)?;
     let mut registry = lock_remote_registry(operations.inner())?;
     registry.cancel(repository_root, operation_id);
     Ok(())
@@ -1746,7 +2320,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             window_chrome_mode,
-            open_repository,
+            open_project,
             open_repository_window,
             read_tracked_changes,
             read_history_page,
@@ -1762,11 +2336,14 @@ pub fn run() {
             rollback_workspace_replacement,
             finalize_workspace_replacement,
             read_text_file,
+            read_image_file,
             save_text_file,
             read_diff,
             read_local_diff,
+            read_local_image_diff,
             read_commit_details,
             read_commit_diff,
+            read_commit_image_diff,
             stage_paths,
             unstage_paths,
             commit_changes,
@@ -1787,6 +2364,27 @@ mod tests {
     use super::*;
     use std::fs;
     use std::process::Command;
+
+    fn png(width: u32, height: u32, animated: bool) -> Vec<u8> {
+        let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+        bytes.extend_from_slice(&13_u32.to_be_bytes());
+        bytes.extend_from_slice(b"IHDR");
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes.extend_from_slice(&[8, 6, 0, 0, 0]);
+        bytes.extend_from_slice(&[0; 4]);
+        if animated {
+            bytes.extend_from_slice(&8_u32.to_be_bytes());
+            bytes.extend_from_slice(b"acTL");
+            bytes.extend_from_slice(&1_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&[0; 4]);
+        }
+        bytes.extend_from_slice(&0_u32.to_be_bytes());
+        bytes.extend_from_slice(b"IEND");
+        bytes.extend_from_slice(&[0; 4]);
+        bytes
+    }
 
     fn git(path: &Path, arguments: &[&str]) {
         let output = Command::new("git")
@@ -2132,10 +2730,10 @@ mod tests {
             Err(WorkspaceError::NotAuthorized { .. })
         ));
         active
-            .activate("main", &first_path)
+            .activate("main", first.path(), false)
             .expect("first workspace activates");
         active
-            .activate("project-1", &second_path)
+            .activate("project-1", second.path(), true)
             .expect("second workspace activates");
         assert_eq!(
             active
@@ -2153,11 +2751,130 @@ mod tests {
             active.resolve("main", &second_path),
             Err(WorkspaceError::NotAuthorized { .. })
         ));
+        assert!(matches!(
+            active.require_git("main", &first_path),
+            Err(GitError::InvalidInput { .. })
+        ));
+        assert_eq!(
+            active
+                .require_git("project-1", &second_path)
+                .expect("Git workspace resolves"),
+            std::fs::canonicalize(second.path()).expect("canonical second root")
+        );
         active.remove("main");
         assert!(matches!(
             active.resolve("main", &first_path),
             Err(WorkspaceError::NotAuthorized { .. })
         ));
+    }
+
+    #[test]
+    fn ordinary_folder_catalog_is_explicit_and_nested_git_folders_stay_ordinary() {
+        let directory = tempfile::tempdir().expect("ordinary workspace");
+        fs::write(directory.path().join("notes.txt"), "notes\n").expect("ordinary file");
+        let catalog = load_project_catalog(directory.path()).expect("ordinary catalog");
+        assert_eq!(catalog.paths, ["notes.txt"]);
+        assert_eq!(catalog.files[0].repository_id, "workspace");
+        assert!(catalog.repository_roots.is_empty());
+
+        let repository = directory.path().join("repository");
+        let nested = repository.join("nested");
+        fs::create_dir_all(&nested).expect("nested folder");
+        git(&repository, &["init", "-b", "main"]);
+        assert!(
+            exact_git_repository(&repository)
+                .expect("repository detection")
+                .is_some()
+        );
+        assert!(
+            exact_git_repository(&nested)
+                .expect("nested detection")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn image_preview_accepts_static_png_and_rejects_animation_and_pixel_bombs() {
+        let preview =
+            encode_image_preview("image.png", png(320, 200, false)).expect("static PNG preview");
+        assert_eq!(preview.media_type, "image/png");
+        assert_eq!((preview.width, preview.height), (320, 200));
+        assert!(preview.data_url.starts_with("data:image/png;base64,"));
+
+        assert!(
+            encode_image_preview("animated.png", png(32, 32, true))
+                .expect_err("APNG is rejected")
+                .contains("animated PNG")
+        );
+        assert!(
+            encode_image_preview("large.png", png(8_000, 8_000, false))
+                .expect_err("pixel bomb is rejected")
+                .contains("decoded pixels")
+        );
+        assert!(
+            encode_image_preview("fake.png", b"not an image".to_vec())
+                .expect_err("signature is authoritative")
+                .contains("supported image formats")
+        );
+        assert!(
+            encode_image_preview("oversized.png", vec![0; IMAGE_PREVIEW_LIMIT_BYTES + 1])
+                .expect_err("encoded source limit is enforced")
+                .contains("bytes per file")
+        );
+        assert!(matches!(
+            encode_image_diff(
+                "wide.png".to_string(),
+                Some(png(4_000, 4_000, false)),
+                Some(png(4_000, 4_000, false)),
+            ),
+            Err(GitError::InvalidInput { .. })
+        ));
+    }
+
+    #[test]
+    fn image_preview_recognizes_every_advertised_static_format() {
+        let jpeg = [
+            0xff, 0xd8, 0xff, 0xc0, 0x00, 0x07, 0x08, 0x00, 0x03, 0x00, 0x05, 0xff, 0xd9,
+        ];
+        assert_eq!(inspect_image(&jpeg), Ok(("image/jpeg", 5, 3)));
+
+        let mut gif = b"GIF89a\x02\x00\x03\x00\x00\x00\x00".to_vec();
+        gif.extend_from_slice(&[0x2c, 0, 0, 0, 0, 2, 0, 3, 0, 0, 2, 1, 0, 0, 0x3b]);
+        assert_eq!(inspect_image(&gif), Ok(("image/gif", 2, 3)));
+
+        let mut webp = b"RIFF\x12\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00".to_vec();
+        webp.extend_from_slice(&[0, 0, 0, 0, 4, 0, 0, 2, 0, 0]);
+        assert_eq!(inspect_image(&webp), Ok(("image/webp", 5, 3)));
+
+        let mut bmp = vec![0; 26];
+        bmp[..2].copy_from_slice(b"BM");
+        bmp[18..22].copy_from_slice(&5_i32.to_le_bytes());
+        bmp[22..26].copy_from_slice(&(-3_i32).to_le_bytes());
+        assert_eq!(inspect_image(&bmp), Ok(("image/bmp", 5, 3)));
+
+        let mut ico = vec![0; 22];
+        ico[..6].copy_from_slice(&[0, 0, 1, 0, 1, 0]);
+        ico[6] = 5;
+        ico[7] = 3;
+        assert_eq!(inspect_image(&ico), Ok(("image/x-icon", 5, 3)));
+
+        let first_frame = gif.len() - 1;
+        gif.splice(
+            first_frame..first_frame,
+            [0x2c, 0, 0, 0, 0, 2, 0, 3, 0, 0, 2, 1, 0, 0],
+        );
+        assert!(
+            inspect_image(&gif)
+                .expect_err("animated GIF is rejected")
+                .contains("animated GIF")
+        );
+
+        webp[20] = 0x02;
+        assert!(
+            inspect_image(&webp)
+                .expect_err("animated WebP is rejected")
+                .contains("animated WebP")
+        );
     }
 
     #[test]

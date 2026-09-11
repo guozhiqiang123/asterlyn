@@ -14,8 +14,8 @@ use std::os::unix::process::CommandExt;
 
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
-    ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
-    FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
+    BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
+    DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
     RemoteSummary, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
     UntrackedState,
@@ -23,6 +23,7 @@ use crate::model::{
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
@@ -936,6 +937,29 @@ impl GitRepository {
         })
     }
 
+    pub fn local_binary_diff(&self, selected: &FileChange) -> Result<BinaryDiffResult, GitError> {
+        let changes = self.status_changes_with_untracked()?;
+        let current = match_fresh_changes(
+            &changes,
+            std::slice::from_ref(selected),
+            "read local image diff",
+        )?
+        .pop()
+        .expect("one selected change produces one fresh match");
+        let before_path = current.original_path.as_deref().unwrap_or(&current.path);
+        let before = self
+            .head_oid()?
+            .map(|head| self.read_binary_at_revision(&head, before_path))
+            .transpose()?
+            .flatten();
+        let after = self.read_binary_from_worktree(&current.path)?;
+        Ok(BinaryDiffResult {
+            path: current.path,
+            before,
+            after,
+        })
+    }
+
     pub fn commit_details(&self, oid: &str) -> Result<CommitDetails, GitError> {
         validate_object_id(oid)?;
         let parent_oid = self.first_parent(oid)?;
@@ -1061,6 +1085,215 @@ impl GitRepository {
         let mut diff = root.repository.commit_diff(oid, path, original_path)?;
         diff.repository_id = root.descriptor.id;
         Ok(diff)
+    }
+
+    pub fn repository_commit_binary_diff(
+        &self,
+        repository_id: &str,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<BinaryDiffResult, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        root.repository.commit_binary_diff(oid, path, original_path)
+    }
+
+    fn commit_binary_diff(
+        &self,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<BinaryDiffResult, GitError> {
+        validate_object_id(oid)?;
+        validate_relative_path(path)?;
+        if let Some(original_path) = original_path {
+            validate_relative_path(original_path)?;
+        }
+        let details = self.commit_details(oid)?;
+        let selected = details
+            .files
+            .iter()
+            .find(|file| file.path == path && file.original_path.as_deref() == original_path)
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "select a file from the current commit details".to_string(),
+            })?;
+        let before_path = selected.original_path.as_deref().unwrap_or(&selected.path);
+        let before = details
+            .parent_oid
+            .as_deref()
+            .map(|parent| self.read_binary_at_revision(parent, before_path))
+            .transpose()?
+            .flatten();
+        let after = self.read_binary_at_revision(oid, &selected.path)?;
+        Ok(BinaryDiffResult {
+            path: selected.path.clone(),
+            before,
+            after,
+        })
+    }
+
+    fn read_binary_at_revision(
+        &self,
+        revision: &str,
+        path: &str,
+    ) -> Result<Option<Vec<u8>>, GitError> {
+        validate_object_id(revision)?;
+        validate_relative_path(path)?;
+        let listing = self.run_read_owned(
+            "resolve image blob",
+            vec![
+                OsString::from("--literal-pathspecs"),
+                OsString::from("ls-tree"),
+                OsString::from("-z"),
+                OsString::from(revision),
+                OsString::from("--"),
+                OsString::from(path),
+            ],
+        )?;
+        let mut records = listing
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|row| !row.is_empty());
+        let Some(record) = records.next() else {
+            return Ok(None);
+        };
+        if records.next().is_some() {
+            return Err(GitError::Parse {
+                context: "image blob".to_string(),
+                message: "the selected path resolved to multiple tree entries".to_string(),
+            });
+        }
+        let tab = record
+            .iter()
+            .position(|byte| *byte == b'\t')
+            .ok_or_else(|| GitError::Parse {
+                context: "image blob".to_string(),
+                message: "the tree entry had no path separator".to_string(),
+            })?;
+        let listed_path = std::str::from_utf8(&record[tab + 1..]).map_err(|_| GitError::Parse {
+            context: "image blob".to_string(),
+            message: "non-UTF-8 image paths are not supported".to_string(),
+        })?;
+        if listed_path != path {
+            return Err(GitError::InvalidInput {
+                field: "image path".to_string(),
+                message: "the selected path did not resolve exactly".to_string(),
+            });
+        }
+        let header = std::str::from_utf8(&record[..tab]).map_err(|_| GitError::Parse {
+            context: "image blob".to_string(),
+            message: "the tree entry header was not UTF-8".to_string(),
+        })?;
+        let mut fields = header.split_ascii_whitespace();
+        let _mode = fields.next();
+        let kind = fields.next();
+        let object = fields.next();
+        if kind != Some("blob") || fields.next().is_some() {
+            return Err(GitError::InvalidInput {
+                field: "image path".to_string(),
+                message: "the selected revision entry is not a regular file".to_string(),
+            });
+        }
+        let object = object.ok_or_else(|| GitError::Parse {
+            context: "image blob".to_string(),
+            message: "the tree entry had no object id".to_string(),
+        })?;
+        validate_object_id(object)?;
+        let size = self.run_read_owned(
+            "measure image blob",
+            vec![
+                OsString::from("cat-file"),
+                OsString::from("-s"),
+                OsString::from(object),
+            ],
+        )?;
+        let size = String::from_utf8_lossy(&size.stdout)
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| GitError::Parse {
+                context: "image blob".to_string(),
+                message: "Git returned an invalid blob size".to_string(),
+            })?;
+        if size > MAX_BINARY_PREVIEW_BYTES {
+            return Err(GitError::InvalidInput {
+                field: "image file".to_string(),
+                message: format!(
+                    "image preview is limited to {MAX_BINARY_PREVIEW_BYTES} bytes per side"
+                ),
+            });
+        }
+        let output = self.run_read_owned(
+            "read image blob",
+            vec![
+                OsString::from("cat-file"),
+                OsString::from("blob"),
+                OsString::from(object),
+            ],
+        )?;
+        if output.stdout.len() != size || output.stdout.len() > MAX_BINARY_PREVIEW_BYTES {
+            return Err(GitError::Io {
+                operation: "read image blob".to_string(),
+                message: "the image blob changed size while it was read".to_string(),
+            });
+        }
+        Ok(Some(output.stdout))
+    }
+
+    fn read_binary_from_worktree(&self, path: &str) -> Result<Option<Vec<u8>>, GitError> {
+        validate_relative_path(path)?;
+        let candidate = self.root.join(path);
+        let metadata = match fs::symlink_metadata(&candidate) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(GitError::Io {
+                    operation: "inspect image file".to_string(),
+                    message: error.to_string(),
+                });
+            }
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(GitError::InvalidInput {
+                field: "image path".to_string(),
+                message: "image preview requires a regular non-symlink file".to_string(),
+            });
+        }
+        if metadata.len() > MAX_BINARY_PREVIEW_BYTES as u64 {
+            return Err(GitError::InvalidInput {
+                field: "image file".to_string(),
+                message: format!(
+                    "image preview is limited to {MAX_BINARY_PREVIEW_BYTES} bytes per side"
+                ),
+            });
+        }
+        let canonical = fs::canonicalize(&candidate).map_err(|error| GitError::Io {
+            operation: "resolve image file".to_string(),
+            message: error.to_string(),
+        })?;
+        let canonical_root = fs::canonicalize(&self.root).map_err(|error| GitError::Io {
+            operation: "resolve repository root".to_string(),
+            message: error.to_string(),
+        })?;
+        if !canonical.starts_with(&canonical_root) {
+            return Err(GitError::InvalidInput {
+                field: "image path".to_string(),
+                message: "the image file resolves outside the repository".to_string(),
+            });
+        }
+        let bytes = fs::read(&canonical).map_err(|error| GitError::Io {
+            operation: "read image file".to_string(),
+            message: error.to_string(),
+        })?;
+        if bytes.len() > MAX_BINARY_PREVIEW_BYTES {
+            return Err(GitError::InvalidInput {
+                field: "image file".to_string(),
+                message: format!(
+                    "image preview is limited to {MAX_BINARY_PREVIEW_BYTES} bytes per side"
+                ),
+            });
+        }
+        Ok(Some(bytes))
     }
 
     pub fn stage(&self, paths: &[String]) -> Result<(), GitError> {
@@ -4091,6 +4324,45 @@ mod tests {
         assert!(diff.patch.contains("-before"));
         assert!(diff.patch.contains("+working"));
         assert!(!diff.patch.contains("+staged"));
+    }
+
+    #[test]
+    fn binary_diff_reads_fresh_worktree_and_commit_sides() {
+        let directory = fixture();
+        let path = directory.path().join("image.png");
+        let before = b"\x89PNG\r\n\x1a\n-before";
+        let after = b"\x89PNG\r\n\x1a\n-after";
+        fs::write(&path, before).expect("write original image");
+        git(directory.path(), &["add", "image.png"]);
+        git(directory.path(), &["commit", "-m", "Original image"]);
+        fs::write(&path, after).expect("write changed image");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "image.png")
+            .expect("image change");
+
+        let local = repository
+            .local_binary_diff(&selected)
+            .expect("local binary diff");
+        assert_eq!(local.before.as_deref(), Some(before.as_slice()));
+        assert_eq!(local.after.as_deref(), Some(after.as_slice()));
+
+        git(directory.path(), &["add", "image.png"]);
+        git(directory.path(), &["commit", "-m", "Changed image"]);
+        let oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let committed = repository
+            .repository_commit_binary_diff(".", &oid, "image.png", None)
+            .expect("commit binary diff");
+        assert_eq!(committed.before.as_deref(), Some(before.as_slice()));
+        assert_eq!(committed.after.as_deref(), Some(after.as_slice()));
+        assert!(matches!(
+            repository.repository_commit_binary_diff(".", &oid, "other.png", None),
+            Err(GitError::InvalidInput { .. })
+        ));
     }
 
     #[test]

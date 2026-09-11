@@ -181,6 +181,14 @@ Repeated Files-tree activation must always converge on the last selected file. O
 
 The 20-state ceiling remains a memory bound rather than a hidden navigation failure. Opening another file automatically retires the oldest inactive clean tab. Dirty buffers and active saves are never evicted; only the exceptional all-protected case refuses the open, restores the tree selection to the visible document, and explains the required save-or-close action. Focused session fixtures, the production-like rapid-switch journey, real `superboost` parser fixtures, complete validation, and package evidence are recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md).
 
+### E3.1 ordinary-folder and image-presentation correction — 2026-09-11
+
+A project is now an explicit workspace with optional Git capability. Selecting an ordinary folder opens its bounded Files tree, text editor, Markdown presentation, search, replacement, and raster-image preview in the current or a new window. Branches, Changes, remote sync, the Git bottom dock, keyboard Git actions, and every native Git command remain disabled. Selecting a nested directory inside a larger repository is intentionally ordinary; only an exact selected worktree root enables Git. File reads and writes continue to require a fresh current-catalog identity plus the workspace traversal checks.
+
+Raster images use a read-only preview document and the same bounded preview slot as Diff. PNG, JPEG, static GIF, static WebP, BMP, and ICO are identified by content signature and decoded by the platform WebView from a Rust-produced fixed-media-type data URL. Working Diff compares `HEAD` with the current worktree and commit Diff uses its verified first-parent file identity. Each side is limited to 16 MiB and 16 million pixels, a pair to 24 million pixels, and animation is rejected. SVG, animated media, editing, zoom/pan, metadata inspection, perceptual overlays, and pixel-level comparison remain later capability slices.
+
+The compact checkbox is an application-owned 14-pixel control with checked, indeterminate, hover, disabled, and keyboard-focus states; color never replaces the associated label. Commit-file details now place tree/flat, recursive expand, and recursive collapse actions in one stable toolbar. The complete validation and package record is in [`ordinary workspace and image evidence`](../benchmarks/2026-09-11-ordinary-workspace-images.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

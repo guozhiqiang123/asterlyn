@@ -137,6 +137,26 @@ export interface RepositorySnapshot {
   untrackedState: "pending" | "complete" | "failed";
 }
 
+export interface OpenedProject {
+  root: string;
+  repository: RepositorySnapshot | null;
+}
+
+export interface ImagePreview {
+  path: string;
+  mediaType: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  byteLength: number;
+}
+
+export interface ImageDiffPreview {
+  path: string;
+  before: ImagePreview | null;
+  after: ImagePreview | null;
+}
+
 export interface UntrackedScan {
   root: string;
   changes: FileChange[];

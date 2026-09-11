@@ -25,7 +25,10 @@ import type {
   FileChange,
   HistoryQuery,
   HistoryPage,
+  ImageDiffPreview,
+  ImagePreview,
   ProjectFileList,
+  OpenedProject,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositorySnapshot,
@@ -44,6 +47,7 @@ import {
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 let browserSnapshot = structuredClone(demoSnapshot);
+let browserGitEnabled = true;
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>();
 const cancelledDemoRemoteOperations = new Set<string>();
@@ -65,6 +69,19 @@ const demoTextBaselines = new Map(
     { content: file.content, utf8Bom: file.utf8Bom },
   ]),
 );
+const DEMO_IMAGE_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+function demoImage(path: string): ImagePreview {
+  return {
+    path,
+    mediaType: "image/png",
+    dataUrl: DEMO_IMAGE_DATA_URL,
+    width: 1,
+    height: 1,
+    byteLength: 68,
+  };
+}
 
 interface DemoReplacementFile {
   workspacePath: string;
@@ -108,7 +125,7 @@ export const bridge = {
     const selected = await openDialog({
       directory: true,
       multiple: false,
-      title: "Open Git Repository",
+      title: "Open Project Folder",
       defaultPath: defaultPath || undefined,
     });
     if (selected === null) return { kind: "cancelled" };
@@ -118,13 +135,17 @@ export const bridge = {
     return { kind: "selected", path: selected };
   },
 
-  async openRepository(path: string): Promise<RepositorySnapshot> {
+  async openProject(path: string): Promise<OpenedProject> {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot.root = path || demoSnapshot.root;
-      return demoTrackedSnapshot(browserSnapshot);
+      browserGitEnabled = !browserSnapshot.root.endsWith("/ordinary-folder");
+      return {
+        root: browserSnapshot.root,
+        repository: browserGitEnabled ? demoTrackedSnapshot(browserSnapshot) : null,
+      };
     }
-    return invoke<RepositorySnapshot>("open_repository", { path });
+    return invoke<OpenedProject>("open_project", { path });
   },
 
   async readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan> {
@@ -223,12 +244,43 @@ export const bridge = {
     });
   },
 
+  async readImageFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+  ): Promise<ImagePreview> {
+    if (!isTauri) {
+      await demoDelay(80);
+      return demoImage(path);
+    }
+    return invoke<ImagePreview>("read_image_file", {
+      repositoryRoot,
+      repositoryId,
+      path,
+    });
+  },
+
+  async readLocalImageDiff(
+    repositoryRoot: string,
+    selected: FileChange,
+  ): Promise<ImageDiffPreview> {
+    if (!isTauri) {
+      await demoDelay(90);
+      return { path: selected.path, before: demoImage(selected.path), after: demoImage(selected.path) };
+    }
+    return invoke<ImageDiffPreview>("read_local_image_diff", {
+      repositoryRoot,
+      selected,
+    });
+  },
+
   async listProjectFiles(repositoryRoot: string): Promise<ProjectFileList> {
     if (!isTauri) {
       await demoDelay(120);
       const paths = [
         "README.md",
         "package.json",
+        "assets/preview.png",
         "src/app.ts",
         "src/bridge.ts",
         "src/diff-editor.ts",
@@ -248,15 +300,19 @@ export const bridge = {
         root: repositoryRoot,
         paths: Array.from(new Set(paths)).sort(),
         files: Array.from(new Set(paths)).sort().map((path) => ({
-          repositoryId: ".",
+          repositoryId: browserGitEnabled ? "." : "workspace",
           path,
           workspacePath: path,
         })),
-        ignoredEntries: [
-          { workspacePath: ".cache", kind: "directory" },
-          { workspacePath: "local.settings", kind: "file" },
-        ],
-        repositoryRoots: structuredClone(browserSnapshot.repositoryRoots),
+        ignoredEntries: browserGitEnabled
+          ? [
+              { workspacePath: ".cache", kind: "directory" },
+              { workspacePath: "local.settings", kind: "file" },
+            ]
+          : [],
+        repositoryRoots: browserGitEnabled
+          ? structuredClone(browserSnapshot.repositoryRoots)
+          : [],
         truncated: false,
       };
     }
@@ -404,7 +460,8 @@ export const bridge = {
     if (!isTauri) {
       await demoDelay(90);
       const file = demoTextFiles.get(path);
-      if (repositoryId !== "." || !file) {
+      const expectedRepositoryId = browserGitEnabled ? "." : "workspace";
+      if (repositoryId !== expectedRepositoryId || !file) {
         throw { kind: "notAuthorized", message: "Select a current project file." };
       }
       return {
@@ -434,7 +491,8 @@ export const bridge = {
     if (!isTauri) {
       await demoDelay(140);
       const file = demoTextFiles.get(path);
-      if (repositoryId !== "." || !file) {
+      const expectedRepositoryId = browserGitEnabled ? "." : "workspace";
+      if (repositoryId !== expectedRepositoryId || !file) {
         throw { kind: "notAuthorized", message: "Select a current project file." };
       }
       const currentRevision = demoTextRevision(path, file);
@@ -501,6 +559,26 @@ export const bridge = {
       return diff;
     }
     return invoke<CommitDiffResult>("read_commit_diff", {
+      repositoryRoot,
+      repositoryId,
+      commitOid,
+      path,
+      originalPath,
+    });
+  },
+
+  async readCommitImageDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    commitOid: string,
+    path: string,
+    originalPath: string | null,
+  ): Promise<ImageDiffPreview> {
+    if (!isTauri) {
+      await demoDelay(90);
+      return { path, before: demoImage(path), after: demoImage(path) };
+    }
+    return invoke<ImageDiffPreview>("read_commit_image_diff", {
       repositoryRoot,
       repositoryId,
       commitOid,
@@ -837,7 +915,7 @@ function demoWorkspaceSearch(
           options.contextLines,
         );
         matches.push({
-          repositoryId: ".",
+          repositoryId: browserGitEnabled ? "." : "workspace",
           path,
           workspacePath: path,
           revision: demoTextRevision(path, file),
@@ -939,7 +1017,7 @@ function demoReplacementPreview(
       originalRevision: file.revision,
     });
     previews.push({
-      repositoryId: ".",
+      repositoryId: browserGitEnabled ? "." : "workspace",
       path: workspacePath,
       workspacePath,
       matchCount,

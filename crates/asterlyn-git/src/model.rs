@@ -277,3 +277,10 @@ pub struct DiffResult {
     pub binary: bool,
     pub truncated: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BinaryDiffResult {
+    pub path: String,
+    pub before: Option<Vec<u8>>,
+    pub after: Option<Vec<u8>>,
+}

@@ -8,9 +8,18 @@ export interface ProjectFileDocument {
   workspacePath: string;
 }
 
+export interface ProjectImageDocument {
+  kind: "project-image";
+  repositoryRoot: string;
+  repositoryId: string;
+  path: string;
+  workspacePath: string;
+}
+
 export type EditorDocument =
   | { kind: "welcome" }
   | ProjectFileDocument
+  | ProjectImageDocument
   | {
       kind: "working-diff";
       repositoryRoot: string;
@@ -30,6 +39,8 @@ export function editorDocumentKey(document: EditorDocument): string {
       return "welcome";
     case "project-file":
       return `file\0${document.repositoryRoot}\0${document.repositoryId}\0${document.path}`;
+    case "project-image":
+      return `image\0${document.repositoryRoot}\0${document.repositoryId}\0${document.path}`;
     case "working-diff":
       return `working\0${document.repositoryRoot}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":
