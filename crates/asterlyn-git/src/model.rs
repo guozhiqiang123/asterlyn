@@ -117,6 +117,12 @@ pub struct FileChange {
     pub submodule: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectedCommitResult {
+    pub oid: Option<String>,
+    pub verification_warning: Option<String>,
+}
+
 impl FileChange {
     pub fn has_staged_change(&self) -> bool {
         !matches!(

@@ -151,6 +151,17 @@ import {
 } from "./workbench/project-tree";
 import { mergeTrackedChanges } from "./workbench/repository-changes";
 import {
+  buildChangeFileTree,
+  changeGroup,
+  descendantChangePaths,
+  effectiveChangeKind,
+  includedChanges,
+  reconcileExcludedChangePaths,
+  type ChangeFileTreeNode,
+  type ChangeFileView,
+  type ChangeGroupId,
+} from "./workbench/change-presentation";
+import {
   clampCommandSurfaceSelection,
   closeCommandSurface,
   createCommandSurfaceState,
@@ -228,6 +239,7 @@ import type {
 } from "./models";
 
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
+const CHANGE_FILE_VIEW_KEY = "asterlyn.changeFileView.v1";
 const HISTORY_PAGE_SIZE = 150;
 const HISTORY_ROW_LIMIT = 3_000;
 const HISTORY_SCROLL_THRESHOLD = 72;
@@ -262,8 +274,9 @@ interface AppState {
   replacementDialog: "preview" | "recovery" | null;
   replacementRecoveryBusy: { id: string; action: "keep" | "rollback" } | null;
   selectedChange: ChangeSelection | null;
-  selectedChangeKeys: Set<string>;
-  changeQuery: string;
+  excludedChangePaths: Set<string>;
+  changeFileView: ChangeFileView;
+  collapsedChangeDirectories: Set<string>;
   selectedCommit: string | null;
   historyQuery: string;
   historyCaseSensitive: boolean;
@@ -357,8 +370,9 @@ export class AsterlynApp {
     replacementDialog: null,
     replacementRecoveryBusy: null,
     selectedChange: null,
-    selectedChangeKeys: new Set(),
-    changeQuery: "",
+    excludedChangePaths: new Set(),
+    changeFileView: loadChangeFileView(window.localStorage),
+    collapsedChangeDirectories: new Set(),
     selectedCommit: null,
     historyQuery: "",
     historyCaseSensitive: false,
@@ -428,7 +442,6 @@ export class AsterlynApp {
   private diffGeneration = 0;
   private commitDetailsGeneration = 0;
   private commitDiffGeneration = 0;
-  private changeSelectionAnchor: string | null = null;
   private scanSequence = 0;
   private remoteOperationSequence = 0;
   private projectFilesGeneration = 0;
@@ -462,6 +475,7 @@ export class AsterlynApp {
   private windowChromeMode: WindowChromeMode = "custom-right";
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
+  private changeCommitSplitterDisposer: (() => void) | null = null;
   private readonly commitDetailsCache = new RecentValueCache<CommitDetails>(
     COMMIT_DETAILS_CACHE_LIMIT,
   );
@@ -931,8 +945,6 @@ export class AsterlynApp {
           this.state.layout.bottomTool === "branches"
         ) {
           this.focusHistoryFilter();
-        } else if (this.state.layout.leftTool === "changes") {
-          this.focusChangeFilter();
         } else if (activeTextTab(this.state.editor)?.status === "ready") {
           this.textEditor.openFindReplace();
         }
@@ -1391,9 +1403,8 @@ export class AsterlynApp {
         this.state.editor = closePreview(this.state.editor);
       }
       this.state.snapshot = snapshot;
-      this.state.changeQuery = "";
-      this.state.selectedChangeKeys.clear();
-      this.changeSelectionAnchor = null;
+      this.state.excludedChangePaths.clear();
+      this.state.collapsedChangeDirectories.clear();
       this.state.historyQuery = "";
       this.state.historyRecentPaths = [];
       this.closeHistoryDialog();
@@ -1464,6 +1475,10 @@ export class AsterlynApp {
       const next = await bridge.openRepository(snapshot.root);
       if (generation !== this.requestGeneration) return;
       this.state.snapshot = next;
+      this.state.excludedChangePaths = reconcileExcludedChangePaths(
+        this.state.excludedChangePaths,
+        next.changes,
+      );
       this.state.selectedRemote = preferredRemote(next, this.state.selectedRemote);
       this.reconcileHistoryScope(next);
       this.chooseValidChangeSelection();
@@ -2486,7 +2501,12 @@ export class AsterlynApp {
       return;
     }
     this.state.snapshot = { ...refreshed, commits: current.commits };
+    this.state.excludedChangePaths = reconcileExcludedChangePaths(
+      this.state.excludedChangePaths,
+      this.state.snapshot.changes,
+    );
     this.chooseValidChangeSelection();
+    this.reconcileWorkingDocument(this.state.snapshot);
     this.renderWorkspace();
     await this.completeUntrackedScan(repositoryRoot, generation);
   }
@@ -2693,9 +2713,11 @@ export class AsterlynApp {
     this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
     this.state.selectedBranch = null;
     this.installSnapshotHistory(snapshot);
-    this.state.selectedChangeKeys.clear();
+    this.state.excludedChangePaths = reconcileExcludedChangePaths(
+      this.state.excludedChangePaths,
+      snapshot.changes,
+    );
     this.state.selectedChange = null;
-    this.changeSelectionAnchor = null;
     this.chooseValidChangeSelection();
     this.reconcileWorkingDocument(snapshot);
     this.renderWorkspace();
@@ -2864,6 +2886,7 @@ export class AsterlynApp {
       | "branchTreeWidth"
       | "branchDetailsWidth"
       | "commitSummaryHeight"
+      | "changesCommitHeight"
       | "diffBeforePercent",
     value: number,
   ): void {
@@ -2878,6 +2901,7 @@ export class AsterlynApp {
       branchTreeWidth: "--branch-tree-width",
       branchDetailsWidth: "--branch-details-width",
       commitSummaryHeight: "--commit-summary-height",
+      changesCommitHeight: "--changes-commit-height",
       diffBeforePercent: null,
     }[dimension];
     if (property) {
@@ -2917,6 +2941,10 @@ export class AsterlynApp {
     workbench.style.setProperty(
       "--commit-summary-height",
       `${this.state.layout.commitSummaryHeight}px`,
+    );
+    workbench.style.setProperty(
+      "--changes-commit-height",
+      `${this.state.layout.changesCommitHeight}px`,
     );
     const leftOpen = this.state.layout.leftTool !== null;
     const bottomOpen = this.state.layout.bottomTool !== null;
@@ -3021,21 +3049,29 @@ export class AsterlynApp {
     const actions = this.query("#navigator-actions");
     const hide = this.query<HTMLButtonElement>("#hide-left-tool");
     const body = this.query("#navigator-body");
+    this.changeCommitSplitterDisposer?.();
+    this.changeCommitSplitterDisposer = null;
 
     if (this.state.layout.leftTool === "changes") {
+      const preserveScroll = body.dataset.navigatorView === "changes";
+      const scrollTop = preserveScroll
+        ? body.querySelector<HTMLElement>("#change-results")?.scrollTop ?? 0
+        : 0;
       body.dataset.navigatorView = "changes";
       title.textContent = "Changes";
       hide.setAttribute("aria-label", "Hide Changes tool window");
       hide.title = "Hide Changes tool window";
-      const filtered = this.filteredChanges(snapshot);
-      count.textContent = filtered.length.toString();
-      count.title = this.state.changeQuery
-        ? `${filtered.length} of ${snapshot.changes.length} changed files`
-        : `${snapshot.changes.length} changed files`;
+      count.textContent = snapshot.changes.length.toString();
+      count.title = `${snapshot.changes.length} changed files`;
       actions.innerHTML = "";
-      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${this.renderChangeNavigation(snapshot)}</div>${this.renderCommitComposer(snapshot)}</div>`;
+      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${this.renderChangeNavigation(snapshot)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="Resize commit message area"></div>${this.renderCommitComposer(snapshot)}</div>`;
       this.bindChangeEvents();
       this.bindCommitComposer(snapshot);
+      this.bindChangeCommitSplitter();
+      if (preserveScroll) {
+        const results = body.querySelector<HTMLElement>("#change-results");
+        if (results) results.scrollTop = scrollTop;
+      }
       return;
     }
 
@@ -3531,92 +3567,57 @@ export class AsterlynApp {
   }
 
   private renderChangeNavigation(snapshot: RepositorySnapshot): string {
-    if (snapshot.changes.length === 0) {
-      if (snapshot.untrackedState === "pending") {
-        return this.emptyState(
-          "Checking for untracked files",
-          "Tracked changes are ready. The remaining working tree is still being scanned.",
-          "changes",
-          true,
-        );
-      }
-      if (snapshot.untrackedState === "failed") {
-        return this.emptyState(
-          "Untracked scan failed",
-          "Tracked state is available. Refresh to try the remaining scan again.",
-          "changes",
-          true,
-        );
-      }
-      return this.emptyState(
-        "Working tree clean",
-        "There are no local changes to review.",
-        "check",
-        true,
-      );
-    }
     return `
       <div class="changes-navigation">
-        ${this.renderChangeToolbar()}
+        ${this.renderChangeToolbar(snapshot)}
         <div class="change-results" id="change-results">
-          ${this.renderChangeResults(snapshot, this.filteredChanges(snapshot))}
+          ${this.renderChangeResults(snapshot)}
         </div>
       </div>`;
   }
 
-  private renderChangeToolbar(): string {
-    const staged = Array.from(this.state.selectedChangeKeys).filter((key) =>
-      key.startsWith("index:"),
-    ).length;
-    const unstaged = this.state.selectedChangeKeys.size - staged;
+  private renderChangeToolbar(snapshot: RepositorySnapshot): string {
+    const selected = this.selectedChangeModel(snapshot);
+    const revertUnsupported =
+      !selected ||
+      snapshot.branch.unborn ||
+      selected.conflicted ||
+      selected.submodule ||
+      selected.worktreeStatus === "untracked" ||
+      selected.indexStatus === "added" ||
+      selected.indexStatus === "copied";
+    const nextView = this.state.changeFileView === "tree" ? "flat list" : "directory tree";
     return `
-      <div class="change-toolbar">
-        <label class="change-filter" for="change-filter">
-          ${icon("search", 14)}
-          <input id="change-filter" type="search" value="${escapeAttribute(this.state.changeQuery)}" placeholder="Filter changed files…" autocomplete="off" spellcheck="false" aria-label="Filter changed files" aria-keyshortcuts="Control+F Meta+F" />
-          <span>Ctrl F</span>
-        </label>
-        <div class="selection-toolbar" aria-label="Selected change actions">
-          <span>${this.state.selectedChangeKeys.size} selected</span>
-          <div>
-            <button type="button" data-selection-action="unstage" ${staged === 0 ? "disabled" : ""}>Unstage${staged ? ` ${staged}` : ""}</button>
-            <button type="button" data-selection-action="stage" ${unstaged === 0 ? "disabled" : ""}>Stage${unstaged ? ` ${unstaged}` : ""}</button>
-            <button type="button" data-selection-action="clear" ${this.state.selectedChangeKeys.size === 0 ? "disabled" : ""} aria-label="Clear change selection">Clear</button>
-          </div>
-        </div>
+      <div class="change-toolbar" role="toolbar" aria-label="Commit file actions">
+        <button class="compact-icon-button" type="button" data-change-action="refresh" title="Refresh changes" aria-label="Refresh changes">${icon("refresh", 15)}</button>
+        <button class="compact-icon-button" type="button" data-change-action="revert" title="${revertUnsupported ? "Select an ordinary tracked file to revert" : "Revert selected file to HEAD"}" aria-label="Revert selected file" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
+        <button class="compact-icon-button" type="button" data-change-action="diff" title="Open selected file Diff" aria-label="Open selected file Diff" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
+        <span class="toolbar-separator" aria-hidden="true"></span>
+        <button class="compact-icon-button ${this.state.changeFileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="Show changes as ${nextView}" aria-label="Show changes as ${nextView}" aria-pressed="${this.state.changeFileView === "tree"}">${icon("eye", 15)}</button>
+        <button class="compact-icon-button" type="button" data-change-action="expand" title="Expand all folders" aria-label="Expand all folders" ${this.state.changeFileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
+        <button class="compact-icon-button" type="button" data-change-action="collapse" title="Collapse all folders" aria-label="Collapse all folders" ${this.state.changeFileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
       </div>`;
   }
 
-  private renderChangeResults(
-    snapshot: RepositorySnapshot,
-    changes: FileChange[],
-  ): string {
-    if (changes.length === 0) {
-      return `<div class="change-no-results"><strong>No matching files</strong><span>Try another path or status.</span></div>`;
+  private renderChangeResults(snapshot: RepositorySnapshot): string {
+    if (snapshot.changes.length === 0) {
+      if (snapshot.untrackedState === "pending") {
+        return `<div class="change-no-results"><span class="spinner"></span><strong>Checking for untracked files</strong><span>Tracked changes are ready.</span></div>`;
+      }
+      if (snapshot.untrackedState === "failed") {
+        return `<div class="change-no-results"><strong>Untracked scan failed</strong><span>Refresh to try again.</span></div>`;
+      }
+      return `<div class="change-no-results"><span class="empty-icon">${icon("check", 22)}</span><strong>Working tree clean</strong><span>There are no local changes to commit.</span></div>`;
     }
-    const staged = changes.filter(hasStagedChange);
-    const unstaged = changes.filter(hasWorktreeChange);
+    const versioned = snapshot.changes.filter((change) => changeGroup(change) === "changes");
+    const unversioned = snapshot.changes.filter(
+      (change) => changeGroup(change) === "unversioned",
+    );
     return [
-      this.renderChangeGroup("Staged", staged, true),
-      this.renderChangeGroup("Unstaged", unstaged, false),
+      this.renderChangeGroup("Changes", versioned, "changes"),
+      this.renderChangeGroup("Unversioned Files", unversioned, "unversioned"),
       this.untrackedScanNotice(snapshot),
     ].join("");
-  }
-
-  private filteredChanges(snapshot: RepositorySnapshot): FileChange[] {
-    const query = this.state.changeQuery.trim().toLocaleLowerCase();
-    if (!query) return snapshot.changes;
-    return snapshot.changes.filter((change) =>
-      [
-        change.path,
-        change.originalPath ?? "",
-        change.indexStatus,
-        change.worktreeStatus,
-        hasStagedChange(change) ? "staged" : "",
-        hasWorktreeChange(change) ? "unstaged working tree" : "",
-        change.conflicted ? "conflict conflicted" : "",
-      ].some((value) => value.toLocaleLowerCase().includes(query)),
-    );
   }
 
   private untrackedScanNotice(snapshot: RepositorySnapshot): string {
@@ -3628,39 +3629,65 @@ export class AsterlynApp {
   private renderChangeGroup(
     title: string,
     changes: FileChange[],
-    staged: boolean,
+    group: ChangeGroupId,
   ): string {
-    const action = staged ? "Unstage all" : "Stage all";
+    if (changes.length === 0) return "";
+    const collapsed = this.state.collapsedChangeDirectories.has(`group:${group}`);
+    const rows =
+      this.state.changeFileView === "tree"
+        ? buildChangeFileTree(changes)
+            .map((node) => this.renderChangeTreeNode(node, group, 0))
+            .join("")
+        : [...changes]
+            .sort((left, right) => left.path.localeCompare(right.path))
+            .map((change) => this.changeRow(change, null))
+            .join("");
     return `
-      <section class="change-group">
-        <div class="group-header">
-          <span>${title}<b>${changes.length}</b></span>
-          <button class="group-action" data-group-action="${staged ? "unstage" : "stage"}" type="button" ${changes.length === 0 ? "disabled" : ""}>${action}</button>
-        </div>
-        <div class="change-list">
-          ${changes.length === 0 ? '<div class="group-empty">No files</div>' : changes.map((change) => this.changeRow(change, staged)).join("")}
-        </div>
-      </section>
+      <details class="change-group" data-change-disclosure="group:${group}" ${collapsed ? "" : "open"}>
+        <summary class="group-header">
+          <span class="tree-chevron">${icon("chevron", 11)}</span>
+          <input class="change-checkbox" type="checkbox" data-include-group="${group}" aria-label="Include all ${escapeAttribute(title)}" />
+          <span class="group-title">${escapeHtml(title)}<b>${changes.length} ${changes.length === 1 ? "file" : "files"}</b></span>
+        </summary>
+        <div class="change-list" role="tree">${rows}</div>
+      </details>
     `;
   }
 
-  private changeRow(change: FileChange, staged: boolean): string {
-    const kind = staged ? change.indexStatus : change.worktreeStatus;
-    const key = changeSelectionKey(change.path, staged);
-    const selected = this.state.selectedChangeKeys.has(key);
-    const primary =
-      this.state.selectedChange?.path === change.path &&
-      this.state.selectedChange.staged === staged;
-    const actionLabel = staged ? "Unstage" : "Stage";
+  private renderChangeTreeNode(
+    node: ChangeFileTreeNode,
+    group: ChangeGroupId,
+    depth: number,
+  ): string {
+    if (node.kind === "file") return this.changeRow(node.change!, depth);
+    const key = `directory:${group}:${node.path}`;
+    const paths = descendantChangePaths(node);
+    const collapsed = this.state.collapsedChangeDirectories.has(key);
+    return `<details class="change-directory" data-change-disclosure="${escapeAttribute(key)}" ${collapsed ? "" : "open"}>
+      <summary style="--tree-depth:${depth}">
+        <span class="tree-chevron">${icon("chevron", 11)}</span>
+        <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(node.path)}" data-include-directory-group="${group}" aria-label="Include ${escapeAttribute(node.path)}" />
+        ${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${paths.length}</small>
+      </summary>
+      <div role="group">${node.children.map((child) => this.renderChangeTreeNode(child, group, depth + 1)).join("")}</div>
+    </details>`;
+  }
+
+  private changeRow(change: FileChange, depth: number | null): string {
+    const kind = effectiveChangeKind(change);
+    const primary = this.state.selectedChange?.path === change.path;
+    const included = !this.state.excludedChangePaths.has(change.path);
     return `
-      <div class="change-row file-status-${kind} ${selected ? "selected" : ""} ${primary ? "primary" : ""}" role="option" tabindex="0" data-change-key="${escapeAttribute(key)}" data-change-path="${escapeAttribute(change.path)}" data-staged="${staged}" aria-selected="${selected}" aria-label="${selected ? "Selected, " : ""}view ${staged ? "staged" : "working tree"} diff for ${escapeAttribute(change.path)}">
+      <div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="option" tabindex="0" ${depth === null ? "" : `style="--tree-depth:${depth}"`} data-change-path="${escapeAttribute(change.path)}" aria-selected="${primary}" aria-label="${primary ? "Selected, " : ""}open complete local diff for ${escapeAttribute(change.path)}">
+        <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(change.path)}" aria-label="Include ${escapeAttribute(change.path)} in commit" ${included ? "checked" : ""} />
         <span class="change-status status-${kind}" title="${changeLabel(kind)}">${changeCode(kind)}</span>
+        <span class="commit-file-glyph">${fileTypeIcon(change.path)}</span>
         <span class="change-path">
+          ${change.originalPath ? `<span class="commit-file-origin">${escapeHtml(change.originalPath)} →</span>` : ""}
           <span class="file-name">${escapeHtml(basename(change.path))}</span>
-          <span class="file-directory">${escapeHtml(dirname(change.path))}</span>
+          ${depth === null ? `<span class="file-directory">${escapeHtml(dirname(change.path))}</span>` : ""}
         </span>
         ${change.conflicted ? '<span class="conflict-pill">Conflict</span>' : ""}
-        <button class="row-action" data-path-action="${staged ? "unstage" : "stage"}" type="button" title="${actionLabel} ${escapeAttribute(change.path)}" aria-label="${actionLabel} ${escapeAttribute(change.path)}">${icon(staged ? "minus" : "plus", 15)}</button>
       </div>
     `;
   }
@@ -4402,77 +4429,105 @@ export class AsterlynApp {
   }
 
   private bindChangeEvents(): void {
-    const input = this.root.querySelector<HTMLInputElement>("#change-filter");
-    input?.addEventListener("input", () => {
-      this.state.changeQuery = input.value;
-      this.renderFilteredChanges();
-    });
-    input?.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && input.value) {
-        event.preventDefault();
-        event.stopPropagation();
-        input.value = "";
-        this.state.changeQuery = "";
-        this.renderFilteredChanges();
-        return;
-      }
-      if (event.key === "Enter" || event.key === "ArrowDown") {
-        const first = this.root.querySelector<HTMLElement>("[data-change-key]");
-        if (!first) return;
-        event.preventDefault();
-        this.selectChangeRow(first, false, false, true);
-      }
-    });
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-selection-action]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const action = button.dataset.selectionAction;
-          if (action === "clear") {
-            this.state.selectedChangeKeys.clear();
-            this.state.selectedChange = null;
-            this.changeSelectionAnchor = null;
-            this.renderWorkspace();
-            return;
-          }
-          const staged = action === "unstage";
-          const prefix = staged ? "index:" : "worktree:";
-          const paths = Array.from(this.state.selectedChangeKeys)
-            .filter((key) => key.startsWith(prefix))
-            .map(changePathFromKey);
-          void this.mutatePaths(!staged, paths);
-        });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-change-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.changeAction;
+        if (action === "refresh") {
+          void this.refresh();
+        } else if (action === "revert") {
+          void this.revertSelectedChange();
+        } else if (action === "diff") {
+          this.openSelectedChangeDiff();
+        } else if (action === "view") {
+          this.state.changeFileView = this.state.changeFileView === "tree" ? "flat" : "tree";
+          saveChangeFileView(window.localStorage, this.state.changeFileView);
+          this.renderLeftTool();
+        } else if (action === "expand") {
+          this.state.collapsedChangeDirectories.clear();
+          this.renderLeftTool();
+        } else if (action === "collapse") {
+          this.state.collapsedChangeDirectories = new Set(
+            Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-disclosure]"))
+              .flatMap((item) => item.dataset.changeDisclosure ? [item.dataset.changeDisclosure] : []),
+          );
+          this.renderLeftTool();
+        }
       });
-    this.bindChangeRowsAndGroups();
-  }
+    });
 
-  private bindChangeRowsAndGroups(): void {
+    this.root.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        const path = checkbox.dataset.includePath;
+        if (path) this.setChangePathsIncluded([path], checkbox.checked);
+      });
+    });
+    this.root.querySelectorAll<HTMLInputElement>("[data-include-group]").forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        const snapshot = this.state.snapshot;
+        const group = checkbox.dataset.includeGroup as ChangeGroupId | undefined;
+        if (!snapshot || !group) return;
+        this.setChangePathsIncluded(
+          snapshot.changes.filter((change) => changeGroup(change) === group).map((change) => change.path),
+          checkbox.checked,
+        );
+      });
+    });
+    this.root.querySelectorAll<HTMLInputElement>("[data-include-directory]").forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        const snapshot = this.state.snapshot;
+        const path = checkbox.dataset.includeDirectory;
+        const group = checkbox.dataset.includeDirectoryGroup as ChangeGroupId | undefined;
+        if (!snapshot || !path || !group) return;
+        this.setChangePathsIncluded(
+          snapshot.changes
+            .filter(
+              (change) =>
+                changeGroup(change) === group &&
+                (change.path === path || change.path.startsWith(`${path}/`)),
+            )
+            .map((change) => change.path),
+          checkbox.checked,
+        );
+      });
+    });
+    this.root.querySelectorAll<HTMLDetailsElement>("[data-change-disclosure]").forEach((details) => {
+      details.addEventListener("toggle", () => {
+        const key = details.dataset.changeDisclosure;
+        if (!key) return;
+        if (details.open) this.state.collapsedChangeDirectories.delete(key);
+        else this.state.collapsedChangeDirectories.add(key);
+      });
+    });
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
       row.addEventListener("click", (event) => {
-        const action = (event.target as HTMLElement).closest<HTMLElement>("[data-path-action]");
+        if ((event.target as HTMLElement).closest(".change-checkbox")) return;
         const path = row.dataset.changePath;
         if (!path) return;
-        if (action) {
-          event.stopPropagation();
-          void this.mutatePaths(action.dataset.pathAction === "stage", [path]);
-          return;
-        }
-        this.selectChangeRow(
-          row,
-          event.ctrlKey || event.metaKey,
-          event.shiftKey,
-          false,
-        );
+        this.selectChangeRow(row, false);
       });
       row.addEventListener("keydown", (event) => {
         if (event.target !== row) return;
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === "Enter") {
           event.preventDefault();
-          this.selectChangeRow(row, event.key === " " || event.ctrlKey || event.metaKey, event.shiftKey, true);
+          this.selectChangeRow(row, true);
+          return;
+        }
+        if (event.key === " ") {
+          const path = row.dataset.changePath;
+          if (!path) return;
+          event.preventDefault();
+          this.setChangePathsIncluded(
+            [path],
+            this.state.excludedChangePaths.has(path),
+          );
           return;
         }
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        const rows = Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-key]"));
+        const rows = Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-path]"))
+          .filter((candidate) => candidate.offsetParent !== null);
         const current = rows.indexOf(row);
         if (current < 0) return;
         event.preventDefault();
@@ -4482,59 +4537,19 @@ export class AsterlynApp {
             : event.key === "End"
               ? rows.at(-1)
               : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
-        if (target) this.selectChangeRow(target, false, event.shiftKey, true);
+        if (target) this.selectChangeRow(target, true);
       });
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-group-action]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const staged = button.dataset.groupAction === "stage";
-        const snapshot = this.state.snapshot;
-        if (!snapshot) return;
-        const paths = this.filteredChanges(snapshot)
-          .filter(staged ? hasWorktreeChange : hasStagedChange)
-          .map((change) => change.path);
-        void this.mutatePaths(staged, paths);
-      });
-    });
+    this.syncChangeInclusionUi();
   }
 
   private selectChangeRow(
     row: HTMLElement,
-    toggle: boolean,
-    range: boolean,
     restoreFocus: boolean,
   ): void {
-    const key = row.dataset.changeKey;
     const path = row.dataset.changePath;
-    if (!key || !path) return;
-    if (range && this.changeSelectionAnchor) {
-      const rows = Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-key]"));
-      const keys = rows.flatMap((candidate) =>
-        candidate.dataset.changeKey ? [candidate.dataset.changeKey] : [],
-      );
-      const anchor = keys.indexOf(this.changeSelectionAnchor);
-      const target = keys.indexOf(key);
-      if (anchor >= 0 && target >= 0) {
-        const [start, end] = anchor <= target ? [anchor, target] : [target, anchor];
-        this.state.selectedChangeKeys = new Set(keys.slice(start, end + 1));
-      } else {
-        this.state.selectedChangeKeys = new Set([key]);
-      }
-    } else if (toggle) {
-      if (this.state.selectedChangeKeys.has(key)) this.state.selectedChangeKeys.delete(key);
-      else this.state.selectedChangeKeys.add(key);
-      this.changeSelectionAnchor = key;
-    } else {
-      this.state.selectedChangeKeys = new Set([key]);
-      this.changeSelectionAnchor = key;
-    }
-
-    const primaryKey = this.state.selectedChangeKeys.has(key)
-      ? key
-      : Array.from(this.state.selectedChangeKeys).at(-1) ?? null;
-    this.state.selectedChange = primaryKey
-      ? changeSelectionFromKey(primaryKey)
-      : null;
+    if (!path || !this.state.snapshot) return;
+    this.state.selectedChange = { path, staged: false };
     if (this.state.selectedChange && this.state.snapshot) {
       this.activateDiffPreview({
         kind: "working-diff",
@@ -4544,33 +4559,83 @@ export class AsterlynApp {
       this.clearWorkingDiff();
       this.state.workingPatchLoading = true;
     }
-    this.renderLeftTool();
+    this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((candidate) => {
+      const primary = candidate.dataset.changePath === path;
+      candidate.classList.toggle("primary", primary);
+      candidate.setAttribute("aria-selected", String(primary));
+    });
+    const selected = this.selectedChangeModel(this.state.snapshot);
+    const diff = this.root.querySelector<HTMLButtonElement>("[data-change-action='diff']");
+    const revert = this.root.querySelector<HTMLButtonElement>("[data-change-action='revert']");
+    if (diff) diff.disabled = false;
+    if (revert) {
+      const unsupported =
+        !selected ||
+        this.state.snapshot.branch.unborn ||
+        selected.conflicted ||
+        selected.submodule ||
+        selected.worktreeStatus === "untracked" ||
+        selected.indexStatus === "added" ||
+        selected.indexStatus === "copied";
+      revert.disabled = unsupported;
+      revert.title = unsupported
+        ? "Select an ordinary tracked file to revert"
+        : "Revert selected file to HEAD";
+    }
     this.renderEditor();
     if (this.state.selectedChange) void this.loadSelectedDiff();
-    if (restoreFocus && primaryKey) this.focusChangeRow(primaryKey);
+    if (restoreFocus) this.focusChangeRow(path);
   }
 
-  private renderFilteredChanges(): void {
+  private setChangePathsIncluded(paths: string[], included: boolean): void {
+    for (const path of paths) {
+      if (included) this.state.excludedChangePaths.delete(path);
+      else this.state.excludedChangePaths.add(path);
+    }
+    this.syncChangeInclusionUi();
+    this.refreshCommitComposer();
+  }
+
+  private syncChangeInclusionUi(): void {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.layout.leftTool !== "changes") return;
-    const changes = this.filteredChanges(snapshot);
-    this.query("#change-results").innerHTML = this.renderChangeResults(snapshot, changes);
-    const count = this.query("#navigator-count");
-    count.textContent = changes.length.toString();
-    count.title = `${changes.length} of ${snapshot.changes.length} changed files`;
-    this.bindChangeRowsAndGroups();
+    this.root.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
+      const path = checkbox.dataset.includePath!;
+      checkbox.checked = !this.state.excludedChangePaths.has(path);
+      checkbox.indeterminate = false;
+      checkbox.closest(".change-row")?.classList.toggle("excluded", !checkbox.checked);
+    });
+    this.root.querySelectorAll<HTMLInputElement>("[data-include-group]").forEach((checkbox) => {
+      const group = checkbox.dataset.includeGroup as ChangeGroupId;
+      const paths = snapshot.changes
+        .filter((change) => changeGroup(change) === group)
+        .map((change) => change.path);
+      this.setAggregateCheckbox(checkbox, paths);
+    });
+    this.root.querySelectorAll<HTMLInputElement>("[data-include-directory]").forEach((checkbox) => {
+      const path = checkbox.dataset.includeDirectory!;
+      const group = checkbox.dataset.includeDirectoryGroup as ChangeGroupId;
+      const paths = snapshot.changes
+        .filter(
+          (change) =>
+            changeGroup(change) === group &&
+            (change.path === path || change.path.startsWith(`${path}/`)),
+        )
+        .map((change) => change.path);
+      this.setAggregateCheckbox(checkbox, paths);
+    });
   }
 
-  private focusChangeFilter(): void {
-    const input = this.root.querySelector<HTMLInputElement>("#change-filter");
-    input?.focus();
-    input?.select();
+  private setAggregateCheckbox(checkbox: HTMLInputElement, paths: string[]): void {
+    const included = paths.filter((path) => !this.state.excludedChangePaths.has(path)).length;
+    checkbox.checked = paths.length > 0 && included === paths.length;
+    checkbox.indeterminate = included > 0 && included < paths.length;
   }
 
-  private focusChangeRow(key: string): void {
-    const rows = this.root.querySelectorAll<HTMLElement>("[data-change-key]");
+  private focusChangeRow(path: string): void {
+    const rows = this.root.querySelectorAll<HTMLElement>("[data-change-path]");
     Array.from(rows)
-      .find((row) => row.dataset.changeKey === key)
+      .find((row) => row.dataset.changePath === path)
       ?.focus();
   }
 
@@ -5415,7 +5480,7 @@ export class AsterlynApp {
       const selected = document.selection;
       header.innerHTML = `
         ${this.contentHeading(basename(selected.path), selected.path)}
-        <div class="header-actions">${this.diffControls()}<span class="scope-pill">${selected.staged ? "Staged" : "Working tree"}</span></div>
+        <div class="header-actions">${this.diffControls()}<span class="scope-pill">Local changes</span></div>
       `;
       this.bindDiffControls();
       if (this.state.workingPatchLoading) {
@@ -6039,6 +6104,10 @@ export class AsterlynApp {
         return;
       }
       this.state.snapshot = mergeTrackedChanges(snapshot, scan);
+      this.state.excludedChangePaths = reconcileExcludedChangePaths(
+        this.state.excludedChangePaths,
+        this.state.snapshot.changes,
+      );
       this.chooseValidChangeSelection();
       this.reconcileWorkingDocument(this.state.snapshot);
       this.renderWorkspace();
@@ -6174,13 +6243,15 @@ export class AsterlynApp {
       return;
     }
     const selected = document.selection;
+    const selectedModel = this.selectedChangeModel(snapshot);
+    if (!selectedModel || selectedModel.path !== selected.path) return;
     const generation = ++this.diffGeneration;
     this.state.workingPatch = null;
     this.state.workingPatchLoading = true;
     this.state.workingPatchError = null;
     this.renderEditor();
     try {
-      const diff = await bridge.readDiff(snapshot.root, selected.path, selected.staged);
+      const diff = await bridge.readLocalDiff(snapshot.root, selectedModel);
       const current = this.activeDocument();
       if (
         generation !== this.diffGeneration ||
@@ -6188,8 +6259,7 @@ export class AsterlynApp {
         current.repositoryRoot !== snapshot.root ||
         current.selection.path !== selected.path ||
         current.selection.staged !== selected.staged ||
-        diff.path !== selected.path ||
-        diff.staged !== selected.staged
+        diff.path !== selected.path
       ) {
         return;
       }
@@ -6659,36 +6729,124 @@ export class AsterlynApp {
     this.state.workingPatchError = null;
   }
 
+  private selectedChangeModel(snapshot: RepositorySnapshot): FileChange | null {
+    const path = this.state.selectedChange?.path;
+    return path ? snapshot.changes.find((change) => change.path === path) ?? null : null;
+  }
+
+  private openSelectedChangeDiff(): void {
+    const snapshot = this.state.snapshot;
+    const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
+    if (!snapshot || !selected) return;
+    this.state.selectedChange = { path: selected.path, staged: false };
+    this.activateDiffPreview({
+      kind: "working-diff",
+      repositoryRoot: snapshot.root,
+      selection: { ...this.state.selectedChange },
+    });
+    this.clearWorkingDiff();
+    this.state.workingPatchLoading = true;
+    this.renderEditor();
+    void this.loadSelectedDiff();
+  }
+
+  private async revertSelectedChange(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
+    if (!snapshot || !selected || this.state.loading) return;
+    const dirty = dirtyTextTabs(this.state.editor).find(
+      (tab) => tab.document.repositoryId === "." && tab.document.path === selected.path,
+    );
+    if (dirty) {
+      this.setStatus("Save or undo the unsaved editor changes before reverting this file", "warning");
+      return;
+    }
+    const label = selected.originalPath
+      ? `${selected.originalPath} → ${selected.path}`
+      : selected.path;
+    if (
+      !window.confirm(
+        `Revert 1 tracked file to HEAD?\n\n${label}\n\nThis overwrites its staged and working-tree changes.`,
+      )
+    ) {
+      return;
+    }
+
+    const generation = ++this.requestGeneration;
+    this.cancelActiveUntrackedScan();
+    let pendingRoot: string | null = null;
+    let refreshAfterFailure = false;
+    let revertFailure: unknown = null;
+    this.setLoading(true, "Reverting selected file…");
+    try {
+      const next = await bridge.revertChanges(snapshot.root, [selected]);
+      if (generation !== this.requestGeneration) return;
+      this.state.snapshot = next;
+      this.state.excludedChangePaths = reconcileExcludedChangePaths(
+        this.state.excludedChangePaths,
+        next.changes,
+      );
+      this.chooseValidChangeSelection();
+      this.reconcileWorkingDocument(next);
+      this.renderWorkspace();
+      if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
+      pendingRoot = next.root;
+      this.setStatus("Selected file reverted", "success");
+    } catch (error) {
+      if (generation !== this.requestGeneration) return;
+      refreshAfterFailure = true;
+      revertFailure = error;
+    } finally {
+      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+    }
+    if (refreshAfterFailure && generation === this.requestGeneration) {
+      await this.refresh();
+      if (revertFailure) this.showError(revertFailure);
+    } else if (pendingRoot && generation === this.requestGeneration) {
+      void this.completeUntrackedScan(pendingRoot, generation);
+    }
+  }
+
   private renderCommitComposer(snapshot: RepositorySnapshot): string {
-    const staged = snapshot.changes.filter(hasStagedChange);
+    const included = includedChanges(snapshot.changes, this.state.excludedChangePaths);
+    const conflict = snapshot.changes.some((change) => change.conflicted);
+    const submodule = included.some((change) => change.submodule);
+    const blockedMessage = conflict
+      ? "Resolve conflicts before committing."
+      : submodule
+        ? "Exclude submodule changes; commit them from their own Git root."
+        : included.length === 0
+          ? "Select at least one file to commit."
+          : "";
+    const disabled =
+      included.length === 0 ||
+      conflict ||
+      submodule ||
+      this.state.commitMessage.trim().length === 0 ||
+      this.state.loading;
     return `
-      <section class="commit-tool" aria-label="Create commit">
-        <div class="inspector-header">
-          <span class="panel-eyebrow">Create commit</span>
-          <h2>${staged.length} staged ${staged.length === 1 ? "file" : "files"}</h2>
-        </div>
-        <div class="commit-summary">
-          ${staged.length === 0 ? '<p class="muted-copy">Stage at least one file to create a commit.</p>' : `<ul>${staged.slice(0, 3).map((change) => `<li><span class="change-status status-${change.indexStatus}">${changeCode(change.indexStatus)}</span><span>${escapeHtml(change.path)}</span></li>`).join("")}</ul>${staged.length > 3 ? `<small>and ${staged.length - 3} more</small>` : ""}`}
-        </div>
+      <section class="commit-tool" id="commit-tool" aria-label="Create commit">
         <div class="commit-form">
-          <label for="commit-message">Commit message</label>
-          <textarea id="commit-message" rows="4" placeholder="Describe this change…" ${staged.length === 0 ? "disabled" : ""}>${escapeHtml(this.state.commitMessage)}</textarea>
+          <label for="commit-message">Commit Message</label>
+          <textarea id="commit-message" placeholder="Commit Message">${escapeHtml(this.state.commitMessage)}</textarea>
           <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.state.commitMessage.trim().length}/72</span></div>
-          <button class="primary-button commit-button" id="commit-button" type="button" ${staged.length === 0 || this.state.commitMessage.trim().length === 0 || this.state.loading ? "disabled" : ""}>
-            ${icon("commit", 16)} Commit ${staged.length || ""}
-          </button>
+          ${blockedMessage ? `<div class="commit-blocker" role="status">${escapeHtml(blockedMessage)}</div>` : ""}
+          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>Commit ${included.length || ""}</button></div>
         </div>
       </section>`;
   }
 
   private bindCommitComposer(snapshot: RepositorySnapshot): void {
-    const staged = snapshot.changes.filter(hasStagedChange);
+    const included = includedChanges(snapshot.changes, this.state.excludedChangePaths);
+    const blocked =
+      snapshot.changes.some((change) => change.conflicted) ||
+      included.some((change) => change.submodule);
     const textarea = this.root.querySelector<HTMLTextAreaElement>("#commit-message");
     const button = this.root.querySelector<HTMLButtonElement>("#commit-button");
     textarea?.addEventListener("input", () => {
       this.state.commitMessage = textarea.value;
       if (button) {
-        button.disabled = textarea.value.trim().length === 0 || staged.length === 0;
+        button.disabled = textarea.value.trim().length === 0 || included.length === 0 || blocked;
       }
       const counter = textarea.parentElement?.querySelector(
         ".commit-hint span:last-child",
@@ -6702,6 +6860,43 @@ export class AsterlynApp {
       }
     });
     button?.addEventListener("click", () => void this.commit());
+  }
+
+  private refreshCommitComposer(): void {
+    const snapshot = this.state.snapshot;
+    const current = this.root.querySelector<HTMLElement>("#commit-tool");
+    if (!snapshot || !current) return;
+    current.outerHTML = this.renderCommitComposer(snapshot);
+    this.bindCommitComposer(snapshot);
+  }
+
+  private bindChangeCommitSplitter(): void {
+    this.changeCommitSplitterDisposer?.();
+    this.changeCommitSplitterDisposer = null;
+    const splitter = this.root.querySelector<HTMLElement>("#changes-commit-splitter");
+    const layout = this.root.querySelector<HTMLElement>(".changes-tool-layout");
+    if (!splitter || !layout) return;
+    this.changeCommitSplitterDisposer = attachSplitter(splitter, {
+      orientation: "horizontal",
+      direction: -1,
+      getValue: () => this.state.layout.changesCommitHeight,
+      getRange: () => ({
+        minimum: WORKBENCH_LIMITS.changesCommitMin,
+        maximum: Math.max(
+          WORKBENCH_LIMITS.changesCommitMin,
+          layout.clientHeight -
+            WORKBENCH_LIMITS.changesFilesMin -
+            WORKBENCH_LIMITS.separatorSize,
+        ),
+      }),
+      onChange: (value) => this.resizeWorkbench("changesCommitHeight", value),
+      onCommit: () => this.persistWorkbenchLayout(),
+      onReset: () =>
+        this.resizeWorkbench(
+          "changesCommitHeight",
+          WORKBENCH_LAYOUT_DEFAULTS.changesCommitHeight,
+        ),
+    });
   }
 
   private renderGitDetail(snapshot: RepositorySnapshot): string {
@@ -6815,86 +7010,77 @@ export class AsterlynApp {
     }
   }
 
-  private async mutatePaths(stage: boolean, paths: string[]): Promise<void> {
-    const snapshot = this.state.snapshot;
-    if (!snapshot || paths.length === 0 || this.state.loading) return;
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
-    let pendingRoot: string | null = null;
-    this.setLoading(true, stage ? "Staging changes…" : "Unstaging changes…");
-    try {
-      const next = stage
-        ? await bridge.stagePaths(snapshot.root, paths)
-        : await bridge.unstagePaths(snapshot.root, paths);
-      this.state.snapshot = next;
-      this.state.selectedBranch = null;
-      this.installSnapshotHistory(next);
-      const sourcePrefix = stage ? "worktree:" : "index:";
-      const migrated = new Set(this.state.selectedChangeKeys);
-      for (const path of paths) {
-        const sourceKey = `${sourcePrefix}${path}`;
-        if (!migrated.delete(sourceKey)) continue;
-        if (changeExists(next, path, stage)) {
-          migrated.add(changeSelectionKey(path, stage));
-        }
-      }
-      this.state.selectedChangeKeys = migrated;
-      if (
-        this.state.selectedChange &&
-        paths.includes(this.state.selectedChange.path) &&
-        this.state.selectedChange.staged !== stage
-      ) {
-        this.state.selectedChange = changeExists(next, this.state.selectedChange.path, stage)
-          ? { path: this.state.selectedChange.path, staged: stage }
-          : null;
-      }
-      this.chooseValidChangeSelection();
-      this.reconcileWorkingDocument(next);
-      this.renderWorkspace();
-      this.loadVisibleCommitDetails();
-      if (this.activeDocument().kind === "working-diff") {
-        void this.loadSelectedDiff();
-      }
-      pendingRoot = next.root;
-    } catch (error) {
-      this.showError(error);
-    } finally {
-      this.setLoading(false, "Ready");
-    }
-    if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
-    }
-  }
-
   private async commit(): Promise<void> {
+    this.captureMountedTextEditor();
+    if (dirtyTextTabs(this.state.editor).length > 0) {
+      if (await this.saveDirtyTabsBefore("creating the commit")) {
+        await this.refresh();
+        this.setStatus("Files saved; review the refreshed selection before committing", "warning");
+      }
+      return;
+    }
     const snapshot = this.state.snapshot;
     const message = this.state.commitMessage.trim();
-    if (!snapshot || !message || this.state.loading) return;
+    const selected = snapshot
+      ? includedChanges(snapshot.changes, this.state.excludedChangePaths)
+      : [];
+    if (
+      !snapshot ||
+      !message ||
+      selected.length === 0 ||
+      snapshot.changes.some((change) => change.conflicted) ||
+      selected.some((change) => change.submodule) ||
+      this.state.loading
+    ) {
+      return;
+    }
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
     let pendingRoot: string | null = null;
+    let refreshAfter = false;
+    let commitFailure: unknown = null;
     this.setLoading(true, "Creating commit…");
     try {
-      const next = await bridge.commitChanges(snapshot.root, message);
-      this.state.snapshot = next;
+      const result = await bridge.commitChanges(snapshot.root, message, selected);
+      if (generation !== this.requestGeneration) return;
       this.state.commitMessage = "";
-      this.state.selectedBranch = null;
-      this.installSnapshotHistory(next, true);
-      this.chooseValidChangeSelection();
-      this.reconcileWorkingDocument(next);
-      this.renderWorkspace();
-      this.loadVisibleCommitDetails();
-      if (this.activeDocument().kind === "working-diff") {
-        void this.loadSelectedDiff();
+      if (result.snapshot) {
+        const next = result.snapshot;
+        this.state.snapshot = next;
+        this.state.excludedChangePaths = reconcileExcludedChangePaths(
+          this.state.excludedChangePaths,
+          next.changes,
+        );
+        this.state.selectedBranch = null;
+        this.installSnapshotHistory(next, true);
+        this.chooseValidChangeSelection();
+        this.reconcileWorkingDocument(next);
+        this.renderWorkspace();
+        this.loadVisibleCommitDetails();
+        if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
+        pendingRoot = next.root;
+      } else {
+        refreshAfter = true;
       }
-      this.setStatus("Commit created", "success");
-      pendingRoot = next.root;
+      this.setStatus(
+        result.verificationWarning
+          ? "Commit finished, but Git changed concurrently; inspect refreshed history before committing again"
+          : result.refreshError
+            ? "Commit created; refreshing repository status…"
+            : "Commit created",
+        result.verificationWarning || result.refreshError ? "warning" : "success",
+      );
     } catch (error) {
-      this.showError(error);
+      if (generation !== this.requestGeneration) return;
+      commitFailure = error;
+      refreshAfter = true;
     } finally {
-      this.setLoading(false, "Ready");
+      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
     }
-    if (pendingRoot && generation === this.requestGeneration) {
+    if (refreshAfter && generation === this.requestGeneration) {
+      await this.refresh();
+      if (commitFailure) this.showError(commitFailure);
+    } else if (pendingRoot && generation === this.requestGeneration) {
       void this.completeUntrackedScan(pendingRoot, generation);
     }
   }
@@ -6960,9 +7146,8 @@ export class AsterlynApp {
       this.state.snapshot = next;
       this.state.selectedBranch = null;
       this.installSnapshotHistory(next, true);
-      this.state.selectedChangeKeys.clear();
+      this.state.excludedChangePaths.clear();
       this.state.selectedChange = null;
-      this.changeSelectionAnchor = null;
       this.chooseValidChangeSelection();
       this.captureMountedTextEditor();
       if (dirtyTextTabs(this.state.editor).length === 0) {
@@ -7026,8 +7211,14 @@ export class AsterlynApp {
         ),
         untrackedState: "complete",
       };
+      this.state.excludedChangePaths = reconcileExcludedChangePaths(
+        this.state.excludedChangePaths,
+        this.state.snapshot.changes,
+      );
       this.chooseValidChangeSelection();
+      this.reconcileWorkingDocument(this.state.snapshot);
       this.renderWorkspace();
+      if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
       completed = true;
     } catch (error) {
       if (
@@ -7069,71 +7260,21 @@ export class AsterlynApp {
 
   private chooseValidChangeSelection(): void {
     const changes = this.state.snapshot?.changes ?? [];
-    const validKeys = new Set<string>();
-    for (const change of changes) {
-      if (hasStagedChange(change)) validKeys.add(changeSelectionKey(change.path, true));
-      if (hasWorktreeChange(change)) validKeys.add(changeSelectionKey(change.path, false));
-    }
-    this.state.selectedChangeKeys = new Set(
-      Array.from(this.state.selectedChangeKeys).filter((key) => validKeys.has(key)),
-    );
     const current = this.state.selectedChange;
-    const valid = current
-      ? changes.some(
-          (change) =>
-            change.path === current.path &&
-            (current.staged ? hasStagedChange(change) : hasWorktreeChange(change)),
-        )
-      : false;
-    if (current && valid) {
-      const currentKey = changeSelectionKey(current.path, current.staged);
-      if (this.state.selectedChangeKeys.size === 0) {
-        this.state.selectedChangeKeys.add(currentKey);
-      } else if (!this.state.selectedChangeKeys.has(currentKey)) {
-        const selectedKey = Array.from(this.state.selectedChangeKeys).at(-1);
-        this.state.selectedChange = selectedKey ? changeSelectionFromKey(selectedKey) : null;
-      }
+    if (current && changes.some((change) => change.path === current.path)) {
+      this.state.selectedChange = { path: current.path, staged: false };
       return;
     }
-
-    const selectedKey = Array.from(this.state.selectedChangeKeys).at(-1);
-    if (selectedKey) {
-      this.state.selectedChange = changeSelectionFromKey(selectedKey);
-      return;
-    }
-
-    const staged = changes.find(hasStagedChange);
-    const unstaged = changes.find(hasWorktreeChange);
-    this.state.selectedChange = staged
-      ? { path: staged.path, staged: true }
-      : unstaged
-        ? { path: unstaged.path, staged: false }
-        : null;
-    if (this.state.selectedChange) {
-      this.state.selectedChangeKeys.add(
-        changeSelectionKey(
-          this.state.selectedChange.path,
-          this.state.selectedChange.staged,
-        ),
-      );
-      this.changeSelectionAnchor = changeSelectionKey(
-        this.state.selectedChange.path,
-        this.state.selectedChange.staged,
-      );
-    } else {
-      this.changeSelectionAnchor = null;
-    }
+    this.state.selectedChange = changes[0]
+      ? { path: changes[0].path, staged: false }
+      : null;
   }
 
   private reconcileWorkingDocument(snapshot: RepositorySnapshot): void {
     const document = this.activeDocument();
     if (document.kind !== "working-diff") return;
     const stillValid = snapshot.changes.some(
-      (change) =>
-        change.path === document.selection.path &&
-        (document.selection.staged
-          ? hasStagedChange(change)
-          : hasWorktreeChange(change)),
+      (change) => change.path === document.selection.path,
     );
     if (stillValid) {
       this.clearWorkingDiff();
@@ -7453,40 +7594,6 @@ export class AsterlynApp {
   }
 }
 
-function hasStagedChange(change: FileChange): boolean {
-  return change.indexStatus !== "unmodified" && change.indexStatus !== "ignored";
-}
-
-function hasWorktreeChange(change: FileChange): boolean {
-  return change.worktreeStatus !== "unmodified" && change.worktreeStatus !== "ignored";
-}
-
-function changeSelectionKey(path: string, staged: boolean): string {
-  return `${staged ? "index" : "worktree"}:${path}`;
-}
-
-function changePathFromKey(key: string): string {
-  return key.slice(key.indexOf(":") + 1);
-}
-
-function changeSelectionFromKey(key: string): ChangeSelection {
-  return {
-    path: changePathFromKey(key),
-    staged: key.startsWith("index:"),
-  };
-}
-
-function changeExists(
-  snapshot: RepositorySnapshot,
-  path: string,
-  staged: boolean,
-): boolean {
-  return snapshot.changes.some(
-    (change) =>
-      change.path === path && (staged ? hasStagedChange(change) : hasWorktreeChange(change)),
-  );
-}
-
 function countCommitTreeFiles(node: CommitFileTreeNode): number {
   if (node.kind === "file") return 1;
   return node.children.reduce((total, child) => total + countCommitTreeFiles(child), 0);
@@ -7508,6 +7615,25 @@ function saveCommitFileView(
     storage.setItem(COMMIT_FILE_VIEW_KEY, view);
   } catch {
     // A denied preference write must not affect commit inspection.
+  }
+}
+
+function loadChangeFileView(storage: Pick<Storage, "getItem">): ChangeFileView {
+  try {
+    return storage.getItem(CHANGE_FILE_VIEW_KEY) === "flat" ? "flat" : "tree";
+  } catch {
+    return "tree";
+  }
+}
+
+function saveChangeFileView(
+  storage: Pick<Storage, "setItem">,
+  view: ChangeFileView,
+): void {
+  try {
+    storage.setItem(CHANGE_FILE_VIEW_KEY, view);
+  } catch {
+    // This display preference is optional and never contains repository truth.
   }
 }
 

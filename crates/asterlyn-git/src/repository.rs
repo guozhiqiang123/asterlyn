@@ -17,7 +17,8 @@ use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
     FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    RemoteSummary, RepositorySnapshot, TrackedChangeScan, UntrackedScan, UntrackedState,
+    RemoteSummary, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
+    UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -880,6 +881,61 @@ impl GitRepository {
         })
     }
 
+    pub fn local_diff(&self, selected: &FileChange) -> Result<DiffResult, GitError> {
+        let changes = self.status_changes_with_untracked()?;
+        let current =
+            match_fresh_changes(&changes, std::slice::from_ref(selected), "read local diff")?
+                .pop()
+                .expect("one selected change produces one fresh match");
+        let mut args = vec![
+            OsString::from("--literal-pathspecs"),
+            OsString::from("diff"),
+            OsString::from("--no-ext-diff"),
+            OsString::from("--no-color"),
+            OsString::from("--unified=3"),
+        ];
+        if self.head_oid()?.is_some() {
+            args.push(OsString::from("HEAD"));
+        }
+        args.push(OsString::from("--"));
+        args.push(OsString::from(&current.path));
+        if let Some(original) = &current.original_path {
+            args.push(OsString::from(original));
+        }
+
+        let output = self.run_read_owned("read complete local diff", args)?;
+        let mut patch = output.stdout;
+        let mut binary = patch.windows(15).any(|window| window == b"Binary files ");
+        if patch.is_empty() {
+            let candidate = self.root.join(&current.path);
+            if candidate.is_file() {
+                let data = fs::read(&candidate).map_err(|error| GitError::Io {
+                    operation: "read untracked file".to_string(),
+                    message: error.to_string(),
+                })?;
+                binary = data.contains(&0);
+                patch = if binary {
+                    format!("Binary file: {}\n", current.path).into_bytes()
+                } else {
+                    untracked_patch(&current.path, &data).into_bytes()
+                };
+            }
+        }
+
+        let truncated = patch.len() > DIFF_LIMIT_BYTES;
+        if truncated {
+            patch.truncate(DIFF_LIMIT_BYTES);
+            patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
+        }
+        Ok(DiffResult {
+            path: current.path,
+            staged: false,
+            patch: String::from_utf8_lossy(&patch).into_owned(),
+            binary,
+            truncated,
+        })
+    }
+
     pub fn commit_details(&self, oid: &str) -> Result<CommitDetails, GitError> {
         validate_object_id(oid)?;
         let parent_oid = self.first_parent(oid)?;
@@ -1079,6 +1135,309 @@ impl GitRepository {
 
         let oid = self.run_read("read new commit id", ["rev-parse", "HEAD"])?;
         Ok(String::from_utf8_lossy(&oid.stdout).trim().to_string())
+    }
+
+    pub fn commit_selected(
+        &self,
+        message: &str,
+        selected: &[FileChange],
+    ) -> Result<SelectedCommitResult, GitError> {
+        let message = validate_commit_message(message)?;
+        self.ensure_no_repository_operation("create selected commit")?;
+        let changes = self.status_changes_with_untracked()?;
+        if changes.iter().any(|change| change.conflicted) {
+            return Err(GitError::UnsafeOperation {
+                operation: "create selected commit".to_string(),
+                message: "resolve every conflicted path before committing".to_string(),
+                blockers: changes
+                    .iter()
+                    .filter(|change| change.conflicted)
+                    .map(|change| change.path.clone())
+                    .collect(),
+            });
+        }
+        let selected = match_fresh_changes(&changes, selected, "create selected commit")?;
+        reject_submodule_changes(&selected, "create selected commit")?;
+        let pathspecs = expanded_change_paths(&selected)?;
+        let introduced = selected
+            .iter()
+            .filter(|change| change.worktree_status == ChangeKind::Untracked)
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        let before_head = self.head_oid()?;
+
+        if !introduced.is_empty() {
+            let mut args = vec![
+                OsString::from("--literal-pathspecs"),
+                OsString::from("add"),
+                OsString::from("--intent-to-add"),
+                OsString::from("--"),
+            ];
+            args.extend(introduced.iter().map(OsString::from));
+            self.run_mutation("prepare untracked selected paths", args)?;
+        }
+
+        let commit_result = (|| {
+            let mut command = base_command(&self.root);
+            command
+                .arg("--literal-pathspecs")
+                .args(["commit", "--only", "--file=-", "--cleanup=strip", "--"])
+                .args(&pathspecs)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            let mut child = command.spawn().map_err(|error| GitError::Io {
+                operation: "create selected commit".to_string(),
+                message: error.to_string(),
+            })?;
+            child
+                .stdin
+                .take()
+                .ok_or_else(|| GitError::Io {
+                    operation: "create selected commit".to_string(),
+                    message: "Git stdin was not available".to_string(),
+                })?
+                .write_all(message.as_bytes())
+                .map_err(|error| GitError::Io {
+                    operation: "create selected commit".to_string(),
+                    message: error.to_string(),
+                })?;
+            child.wait_with_output().map_err(|error| GitError::Io {
+                operation: "create selected commit".to_string(),
+                message: error.to_string(),
+            })
+        })();
+        let output = match commit_result {
+            Ok(output) => output,
+            Err(error) => {
+                return match self
+                    .remove_introduced_index_entries(&introduced, before_head.is_some())
+                {
+                    Ok(()) => Err(error),
+                    Err(cleanup) => Err(GitError::Io {
+                        operation: "recover rejected selected commit".to_string(),
+                        message: format!("{error}; cleanup also failed: {cleanup}"),
+                    }),
+                };
+            }
+        };
+        let after_head = match self.head_oid() {
+            Ok(oid) => oid,
+            Err(error) if output.status.success() => {
+                return Ok(SelectedCommitResult {
+                    oid: None,
+                    verification_warning: Some(format!(
+                        "Git reported commit success, but the final HEAD could not be verified: {error}. Refresh and inspect history before committing again."
+                    )),
+                });
+            }
+            Err(error) => return Err(error),
+        };
+        if !output.status.success() && after_head == before_head {
+            let command_error = ensure_success("create selected commit", output)
+                .expect_err("non-success status produces a Git error");
+            return match self.remove_introduced_index_entries(&introduced, before_head.is_some()) {
+                Ok(()) => Err(command_error),
+                Err(cleanup) => Err(GitError::Io {
+                    operation: "recover rejected selected commit".to_string(),
+                    message: format!("{command_error}; cleanup also failed: {cleanup}"),
+                }),
+            };
+        }
+        if !output.status.success() {
+            return Err(GitError::UnsafeOperation {
+                operation: "create selected commit".to_string(),
+                message: "Git rejected the commit while HEAD changed concurrently; Asterlyn preserved the observed history and did not alter the index during recovery. Refresh and inspect the repository before retrying."
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        let Some(oid) = after_head else {
+            return Ok(SelectedCommitResult {
+                oid: None,
+                verification_warning: Some(
+                    "Git reported commit success, but HEAD is unborn. Refresh and inspect history before committing again."
+                        .to_string(),
+                ),
+            });
+        };
+        if Some(&oid) == before_head.as_ref() {
+            return Ok(SelectedCommitResult {
+                oid: None,
+                verification_warning: Some(
+                    "Git reported commit success, but HEAD did not advance. Refresh and inspect history before committing again."
+                        .to_string(),
+                ),
+            });
+        }
+        let verification_warning = self
+            .verify_selected_commit(&oid, before_head.as_deref(), &pathspecs)
+            .err()
+            .map(|error| {
+                format!(
+                    "Git reported commit success, but the final repository state could not be verified: {error}. Asterlyn preserved the observed history; inspect it before committing again."
+                )
+            });
+        Ok(SelectedCommitResult {
+            oid: verification_warning.is_none().then_some(oid),
+            verification_warning,
+        })
+    }
+
+    pub fn revert_selected(&self, selected: &[FileChange]) -> Result<(), GitError> {
+        self.ensure_no_repository_operation("revert selected changes")?;
+        if self.head_oid()?.is_none() {
+            return Err(GitError::UnsafeOperation {
+                operation: "revert selected changes".to_string(),
+                message: "revert requires an existing HEAD commit".to_string(),
+                blockers: selected.iter().map(|change| change.path.clone()).collect(),
+            });
+        }
+        let changes = self.status_changes_with_untracked()?;
+        let selected = match_fresh_changes(&changes, selected, "revert selected changes")?;
+        reject_submodule_changes(&selected, "revert selected changes")?;
+        let unsupported = selected
+            .iter()
+            .filter(|change| {
+                change.conflicted
+                    || change.worktree_status == ChangeKind::Untracked
+                    || matches!(change.index_status, ChangeKind::Added | ChangeKind::Copied)
+            })
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        if !unsupported.is_empty() {
+            return Err(GitError::UnsafeOperation {
+                operation: "revert selected changes".to_string(),
+                message: "this version only reverts ordinary tracked files; added, untracked, conflicted, and submodule paths are left untouched".to_string(),
+                blockers: unsupported,
+            });
+        }
+        let pathspecs = expanded_change_paths(&selected)?;
+        let mut args = vec![
+            OsString::from("--literal-pathspecs"),
+            OsString::from("restore"),
+            OsString::from("--source=HEAD"),
+            OsString::from("--staged"),
+            OsString::from("--worktree"),
+            OsString::from("--"),
+        ];
+        args.extend(pathspecs);
+        self.run_mutation("revert selected changes", args)?;
+        Ok(())
+    }
+
+    fn status_changes_with_untracked(&self) -> Result<Vec<FileChange>, GitError> {
+        let status = self.run_read(
+            "read current working tree changes",
+            ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
+        )?;
+        let (_, changes) = parse_status(&status.stdout)?;
+        Ok(changes)
+    }
+
+    fn head_oid(&self) -> Result<Option<String>, GitError> {
+        let output =
+            run_git_output(&self.root, ["rev-parse", "--verify", "HEAD"]).map_err(|error| {
+                GitError::Io {
+                    operation: "read HEAD".to_string(),
+                    message: error.to_string(),
+                }
+            })?;
+        if output.status.success() {
+            Ok(Some(
+                String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn remove_introduced_index_entries(
+        &self,
+        introduced: &[String],
+        has_head: bool,
+    ) -> Result<(), GitError> {
+        if introduced.is_empty() {
+            return Ok(());
+        }
+        let mut args = if has_head {
+            vec![
+                OsString::from("--literal-pathspecs"),
+                OsString::from("reset"),
+                OsString::from("--quiet"),
+                OsString::from("HEAD"),
+                OsString::from("--"),
+            ]
+        } else {
+            vec![
+                OsString::from("--literal-pathspecs"),
+                OsString::from("rm"),
+                OsString::from("--cached"),
+                OsString::from("--quiet"),
+                OsString::from("--force"),
+                OsString::from("--"),
+            ]
+        };
+        args.extend(introduced.iter().map(OsString::from));
+        self.run_mutation("restore index after rejected commit", args)?;
+        Ok(())
+    }
+
+    fn verify_selected_commit(
+        &self,
+        oid: &str,
+        before_head: Option<&str>,
+        allowed_paths: &[OsString],
+    ) -> Result<(), GitError> {
+        let parents = self.run_read_owned(
+            "verify selected commit parent",
+            vec![
+                OsString::from("rev-list"),
+                OsString::from("--parents"),
+                OsString::from("-n"),
+                OsString::from("1"),
+                OsString::from(oid),
+            ],
+        )?;
+        let line = String::from_utf8_lossy(&parents.stdout);
+        let actual_parents = line.split_ascii_whitespace().skip(1).collect::<Vec<_>>();
+        let parent_valid = match before_head {
+            Some(before) => actual_parents == [before],
+            None => actual_parents.is_empty(),
+        };
+        let changed = self.run_read_owned(
+            "verify selected commit paths",
+            vec![
+                OsString::from("diff-tree"),
+                OsString::from("--root"),
+                OsString::from("--no-commit-id"),
+                OsString::from("--name-only"),
+                OsString::from("-z"),
+                OsString::from("-r"),
+                OsString::from("--no-renames"),
+                OsString::from(oid),
+            ],
+        )?;
+        let allowed = allowed_paths
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<HashSet<_>>();
+        let unexpected = changed
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .filter(|path| !allowed.contains(path))
+            .collect::<Vec<_>>();
+        if parent_valid && unexpected.is_empty() {
+            return Ok(());
+        }
+        Err(GitError::UnsafeOperation {
+            operation: "verify selected commit".to_string(),
+            message: "the observed HEAD did not match the selected commit parent/path boundary"
+                .to_string(),
+            blockers: unexpected,
+        })
     }
 
     pub fn switch_branch(&self, target_full_name: &str) -> Result<(), GitError> {
@@ -2236,6 +2595,89 @@ fn validate_paths(paths: &[String]) -> Result<Vec<OsString>, GitError> {
         .collect()
 }
 
+fn validate_commit_message(message: &str) -> Result<&str, GitError> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(GitError::InvalidInput {
+            field: "commit message".to_string(),
+            message: "the message cannot be empty".to_string(),
+        });
+    }
+    Ok(message)
+}
+
+fn match_fresh_changes(
+    current: &[FileChange],
+    selected: &[FileChange],
+    operation: &str,
+) -> Result<Vec<FileChange>, GitError> {
+    if selected.is_empty() {
+        return Err(GitError::InvalidInput {
+            field: "selected changes".to_string(),
+            message: "select at least one changed file".to_string(),
+        });
+    }
+    let mut seen = HashSet::new();
+    let mut matched = Vec::with_capacity(selected.len());
+    for requested in selected {
+        validate_relative_path(&requested.path)?;
+        if !seen.insert(requested.path.as_str()) {
+            return Err(GitError::InvalidInput {
+                field: "selected changes".to_string(),
+                message: format!("'{}' was selected more than once", requested.path),
+            });
+        }
+        let fresh = current
+            .iter()
+            .find(|change| change.path == requested.path)
+            .ok_or_else(|| GitError::UnsafeOperation {
+                operation: operation.to_string(),
+                message: "the selected change is stale; refresh and try again".to_string(),
+                blockers: vec![requested.path.clone()],
+            })?;
+        if fresh != requested {
+            return Err(GitError::UnsafeOperation {
+                operation: operation.to_string(),
+                message: "the selected change changed since the last refresh".to_string(),
+                blockers: vec![requested.path.clone()],
+            });
+        }
+        matched.push(fresh.clone());
+    }
+    Ok(matched)
+}
+
+fn reject_submodule_changes(selected: &[FileChange], operation: &str) -> Result<(), GitError> {
+    let blockers = selected
+        .iter()
+        .filter(|change| change.submodule)
+        .map(|change| change.path.clone())
+        .collect::<Vec<_>>();
+    if blockers.is_empty() {
+        Ok(())
+    } else {
+        Err(GitError::UnsafeOperation {
+            operation: operation.to_string(),
+            message: "submodule changes require a dedicated repository-root workflow".to_string(),
+            blockers,
+        })
+    }
+}
+
+fn expanded_change_paths(selected: &[FileChange]) -> Result<Vec<OsString>, GitError> {
+    let mut paths = Vec::new();
+    let mut seen = HashSet::new();
+    for change in selected {
+        for path in std::iter::once(change.path.as_str()).chain(change.original_path.as_deref()) {
+            validate_relative_path(path)?;
+            if seen.insert(path.to_string()) {
+                paths.push(OsString::from(path));
+            }
+        }
+    }
+    Ok(paths)
+}
+
 fn validate_relative_path(path: &str) -> Result<(), GitError> {
     let candidate = Path::new(path);
     if path.is_empty()
@@ -3334,6 +3776,357 @@ mod tests {
         let snapshot = repository.snapshot(50).expect("committed snapshot loads");
         assert_eq!(snapshot.commits[0].subject, "Initial fixture");
         assert!(snapshot.changes.is_empty());
+    }
+
+    #[test]
+    fn selected_commit_keeps_unselected_index_entries_and_commits_worktree_content() {
+        let directory = fixture();
+        fs::write(directory.path().join("selected.txt"), "before\n").expect("selected base");
+        fs::write(directory.path().join("kept.txt"), "before\n").expect("kept base");
+        git(directory.path(), &["add", "selected.txt", "kept.txt"]);
+        git(directory.path(), &["commit", "-m", "Base"]);
+        fs::write(directory.path().join("selected.txt"), "staged version\n")
+            .expect("selected staged version");
+        git(directory.path(), &["add", "selected.txt"]);
+        fs::write(directory.path().join("selected.txt"), "working version\n")
+            .expect("selected working version");
+        fs::write(directory.path().join("kept.txt"), "kept staged\n").expect("kept change");
+        git(directory.path(), &["add", "kept.txt"]);
+
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "selected.txt")
+            .expect("selected change");
+        repository
+            .commit_selected("Selected only", &[selected])
+            .expect("selected commit");
+
+        assert_eq!(
+            git_stdout(directory.path(), &["show", "HEAD:selected.txt"]),
+            "working version"
+        );
+        assert_eq!(
+            git_stdout(
+                directory.path(),
+                &["show", "--format=", "--name-only", "HEAD"]
+            ),
+            "selected.txt"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["diff", "--cached", "--name-only"]),
+            "kept.txt"
+        );
+    }
+
+    #[test]
+    fn selected_commit_supports_untracked_and_unborn_paths_without_absorbing_other_index_entries() {
+        let directory = fixture();
+        fs::write(directory.path().join("selected.txt"), "selected\n").expect("selected file");
+        fs::write(directory.path().join("kept.txt"), "kept\n").expect("kept file");
+        git(directory.path(), &["add", "kept.txt"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "selected.txt")
+            .expect("selected change");
+
+        repository
+            .commit_selected("Selected root", &[selected])
+            .expect("root commit");
+
+        assert_eq!(
+            git_stdout(directory.path(), &["show", "HEAD:selected.txt"]),
+            "selected"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["diff", "--cached", "--name-only"]),
+            "kept.txt"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["ls-tree", "--name-only", "HEAD"]),
+            "selected.txt"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejected_selected_commit_removes_only_introduced_intent_entries() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        fs::write(directory.path().join("kept.txt"), "kept\n").expect("kept file");
+        git(directory.path(), &["add", "kept.txt"]);
+        fs::write(directory.path().join("selected.txt"), "selected\n").expect("selected file");
+        let hook = directory.path().join(".git/hooks/pre-commit");
+        fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("hook");
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("hook mode");
+        let before = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "selected.txt")
+            .expect("selected change");
+
+        repository
+            .commit_selected("Rejected", &[selected])
+            .expect_err("hook rejection is returned");
+
+        assert_eq!(git_stdout(directory.path(), &["rev-parse", "HEAD"]), before);
+        assert_eq!(
+            git_stdout(directory.path(), &["diff", "--cached", "--name-only"]),
+            "kept.txt"
+        );
+        assert!(
+            git_stdout(directory.path(), &["status", "--short"])
+                .lines()
+                .any(|line| line == "?? selected.txt")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejected_commit_does_not_roll_back_a_concurrent_head_advance() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = fixture();
+        fs::write(directory.path().join("selected.txt"), "before\n").expect("selected base");
+        fs::write(directory.path().join("kept.txt"), "before\n").expect("kept base");
+        git(directory.path(), &["add", "selected.txt", "kept.txt"]);
+        git(directory.path(), &["commit", "-m", "Base"]);
+        fs::write(directory.path().join("selected.txt"), "after\n").expect("selected edit");
+        fs::write(directory.path().join("kept.txt"), "staged\n").expect("kept edit");
+        git(directory.path(), &["add", "kept.txt"]);
+        let before = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let tree = git_stdout(directory.path(), &["rev-parse", "HEAD^{tree}"]);
+        let concurrent = git_stdout(
+            directory.path(),
+            &["commit-tree", &tree, "-p", &before, "-m", "Concurrent"],
+        );
+        let cached_before = git_stdout(directory.path(), &["diff", "--cached", "--binary"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "selected.txt")
+            .expect("selected change");
+        let hook = directory.path().join(".git/hooks/pre-commit");
+        fs::write(
+            &hook,
+            format!("#!/bin/sh\ngit update-ref refs/heads/main {concurrent} {before}\nexit 1\n"),
+        )
+        .expect("hook");
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("hook mode");
+
+        let error = repository
+            .commit_selected("Rejected after concurrent update", &[selected])
+            .expect_err("rejected commit reports concurrent HEAD");
+
+        assert!(matches!(error, GitError::UnsafeOperation { .. }));
+        assert_eq!(
+            git_stdout(directory.path(), &["rev-parse", "HEAD"]),
+            concurrent
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["show", "-s", "--format=%s", "HEAD"]),
+            "Concurrent"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["diff", "--cached", "--binary"]),
+            cached_before
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn successful_commit_preserves_concurrent_history_when_final_verification_warns() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = fixture();
+        fs::write(directory.path().join("selected.txt"), "before\n").expect("selected base");
+        fs::write(directory.path().join("kept.txt"), "before\n").expect("kept base");
+        git(directory.path(), &["add", "selected.txt", "kept.txt"]);
+        git(directory.path(), &["commit", "-m", "Base"]);
+        fs::write(directory.path().join("selected.txt"), "staged\n").expect("selected staged");
+        git(directory.path(), &["add", "selected.txt"]);
+        fs::write(directory.path().join("selected.txt"), "working\n").expect("selected working");
+        fs::write(directory.path().join("kept.txt"), "kept staged\n").expect("kept staged");
+        git(directory.path(), &["add", "kept.txt"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "selected.txt")
+            .expect("selected change");
+        let hook = directory.path().join(".git/hooks/post-commit");
+        fs::write(
+            &hook,
+            "#!/bin/sh\nrm \"$0\"\nparent=$(git rev-parse HEAD)\ntree=$(git rev-parse HEAD^{tree})\noid=$(printf 'Concurrent after selected\\n' | git commit-tree \"$tree\" -p \"$parent\")\ngit update-ref refs/heads/main \"$oid\" \"$parent\"\n",
+        )
+        .expect("hook");
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("hook mode");
+
+        let result = repository
+            .commit_selected("Selected with concurrency", &[selected])
+            .expect("successful Git commit returns a warning outcome");
+
+        assert_eq!(result.oid, None);
+        assert!(result.verification_warning.is_some());
+        assert_eq!(
+            git_stdout(directory.path(), &["log", "-2", "--format=%s"]),
+            "Concurrent after selected\nSelected with concurrency"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["show", "HEAD~1:selected.txt"]),
+            "working"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["diff", "--cached", "--name-only"]),
+            "kept.txt"
+        );
+    }
+
+    #[test]
+    fn selected_commit_handles_renames_and_literal_pathspec_characters() {
+        let directory = fixture();
+        fs::write(directory.path().join("old-name.txt"), "rename me\n").expect("rename base");
+        git(directory.path(), &["add", "old-name.txt"]);
+        git(directory.path(), &["commit", "-m", "Base"]);
+        fs::rename(
+            directory.path().join("old-name.txt"),
+            directory.path().join("new-name.txt"),
+        )
+        .expect("rename fixture");
+        git(directory.path(), &["add", "old-name.txt", "new-name.txt"]);
+        fs::write(
+            directory.path().join(":(glob)selected.txt"),
+            "literal path\n",
+        )
+        .expect("literal path file");
+        fs::write(directory.path().join("unselected.txt"), "leave me\n").expect("unselected file");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let changes = repository.snapshot(50).expect("snapshot").changes;
+        let selected = changes
+            .into_iter()
+            .filter(|change| change.path == "new-name.txt" || change.path == ":(glob)selected.txt")
+            .collect::<Vec<_>>();
+
+        repository
+            .commit_selected("Rename and literal path", &selected)
+            .expect("selected commit");
+
+        let committed = git_stdout(
+            directory.path(),
+            &["show", "--format=", "--name-only", "--no-renames", "HEAD"],
+        );
+        assert!(committed.lines().any(|path| path == "old-name.txt"));
+        assert!(committed.lines().any(|path| path == "new-name.txt"));
+        assert!(committed.lines().any(|path| path == ":(glob)selected.txt"));
+        assert!(!committed.lines().any(|path| path == "unselected.txt"));
+        assert!(directory.path().join("unselected.txt").exists());
+    }
+
+    #[test]
+    fn selected_commit_rejects_a_stale_change_identity() {
+        let directory = fixture();
+        commit_file(directory.path(), "stale.txt", "before\n", "Base");
+        fs::write(directory.path().join("stale.txt"), "after\n").expect("working edit");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let stale = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "stale.txt")
+            .expect("stale candidate");
+        git(directory.path(), &["add", "stale.txt"]);
+        let before = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+
+        let error = repository
+            .commit_selected("Must refresh", &[stale])
+            .expect_err("stale identity is rejected");
+
+        assert!(matches!(error, GitError::UnsafeOperation { .. }));
+        assert_eq!(git_stdout(directory.path(), &["rev-parse", "HEAD"]), before);
+        assert_eq!(
+            git_stdout(directory.path(), &["diff", "--cached", "--name-only"]),
+            "stale.txt"
+        );
+    }
+
+    #[test]
+    fn complete_local_diff_includes_staged_and_worktree_content() {
+        let directory = fixture();
+        commit_file(directory.path(), "mixed.txt", "before\n", "Base");
+        fs::write(directory.path().join("mixed.txt"), "staged\n").expect("staged edit");
+        git(directory.path(), &["add", "mixed.txt"]);
+        fs::write(directory.path().join("mixed.txt"), "working\n").expect("working edit");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "mixed.txt")
+            .expect("mixed change");
+
+        let diff = repository
+            .local_diff(&selected)
+            .expect("complete local diff");
+
+        assert!(diff.patch.contains("-before"));
+        assert!(diff.patch.contains("+working"));
+        assert!(!diff.patch.contains("+staged"));
+    }
+
+    #[test]
+    fn revert_selected_restores_tracked_paths_and_rejects_destructive_classes() {
+        let directory = fixture();
+        commit_file(directory.path(), "tracked.txt", "before\n", "Base");
+        fs::write(directory.path().join("tracked.txt"), "after\n").expect("tracked edit");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let tracked = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "tracked.txt")
+            .expect("tracked change");
+        repository
+            .revert_selected(&[tracked])
+            .expect("tracked revert");
+        assert_eq!(
+            fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+            "before\n"
+        );
+
+        fs::write(directory.path().join("new.txt"), "new\n").expect("untracked file");
+        let untracked = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "new.txt")
+            .expect("untracked change");
+        assert!(matches!(
+            repository.revert_selected(&[untracked]),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+        assert!(directory.path().join("new.txt").exists());
     }
 
     #[test]

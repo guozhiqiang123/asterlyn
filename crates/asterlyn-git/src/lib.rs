@@ -9,6 +9,6 @@ pub use model::{
     CommitFileChange, CommitSummary, DiffResult, FileChange, GitRootDescriptor, GitRootKind,
     HistoryOrder, HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind,
     ProjectFile, ProjectFileList, ProjectIgnoredEntry, RemoteSummary, RepositorySnapshot,
-    TrackedChangeScan, UntrackedScan, UntrackedState,
+    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 pub use repository::{CancellationToken, GitRepository};

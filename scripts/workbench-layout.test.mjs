@@ -59,6 +59,7 @@ test("layout persistence excludes unrelated session state", () => {
     "bottomTool",
     "branchDetailsWidth",
     "branchTreeWidth",
+    "changesCommitHeight",
     "commitSummaryHeight",
     "diffBeforePercent",
     "leftTool",
@@ -76,6 +77,7 @@ test("viewport clamping preserves usable editor and branch columns", () => {
       branchTreeWidth: 900,
       branchDetailsWidth: 900,
       commitSummaryHeight: 900,
+      changesCommitHeight: 900,
       diffBeforePercent: 99,
     },
     { width: 1_100, height: 700 },
@@ -85,6 +87,7 @@ test("viewport clamping preserves usable editor and branch columns", () => {
   assert.equal(clamped.branchTreeWidth, 540);
   assert.equal(clamped.branchDetailsWidth, 230);
   assert.equal(clamped.commitSummaryHeight, 370);
+  assert.equal(clamped.changesCommitHeight, 585);
   assert.equal(clamped.diffBeforePercent, 75);
 });
 

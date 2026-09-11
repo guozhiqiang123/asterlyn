@@ -10,6 +10,7 @@ export interface WorkbenchLayout {
   branchTreeWidth: number;
   branchDetailsWidth: number;
   commitSummaryHeight: number;
+  changesCommitHeight: number;
   diffBeforePercent: number;
 }
 
@@ -24,6 +25,7 @@ export type WorkbenchLayoutAction =
         | "branchTreeWidth"
         | "branchDetailsWidth"
         | "commitSummaryHeight"
+        | "changesCommitHeight"
         | "diffBeforePercent";
       value: number;
     }
@@ -44,6 +46,7 @@ export const WORKBENCH_LAYOUT_DEFAULTS: WorkbenchLayout = Object.freeze({
   branchTreeWidth: 270,
   branchDetailsWidth: 320,
   commitSummaryHeight: 145,
+  changesCommitHeight: 230,
   diffBeforePercent: 50,
 });
 
@@ -57,6 +60,8 @@ export const WORKBENCH_LIMITS = Object.freeze({
   branchDetailsMin: 230,
   commitFilesMin: 80,
   commitSummaryMin: 90,
+  changesFilesMin: 110,
+  changesCommitMin: 145,
   bottomHeaderSize: 30,
   separatorSize: 5,
   diffPercentMin: 25,
@@ -169,6 +174,17 @@ export function clampWorkbenchLayout(
           WORKBENCH_LIMITS.bottomHeaderSize -
           WORKBENCH_LIMITS.commitFilesMin -
           WORKBENCH_LIMITS.separatorSize,
+      ),
+    ),
+    changesCommitHeight: clamp(
+      finiteOr(
+        layout.changesCommitHeight,
+        WORKBENCH_LAYOUT_DEFAULTS.changesCommitHeight,
+      ),
+      WORKBENCH_LIMITS.changesCommitMin,
+      Math.max(
+        WORKBENCH_LIMITS.changesCommitMin,
+        height - WORKBENCH_LIMITS.changesFilesMin - WORKBENCH_LIMITS.separatorSize,
       ),
     ),
     diffBeforePercent: clamp(

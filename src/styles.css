@@ -889,6 +889,7 @@ textarea:focus-visible {
   --branch-tree-width: 270px;
   --branch-details-width: 320px;
   --commit-summary-height: 145px;
+  --changes-commit-height: 230px;
   display: grid;
   overflow: hidden;
   min-width: 0;
@@ -1101,20 +1102,20 @@ textarea:focus-visible {
 
 .changes-tool-layout {
   display: grid;
+  overflow: hidden;
   height: 100%;
   min-height: 0;
-  grid-template-rows: minmax(150px, 1fr) auto;
+  grid-template-rows: minmax(110px, 1fr) 5px var(--changes-commit-height);
 }
 
 .changes-tool-navigation {
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
 }
 
 .commit-tool {
-  overflow: auto;
-  max-height: min(42vh, 330px);
-  border-top: 1px solid var(--border-strong);
+  overflow: hidden;
+  min-height: 0;
   background: #242529;
 }
 
@@ -1127,12 +1128,22 @@ textarea:focus-visible {
 }
 
 .commit-tool .commit-form {
-  padding: 9px 12px 12px;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 9px;
 }
 
 .commit-tool .commit-form textarea {
-  min-height: 64px;
-  resize: vertical;
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
+}
+
+.changes-commit-splitter {
+  width: 100%;
 }
 
 .project-tree {
@@ -1574,6 +1585,16 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
+.change-group > summary,
+.change-directory > summary {
+  list-style: none;
+}
+
+.change-group > summary::-webkit-details-marker,
+.change-directory > summary::-webkit-details-marker {
+  display: none;
+}
+
 .group-header {
   display: flex;
   height: 27px;
@@ -1585,6 +1606,34 @@ textarea:focus-visible {
   font-weight: 700;
   letter-spacing: 0.025em;
   text-transform: uppercase;
+}
+
+.change-group > .group-header {
+  display: grid;
+  height: 28px;
+  grid-template-columns: 15px 18px minmax(0, 1fr);
+  justify-content: initial;
+  gap: 4px;
+  padding: 0 7px;
+  cursor: default;
+  text-transform: none;
+}
+
+.change-group > .group-header .tree-chevron,
+.change-directory > summary .tree-chevron {
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+}
+
+.change-group[open] > .group-header .tree-chevron,
+.change-directory[open] > summary .tree-chevron {
+  transform: rotate(90deg);
+}
+
+.group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-header b {
@@ -1693,6 +1742,31 @@ textarea:focus-visible {
   padding: 0 5px 6px;
 }
 
+.change-list {
+  min-width: max-content;
+}
+
+.change-directory > summary {
+  display: grid;
+  height: 27px;
+  grid-template-columns: 15px 18px 18px minmax(90px, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 calc(3px + var(--tree-depth) * 13px);
+  border-radius: 3px;
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.change-directory > summary:hover {
+  background: var(--bg-hover);
+}
+
+.change-directory > summary small {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
 .change-row,
 .history-row,
 .branch-row {
@@ -1709,9 +1783,10 @@ textarea:focus-visible {
 }
 
 .change-row {
-  grid-template-columns: 23px minmax(0, 1fr) auto 26px;
-  min-height: 37px;
-  padding: 3px 5px 3px 7px;
+  grid-template-columns: 18px 18px 18px minmax(90px, 1fr) auto;
+  min-height: 28px;
+  gap: 4px;
+  padding: 2px 7px 2px calc(4px + var(--tree-depth, 0) * 13px);
 }
 
 .change-row:hover,
@@ -1725,9 +1800,21 @@ textarea:focus-visible {
   background: #214283;
 }
 
-.change-row.selected,
 .change-row.primary {
   background: #214283;
+}
+
+.change-row.excluded .change-path,
+.change-row.excluded .commit-file-glyph {
+  opacity: 0.56;
+}
+
+.change-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .change-row:focus-visible,
@@ -1888,14 +1975,27 @@ textarea:focus-visible {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: 72px minmax(0, 1fr);
+  grid-template-rows: 32px minmax(0, 1fr);
 }
 
 .change-toolbar {
-  display: grid;
+  display: flex;
   min-width: 0;
-  grid-template-rows: 38px 34px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 7px;
   border-bottom: 1px solid var(--border);
+}
+
+.change-toolbar .compact-icon-button {
+  margin-left: 0;
+}
+
+.change-toolbar .toolbar-separator {
+  width: 1px;
+  height: 17px;
+  margin: 0 3px;
+  background: var(--border-strong);
 }
 
 .change-filter,
@@ -2001,6 +2101,26 @@ textarea:focus-visible {
   padding: 20px;
   color: var(--text-muted);
   text-align: center;
+}
+
+.commit-blocker {
+  overflow: hidden;
+  color: #dca0a0;
+  font-size: 9px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.commit-actions .commit-button {
+  width: auto;
+  min-width: 76px;
+  padding: 0 14px;
 }
 
 .change-no-results strong {

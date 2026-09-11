@@ -2,7 +2,7 @@
 
 ## Outcome
 
-M1 is the smallest honest product slice: a developer can open a local repository, understand its current state, inspect a change, stage or unstage selected paths, review recent history, and create a commit without leaving Asterlyn.
+M1 is the smallest honest product slice: a developer can open a local repository, understand its current state, inspect a change, choose files for a commit, review recent history, and create that exact commit without leaving Asterlyn.
 
 It is not the final product identity and does not authorize shortcuts that would block the editor roadmap.
 
@@ -11,17 +11,18 @@ It is not the final product identity and does not authorize shortcuts that would
 - Open a repository from an explicit local path and remember recent paths locally.
 - Display repository root, current branch or detached HEAD, upstream, ahead/behind, and operation hints where available.
 - Parse porcelain v2 entries for ordinary, renamed/copied, unmerged, untracked, and ignored paths.
-- Separate staged and unstaged views without hiding partially staged files.
+- Present each changed path once, grouped as versioned Changes or Unversioned Files, without hiding partial-stage truth.
 - Show a read-only patch in CodeMirror 6.
 - Show recent commits and local/remote branches.
-- Stage and unstage selected paths.
-- Create a commit from an explicit message after presenting what is staged.
+- Check whole files, folders, or groups to define an explicit commit set; row selection remains independent and opens the complete local Diff.
+- Create a commit from an explicit message and the checked worktree files while preserving unrelated staged index entries.
+- Revert an explicitly selected supported tracked path to `HEAD` only after confirmation.
 - Refresh without blocking the UI and reject stale responses.
 - Browser demo mode for presentation work when the native shell cannot be built.
 
 ## Explicitly deferred
 
-- Discarding work, reset, clean, force push, interactive rebase, merge conflict editing, submodule mutation, credential prompts, commit signing UI, and worktree management.
+- Deleting untracked files, general reset/clean, force push, interactive rebase, merge conflict editing, submodule mutation, credential prompts, amend, commit-and-push composition, commit signing UI, and worktree management.
 - File-system watchers; M1 uses explicit/event-triggered refresh.
 - Graph lane rendering and provider-specific pull-request workflows.
 - Binary-safe path transport for non-UTF-8 filenames.
@@ -31,12 +32,12 @@ It is not the final product identity and does not authorize shortcuts that would
 ### Correctness
 
 - Parser unit tests cover ordinary, rename, unmerged, untracked, ignored, detached, ahead/behind, and partial-stage cases.
-- Integration tests create a temporary repository and exercise snapshot, stage, unstage, diff, and commit without mutating a user repository.
+- Integration tests create temporary repositories and exercise snapshot, complete local Diff, checked commit, index preservation, hook failure cleanup, stale-selection rejection, and tracked Revert without mutating a user repository.
 - Every Git process is invoked without a shell and every mutation is followed by a fresh snapshot.
 
 ### User workflow
 
-- A first-time user can complete open → inspect → stage → commit using visible controls.
+- A first-time user can complete open → inspect → check files → commit using visible controls.
 - All primary actions are keyboard reachable and expose disabled/busy/error states.
 - Empty, loading, clean, detached, no-upstream, and command-failure states are designed, not blank screens.
 
@@ -55,7 +56,7 @@ It is not the final product identity and does not authorize shortcuts that would
 
 ## Current slice
 
-The first implementation slice covers repository open/refresh, status/history/branch presentation, patch viewing, stage/unstage, and commit. Advanced Stage 2 operations remain outside this slice.
+The current M1 interaction covers repository open/refresh, status/history/branch presentation, complete local Diff, checked-file commit, and narrowly gated tracked-file Revert. Legacy stage/unstage commands remain internal compatibility operations rather than the primary commit interface. Advanced Stage 2 operations remain outside this slice.
 
 The first accepted evidence set is recorded in [`../benchmarks/2026-09-08-m1-baseline.md`](../benchmarks/2026-09-08-m1-baseline.md). Its conclusion is **mixed**: the vertical slice and packaging are viable, but large-repository untracked discovery exceeds the refresh budget and the memory margin needs repeated measurement before M1 can close.
 

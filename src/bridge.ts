@@ -20,7 +20,9 @@ import type {
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
+  CommitSelectedResult,
   DiffResult,
+  FileChange,
   HistoryQuery,
   HistoryPage,
   ProjectFileList,
@@ -204,6 +206,20 @@ export const bridge = {
       repositoryRoot,
       path,
       staged,
+    });
+  },
+
+  async readLocalDiff(
+    repositoryRoot: string,
+    selected: FileChange,
+  ): Promise<DiffResult> {
+    if (!isTauri) {
+      await demoDelay(90);
+      return demoDiff(selected.path, false);
+    }
+    return invoke<DiffResult>("read_local_diff", {
+      repositoryRoot,
+      selected,
     });
   },
 
@@ -526,17 +542,17 @@ export const bridge = {
   async commitChanges(
     repositoryRoot: string,
     message: string,
-  ): Promise<RepositorySnapshot> {
+    selected: FileChange[],
+  ): Promise<CommitSelectedResult> {
     if (!isTauri) {
       await demoDelay(320);
       const next = structuredClone(browserSnapshot);
-      const committed = next.changes.filter(
-        (change) => change.indexStatus !== "unmodified",
-      );
-      if (committed.length === 0) throw new Error("Nothing is staged.");
-      next.changes = next.changes
-        .map((change) => ({ ...change, indexStatus: "unmodified" as const }))
-        .filter((change) => change.worktreeStatus !== "unmodified");
+      const paths = new Set(selected.map((change) => change.path));
+      const committed = next.changes.filter((change) => paths.has(change.path));
+      if (committed.length !== paths.size || committed.length === 0) {
+        throw new Error("The selected changes are stale.");
+      }
+      next.changes = next.changes.filter((change) => !paths.has(change.path));
       const oid = `demo${Date.now().toString(16)}`.padEnd(40, "0").slice(0, 40);
       next.commits.unshift({
         repositoryId: ".",
@@ -554,7 +570,10 @@ export const bridge = {
         committed.map((change) => ({
           path: change.path,
           originalPath: change.originalPath,
-          status: change.indexStatus,
+          status:
+            change.worktreeStatus !== "unmodified"
+              ? change.worktreeStatus
+              : change.indexStatus,
         })),
       );
       next.branch.ahead += 1;
@@ -566,11 +585,48 @@ export const bridge = {
         currentBranch.subject = next.commits[0]?.subject ?? currentBranch.subject;
       }
       browserSnapshot = next;
-      return demoTrackedSnapshot(next);
+      return {
+        oid,
+        snapshot: demoTrackedSnapshot(next),
+        refreshError: null,
+        verificationWarning: null,
+      };
     }
-    return invoke<RepositorySnapshot>("commit_changes", {
+    return invoke<CommitSelectedResult>("commit_changes", {
       repositoryRoot,
       message,
+      selected,
+    });
+  },
+
+  async revertChanges(
+    repositoryRoot: string,
+    selected: FileChange[],
+  ): Promise<RepositorySnapshot> {
+    if (!isTauri) {
+      await demoDelay(220);
+      if (
+        selected.some(
+          (change) =>
+            change.worktreeStatus === "untracked" ||
+            change.indexStatus === "added" ||
+            change.indexStatus === "copied" ||
+            change.conflicted ||
+            change.submodule,
+        )
+      ) {
+        throw new Error("Only ordinary tracked files can be reverted in this version.");
+      }
+      const paths = new Set(selected.map((change) => change.path));
+      browserSnapshot = {
+        ...browserSnapshot,
+        changes: browserSnapshot.changes.filter((change) => !paths.has(change.path)),
+      };
+      return demoTrackedSnapshot(browserSnapshot);
+    }
+    return invoke<RepositorySnapshot>("revert_changes", {
+      repositoryRoot,
+      selected,
     });
   },
 

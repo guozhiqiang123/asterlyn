@@ -4,9 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
-    CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
-    HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, TrackedChangeScan,
-    UntrackedScan,
+    CancellationToken, CommitDetails, CommitDiffResult, DiffResult, FileChange, GitError,
+    GitRepository, HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot,
+    TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
@@ -110,6 +110,20 @@ struct PendingRepositoryWindows {
 #[derive(Default)]
 struct WorkspaceWriteRegistry {
     locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+#[derive(Default)]
+struct GitMutationRegistry {
+    locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommitSelectedResult {
+    oid: Option<String>,
+    snapshot: Option<RepositorySnapshot>,
+    refresh_error: Option<String>,
+    verification_warning: Option<String>,
 }
 
 #[derive(Default)]
@@ -305,6 +319,19 @@ impl WorkspaceWriteRegistry {
         let mut locks = self.locks.lock().map_err(|_| WorkspaceError::Io {
             operation: "serialize file saves".to_string(),
             message: "file-save registry lock was poisoned".to_string(),
+        })?;
+        Ok(locks
+            .entry(identity)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
+    }
+}
+
+impl GitMutationRegistry {
+    fn lock_for(&self, identity: String) -> Result<Arc<Mutex<()>>, GitError> {
+        let mut locks = self.locks.lock().map_err(|_| GitError::Io {
+            operation: "serialize Git mutations".to_string(),
+            message: "Git-mutation registry lock was poisoned".to_string(),
         })?;
         Ok(locks
             .entry(identity)
@@ -757,6 +784,17 @@ async fn read_diff(
 ) -> Result<DiffResult, GitError> {
     run_blocking("read diff", move || {
         GitRepository::open(repository_root)?.diff(&path, staged)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_local_diff(
+    repository_root: String,
+    selected: FileChange,
+) -> Result<DiffResult, GitError> {
+    run_blocking("read complete local diff", move || {
+        GitRepository::open(repository_root)?.local_diff(&selected)
     })
     .await
 }
@@ -1381,12 +1419,17 @@ async fn read_commit_diff(
 async fn stage_paths(
     repository_root: String,
     paths: Vec<String>,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
-    run_blocking("stage paths", move || {
-        let repository = GitRepository::open(repository_root)?;
-        repository.stage(&paths)?;
-        repository.tracked_snapshot(COMMIT_LIMIT)
-    })
+    run_local_git_mutation(
+        repository_root,
+        mutations.inner(),
+        "stage paths",
+        move |repository| {
+            repository.stage(&paths)?;
+            repository.tracked_snapshot(COMMIT_LIMIT)
+        },
+    )
     .await
 }
 
@@ -1394,12 +1437,17 @@ async fn stage_paths(
 async fn unstage_paths(
     repository_root: String,
     paths: Vec<String>,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
-    run_blocking("unstage paths", move || {
-        let repository = GitRepository::open(repository_root)?;
-        repository.unstage(&paths)?;
-        repository.tracked_snapshot(COMMIT_LIMIT)
-    })
+    run_local_git_mutation(
+        repository_root,
+        mutations.inner(),
+        "unstage paths",
+        move |repository| {
+            repository.unstage(&paths)?;
+            repository.tracked_snapshot(COMMIT_LIMIT)
+        },
+    )
     .await
 }
 
@@ -1407,12 +1455,49 @@ async fn unstage_paths(
 async fn commit_changes(
     repository_root: String,
     message: String,
+    selected: Vec<FileChange>,
+    mutations: State<'_, GitMutationRegistry>,
+) -> Result<CommitSelectedResult, GitError> {
+    run_local_git_mutation(
+        repository_root,
+        mutations.inner(),
+        "create selected commit",
+        move |repository| {
+            let committed = repository.commit_selected(&message, &selected)?;
+            match repository.tracked_snapshot(COMMIT_LIMIT) {
+                Ok(snapshot) => Ok(CommitSelectedResult {
+                    oid: committed.oid,
+                    snapshot: Some(snapshot),
+                    refresh_error: None,
+                    verification_warning: committed.verification_warning,
+                }),
+                Err(error) => Ok(CommitSelectedResult {
+                    oid: committed.oid,
+                    snapshot: None,
+                    refresh_error: Some(error.to_string()),
+                    verification_warning: committed.verification_warning,
+                }),
+            }
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+async fn revert_changes(
+    repository_root: String,
+    selected: Vec<FileChange>,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
-    run_blocking("create commit", move || {
-        let repository = GitRepository::open(repository_root)?;
-        repository.commit(&message)?;
-        repository.tracked_snapshot(COMMIT_LIMIT)
-    })
+    run_local_git_mutation(
+        repository_root,
+        mutations.inner(),
+        "revert selected changes",
+        move |repository| {
+            repository.revert_selected(&selected)?;
+            repository.tracked_snapshot(COMMIT_LIMIT)
+        },
+    )
     .await
 }
 
@@ -1420,12 +1505,17 @@ async fn commit_changes(
 async fn switch_branch(
     repository_root: String,
     target_full_name: String,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
-    run_blocking("switch branch", move || {
-        let repository = GitRepository::open(repository_root)?;
-        repository.switch_branch(&target_full_name)?;
-        repository.tracked_snapshot(COMMIT_LIMIT)
-    })
+    run_local_git_mutation(
+        repository_root,
+        mutations.inner(),
+        "switch branch",
+        move |repository| {
+            repository.switch_branch(&target_full_name)?;
+            repository.tracked_snapshot(COMMIT_LIMIT)
+        },
+    )
     .await
 }
 
@@ -1433,12 +1523,17 @@ async fn switch_branch(
 async fn create_branch(
     repository_root: String,
     name: String,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
-    run_blocking("create branch", move || {
-        let repository = GitRepository::open(repository_root)?;
-        repository.create_branch(&name)?;
-        repository.tracked_snapshot(COMMIT_LIMIT)
-    })
+    run_local_git_mutation(
+        repository_root,
+        mutations.inner(),
+        "create branch",
+        move |repository| {
+            repository.create_branch(&name)?;
+            repository.tracked_snapshot(COMMIT_LIMIT)
+        },
+    )
     .await
 }
 
@@ -1448,11 +1543,13 @@ async fn fetch_remote(
     remote: String,
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
     run_remote_action(
         repository_root,
         operation_id,
         operations.inner(),
+        mutations.inner(),
         "fetch",
         move |repository, cancellation| repository.fetch_remote(&remote, cancellation),
     )
@@ -1464,11 +1561,13 @@ async fn pull_current(
     repository_root: String,
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
     run_remote_action(
         repository_root,
         operation_id,
         operations.inner(),
+        mutations.inner(),
         "pull",
         move |repository, cancellation| repository.pull_ff_only(cancellation),
     )
@@ -1481,11 +1580,13 @@ async fn push_current(
     remote: String,
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
+    mutations: State<'_, GitMutationRegistry>,
 ) -> Result<RepositorySnapshot, GitError> {
     run_remote_action(
         repository_root,
         operation_id,
         operations.inner(),
+        mutations.inner(),
         "push",
         move |repository, cancellation| repository.push_current(&remote, cancellation),
     )
@@ -1503,10 +1604,37 @@ fn cancel_remote_operation(
     Ok(())
 }
 
+async fn run_local_git_mutation<T, F>(
+    repository_root: String,
+    mutations: &GitMutationRegistry,
+    operation: &str,
+    action: F,
+) -> Result<T, GitError>
+where
+    T: Send + 'static,
+    F: FnOnce(&GitRepository) -> Result<T, GitError> + Send + 'static,
+{
+    let repository = run_blocking("open repository for Git mutation", move || {
+        GitRepository::open(repository_root)
+    })
+    .await?;
+    let identity = repository.root().to_string_lossy().into_owned();
+    let mutation_lock = mutations.lock_for(identity)?;
+    run_blocking(operation, move || {
+        let _guard = mutation_lock.lock().map_err(|_| GitError::Io {
+            operation: "serialize Git mutations".to_string(),
+            message: "Git-mutation lock was poisoned".to_string(),
+        })?;
+        action(&repository)
+    })
+    .await
+}
+
 async fn run_remote_action<F>(
     repository_root: String,
     operation_id: String,
     operations: &RemoteOperationRegistry,
+    mutations: &GitMutationRegistry,
     operation: &str,
     action: F,
 ) -> Result<RepositorySnapshot, GitError>
@@ -1518,6 +1646,7 @@ where
     })
     .await?;
     let resolved_root = repository.root().to_string_lossy().into_owned();
+    let mutation_lock = mutations.lock_for(resolved_root.clone())?;
     let cancellation = {
         let mut registry = lock_remote_registry(operations)?;
         registry.register(&resolved_root, &operation_id, operation)?
@@ -1525,6 +1654,10 @@ where
 
     let task_cancellation = cancellation.clone();
     let result = run_blocking(operation, move || {
+        let _guard = mutation_lock.lock().map_err(|_| GitError::Io {
+            operation: "serialize Git mutations".to_string(),
+            message: "Git-mutation lock was poisoned".to_string(),
+        })?;
         action(&repository, &task_cancellation)?;
         repository.tracked_snapshot(COMMIT_LIMIT)
     })
@@ -1586,6 +1719,7 @@ pub fn run() {
         .manage(ActiveWorkspaces::default())
         .manage(PendingRepositoryWindows::default())
         .manage(WorkspaceWriteRegistry::default())
+        .manage(GitMutationRegistry::default())
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
         .setup(|app| {
@@ -1630,11 +1764,13 @@ pub fn run() {
             read_text_file,
             save_text_file,
             read_diff,
+            read_local_diff,
             read_commit_details,
             read_commit_diff,
             stage_paths,
             unstage_paths,
             commit_changes,
+            revert_changes,
             switch_branch,
             create_branch,
             fetch_remote,
@@ -2070,6 +2206,17 @@ mod tests {
     #[test]
     fn workspace_write_registry_reuses_only_matching_root_locks() {
         let registry = WorkspaceWriteRegistry::default();
+        let first = registry.lock_for("root-a".to_string()).expect("lock");
+        let same = registry.lock_for("root-a".to_string()).expect("same lock");
+        let other = registry.lock_for("root-b".to_string()).expect("other lock");
+
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &other));
+    }
+
+    #[test]
+    fn git_mutation_registry_serializes_only_matching_roots() {
+        let registry = GitMutationRegistry::default();
         let first = registry.lock_for("root-a".to_string()).expect("lock");
         let same = registry.lock_for("root-a".to_string()).expect("same lock");
         let other = registry.lock_for("root-b".to_string()).expect("other lock");

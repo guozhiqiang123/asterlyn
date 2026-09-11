@@ -38,6 +38,13 @@ export interface FileChange {
   submodule: boolean;
 }
 
+export interface CommitSelectedResult {
+  oid: string | null;
+  snapshot: RepositorySnapshot | null;
+  refreshError: string | null;
+  verificationWarning: string | null;
+}
+
 export interface CommitSummary {
   repositoryId: string;
   oid: string;
