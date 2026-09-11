@@ -15,6 +15,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0003-persistent-workbench.md`](architecture/decisions/0003-persistent-workbench.md) — persistent editor, orthogonal tool windows, and resizable layout state.
 - [`architecture/decisions/0004-safe-text-editing.md`](architecture/decisions/0004-safe-text-editing.md) — authorized text-file access, optimistic save, and editor-session ownership.
 - [`architecture/decisions/0005-bounded-navigation-search.md`](architecture/decisions/0005-bounded-navigation-search.md) — keyboard-first navigation, bounded cancellable text search, and safe replacement scope.
+- [`architecture/decisions/0006-language-adapter-evolution.md`](architecture/decisions/0006-language-adapter-evolution.md) — syntax adapters now, optional Tree-sitter language packs later, and deferred semantic intelligence.
 
 ## Delivery
 

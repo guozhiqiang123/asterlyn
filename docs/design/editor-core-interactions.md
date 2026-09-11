@@ -147,6 +147,12 @@ The parser-backed CodeMirror fold gutter now uses original high-contrast SVG che
 
 The updated evidence is recorded in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md). Long-preview wheel scrolling and pointer fold/unfold pass in a production-like browser journey, the frontend suite remains green, and native liveness passes. Functionality and discoverability are **improved**; output-size movement is **no material change** and memory remains **inconclusive** because no matched resource series was run. One refreshed local Debian package is produced without a remote push.
 
+### E3.1 legacy-language folding correction — 2026-09-11
+
+Language folding now follows [`ADR-0006`](../architecture/decisions/0006-language-adapter-evolution.md). Kotlin and Groovy/Gradle retain their on-demand CodeMirror stream highlighters and add only a token-aware brace-folding adapter over the active editor state. The adapter ignores braces classified as strings, regular expressions, or comments; chooses the outer structural block when multiple openings share a line; caches ranges against the immutable editor state and current syntax tree; and fails closed above one MiB. XML retains its Lezer parser but moves paired-element folding from the final line of a multiline opening tag to the tag's first line.
+
+This correction does not introduce Tree-sitter, LSP, completion, navigation, diagnostics, formatting, symbol extraction, a worker, or an index. Those remain separately gated Stage 4 work. Focused fixtures cover Kotlin classes/functions/conditions, Groovy Gradle blocks, false braces in strings/comments, multiline Android XML, and the large-file cutoff. The updated evidence remains in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

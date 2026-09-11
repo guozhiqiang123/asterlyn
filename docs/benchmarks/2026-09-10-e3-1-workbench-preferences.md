@@ -151,3 +151,25 @@ The complete frontend suite passes 125 tests, TypeScript checking and the produc
 | Debian package | 6,357,474 bytes | 6,358,216 bytes | +742 bytes / +0.012% |
 
 Every output movement is **no material change**. Functionality and fold discoverability are **improved**; performance has **no material change** at this correction's scope; memory remains **inconclusive**. The refreshed unsigned local package is `Asterlyn_0.1.0_amd64.deb`, 6,358,216 bytes, with SHA-256 `05618a26a897bb448d4218a9d5846a1c989fc1746502752166e1dd5f8d33aa14`. Package inspection confirms version 0.1.0 and `amd64`. No remote push is made.
+
+## Legacy-language folding and language-adapter boundary
+
+Manual review found that the catalog's Kotlin and Groovy stream modes produced syntax colors but no structural fold ranges, while XML placed the marker on the final line of a multiline opening tag. The Stage 3 correction follows [`ADR-0006`](../architecture/decisions/0006-language-adapter-evolution.md): Kotlin, Kotlin Gradle scripts, Groovy, Gradle Groovy scripts, and Jenkinsfiles retain their existing lazily loaded tokenizers and receive only a bounded token-aware brace-fold service. XML keeps its Lezer parser and publishes paired-element folding on the opening tag's first line. Completion, navigation, diagnostics, symbols, formatting, Tree-sitter, LSP, workers, and repository indexing remain outside this slice.
+
+Focused fixtures use the real installed CodeMirror language packages. They prove nested Kotlin class/function/condition folds, Groovy/Gradle block folds, first-line Android XML element folds, ignored braces inside tokenized strings and comments, and a fail-closed result above the one-MiB synchronous limit. Filename coverage also identifies `.gradle.kts` as Kotlin and `Jenkinsfile` as Groovy. The complete frontend suite passes 129 tests, and TypeScript checking succeeds. The existing fold gutter, pointer titles, chevrons, and keyboard commands are unchanged; a language adapter now determines whether those same accessible controls appear. Installed-platform pointer interaction remains a manual acceptance item.
+
+A generated 102,400-code-unit Kotlin document measured the first fold query of 20 fresh editor states after bounded parser preparation: 0.182 milliseconds median, 0.092 minimum, and 1.918 maximum on this machine. This is an absolute Node fixture rather than a native-webview latency series, and it excludes asynchronous language-module loading. It confirms that the cached scan is inside the interaction budget for this fixture but provides no normalized before/after comparison; performance impact is therefore **inconclusive** rather than a general speed claim.
+
+| Output | Scroll/fold correction | Language-fold correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 72.54 kB | 72.54 kB | 0.00 kB / 0.00% |
+| CSS gzip | 13.74 kB | 13.74 kB | 0.00 kB / 0.00% |
+| Main JavaScript | 634.92 kB | 636.34 kB | +1.42 kB / +0.22% |
+| Main JavaScript gzip | 183.23 kB | 183.79 kB | +0.56 kB / +0.31% |
+| Main JavaScript source map | 2,340.68 kB | 2,347.54 kB | +6.86 kB / +0.29% |
+| Linux release executable | 18,397,552 bytes | 18,399,664 bytes | +2,112 bytes / +0.01% |
+| Debian package | 6,358,216 bytes | 6,360,536 bytes | +2,320 bytes / +0.04% |
+
+Every output movement is **no material change**. Folding availability and XML control placement are **improved**. No matched process-tree PSS/RSS or forced browser-heap series was run, so memory remains **inconclusive** and no memory-reduction claim is made. The fallback is intentionally brace-structural rather than grammar-complete and disables itself above one MiB; richer syntax structure remains a separately gated Stage 4 language-pack decision.
+
+The refreshed unsigned local package is `Asterlyn_0.1.0_amd64.deb`, 6,360,536 bytes, with SHA-256 `7da24c5ef29421352b1b6b6bea5cc1550dd9590ede78d81eaf38ad94a3d1fefb`. Package inspection confirms version 0.1.0, `amd64`, the native executable, desktop entry, and maintained icon-size set. The release executable remained alive for the six-second native smoke interval. No remote push is made.

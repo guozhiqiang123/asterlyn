@@ -22,6 +22,7 @@ import {
   asterlynSyntaxHighlighting,
 } from "./editor-theme";
 import { EditorLanguageLoader } from "./editor-language";
+import { withEditorFolding } from "./editor-folding";
 import {
   applyExactTextChanges,
   decodeExactText,
@@ -101,7 +102,9 @@ export class TextEditor {
       }
       mountedView.dom.dataset.language = result.name;
       mountedView.dispatch({
-        effects: this.language.reconfigure(result.support),
+        effects: this.language.reconfigure(
+          withEditorFolding(result.name, result.support),
+        ),
       });
     });
   }
