@@ -29,10 +29,11 @@ These values are treated as replaceable tokens, not copied components. Layout, t
 ## What we do not copy
 
 - JetBrains or Rebased source code unless a future, file-specific license review explicitly approves reuse and records attribution.
-- Logos, product names, icons, fonts, screenshots, illustrations, bundled themes, or other branded assets.
+- Logos, product names, icons, fonts, screenshots, illustrations, bundled themes, or other branded assets extracted from an installed JetBrains or Rebased product.
 - Internal APIs or implementation structure merely because they exist in IntelliJ Platform.
+
+A standalone upstream asset is evaluated independently from this reference policy. For example, the publicly distributed JetBrains Mono project may be consumed from a pinned package under its SIL Open Font License; that does not authorize extracting a JBR/IDE font, copying an IDE icon, or treating another bundled asset as reusable.
 
 ## Reference method
 
 For each borrowed interaction concept, describe the user problem first, compare at least one alternative, implement an original version, and validate it with task-based testing. Rebased is evidence, not the specification.
-

@@ -61,6 +61,17 @@ import {
   type WindowChromeMode,
 } from "./workbench/window-chrome";
 import {
+  EDITOR_FONTS,
+  DEFAULT_EDITOR_FONT_ID,
+  EditorFontLoader,
+  editorFont,
+  editorFontFamilyStack,
+  editorFontOptionLabel,
+  isEditorFontId,
+  type EditorFontId,
+  type EditorFontLoadSource,
+} from "./workbench/editor-fonts";
+import {
   EDITOR_INDENT_SIZES,
   EDITOR_LETTER_SPACINGS,
   EDITOR_FONT_SIZES,
@@ -317,6 +328,7 @@ interface AppState {
 export class AsterlynApp {
   private readonly diffEditor = new DiffEditor();
   private readonly textEditor = new TextEditor();
+  private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private readonly state: AppState = {
     snapshot: null,
     activePage: "workbench",
@@ -403,6 +415,13 @@ export class AsterlynApp {
     error: null,
   };
   private requestGeneration = 0;
+  private editorFontRequestGeneration = 0;
+  private editorFontStatus: {
+    id: EditorFontId | null;
+    kind: "idle" | "loading" | "ready" | "error";
+    source?: EditorFontLoadSource;
+    message?: string;
+  } = { id: null, kind: "idle" };
   private diffGeneration = 0;
   private commitDetailsGeneration = 0;
   private commitDiffGeneration = 0;
@@ -459,6 +478,7 @@ export class AsterlynApp {
     this.applyAppPreferences();
     this.bindShellEvents();
     this.renderRepositoryMenu();
+    void this.activateConfiguredEditorFont();
 
     if (bridge.isDemo) {
       await this.openRepository("/workspace/asterlyn");
@@ -1027,6 +1047,7 @@ export class AsterlynApp {
           "Editor",
           "Shared defaults for text editors and source-aware Diff panes.",
           `
+            ${this.settingsRow("Editor font", "JetBrains Mono is included. Other fonts download only when selected, pass an integrity check, and remain cached in this profile.", this.editorFontControl())}
             ${this.settingsRow("Editor font size", "Applies immediately to text files and Diff code.", this.settingsSelect("setting-editor-font", "Editor font size", "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}
             ${this.settingsRow("Line spacing", "Controls vertical code density without changing file content.", this.settingsSelect("setting-editor-line-height", "Editor line spacing", "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}
             ${this.settingsRow("Letter spacing", "Adjusts horizontal spacing between code glyphs. Android Studio's editor default is represented by 0 px.", this.settingsSelect("setting-editor-letter-spacing", "Editor letter spacing", "editorLetterSpacing", EDITOR_LETTER_SPACINGS, preferences.editorLetterSpacing, (value) => value === 0 ? "Default · 0 px" : `${value > 0 ? "+" : ""}${value} px`))}
@@ -1063,6 +1084,38 @@ export class AsterlynApp {
     return `<div class="settings-row"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(description)}</span></div><div class="settings-control">${control}</div></div>`;
   }
 
+  private editorFontControl(): string {
+    const selected =
+      this.editorFontStatus.kind === "loading" && this.editorFontStatus.id
+        ? this.editorFontStatus.id
+        : this.state.preferences.editorFontFamily;
+    const status = this.editorFontStatus;
+    let message = "Included with Asterlyn";
+    let statusClass = "";
+    if (status.kind === "loading" && status.id) {
+      message = `Downloading and verifying ${editorFont(status.id).label}…`;
+      statusClass = "loading";
+    } else if (status.kind === "error" && status.message) {
+      message = status.message;
+      statusClass = "error";
+    } else if (status.kind === "ready" && status.id !== DEFAULT_EDITOR_FONT_ID) {
+      message =
+        status.source === "download"
+          ? "Downloaded, verified, and cached"
+          : status.source === "download-uncached"
+            ? "Loaded for this window; local cache is unavailable"
+          : status.source === "cache"
+            ? "Loaded from verified local cache"
+            : "Ready in this window";
+      statusClass = "success";
+    }
+    const retry =
+      status.kind === "error" && status.id
+        ? `<button class="setting-retry-button" id="setting-editor-font-retry" type="button">Retry ${escapeHtml(editorFont(status.id).label)}</button>`
+        : "";
+    return `<div class="editor-font-setting"><select id="setting-editor-font-family" aria-label="Editor font family" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select><span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
+  }
+
   private settingsSelect(
     id: string,
     ariaLabel: string,
@@ -1096,6 +1149,20 @@ export class AsterlynApp {
               ?.focus(),
           );
         });
+      });
+    this.root
+      .querySelector<HTMLSelectElement>("#setting-editor-font-family")
+      ?.addEventListener("change", (event) => {
+        const target = event.currentTarget as HTMLSelectElement;
+        if (isEditorFontId(target.value)) {
+          void this.selectEditorFont(target.value);
+        }
+      });
+    this.root
+      .querySelector<HTMLButtonElement>("#setting-editor-font-retry")
+      ?.addEventListener("click", () => {
+        const id = this.editorFontStatus.id;
+        if (id) void this.selectEditorFont(id);
       });
     this.root.querySelectorAll<HTMLSelectElement>("[data-setting-number]").forEach((select) => {
       select.addEventListener("change", () => {
@@ -1165,12 +1232,63 @@ export class AsterlynApp {
   }
 
   private applyAppPreferences(): void {
+    const requestedFont = this.state.preferences.editorFontFamily;
+    const effectiveFont = this.editorFontLoader.isLoaded(requestedFont)
+      ? requestedFont
+      : DEFAULT_EDITOR_FONT_ID;
+    document.documentElement.style.setProperty(
+      "--editor-font-family",
+      editorFontFamilyStack(effectiveFont),
+    );
     this.query(".app-shell").style.setProperty(
       "--ui-font-size",
       `${this.state.preferences.uiFontSize}px`,
     );
     this.textEditor.setPreferences(this.state.preferences);
     this.diffEditor.setPreferences(this.state.preferences);
+  }
+
+  private async activateConfiguredEditorFont(): Promise<void> {
+    const id = this.state.preferences.editorFontFamily;
+    const request = ++this.editorFontRequestGeneration;
+    this.editorFontStatus = { id, kind: "loading" };
+    try {
+      const source = await this.editorFontLoader.load(id);
+      if (request !== this.editorFontRequestGeneration) return;
+      this.editorFontStatus = { id, kind: "ready", source };
+      this.applyAppPreferences();
+      if (this.state.activePage === "settings") this.renderSettingsPage();
+    } catch (error) {
+      if (request !== this.editorFontRequestGeneration) return;
+      const message = error instanceof Error ? error.message : String(error);
+      this.editorFontStatus = { id, kind: "error", message };
+      this.applyAppPreferences();
+      if (this.state.activePage === "settings") this.renderSettingsPage();
+      this.showError(error);
+    }
+  }
+
+  private async selectEditorFont(id: EditorFontId): Promise<void> {
+    const request = ++this.editorFontRequestGeneration;
+    this.editorFontStatus = { id, kind: "loading" };
+    if (this.state.activePage === "settings") this.renderSettingsPage();
+    try {
+      const source = await this.editorFontLoader.load(id);
+      if (request !== this.editorFontRequestGeneration) return;
+      this.editorFontStatus = { id, kind: "ready", source };
+      this.updatePreferences({ editorFontFamily: id }, "setting-editor-font-family");
+    } catch (error) {
+      if (request !== this.editorFontRequestGeneration) return;
+      const message = error instanceof Error ? error.message : String(error);
+      this.editorFontStatus = { id, kind: "error", message };
+      if (this.state.activePage === "settings") {
+        this.renderSettingsPage();
+        queueMicrotask(() =>
+          this.query<HTMLSelectElement>("#setting-editor-font-family").focus(),
+        );
+      }
+      this.showError(error);
+    }
   }
 
   private bindWindowControls(): void {

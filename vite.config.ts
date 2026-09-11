@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 
-const sourceCodeProLicense = readFileSync(
-  new URL("./node_modules/@fontsource-variable/source-code-pro/LICENSE", import.meta.url),
+const jetBrainsMonoLicense = readFileSync(
+  new URL("./node_modules/@fontsource-variable/jetbrains-mono/LICENSE", import.meta.url),
   "utf8",
 );
 
@@ -13,8 +13,8 @@ export default defineConfig({
       generateBundle() {
         this.emitFile({
           type: "asset",
-          fileName: "licenses/source-code-pro-OFL.txt",
-          source: sourceCodeProLicense,
+          fileName: "licenses/jetbrains-mono-OFL.txt",
+          source: jetBrainsMonoLicense,
         });
       },
     },

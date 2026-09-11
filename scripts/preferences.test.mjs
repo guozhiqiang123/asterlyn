@@ -56,6 +56,7 @@ test("preferences update only through bounded choices and round trip by version"
   const storage = memoryStorage();
   const updated = updateAppPreferences(DEFAULT_APP_PREFERENCES, {
     uiFontSize: 13,
+    editorFontFamily: "fira-code",
     editorFontSize: 16,
     editorLineHeight: 1.8,
     editorLetterSpacing: 0.5,
@@ -77,6 +78,10 @@ test("preferences update only through bounded choices and round trip by version"
   assert.equal(
     updateAppPreferences(updated, { editorIndentSize: 3 }).editorIndentSize,
     2,
+  );
+  assert.equal(
+    updateAppPreferences(updated, { editorFontFamily: "unknown-font" }).editorFontFamily,
+    "fira-code",
   );
 });
 
@@ -149,6 +154,7 @@ test("version three untouched typography defaults migrate without replacing cust
   });
   assert.deepEqual(loadAppPreferences(memoryStorage(customized)), {
     uiFontSize: 14,
+    editorFontFamily: "jetbrains-mono",
     editorFontSize: 18,
     editorLineHeight: 1.5,
     editorLetterSpacing: 0.5,
@@ -157,4 +163,26 @@ test("version three untouched typography defaults migrate without replacing cust
     diffLayout: "unified",
     showWhitespace: true,
   });
+});
+
+test("version five persists a bounded editor font family", () => {
+  const selected = {
+    ...DEFAULT_APP_PREFERENCES,
+    editorFontFamily: "cascadia-code",
+  };
+  const storage = memoryStorage();
+  saveAppPreferences(storage, selected);
+  assert.deepEqual(loadAppPreferences(storage), selected);
+
+  const malformed = JSON.stringify({
+    version: 5,
+    preferences: {
+      ...selected,
+      editorFontFamily: "file:///tmp/untrusted.woff2",
+    },
+  });
+  assert.equal(
+    loadAppPreferences(memoryStorage(malformed)).editorFontFamily,
+    "jetbrains-mono",
+  );
 });

@@ -37,6 +37,12 @@ Deepin 23 may expose a GPU render node while denying the KMS buffer operation us
 
 The native smoke launcher must not share Linux desktop persistence with an installed Asterlyn profile. It overrides only XDG cache, configuration, data, and state roots below a disposable smoke-profile directory, preserves the user's real home, and removes that profile together with its temporary Git repository. Application startup independently treats an unreadable recent-project hint as recoverable and returns to the system folder chooser. These are complementary boundaries: profile isolation prevents test pollution, while startup recovery handles paths removed outside Asterlyn.
 
+## Editor font assets
+
+JetBrains Mono is the only bundled editor family. Its exact Fontsource dependency and OFL resource path must change together. Optional editor fonts are presentation-owned downloads declared in `src/workbench/editor-fonts.ts`; do not add those packages to production dependencies. Every optional entry must use an immutable versioned HTTPS URL on the existing CSP origin, a reviewed OFL-compatible license, a measured size below the hard limit, and a freshly computed SHA-256 digest. A version or file change without its matching digest must fail integrity verification rather than silently update the user's typography.
+
+After changing the catalog, run the full script suite and production build, exercise one first-use download plus one cached reload, and inspect the native package for the single bundled-font license. Keep arbitrary URLs, filesystem font paths, unverified cache entries, redirects, and automatic fallback preference changes outside this boundary.
+
 ## Platform icon generation
 
 [`../../assets/asterlyn-mark.svg`](../../assets/asterlyn-mark.svg) is the only hand-maintained application-icon source. The mark uses the complete square canvas. The generator preserves that full-canvas artwork for Windows and Linux, then derives a centered macOS-only representation whose visible alpha bounds occupy approximately 82% of the ICNS canvas. This keeps the same mark while matching the visual safe area used by neighboring macOS Launchpad icons instead of shrinking every platform. Regenerate the maintained desktop set atomically with the repository-pinned helper:

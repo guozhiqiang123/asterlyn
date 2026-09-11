@@ -1,4 +1,9 @@
 import type { DiffLayout } from "../diff-presentation";
+import {
+  DEFAULT_EDITOR_FONT_ID,
+  isEditorFontId,
+  type EditorFontId,
+} from "./editor-fonts.ts";
 
 export const APP_PREFERENCES_KEY = "asterlyn.preferences.v1";
 export const UI_FONT_SIZES = [10, 11, 12, 13, 14] as const;
@@ -10,6 +15,7 @@ export const EDITOR_TAB_SIZES = [2, 4, 8] as const;
 
 export interface AppPreferences {
   uiFontSize: number;
+  editorFontFamily: EditorFontId;
   editorFontSize: number;
   editorLineHeight: number;
   editorLetterSpacing: number;
@@ -21,6 +27,7 @@ export interface AppPreferences {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   uiFontSize: 13,
+  editorFontFamily: DEFAULT_EDITOR_FONT_ID,
   editorFontSize: 14,
   editorLineHeight: 1.35,
   editorLetterSpacing: 0,
@@ -47,7 +54,8 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
       (value.version !== 1 &&
         value.version !== 2 &&
         value.version !== 3 &&
-        value.version !== 4) ||
+        value.version !== 4 &&
+        value.version !== 5) ||
       !isRecord(value.preferences)
     ) {
       return { ...DEFAULT_APP_PREFERENCES };
@@ -67,6 +75,9 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         UI_FONT_SIZES,
         13,
       ),
+      editorFontFamily: isEditorFontId(preferences.editorFontFamily)
+        ? preferences.editorFontFamily
+        : DEFAULT_EDITOR_FONT_ID,
       editorFontSize: allowedNumber(
         migrateVersionedDefault(
           preferences.editorFontSize,
@@ -120,7 +131,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 4, preferences }),
+    JSON.stringify({ version: 5, preferences }),
   );
 }
 
@@ -131,6 +142,9 @@ export function updateAppPreferences(
   const candidate = { ...current, ...patch };
   return {
     uiFontSize: allowedNumber(candidate.uiFontSize, UI_FONT_SIZES, current.uiFontSize),
+    editorFontFamily: isEditorFontId(candidate.editorFontFamily)
+      ? candidate.editorFontFamily
+      : current.editorFontFamily,
     editorFontSize: allowedNumber(
       candidate.editorFontSize,
       EDITOR_FONT_SIZES,

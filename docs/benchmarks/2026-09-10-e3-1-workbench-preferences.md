@@ -277,3 +277,27 @@ The complete frontend suite passes 142 tests, TypeScript checking and production
 CSS and Debian size are **regressed** because the application now owns normal and italic Unicode-subset WOFF2 assets; JavaScript movement is **no material change**. Default readability and cross-platform font determinism are **improved**. No repeated font-load timing, installed WebKit frame-time, process-tree PSS/RSS, or forced browser-heap series was captured, so startup cost, scrolling performance, and memory remain **inconclusive**. The next action is installed Linux and macOS visual acceptance rather than further numerical tuning from Chromium alone.
 
 The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,548,920 bytes, with SHA-256 `ea8575569d0ce6a4e4d7e259778bee6cc1d002303849becffd552bd9d8711e95`. No remote push is made.
+
+## Bundled font family and optional downloads follow-up
+
+The 2026-09-11 follow-up replaces the temporary Source Code Pro default from the preceding calibration with the user's chosen JetBrains Mono. The baseline for size comparison is commit `65caee5` and its recorded Source Code Pro build. Asterlyn consumes JetBrains Mono 5.3.0 from the public Fontsource package under OFL-1.1; this is a pinned upstream dependency, not the font extracted from Android Studio or JBR. Its license is emitted as `licenses/jetbrains-mono-OFL.txt` in both the frontend output and native bundle.
+
+The Editor settings now expose five bounded font identifiers. JetBrains Mono is the only family shipped in the application. Cascadia Code, Fira Code, Source Code Pro, and IBM Plex Mono point to exact Fontsource 5.3.0 Latin WOFF2 assets on one CSP-allowed jsDelivr origin. Each asset has a fixed SHA-256 digest and 256-KiB ceiling; redirects, empty/oversized responses, failed integrity, and failed font decoding are rejected before preference activation. Verified bytes are cached in profile storage and reverified before later use. The previous working family remains active on failure, and a failed selection has an explicit retry action.
+
+Production-like browser acceptance selected Fira Code from the settings page. The UI reported `Downloaded, verified, and cached`, the root family changed to `Asterlyn Fira Code`, and a reload reported `Loaded from verified local cache`; no warning or error was recorded. Returning to the bundled default produced a live CodeMirror content family beginning with `JetBrains Mono Variable`; the browser font set reported it loaded, with the preserved 14-pixel size and 18.9-pixel computed line box. This verifies the frontend loading, integrity, cache, preference, and CodeMirror application paths in Chromium. It does not establish installed macOS WebKit rendering parity or CDN availability in every region.
+
+The complete frontend suite passes 146 tests, TypeScript checking and production build pass, and the Rust workspace passes 65 tests. The release executable remains alive for the six-second isolated native smoke interval. Debian inspection confirms package `asterlyn` version `0.1.0`, architecture `amd64`, and the 4,524-byte JetBrains Mono OFL file; no optional font package is a production dependency or bundle resource.
+
+| Output | Source Code Pro baseline | JetBrains Mono + selector | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 94.18 kB | 85.44 kB | -8.74 kB / -9.28% |
+| CSS gzip | 26.27 kB | 20.36 kB | -5.91 kB / -22.50% |
+| Main JavaScript | 647.90 kB | 656.18 kB | +8.28 kB / +1.28% |
+| Main JavaScript gzip | 186.90 kB | 189.63 kB | +2.73 kB / +1.46% |
+| Main JavaScript source map | 2,382.73 kB | 2,405.76 kB | +23.03 kB / +0.97% |
+| Linux release executable | 18,587,056 bytes | 18,600,144 bytes | +13,088 bytes / +0.07% |
+| Debian package | 6,548,920 bytes | 6,563,164 bytes | +14,244 bytes / +0.22% |
+
+The result is **mixed**: deterministic user-selected typography and bundled CSS size are improved, main JavaScript is regressed by the bounded loader and verification path, and native/package size movement is no material change. Memory is **inconclusive** because no process-tree comparison was run; only one optional Latin face is needed for the active choice, but selecting several families in one window intentionally retains their already decoded faces for fast switching. Optional italic faces, offline redistribution, cache management UI, installed macOS visual acceptance, and non-Latin coverage beyond the explicit system fallback remain limitations. The next action is manual Debian acceptance of JetBrains Mono's density and the settings interaction before any further typography calibration.
+
+The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,563,164 bytes, with SHA-256 `eff165685acb7104eac0a7ef6aea5a4a70e1fc15b6b61fc85e5c6b5880248601`. No remote push is made.

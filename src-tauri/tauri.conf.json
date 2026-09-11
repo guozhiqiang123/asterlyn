@@ -12,7 +12,7 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data: blob:; connect-src ipc: http://ipc.localhost https://cdn.jsdelivr.net"
     }
   },
   "bundle": {
@@ -22,7 +22,7 @@
     "shortDescription": "A lightweight developer workspace",
     "longDescription": "Asterlyn is a lightweight cross-platform developer workspace with a first-class Git experience.",
     "resources": {
-      "../node_modules/@fontsource-variable/source-code-pro/LICENSE": "licenses/source-code-pro-OFL.txt"
+      "../node_modules/@fontsource-variable/jetbrains-mono/LICENSE": "licenses/jetbrains-mono-OFL.txt"
     },
     "icon": [
       "icons/128x128.png",

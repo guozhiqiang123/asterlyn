@@ -1,5 +1,5 @@
-import "@fontsource-variable/source-code-pro/wght.css";
-import "@fontsource-variable/source-code-pro/wght-italic.css";
+import "@fontsource-variable/jetbrains-mono/wght.css";
+import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 import "./styles.css";
 import { AsterlynApp } from "./app";
 import { BRAND } from "./brand";

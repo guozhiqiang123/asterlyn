@@ -30,7 +30,7 @@
   --file-ignored: #b78a70;
   --file-unknown: #d69a62;
   --editor-font-family:
-    "Source Code Pro Variable", "Noto Sans Mono CJK SC", "Noto Sans Mono",
+    "JetBrains Mono Variable", "Noto Sans Mono CJK SC", "Noto Sans Mono",
     monospace;
   --radius: 7px;
 }
@@ -727,6 +727,51 @@ textarea:focus-visible {
   border-radius: 5px;
   background: var(--bg-deep);
   color: var(--text);
+}
+
+.editor-font-setting {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.editor-font-setting select {
+  min-width: 270px;
+}
+
+.editor-font-status {
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 2px);
+  line-height: 1.35;
+}
+
+.editor-font-status.loading {
+  color: #a8c7fa;
+}
+
+.editor-font-status.success {
+  color: #9bd7a8;
+}
+
+.editor-font-status.error {
+  max-width: 320px;
+  color: #f0a5a5;
+  text-align: right;
+}
+
+.setting-retry-button {
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.setting-retry-button:hover {
+  background: var(--bg-hover);
 }
 
 .setting-value-pill,
@@ -5172,6 +5217,14 @@ textarea:focus-visible {
 
   .settings-control {
     justify-content: flex-start;
+  }
+
+  .editor-font-setting {
+    align-items: flex-start;
+  }
+
+  .editor-font-status.error {
+    text-align: left;
   }
 }
 
