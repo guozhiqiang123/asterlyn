@@ -42,7 +42,7 @@ The rebuilt Linux release executable is 16,185,584 bytes, 17,544 bytes or 0.11% 
 
 ## Limits and next action
 
-The settings route currently supports one dark English interface. It is not yet a localization catalog, theme engine, formatter registry, or complete keymap editor. Tab width is a visual CodeMirror indentation unit and does not rewrite existing content. Semantic file colors describe the current Git snapshot and can be stale until refresh. Ignored directories are intentionally opaque collapsed entries, and both authorized and ignored catalogs retain independent bounds. A deleted commit path that no longer exists in the current project catalog cannot be located in the tree. Project-tree disclosure and selection are session-only, while application preferences are local to the webview profile and are not synchronized.
+The settings route currently supports one dark English interface. It is not yet a localization catalog, theme engine, formatter registry, or complete keymap editor. Tab width is a visual CodeMirror indentation unit and does not rewrite existing content. Semantic file colors describe the current Git snapshot; successful Asterlyn saves now trigger refresh, while unobserved external filesystem changes can remain stale until another event or explicit refresh. Ignored directories are intentionally opaque collapsed entries, and both authorized and ignored catalogs retain independent bounds. A deleted commit path that no longer exists in the current project catalog cannot be located in the tree. Project-tree disclosure and selection are session-only, while application preferences are local to the webview profile and are not synchronized.
 
 Interaction and consistency are **improved**, frontend footprint is **regressed**, native size has **no material change**, and memory remains **inconclusive**. E3.2 adds the typed editor-group model, horizontal and vertical splits, group focus, and tab movement while preserving one owner for dirty buffers. A matched normalized native resource series, language-catalog packaging work, and installed Windows/macOS interaction remain larger Stage 3 checkpoint gates.
 
@@ -327,3 +327,27 @@ The complete frontend suite passes 147 tests, TypeScript checking and the produc
 Every output movement is **no material change**. Final-selection correctness, clean-tab navigation at the retained-state bound, and avoidance of obsolete parser installation are **improved**. The number of retained editor states remains bounded at 20 and only one DOM view exists, but no matched heap or process-tree series was run, so memory remains **inconclusive**. Installed macOS WebKit interaction is still a manual acceptance limitation.
 
 The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,564,742 bytes, with SHA-256 `d6f812c5ed75d7b5fc3d59e66ac39174fe6c0f96f0351825cfaaf581dd32f92a`. Package inspection confirms package `asterlyn`, version `0.1.0`, architecture `amd64`, the native executable, desktop entry, and maintained icon/font resources. No remote push is made.
+
+## Save-triggered Git-status correction
+
+Manual acceptance on 2026-09-11 found that a successful editor save updated only the text tab's persisted-content baseline. Changes, the Files tree, editor-tab file color, and working-Diff selection all continued to project the previous repository snapshot until the user invoked a full refresh. Repainting those surfaces locally would have introduced several competing versions of Git truth.
+
+The correction adds one active-window-authorized tracked-change query that runs after a debounced successful save. It does not enumerate refs, read commit history, rebuild the project catalog, or replace editor state. The frontend accepts only a matching root and repository generation, atomically replaces the tracked portion of the shared snapshot, preserves current untracked rows, reconciles path-keyed selection, and redraws every consumer. A silent cancellable untracked scan then replaces the retained supplement. Another save arriving during a query requests a final pass, while a repository transition makes the old result inert.
+
+In the production-like browser journey, `README.md` began clean. After editing and `Ctrl+S`, its editor tab computed `file-status-modified`, its selected project-tree row computed the same status, and Changes contained a new `M README.md` row alongside the existing fixture changes. The seven-row history and open editor remained intact, and the browser reported no warning or error. Three pure merge fixtures additionally prove tracked replacement with untracked preservation, obsolete-root rejection, and de-duplication when an old untracked path becomes tracked. The Git crate fixture proves the status-only query reports one modified tracked file while excluding a neighboring untracked file.
+
+The complete frontend suite passes 150 tests, TypeScript checking and the production build pass, and the Rust workspace passes formatting, strict all-target Clippy, and 66 tests. Fifteen direct status-only samples against `/home/gzq/AndroidStudioProjects/superboost` measured 9–13 milliseconds with a 10-millisecond median. This is the exact Git command used by the new core query, but excludes repository-open, IPC, untracked supplement, and WebView rendering time; it therefore supports only the conclusion that the tracked query is interactive on this fixture.
+
+| Output | Activation correction | Save-status correction | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 85.44 kB | 85.44 kB | 0.00 kB / 0.00% |
+| CSS gzip | 20.36 kB | 20.36 kB | 0.00 kB / 0.00% |
+| Main JavaScript | 657.34 kB | 659.61 kB | +2.27 kB / +0.35% |
+| Main JavaScript gzip | 189.94 kB | 190.45 kB | +0.51 kB / +0.27% |
+| Main JavaScript source map | 2,410.08 kB | 2,416.87 kB | +6.79 kB / +0.28% |
+| Linux release executable | 18,601,552 bytes | 18,688,056 bytes | +86,504 bytes / +0.46% |
+| Debian package | 6,564,742 bytes | 6,574,690 bytes | +9,948 bytes / +0.15% |
+
+All artifact movements are **no material change**. Save-to-Git projection correctness and internal-save responsiveness are **improved**. This adds no watcher, polling loop, index, retained history, or service process; no matched process-tree PSS/RSS or installed Linux/macOS frame-time series was captured, so memory and cross-platform rendering cost remain **inconclusive**. External writers are still observed only by explicit or later event-triggered refresh until a filesystem watcher is introduced.
+
+The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,574,690 bytes, with SHA-256 `4d632d3ab0bfc012548779e50d74091e1f806db9e54ae194cedba0c2d20abdf6`. Package inspection confirms package `asterlyn`, version `0.1.0`, architecture `amd64`, the native executable, desktop entry, and maintained icon/font resources. The release executable remained alive for the six-second isolated native smoke interval. No remote push is made.

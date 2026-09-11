@@ -17,8 +17,9 @@ Generation checks in the frontend prevent stale data from being displayed, but r
 - Untracked discovery uses system Git and a core-owned cancellation token. Cancellation terminates the child process and drains its pipes rather than merely ignoring its eventual result.
 - The desktop adapter owns active-request registration. Presentation code owns generations and merges only a supplement whose request and repository root still match.
 - Mutations invalidate and cancel prior scans, return fresh tracked truth, and start a new supplement.
+- Successful in-application text saves debounce into a status-only tracked query rather than reopening the repository and rebuilding refs or history. The matching repository generation accepts that result, preserves the last untracked rows until a silent cancellable supplement completes, and then redraws every Git-status projection from the same snapshot.
 - The existing complete snapshot remains available for non-interactive callers and benchmarks.
 
 ## Consequences
 
-The changes list can become useful before every untracked path is known, and obsolete scans stop doing work. During the pending interval, counts are provisional and the UI must state that discovery is in progress. The two phases are not a filesystem transaction, so generation checks and post-mutation refresh remain mandatory. A future watcher or index may change how refreshes are triggered, but it must preserve these truth and cancellation semantics.
+The changes list can become useful before every untracked path is known, and obsolete scans stop doing work. During an announced pending interval, counts are provisional and the UI must state that discovery is in progress; a save-triggered supplement is silent because the existing complete untracked projection remains visible until replacement. The two phases are not a filesystem transaction, so generation checks and post-mutation refresh remain mandatory. A future watcher or index may change how refreshes are triggered, but it must preserve these truth and cancellation semantics.

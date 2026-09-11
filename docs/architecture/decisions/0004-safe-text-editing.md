@@ -23,6 +23,8 @@ Portable compare-then-replace cannot be linearizable against a non-cooperating w
 
 The frontend owns a pure editor-session model with persistent text tabs and one replaceable read-only Diff preview. A text tab records exact file identity, load epoch, content, BOM state, base revision, edit version, persisted version, one optional save request, and conflict/error state. Dirty state is derived from edit and persisted versions. A successful save advances the base revision but marks only the captured edit version persisted, so typing during a save remains dirty. Stale load or save responses cannot mutate a newer tab.
 
+A successful write also schedules one debounced repository-status refresh. The desktop boundary revalidates the invoking window's active root and asks Git only for tracked/index changes; it does not reload commit history, refs, remotes, the project catalog, or editor buffers. Presentation merges that result into the current matching-generation snapshot, redraws Changes, Files, tabs, and Diff selection from that single source, and silently refreshes untracked rows afterward. A stale root or generation is discarded, while several saves in one burst converge on another final refresh.
+
 CodeMirror remains behind a text-editor adapter. The adapter edits LF-normalized text while a tested line-ending map preserves untouched LF/CRLF separators and uses the document's dominant separator for inserted lines. CodeMirror classes never enter application/session models.
 
 ## Interaction policy
@@ -31,6 +33,7 @@ CodeMirror remains behind a text-editor adapter. The adapter edits LF-normalized
 - Project refresh preserves every text tab and dirty buffer.
 - Opening a Diff replaces only the Diff preview and never closes a text tab.
 - `Ctrl/Cmd+S` saves only the active editable tab; concurrent saves of that tab are disabled.
+- A successful save refreshes shared Git-status presentation without resetting tree disclosure, history filters, or open tabs.
 - Closing a dirty tab, switching repository, or closing the window offers Save or Cancel. There is no Discard or force-save path before recoverable drafts exist.
 - Conflicts retain the complete local buffer and provide no overwrite action in this slice.
 

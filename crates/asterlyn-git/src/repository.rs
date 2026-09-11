@@ -17,7 +17,7 @@ use crate::model::{
     ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult,
     FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    RemoteSummary, RepositorySnapshot, UntrackedScan, UntrackedState,
+    RemoteSummary, RepositorySnapshot, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -267,6 +267,18 @@ impl GitRepository {
         });
         snapshot.commits = merge_root_histories(histories, commit_limit);
         Ok(snapshot)
+    }
+
+    pub fn tracked_changes(&self) -> Result<TrackedChangeScan, GitError> {
+        let status = self.run_read(
+            "read tracked working tree status",
+            ["status", "--porcelain=v2", "-z", "--untracked-files=no"],
+        )?;
+        let (_, changes) = parse_status(&status.stdout)?;
+        Ok(TrackedChangeScan {
+            root: self.root.to_string_lossy().into_owned(),
+            changes,
+        })
     }
 
     fn tracked_root_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
@@ -2664,6 +2676,23 @@ mod tests {
         let complete = repository.snapshot(50).expect("full snapshot loads");
         assert_eq!(complete.untracked_state, UntrackedState::Complete);
         assert_eq!(complete.changes.len(), 1);
+    }
+
+    #[test]
+    fn tracked_change_scan_refreshes_worktree_state_without_history_or_untracked_files() {
+        let directory = fixture();
+        commit_file(directory.path(), "tracked.txt", "before\n", "Initial file");
+        fs::write(directory.path().join("tracked.txt"), "after\n").expect("modify tracked file");
+        fs::write(directory.path().join("untracked.txt"), "later\n")
+            .expect("create untracked file");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        let scan = repository.tracked_changes().expect("tracked changes load");
+
+        assert_eq!(scan.root, directory.path().to_string_lossy());
+        assert_eq!(scan.changes.len(), 1);
+        assert_eq!(scan.changes[0].path, "tracked.txt");
+        assert_eq!(scan.changes[0].worktree_status, ChangeKind::Modified);
     }
 
     #[test]

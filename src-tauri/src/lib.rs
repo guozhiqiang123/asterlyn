@@ -5,7 +5,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, GitError, GitRepository,
-    HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, UntrackedScan,
+    HistoryPage, HistoryQuery, ProjectFileList, RepositorySnapshot, TrackedChangeScan,
+    UntrackedScan,
 };
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
@@ -629,6 +630,24 @@ async fn open_repository(
     .await?;
     active_workspaces.activate(window.label(), &snapshot.root)?;
     Ok(snapshot)
+}
+
+#[tauri::command]
+async fn read_tracked_changes(
+    repository_root: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<TrackedChangeScan, GitError> {
+    let root = active_workspaces
+        .resolve(window.label(), &repository_root)
+        .map_err(|_| GitError::InvalidInput {
+            field: "repository root".to_string(),
+            message: "refresh the active repository".to_string(),
+        })?;
+    run_blocking("read tracked changes", move || {
+        GitRepository::open(root)?.tracked_changes()
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1595,6 +1614,7 @@ pub fn run() {
             window_chrome_mode,
             open_repository,
             open_repository_window,
+            read_tracked_changes,
             read_history_page,
             scan_untracked,
             cancel_untracked_scan,

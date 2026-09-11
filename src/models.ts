@@ -171,6 +171,11 @@ export interface SaveTextFileResult {
   alreadySaved: boolean;
 }
 
+export interface TrackedChangeScan {
+  root: string;
+  changes: FileChange[];
+}
+
 export type SearchCoverageReason =
   | "catalogTruncated"
   | "candidateLimit"

@@ -148,6 +148,7 @@ import {
   type ProjectTreeNode,
   type ProjectTreeSelection,
 } from "./workbench/project-tree";
+import { mergeTrackedChanges } from "./workbench/repository-changes";
 import {
   clampCommandSurfaceSelection,
   closeCommandSurface,
@@ -448,6 +449,9 @@ export class AsterlynApp {
     request: number;
   } | null = null;
   private textSaveSequence = 0;
+  private saveStatusRefreshTimer: number | null = null;
+  private saveStatusRefreshRoot: string | null = null;
+  private saveStatusRefreshRunning = false;
   private workspaceSearchSequence = 0;
   private workspaceReplacementSequence = 0;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
@@ -5934,6 +5938,7 @@ export class AsterlynApp {
       const current = textTab(this.state.editor, tabId);
       this.renderEditor();
       this.renderLeftTool();
+      this.scheduleSavedRepositoryRefresh(request.document.repositoryRoot);
       if (current && !isTextTabDirty(current)) {
         this.setStatus(`Saved ${basename(current.document.workspacePath)}`, "success");
         return true;
@@ -5953,6 +5958,64 @@ export class AsterlynApp {
       this.renderLeftTool();
       this.showError(error);
       return false;
+    }
+  }
+
+  private scheduleSavedRepositoryRefresh(repositoryRoot: string): void {
+    if (this.state.snapshot?.root !== repositoryRoot) return;
+    this.saveStatusRefreshRoot = repositoryRoot;
+    if (this.saveStatusRefreshRunning) return;
+    if (this.saveStatusRefreshTimer !== null) {
+      window.clearTimeout(this.saveStatusRefreshTimer);
+    }
+    this.saveStatusRefreshTimer = window.setTimeout(() => {
+      this.saveStatusRefreshTimer = null;
+      void this.refreshSavedRepositoryStatus();
+    }, 80);
+  }
+
+  private async refreshSavedRepositoryStatus(): Promise<void> {
+    if (this.saveStatusRefreshRunning) return;
+    const repositoryRoot = this.saveStatusRefreshRoot;
+    if (!repositoryRoot) return;
+    if (this.state.loading) {
+      this.scheduleSavedRepositoryRefresh(repositoryRoot);
+      return;
+    }
+
+    this.saveStatusRefreshRoot = null;
+    this.saveStatusRefreshRunning = true;
+    const generation = this.requestGeneration;
+    try {
+      const scan = await bridge.readTrackedChanges(repositoryRoot);
+      const snapshot = this.state.snapshot;
+      if (
+        generation !== this.requestGeneration ||
+        !snapshot ||
+        snapshot.root !== repositoryRoot ||
+        scan.root !== repositoryRoot
+      ) {
+        return;
+      }
+      this.state.snapshot = mergeTrackedChanges(snapshot, scan);
+      this.chooseValidChangeSelection();
+      this.reconcileWorkingDocument(this.state.snapshot);
+      this.renderWorkspace();
+      void this.completeUntrackedScan(repositoryRoot, generation, false);
+    } catch (error) {
+      if (
+        generation === this.requestGeneration &&
+        this.state.snapshot?.root === repositoryRoot
+      ) {
+        this.setStatus("File saved; Git status refresh failed", "warning");
+        this.showError(error);
+      }
+    } finally {
+      this.saveStatusRefreshRunning = false;
+      const pendingRoot = this.saveStatusRefreshRoot;
+      if (pendingRoot && this.state.snapshot?.root === pendingRoot) {
+        this.scheduleSavedRepositoryRefresh(pendingRoot);
+      }
     }
   }
 
@@ -6864,6 +6927,7 @@ export class AsterlynApp {
   private async completeUntrackedScan(
     repositoryRoot: string,
     generation: number,
+    announce = true,
   ): Promise<void> {
     if (generation !== this.requestGeneration) return;
     const scan = {
@@ -6872,7 +6936,7 @@ export class AsterlynApp {
       root: repositoryRoot,
     };
     this.activeUntrackedScan = scan;
-    this.setStatus("Scanning untracked files…", "busy");
+    if (announce) this.setStatus("Scanning untracked files…", "busy");
     let completed = false;
 
     try {
@@ -6916,7 +6980,7 @@ export class AsterlynApp {
     } finally {
       if (this.activeUntrackedScan === scan) {
         this.activeUntrackedScan = null;
-        if (completed) {
+        if (completed && announce) {
           const recoveries = this.state.workspaceReplacement.recoveries.length;
           this.setStatus(
             recoveries > 0

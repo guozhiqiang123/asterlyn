@@ -29,6 +29,7 @@ import type {
   RepositorySnapshot,
   SaveTextFileResult,
   TextFileSnapshot,
+  TrackedChangeScan,
   UntrackedScan,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
@@ -56,6 +57,12 @@ const demoTextFiles = new Map<string, { content: string; utf8Bom: boolean; revis
   ["src/diff-editor.ts", { content: "export class DiffEditor {}\n", utf8Bom: false, revision: 1 }],
   ["src/styles.css", { content: ":root {\n  color-scheme: dark;\n}\n", utf8Bom: false, revision: 1 }],
 ]);
+const demoTextBaselines = new Map(
+  Array.from(demoTextFiles, ([path, file]) => [
+    path,
+    { content: file.content, utf8Bom: file.utf8Bom },
+  ]),
+);
 
 interface DemoReplacementFile {
   workspacePath: string;
@@ -116,6 +123,15 @@ export const bridge = {
       return demoTrackedSnapshot(browserSnapshot);
     }
     return invoke<RepositorySnapshot>("open_repository", { path });
+  },
+
+  async readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan> {
+    if (!isTauri) {
+      await demoDelay(70);
+      const snapshot = demoTrackedSnapshot(browserSnapshot);
+      return { root: repositoryRoot, changes: snapshot.changes };
+    }
+    return invoke<TrackedChangeScan>("read_tracked_changes", { repositoryRoot });
   },
 
   async openRepositoryWindow(path: string): Promise<string> {
@@ -413,6 +429,7 @@ export const bridge = {
         file.content = content;
         file.utf8Bom = utf8Bom;
         file.revision += 1;
+        reconcileDemoTextChange(path, file);
       }
       return {
         workspacePath: path,
@@ -677,6 +694,34 @@ function demoTextRevision(
   file: { content: string; utf8Bom: boolean; revision: number },
 ): string {
   return `demo:${path}:${file.revision}:${file.utf8Bom ? "bom" : "plain"}`;
+}
+
+function reconcileDemoTextChange(
+  path: string,
+  file: { content: string; utf8Bom: boolean },
+): void {
+  const baseline = demoTextBaselines.get(path);
+  if (!baseline) return;
+  const modified = file.content !== baseline.content || file.utf8Bom !== baseline.utf8Bom;
+  const index = browserSnapshot.changes.findIndex((change) => change.path === path);
+  const existing = index >= 0 ? browserSnapshot.changes[index] : null;
+  if (existing?.worktreeStatus === "untracked") return;
+  if (!existing && modified) {
+    browserSnapshot.changes.push({
+      path,
+      originalPath: null,
+      indexStatus: "unmodified",
+      worktreeStatus: "modified",
+      conflicted: false,
+      submodule: false,
+    });
+    return;
+  }
+  if (!existing) return;
+  existing.worktreeStatus = modified ? "modified" : "unmodified";
+  if (existing.indexStatus === "unmodified" && !modified) {
+    browserSnapshot.changes.splice(index, 1);
+  }
 }
 
 function demoWorkspaceSearch(
