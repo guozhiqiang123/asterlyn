@@ -50,6 +50,7 @@ import {
   type WorkbenchLayout,
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
+import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
 import {
   MARKDOWN_PREVIEW_MAX_BYTES,
   isMarkdownPath,
@@ -459,6 +460,7 @@ export class AsterlynApp {
     message?: string;
   } = { id: null, kind: "idle" };
   private diffGeneration = 0;
+  private expandedUnchangedDiffKey: string | null = null;
   private commitDetailsGeneration = 0;
   private commitDiffGeneration = 0;
   private scanSequence = 0;
@@ -5661,9 +5663,9 @@ export class AsterlynApp {
       const imageDiff = isImagePreviewPath(selected.path);
       header.innerHTML = `
         ${this.contentHeading(basename(selected.path), selected.path)}
-        <div class="header-actions">${imageDiff ? "" : this.diffControls()}<span class="scope-pill">Local changes</span></div>
+        <div class="header-actions">${this.diffControls(document, imageDiff)}<span class="scope-pill">Local changes</span></div>
       `;
-      if (!imageDiff) this.bindDiffControls();
+      this.bindDiffControls();
       if (imageDiff) {
         this.renderImageDiff(document, () => void this.loadSelectedDiff());
         return;
@@ -5713,9 +5715,9 @@ export class AsterlynApp {
     const imageDiff = isImagePreviewPath(document.path);
     header.innerHTML = `
       ${this.contentHeading(basename(document.path), document.path)}
-      <div class="header-actions">${imageDiff ? "" : this.diffControls()}<code class="oid">${escapeHtml(shortOid)}</code></div>
+      <div class="header-actions">${this.diffControls(document, imageDiff)}<code class="oid">${escapeHtml(shortOid)}</code></div>
     `;
-    if (!imageDiff) this.bindDiffControls();
+    this.bindDiffControls();
     if (imageDiff) {
       this.renderImageDiff(document, () => void this.loadSelectedCommitDiff());
       return;
@@ -6464,16 +6466,57 @@ export class AsterlynApp {
     return `<div class="content-title-group"><span class="content-kicker">${escapeHtml(subtitle)}</span><h2>${escapeHtml(title)}</h2></div>`;
   }
 
-  private diffControls(): string {
+  private diffControls(
+    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    imageDiff: boolean,
+  ): string {
+    const textReady = !imageDiff && (document.kind === "working-diff"
+      ? this.state.workingPatch !== null
+      : this.state.commitPatch !== null);
+    const previousFile = this.adjacentDiffPath(document, -1);
+    const nextFile = this.adjacentDiffPath(document, 1);
+    const canOpenSource = this.diffProjectFile(document) !== null;
+    const expanded = this.isDiffExpanded(document);
     return `
-      <div class="diff-controls" role="group" aria-label="Diff presentation">
-        <button type="button" data-diff-layout="unified" aria-pressed="${this.state.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
-        <button type="button" data-diff-layout="split" aria-pressed="${this.state.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
-        <button type="button" data-diff-whitespace aria-pressed="${this.state.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
+      <div class="diff-toolbar" aria-label="Diff navigation and presentation">
+        <div class="diff-navigation-controls" role="group" aria-label="Diff navigation">
+          <button class="compact-icon-button" type="button" data-diff-action="previous-change" aria-label="Previous change in file" title="Previous change in file" ${textReady ? "" : "disabled"}>${icon("up", 15)}</button>
+          <button class="compact-icon-button" type="button" data-diff-action="next-change" aria-label="Next change in file" title="Next change in file" ${textReady ? "" : "disabled"}>${icon("down", 15)}</button>
+          <span class="diff-control-separator" aria-hidden="true"></span>
+          <button class="compact-icon-button" type="button" data-diff-action="previous-file" aria-label="Previous changed file" title="Previous changed file" ${previousFile ? "" : "disabled"}>${icon("back", 15)}</button>
+          <button class="compact-icon-button" type="button" data-diff-action="next-file" aria-label="Next changed file" title="Next changed file" ${nextFile ? "" : "disabled"}>${icon("forward", 15)}</button>
+          <button class="compact-icon-button" type="button" data-diff-action="open-source" aria-label="Open file and reveal in Project" title="Open file and reveal in Project" ${canOpenSource ? "" : "disabled"}>${icon("locate", 15)}</button>
+          <button class="compact-icon-button ${expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${expanded ? "Collapse" : "Expand"} unchanged lines" title="${expanded ? "Collapse" : "Expand"} unchanged lines" aria-pressed="${expanded}" ${textReady ? "" : "disabled"}>${icon(expanded ? "collapse" : "expand", 15)}</button>
+        </div>
+        ${imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation">
+          <button type="button" data-diff-layout="unified" aria-pressed="${this.state.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
+          <button type="button" data-diff-layout="split" aria-pressed="${this.state.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
+          <button type="button" data-diff-whitespace aria-pressed="${this.state.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
+        </div>`}
       </div>`;
   }
 
   private bindDiffControls(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-diff-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.diffAction;
+        if (action === "previous-change" || action === "next-change") {
+          const moved = this.diffEditor.navigateChange(action === "next-change" ? 1 : -1);
+          if (!moved) {
+            this.setStatus(
+              `No ${action === "next-change" ? "next" : "previous"} change in this file`,
+              "normal",
+            );
+          }
+        } else if (action === "previous-file" || action === "next-file") {
+          this.navigateDiffFile(action === "next-file" ? 1 : -1);
+        } else if (action === "open-source") {
+          void this.openDiffSourceFile();
+        } else if (action === "toggle-unchanged") {
+          this.toggleDiffUnchangedLines();
+        }
+      });
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
       button.addEventListener("click", () => {
         const layout = button.dataset.diffLayout as DiffLayout;
@@ -6489,6 +6532,87 @@ export class AsterlynApp {
         });
       },
     );
+  }
+
+  private adjacentDiffPath(
+    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    direction: DiffDirection,
+  ): string | null {
+    const paths = document.kind === "working-diff"
+      ? this.state.snapshot?.changes.map((change) => change.path) ?? []
+      : this.state.commitDetails?.files.map((file) => file.path) ?? [];
+    const current = document.kind === "working-diff" ? document.selection.path : document.path;
+    return adjacentDiffItem(paths, current, direction);
+  }
+
+  private navigateDiffFile(direction: DiffDirection): void {
+    const document = this.activeDocument();
+    if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
+    const path = this.adjacentDiffPath(document, direction);
+    if (!path) {
+      this.setStatus(`No ${direction === 1 ? "next" : "previous"} changed file`, "normal");
+      return;
+    }
+    if (document.kind === "commit-diff") {
+      this.selectCommitFile(path, false);
+      return;
+    }
+    const snapshot = this.state.snapshot;
+    const selected = snapshot?.changes.find((change) => change.path === path);
+    if (!snapshot || !selected) return;
+    this.state.selectedChange = { path: selected.path, staged: false };
+    this.activateDiffPreview({
+      kind: "working-diff",
+      repositoryRoot: snapshot.root,
+      selection: { ...this.state.selectedChange },
+    });
+    this.clearWorkingDiff();
+    this.state.workingPatchLoading = true;
+    if (this.state.layout.leftTool === "changes") this.renderLeftTool();
+    this.renderEditor();
+    void this.loadSelectedDiff();
+  }
+
+  private diffProjectFile(
+    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+  ): ProjectFile | null {
+    return document.kind === "working-diff"
+      ? this.state.repositoryFiles.find(
+          (file) => file.repositoryId === "." && file.path === document.selection.path,
+        ) ?? null
+      : this.state.repositoryFiles.find(
+          (file) => file.repositoryId === document.repositoryId && file.path === document.path,
+        ) ?? null;
+  }
+
+  private async openDiffSourceFile(): Promise<void> {
+    const document = this.activeDocument();
+    if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
+    const file = this.diffProjectFile(document);
+    if (!file) {
+      this.setStatus("The current Diff file is not present in the project tree", "warning");
+      return;
+    }
+    this.state.layout = { ...this.state.layout, leftTool: "files" };
+    this.applyWorkbenchLayout(true);
+    this.renderActivityRail();
+    await this.openProjectFile(document.repositoryRoot, file);
+    if (this.state.workspaceRoot === document.repositoryRoot) this.locateCurrentProjectFile();
+  }
+
+  private isDiffExpanded(
+    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+  ): boolean {
+    return this.expandedUnchangedDiffKey === editorDocumentKey(document);
+  }
+
+  private toggleDiffUnchangedLines(): void {
+    const document = this.activeDocument();
+    if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
+    const key = editorDocumentKey(document);
+    this.expandedUnchangedDiffKey = this.expandedUnchangedDiffKey === key ? null : key;
+    if (document.kind === "working-diff") void this.loadSelectedDiff();
+    else void this.loadSelectedCommitDiff();
   }
 
   private syncDiffControls(): void {
@@ -6570,7 +6694,11 @@ export class AsterlynApp {
         this.renderEditor();
         return;
       }
-      const diff = await bridge.readLocalDiff(snapshot.root, selectedModel);
+      const diff = await bridge.readLocalDiff(
+        snapshot.root,
+        selectedModel,
+        this.isDiffExpanded(document),
+      );
       const current = this.activeDocument();
       if (
         generation !== this.diffGeneration ||
@@ -6775,6 +6903,7 @@ export class AsterlynApp {
         oid,
         file.path,
         file.originalPath,
+        this.isDiffExpanded(document),
       );
       const activeDocument = this.activeDocument();
       if (

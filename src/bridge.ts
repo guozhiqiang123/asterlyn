@@ -233,6 +233,7 @@ export const bridge = {
   async readLocalDiff(
     repositoryRoot: string,
     selected: FileChange,
+    expandedUnchanged = false,
   ): Promise<DiffResult> {
     if (!isTauri) {
       await demoDelay(90);
@@ -241,6 +242,7 @@ export const bridge = {
     return invoke<DiffResult>("read_local_diff", {
       repositoryRoot,
       selected,
+      expandedUnchanged,
     });
   },
 
@@ -551,6 +553,7 @@ export const bridge = {
     commitOid: string,
     path: string,
     originalPath: string | null,
+    expandedUnchanged = false,
   ): Promise<CommitDiffResult> {
     if (!isTauri) {
       await demoDelay(110);
@@ -564,6 +567,7 @@ export const bridge = {
       commitOid,
       path,
       originalPath,
+      expandedUnchanged,
     });
   },
 

@@ -10,18 +10,31 @@ export interface LinkedScrollElement {
   removeEventListener(type: "scroll", listener: () => void): void;
 }
 
+export interface ScrollFrameScheduler {
+  request(callback: () => void): number;
+  cancel(handle: number): void;
+}
+
 export function linkScrollElements(
   first: LinkedScrollElement,
   second: LinkedScrollElement,
+  scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
 ): () => void {
-  return linkMappedScrollElements(first, second, absolutePosition, false);
+  return linkMappedScrollElements(first, second, absolutePosition, false, scheduler);
 }
 
 export function linkVerticalScrollProportionally(
   first: LinkedScrollElement,
   second: LinkedScrollElement,
+  scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
 ): () => void {
-  return linkMappedScrollElements(first, second, proportionalVerticalPosition, true);
+  return linkMappedScrollElements(
+    first,
+    second,
+    proportionalVerticalPosition,
+    true,
+    scheduler,
+  );
 }
 
 type Position = { top: number; left: number };
@@ -34,9 +47,18 @@ function linkMappedScrollElements(
     target: LinkedScrollElement,
   ) => Position,
   synchronizeImmediately: boolean,
+  scheduler: ScrollFrameScheduler,
 ): () => void {
   let suppressedFirst: Position | null = null;
   let suppressedSecond: Position | null = null;
+  let pending: {
+    source: LinkedScrollElement;
+    target: LinkedScrollElement;
+    targetName: "first" | "second";
+  } | null = null;
+  let framePending = false;
+  let frameHandle = 0;
+  let disposed = false;
   const consumeSuppressed = (
     element: LinkedScrollElement,
     position: Position | null,
@@ -52,11 +74,35 @@ function linkMappedScrollElements(
   const mirror = (
     source: LinkedScrollElement,
     target: LinkedScrollElement,
-    suppressTarget: (position: Position) => void,
+    targetName: "first" | "second",
   ) => {
     const position = mapPosition(source, target);
-    suppressTarget(position);
+    if (
+      Math.abs(target.scrollTop - position.top) < 0.5 &&
+      Math.abs(target.scrollLeft - position.left) < 0.5
+    ) {
+      return;
+    }
+    if (targetName === "first") suppressedFirst = position;
+    else suppressedSecond = position;
     target.scrollTo(position.left, position.top);
+  };
+  const flush = () => {
+    framePending = false;
+    frameHandle = 0;
+    const next = pending;
+    pending = null;
+    if (!disposed && next) mirror(next.source, next.target, next.targetName);
+  };
+  const queueMirror = (
+    source: LinkedScrollElement,
+    target: LinkedScrollElement,
+    targetName: "first" | "second",
+  ) => {
+    pending = { source, target, targetName };
+    if (framePending) return;
+    framePending = true;
+    frameHandle = scheduler.request(flush);
   };
   const mirrorFirst = () => {
     if (
@@ -66,9 +112,8 @@ function linkMappedScrollElements(
     ) {
       return;
     }
-    mirror(first, second, (position) => {
-      suppressedSecond = position;
-    });
+    suppressedFirst = null;
+    queueMirror(first, second, "second");
   };
   const mirrorSecond = () => {
     if (
@@ -78,16 +123,35 @@ function linkMappedScrollElements(
     ) {
       return;
     }
-    mirror(second, first, (position) => {
-      suppressedFirst = position;
-    });
+    suppressedSecond = null;
+    queueMirror(second, first, "first");
   };
   first.addEventListener("scroll", mirrorFirst);
   second.addEventListener("scroll", mirrorSecond);
-  if (synchronizeImmediately) mirrorFirst();
+  if (synchronizeImmediately) mirror(first, second, "second");
   return () => {
+    disposed = true;
+    pending = null;
+    if (framePending) scheduler.cancel(frameHandle);
+    framePending = false;
     first.removeEventListener("scroll", mirrorFirst);
     second.removeEventListener("scroll", mirrorSecond);
+  };
+}
+
+function defaultScrollFrameScheduler(): ScrollFrameScheduler {
+  if (typeof window !== "undefined") {
+    return {
+      request: (callback) => window.requestAnimationFrame(callback),
+      cancel: (handle) => window.cancelAnimationFrame(handle),
+    };
+  }
+  return {
+    request: (callback) => {
+      callback();
+      return 0;
+    },
+    cancel: () => undefined,
   };
 }
 

@@ -12,6 +12,7 @@ class FakeScroller {
   scrollWidth;
   clientHeight = 100;
   clientWidth = 100;
+  scrollToCalls = 0;
   #listeners = new Set();
   #pending = 0;
 
@@ -32,6 +33,7 @@ class FakeScroller {
     const nextLeft = Math.min(left, this.scrollWidth - this.clientWidth);
     const nextTop = Math.min(top, this.scrollHeight - this.clientHeight);
     if (nextLeft === this.scrollLeft && nextTop === this.scrollTop) return;
+    this.scrollToCalls += 1;
     this.scrollLeft = nextLeft;
     this.scrollTop = nextTop;
     this.#pending += 1;
@@ -52,6 +54,31 @@ class FakeScroller {
 
   #emit() {
     for (const listener of this.#listeners) listener();
+  }
+}
+
+class FakeFrameScheduler {
+  #nextHandle = 1;
+  #callbacks = new Map();
+
+  request(callback) {
+    const handle = this.#nextHandle++;
+    this.#callbacks.set(handle, callback);
+    return handle;
+  }
+
+  cancel(handle) {
+    this.#callbacks.delete(handle);
+  }
+
+  flush() {
+    const callbacks = [...this.#callbacks.values()];
+    this.#callbacks.clear();
+    for (const callback of callbacks) callback();
+  }
+
+  get size() {
+    return this.#callbacks.size;
   }
 }
 
@@ -112,4 +139,49 @@ test("proportional vertical linking maps unequal document heights in both direct
   dispose();
   source.userScroll(0, 40);
   assert.equal(preview.scrollTop, 750);
+});
+
+test("proportional linking coalesces a scroll burst to the latest animation frame", () => {
+  const source = new FakeScroller(500, 500);
+  const preview = new FakeScroller(800, 1_100);
+  const scheduler = new FakeFrameScheduler();
+  const dispose = linkVerticalScrollProportionally(source, preview, scheduler);
+
+  source.userScroll(0, 40);
+  source.userScroll(0, 80);
+  source.userScroll(0, 120);
+  assert.equal(scheduler.size, 1);
+  assert.equal(preview.scrollTop, 0);
+
+  scheduler.flush();
+  assert.equal(preview.scrollTop, 300);
+  assert.equal(preview.scrollToCalls, 1);
+  assert.equal(scheduler.size, 0);
+
+  source.userScroll(0, 160);
+  dispose();
+  assert.equal(scheduler.size, 0);
+  scheduler.flush();
+  assert.equal(preview.scrollTop, 300);
+});
+
+test("opposite-side user input wins over a delayed programmatic scroll event", () => {
+  const first = new FakeScroller(500, 500);
+  const second = new FakeScroller(800, 1_100);
+  const scheduler = new FakeFrameScheduler();
+  linkVerticalScrollProportionally(first, second, scheduler);
+
+  first.userScroll(0, 80);
+  scheduler.flush();
+  assert.equal(second.scrollTop, 200);
+
+  second.userScroll(0, 700);
+  second.flush();
+  assert.equal(scheduler.size, 1);
+  scheduler.flush();
+  first.flush();
+
+  assert.equal(first.scrollTop, 280);
+  assert.equal(second.scrollTop, 700);
+  assert.equal(scheduler.size, 0);
 });

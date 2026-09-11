@@ -3237,6 +3237,38 @@ textarea:focus-visible {
   margin-left: 12px;
 }
 
+.diff-toolbar,
+.diff-navigation-controls {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.diff-toolbar {
+  gap: 7px;
+}
+
+.diff-navigation-controls {
+  gap: 1px;
+}
+
+.diff-navigation-controls .compact-icon-button {
+  width: 24px;
+  margin-left: 0;
+}
+
+.diff-navigation-controls .compact-icon-button.active {
+  background: var(--accent-soft);
+  color: #b9d0ff;
+}
+
+.diff-control-separator {
+  width: 1px;
+  height: 17px;
+  margin: 0 3px;
+  background: var(--border-strong);
+}
+
 .diff-controls {
   display: inline-flex;
   overflow: hidden;
@@ -3447,6 +3479,8 @@ textarea:focus-visible {
 
 .markdown-preview-pane {
   overflow: auto;
+  contain: layout paint;
+  overscroll-behavior: contain;
   background: #1e1f22;
   color: var(--text-soft);
 }
@@ -3542,6 +3576,52 @@ textarea:focus-visible {
   background: transparent;
   color: #dfe1e5;
   white-space: pre;
+}
+
+.markdown-rendered .md-code-comment {
+  color: #8c919b;
+  font-style: italic;
+}
+
+.markdown-rendered .md-code-keyword {
+  color: #cf8e6d;
+}
+
+.markdown-rendered .md-code-string {
+  color: #6aab73;
+}
+
+.markdown-rendered .md-code-literal {
+  color: #2aacb8;
+}
+
+.markdown-rendered .md-code-type {
+  color: #56a8f5;
+}
+
+.markdown-rendered .md-code-property {
+  color: #c77dbb;
+}
+
+.markdown-rendered .md-code-tag {
+  color: #e8bf6a;
+}
+
+.markdown-rendered .md-code-punctuation {
+  color: #bcbec4;
+}
+
+.markdown-rendered .md-code-link {
+  color: #42c3d4;
+}
+
+.markdown-rendered .md-code-meta {
+  color: #bbb529;
+}
+
+.markdown-rendered .md-code-invalid {
+  color: #ff6666;
+  text-decoration: underline wavy;
 }
 
 .markdown-rendered table {

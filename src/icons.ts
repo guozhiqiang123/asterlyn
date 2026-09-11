@@ -21,6 +21,9 @@ const paths: Record<string, string> = {
   collapse:
     '<path d="m8 12 4-4 4 4M8 18l4-4 4 4"/>',
   back: '<path d="m14.5 5-7 7 7 7"/>',
+  forward: '<path d="m9.5 5 7 7-7 7"/>',
+  up: '<path d="m5 14.5 7-7 7 7"/>',
+  down: '<path d="m5 9.5 7 7 7-7"/>',
   sync: '<path d="M7 7h11l-3-3M17 17H6l3 3M18 7l-3 3M6 17l3-3"/>',
   download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/>',
   upload: '<path d="M12 20V9M7.5 13.5 12 9l4.5 4.5M5 4h14"/>',

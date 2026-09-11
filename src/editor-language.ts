@@ -39,6 +39,15 @@ export async function editorLanguageDescription(
   return LanguageDescription.matchFilename(languages, normalized);
 }
 
+export async function editorLanguageDescriptionByName(
+  name: string,
+): Promise<LanguageDescription | null> {
+  const normalized = name.trim().split(/\s/u, 1)[0]?.toLowerCase() ?? "";
+  if (!normalized || !/^[a-z0-9_+.#-]{1,40}$/u.test(normalized)) return null;
+  const { languages } = await import("@codemirror/language-data");
+  return LanguageDescription.matchLanguageName(languages, normalized, false);
+}
+
 export async function editorLanguageName(path: string): Promise<string> {
   return (await editorLanguageDescription(path))?.name ?? "Plain Text";
 }

@@ -189,6 +189,14 @@ Raster images use a read-only preview document and the same bounded preview slot
 
 The compact checkbox is an application-owned 14-pixel control with checked, indeterminate, hover, disabled, and keyboard-focus states; color never replaces the associated label. Commit-file details now place tree/flat, recursive expand, and recursive collapse actions in one stable toolbar. The complete validation and package record is in [`ordinary workspace and image evidence`](../benchmarks/2026-09-11-ordinary-workspace-images.md).
 
+### E3.1 Markdown and Diff navigation correction — 2026-09-11
+
+Markdown Split synchronization now treats wheel and trackpad bursts as frame work rather than synchronous layout work. The latest source pane in a frame wins, one proportional target write is applied at most once per frame, matching target positions are skipped, and disposal cancels pending work. The preview region is layout/paint-contained. This remains normalized progress synchronization rather than an exact source-line or heading map.
+
+Fenced Markdown code now receives static syntax highlighting through the same on-demand CodeMirror language catalog, Lezer parsers, and semantic palette used by editors and Diff. `markdown-it` still owns Markdown-to-HTML rendering; Asterlyn supplies its explicit highlight callback. A render loads at most eight unique fence languages and highlights at most 256 Ki UTF-16 code units. Unknown, failed, malformed, or over-budget languages remain escaped plain code, and preview keeps its existing raw-HTML, remote-image, and link-navigation restrictions.
+
+Text Diff now exposes previous/next change within the current file, previous/next changed file, open-and-reveal current source, and per-document expand/collapse unchanged-line controls. Current-file navigation stops at the file boundary, while cross-file navigation follows the current working-change or selected-commit file order. Open-and-reveal uses the existing bounded project catalog and is unavailable for a deleted or otherwise absent source. Expanded context is loaded from Git on demand and remains subject to the four-MiB patch cap; image Diff supports cross-file and source navigation but not text-hunk or context controls. Exact acceptance results are recorded in [`Markdown and Diff navigation evidence`](../benchmarks/2026-09-11-markdown-diff-navigation.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

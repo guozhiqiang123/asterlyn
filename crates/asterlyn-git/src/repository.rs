@@ -23,11 +23,23 @@ use crate::model::{
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+// Git has no "all context" switch. A deliberately unreachable practical line count requests the
+// complete file while the existing byte limit remains the authoritative output bound.
+const EXPANDED_DIFF_CONTEXT_LINES: usize = 1_000_000;
 const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
+
+fn diff_context_argument(expanded_unchanged: bool) -> OsString {
+    let lines = if expanded_unchanged {
+        EXPANDED_DIFF_CONTEXT_LINES
+    } else {
+        3
+    };
+    OsString::from(format!("--unified={lines}"))
+}
 
 fn project_entry_kind_order(kind: ProjectEntryKind) -> u8 {
     match kind {
@@ -883,6 +895,14 @@ impl GitRepository {
     }
 
     pub fn local_diff(&self, selected: &FileChange) -> Result<DiffResult, GitError> {
+        self.local_diff_with_unchanged(selected, false)
+    }
+
+    pub fn local_diff_with_unchanged(
+        &self,
+        selected: &FileChange,
+        expanded_unchanged: bool,
+    ) -> Result<DiffResult, GitError> {
         let changes = self.status_changes_with_untracked()?;
         let current =
             match_fresh_changes(&changes, std::slice::from_ref(selected), "read local diff")?
@@ -893,7 +913,7 @@ impl GitRepository {
             OsString::from("diff"),
             OsString::from("--no-ext-diff"),
             OsString::from("--no-color"),
-            OsString::from("--unified=3"),
+            diff_context_argument(expanded_unchanged),
         ];
         if self.head_oid()?.is_some() {
             args.push(OsString::from("HEAD"));
@@ -904,7 +924,8 @@ impl GitRepository {
             args.push(OsString::from(original));
         }
 
-        let output = self.run_read_owned("read complete local diff", args)?;
+        let (output, output_truncated) =
+            self.run_read_owned_bounded("read complete local diff", args, DIFF_LIMIT_BYTES + 1)?;
         let mut patch = output.stdout;
         let mut binary = patch.windows(15).any(|window| window == b"Binary files ");
         if patch.is_empty() {
@@ -923,7 +944,7 @@ impl GitRepository {
             }
         }
 
-        let truncated = patch.len() > DIFF_LIMIT_BYTES;
+        let truncated = output_truncated || patch.len() > DIFF_LIMIT_BYTES;
         if truncated {
             patch.truncate(DIFF_LIMIT_BYTES);
             patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
@@ -1019,6 +1040,16 @@ impl GitRepository {
         path: &str,
         original_path: Option<&str>,
     ) -> Result<CommitDiffResult, GitError> {
+        self.commit_diff_with_unchanged(oid, path, original_path, false)
+    }
+
+    pub fn commit_diff_with_unchanged(
+        &self,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+        expanded_unchanged: bool,
+    ) -> Result<CommitDiffResult, GitError> {
         validate_object_id(oid)?;
         validate_relative_path(path)?;
         if let Some(original_path) = original_path {
@@ -1031,7 +1062,7 @@ impl GitRepository {
                 OsString::from("diff"),
                 OsString::from("--no-ext-diff"),
                 OsString::from("--no-color"),
-                OsString::from("--unified=3"),
+                diff_context_argument(expanded_unchanged),
                 OsString::from("-M"),
                 OsString::from("-C"),
                 OsString::from(parent),
@@ -1043,7 +1074,7 @@ impl GitRepository {
                 OsString::from("--format="),
                 OsString::from("--no-ext-diff"),
                 OsString::from("--no-color"),
-                OsString::from("--unified=3"),
+                diff_context_argument(expanded_unchanged),
                 OsString::from("-M"),
                 OsString::from("-C"),
                 OsString::from(oid),
@@ -1055,10 +1086,11 @@ impl GitRepository {
         }
         args.push(OsString::from(path));
 
-        let output = self.run_read_owned("read commit file diff", args)?;
+        let (output, output_truncated) =
+            self.run_read_owned_bounded("read commit file diff", args, DIFF_LIMIT_BYTES + 1)?;
         let mut patch = output.stdout;
         let binary = patch.windows(15).any(|window| window == b"Binary files ");
-        let truncated = patch.len() > DIFF_LIMIT_BYTES;
+        let truncated = output_truncated || patch.len() > DIFF_LIMIT_BYTES;
         if truncated {
             patch.truncate(DIFF_LIMIT_BYTES);
             patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
@@ -1081,8 +1113,24 @@ impl GitRepository {
         path: &str,
         original_path: Option<&str>,
     ) -> Result<CommitDiffResult, GitError> {
+        self.repository_commit_diff_with_unchanged(repository_id, oid, path, original_path, false)
+    }
+
+    pub fn repository_commit_diff_with_unchanged(
+        &self,
+        repository_id: &str,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+        expanded_unchanged: bool,
+    ) -> Result<CommitDiffResult, GitError> {
         let root = self.resolve_history_root(repository_id)?;
-        let mut diff = root.repository.commit_diff(oid, path, original_path)?;
+        let mut diff = root.repository.commit_diff_with_unchanged(
+            oid,
+            path,
+            original_path,
+            expanded_unchanged,
+        )?;
         diff.repository_id = root.descriptor.id;
         Ok(diff)
     }
@@ -2356,6 +2404,72 @@ impl GitRepository {
         ensure_success(operation, output)
     }
 
+    fn run_read_owned_bounded(
+        &self,
+        operation: &str,
+        args: Vec<OsString>,
+        stdout_limit: usize,
+    ) -> Result<(Output, bool), GitError> {
+        let mut child = base_command(&self.root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            })?;
+        let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git stdout was not available".to_string(),
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git stderr was not available".to_string(),
+        })?;
+        let (limit_sender, limit_receiver) = std::sync::mpsc::sync_channel(1);
+        let stdout_reader = thread::spawn(move || {
+            read_stream_limited_with_signal(stdout, stdout_limit, Some(limit_sender))
+        });
+        let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+        let mut terminated_at_limit = false;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if limit_receiver.try_recv().is_ok() => {
+                    terminated_at_limit = true;
+                    let _ = child.kill();
+                    break child.wait().map_err(|error| GitError::Io {
+                        operation: operation.to_string(),
+                        message: error.to_string(),
+                    })?;
+                }
+                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = join_limited_stream(stdout_reader, operation, "stdout");
+                    let _ = join_stream(stderr_reader, operation, "stderr");
+                    return Err(GitError::Io {
+                        operation: operation.to_string(),
+                        message: error.to_string(),
+                    });
+                }
+            }
+        };
+        let (stdout, stdout_truncated) = join_limited_stream(stdout_reader, operation, "stdout")?;
+        let output = Output {
+            status,
+            stdout,
+            stderr: join_stream(stderr_reader, operation, "stderr")?,
+        };
+        if terminated_at_limit || stdout_truncated {
+            Ok((output, true))
+        } else {
+            Ok((ensure_success(operation, output)?, false))
+        }
+    }
+
     fn run_mutation(&self, operation: &str, args: Vec<OsString>) -> Result<Output, GitError> {
         let output = run_git_output(&self.root, args).map_err(|error| GitError::Io {
             operation: operation.to_string(),
@@ -2641,17 +2755,36 @@ fn read_stream(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
 }
 
 fn read_stream_bounded(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
+    read_stream_limited(&mut stream, REMOTE_OUTPUT_LIMIT_BYTES).map(|(bytes, _)| bytes)
+}
+
+fn read_stream_limited(stream: impl Read, limit: usize) -> std::io::Result<(Vec<u8>, bool)> {
+    read_stream_limited_with_signal(stream, limit, None)
+}
+
+fn read_stream_limited_with_signal(
+    mut stream: impl Read,
+    limit: usize,
+    limit_reached: Option<std::sync::mpsc::SyncSender<()>>,
+) -> std::io::Result<(Vec<u8>, bool)> {
     let mut retained = Vec::new();
+    let mut truncated = false;
     let mut buffer = [0_u8; 8 * 1024];
     loop {
         let count = stream.read(&mut buffer)?;
         if count == 0 {
             break;
         }
-        let remaining = REMOTE_OUTPUT_LIMIT_BYTES.saturating_sub(retained.len());
+        let remaining = limit.saturating_sub(retained.len());
         retained.extend_from_slice(&buffer[..count.min(remaining)]);
+        if count > remaining && !truncated {
+            truncated = true;
+            if let Some(sender) = limit_reached.as_ref() {
+                let _ = sender.try_send(());
+            }
+        }
     }
-    Ok(retained)
+    Ok((retained, truncated))
 }
 
 fn join_stream(
@@ -2659,6 +2792,23 @@ fn join_stream(
     operation: &str,
     stream: &str,
 ) -> Result<Vec<u8>, GitError> {
+    reader
+        .join()
+        .map_err(|_| GitError::Io {
+            operation: operation.to_string(),
+            message: format!("Git {stream} reader stopped unexpectedly"),
+        })?
+        .map_err(|error| GitError::Io {
+            operation: operation.to_string(),
+            message: format!("could not read Git {stream}: {error}"),
+        })
+}
+
+fn join_limited_stream(
+    reader: thread::JoinHandle<std::io::Result<(Vec<u8>, bool)>>,
+    operation: &str,
+    stream: &str,
+) -> Result<(Vec<u8>, bool), GitError> {
     reader
         .join()
         .map_err(|_| GitError::Io {
@@ -4324,6 +4474,90 @@ mod tests {
         assert!(diff.patch.contains("-before"));
         assert!(diff.patch.contains("+working"));
         assert!(!diff.patch.contains("+staged"));
+    }
+
+    #[test]
+    fn unchanged_context_expands_only_when_requested() {
+        let directory = fixture();
+        let mut before = (1..=30)
+            .map(|line| format!("line-{line}"))
+            .collect::<Vec<_>>();
+        before[0] = "far-start-context".to_string();
+        before[14] = "before-target".to_string();
+        let mut after = before.clone();
+        after[14] = "after-target".to_string();
+        commit_file(
+            directory.path(),
+            "context.txt",
+            &format!("{}\n", before.join("\n")),
+            "Base",
+        );
+        fs::write(
+            directory.path().join("context.txt"),
+            format!("{}\n", after.join("\n")),
+        )
+        .expect("working context edit");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "context.txt")
+            .expect("context change");
+
+        let collapsed = repository
+            .local_diff(&selected)
+            .expect("collapsed local diff");
+        let expanded = repository
+            .local_diff_with_unchanged(&selected, true)
+            .expect("expanded local diff");
+        assert!(!collapsed.patch.contains("far-start-context"));
+        assert!(expanded.patch.contains("far-start-context"));
+
+        git(directory.path(), &["add", "context.txt"]);
+        git(directory.path(), &["commit", "-m", "Change context"]);
+        let oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let collapsed = repository
+            .commit_diff(&oid, "context.txt", None)
+            .expect("collapsed commit diff");
+        let expanded = repository
+            .commit_diff_with_unchanged(&oid, "context.txt", None, true)
+            .expect("expanded commit diff");
+        assert!(!collapsed.patch.contains("far-start-context"));
+        assert!(expanded.patch.contains("far-start-context"));
+    }
+
+    #[test]
+    fn expanded_context_is_bounded_while_git_output_is_consumed() {
+        let directory = fixture();
+        let before = format!("{}\n", "a".repeat(DIFF_LIMIT_BYTES + 1_024));
+        let after = format!("{}\n", "b".repeat(DIFF_LIMIT_BYTES + 1_024));
+        commit_file(directory.path(), "large.txt", &before, "Large base");
+        fs::write(directory.path().join("large.txt"), &after).expect("large working edit");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "large.txt")
+            .expect("large change");
+
+        let local = repository
+            .local_diff_with_unchanged(&selected, true)
+            .expect("bounded expanded local diff");
+        assert!(local.truncated);
+        assert!(local.patch.ends_with("[Diff truncated at 4 MiB]\n"));
+
+        git(directory.path(), &["add", "large.txt"]);
+        git(directory.path(), &["commit", "-m", "Large change"]);
+        let oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let committed = repository
+            .commit_diff_with_unchanged(&oid, "large.txt", None, true)
+            .expect("bounded expanded commit diff");
+        assert!(committed.truncated);
+        assert!(committed.patch.ends_with("[Diff truncated at 4 MiB]\n"));
     }
 
     #[test]

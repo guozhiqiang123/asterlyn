@@ -30,6 +30,11 @@ import {
 import { attachSplitter } from "./workbench/splitter";
 import { linkScrollElements } from "./workbench/linked-scroll";
 import {
+  splitChangeStartLines,
+  unifiedChangeStartLines,
+  type DiffDirection,
+} from "./workbench/diff-navigation";
+import {
   asterlynEditorTheme,
   asterlynSyntaxHighlighting,
 } from "./editor-theme";
@@ -90,6 +95,8 @@ export class DiffEditor {
   };
   private splitDispose: (() => void) | null = null;
   private scrollDispose: (() => void) | null = null;
+  private changeLines: number[] = [];
+  private activeChangeLine: number | null = null;
 
   mount(
     parent: HTMLElement,
@@ -128,6 +135,28 @@ export class DiffEditor {
     for (const view of this.views) view.requestMeasure();
   }
 
+  navigateChange(direction: DiffDirection): boolean {
+    const target = this.activeChangeLine === null
+      ? direction === 1
+        ? this.changeLines[0]
+        : this.changeLines.at(-1)
+      : direction === 1
+        ? this.changeLines.find((line) => line > this.activeChangeLine!)
+        : this.changeLines.slice().reverse().find((line) => line < this.activeChangeLine!);
+    if (!target) return false;
+    this.activeChangeLine = target;
+    for (const view of this.views) {
+      if (target > view.state.doc.lines) continue;
+      const line = view.state.doc.line(target);
+      view.dispatch({
+        selection: { anchor: line.from },
+        effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+      });
+    }
+    this.views[0]?.focus();
+    return true;
+  }
+
   setPreferences(preferences: AppPreferences): void {
     this.editorPreferences = { ...preferences };
     for (const binding of this.languageBindings) {
@@ -144,15 +173,18 @@ export class DiffEditor {
     const parent = this.parent;
     if (!parent) return;
     this.destroyViews();
+    this.activeChangeLine = null;
     parent.replaceChildren();
     parent.classList.toggle("split-diff", this.presentation.layout === "split");
 
     if (this.presentation.layout === "unified") {
+      this.changeLines = unifiedChangeStartLines(this.sourceDocument);
       this.views.push(this.createView(parent, this.sourceDocument));
       return;
     }
 
     const split = splitUnifiedDiff(this.sourceDocument);
+    this.changeLines = splitChangeStartLines(split.rows);
     const grid = window.document.createElement("div");
     grid.className = "diff-split-grid";
     let splitPercentage = clampPercentage(this.presentation.splitPercentage ?? 50);
@@ -321,6 +353,8 @@ export class DiffEditor {
     this.languageSupport = null;
     this.languageName = "Plain Text";
     this.languageStatus = "loading";
+    this.changeLines = [];
+    this.activeChangeLine = null;
   }
 }
 

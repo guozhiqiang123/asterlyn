@@ -910,12 +910,13 @@ async fn read_diff(
 async fn read_local_diff(
     repository_root: String,
     selected: FileChange,
+    expanded_unchanged: bool,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<DiffResult, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read complete local diff", move || {
-        GitRepository::open(root)?.local_diff(&selected)
+        GitRepository::open(root)?.local_diff_with_unchanged(&selected, expanded_unchanged)
     })
     .await
 }
@@ -1911,22 +1912,25 @@ async fn read_commit_details(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn read_commit_diff(
     repository_root: String,
     repository_id: String,
     commit_oid: String,
     path: String,
     original_path: Option<String>,
+    expanded_unchanged: bool,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<CommitDiffResult, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read commit diff", move || {
-        GitRepository::open(root)?.repository_commit_diff(
+        GitRepository::open(root)?.repository_commit_diff_with_unchanged(
             &repository_id,
             &commit_oid,
             &path,
             original_path.as_deref(),
+            expanded_unchanged,
         )
     })
     .await
