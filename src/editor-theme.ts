@@ -98,19 +98,27 @@ export const asterlynEditorTheme = EditorView.theme(
       height: "100%",
       color: "#dfe1e5",
       backgroundColor: "#1e1f22",
-      fontSize: "var(--editor-font-size, 13px)",
+      fontFamily: "var(--editor-font-family)",
+      fontSize: "var(--editor-font-size, 14px)",
+      fontWeight: "400",
+      fontKerning: "none",
+      fontVariantLigatures: "none",
+      fontFeatureSettings: '"liga" 0, "calt" 0',
+      fontSynthesis: "none",
     },
     ".cm-content": {
-      fontFamily:
-        '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+      fontFamily: "var(--editor-font-family)",
       letterSpacing: "var(--editor-letter-spacing, 0px)",
       padding: "10px 0 40px",
       caretColor: "#a8c7fa",
     },
+    ".cm-gutter": {
+      fontFamily: "var(--editor-font-family)",
+    },
     ".cm-line": { padding: "0 14px 0 0" },
     ".cm-scroller": {
       overflow: "auto",
-      lineHeight: "var(--editor-line-height, 1.2)",
+      lineHeight: "var(--editor-line-height, 1.35)",
     },
     ".cm-gutters": {
       color: "#6f737b",

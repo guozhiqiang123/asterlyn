@@ -167,6 +167,12 @@ Markdown Split links source and preview scrolling in both directions by normaliz
 
 Editor settings now separate line spacing, letter spacing, inserted-space indent size, and visual tab width. Defaults retain the locally observed Android Studio/JetBrains baseline of 1.20 line height, normal zero letter spacing, and four-space indentation/tab width. CodeMirror receives a real indentation unit for automatic newlines and explicit indent commands; text and Diff surfaces share font, line-height, and letter-spacing variables. Settings navigation uses one label per item, removes redundant eyebrow headings, and renames `Languages` to `Code`. The updated evidence remains in [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md).
 
+### E3.1 editor typography calibration — 2026-09-11
+
+Manual comparison showed that matching Android Studio's published numeric size and spacing did not match its rendered density. Android Studio's bundled font and JBR metrics are not available to a Tauri WebView, and the former CSS family list silently selected different installed fonts by platform. Asterlyn now bundles Source Code Pro independently under the OFL and applies it to code, Diff content, line numbers, and rendered Markdown code. The CodeMirror-specific baseline is 14 pixels at 1.35 line height, normal zero letter spacing, 400 weight, no synthetic faces, and no discretionary or contextual ligatures. Uncovered scripts use a system monospace fallback without changing the Latin glyph source.
+
+Version-four preference loading migrates only untouched version-one through version-three editor font-size and line-height defaults; deliberate non-default choices remain unchanged. The source font license is emitted into every frontend distribution. This is an original cross-platform typography preset informed by comparative reading density, not a copied JetBrains font asset or a claim that CSS and JBR numeric units are equivalent. Validation and package evidence remain on the existing [`E3.1 workbench navigation and preference evidence`](../benchmarks/2026-09-10-e3-1-workbench-preferences.md) page.
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

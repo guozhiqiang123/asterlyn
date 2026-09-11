@@ -21,8 +21,8 @@ export interface AppPreferences {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   uiFontSize: 13,
-  editorFontSize: 13,
-  editorLineHeight: 1.2,
+  editorFontSize: 14,
+  editorLineHeight: 1.35,
   editorLetterSpacing: 0,
   editorIndentSize: 4,
   editorTabSize: 4,
@@ -44,28 +44,46 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
     if (!raw) return { ...DEFAULT_APP_PREFERENCES };
     const value = JSON.parse(raw) as { version?: unknown; preferences?: unknown };
     if (
-      (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
+      (value.version !== 1 &&
+        value.version !== 2 &&
+        value.version !== 3 &&
+        value.version !== 4) ||
       !isRecord(value.preferences)
     ) {
       return { ...DEFAULT_APP_PREFERENCES };
     }
     const preferences = value.preferences;
-    const legacyDefaults = value.version === 1;
+    const uiFontDefault = value.version === 1 ? 11 : null;
+    const editorFontDefault = value.version === 1 ? 12 : value.version < 4 ? 13 : null;
+    const editorLineHeightDefault =
+      value.version === 1 ? 1.62 : value.version < 4 ? 1.2 : null;
     return {
       uiFontSize: allowedNumber(
-        migrateLegacyDefault(preferences.uiFontSize, legacyDefaults, 11, 13),
+        migrateVersionedDefault(
+          preferences.uiFontSize,
+          uiFontDefault,
+          DEFAULT_APP_PREFERENCES.uiFontSize,
+        ),
         UI_FONT_SIZES,
         13,
       ),
       editorFontSize: allowedNumber(
-        migrateLegacyDefault(preferences.editorFontSize, legacyDefaults, 12, 13),
+        migrateVersionedDefault(
+          preferences.editorFontSize,
+          editorFontDefault,
+          DEFAULT_APP_PREFERENCES.editorFontSize,
+        ),
         EDITOR_FONT_SIZES,
-        13,
+        DEFAULT_APP_PREFERENCES.editorFontSize,
       ),
       editorLineHeight: allowedNumber(
-        migrateLegacyDefault(preferences.editorLineHeight, legacyDefaults, 1.62, 1.2),
+        migrateVersionedDefault(
+          preferences.editorLineHeight,
+          editorLineHeightDefault,
+          DEFAULT_APP_PREFERENCES.editorLineHeight,
+        ),
         EDITOR_LINE_HEIGHTS,
-        1.2,
+        DEFAULT_APP_PREFERENCES.editorLineHeight,
       ),
       editorLetterSpacing: allowedNumber(
         preferences.editorLetterSpacing,
@@ -102,7 +120,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 3, preferences }),
+    JSON.stringify({ version: 4, preferences }),
   );
 }
 
@@ -157,13 +175,12 @@ function allowedNumber<T extends number>(
   return typeof value === "number" && allowed.includes(value as T) ? value : fallback;
 }
 
-function migrateLegacyDefault(
+function migrateVersionedDefault(
   value: unknown,
-  legacy: boolean,
-  previousDefault: number,
+  previousDefault: number | null,
   nextDefault: number,
 ): unknown {
-  return legacy && value === previousDefault ? nextDefault : value;
+  return previousDefault !== null && value === previousDefault ? nextDefault : value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

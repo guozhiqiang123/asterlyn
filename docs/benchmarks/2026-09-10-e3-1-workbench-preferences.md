@@ -253,3 +253,27 @@ The complete frontend suite passes 141 tests, TypeScript checking succeeds, the 
 The menu styling makes CSS size **regressed**; JavaScript, native executable, and Debian movements are **no material change**. Header hierarchy, project switching discoverability, tool-window closure consistency, ignored-directory truthfulness, and compact icon legibility are **improved**. Installed Linux/macOS placement and native tooltip timing remain manual acceptance items. The next shell change must reuse the documented one-title and top-right Hide invariants instead of adding a second label or an activity-rail-only close path.
 
 The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,369,564 bytes, with SHA-256 `d8d686da184b7844294bcc7ad40101680e86f84eaaba0578d66b39efec6bd6db`. Package inspection confirms version 0.1.0 and `amd64`; the release executable passed the isolated native smoke. No remote push is made.
+
+## Cross-platform editor typography calibration
+
+Manual comparison on 2026-09-11 invalidated the earlier assumption that copying Android Studio's published `13` and `1.20` numeric settings would reproduce its appearance. The local Android Studio profile has no editor-font override, but its bundled font is private to the JBR runtime. Asterlyn's former CSS list did not bundle a font; on the same Linux machine `JetBrains Mono` was unavailable to fontconfig while `Consolas` resolved, so the WebView rendered different glyph metrics. CSS pixels, fractional line boxes, WebView rasterization, and JBR font metrics also make identical numeric settings visually non-equivalent.
+
+Asterlyn now self-hosts Source Code Pro Variable 5.3.0 through Fontsource. The font is independent from JetBrains assets and distributed under the SIL Open Font License 1.1; the production frontend emits `licenses/source-code-pro-OFL.txt`, and native bundles also carry it as an explicit application resource. CodeMirror content and gutters plus rendered Markdown code share the application-owned font family. The editor fixes weight at 400, disables synthetic faces, kerning, discretionary ligatures, and contextual alternates, and retains normal zero letter spacing. CJK and other uncovered glyphs use an explicit system-monospace fallback.
+
+The calibrated untouched default is 14 CSS pixels with a 1.35 line-height factor. In the production-like browser, the resulting first line box measured 18.890625 pixels and computed to 18.9 pixels; the selected font family began with `Source Code Pro Variable`, the font-loading API reported it loaded, letter spacing computed to `normal`, both content and gutters resolved the same family, and no warning or error was reported. This confirms deterministic font selection and geometry in Chromium, not installed macOS WebKit pixel parity. Version-four preference loading migrates version-one `12/1.62` and version-two or version-three `13/1.20` untouched defaults to the new baseline while preserving tested non-default values.
+
+The complete frontend suite passes 142 tests, TypeScript checking and production build pass, 28 Git crate tests pass, Debian packaging succeeds, and the release executable remains alive for the six-second isolated native smoke interval. Package inspection confirms the 4,314-byte OFL text at `usr/lib/Asterlyn/licenses/source-code-pro-OFL.txt`.
+
+| Output | Project-chrome correction | Typography calibration | Movement |
+| --- | ---: | ---: | ---: |
+| CSS | 75.44 kB | 94.18 kB | +18.74 kB / +24.84% |
+| CSS gzip | 14.49 kB | 26.27 kB | +11.78 kB / +81.30% |
+| Main JavaScript | 647.57 kB | 647.90 kB | +0.33 kB / +0.05% |
+| Main JavaScript gzip | 186.82 kB | 186.90 kB | +0.08 kB / +0.04% |
+| Main JavaScript source map | 2,381.53 kB | 2,382.73 kB | +1.20 kB / +0.05% |
+| Linux release executable | 18,409,648 bytes | 18,587,056 bytes | +177,408 bytes / +0.96% |
+| Debian package | 6,369,564 bytes | 6,548,920 bytes | +179,356 bytes / +2.82% |
+
+CSS and Debian size are **regressed** because the application now owns normal and italic Unicode-subset WOFF2 assets; JavaScript movement is **no material change**. Default readability and cross-platform font determinism are **improved**. No repeated font-load timing, installed WebKit frame-time, process-tree PSS/RSS, or forced browser-heap series was captured, so startup cost, scrolling performance, and memory remain **inconclusive**. The next action is installed Linux and macOS visual acceptance rather than further numerical tuning from Chromium alone.
+
+The refreshed unsigned local acceptance package is `Asterlyn_0.1.0_amd64.deb`, 6,548,920 bytes, with SHA-256 `ea8575569d0ce6a4e4d7e259778bee6cc1d002303849becffd552bd9d8711e95`. No remote push is made.

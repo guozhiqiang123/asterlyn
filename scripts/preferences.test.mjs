@@ -80,7 +80,7 @@ test("preferences update only through bounded choices and round trip by version"
   );
 });
 
-test("version one defaults migrate to the JetBrains-aligned typography baseline", () => {
+test("version one defaults migrate to the bundled editor typography baseline", () => {
   const persisted = JSON.stringify({
     version: 1,
     preferences: {
@@ -95,7 +95,7 @@ test("version one defaults migrate to the JetBrains-aligned typography baseline"
   assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), DEFAULT_APP_PREFERENCES);
 });
 
-test("version two preferences gain Android Studio-aligned spacing defaults", () => {
+test("version two preferences gain the current editor spacing defaults", () => {
   const persisted = JSON.stringify({
     version: 2,
     preferences: {
@@ -112,6 +112,47 @@ test("version two preferences gain Android Studio-aligned spacing defaults", () 
     uiFontSize: 14,
     editorFontSize: 18,
     editorLineHeight: 1.5,
+    editorTabSize: 8,
+    diffLayout: "unified",
+    showWhitespace: true,
+  });
+});
+
+test("version three untouched typography defaults migrate without replacing custom values", () => {
+  const oldDefaults = JSON.stringify({
+    version: 3,
+    preferences: {
+      uiFontSize: 13,
+      editorFontSize: 13,
+      editorLineHeight: 1.2,
+      editorLetterSpacing: 0,
+      editorIndentSize: 4,
+      editorTabSize: 4,
+      diffLayout: "split",
+      showWhitespace: false,
+    },
+  });
+  assert.deepEqual(loadAppPreferences(memoryStorage(oldDefaults)), DEFAULT_APP_PREFERENCES);
+
+  const customized = JSON.stringify({
+    version: 3,
+    preferences: {
+      uiFontSize: 14,
+      editorFontSize: 18,
+      editorLineHeight: 1.5,
+      editorLetterSpacing: 0.5,
+      editorIndentSize: 8,
+      editorTabSize: 8,
+      diffLayout: "unified",
+      showWhitespace: true,
+    },
+  });
+  assert.deepEqual(loadAppPreferences(memoryStorage(customized)), {
+    uiFontSize: 14,
+    editorFontSize: 18,
+    editorLineHeight: 1.5,
+    editorLetterSpacing: 0.5,
+    editorIndentSize: 8,
     editorTabSize: 8,
     diffLayout: "unified",
     showWhitespace: true,
