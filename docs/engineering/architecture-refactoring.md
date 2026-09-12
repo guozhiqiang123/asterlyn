@@ -130,6 +130,9 @@ source ceiling prevents this adapter from becoming a feature-growth destination 
   branch-operation, refresh, and host coordination out of the 5,955-line migration adapter as the
   window-scoped sessions and typed invalidation protocol become available.
 - Introduce window-scoped `WorkspaceSession` and `RepositorySession` catalogs.
+- Define the watcher-facing typed slice invalidation and coalescing contract from ADR-0009. R3 owns
+  the session identities, scheduling, stale-result rejection, and targeted reconciliation seam;
+  native watcher activation follows as a focused Stage 3 slice after these boundaries are stable.
 - Move Git mutation serialization and task supervision from Tauri commands into application
   services.
 - Split Tauri commands and bridge adapters by capability.
@@ -151,10 +154,11 @@ allowed by the current operation snapshot, and uncertain outcomes are never retr
 
 ### R5 — Workspace mutation foundation
 
-Add one coalesced watcher as an invalidation hint, then create, rename/move, copy/paste, and
-trash-first delete. File operations use typed identities, source/destination revisions, explicit
-collision policy, case-only rename handling, cross-device behavior, and recoverable multi-file
-outcomes. The Files tree, editor tabs, search, and Git status reconcile from one session catalog.
+Build create, rename/move, copy/paste, and trash-first delete on the R3 session catalog and the
+ADR-0009 watcher/invalidation foundation. File operations use typed identities,
+source/destination revisions, explicit collision policy, case-only rename handling, cross-device
+behavior, and recoverable multi-file outcomes. The Files tree, editor tabs, search, and Git status
+reconcile from one session catalog.
 
 Exit gate: file operations cannot escape the workspace, destroy an unreviewed destination, or lose
 open-buffer identity, disclosure, selection, and scroll state.

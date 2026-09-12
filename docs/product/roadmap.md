@@ -22,6 +22,11 @@ Add graph-quality history, branch/tag/stash operations, amend, rebase/cherry-pic
 
 Build multi-file editing, on-demand syntax highlighting, tabs/splits, project tree, search/replace, command palette, settings/keymaps, autosave and crash recovery, large-file policy, terminal/task surfaces, file watching, encoding/EOL handling, and accessible navigation. CodeMirror 6 remains behind an editor capability interface; parser-backed coloring is distinct from Stage 4 language intelligence.
 
+File watching follows ADR-0009: native events are bounded invalidation hints into window-scoped
+workspace/repository sessions, not a second source of truth. The session and typed reconciliation
+foundation is established during R3 before native watcher activation; file mutation workflows may
+then reuse it without broad project refreshes.
+
 **Exit gate:** Asterlyn is a dependable text/code editor even with all language intelligence disabled; data-loss and recovery scenarios are tested.
 
 ## Stage 4 — Language and project intelligence (months 12–26)
