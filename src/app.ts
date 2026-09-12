@@ -25,8 +25,6 @@ import {
 } from "./features/git-history/history-details-controller";
 import {
   HistoryFilterController,
-  createHistoryFilterState,
-  type HistoryFilterState,
 } from "./features/git-history/history-filter-controller";
 import {
   filteredBranches as filteredBranchesForView,
@@ -124,6 +122,7 @@ import type {
 import { repositoryReconciliationPlan } from "./application/repository-mutation";
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
+import { createAppState, type AppState } from "./application/app-state";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -206,7 +205,6 @@ import {
 import {
   clampCommandSurfaceSelection,
   closeCommandSurface,
-  createCommandSurfaceState,
   loadRecentFiles,
   moveCommandSurfaceSelection,
   openCommandSurface,
@@ -214,7 +212,6 @@ import {
   rankProjectFiles,
   touchRecentFile,
   updateCommandSurfaceQuery,
-  type CommandSurfaceState,
   type NavigationCommand,
   type NavigationMode,
 } from "./workbench/navigation";
@@ -222,14 +219,11 @@ import { evaluateSearchNavigation } from "./workbench/search-navigation";
 import {
   beginWorkspaceSearch,
   completeWorkspaceSearch,
-  createWorkspaceSearchControls,
-  createWorkspaceSearchState,
   failWorkspaceSearch,
   invalidateWorkspaceSearch,
   sameWorkspaceSearchOptions,
   workspaceSearchOptions,
   type WorkspaceSearchControls,
-  type WorkspaceSearchState,
 } from "./workbench/workspace-search";
 import {
   beginReplacementApply,
@@ -242,7 +236,6 @@ import {
   selectAllReplacementFiles,
   setReplacementRecoveries,
   toggleReplacementFile,
-  type WorkspaceReplacementState,
 } from "./workbench/workspace-replacement";
 import {
   buildCommitFileTree,
@@ -252,7 +245,6 @@ import {
 import type {
   BranchSummary,
   CommitDetails,
-  CommitDiffResult,
   CommitFileChange,
   CommitSummary,
   FileChange,
@@ -282,41 +274,6 @@ const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
   "operation",
 ];
 
-interface AppState extends HistoryFilterState {
-  gitDetail: "branch" | "commit";
-  commandSurface: CommandSurfaceState;
-  workspaceSearch: WorkspaceSearchState;
-  workspaceSearchControls: WorkspaceSearchControls;
-  workspaceReplacement: WorkspaceReplacementState;
-  replacementText: string;
-  replacementDialog: "preview" | "recovery" | null;
-  replacementRecoveryBusy: { id: string; action: "keep" | "rollback" } | null;
-  historyQuery: string;
-  historyCaseSensitive: boolean;
-  historyRegularExpression: boolean;
-  historyFilterMenu: HistoryFilterMenu | null;
-  historyBranchSubmenu: string | null;
-  historyDialog: "branches" | "paths-text" | "paths-tree" | null;
-  historyDialogQuery: string;
-  historyDialogError: string | null;
-  historyRefDraft: Map<string, HistoryRef>;
-  historyPathDraft: Map<string, HistoryPath>;
-  historyPathText: string;
-  historyTreeCollapsed: Set<string>;
-  branchQuery: string;
-  commitFileView: CommitFileView;
-  collapsedCommitFileDirectories: Set<string>;
-  commitPatch: CommitDiffResult | null;
-  commitPatchLoading: boolean;
-  commitPatchError: string | null;
-  commitPatchVersion: number;
-  selectedBranch: string | null;
-  collapsedBranchGroups: Set<BranchSummary["kind"]>;
-  newBranchName: string;
-  loading: boolean;
-  error: string | null;
-}
-
 export class AsterlynApp {
   private readonly pushDiffEditor = new LazyDiffEditor();
   private readonly editorSurface: EditorSurface;
@@ -324,41 +281,7 @@ export class AsterlynApp {
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
-  private readonly state: AppState = {
-    gitDetail: "commit",
-    commandSurface: createCommandSurfaceState(),
-    workspaceSearch: createWorkspaceSearchState(),
-    workspaceSearchControls: createWorkspaceSearchControls(),
-    workspaceReplacement: createWorkspaceReplacementState(),
-    replacementText: "",
-    replacementDialog: null,
-    replacementRecoveryBusy: null,
-    ...createHistoryFilterState(),
-    historyQuery: "",
-    historyCaseSensitive: false,
-    historyRegularExpression: false,
-    historyFilterMenu: null,
-    historyBranchSubmenu: null,
-    historyDialog: null,
-    historyDialogQuery: "",
-    historyDialogError: null,
-    historyRefDraft: new Map(),
-    historyPathDraft: new Map(),
-    historyPathText: "",
-    historyTreeCollapsed: new Set(),
-    branchQuery: "",
-    commitFileView: loadCommitFileView(window.localStorage),
-    collapsedCommitFileDirectories: new Set(),
-    commitPatch: null,
-    commitPatchLoading: false,
-    commitPatchError: null,
-    commitPatchVersion: 0,
-    selectedBranch: null,
-    collapsedBranchGroups: new Set(),
-    newBranchName: "",
-    loading: false,
-    error: null,
-  };
+  private readonly state = createAppState(loadCommitFileView(window.localStorage));
   private readonly historyFilters = new HistoryFilterController(
     this.state,
     window.localStorage,
