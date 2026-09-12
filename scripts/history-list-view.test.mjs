@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  HISTORY_MOUNT_LIMIT,
   HISTORY_ROW_LIMIT,
+  historyRenderWindow,
   renderHistoryList,
 } from "../src/features/git-history/history-list-view.ts";
 import { commitKey } from "../src/workbench/history-identity.ts";
@@ -59,6 +61,21 @@ test("history list distinguishes query loading, backend failure, and text mismat
     renderHistoryList({ ...presentation(loaded), commits: [], textError: "[" }),
     /No matching commits/,
   );
+});
+
+test("large history windows mount no more than the row budget", () => {
+  const commits = Array.from(
+    { length: HISTORY_ROW_LIMIT },
+    (_, index) => commit(`c${index}`, [], []),
+  );
+  const window = historyRenderWindow(commits.length, 28 * 1_800, 840);
+  const html = renderHistoryList(presentation(commits), window);
+  const mounted = html.match(/data-commit-key=/g)?.length ?? 0;
+
+  assert.ok(window.start > 0);
+  assert.ok(window.end < commits.length);
+  assert.ok(mounted <= HISTORY_MOUNT_LIMIT);
+  assert.match(html, /history-virtual-spacer/);
 });
 
 function presentation(commits) {

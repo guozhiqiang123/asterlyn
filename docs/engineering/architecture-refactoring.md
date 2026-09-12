@@ -90,7 +90,10 @@ Editor session, text load/reload/save and project-image request lifecycles into
 `EditorSessionController`. The fifth slice moves settings section/preferences and shell
 page/layout/activity/menu/chrome state into `SettingsController` and `ShellController`. The planned
 controller sequence is complete, but view/CSS ownership, bounded mounting and lazy capability
-loading remain before the R2 exit gate can pass.
+loading remain before the R2 exit gate can pass. The sixth slice moves project-tree and Changes-tree
+presentation into feature-owned views and bounds History, project, and changed-file mounting to 200
+rows with overscan. Long-list DOM growth is now bounded; lazy editor/Diff loading, stylesheet
+ownership, remaining composition-root reduction, and closing acceptance are still required.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.

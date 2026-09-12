@@ -18,6 +18,14 @@ import {
 import { commitKey } from "../../workbench/history-identity.ts";
 
 export const HISTORY_ROW_LIMIT = 3_000;
+export const HISTORY_MOUNT_LIMIT = 200;
+const HISTORY_ROW_HEIGHT = 28;
+const HISTORY_OVERSCAN_ROWS = 36;
+
+export interface HistoryRenderWindow {
+  start: number;
+  end: number;
+}
 
 export interface HistoryListPresentation {
   status: "idle" | "loading" | "ready" | "error";
@@ -45,6 +53,9 @@ export interface HistoryListActions {
 export class GitHistoryListView {
   private host: HTMLElement | null = null;
   private actions: HistoryListActions | null = null;
+  private presentation: HistoryListPresentation | null = null;
+  private renderFrame: number | null = null;
+  private renderedWindow: HistoryRenderWindow | null = null;
 
   mount(host: HTMLElement, actions: HistoryListActions): void {
     if (this.host === host) {
@@ -65,13 +76,30 @@ export class GitHistoryListView {
     this.host?.removeEventListener("scroll", this.handleScroll);
     this.host = null;
     this.actions = null;
+    this.presentation = null;
+    this.renderedWindow = null;
+    if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
+    this.renderFrame = null;
   }
 
   render(presentation: HistoryListPresentation): void {
-    if (!this.host) return;
+    this.presentation = presentation;
+    this.renderCurrentWindow(true);
+  }
+
+  private renderCurrentWindow(force = false): void {
+    if (!this.host || !this.presentation) return;
     const scrollTop = this.host.scrollTop;
     const scrollLeft = this.host.scrollLeft;
-    this.host.innerHTML = renderHistoryList(presentation);
+    const entries = historyDisplayEntries(this.presentation);
+    const window = historyRenderWindow(entries.length, scrollTop, this.host.clientHeight);
+    if (
+      !force &&
+      this.renderedWindow?.start === window?.start &&
+      this.renderedWindow?.end === window?.end
+    ) return;
+    this.renderedWindow = window;
+    this.host.innerHTML = renderHistoryList(this.presentation, window);
     this.host.scrollTop = scrollTop;
     this.host.scrollLeft = scrollLeft;
   }
@@ -85,9 +113,21 @@ export class GitHistoryListView {
   }
 
   focusCommit(key: string): void {
-    Array.from(this.host?.querySelectorAll<HTMLButtonElement>("[data-commit-key]") ?? [])
-      .find((row) => row.dataset.commitKey === key)
-      ?.focus();
+    if (!this.host) return;
+    let target = Array.from(this.host.querySelectorAll<HTMLButtonElement>("[data-commit-key]"))
+      .find((row) => row.dataset.commitKey === key);
+    if (!target && this.presentation) {
+      const index = historyDisplayEntries(this.presentation).findIndex(
+        (entry) => entry.kind === "commit" && commitKey(entry.commit) === key,
+      );
+      if (index >= 0) {
+        this.host.scrollTop = index * HISTORY_ROW_HEIGHT;
+        this.renderCurrentWindow(true);
+        target = Array.from(this.host.querySelectorAll<HTMLButtonElement>("[data-commit-key]"))
+          .find((row) => row.dataset.commitKey === key);
+      }
+    }
+    target?.focus();
   }
 
   private readonly handleClick = (event: Event): void => {
@@ -130,11 +170,20 @@ export class GitHistoryListView {
   };
 
   private readonly handleScroll = (): void => {
-    if (this.host) this.actions?.scroll(this.host);
+    if (!this.host) return;
+    this.actions?.scroll(this.host);
+    if (this.renderFrame !== null) return;
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      this.renderCurrentWindow();
+    });
   };
 }
 
-export function renderHistoryList(presentation: HistoryListPresentation): string {
+export function renderHistoryList(
+  presentation: HistoryListPresentation,
+  renderWindow: HistoryRenderWindow | null = null,
+): string {
   if (presentation.status === "loading") {
     return '<div class="loading-block"><span class="spinner"></span><span>Loading filtered history…</span></div>';
   }
@@ -152,19 +201,22 @@ export function renderHistoryList(presentation: HistoryListPresentation): string
     return `${textError}<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>${renderPagingStatus(presentation)}`;
   }
 
-  const entries: HistoryDisplayEntry[] = presentation.collapseLinear
-    ? collapseLinearHistory(presentation.commits, presentation.selectedCommit)
-    : presentation.commits.map((commit) => ({ kind: "commit", commit, graphCommit: commit }));
+  const entries = historyDisplayEntries(presentation);
   const graph = projectCommitGraph(entries.map((entry) => entry.graphCommit), {
     bridgeOmittedParents: presentation.bridgeOmittedParents,
   });
   const graphWidth = Math.max(22, 14 + (graph.laneCount - 1) * 12);
   const roots = new Map(presentation.repositoryRoots.map((root) => [root.id, root]));
   const multipleRoots = presentation.repositoryRoots.length > 1;
-  const rows = entries
-    .map((entry, index) => {
+  const boundedWindow = clampHistoryRenderWindow(renderWindow, entries.length);
+  const visibleEntries = boundedWindow
+    ? entries.slice(boundedWindow.start, boundedWindow.end)
+    : entries;
+  const rows = visibleEntries
+    .map((entry, visibleIndex) => {
+      const index = (boundedWindow?.start ?? 0) + visibleIndex;
       if (entry.kind === "collapsed") {
-        return `<button class="history-row history-collapsed-row" type="button" data-expand-linear-history data-first-collapsed="${escapeAttribute(entry.firstKey)}" title="Expand ${entry.count} linear commits">${renderCommitGraph(graph.rows[index]!, graphWidth, true)}<span class="history-subject">${entry.count} linear commits collapsed</span><span class="history-references"></span><span class="history-author">Expand</span><span class="history-date"></span></button>`;
+        return `<button class="history-row history-collapsed-row" type="button" data-expand-linear-history data-first-collapsed="${escapeAttribute(entry.firstKey)}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="Expand ${entry.count} linear commits">${renderCommitGraph(graph.rows[index]!, graphWidth, true)}<span class="history-subject">${entry.count} linear commits collapsed</span><span class="history-references"></span><span class="history-author">Expand</span><span class="history-date"></span></button>`;
       }
       const commit = entry.commit;
       const key = commitKey(commit);
@@ -178,11 +230,55 @@ export function renderHistoryList(presentation: HistoryListPresentation): string
       const rootBadge = multipleRoots
         ? `<span class="history-root-badge" title="Git root: ${escapeAttribute(root?.relativePath ?? commit.repositoryId)}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
         : "";
-      return `<button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time></button>`;
+      return `<button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time></button>`;
     })
     .join("");
+  const topSpacer = boundedWindow && boundedWindow.start > 0
+    ? `<div class="history-virtual-spacer" aria-hidden="true" style="height:${boundedWindow.start * HISTORY_ROW_HEIGHT}px"></div>`
+    : "";
+  const bottomCount = boundedWindow ? entries.length - boundedWindow.end : 0;
+  const bottomSpacer = bottomCount > 0
+    ? `<div class="history-virtual-spacer" aria-hidden="true" style="height:${bottomCount * HISTORY_ROW_HEIGHT}px"></div>`
+    : "";
 
-  return `${textError}<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${rows}</div>${renderPagingStatus(presentation)}`;
+  return `${textError}<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${topSpacer}${rows}${bottomSpacer}</div>${renderPagingStatus(presentation)}`;
+}
+
+export function historyRenderWindow(
+  entryCount: number,
+  scrollTop: number,
+  clientHeight: number,
+): HistoryRenderWindow | null {
+  if (entryCount <= HISTORY_MOUNT_LIMIT) return null;
+  const visibleRows = Math.max(1, Math.ceil(Math.max(0, clientHeight) / HISTORY_ROW_HEIGHT));
+  const windowSize = Math.min(
+    HISTORY_MOUNT_LIMIT,
+    Math.max(80, visibleRows + HISTORY_OVERSCAN_ROWS * 2),
+  );
+  const anchor = Math.max(0, Math.floor(Math.max(0, scrollTop) / HISTORY_ROW_HEIGHT));
+  const start = Math.min(
+    Math.max(0, Math.floor(Math.max(0, anchor - HISTORY_OVERSCAN_ROWS) / 24) * 24),
+    Math.max(0, entryCount - windowSize),
+  );
+  return { start, end: Math.min(entryCount, start + windowSize) };
+}
+
+function historyDisplayEntries(presentation: HistoryListPresentation): HistoryDisplayEntry[] {
+  return presentation.collapseLinear
+    ? collapseLinearHistory(presentation.commits, presentation.selectedCommit)
+    : presentation.commits.map((commit) => ({ kind: "commit", commit, graphCommit: commit }));
+}
+
+function clampHistoryRenderWindow(
+  renderWindow: HistoryRenderWindow | null,
+  entryCount: number,
+): HistoryRenderWindow | null {
+  if (!renderWindow || entryCount <= HISTORY_MOUNT_LIMIT) return null;
+  const start = Math.max(0, Math.min(Math.floor(renderWindow.start), entryCount));
+  const end = Math.max(start, Math.min(Math.floor(renderWindow.end), entryCount));
+  return end - start <= HISTORY_MOUNT_LIMIT
+    ? { start, end }
+    : { start, end: start + HISTORY_MOUNT_LIMIT };
 }
 
 function renderPagingStatus(presentation: HistoryListPresentation): string {

@@ -1086,6 +1086,7 @@ textarea:focus-visible {
 }
 
 .project-directory > summary,
+.project-directory-row,
 .project-file-row {
   display: flex;
   width: 100%;
@@ -1115,6 +1116,7 @@ textarea:focus-visible {
 }
 
 .project-directory > summary:hover,
+.project-directory-row:hover,
 .project-file-row:hover {
   background: var(--bg-hover);
   color: var(--text);
@@ -1134,6 +1136,29 @@ textarea:focus-visible {
 
 .project-directory[open] > summary .tree-chevron {
   transform: rotate(90deg);
+}
+
+.project-directory-row .tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.project-tree-toggle {
+  display: inline-grid;
+  width: 12px;
+  height: 20px;
+  flex: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  place-items: center;
+}
+
+.project-virtual-spacer,
+.history-virtual-spacer {
+  width: 1px;
+  pointer-events: none;
 }
 
 .project-file-row {
@@ -1245,6 +1270,10 @@ textarea:focus-visible {
 }
 
 .project-directory.file-status-ignored > summary {
+  color: var(--file-ignored);
+}
+
+.project-directory.file-status-ignored > .project-directory-row {
   color: var(--file-ignored);
 }
 
@@ -1525,7 +1554,8 @@ textarea:focus-visible {
 }
 
 .change-group > summary,
-.change-directory > summary {
+.change-directory > summary,
+.change-directory-row {
   list-style: none;
 }
 
@@ -1559,7 +1589,8 @@ textarea:focus-visible {
 }
 
 .change-group > .group-header .tree-chevron,
-.change-directory > summary .tree-chevron {
+.change-directory > summary .tree-chevron,
+.change-directory-row .tree-chevron {
   transform: rotate(0deg);
   transition: transform 100ms ease;
 }
@@ -1567,6 +1598,23 @@ textarea:focus-visible {
 .change-group[open] > .group-header .tree-chevron,
 .change-directory[open] > summary .tree-chevron {
   transform: rotate(90deg);
+}
+
+.change-group .tree-chevron.expanded,
+.change-directory-row .tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.change-tree-toggle {
+  display: inline-grid;
+  width: 15px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  place-items: center;
 }
 
 .group-title {
@@ -1685,7 +1733,8 @@ textarea:focus-visible {
   min-width: max-content;
 }
 
-.change-directory > summary {
+.change-directory > summary,
+.change-directory-row {
   display: grid;
   height: 27px;
   grid-template-columns: 18px 15px 18px minmax(90px, 1fr) auto;
@@ -1697,13 +1746,20 @@ textarea:focus-visible {
   cursor: default;
 }
 
-.change-directory > summary:hover {
+.change-directory > summary:hover,
+.change-directory-row:hover {
   background: var(--bg-hover);
 }
 
-.change-directory > summary small {
+.change-directory > summary small,
+.change-directory-row small {
   color: var(--text-faint);
   font-size: 8px;
+}
+
+.change-virtual-spacer {
+  width: 1px;
+  pointer-events: none;
 }
 
 .change-row,

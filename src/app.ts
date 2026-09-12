@@ -28,10 +28,24 @@ import {
   type ChangesCommitState,
 } from "./features/changes-commit/changes-commit-controller";
 import {
+  CHANGE_TREE_ROW_HEIGHT,
+  changeDisclosureKeys,
+  changeTreeRenderWindow,
+  changeViewRows,
+  renderChangeNavigation,
+} from "./features/changes-commit/changes-view";
+import {
   ProjectFilesController,
   type ProjectFilesChange,
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
+import {
+  PROJECT_TREE_ROW_HEIGHT,
+  projectTreeRenderWindow,
+  projectTreeRows,
+  renderProjectNavigation,
+  renderProjectToolbar,
+} from "./features/files-editor/project-files-view";
 import {
   EditorSessionController,
   type EditorSessionChange,
@@ -160,12 +174,8 @@ import {
 } from "./workbench/project-tree";
 import { mergeTrackedChanges } from "./workbench/repository-changes";
 import {
-  buildChangeFileTree,
   changeGroup,
-  descendantChangePaths,
-  effectiveChangeKind,
   includedChanges,
-  type ChangeFileTreeNode,
   type ChangeFileView,
   type ChangeGroupId,
 } from "./workbench/change-presentation";
@@ -426,6 +436,10 @@ export class AsterlynApp {
   private readonly releaseShellController: () => void;
   private workspaceResizeObserver: ResizeObserver | null = null;
   private editorMeasureFrame: number | null = null;
+  private projectTreeScrollFrame: number | null = null;
+  private projectTreeWindowStart = 0;
+  private changeTreeScrollFrame: number | null = null;
+  private changeTreeWindowStart = 0;
   private activeUntrackedScan: {
     id: string;
     generation: number;
@@ -1290,6 +1304,14 @@ export class AsterlynApp {
     window.addEventListener(
       "pagehide",
       () => {
+        if (this.projectTreeScrollFrame !== null) {
+          cancelAnimationFrame(this.projectTreeScrollFrame);
+          this.projectTreeScrollFrame = null;
+        }
+        if (this.changeTreeScrollFrame !== null) {
+          cancelAnimationFrame(this.changeTreeScrollFrame);
+          this.changeTreeScrollFrame = null;
+        }
         this.releaseHistoryController();
         this.historyController.dispose();
         this.releaseRemoteController();
@@ -3908,13 +3930,21 @@ export class AsterlynApp {
         ? body.querySelector<HTMLElement>("#change-results")?.scrollTop ?? 0
         : 0;
       body.dataset.navigatorView = "changes";
+      body.onscroll = null;
       title.textContent = "Changes";
       hide.setAttribute("aria-label", "Hide Changes tool window");
       hide.title = "Hide Changes tool window";
       count.textContent = snapshot.changes.length.toString();
       count.title = `${snapshot.changes.length} changed files`;
       actions.innerHTML = "";
-      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${this.renderChangeNavigation(snapshot)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="Resize commit message area"></div>${this.renderCommitComposer(snapshot)}</div>`;
+      const changeRows = changeViewRows(snapshot, this.changesState);
+      const changeWindow = changeTreeRenderWindow(
+        changeRows.length,
+        scrollTop,
+        body.clientHeight,
+      );
+      this.changeTreeWindowStart = changeWindow?.start ?? 0;
+      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${renderChangeNavigation(snapshot, this.changesState, scrollTop, body.clientHeight)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="Resize commit message area"></div>${this.renderCommitComposer(snapshot)}</div>`;
       this.bindChangeEvents();
       this.bindCommitComposer(snapshot);
       this.bindChangeCommitSplitter();
@@ -3922,6 +3952,8 @@ export class AsterlynApp {
         const results = body.querySelector<HTMLElement>("#change-results");
         if (results) results.scrollTop = scrollTop;
       }
+      const results = body.querySelector<HTMLElement>("#change-results");
+      if (results) results.onscroll = () => this.handleChangeTreeScroll(results);
       return;
     }
 
@@ -3936,8 +3968,18 @@ export class AsterlynApp {
     const scrollLeft = body.scrollLeft;
     const tree = this.projectTree();
     body.dataset.navigatorView = "files";
-    actions.innerHTML = this.renderProjectToolbar(workspaceRoot, tree);
-    body.innerHTML = this.renderProjectNavigation(tree);
+    const activePath = this.activeProjectWorkspacePath(workspaceRoot);
+    actions.innerHTML = renderProjectToolbar(this.filesState, tree, activePath);
+    const projectRows = projectTreeRows(tree, this.filesState.expandedDirectories);
+    const window = projectTreeRenderWindow(projectRows.length, scrollTop, body.clientHeight);
+    this.projectTreeWindowStart = window?.start ?? 0;
+    body.innerHTML = renderProjectNavigation(
+      this.filesState,
+      tree,
+      scrollTop,
+      body.clientHeight,
+    );
+    body.onscroll = () => this.handleProjectTreeScroll(body);
     this.bindProjectEvents();
     if (preserveScroll) {
       body.scrollTop = scrollTop;
@@ -4006,62 +4048,6 @@ export class AsterlynApp {
     return this.filesController.tree();
   }
 
-  private renderProjectToolbar(
-    workspaceRoot: string,
-    tree = this.projectTree(),
-  ): string {
-    const activePath = this.activeProjectWorkspacePath(workspaceRoot);
-    const canLocate = Boolean(
-      activePath && findProjectTreeNode(tree, activePath),
-    );
-    const canChangeSubtree = this.filesState.selection?.kind === "directory";
-    return `
-      <button class="compact-icon-button" id="locate-project-file" type="button" aria-label="Locate current file in project" title="Locate current file" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
-      <button class="compact-icon-button" id="expand-project-folder" type="button" aria-label="Expand selected folder" title="Expand selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("expand", 14)}</button>
-      <button class="compact-icon-button" id="collapse-project-folder" type="button" aria-label="Collapse selected folder" title="Collapse selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
-  }
-
-  private renderProjectNavigation(tree: ProjectTreeNode[]): string {
-    if (tree.length === 0 && this.filesState.loading) {
-      return this.loadingBlock("Loading project files…");
-    }
-    if (tree.length === 0 && this.filesState.error) {
-      return this.retryState(
-        "Could not list project files",
-        this.filesState.error,
-        "retry-project-files",
-        "folder",
-      );
-    }
-    const notices = [
-      this.filesState.loading
-        ? '<div class="project-tree-notice"><span class="spinner"></span><span>Refreshing files…</span></div>'
-        : "",
-      this.filesState.truncated
-        ? '<div class="project-tree-notice warning"><span>!</span><span>Showing a bounded project catalog; some paths were omitted.</span></div>'
-        : "",
-      this.filesState.error
-        ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(this.filesState.error)}</span></div>`
-        : "",
-    ].join("");
-    return `<div class="project-tree" role="tree" aria-label="Project files">${tree.map((node) => this.renderProjectNode(node, 0)).join("")}</div>${notices}`;
-  }
-
-  private renderProjectNode(node: ProjectTreeNode, depth: number): string {
-    const selected =
-      this.filesState.selection?.path === node.path &&
-      this.filesState.selection.kind === node.kind;
-    const statusClass = `file-status-${node.status}`;
-    if (node.kind === "directory") {
-      const expanded = this.filesState.expandedDirectories.has(node.path);
-      const children = expanded
-        ? node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")
-        : "";
-      return `<details class="project-directory ${statusClass}" data-project-directory-container="${escapeAttribute(node.path)}" data-project-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary class="project-node-row ${selected ? "selected" : ""}" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-directory="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-expanded="${expanded}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></summary><div role="group">${children}</div></details>`;
-    }
-    return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-file="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"><span class="project-file-glyph">${fileTypeIcon(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
-  }
-
   private bindProjectEvents(): void {
     const workspaceRoot = this.state.workspaceRoot;
     if (!workspaceRoot) return;
@@ -4080,26 +4066,22 @@ export class AsterlynApp {
       .querySelector<HTMLButtonElement>("#collapse-project-folder")
       ?.addEventListener("click", () => this.setSelectedProjectFolderExpanded(false));
     this.root
-      .querySelectorAll<HTMLDetailsElement>("[data-project-directory-container]")
-      .forEach((details) => {
-        details.addEventListener("toggle", () => {
-          const path = details.dataset.projectDirectoryContainer;
+      .querySelectorAll<HTMLButtonElement>("[data-project-directory-toggle]")
+      .forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const path = button.dataset.projectDirectoryToggle;
           if (!path) return;
-          const renderedExpanded = details.dataset.projectRenderedExpanded === "true";
-          this.filesController.setDirectoryExpanded(path, details.open);
-          details
-            .querySelector<HTMLElement>(":scope > summary")
-            ?.setAttribute("aria-expanded", String(details.open));
-          if (details.open !== renderedExpanded) {
-            this.renderLeftTool();
-            queueMicrotask(() => {
-              Array.from(
-                this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
-              )
-                .find((row) => row.dataset.projectDirectory === path)
-                ?.focus();
-            });
-          }
+          const expanded = this.filesState.expandedDirectories.has(path);
+          if (!this.filesController.setDirectoryExpanded(path, !expanded)) return;
+          this.renderLeftTool();
+          queueMicrotask(() => {
+            Array.from(
+              this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
+            )
+              .find((row) => row.dataset.projectDirectory === path)
+              ?.focus();
+          });
         });
       });
     this.root
@@ -4131,6 +4113,25 @@ export class AsterlynApp {
     });
   }
 
+  private handleProjectTreeScroll(body: HTMLElement): void {
+    if (this.shellState.layout.leftTool !== "files") return;
+    const rows = projectTreeRows(
+      this.projectTree(),
+      this.filesState.expandedDirectories,
+    );
+    const window = projectTreeRenderWindow(rows.length, body.scrollTop, body.clientHeight);
+    const nextStart = window?.start ?? 0;
+    if (
+      nextStart === this.projectTreeWindowStart ||
+      this.projectTreeScrollFrame !== null
+    ) return;
+    this.projectTreeScrollFrame = requestAnimationFrame(() => {
+      this.projectTreeScrollFrame = null;
+      if (this.shellState.layout.leftTool !== "files") return;
+      this.renderLeftTool();
+    });
+  }
+
   private markProjectTreeSelection(path: string): void {
     this.root.querySelectorAll<HTMLElement>("[data-project-node]").forEach((row) => {
       const selected = row.dataset.projectNode === path;
@@ -4154,6 +4155,12 @@ export class AsterlynApp {
       this.setStatus("The current file is outside the bounded project tree", "warning");
       return;
     }
+    const targetIndex = projectTreeRows(
+      this.projectTree(),
+      this.filesState.expandedDirectories,
+    ).findIndex(({ node }) => node.path === activePath);
+    const body = this.query<HTMLElement>("#navigator-body");
+    if (targetIndex >= 0) body.scrollTop = targetIndex * PROJECT_TREE_ROW_HEIGHT;
     this.renderLeftTool();
     queueMicrotask(() => {
       const target = Array.from(
@@ -4354,132 +4361,6 @@ export class AsterlynApp {
         this.setStatus("Search location is no longer valid; run the search again", "warning");
       }
     });
-  }
-
-  private renderChangeNavigation(snapshot: RepositorySnapshot): string {
-    return `
-      <div class="changes-navigation">
-        ${this.renderChangeToolbar(snapshot)}
-        <div class="change-results" id="change-results">
-          ${this.renderChangeResults(snapshot)}
-        </div>
-      </div>`;
-  }
-
-  private renderChangeToolbar(snapshot: RepositorySnapshot): string {
-    const selected = this.selectedChangeModel(snapshot);
-    const revertUnsupported =
-      !selected ||
-      snapshot.branch.unborn ||
-      selected.conflicted ||
-      selected.submodule ||
-      selected.worktreeStatus === "untracked" ||
-      selected.indexStatus === "added" ||
-      selected.indexStatus === "copied";
-    const nextView = this.changesState.fileView === "tree" ? "flat list" : "directory tree";
-    return `
-      <div class="change-toolbar" role="toolbar" aria-label="Commit file actions">
-        <button class="compact-icon-button" type="button" data-change-action="refresh" title="Refresh changes" aria-label="Refresh changes">${icon("refresh", 15)}</button>
-        <button class="compact-icon-button" type="button" data-change-action="revert" title="${revertUnsupported ? "Select an ordinary tracked file to revert" : "Revert selected file to HEAD"}" aria-label="Revert selected file" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
-        <button class="compact-icon-button" type="button" data-change-action="diff" title="Open selected file Diff" aria-label="Open selected file Diff" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
-        <span class="toolbar-separator" aria-hidden="true"></span>
-        <button class="compact-icon-button ${this.changesState.fileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="Show changes as ${nextView}" aria-label="Show changes as ${nextView}" aria-pressed="${this.changesState.fileView === "tree"}">${icon("eye", 15)}</button>
-        <button class="compact-icon-button" type="button" data-change-action="expand" title="Expand all folders" aria-label="Expand all folders" ${this.changesState.fileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
-        <button class="compact-icon-button" type="button" data-change-action="collapse" title="Collapse all folders" aria-label="Collapse all folders" ${this.changesState.fileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
-      </div>`;
-  }
-
-  private renderChangeResults(snapshot: RepositorySnapshot): string {
-    if (snapshot.changes.length === 0) {
-      if (snapshot.untrackedState === "pending") {
-        return `<div class="change-no-results"><span class="spinner"></span><strong>Checking for untracked files</strong><span>Tracked changes are ready.</span></div>`;
-      }
-      if (snapshot.untrackedState === "failed") {
-        return `<div class="change-no-results"><strong>Untracked scan failed</strong><span>Refresh to try again.</span></div>`;
-      }
-      return `<div class="change-no-results"><span class="empty-icon">${icon("check", 22)}</span><strong>Working tree clean</strong><span>There are no local changes to commit.</span></div>`;
-    }
-    const versioned = snapshot.changes.filter((change) => changeGroup(change) === "changes");
-    const unversioned = snapshot.changes.filter(
-      (change) => changeGroup(change) === "unversioned",
-    );
-    return [
-      this.renderChangeGroup("Changes", versioned, "changes"),
-      this.renderChangeGroup("Unversioned Files", unversioned, "unversioned"),
-      this.untrackedScanNotice(snapshot),
-    ].join("");
-  }
-
-  private untrackedScanNotice(snapshot: RepositorySnapshot): string {
-    if (snapshot.untrackedState === "complete") return "";
-    const failed = snapshot.untrackedState === "failed";
-    return `<div class="untracked-scan ${failed ? "failed" : ""}">${failed ? '<span class="scan-alert">!</span>' : '<span class="spinner"></span>'}<span>${failed ? "Untracked files could not be scanned. Refresh to retry." : "Scanning untracked files… counts are provisional."}</span></div>`;
-  }
-
-  private renderChangeGroup(
-    title: string,
-    changes: FileChange[],
-    group: ChangeGroupId,
-  ): string {
-    if (changes.length === 0) return "";
-    const collapsed = this.changesState.collapsedDirectories.has(`group:${group}`);
-    const rows =
-      this.changesState.fileView === "tree"
-        ? buildChangeFileTree(changes)
-            .map((node) => this.renderChangeTreeNode(node, group, 0))
-            .join("")
-        : [...changes]
-            .sort((left, right) => left.path.localeCompare(right.path))
-            .map((change) => this.changeRow(change, null))
-            .join("");
-    return `
-      <details class="change-group" data-change-disclosure="group:${group}" ${collapsed ? "" : "open"}>
-        <summary class="group-header">
-          <input class="change-checkbox" type="checkbox" data-include-group="${group}" aria-label="Include all ${escapeAttribute(title)}" />
-          <span class="tree-chevron">${icon("chevron", 11)}</span>
-          <span class="group-title">${escapeHtml(title)}<b>${changes.length} ${changes.length === 1 ? "file" : "files"}</b></span>
-        </summary>
-        <div class="change-list" role="tree">${rows}</div>
-      </details>
-    `;
-  }
-
-  private renderChangeTreeNode(
-    node: ChangeFileTreeNode,
-    group: ChangeGroupId,
-    depth: number,
-  ): string {
-    if (node.kind === "file") return this.changeRow(node.change!, depth);
-    const key = `directory:${group}:${node.path}`;
-    const paths = descendantChangePaths(node);
-    const collapsed = this.changesState.collapsedDirectories.has(key);
-    return `<details class="change-directory" data-change-disclosure="${escapeAttribute(key)}" ${collapsed ? "" : "open"}>
-      <summary style="--tree-depth:${depth}">
-        <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(node.path)}" data-include-directory-group="${group}" aria-label="Include ${escapeAttribute(node.path)}" />
-        <span class="tree-chevron">${icon("chevron", 11)}</span>
-        ${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${paths.length}</small>
-      </summary>
-      <div role="group">${node.children.map((child) => this.renderChangeTreeNode(child, group, depth + 1)).join("")}</div>
-    </details>`;
-  }
-
-  private changeRow(change: FileChange, depth: number | null): string {
-    const kind = effectiveChangeKind(change);
-    const primary = this.changesState.selectedChange?.path === change.path;
-    const included = !this.changesState.excludedPaths.has(change.path);
-    return `
-      <div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="option" tabindex="0" ${depth === null ? "" : `style="--tree-depth:${depth}"`} data-change-path="${escapeAttribute(change.path)}" aria-selected="${primary}" aria-label="${primary ? "Selected, " : ""}open complete local diff for ${escapeAttribute(change.path)}">
-        <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(change.path)}" aria-label="Include ${escapeAttribute(change.path)} in commit" ${included ? "checked" : ""} />
-        <span class="change-status status-${kind}" title="${changeLabel(kind)}">${changeCode(kind)}</span>
-        <span class="commit-file-glyph">${fileTypeIcon(change.path)}</span>
-        <span class="change-path">
-          ${change.originalPath ? `<span class="commit-file-origin">${escapeHtml(change.originalPath)} →</span>` : ""}
-          <span class="file-name">${escapeHtml(basename(change.path))}</span>
-          ${depth === null ? `<span class="file-directory">${escapeHtml(dirname(change.path))}</span>` : ""}
-        </span>
-        ${change.conflicted ? '<span class="conflict-pill">Conflict</span>' : ""}
-      </div>
-    `;
   }
 
   private renderHistoryNavigation(): string {
@@ -5128,10 +5009,10 @@ export class AsterlynApp {
         } else if (action === "expand") {
           this.changesController.expandDirectories();
         } else if (action === "collapse") {
-          this.changesController.collapseDirectories(
-            Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-disclosure]"))
-              .flatMap((item) => item.dataset.changeDisclosure ? [item.dataset.changeDisclosure] : []),
-          );
+          const snapshot = this.state.snapshot;
+          if (snapshot) {
+            this.changesController.collapseDirectories(changeDisclosureKeys(snapshot));
+          }
         }
       });
     });
@@ -5174,11 +5055,13 @@ export class AsterlynApp {
         );
       });
     });
-    this.root.querySelectorAll<HTMLDetailsElement>("[data-change-disclosure]").forEach((details) => {
-      details.addEventListener("toggle", () => {
-        const key = details.dataset.changeDisclosure;
+    this.root.querySelectorAll<HTMLButtonElement>("[data-change-disclosure]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.changeDisclosure;
         if (!key) return;
-        this.changesController.setDirectoryExpanded(key, details.open);
+        const expanded = !this.changesState.collapsedDirectories.has(key);
+        this.changesController.setDirectoryExpanded(key, !expanded);
+        this.renderLeftTool();
       });
     });
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
@@ -5221,6 +5104,26 @@ export class AsterlynApp {
       });
     });
     this.syncChangeInclusionUi();
+  }
+
+  private handleChangeTreeScroll(results: HTMLElement): void {
+    if (this.shellState.layout.leftTool !== "changes" || !this.state.snapshot) return;
+    const rows = changeViewRows(this.state.snapshot, this.changesState);
+    const window = changeTreeRenderWindow(
+      rows.length,
+      results.scrollTop,
+      results.clientHeight,
+    );
+    const nextStart = window?.start ?? 0;
+    if (
+      nextStart === this.changeTreeWindowStart ||
+      this.changeTreeScrollFrame !== null
+    ) return;
+    this.changeTreeScrollFrame = requestAnimationFrame(() => {
+      this.changeTreeScrollFrame = null;
+      if (this.shellState.layout.leftTool !== "changes") return;
+      this.renderLeftTool();
+    });
   }
 
   private selectChangeRow(
@@ -5306,10 +5209,27 @@ export class AsterlynApp {
   }
 
   private focusChangeRow(path: string): void {
-    const rows = this.root.querySelectorAll<HTMLElement>("[data-change-path]");
-    Array.from(rows)
-      .find((row) => row.dataset.changePath === path)
-      ?.focus();
+    const mounted = Array.from(
+      this.root.querySelectorAll<HTMLElement>("[data-change-path]"),
+    ).find((row) => row.dataset.changePath === path);
+    if (mounted) {
+      mounted.focus();
+      return;
+    }
+    const snapshot = this.state.snapshot;
+    const results = this.root.querySelector<HTMLElement>("#change-results");
+    if (!snapshot || !results) return;
+    const index = changeViewRows(snapshot, this.changesState).findIndex(
+      (row) => row.kind === "file" && row.change.path === path,
+    );
+    if (index < 0) return;
+    results.scrollTop = index * CHANGE_TREE_ROW_HEIGHT;
+    this.renderLeftTool();
+    queueMicrotask(() => {
+      Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-path]"))
+        .find((row) => row.dataset.changePath === path)
+        ?.focus();
+    });
   }
 
   private bindHistoryEvents(): void {
