@@ -151,7 +151,7 @@ function remoteActionDescription(
     return `Fetch from ${selectedName}. Refresh all standard branch-tracking refs for this remote without changing the checked-out branch or working files. The badge shows ${behind} incoming commit${behind === 1 ? "" : "s"} known after the last Fetch.`;
   }
   if (kind === "pull") {
-    return `Update ${sourceRef} from ${selectedName}:${destinationRef}. Opens a confirmation and performs fast-forward only; it never creates a merge commit or starts a rebase.`;
+    return `Update ${sourceRef} from ${selectedName}:${destinationRef}. Opens a confirmation for Fast-forward, Merge, or Rebase. Merge and Rebase fetch first, then require a second exact-object review; conflicts pause for explicit resolution, Continue, Skip, or Abort.`;
   }
   const ahead = tracksSelected ? snapshot.branch.ahead : 0;
   return `Review Push from ${sourceRef} to ${selectedName}:${destinationRef}. The badge shows ${ahead} outgoing commit${ahead === 1 ? "" : "s"} known from the last Fetch. Review can explicitly include tags or choose Force Push with an exact lease; it never retries automatically.`;
@@ -178,16 +178,24 @@ function renderUpdateDialog(snapshot: RepositorySnapshot, state: RemotePushState
   const source = snapshot.branch.head ? `refs/heads/${snapshot.branch.head}` : "No branch";
   const destination = snapshot.branch.upstreamRef ?? "No upstream";
   const operation = state.operation?.kind === "pull" ? state.operation : null;
-  const busyLabel = operation?.cancelling ? "Cancelling…" : operation ? "Updating…" : "Update";
+  const strategy = state.updateStrategy;
+  const strategyLabel = strategy === "ffOnly" ? "Fast-forward" : strategy === "merge" ? "Merge" : "Rebase";
+  const busyLabel = operation?.cancelling
+    ? "Cancelling…"
+    : operation
+      ? "Updating…"
+      : strategy === "ffOnly"
+        ? "Update"
+        : `Fetch and Review ${strategyLabel}`;
   const error = state.dialogError ? `<div class="remote-dialog-error" role="alert">${escapeHtml(state.dialogError)}</div>` : "";
   return `<section class="dialog remote-action-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
     <div class="dialog-heading"><div><span class="panel-eyebrow">Current branch</span><h2 id="remote-dialog-title">Update ${escapeHtml(branch)}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="Cancel Update confirmation" title="Cancel" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
-    <p id="remote-dialog-description">Fetch the configured upstream and integrate it into the checked-out branch. Only a clean fast-forward is executable in this version.</p>
+    <p id="remote-dialog-description">Choose how the configured upstream should be integrated into the checked-out branch. Merge and Rebase fetch first, then open an exact-object review before changing local history.</p>
     <div class="remote-dialog-route" aria-label="Update route"><code>${escapeHtml(source)}</code><span>←</span><code>${escapeHtml(`${remote}:${destination}`)}</code></div>
     ${error}
-    <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}><legend>Update method</legend><label class="remote-strategy-card selected"><input type="radio" name="update-strategy" value="ff-only" checked /><span><strong>Fast-forward only</strong><small>Fetch the configured upstream, then move the current branch only when no merge or rebase is required.</small></span></label><label class="remote-strategy-card unavailable"><input type="radio" name="update-strategy" value="merge" disabled /><span><strong>Merge incoming changes <b>Unavailable</b></strong><small>Requires editable conflict Diff plus Continue and Abort lifecycle support.</small></span></label><label class="remote-strategy-card unavailable"><input type="radio" name="update-strategy" value="rebase" disabled /><span><strong>Rebase current branch <b>Unavailable</b></strong><small>Requires editable conflict Diff plus Continue, Skip, and Abort lifecycle support.</small></span></label></fieldset>
-    <p class="remote-dialog-note">No merge commit, rebase, reset, stash, or force operation will be started. Git credentials come from your configured credential helper or SSH agent.</p>
-    <div class="dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel update"}</button>` : '<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>'}<button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="Update ${escapeAttribute(source)} from ${escapeAttribute(`${remote}:${destination}`)} using fast-forward only" ${operation || !policy.pull.enabled ? "disabled" : ""}>${busyLabel}</button></div>
+    <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}><legend>Update method</legend><label class="remote-strategy-card ${strategy === "ffOnly" ? "selected" : ""} ${snapshot.branch.ahead > 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="ffOnly" ${strategy === "ffOnly" ? "checked" : ""} ${snapshot.branch.ahead > 0 ? "disabled" : ""}/><span><strong>Fast-forward only</strong><small>Fetch the configured upstream, then move the current branch only when no merge or rebase is required.</small></span></label><label class="remote-strategy-card ${strategy === "merge" ? "selected" : ""}"><input type="radio" name="update-strategy" value="merge" ${strategy === "merge" ? "checked" : ""}/><span><strong>Merge incoming changes</strong><small>Fetch, review the exact tracking commit, then merge it. Conflicts pause with editable Base, Ours, and Theirs content.</small></span></label><label class="remote-strategy-card ${strategy === "rebase" ? "selected" : ""} ${snapshot.branch.ahead === 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="rebase" ${strategy === "rebase" ? "checked" : ""} ${snapshot.branch.ahead === 0 ? "disabled" : ""}/><span><strong>Rebase the current branch</strong><small>Fetch, review the exact tracking commit, then replay local commits. Continue, Skip, and Abort remain restart-safe.</small></span></label></fieldset>
+    <p class="remote-dialog-note">Fast-forward executes after this confirmation. Merge and Rebase require another review bound to the fetched object and current clean HEAD. No reset, stash, force, or automatic retry is performed.</p>
+    <div class="dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel update"}</button>` : '<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>'}<button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="${escapeAttribute(strategy === "ffOnly" ? `Update ${source} from ${remote}:${destination} using fast-forward only` : `Fetch ${remote}, then review ${strategyLabel} of ${remote}:${destination} into ${source}`)}" ${operation || !policy.pull.enabled ? "disabled" : ""}>${busyLabel}</button></div>
   </section>`;
 }
 

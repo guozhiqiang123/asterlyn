@@ -15,10 +15,15 @@ import { isImagePreviewPath } from "../../workbench/image-preview.ts";
 import { RecentValueCache } from "../../workbench/recent-value-cache.ts";
 import {
   createRemotePushState,
+  type RemoteUpdateStrategy,
   type RemotePushState,
 } from "./remote-push-state.ts";
 
-export type { PushDiffState, RemotePushState } from "./remote-push-state.ts";
+export type {
+  PushDiffState,
+  RemotePushState,
+  RemoteUpdateStrategy,
+} from "./remote-push-state.ts";
 
 export const PUSH_PREVIEW_PAGE_SIZE = 100;
 export const PUSH_COMMIT_DETAILS_CACHE_LIMIT = 48;
@@ -40,6 +45,7 @@ export type RemotePushChangeReason =
   | "commit-details-error"
   | "file-selection"
   | "file-presentation"
+  | "update-options"
   | "push-options"
   | "diff-start"
   | "diff-complete"
@@ -192,6 +198,11 @@ export class RemotePushController {
     this.invalidateDialogRequests();
     this.resetDialog();
     this.state.dialog = dialog;
+    if (dialog === "update") {
+      this.state.updateStrategy = snapshot.branch.ahead > 0 && snapshot.branch.behind > 0
+        ? "merge"
+        : "ffOnly";
+    }
     this.state.pushPreviewLoading = dialog === "push";
     const sequence = this.dialogSequence;
     this.emit({ reason: "dialog-open", dialogChanged: true, diffChanged: true });
@@ -210,6 +221,15 @@ export class RemotePushController {
   setDialogError(message: string | null): void {
     this.state.dialogError = message;
     this.emit({ reason: "dialog-error", dialogChanged: true, error: message ?? undefined });
+  }
+
+  setUpdateStrategy(strategy: RemoteUpdateStrategy): void {
+    if (this.state.dialog !== "update" || this.state.operation) return;
+    if (strategy === "rebase" && (this.snapshot?.branch.ahead ?? 0) === 0) return;
+    if (strategy === "ffOnly" && (this.snapshot?.branch.ahead ?? 0) > 0) return;
+    if (this.state.updateStrategy === strategy) return;
+    this.state.updateStrategy = strategy;
+    this.emit({ reason: "update-options", dialogChanged: true });
   }
 
   setPushTagsEnabled(enabled: boolean): void {
@@ -502,6 +522,7 @@ export class RemotePushController {
       cancelling: false,
     };
     this.state.dialogError = null;
+    this.state.updateStrategy = "ffOnly";
     this.emit({ reason: "operation-start", toolbarChanged: true, dialogChanged: true });
     try {
       const outcome = kind === "fetch"

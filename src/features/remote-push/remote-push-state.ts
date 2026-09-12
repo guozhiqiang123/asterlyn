@@ -26,11 +26,14 @@ export interface RemoteOperationState {
   cancelling: boolean;
 }
 
+export type RemoteUpdateStrategy = "ffOnly" | "merge" | "rebase";
+
 export interface RemotePushState {
   selectedRemote: string | null;
   operation: RemoteOperationState | null;
   dialog: "update" | "push" | null;
   dialogError: string | null;
+  updateStrategy: RemoteUpdateStrategy;
   pushPreview: PushPreview | null;
   pushPreviewLoading: boolean;
   pushPreviewRefreshing: boolean;
@@ -56,6 +59,7 @@ export function createRemotePushState(): RemotePushState {
     operation: null,
     dialog: null,
     dialogError: null,
+    updateStrategy: "ffOnly",
     pushPreview: null,
     pushPreviewLoading: false,
     pushPreviewRefreshing: false,

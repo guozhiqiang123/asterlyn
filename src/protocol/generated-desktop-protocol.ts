@@ -45,6 +45,12 @@ export interface DesktopCommandMap {
   pull_current: { args: { repositoryRoot: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
   push_current: { args: { repositoryRoot: string; remote: string; mode: Model.PushMode; tagMode: Model.PushTagMode; previewToken: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
   cancel_remote_operation: { args: { repositoryRoot: string; operationId: string; }; result: void };
+  read_git_operation: { args: { repositoryRoot: string; }; result: Model.GitOperationSnapshot | null };
+  prepare_git_operation: { args: { repositoryRoot: string; kind: Model.GitOperationKind; targetRefs: Array<string>; message: string | null; }; result: Model.GitOperationPlan };
+  execute_git_operation: { args: { repositoryRoot: string; plan: Model.GitOperationPlan; }; result: Model.RepositoryMutationOutcome };
+  run_git_operation_action: { args: { repositoryRoot: string; action: Model.GitOperationAction; }; result: Model.RepositoryMutationOutcome };
+  read_conflict_content: { args: { repositoryRoot: string; path: string; }; result: Model.GitConflictContent };
+  resolve_conflict: { args: { repositoryRoot: string; path: string; expectedRevisionToken: string; content: string | null; }; result: Model.GitOperationMutationOutcome };
 }
 
 export type DesktopCommandName = keyof DesktopCommandMap;
@@ -92,5 +98,11 @@ export const DESKTOP_RESULT_VALIDATORS: {
   pull_current: "repositoryMutationOutcome",
   push_current: "repositoryMutationOutcome",
   cancel_remote_operation: "void",
+  read_git_operation: "nullableGitOperationSnapshot",
+  prepare_git_operation: "gitOperationPlan",
+  execute_git_operation: "repositoryMutationOutcome",
+  run_git_operation_action: "repositoryMutationOutcome",
+  read_conflict_content: "gitConflictContent",
+  resolve_conflict: "gitOperationMutationOutcome",
 };
 

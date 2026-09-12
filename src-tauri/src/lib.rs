@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use asterlyn_git::{
-    CommitDetails, CommitDiffResult, DiffResult, FileChange, GitError, GitRepository, HistoryPage,
-    HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
+    CommitDetails, CommitDiffResult, DiffResult, FileChange, GitConflictContent, GitError,
+    GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot, GitRepository,
+    HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
     RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
@@ -99,6 +100,14 @@ struct RepositoryMutationOutcome {
 #[serde(rename_all = "camelCase")]
 struct WorkingTreeMutationOutcome {
     tracked: TrackedChangeScan,
+    invalidated_slices: Vec<RepositoryStateSlice>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitOperationMutationOutcome {
+    tracked: TrackedChangeScan,
+    operation: Option<GitOperationSnapshot>,
     invalidated_slices: Vec<RepositoryStateSlice>,
 }
 
@@ -679,7 +688,13 @@ pub fn run() {
             read_push_file_commit,
             pull_current,
             push_current,
-            cancel_remote_operation
+            cancel_remote_operation,
+            read_git_operation,
+            prepare_git_operation,
+            execute_git_operation,
+            run_git_operation_action,
+            read_conflict_content,
+            resolve_conflict
         ])
         .run(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");

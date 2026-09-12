@@ -1,0 +1,184 @@
+.git-operation-dialog {
+  width: min(760px, calc(100vw - 40px));
+  max-height: min(820px, calc(100vh - 40px));
+  overflow: auto;
+}
+
+.git-operation-form,
+.git-operation-review,
+.conflict-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.git-operation-form label,
+.conflict-editor > label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.git-operation-form select,
+.git-operation-form textarea,
+.conflict-editor textarea {
+  width: 100%;
+}
+
+.git-operation-form textarea,
+.conflict-editor textarea {
+  min-height: 56px;
+  resize: vertical;
+  font-family: var(--editor-font-family);
+}
+
+.git-operation-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.git-operation-error,
+.git-operation-warning {
+  border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--yellow) 10%, var(--bg-elevated));
+  color: var(--text);
+  padding: 9px 11px;
+}
+
+.git-operation-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+
+.git-operation-route {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) 24px minmax(220px, 1.3fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+  padding: 12px;
+}
+
+.git-operation-route > span {
+  display: grid;
+  gap: 3px;
+}
+
+.git-operation-route small,
+.git-operation-route em {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.git-operation-route > b {
+  color: var(--accent);
+  text-align: center;
+}
+
+.git-operation-review section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.git-operation-review h3,
+.conflict-sides h3 {
+  margin: 0 0 7px;
+  font-size: 12px;
+}
+
+.git-operation-review ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.git-operation-review li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.git-operation-review pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.git-operation-loading {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--text-muted);
+}
+
+.git-conflict-dialog {
+  width: min(1180px, calc(100vw - 30px));
+  height: min(840px, calc(100vh - 30px));
+  overflow: hidden;
+}
+
+.conflict-editor {
+  min-height: 0;
+  grid-template-rows: minmax(140px, 0.7fr) auto minmax(180px, 1fr) auto auto auto;
+  height: calc(100% - 48px);
+}
+
+.conflict-sides {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--border);
+}
+
+.conflict-sides section {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--bg-deep);
+  padding: 8px;
+}
+
+.conflict-sides pre {
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  white-space: pre;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+}
+
+.conflict-editor textarea {
+  min-height: 0;
+  height: 100%;
+  white-space: pre;
+  line-height: var(--editor-line-height);
+}
+
+.conflict-side-missing {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+@media (max-width: 760px) {
+  .conflict-sides {
+    grid-template-columns: 1fr;
+  }
+
+  .git-operation-route {
+    grid-template-columns: 1fr;
+  }
+}

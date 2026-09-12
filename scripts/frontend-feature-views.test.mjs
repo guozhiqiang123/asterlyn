@@ -62,7 +62,9 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   state.dialog = "update";
   const update = renderRemoteDialogContent(viewModel(state));
   assert.match(update, /Fast-forward only/);
-  assert.match(update, /Merge incoming changes .*Unavailable/);
+  assert.match(update, /Merge incoming changes/);
+  assert.match(update, /Rebase the current branch/);
+  assert.doesNotMatch(update, /Requires editable conflict Diff/);
 
   state.dialog = "push";
   state.pushPreviewLoading = true;

@@ -35,6 +35,18 @@ test("desktop response validation accepts representative valid payloads", () => 
     { available: true, message: null },
   );
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
+  assert.deepEqual(
+    validateDesktopResult("resolve_conflict", {
+      tracked: { root: "/repo", changes: [] },
+      operation: null,
+      invalidatedSlices: ["openDocuments", "workingTree", "operation"],
+    }),
+    {
+      tracked: { root: "/repo", changes: [] },
+      operation: null,
+      invalidatedSlices: ["openDocuments", "workingTree", "operation"],
+    },
+  );
 });
 
 test("desktop response validation rejects malformed watch status", () => {

@@ -163,12 +163,71 @@ export interface RepositorySnapshot {
   gitDir: string;
   repositoryRoots: GitRootDescriptor[];
   branch: BranchState;
-  operation: string | null;
+  operation: GitOperationSnapshot | null;
   changes: FileChange[];
   commits: CommitSummary[];
   branches: BranchSummary[];
   remotes: RemoteSummary[];
   untrackedState: "pending" | "complete" | "failed";
+}
+
+export type GitOperationKind =
+  | "merge"
+  | "cherryPick"
+  | "rebase"
+  | "squash"
+  | "revert"
+  | "bisect";
+
+export type GitOperationPhase = "conflicted" | "paused";
+export type GitOperationAction = "continue" | "skip" | "abort";
+
+export interface GitConflictFile {
+  path: string;
+  baseOid: string | null;
+  oursOid: string | null;
+  theirsOid: string | null;
+}
+
+export interface GitOperationProgress {
+  current: number | null;
+  total: number | null;
+  detail: string | null;
+}
+
+export interface GitOperationSnapshot {
+  kind: GitOperationKind;
+  phase: GitOperationPhase;
+  originalHeadOid: string | null;
+  currentHeadOid: string | null;
+  headRef: string | null;
+  targetOids: string[];
+  conflicts: GitConflictFile[];
+  progress: GitOperationProgress;
+  allowedActions: GitOperationAction[];
+}
+
+export interface GitOperationPlan {
+  kind: GitOperationKind;
+  repositoryRoot: string;
+  startHeadOid: string;
+  startHeadRef: string;
+  targetRefs: string[];
+  targetOids: string[];
+  commitCount: number;
+  summary: string;
+  message: string | null;
+  previewToken: string;
+}
+
+export interface GitConflictContent {
+  path: string;
+  base: string | null;
+  ours: string | null;
+  theirs: string | null;
+  worktree: string | null;
+  binary: boolean;
+  revisionToken: string;
 }
 
 export type RepositoryStateSlice =
@@ -201,6 +260,12 @@ export interface RepositoryMutationOutcome {
 
 export interface WorkingTreeMutationOutcome {
   tracked: TrackedChangeScan;
+  invalidatedSlices: RepositoryStateSlice[];
+}
+
+export interface GitOperationMutationOutcome {
+  tracked: TrackedChangeScan;
+  operation: GitOperationSnapshot | null;
   invalidatedSlices: RepositoryStateSlice[];
 }
 

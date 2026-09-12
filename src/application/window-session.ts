@@ -1,4 +1,5 @@
 import type {
+  GitOperationSnapshot,
   OpenedProject,
   RepositorySnapshot,
   TrackedChangeScan,
@@ -143,6 +144,23 @@ export class WindowSession {
     const identity = this.workspace.identity();
     if (!identity) throw new Error("Open a workspace before installing working-tree state.");
     return this.repository.mergeTracked(identity, scan, cause, paths, slices)?.snapshot ?? null;
+  }
+
+  installTrackedOperation(
+    scan: TrackedChangeScan,
+    operation: GitOperationSnapshot | null,
+    cause: SessionInvalidationCause,
+    slices: Iterable<SessionInvalidationSlice>,
+  ): RepositorySnapshot | null {
+    const identity = this.workspace.identity();
+    if (!identity) throw new Error("Open a workspace before installing Git operation state.");
+    return this.repository.mergeTrackedOperation(
+      identity,
+      scan,
+      operation,
+      cause,
+      slices,
+    )?.snapshot ?? null;
   }
 
   scheduleTrackedRefresh(

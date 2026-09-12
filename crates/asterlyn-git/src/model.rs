@@ -5,12 +5,109 @@ pub struct RepositorySnapshot {
     pub git_dir: String,
     pub repository_roots: Vec<GitRootDescriptor>,
     pub branch: BranchState,
-    pub operation: Option<String>,
+    pub operation: Option<GitOperationSnapshot>,
     pub changes: Vec<FileChange>,
     pub commits: Vec<CommitSummary>,
     pub branches: Vec<BranchSummary>,
     pub remotes: Vec<RemoteSummary>,
     pub untracked_state: UntrackedState,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitOperationKind {
+    Merge,
+    CherryPick,
+    Rebase,
+    Squash,
+    Revert,
+    Bisect,
+}
+
+impl GitOperationKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Merge => "merge",
+            Self::CherryPick => "cherry-pick",
+            Self::Rebase => "rebase",
+            Self::Squash => "squash",
+            Self::Revert => "revert",
+            Self::Bisect => "bisect",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitOperationPhase {
+    Conflicted,
+    Paused,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitOperationAction {
+    Continue,
+    Skip,
+    Abort,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitConflictFile {
+    pub path: String,
+    pub base_oid: Option<String>,
+    pub ours_oid: Option<String>,
+    pub theirs_oid: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOperationProgress {
+    pub current: Option<u32>,
+    pub total: Option<u32>,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOperationSnapshot {
+    pub kind: GitOperationKind,
+    pub phase: GitOperationPhase,
+    pub original_head_oid: Option<String>,
+    pub current_head_oid: Option<String>,
+    pub head_ref: Option<String>,
+    pub target_oids: Vec<String>,
+    pub conflicts: Vec<GitConflictFile>,
+    pub progress: GitOperationProgress,
+    pub allowed_actions: Vec<GitOperationAction>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOperationPlan {
+    pub kind: GitOperationKind,
+    pub repository_root: String,
+    pub start_head_oid: String,
+    pub start_head_ref: String,
+    pub target_refs: Vec<String>,
+    pub target_oids: Vec<String>,
+    pub commit_count: usize,
+    pub summary: String,
+    pub message: Option<String>,
+    pub preview_token: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitConflictContent {
+    pub path: String,
+    pub base: Option<String>,
+    pub ours: Option<String>,
+    pub theirs: Option<String>,
+    pub worktree: Option<String>,
+    pub binary: bool,
+    pub revision_token: String,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

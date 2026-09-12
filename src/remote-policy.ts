@@ -1,4 +1,4 @@
-import type { RemoteSummary, RepositorySnapshot } from "./models";
+import type { GitOperationKind, RemoteSummary, RepositorySnapshot } from "./models";
 
 export interface RemoteActionState {
   enabled: boolean;
@@ -46,7 +46,7 @@ function fetchState(
   remote: RemoteSummary | null,
 ): RemoteActionState {
   if (snapshot.operation) {
-    return blocked("Fetch", `Finish the active ${snapshot.operation} operation first.`);
+    return blocked("Fetch", `Finish the active ${operationLabel(snapshot.operation.kind)} operation first.`);
   }
   if (!remote) return blocked("Fetch", "Select a configured remote.");
   if (!remote.fetchSupported) {
@@ -64,7 +64,7 @@ function pullState(
     return blocked("Update", "A checked-out branch with a commit is required.");
   }
   if (snapshot.operation) {
-    return blocked("Update", `Finish the active ${snapshot.operation} operation first.`);
+    return blocked("Update", `Finish the active ${operationLabel(snapshot.operation.kind)} operation first.`);
   }
   if (!branch.upstreamRemote || !branch.upstreamRef) {
     return blocked("Update", "Publish the branch or configure a supported upstream first.");
@@ -79,9 +79,6 @@ function pullState(
   if (!remote.fetchSupported) {
     return blocked("Update blocked", "The upstream uses an unsupported fetch mapping.");
   }
-  if (branch.ahead > 0 && branch.behind > 0) {
-    return blocked("Update blocked", "The branch has diverged; merge or rebase explicitly.");
-  }
   if (snapshot.untrackedState === "pending") {
     return blocked("Update blocked", "Wait for the complete worktree scan.");
   }
@@ -91,8 +88,13 @@ function pullState(
   if (snapshot.changes.length > 0) {
     return blocked("Update blocked", "Commit, stash, or remove local changes first.");
   }
-  if (branch.behind > 0 && branch.ahead === 0) {
-    return ready("Update", `Fast-forward by ${branch.behind} upstream commit${branch.behind === 1 ? "" : "s"}.`);
+  if (branch.behind > 0) {
+    return ready(
+      "Update",
+      branch.ahead > 0
+        ? `Review Merge or Rebase for ${branch.ahead} local and ${branch.behind} incoming commits.`
+        : `Fast-forward by ${branch.behind} upstream commit${branch.behind === 1 ? "" : "s"}.`,
+    );
   }
   return blocked("Up to date", "No upstream commits need to be pulled.");
 }
@@ -106,7 +108,7 @@ function pushState(
     return blocked("Push", "A checked-out branch with a commit is required.");
   }
   if (snapshot.operation) {
-    return blocked("Push", `Finish the active ${snapshot.operation} operation first.`);
+    return blocked("Push", `Finish the active ${operationLabel(snapshot.operation.kind)} operation first.`);
   }
   if (!remote) return blocked("Push", "Select a configured remote.");
   if (!remote.pushSupported) {
@@ -139,4 +141,8 @@ function ready(label: string, detail: string): RemoteActionState {
 
 function blocked(label: string, detail: string): RemoteActionState {
   return { enabled: false, label, detail };
+}
+
+function operationLabel(kind: GitOperationKind): string {
+  return kind === "cherryPick" ? "Cherry-pick" : kind.charAt(0).toLocaleUpperCase() + kind.slice(1);
 }

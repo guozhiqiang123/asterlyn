@@ -240,7 +240,7 @@ function renderChangeRow(
       <span class="file-name">${escapeHtml(baseName(row.change.path))}</span>
       ${row.depth === null ? `<span class="file-directory">${escapeHtml(directoryName(row.change.path))}</span>` : ""}
     </span>
-    ${row.change.conflicted ? '<span class="conflict-pill">Conflict</span>' : ""}
+    ${row.change.conflicted ? `<button class="conflict-pill conflict-resolve-button" type="button" data-resolve-conflict="${escapeAttribute(row.change.path)}" aria-label="Resolve conflict in ${escapeAttribute(row.change.path)}">Resolve</button>` : ""}
   </div>`;
 }
 

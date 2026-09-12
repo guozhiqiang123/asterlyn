@@ -54,8 +54,38 @@ test("remote conflict routing selects the first conflict through one entry point
   assert.deepEqual(fixture.records.conflictSelections, ["src/first.ts"]);
   assert.deepEqual(fixture.records.openDiffs, [{ root: "/repo", path: "src/first.ts" }]);
   assert.equal(fixture.records.showChanges, 1);
-  assert.match(fixture.records.dialogErrors[0], /read-only Diff/);
+  assert.match(fixture.records.dialogErrors[0], /Resolve the listed files/);
+  assert.deepEqual(fixture.records.operations, [conflicted]);
   assert.equal(fixture.records.renders, 1);
+  fixture.dispose();
+});
+
+test("conflict resolution reconciles working state without reading history or refs", () => {
+  const fixture = integrationFixture();
+  const operation = {
+    kind: "merge",
+    phase: "paused",
+    originalHeadOid: "a".repeat(40),
+    currentHeadOid: "a".repeat(40),
+    headRef: "refs/heads/main",
+    targetOids: ["b".repeat(40)],
+    conflicts: [],
+    progress: { current: null, total: null, detail: null },
+    allowedActions: ["continue", "abort"],
+  };
+
+  const accepted = fixture.coordinator.applyGitOperationMutation({
+    tracked: { root: "/repo", changes: [change("src/resolved.ts")] },
+    operation,
+    invalidatedSlices: ["openDocuments", "workingTree", "operation"],
+  });
+
+  assert.equal(accepted.operation, operation);
+  assert.deepEqual(fixture.records.files, [["src/resolved.ts"]]);
+  assert.deepEqual(fixture.records.operations, [accepted]);
+  assert.equal(fixture.records.documents, 1);
+  assert.equal(fixture.records.remote.length, 0);
+  assert.equal(fixture.records.history.length, 0);
   fixture.dispose();
 });
 
@@ -73,6 +103,7 @@ test("watch reconciliation removes unavailable Git projections without changing 
   assert.deepEqual(fixture.records.changes, [{ snapshot: null, options: {} }]);
   assert.deepEqual(fixture.records.files, [[]]);
   assert.equal(fixture.records.historyClears, 1);
+  assert.deepEqual(fixture.records.operations, [null]);
   assert.equal(fixture.records.hideHistory, 1);
   assert.equal(fixture.records.renders, 1);
   fixture.dispose();
@@ -94,6 +125,7 @@ test("manual refresh reconciles one canonical snapshot without duplicating routi
     { root: "/repo", changes: ["src/refreshed.ts"] },
   ]);
   assert.equal(fixture.records.refreshedHistory, 1);
+  assert.deepEqual(fixture.records.operations, [refreshed]);
   assert.equal(fixture.records.documents, 1);
   assert.equal(fixture.records.renders, 1);
   assert.deepEqual(fixture.records.loads, [
@@ -114,6 +146,7 @@ test("manual refresh keeps an ordinary workspace and disables Git projections", 
   assert.equal(accepted, null);
   assert.deepEqual(fixture.records.remote, [null]);
   assert.equal(fixture.records.historyClears, 1);
+  assert.deepEqual(fixture.records.operations, [null]);
   assert.equal(fixture.records.workspaceOnly, 1);
   assert.deepEqual(fixture.records.loads, [
     { root: "/repo", generation: fixture.session.generation },
@@ -177,6 +210,7 @@ function integrationFixture(gatewayOverrides = {}) {
     files: [],
     workspaces: [],
     history: [],
+    operations: [],
     refreshedHistory: 0,
     historyClears: 0,
     branchClears: 0,
@@ -212,6 +246,7 @@ function integrationFixture(gatewayOverrides = {}) {
         updateChanges(changes) { records.files.push(changes.map((item) => item.path)); },
       },
       history: { clear() { records.historyClears += 1; } },
+      operations: { installSnapshot(value) { records.operations.push(value); } },
     },
     {
       clearBranchSelection() { records.branchClears += 1; },

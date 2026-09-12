@@ -1,5 +1,9 @@
 import type {
   CommitSelectedResult,
+  GitConflictContent,
+  GitOperationMutationOutcome,
+  GitOperationPlan,
+  GitOperationSnapshot,
   RepositoryMutationOutcome,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
@@ -51,4 +55,32 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     }),
   cancelRemoteOperation: (repositoryRoot, operationId) =>
     invokeDesktopCommand<void>("cancel_remote_operation", { repositoryRoot, operationId }),
+  readGitOperation: (repositoryRoot) =>
+    invokeDesktopCommand<GitOperationSnapshot | null>("read_git_operation", { repositoryRoot }),
+  prepareGitOperation: (repositoryRoot, kind, targetRefs, message) =>
+    invokeDesktopCommand<GitOperationPlan>("prepare_git_operation", {
+      repositoryRoot,
+      kind,
+      targetRefs,
+      message,
+    }),
+  executeGitOperation: (repositoryRoot, plan) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_git_operation", {
+      repositoryRoot,
+      plan,
+    }),
+  runGitOperationAction: (repositoryRoot, action) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("run_git_operation_action", {
+      repositoryRoot,
+      action,
+    }),
+  readConflictContent: (repositoryRoot, path) =>
+    invokeDesktopCommand<GitConflictContent>("read_conflict_content", { repositoryRoot, path }),
+  resolveConflict: (repositoryRoot, path, expectedRevisionToken, content) =>
+    invokeDesktopCommand<GitOperationMutationOutcome>("resolve_conflict", {
+      repositoryRoot,
+      path,
+      expectedRevisionToken,
+      content,
+    }),
 };

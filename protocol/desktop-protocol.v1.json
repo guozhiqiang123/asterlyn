@@ -40,6 +40,12 @@
     { "name": "read_push_file_commit", "args": { "repositoryRoot": "string", "remote": "string", "tagMode": "PushTagMode", "previewToken": "string", "path": "string" }, "result": "nullable:CommitDetails", "validator": "nullableCommitDetails" },
     { "name": "pull_current", "args": { "repositoryRoot": "string", "operationId": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "push_current", "args": { "repositoryRoot": "string", "remote": "string", "mode": "PushMode", "tagMode": "PushTagMode", "previewToken": "string", "operationId": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
-    { "name": "cancel_remote_operation", "args": { "repositoryRoot": "string", "operationId": "string" }, "result": "void", "validator": "void" }
+    { "name": "cancel_remote_operation", "args": { "repositoryRoot": "string", "operationId": "string" }, "result": "void", "validator": "void" },
+    { "name": "read_git_operation", "args": { "repositoryRoot": "string" }, "result": "nullable:GitOperationSnapshot", "validator": "nullableGitOperationSnapshot" },
+    { "name": "prepare_git_operation", "args": { "repositoryRoot": "string", "kind": "GitOperationKind", "targetRefs": "array:string", "message": "nullable:string" }, "result": "GitOperationPlan", "validator": "gitOperationPlan" },
+    { "name": "execute_git_operation", "args": { "repositoryRoot": "string", "plan": "GitOperationPlan" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
+    { "name": "run_git_operation_action", "args": { "repositoryRoot": "string", "action": "GitOperationAction" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
+    { "name": "read_conflict_content", "args": { "repositoryRoot": "string", "path": "string" }, "result": "GitConflictContent", "validator": "gitConflictContent" },
+    { "name": "resolve_conflict", "args": { "repositoryRoot": "string", "path": "string", "expectedRevisionToken": "string", "content": "nullable:string" }, "result": "GitOperationMutationOutcome", "validator": "gitOperationMutationOutcome" }
   ]
 }

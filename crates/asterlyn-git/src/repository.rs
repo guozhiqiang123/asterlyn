@@ -145,6 +145,10 @@ impl GitRepository {
         &self.root
     }
 
+    pub(crate) fn git_directory(&self) -> &Path {
+        &self.git_dir
+    }
+
     fn main_root_descriptor(&self) -> GitRootDescriptor {
         GitRootDescriptor {
             id: ".".to_string(),
@@ -360,7 +364,7 @@ impl GitRepository {
             git_dir: self.git_dir.to_string_lossy().into_owned(),
             repository_roots: vec![self.main_root_descriptor()],
             branch,
-            operation: self.detect_operation(),
+            operation: self.operation_snapshot()?,
             changes,
             commits,
             branches,
@@ -2723,10 +2727,10 @@ impl GitRepository {
     }
 
     fn ensure_no_repository_operation(&self, operation: &str) -> Result<(), GitError> {
-        if let Some(active) = self.detect_operation() {
+        if let Some(active) = self.operation_snapshot()? {
             return Err(GitError::UnsafeOperation {
                 operation: operation.to_string(),
-                message: format!("finish the active {active} operation first"),
+                message: format!("finish the active {} operation first", active.kind.label()),
                 blockers: Vec::new(),
             });
         }
@@ -3159,21 +3163,6 @@ impl GitRepository {
             });
         }
         Ok(objects.next().map(str::to_string))
-    }
-
-    fn detect_operation(&self) -> Option<String> {
-        let candidates = [
-            ("rebase-merge", "rebase"),
-            ("rebase-apply", "rebase"),
-            ("MERGE_HEAD", "merge"),
-            ("CHERRY_PICK_HEAD", "cherry-pick"),
-            ("REVERT_HEAD", "revert"),
-            ("BISECT_LOG", "bisect"),
-        ];
-        candidates
-            .iter()
-            .find(|(marker, _)| self.git_dir.join(marker).exists())
-            .map(|(_, operation)| (*operation).to_string())
     }
 }
 

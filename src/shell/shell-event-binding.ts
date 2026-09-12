@@ -6,6 +6,7 @@ export interface ShellEventActions {
   readonly remoteDialogOpen: () => boolean;
   readonly remoteOperationActive: () => boolean;
   readonly pushDiffOpen: () => boolean;
+  readonly gitOperationDialogOpen: () => boolean;
   readonly repositoryMenuOpen: () => boolean;
   readonly editorTabMenuOpen: () => boolean;
   readonly settingsOpen: () => boolean;
@@ -37,6 +38,8 @@ export interface ShellEventActions {
   readonly hideLeftTool: () => void;
   readonly applyLayout: () => void;
   readonly closePushDiff: () => void;
+  readonly openGitOperation: () => void;
+  readonly closeGitOperation: () => void;
   readonly closeRepositoryMenu: (restoreFocus: boolean) => void;
   readonly closeEditorTabMenu: () => void;
   readonly closeHistoryFilter: () => void;
@@ -126,6 +129,10 @@ export class ShellEventBinding {
       }
     });
     listen(remoteDialog, "keydown", (event) => this.trapRemoteDialogFocus(event as KeyboardEvent));
+    const gitOperationDialog = this.query("#git-operation-dialog");
+    listen(gitOperationDialog, "keydown", (event) => {
+      this.trapDialogFocus(event as KeyboardEvent, "#git-operation-dialog", this.actions.gitOperationDialogOpen());
+    });
     listen(this.query("#repository-form"), "submit", (event) => {
       event.preventDefault();
       const path = this.query<HTMLInputElement>("#repository-input").value.trim();
@@ -142,6 +149,7 @@ export class ShellEventBinding {
       this.actions.toggleEditorTabMenu();
     });
     listen(this.query("#hide-git-tool"), "click", () => this.actions.hideGitTool());
+    listen(this.query("#git-operation-open"), "click", () => this.actions.openGitOperation());
     listen(this.query("#hide-left-tool"), "click", () => this.actions.hideLeftTool());
 
     this.resizeObserver = new ResizeObserver(() => this.actions.applyLayout());
@@ -198,6 +206,7 @@ export class ShellEventBinding {
 
   private handleEscape(): boolean {
     if (this.actions.pushDiffOpen()) this.actions.closePushDiff();
+    else if (this.actions.gitOperationDialogOpen()) this.actions.closeGitOperation();
     else if (this.actions.remoteDialogOpen() && !this.actions.remoteOperationActive()) this.actions.closeRemoteDialog();
     else if (this.actions.repositoryMenuOpen()) this.actions.closeRepositoryMenu(true);
     else if (this.actions.editorTabMenuOpen()) this.actions.closeEditorTabMenu();
@@ -228,8 +237,12 @@ export class ShellEventBinding {
   }
 
   private trapRemoteDialogFocus(event: KeyboardEvent): void {
-    if (event.key !== "Tab" || !this.actions.remoteDialogOpen()) return;
-    const focusable = Array.from(this.query("#remote-action-dialog").querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]')).filter((element) => !element.closest(".hidden, [inert]"));
+    this.trapDialogFocus(event, "#remote-action-dialog", this.actions.remoteDialogOpen());
+  }
+
+  private trapDialogFocus(event: KeyboardEvent, selector: string, open: boolean): void {
+    if (event.key !== "Tab" || !open) return;
+    const focusable = Array.from(this.query(selector).querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]')).filter((element) => !element.closest(".hidden, [inert]"));
     if (focusable.length === 0) return;
     const first = focusable[0]!;
     const last = focusable[focusable.length - 1]!;

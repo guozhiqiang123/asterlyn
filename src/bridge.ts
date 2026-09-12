@@ -28,6 +28,12 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  GitConflictContent,
+  GitOperationAction,
+  GitOperationKind,
+  GitOperationMutationOutcome,
+  GitOperationPlan,
+  GitOperationSnapshot,
   HistoryQuery,
   HistoryPage,
   ImageDiffPreview,
@@ -906,6 +912,100 @@ const demoBridge: DesktopBridge = {
     return invoke<void>("cancel_remote_operation", {
       repositoryRoot,
       operationId,
+    });
+  },
+
+  async readGitOperation(repositoryRoot: string): Promise<GitOperationSnapshot | null> {
+    if (!isTauri) return browserSnapshot.root === repositoryRoot ? browserSnapshot.operation : null;
+    return invoke<GitOperationSnapshot | null>("read_git_operation", { repositoryRoot });
+  },
+
+  async prepareGitOperation(
+    repositoryRoot: string,
+    kind: GitOperationKind,
+    targetRefs: string[],
+    message: string | null,
+  ): Promise<GitOperationPlan> {
+    if (!isTauri) {
+      await demoDelay(120);
+      const head = browserSnapshot.branch.oid;
+      const headName = browserSnapshot.branch.head;
+      if (!head || !headName || browserSnapshot.changes.length > 0) {
+        throw new Error("A clean checked-out branch is required.");
+      }
+      const targetOids = targetRefs.map((target) =>
+        browserSnapshot.branches.find((branch) => branch.fullName === target || branch.name === target)?.oid ?? target,
+      );
+      const commitCount = kind === "cherryPick" ? targetRefs.length : kind === "squash" ? 2 : 1;
+      return {
+        kind,
+        repositoryRoot,
+        startHeadOid: head,
+        startHeadRef: `refs/heads/${headName}`,
+        targetRefs,
+        targetOids,
+        commitCount,
+        summary: `${kind} ${targetRefs.join(", ")}`,
+        message,
+        previewToken: [kind, repositoryRoot, head, ...targetRefs, message ?? ""].join("|"),
+      };
+    }
+    return invoke<GitOperationPlan>("prepare_git_operation", {
+      repositoryRoot,
+      kind,
+      targetRefs,
+      message,
+    });
+  },
+
+  async executeGitOperation(
+    repositoryRoot: string,
+    plan: GitOperationPlan,
+  ): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) {
+      await demoDelay(280);
+      if (plan.startHeadOid !== browserSnapshot.branch.oid) {
+        throw new Error("The reviewed operation plan is stale.");
+      }
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
+      };
+    }
+    return invoke<RepositoryMutationOutcome>("execute_git_operation", { repositoryRoot, plan });
+  },
+
+  async runGitOperationAction(
+    repositoryRoot: string,
+    action: GitOperationAction,
+  ): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) throw new Error(`No demo Git operation can ${action}.`);
+    return invoke<RepositoryMutationOutcome>("run_git_operation_action", {
+      repositoryRoot,
+      action,
+    });
+  },
+
+  async readConflictContent(
+    repositoryRoot: string,
+    path: string,
+  ): Promise<GitConflictContent> {
+    if (!isTauri) throw new Error("The browser demo has no conflicted index.");
+    return invoke<GitConflictContent>("read_conflict_content", { repositoryRoot, path });
+  },
+
+  async resolveConflict(
+    repositoryRoot: string,
+    path: string,
+    expectedRevisionToken: string,
+    content: string | null,
+  ): Promise<GitOperationMutationOutcome> {
+    if (!isTauri) throw new Error("The browser demo has no conflicted index.");
+    return invoke<GitOperationMutationOutcome>("resolve_conflict", {
+      repositoryRoot,
+      path,
+      expectedRevisionToken,
+      content,
     });
   },
 };

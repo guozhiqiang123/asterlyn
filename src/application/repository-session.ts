@@ -1,4 +1,5 @@
 import type {
+  GitOperationSnapshot,
   RepositorySnapshot,
   TrackedChangeScan,
   UntrackedScan,
@@ -70,6 +71,23 @@ export class RepositorySession {
       cause,
       slices,
       { paths },
+    );
+  }
+
+  mergeTrackedOperation(
+    identity: WorkspaceSessionIdentity,
+    scan: TrackedChangeScan,
+    operation: GitOperationSnapshot | null,
+    cause: SessionInvalidationCause,
+    slices: Iterable<SessionInvalidationSlice>,
+  ): RepositorySessionState | null {
+    const snapshot = this.value.snapshot;
+    if (!snapshot || snapshot.root !== identity.root || scan.root !== identity.root) return null;
+    return this.install(
+      identity,
+      { ...mergeTrackedChanges(snapshot, scan), operation },
+      cause,
+      slices,
     );
   }
 

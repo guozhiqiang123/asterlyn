@@ -58,7 +58,7 @@ export function renderShellView(model: ShellViewModel): string {
         </div>
         <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="Resize Git tool window"></div>
         <section class="bottom-tool tool-window" id="bottom-tool" aria-label="Branches and Git log">
-          <div class="bottom-tool-header"><strong>Git</strong><span>Branches and Log</span><button class="bottom-tool-hide" id="hide-git-tool" type="button" aria-label="Hide Git tool window" title="Hide Git tool window">${icon("close", 14)}</button></div>
+          <div class="bottom-tool-header"><strong>Git</strong><span>Branches and Log</span><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="Prepare a Merge, Cherry-pick, Rebase, or Squash operation" title="Git operations…">${icon("more", 15)}</button><button class="bottom-tool-hide" id="hide-git-tool" type="button" aria-label="Hide Git tool window" title="Hide Git tool window">${icon("close", 14)}</button></div>
           <div class="git-tool-grid" id="git-tool-grid">
             <section class="git-tool-pane branch-tree-pane" aria-label="Branches"><div class="git-pane-body" id="branch-navigation-body"></div></section>
             <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="Resize branch tree"></div>
@@ -81,6 +81,7 @@ export function renderShellView(model: ShellViewModel): string {
     <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
     <div class="dialog-backdrop hidden replacement-dialog-backdrop" id="workspace-replacement-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden remote-dialog-backdrop" id="remote-action-dialog" role="presentation"></div>
+    <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="git-operation-dialog" role="presentation"></div>
   </main>`;
 }
 

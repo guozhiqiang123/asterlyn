@@ -38,6 +38,7 @@ import {
   RemotePushController,
   type RemotePushChange,
   type RemotePushState,
+  type RemoteUpdateStrategy,
 } from "./features/remote-push/remote-push-controller";
 import {
   pushReviewFiles,
@@ -56,6 +57,16 @@ import {
   changeViewRows,
   renderChangeNavigation,
 } from "./features/changes-commit/changes-view";
+import {
+  GitOperationController,
+  type GitOperationChange,
+  type GitOperationResult,
+  type GitOperationState,
+} from "./features/git-operations/git-operation-controller";
+import {
+  operationDisplayName,
+  renderGitOperationBanner,
+} from "./features/git-operations/git-operation-banner";
 import {
   ProjectFilesController,
   type ProjectFilesChange,
@@ -248,6 +259,8 @@ import type {
   CommitFileChange,
   CommitSummary,
   FileChange,
+  GitOperationAction,
+  GitOperationKind,
   HistoryPath,
   HistoryQuery,
   HistoryRef,
@@ -297,6 +310,11 @@ export class AsterlynApp {
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
+  private gitOperationDialogModule: Promise<
+    typeof import("./features/git-operations/git-operation-dialog-entry")
+  > | null = null;
+  private gitOperationDialogRenderGeneration = 0;
+  private gitOperationFocusReturn: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private readonly activityRailBinding: ActivityRailBinding;
@@ -315,6 +333,8 @@ export class AsterlynApp {
   private readonly releaseFilesController: () => void;
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
+  private readonly gitOperationController: GitOperationController;
+  private readonly releaseGitOperationController: () => void;
   private readonly settingsController: SettingsController;
   private readonly shellController: ShellController;
   private projectTreeScrollFrame: number | null = null;
@@ -399,6 +419,16 @@ export class AsterlynApp {
     this.releaseEditorController = this.editorController.subscribe((change) =>
       this.handleEditorSessionChange(change),
     );
+    this.gitOperationController = new GitOperationController({
+      prepareGitOperation: (...args) => bridge.prepareGitOperation(...args),
+      executeGitOperation: (...args) => bridge.executeGitOperation(...args),
+      runGitOperationAction: (...args) => bridge.runGitOperationAction(...args),
+      readConflictContent: (...args) => bridge.readConflictContent(...args),
+      resolveConflict: (...args) => bridge.resolveConflict(...args),
+    });
+    this.releaseGitOperationController = this.gitOperationController.subscribe((change) =>
+      this.handleGitOperationControllerChange(change),
+    );
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
       {
@@ -406,6 +436,7 @@ export class AsterlynApp {
         changes: this.changesController,
         files: this.filesController,
         history: this.historyController,
+        operations: this.gitOperationController,
       },
       {
         clearBranchSelection: () => {
@@ -473,6 +504,7 @@ export class AsterlynApp {
       remoteDialogOpen: () => this.remoteState.dialog !== null,
       remoteOperationActive: () => this.remoteState.operation !== null,
       pushDiffOpen: () => this.remoteState.pushDiff !== null,
+      gitOperationDialogOpen: () => this.gitOperationState.dialog !== null,
       repositoryMenuOpen: () => this.shellState.repositoryMenuOpen,
       editorTabMenuOpen: () => this.shellState.editorTabMenuOpen,
       settingsOpen: () => this.shellState.page === "settings",
@@ -532,6 +564,8 @@ export class AsterlynApp {
       },
       applyLayout: () => this.applyWorkbenchLayout(false),
       closePushDiff: () => this.closePushDiff(),
+      openGitOperation: () => this.openGitOperation(),
+      closeGitOperation: () => this.closeGitOperation(),
       closeRepositoryMenu: (restoreFocus) => {
         this.shellController.closeRepositoryMenu();
         this.renderRepositoryMenu();
@@ -581,6 +615,10 @@ export class AsterlynApp {
 
   private get settingsState(): SettingsState {
     return this.settingsController.state;
+  }
+
+  private get gitOperationState(): GitOperationState {
+    return this.gitOperationController.state;
   }
 
   private get shellState(): ShellState {
@@ -636,6 +674,18 @@ export class AsterlynApp {
     }
     if (change.reason === "file-selection") this.updatePushFileSelection();
     if (change.error && change.reason === "operation-complete") this.showError(change.error);
+  }
+
+  private handleGitOperationControllerChange(change: GitOperationChange): void {
+    if (change.dialogChanged && this.root.querySelector("#git-operation-dialog")) {
+      this.renderGitOperationDialog();
+      if (!this.gitOperationState.dialog) this.restoreGitOperationFocus();
+    }
+    if (change.operationChanged) {
+      const snapshot = this.windowSession.repository.state.snapshot;
+      if (snapshot) this.renderStatus(snapshot);
+      if (this.shellState.layout.leftTool === "changes") this.renderLeftTool();
+    }
   }
 
   private handleChangesControllerChange(change: ChangesCommitChange): void {
@@ -746,6 +796,8 @@ export class AsterlynApp {
     this.filesController.dispose();
     this.releaseEditorController();
     this.editorController.dispose();
+    this.releaseGitOperationController();
+    this.gitOperationController.dispose();
     this.windowSession.dispose();
     this.settingsController.dispose();
     this.shellController.dispose();
@@ -1942,7 +1994,14 @@ export class AsterlynApp {
       ?.addEventListener("click", () => void this.cancelActiveRemoteOperation());
     this.root
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-update")
-      ?.addEventListener("click", () => void this.confirmRemoteDialog("pull"));
+      ?.addEventListener("click", () => void this.confirmRemoteUpdate());
+    this.root.querySelectorAll<HTMLInputElement>("input[name='update-strategy']").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        if (radio.checked) {
+          this.remoteController.setUpdateStrategy(radio.value as RemoteUpdateStrategy);
+        }
+      });
+    });
     this.root
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
       ?.addEventListener("click", () => {
@@ -2142,6 +2201,32 @@ export class AsterlynApp {
           ?.focus();
       });
     }
+  }
+
+  private async confirmRemoteUpdate(): Promise<void> {
+    const strategy = this.remoteState.updateStrategy;
+    if (strategy === "ffOnly") {
+      await this.confirmRemoteDialog("pull");
+      return;
+    }
+    if (!(await this.saveDirtyTabsBefore(`preparing ${strategy}`))) return;
+    this.closeRemoteDialog(false);
+    if (!(await this.runRemoteOperation("fetch"))) return;
+
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const remote = this.remoteState.selectedRemote;
+    const upstream = snapshot?.branch.upstreamRef;
+    if (!snapshot || !remote || !upstream?.startsWith("refs/heads/")) {
+      this.setStatus("The current upstream changed during Fetch; open Update again", "warning");
+      return;
+    }
+    if (snapshot.branch.behind === 0) {
+      this.setStatus("The current branch is already up to date", "success");
+      return;
+    }
+    const target = `refs/remotes/${remote}/${upstream.slice("refs/heads/".length)}`;
+    this.gitOperationController.openSetup(strategy, [target]);
+    await this.gitOperationController.prepare();
   }
 
   private async confirmRemoteDialog(kind: "pull" | "push"): Promise<void> {
@@ -2455,6 +2540,7 @@ export class AsterlynApp {
     this.renderBottomTool();
     this.renderEditor();
     this.renderStatus(snapshot);
+    this.renderGitOperationDialog();
   }
 
   private renderTopbar(
@@ -2553,7 +2639,7 @@ export class AsterlynApp {
         body.clientHeight,
       );
       this.changeTreeWindowStart = changeWindow?.start ?? 0;
-      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${renderChangeNavigation(snapshot, this.changesState, scrollTop, body.clientHeight)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="Resize commit message area"></div>${this.renderCommitComposer(snapshot)}</div>`;
+      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${renderGitOperationBanner(snapshot.operation)}${renderChangeNavigation(snapshot, this.changesState, scrollTop, body.clientHeight)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="Resize commit message area"></div>${this.renderCommitComposer(snapshot)}</div>`;
       this.bindChangeEvents();
       this.bindCommitComposer(snapshot);
       this.bindChangeCommitSplitter();
@@ -3231,6 +3317,21 @@ export class AsterlynApp {
         const expanded = !this.changesState.collapsedDirectories.has(key);
         this.changesController.setDirectoryExpanded(key, !expanded);
         this.renderLeftTool();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-resolve-conflict]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const path = button.dataset.resolveConflict;
+        if (path) this.openGitConflict(path);
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-git-operation-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.gitOperationAction;
+        if (action === "continue" || action === "skip" || action === "abort") {
+          void this.runGitOperationAction(action);
+        }
       });
     });
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
@@ -5063,6 +5164,7 @@ export class AsterlynApp {
   }
 
   private bindGitDetailEvents(snapshot: RepositorySnapshot): void {
+    this.bindGitOperationStartActions();
     if (this.state.gitDetail === "branch") {
       const branch = selectedBranch(snapshot, this.state.selectedBranch);
       if (branch) this.bindBranchInspector(branch, snapshot);
@@ -5138,6 +5240,275 @@ export class AsterlynApp {
             WORKBENCH_LAYOUT_DEFAULTS.commitSummaryHeight,
           ),
       });
+    }
+  }
+
+  private bindGitOperationStartActions(): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-start-git-operation]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const kind = button.dataset.startGitOperation as GitOperationKind | undefined;
+          const target = button.dataset.operationTarget;
+          if (kind && target) this.openGitOperation(kind, [target]);
+        });
+      });
+  }
+
+  private openGitOperation(
+    kind: GitOperationKind = "merge",
+    targets: string[] = [],
+  ): void {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot) {
+      this.setStatus("Git operations are unavailable for this folder", "warning");
+      return;
+    }
+    if (snapshot.operation) {
+      this.shellController.setLayout({
+        ...this.shellState.layout,
+        leftTool: "changes",
+      }, true);
+      this.renderWorkspace();
+      this.setStatus(
+        `${operationDisplayName(snapshot.operation.kind)} is already in progress`,
+        "warning",
+      );
+      return;
+    }
+    if (!this.gitOperationState.dialog && document.activeElement instanceof HTMLElement) {
+      this.gitOperationFocusReturn = document.activeElement;
+    }
+    this.gitOperationController.openSetup(kind, targets);
+  }
+
+  private closeGitOperation(): void {
+    this.gitOperationController.closeDialog();
+  }
+
+  private openGitConflict(path: string): void {
+    if (!this.gitOperationState.dialog && document.activeElement instanceof HTMLElement) {
+      this.gitOperationFocusReturn = document.activeElement;
+    }
+    void this.gitOperationController.openConflict(path);
+  }
+
+  private restoreGitOperationFocus(): void {
+    const target = this.gitOperationFocusReturn;
+    this.gitOperationFocusReturn = null;
+    queueMicrotask(() => {
+      if (target?.isConnected) target.focus();
+      else this.root.querySelector<HTMLButtonElement>("#git-operation-open")?.focus();
+    });
+  }
+
+  private renderGitOperationDialog(): void {
+    const host = this.root.querySelector<HTMLElement>("#git-operation-dialog");
+    if (!host) return;
+    const state = this.gitOperationState;
+    host.classList.toggle("hidden", !state.dialog);
+    const generation = ++this.gitOperationDialogRenderGeneration;
+    if (!state.dialog) {
+      host.innerHTML = "";
+      host.onclick = null;
+      return;
+    }
+    if (!this.gitOperationDialogModule) {
+      host.innerHTML = '<section class="dialog git-operation-dialog"><div class="git-operation-loading"><span class="spinner"></span><span>Loading Git operation review…</span></div></section>';
+      this.gitOperationDialogModule = import(
+        "./features/git-operations/git-operation-dialog-entry"
+      );
+    }
+    void this.gitOperationDialogModule.then((view) => {
+      if (
+        generation !== this.gitOperationDialogRenderGeneration ||
+        !this.gitOperationState.dialog
+      ) return;
+      host.innerHTML = view.renderGitOperationDialog(this.gitOperationState);
+      this.bindGitOperationDialogEvents(host);
+    }).catch((error) => {
+      if (generation !== this.gitOperationDialogRenderGeneration) return;
+      this.gitOperationDialogModule = null;
+      host.classList.add("hidden");
+      host.innerHTML = "";
+      this.showError(error);
+    });
+  }
+
+  private bindGitOperationDialogEvents(host: HTMLElement): void {
+    host.onclick = (event) => {
+      if (event.target === host) this.gitOperationController.closeDialog();
+    };
+    host.querySelectorAll<HTMLButtonElement>("[data-git-operation-close]").forEach((button) => {
+      button.addEventListener("click", () => this.closeGitOperation());
+    });
+    host.querySelector<HTMLButtonElement>("[data-git-operation-back]")?.addEventListener(
+      "click",
+      () => {
+        const plan = this.gitOperationState.plan;
+        if (plan) this.gitOperationController.openSetup(
+          plan.kind,
+          plan.targetRefs,
+          plan.message ?? "",
+        );
+      },
+    );
+
+    const kind = host.querySelector<HTMLSelectElement>("#git-operation-kind");
+    const targets = host.querySelector<HTMLTextAreaElement>("#git-operation-targets");
+    const message = host.querySelector<HTMLTextAreaElement>("#git-operation-message");
+    const updateDraft = () => {
+      if (!kind || !targets) return;
+      this.gitOperationController.updateDraft(
+        kind.value as GitOperationKind,
+        targets.value,
+        message?.value ?? "",
+      );
+    };
+    kind?.addEventListener("change", () => {
+      updateDraft();
+      this.renderGitOperationDialog();
+    });
+    targets?.addEventListener("input", updateDraft);
+    message?.addEventListener("input", updateDraft);
+    host.querySelector<HTMLFormElement>("#git-operation-setup-form")?.addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        updateDraft();
+        void this.prepareGitOperation();
+      },
+    );
+    host.querySelector<HTMLButtonElement>("#git-operation-execute")?.addEventListener(
+      "click",
+      () => void this.executeGitOperation(),
+    );
+    const result = host.querySelector<HTMLTextAreaElement>("#conflict-result");
+    result?.addEventListener("input", () => {
+      this.gitOperationController.setConflictResult(result.value);
+    });
+    host.querySelector<HTMLButtonElement>("#git-conflict-resolve")?.addEventListener(
+      "click",
+      () => void this.resolveGitConflict(false),
+    );
+    host.querySelector<HTMLButtonElement>("#git-conflict-delete")?.addEventListener(
+      "click",
+      () => void this.resolveGitConflict(true),
+    );
+    queueMicrotask(() => {
+      const preferred = host.querySelector<HTMLElement>(
+        "textarea:not([disabled]), select:not([disabled]), button:not([disabled])",
+      );
+      if (document.activeElement === document.body || !host.contains(document.activeElement)) {
+        preferred?.focus();
+      }
+    });
+  }
+
+  private async prepareGitOperation(): Promise<void> {
+    if (!(await this.saveDirtyTabsBefore("reviewing a Git operation"))) return;
+    await this.refresh();
+    await this.gitOperationController.prepare();
+  }
+
+  private async executeGitOperation(): Promise<void> {
+    if (dirtyTextTabs(this.editorState.session).length > 0) {
+      this.setStatus("Save or undo editor changes, then review the Git operation again", "warning");
+      return;
+    }
+    const kind = this.gitOperationState.plan?.kind;
+    if (!kind) return;
+    await this.runGitOperationMutation(
+      `${operationDisplayName(kind)} in progress…`,
+      `${operationDisplayName(kind)} completed`,
+      () => this.gitOperationController.execute(),
+    );
+  }
+
+  private async runGitOperationAction(action: GitOperationAction): Promise<void> {
+    if (dirtyTextTabs(this.editorState.session).length > 0) {
+      this.setStatus("Save or undo editor changes before changing the active Git operation", "warning");
+      return;
+    }
+    const label = action === "continue" ? "Continue" : action === "skip" ? "Skip" : "Abort";
+    await this.runGitOperationMutation(
+      `${label} Git operation…`,
+      action === "abort"
+        ? "Git operation aborted"
+        : action === "skip"
+          ? "Git operation skipped the current commit"
+          : "Git operation continued",
+      () => this.gitOperationController.runAction(action),
+    );
+  }
+
+  private async resolveGitConflict(deleteFile: boolean): Promise<void> {
+    const path = this.gitOperationState.conflict?.path;
+    if (!path) return;
+    await this.runGitOperationMutation(
+      `Resolving ${path}…`,
+      `Resolved and staged ${path}`,
+      () => this.gitOperationController.resolveConflict(deleteFile),
+    );
+  }
+
+  private async runGitOperationMutation(
+    loadingMessage: string,
+    successMessage: string,
+    mutation: () => Promise<GitOperationResult>,
+  ): Promise<void> {
+    if (this.state.loading) return;
+    const generation = this.windowSession.beginTransition();
+    let nextRoot: string | null = null;
+    let failed: unknown = null;
+    let completedStatus: { message: string; kind: "warning" | "success" } | null = null;
+    this.clearError();
+    this.setLoading(true, loadingMessage);
+    try {
+      const result = await mutation();
+      if (generation !== this.windowSession.generation || result.status === "stale") return;
+      if (result.status === "failure") {
+        failed = result.error;
+      } else if (result.status === "success") {
+        const snapshot = "snapshot" in result.outcome
+          ? this.repositoryIntegration.applyMutation(
+              result.outcome,
+              "gitMutation",
+              { clearInclusion: true, focusConflicts: true },
+            )
+          : this.repositoryIntegration.applyGitOperationMutation(
+              result.outcome,
+              { clearInclusion: true, focusConflicts: true },
+            );
+        await this.editorController.reloadPaths(
+          this.editorState.session.textTabs.map((tab) => tab.document.workspacePath),
+        );
+        if (generation !== this.windowSession.generation) return;
+        this.imageSurface = null;
+        this.renderWorkspace();
+        this.loadVisibleCommitDetails();
+        nextRoot = snapshot.root;
+        completedStatus = snapshot.operation
+          ? {
+              message: `${operationDisplayName(snapshot.operation.kind)} paused; review the operation controls in Changes`,
+              kind: "warning",
+            }
+          : { message: successMessage, kind: "success" };
+      }
+    } finally {
+      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
+    }
+    if (failed && generation === this.windowSession.generation) {
+      await this.refresh();
+      this.showError(failed);
+      return;
+    }
+    if (completedStatus && generation === this.windowSession.generation) {
+      this.setStatus(completedStatus.message, completedStatus.kind);
+    }
+    if (nextRoot && generation === this.windowSession.generation) {
+      void this.loadProjectFiles(nextRoot, generation);
+      void this.windowSession.scanUntracked(nextRoot, generation, true, "gitMutation");
     }
   }
 
@@ -5330,7 +5701,7 @@ export class AsterlynApp {
     ]
       .filter(Boolean)
       .join(" ");
-    this.query("#branch-status").innerHTML = `${icon("branch", 14)}<span>${escapeHtml(label)}</span>${sync ? `<span class="sync-status">${sync}</span>` : ""}${snapshot.operation ? `<span class="operation-status">${escapeHtml(snapshot.operation)}</span>` : ""}`;
+    this.query("#branch-status").innerHTML = `${icon("branch", 14)}<span>${escapeHtml(label)}</span>${sync ? `<span class="sync-status">${sync}</span>` : ""}${snapshot.operation ? `<span class="operation-status">${escapeHtml(operationLabel(snapshot.operation.kind))}</span>` : ""}`;
   }
 
   private setLoading(loading: boolean, message: string): void {
@@ -5589,6 +5960,18 @@ function capitalize(value: string): string {
 
 function remoteActionLabel(kind: "fetch" | "pull" | "push"): string {
   return kind === "pull" ? "Update" : capitalize(kind);
+}
+
+function operationLabel(kind: GitOperationKind): string {
+  const labels: Record<GitOperationKind, string> = {
+    merge: "Merge",
+    cherryPick: "Cherry-pick",
+    rebase: "Rebase",
+    squash: "Squash",
+    revert: "Revert",
+    bisect: "Bisect",
+  };
+  return labels[kind];
 }
 
 function errorMessage(error: unknown): string {

@@ -1,0 +1,92 @@
+.git-operation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--yellow) 8%, var(--bg-elevated));
+  padding: 7px 9px;
+}
+
+.git-operation-banner-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.git-operation-banner-copy > span:last-child {
+  min-width: 0;
+  display: grid;
+}
+
+.git-operation-banner-copy strong,
+.git-operation-banner-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-operation-banner-copy small {
+  color: var(--text-muted);
+}
+
+.git-operation-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.git-operation-actions button {
+  min-height: 25px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.git-operation-open {
+  margin-left: auto;
+}
+
+.bottom-tool-header .git-operation-open + .bottom-tool-hide {
+  margin-left: 0;
+}
+
+.git-detail-operation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.git-detail-operation-actions button {
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.git-operation-dialog .danger-button,
+.git-operation-banner .danger-button {
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--red) 12%, var(--bg-panel));
+  color: #f2c3c3;
+  cursor: pointer;
+}
+
+.git-operation-dialog .danger-button:hover:not(:disabled),
+.git-operation-banner .danger-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red) 20%, var(--bg-panel));
+}
+
+.git-operation-dialog .danger-button:disabled,
+.git-operation-banner .danger-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.conflict-resolve-button {
+  border: 0;
+  cursor: pointer;
+}

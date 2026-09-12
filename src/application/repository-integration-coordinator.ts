@@ -1,5 +1,6 @@
 import type {
   FileChange,
+  GitOperationMutationOutcome,
   RepositoryMutationOutcome,
   RepositorySnapshot,
   RepositoryStateSlice,
@@ -15,8 +16,8 @@ import type {
 } from "./session-invalidation.ts";
 import type { WindowSession, WindowSessionChange } from "./window-session.ts";
 
-const READ_ONLY_CONFLICT_MESSAGE =
-  "Git reported unresolved files. They are listed in Changes and the first conflict is open in the current read-only Diff. Editable conflict resolution, Continue, and Abort are not available yet.";
+const CONFLICT_MESSAGE =
+  "Git paused with conflicts. Resolve the listed files from Changes, then Continue, Skip, or Abort the operation.";
 
 interface RemoteSnapshotTarget {
   installSnapshot(snapshot: RepositorySnapshot | null): void;
@@ -46,11 +47,16 @@ interface HistorySnapshotTarget {
   clear(): void;
 }
 
+interface OperationSnapshotTarget {
+  installSnapshot(snapshot: RepositorySnapshot | null): void;
+}
+
 export interface RepositoryIntegrationTargets {
   readonly remote: RemoteSnapshotTarget;
   readonly changes: ChangesSnapshotTarget;
   readonly files: FilesSnapshotTarget;
   readonly history: HistorySnapshotTarget;
+  readonly operations: OperationSnapshotTarget;
 }
 
 export interface RepositoryIntegrationActions {
@@ -146,6 +152,28 @@ export class RepositoryIntegrationCoordinator {
     return snapshot;
   }
 
+  applyGitOperationMutation(
+    outcome: GitOperationMutationOutcome,
+    options: RepositoryMutationOptions = {},
+  ): RepositorySnapshot {
+    this.ensureActive();
+    const plan = repositoryReconciliationPlan(outcome);
+    const snapshot = this.session.installTrackedOperation(
+      outcome.tracked,
+      outcome.operation,
+      "gitMutation",
+      plan.slices,
+    );
+    if (!snapshot) throw new Error("Git-operation result belongs to a stale repository session.");
+    this.session.repository.consumeInvalidation();
+    this.targets.changes.installSnapshot(snapshot, options);
+    this.targets.files.updateChanges(snapshot.changes);
+    this.targets.operations.installSnapshot(snapshot);
+    if (plan.reconcileOpenDocuments) this.actions.reconcileWorkingDocument(snapshot);
+    if (options.focusConflicts) this.focusFirstConflict(snapshot);
+    return snapshot;
+  }
+
   reconcileWatchedRepository(
     snapshot: RepositorySnapshot | null,
     slices: RepositoryStateSlice[],
@@ -158,6 +186,7 @@ export class RepositoryIntegrationCoordinator {
       this.targets.changes.installSnapshot(null);
       this.targets.files.updateChanges([]);
       this.targets.history.clear();
+      this.targets.operations.installSnapshot(null);
       this.actions.hideHistoryTool();
       this.actions.renderWorkspace();
       return;
@@ -204,6 +233,7 @@ export class RepositoryIntegrationCoordinator {
       this.targets.remote.installSnapshot(null);
       this.targets.changes.installSnapshot(null);
       this.targets.files.installWorkspace(workspaceRoot, []);
+      this.targets.operations.installSnapshot(null);
       this.actions.showWorkspaceOnlyTools();
       this.actions.renderWorkspace();
       this.actions.loadProjectFiles(workspaceRoot, generation);
@@ -212,6 +242,7 @@ export class RepositoryIntegrationCoordinator {
     this.targets.remote.installSnapshot(snapshot);
     this.targets.changes.installSnapshot(snapshot);
     this.targets.files.installWorkspace(snapshot.root, snapshot.changes);
+    this.targets.operations.installSnapshot(snapshot);
     this.actions.reconcileRefreshedHistory(snapshot);
     this.actions.reconcileWorkingDocument(snapshot);
     this.actions.renderWorkspace();
@@ -230,10 +261,12 @@ export class RepositoryIntegrationCoordinator {
     if (snapshot) {
       this.targets.changes.installSnapshot(snapshot);
       this.targets.files.updateChanges(snapshot.changes);
+      this.targets.operations.installSnapshot(snapshot);
       this.actions.reconcileWorkingDocument(snapshot);
     } else {
       this.targets.changes.installSnapshot(null);
       this.targets.files.updateChanges([]);
+      this.targets.operations.installSnapshot(null);
     }
     this.actions.renderWorkspace();
   }
@@ -261,6 +294,7 @@ export class RepositoryIntegrationCoordinator {
       this.targets.files.installWorkspace(snapshot.root, snapshot.changes);
     }
     if (plan.updateHistory) this.actions.installSnapshotHistory(snapshot, true);
+    if (plan.reconcileOperation) this.targets.operations.installSnapshot(snapshot);
     if (plan.reconcileOpenDocuments) this.actions.reconcileWorkingDocument(snapshot);
     if (options.focusConflicts) this.focusFirstConflict(snapshot);
   }
@@ -271,7 +305,7 @@ export class RepositoryIntegrationCoordinator {
     this.actions.showChangesTool();
     this.targets.changes.selectConflict(conflict.path);
     this.actions.openWorkingDiff(snapshot.root, conflict.path);
-    this.targets.remote.setDialogError(READ_ONLY_CONFLICT_MESSAGE);
+    this.targets.remote.setDialogError(CONFLICT_MESSAGE);
     return true;
   }
 
@@ -288,6 +322,7 @@ export class RepositoryIntegrationCoordinator {
       if (!change.snapshot) return;
       this.targets.changes.installSnapshot(change.snapshot);
       this.targets.files.updateChanges(change.snapshot.changes);
+      this.targets.operations.installSnapshot(change.snapshot);
       this.actions.reconcileWorkingDocument(change.snapshot);
       this.actions.renderWorkspace();
       this.actions.reloadWorkingDiff();

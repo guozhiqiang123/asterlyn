@@ -82,7 +82,8 @@ test("reviews divergence and blocks mirror push while allowing new-branch publis
     snapshot({ branch: { ahead: 1, behind: 1 } }),
     "origin",
   );
-  assert.equal(diverged.pull.enabled, false);
+  assert.equal(diverged.pull.enabled, true);
+  assert.match(diverged.pull.detail, /Review Merge or Rebase/);
   assert.equal(diverged.push.enabled, true);
   assert.match(diverged.push.detail, /Ordinary Push will remain blocked/);
 

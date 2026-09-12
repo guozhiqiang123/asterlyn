@@ -3,6 +3,22 @@ import test from "node:test";
 
 import { RemotePushController } from "../src/features/remote-push/remote-push-controller.ts";
 
+test("diverged Update defaults to Merge and rejects unavailable fast-forward selection", () => {
+  const controller = new RemotePushController(createGateway());
+  const repository = snapshot();
+  repository.branch.ahead = 2;
+  repository.branch.behind = 3;
+  controller.installSnapshot(repository);
+
+  assert.equal(controller.openDialog("update"), true);
+  assert.equal(controller.state.updateStrategy, "merge");
+  controller.setUpdateStrategy("ffOnly");
+  assert.equal(controller.state.updateStrategy, "merge");
+  controller.setUpdateStrategy("rebase");
+  assert.equal(controller.state.updateStrategy, "rebase");
+  controller.dispose();
+});
+
 test("latest remote preview owns completion after a remote switch", async () => {
   const origin = deferred();
   const team = deferred();

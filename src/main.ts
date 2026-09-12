@@ -16,6 +16,7 @@ import "./features/git-history/git-history.css";
 import "./features/git-history/history.css";
 import "./features/git-history/branches.css";
 import "./features/git-history/details.css";
+import "./features/git-operations/git-operation-controls.css";
 import "./features/remote-push/remote-push.css";
 import "./shared/responsive.css";
 import { AsterlynApp } from "./app";

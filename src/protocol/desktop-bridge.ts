@@ -4,6 +4,12 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  GitConflictContent,
+  GitOperationAction,
+  GitOperationKind,
+  GitOperationMutationOutcome,
+  GitOperationPlan,
+  GitOperationSnapshot,
   HistoryPage,
   HistoryQuery,
   ImageDiffPreview,
@@ -177,6 +183,28 @@ export interface GitOperationBridge {
     operationId: string,
   ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
+  readGitOperation(repositoryRoot: string): Promise<GitOperationSnapshot | null>;
+  prepareGitOperation(
+    repositoryRoot: string,
+    kind: GitOperationKind,
+    targetRefs: string[],
+    message: string | null,
+  ): Promise<GitOperationPlan>;
+  executeGitOperation(
+    repositoryRoot: string,
+    plan: GitOperationPlan,
+  ): Promise<RepositoryMutationOutcome>;
+  runGitOperationAction(
+    repositoryRoot: string,
+    action: GitOperationAction,
+  ): Promise<RepositoryMutationOutcome>;
+  readConflictContent(repositoryRoot: string, path: string): Promise<GitConflictContent>;
+  resolveConflict(
+    repositoryRoot: string,
+    path: string,
+    expectedRevisionToken: string,
+    content: string | null,
+  ): Promise<GitOperationMutationOutcome>;
 }
 
 export type DesktopBridge = DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge;

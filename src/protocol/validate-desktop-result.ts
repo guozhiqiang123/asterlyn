@@ -47,6 +47,40 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "repositorySnapshot":
       assert(isRepositorySnapshot(value), command, "expected a repository snapshot");
       break;
+    case "nullableGitOperationSnapshot":
+      assert(
+        value === null || isGitOperationSnapshot(value),
+        command,
+        "expected a Git operation snapshot or null",
+      );
+      break;
+    case "gitOperationPlan": {
+      const result = record(value, command);
+      strings(
+        result,
+        command,
+        "kind",
+        "repositoryRoot",
+        "startHeadOid",
+        "startHeadRef",
+        "summary",
+        "previewToken",
+      );
+      arrays(result, command, "targetRefs", "targetOids");
+      numbers(result, command, "commitCount");
+      nullableStrings(result, command, "message");
+      assertGitOperationKind(result.kind, command);
+      assertStringArray(result.targetRefs, command, "targetRefs");
+      assertStringArray(result.targetOids, command, "targetOids");
+      break;
+    }
+    case "gitConflictContent": {
+      const result = record(value, command);
+      strings(result, command, "path", "revisionToken");
+      nullableStrings(result, command, "base", "ours", "theirs", "worktree");
+      booleans(result, command, "binary");
+      break;
+    }
     case "repositoryMutationOutcome": {
       const result = record(value, command);
       assert(isRepositorySnapshot(result.snapshot), command, "expected a mutation snapshot");
@@ -56,6 +90,17 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "workingTreeMutationOutcome": {
       const result = record(value, command);
       assertTrackedChangeScan(result.tracked, command);
+      assertRepositorySlices(result.invalidatedSlices, command);
+      break;
+    }
+    case "gitOperationMutationOutcome": {
+      const result = record(value, command);
+      assertTrackedChangeScan(result.tracked, command);
+      assert(
+        result.operation === null || isGitOperationSnapshot(result.operation),
+        command,
+        "expected a nullable Git operation snapshot",
+      );
       assertRepositorySlices(result.invalidatedSlices, command);
       break;
     }
@@ -239,8 +284,58 @@ function isRepositorySnapshot(value: unknown): value is TransportRecord {
     Array.isArray(value.commits) &&
     Array.isArray(value.branches) &&
     Array.isArray(value.remotes) &&
-    typeof value.untrackedState === "string"
+    typeof value.untrackedState === "string" &&
+    (value.operation === null || isGitOperationSnapshot(value.operation))
   );
+}
+
+function isGitOperationSnapshot(value: unknown): value is TransportRecord {
+  if (!isRecord(value)) return false;
+  if (!isGitOperationKind(value.kind)) return false;
+  if (value.phase !== "conflicted" && value.phase !== "paused") return false;
+  if (!isStringArray(value.targetOids) || !Array.isArray(value.conflicts)) return false;
+  if (!value.conflicts.every((conflict) =>
+    isRecord(conflict) &&
+    typeof conflict.path === "string" &&
+    ["baseOid", "oursOid", "theirsOid"].every(
+      (key) => conflict[key] === null || typeof conflict[key] === "string",
+    )
+  )) return false;
+  if (!Array.isArray(value.allowedActions)) return false;
+  if (!value.allowedActions.every((action) => ["continue", "skip", "abort"].includes(String(action)))) {
+    return false;
+  }
+  const progress = value.progress;
+  if (
+    !isRecord(progress) ||
+    !["current", "total"].every(
+      (key) => progress[key] === null || typeof progress[key] === "number",
+    ) ||
+    !(progress.detail === null || typeof progress.detail === "string")
+  ) return false;
+  return ["originalHeadOid", "currentHeadOid", "headRef"].every(
+    (key) => value[key] === null || typeof value[key] === "string",
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function assertStringArray(
+  value: unknown,
+  command: DesktopCommandName,
+  field: string,
+): void {
+  assert(isStringArray(value), command, `${field} must contain only strings`);
+}
+
+function isGitOperationKind(value: unknown): boolean {
+  return ["merge", "cherryPick", "rebase", "squash", "revert", "bisect"].includes(String(value));
+}
+
+function assertGitOperationKind(value: unknown, command: DesktopCommandName): void {
+  assert(isGitOperationKind(value), command, "kind must be a supported Git operation kind");
 }
 
 function isImagePreview(value: unknown): value is TransportRecord {
