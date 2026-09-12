@@ -84,8 +84,11 @@ preview paging, tag and force-with-lease review options, commit-detail caching, 
 operation cancellation, stale-result rejection, and disposal into `RemotePushController`. The third
 slice moves Changes selection, commit inclusion, presentation/disclosure state, commit message,
 working Diff and image-Diff requests, revert and commit mutation identity, stale-result rejection,
-and disposal into `ChangesCommitController`. Files/Editor coordination is the next extraction; R2
-remains open until the complete exit gate below is met.
+and disposal into `ChangesCommitController`. The fourth slice moves the workspace file catalog,
+project-tree cache/selection/disclosure and refresh ownership into `ProjectFilesController`, and the
+Editor session, text load/reload/save and project-image request lifecycles into
+`EditorSessionController`. Settings/Shell ownership is next; R2 remains open until the complete exit
+gate below is met.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.

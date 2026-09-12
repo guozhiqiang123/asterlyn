@@ -27,6 +27,16 @@ import {
   type ChangesCommitChange,
   type ChangesCommitState,
 } from "./features/changes-commit/changes-commit-controller";
+import {
+  ProjectFilesController,
+  type ProjectFilesChange,
+  type ProjectFilesState,
+} from "./features/files-editor/project-files-controller";
+import {
+  EditorSessionController,
+  type EditorSessionChange,
+  type EditorSessionState,
+} from "./features/files-editor/editor-session-controller";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -36,28 +46,10 @@ import {
   type ProjectImageDocument,
 } from "./workbench/editor-document";
 import {
-  activatePreview,
-  activateTextTab,
-  activateWelcome,
-  activeEditorDocument,
   activeTextTab,
-  beginTextReload,
-  beginTextSave,
-  captureTextContent,
-  closePreview,
-  closeTextTab,
-  completeTextLoad,
-  completeTextSave,
-  createEditorSession,
   dirtyTextTabs,
-  failTextLoad,
-  failTextSave,
   isTextTabDirty,
-  markTextEdited,
-  openTextDocument,
-  setTextTabMarkdownMode,
   textTab,
-  type EditorSession,
   type MarkdownEditorMode,
   type TextTabState,
 } from "./workbench/editor-session";
@@ -97,10 +89,7 @@ import {
   saveMarkdownModePreferences,
 } from "./workbench/markdown-mode-preferences";
 import { revealTabInStrip, scrollTabStrip } from "./workbench/tab-strip";
-import {
-  isCurrentImageRequest,
-  isImagePreviewPath,
-} from "./workbench/image-preview";
+import { isImagePreviewPath } from "./workbench/image-preview";
 import {
   showCustomWindowControls,
   windowChromeClass,
@@ -165,15 +154,9 @@ import {
   touchRecentRef,
 } from "./workbench/history-preferences";
 import {
-  ancestorProjectDirectories,
   buildProjectTree,
-  defaultExpandedProjectDirectories,
-  descendantProjectDirectories,
   findProjectTreeNode,
-  projectTreeEntries,
-  reconcileProjectTreeState,
   type ProjectTreeNode,
-  type ProjectTreeSelection,
 } from "./workbench/project-tree";
 import { mergeTrackedChanges } from "./workbench/repository-changes";
 import {
@@ -253,7 +236,6 @@ import type {
   ImageDiffPreview,
   ImagePreview,
   ProjectFile,
-  ProjectIgnoredEntry,
   PushMode,
   PushPreview,
   PushTagMode,
@@ -266,7 +248,6 @@ import type {
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const CHANGE_FILE_VIEW_KEY = "asterlyn.changeFileView.v1";
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
-const EMPTY_FILE_CHANGES: FileChange[] = [];
 
 type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -284,17 +265,7 @@ interface AppState {
   preferences: AppPreferences;
   layout: WorkbenchLayout;
   activityOrder: ActivityTool[];
-  editor: EditorSession;
   gitDetail: "branch" | "commit";
-  projectFiles: string[];
-  repositoryFiles: ProjectFile[];
-  ignoredProjectEntries: ProjectIgnoredEntry[];
-  projectFilesLoading: boolean;
-  projectFilesError: string | null;
-  projectFilesTruncated: boolean;
-  projectTreeRoot: string | null;
-  projectTreeSelection: ProjectTreeSelection | null;
-  expandedProjectDirectories: Set<string>;
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
   workspaceSearchControls: WorkspaceSearchControls;
@@ -350,7 +321,6 @@ export class AsterlynApp {
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
-  private imageRequestGeneration = 0;
   private readonly state: AppState = {
     workspaceRoot: null,
     snapshot: null,
@@ -359,17 +329,7 @@ export class AsterlynApp {
     preferences: loadAppPreferences(window.localStorage),
     layout: loadWorkbenchLayout(window.localStorage),
     activityOrder: loadActivityOrder(window.localStorage),
-    editor: createEditorSession(),
     gitDetail: "commit",
-    projectFiles: [],
-    repositoryFiles: [],
-    ignoredProjectEntries: [],
-    projectFilesLoading: false,
-    projectFilesError: null,
-    projectFilesTruncated: false,
-    projectTreeRoot: null,
-    projectTreeSelection: null,
-    expandedProjectDirectories: new Set(),
     commandSurface: createCommandSurfaceState(),
     workspaceSearch: createWorkspaceSearchState(),
     workspaceSearchControls: createWorkspaceSearchControls(),
@@ -428,7 +388,6 @@ export class AsterlynApp {
   private commitDiffGeneration = 0;
   private scanSequence = 0;
   private remoteDialogReturnFocus: HTMLElement | null = null;
-  private projectFilesGeneration = 0;
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
@@ -444,7 +403,6 @@ export class AsterlynApp {
     content: string;
     request: number;
   } | null = null;
-  private textSaveSequence = 0;
   private saveStatusRefreshTimer: number | null = null;
   private saveStatusRefreshRoot: string | null = null;
   private saveStatusRefreshRunning = false;
@@ -472,14 +430,12 @@ export class AsterlynApp {
   private readonly releaseRemoteController: () => void;
   private readonly changesController: ChangesCommitController;
   private readonly releaseChangesController: () => void;
+  private readonly filesController: ProjectFilesController;
+  private readonly releaseFilesController: () => void;
+  private readonly editorController: EditorSessionController;
+  private readonly releaseEditorController: () => void;
   private workspaceResizeObserver: ResizeObserver | null = null;
   private editorMeasureFrame: number | null = null;
-  private projectTreeCache: {
-    files: ProjectFile[];
-    changes: FileChange[];
-    ignoredEntries: ProjectIgnoredEntry[];
-    nodes: ProjectTreeNode[];
-  } | null = null;
   private activeUntrackedScan: {
     id: string;
     generation: number;
@@ -525,6 +481,20 @@ export class AsterlynApp {
     this.releaseChangesController = this.changesController.subscribe((change) =>
       this.handleChangesControllerChange(change),
     );
+    this.filesController = new ProjectFilesController({
+      listProjectFiles: (root) => bridge.listProjectFiles(root),
+    });
+    this.releaseFilesController = this.filesController.subscribe((change) =>
+      this.handleProjectFilesChange(change),
+    );
+    this.editorController = new EditorSessionController({
+      readTextFile: (...args) => bridge.readTextFile(...args),
+      saveTextFile: (...args) => bridge.saveTextFile(...args),
+      readImageFile: (...args) => bridge.readImageFile(...args),
+    });
+    this.releaseEditorController = this.editorController.subscribe((change) =>
+      this.handleEditorSessionChange(change),
+    );
   }
 
   private get historyState(): GitHistoryDetailsState {
@@ -537,6 +507,50 @@ export class AsterlynApp {
 
   private get changesState(): ChangesCommitState {
     return this.changesController.state;
+  }
+
+  private get filesState(): ProjectFilesState {
+    return this.filesController.state;
+  }
+
+  private get editorState(): EditorSessionState {
+    return this.editorController.state;
+  }
+
+  private handleEditorSessionChange(change: EditorSessionChange): void {
+    if (
+      change.reason === "load-start" ||
+      change.reason === "load-complete" ||
+      change.reason === "load-error" ||
+      change.reason === "save-start" ||
+      change.reason === "save-complete" ||
+      change.reason === "save-error"
+    ) {
+      this.renderEditor();
+    }
+    if (change.error) this.showError(change.error);
+  }
+
+  private handleProjectFilesChange(change: ProjectFilesChange): void {
+    if (
+      change.reason !== "selection" &&
+      change.reason !== "disclosure" &&
+      this.state.layout.leftTool === "files"
+    ) this.renderLeftTool();
+    if (
+      change.catalogChanged &&
+      (this.state.commandSurface.mode === "files" || this.state.commandSurface.mode === "recent")
+    ) {
+      this.renderCommandSurface(true);
+    }
+    if (
+      change.catalogChanged &&
+      this.state.layout.bottomTool === "branches" &&
+      this.state.historyFilterMenu === "paths"
+    ) {
+      this.renderHistoryPane();
+    }
+    if (change.error) this.showError(change.error);
   }
 
   private handleRemoteControllerChange(change: RemotePushChange): void {
@@ -1100,8 +1114,8 @@ export class AsterlynApp {
     this.query("#editor-tab-menu-toggle").addEventListener("click", (event) => {
       event.stopPropagation();
       if (
-        this.state.editor.textTabs.length === 0 &&
-        this.state.editor.preview === null
+        this.editorState.session.textTabs.length === 0 &&
+        this.editorState.session.preview === null
       ) {
         return;
       }
@@ -1208,7 +1222,7 @@ export class AsterlynApp {
         void this.refresh();
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        const tab = activeTextTab(this.state.editor);
+        const tab = activeTextTab(this.editorState.session);
         if (tab) {
           event.preventDefault();
           void this.saveTextTab(tab.id);
@@ -1228,7 +1242,7 @@ export class AsterlynApp {
           this.state.layout.bottomTool === "branches"
         ) {
           this.focusHistoryFilter();
-        } else if (activeTextTab(this.state.editor)?.status === "ready") {
+        } else if (activeTextTab(this.editorState.session)?.status === "ready") {
           this.textEditor.openFindReplace();
         }
       }
@@ -1261,7 +1275,7 @@ export class AsterlynApp {
     });
     window.addEventListener("beforeunload", (event) => {
       this.captureMountedTextEditor();
-      if (dirtyTextTabs(this.state.editor).length === 0) return;
+      if (dirtyTextTabs(this.editorState.session).length === 0) return;
       event.preventDefault();
       event.returnValue = "";
     });
@@ -1274,6 +1288,10 @@ export class AsterlynApp {
         this.remoteController.dispose();
         this.releaseChangesController();
         this.changesController.dispose();
+        this.releaseFilesController();
+        this.filesController.dispose();
+        this.releaseEditorController();
+        this.editorController.dispose();
         this.historyListView.unmount();
       },
       { once: true },
@@ -1625,7 +1643,7 @@ export class AsterlynApp {
     void windowControls
       .onCloseRequested((event) => {
         this.captureMountedTextEditor();
-        if (dirtyTextTabs(this.state.editor).length === 0) return;
+        if (dirtyTextTabs(this.editorState.session).length === 0) return;
         event.preventDefault();
         void this.requestWindowClose();
       })
@@ -1692,12 +1710,9 @@ export class AsterlynApp {
       touchRecentRepository(window.localStorage, opened.root);
       if (repositoryChanged) {
         this.captureMountedTextEditor();
-        this.state.editor = createEditorSession();
-        this.imageRequestGeneration += 1;
         this.imageSurface = null;
-      } else {
-        this.state.editor = closePreview(this.state.editor);
       }
+      this.editorController.installWorkspace(opened.root);
       this.state.workspaceRoot = opened.root;
       this.state.snapshot = snapshot;
       this.changesController.installSnapshot(snapshot, {
@@ -1710,15 +1725,7 @@ export class AsterlynApp {
       this.closeHistoryDialog();
       this.resetHistoryFilters();
       this.state.gitDetail = "commit";
-      this.state.projectFiles = [];
-      this.state.repositoryFiles = [];
-      this.state.ignoredProjectEntries = [];
-      this.state.projectFilesLoading = true;
-      this.state.projectFilesError = null;
-      this.state.projectFilesTruncated = false;
-      this.state.projectTreeRoot = null;
-      this.state.projectTreeSelection = null;
-      this.state.expandedProjectDirectories.clear();
+      this.filesController.installWorkspace(opened.root, snapshot?.changes ?? []);
       this.state.selectedBranch = null;
       if (snapshot) {
         this.installSnapshotHistory(snapshot, true);
@@ -1782,6 +1789,8 @@ export class AsterlynApp {
         this.state.snapshot = null;
         this.historyController.clear();
         this.remoteController.installSnapshot(null);
+        this.changesController.installSnapshot(null);
+        this.filesController.installWorkspace(opened.root, []);
         this.state.layout = {
           ...this.state.layout,
           leftTool: "files",
@@ -1794,6 +1803,7 @@ export class AsterlynApp {
       this.state.snapshot = next;
       this.remoteController.installSnapshot(next);
       this.changesController.installSnapshot(next);
+      this.filesController.installWorkspace(next.root, next.changes);
       this.reconcileHistoryScope(next);
       this.reconcileWorkingDocument(next);
 
@@ -1862,7 +1872,7 @@ export class AsterlynApp {
       retainedQuery,
     );
     this.renderCommandSurface(true);
-    if (mode === "recent" && workspaceRoot && !this.state.projectFilesLoading) {
+    if (mode === "recent" && workspaceRoot && !this.filesState.loading) {
       void this.loadProjectFiles(workspaceRoot);
     }
   }
@@ -1960,7 +1970,7 @@ export class AsterlynApp {
         mode === "recent" ? "No recent files" : "No matching files",
         mode === "recent"
           ? "Files appear here after they open successfully."
-          : this.state.projectFilesLoading
+          : this.filesState.loading
             ? "The project catalog is still loading."
             : "Try part of a filename or path.",
       );
@@ -2193,12 +2203,12 @@ export class AsterlynApp {
       window.localStorage,
       RECENT_FILE_KEY,
       workspaceRoot,
-      this.state.repositoryFiles,
+      this.filesState.files,
     );
     return mode === "recent"
       ? rankProjectFiles(recent, this.state.commandSurface.query)
       : rankProjectFiles(
-          this.state.repositoryFiles,
+          this.filesState.files,
           this.state.commandSurface.query,
           recent,
         );
@@ -2263,7 +2273,7 @@ export class AsterlynApp {
   private navigationCommands(): NavigationCommand[] {
     const snapshot = this.state.snapshot;
     const hasWorkspace = this.state.workspaceRoot !== null;
-    const tab = activeTextTab(this.state.editor);
+    const tab = activeTextTab(this.editorState.session);
     return [
       { id: "open-repository", label: "Open Project", detail: "Choose a local folder", shortcut: "Ctrl+O", enabled: true },
       { id: "go-file", label: "Go to File", detail: "Open a project file by name", shortcut: "Ctrl+P", enabled: hasWorkspace },
@@ -2294,7 +2304,7 @@ export class AsterlynApp {
         queueMicrotask(() => this.textEditor.openFindReplace());
         break;
       case "save-current": {
-        const tab = activeTextTab(this.state.editor);
+        const tab = activeTextTab(this.editorState.session);
         if (tab) void this.saveTextTab(tab.id);
         break;
       }
@@ -2489,7 +2499,7 @@ export class AsterlynApp {
     const allSelected = selected.size === preview.files.length;
     const rows = preview.files.map((file) => {
       const checked = selected.has(file.workspacePath);
-      const openTab = this.state.editor.textTabs.find(
+      const openTab = this.editorState.session.textTabs.find(
         (tab) => tab.document.workspacePath === file.workspacePath,
       );
       const blocked = Boolean(openTab && (isTextTabDirty(openTab) || openTab.saveRequest));
@@ -2620,7 +2630,7 @@ export class AsterlynApp {
     if (!workspaceRoot || !request || !preview || this.state.workspaceReplacement.status !== "ready") return;
     this.captureMountedTextEditor();
     const selectedPaths = [...this.state.workspaceReplacement.selectedPaths];
-    const blocked = this.state.editor.textTabs.filter(
+    const blocked = this.editorState.session.textTabs.filter(
       (tab) =>
         selectedPaths.includes(tab.document.workspacePath) &&
         (tab.status !== "ready" || isTextTabDirty(tab) || tab.saveRequest !== null),
@@ -2739,7 +2749,7 @@ export class AsterlynApp {
     if (!workspaceRoot || !recovery || this.state.replacementRecoveryBusy) return;
     this.captureMountedTextEditor();
     const paths = recovery.files.map((file) => file.workspacePath);
-    const blocked = this.state.editor.textTabs.filter(
+    const blocked = this.editorState.session.textTabs.filter(
       (tab) =>
         paths.includes(tab.document.workspacePath) &&
         (tab.status !== "ready" || isTextTabDirty(tab) || tab.saveRequest !== null),
@@ -2814,9 +2824,11 @@ export class AsterlynApp {
       : refreshed;
     if (this.state.snapshot) {
       this.changesController.installSnapshot(this.state.snapshot);
+      this.filesController.updateChanges(this.state.snapshot.changes);
       this.reconcileWorkingDocument(this.state.snapshot);
     } else {
       this.changesController.installSnapshot(null);
+      this.filesController.updateChanges([]);
     }
     this.renderWorkspace();
     await this.loadProjectFiles(repositoryRoot, generation);
@@ -2824,33 +2836,7 @@ export class AsterlynApp {
   }
 
   private async reloadReplacementFiles(workspacePaths: string[]): Promise<void> {
-    const selected = new Set(workspacePaths);
-    const tabs = this.state.editor.textTabs.filter((tab) => selected.has(tab.document.workspacePath));
-    for (const tab of tabs) {
-      const reload = beginTextReload(this.state.editor, tab.id);
-      if (reload.loadEpoch === null) continue;
-      this.state.editor = reload.session;
-      try {
-        const snapshot = await bridge.readTextFile(
-          tab.document.repositoryRoot,
-          tab.document.repositoryId,
-          tab.document.path,
-        );
-        this.state.editor = completeTextLoad(
-          this.state.editor,
-          tab.id,
-          reload.loadEpoch,
-          snapshot,
-        );
-      } catch (error) {
-        this.state.editor = failTextLoad(
-          this.state.editor,
-          tab.id,
-          reload.loadEpoch,
-          errorMessage(error),
-        );
-      }
-    }
+    await this.editorController.reloadPaths(workspacePaths);
     this.renderEditor();
   }
 
@@ -3358,7 +3344,7 @@ export class AsterlynApp {
   private pushSelectedProjectFile(): ProjectFile | null {
     const path = this.remoteState.pushSelectedFile;
     return path
-      ? this.state.repositoryFiles.find(
+      ? this.filesState.files.find(
           (file) => file.repositoryId === "." && file.path === path,
         ) ?? null
       : null;
@@ -3502,8 +3488,8 @@ export class AsterlynApp {
         this.acceptRemoteSnapshot(next);
         if (kind === "pull") {
           this.captureMountedTextEditor();
-          if (dirtyTextTabs(this.state.editor).length === 0) {
-            this.state.editor = createEditorSession();
+          if (dirtyTextTabs(this.editorState.session).length === 0) {
+            this.editorController.resetSession();
           }
           this.renderLeftTool();
           this.renderEditor();
@@ -3544,6 +3530,7 @@ export class AsterlynApp {
     this.state.snapshot = snapshot;
     this.remoteController.installSnapshot(snapshot);
     this.changesController.installSnapshot(snapshot, { clearSelection: true });
+    this.filesController.installWorkspace(snapshot.root, snapshot.changes);
     this.state.selectedBranch = null;
     this.installSnapshotHistory(snapshot);
     if (focusConflicts) this.prepareConflictResolution(snapshot);
@@ -3938,13 +3925,13 @@ export class AsterlynApp {
     title.textContent = basename(workspaceRoot);
     hide.setAttribute("aria-label", "Hide Files tool window");
     hide.title = "Hide Files tool window";
-    const visibleEntries = this.state.repositoryFiles.length + this.state.ignoredProjectEntries.length;
+    const visibleEntries = this.filesState.files.length + this.filesState.ignoredEntries.length;
     count.textContent = visibleEntries.toString();
-    count.title = `${this.state.repositoryFiles.length} editable files and ${this.state.ignoredProjectEntries.length} ignored entries`;
+    count.title = `${this.filesState.files.length} editable files and ${this.filesState.ignoredEntries.length} ignored entries`;
     const preserveScroll = body.dataset.navigatorView === "files";
     const scrollTop = body.scrollTop;
     const scrollLeft = body.scrollLeft;
-    const tree = this.projectTree(snapshot);
+    const tree = this.projectTree();
     body.dataset.navigatorView = "files";
     actions.innerHTML = this.renderProjectToolbar(workspaceRoot, tree);
     body.innerHTML = this.renderProjectNavigation(tree);
@@ -4004,106 +3991,16 @@ export class AsterlynApp {
     repositoryRoot: string,
     repositoryGeneration = this.requestGeneration,
   ): Promise<void> {
-    const generation = ++this.projectFilesGeneration;
-    this.state.projectFilesLoading = true;
-    this.state.projectFilesError = null;
-    if (this.state.layout.leftTool === "files") this.renderLeftTool();
-    try {
-      const result = await bridge.listProjectFiles(repositoryRoot);
-      if (
-        generation !== this.projectFilesGeneration ||
-        repositoryGeneration !== this.requestGeneration ||
-        this.state.workspaceRoot !== repositoryRoot ||
-        result.root !== repositoryRoot
-      ) {
-        return;
-      }
-      this.state.projectFiles = result.paths;
-      this.state.repositoryFiles = result.files;
-      this.state.ignoredProjectEntries = result.ignoredEntries;
-      this.state.projectFilesTruncated = result.truncated;
-      this.state.projectFilesLoading = false;
-      const tree = this.projectTree();
-      if (this.state.projectTreeRoot !== result.root) {
-        this.state.projectTreeRoot = result.root;
-        this.state.projectTreeSelection = null;
-        this.state.expandedProjectDirectories = defaultExpandedProjectDirectories(
-          tree,
-        );
-      } else {
-        const reconciled = reconcileProjectTreeState(
-          tree,
-          this.state.expandedProjectDirectories,
-          this.state.projectTreeSelection,
-        );
-        this.state.expandedProjectDirectories = reconciled.expandedDirectories;
-        this.state.projectTreeSelection = reconciled.selection;
-      }
-      if (this.state.layout.leftTool === "files") this.renderLeftTool();
-      if (
-        this.state.commandSurface.mode === "files" ||
-        this.state.commandSurface.mode === "recent"
-      ) {
-        this.renderCommandSurface(true);
-      }
-      if (
-        this.state.layout.bottomTool === "branches" &&
-        this.state.historyFilterMenu === "paths"
-      ) {
-        this.renderHistoryPane();
-      }
-    } catch (error) {
-      if (
-        generation !== this.projectFilesGeneration ||
-        repositoryGeneration !== this.requestGeneration ||
-        this.state.workspaceRoot !== repositoryRoot
-      ) {
-        return;
-      }
-      this.state.projectFilesLoading = false;
-      this.state.projectFilesError = errorMessage(error);
-      if (this.state.layout.leftTool === "files") this.renderLeftTool();
-      if (
-        this.state.commandSurface.mode === "files" ||
-        this.state.commandSurface.mode === "recent"
-      ) {
-        this.renderCommandSurface(true);
-      }
-      if (
-        this.state.layout.bottomTool === "branches" &&
-        this.state.historyFilterMenu === "paths"
-      ) {
-        this.renderHistoryPane();
-      }
-      this.showError(error);
-    }
+    if (
+      repositoryGeneration !== this.requestGeneration ||
+      this.state.workspaceRoot !== repositoryRoot ||
+      this.filesState.root !== repositoryRoot
+    ) return;
+    await this.filesController.refresh();
   }
 
-  private projectTree(snapshot: RepositorySnapshot | null = this.state.snapshot): ProjectTreeNode[] {
-    const changes = snapshot?.changes ?? EMPTY_FILE_CHANGES;
-    const cached = this.projectTreeCache;
-    if (
-      cached &&
-      cached.files === this.state.repositoryFiles &&
-      cached.changes === changes &&
-      cached.ignoredEntries === this.state.ignoredProjectEntries
-    ) {
-      return cached.nodes;
-    }
-    const nodes = buildProjectTree(
-      projectTreeEntries(
-        this.state.repositoryFiles,
-        changes,
-        this.state.ignoredProjectEntries,
-      ),
-    );
-    this.projectTreeCache = {
-      files: this.state.repositoryFiles,
-      changes,
-      ignoredEntries: this.state.ignoredProjectEntries,
-      nodes,
-    };
-    return nodes;
+  private projectTree(): ProjectTreeNode[] {
+    return this.filesController.tree();
   }
 
   private renderProjectToolbar(
@@ -4114,7 +4011,7 @@ export class AsterlynApp {
     const canLocate = Boolean(
       activePath && findProjectTreeNode(tree, activePath),
     );
-    const canChangeSubtree = this.state.projectTreeSelection?.kind === "directory";
+    const canChangeSubtree = this.filesState.selection?.kind === "directory";
     return `
       <button class="compact-icon-button" id="locate-project-file" type="button" aria-label="Locate current file in project" title="Locate current file" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
       <button class="compact-icon-button" id="expand-project-folder" type="button" aria-label="Expand selected folder" title="Expand selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("expand", 14)}</button>
@@ -4122,26 +4019,26 @@ export class AsterlynApp {
   }
 
   private renderProjectNavigation(tree: ProjectTreeNode[]): string {
-    if (tree.length === 0 && this.state.projectFilesLoading) {
+    if (tree.length === 0 && this.filesState.loading) {
       return this.loadingBlock("Loading project files…");
     }
-    if (tree.length === 0 && this.state.projectFilesError) {
+    if (tree.length === 0 && this.filesState.error) {
       return this.retryState(
         "Could not list project files",
-        this.state.projectFilesError,
+        this.filesState.error,
         "retry-project-files",
         "folder",
       );
     }
     const notices = [
-      this.state.projectFilesLoading
+      this.filesState.loading
         ? '<div class="project-tree-notice"><span class="spinner"></span><span>Refreshing files…</span></div>'
         : "",
-      this.state.projectFilesTruncated
+      this.filesState.truncated
         ? '<div class="project-tree-notice warning"><span>!</span><span>Showing a bounded project catalog; some paths were omitted.</span></div>'
         : "",
-      this.state.projectFilesError
-        ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(this.state.projectFilesError)}</span></div>`
+      this.filesState.error
+        ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(this.filesState.error)}</span></div>`
         : "",
     ].join("");
     return `<div class="project-tree" role="tree" aria-label="Project files">${tree.map((node) => this.renderProjectNode(node, 0)).join("")}</div>${notices}`;
@@ -4149,11 +4046,11 @@ export class AsterlynApp {
 
   private renderProjectNode(node: ProjectTreeNode, depth: number): string {
     const selected =
-      this.state.projectTreeSelection?.path === node.path &&
-      this.state.projectTreeSelection.kind === node.kind;
+      this.filesState.selection?.path === node.path &&
+      this.filesState.selection.kind === node.kind;
     const statusClass = `file-status-${node.status}`;
     if (node.kind === "directory") {
-      const expanded = this.state.expandedProjectDirectories.has(node.path);
+      const expanded = this.filesState.expandedDirectories.has(node.path);
       const children = expanded
         ? node.children.map((child) => this.renderProjectNode(child, depth + 1)).join("")
         : "";
@@ -4186,8 +4083,7 @@ export class AsterlynApp {
           const path = details.dataset.projectDirectoryContainer;
           if (!path) return;
           const renderedExpanded = details.dataset.projectRenderedExpanded === "true";
-          if (details.open) this.state.expandedProjectDirectories.add(path);
-          else this.state.expandedProjectDirectories.delete(path);
+          this.filesController.setDirectoryExpanded(path, details.open);
           details
             .querySelector<HTMLElement>(":scope > summary")
             ?.setAttribute("aria-expanded", String(details.open));
@@ -4209,7 +4105,7 @@ export class AsterlynApp {
         row.addEventListener("click", () => {
           const path = row.dataset.projectDirectory;
           if (!path) return;
-          this.state.projectTreeSelection = { path, kind: "directory" };
+          this.filesController.select(path, "directory");
           this.markProjectTreeSelection(path);
         });
       });
@@ -4218,13 +4114,13 @@ export class AsterlynApp {
         const path = row.dataset.projectFile;
         const currentRoot = this.state.workspaceRoot;
         if (!path || !currentRoot) return;
-        this.state.projectTreeSelection = { path, kind: "file" };
+        this.filesController.select(path, "file");
         this.markProjectTreeSelection(path);
         if (row.dataset.projectStatus === "ignored") {
           this.setStatus("Ignored entries are shown for context and are not opened", "normal");
           return;
         }
-        const file = this.state.repositoryFiles.find(
+        const file = this.filesState.files.find(
           (candidate) => candidate.workspacePath === path,
         ) ?? { repositoryId: ".", path, workspacePath: path };
         void this.openProjectFile(currentRoot, file);
@@ -4238,7 +4134,7 @@ export class AsterlynApp {
       row.classList.toggle("selected", selected);
       row.setAttribute("aria-selected", String(selected));
     });
-    const directorySelected = this.state.projectTreeSelection?.kind === "directory";
+    const directorySelected = this.filesState.selection?.kind === "directory";
     this.root.querySelectorAll<HTMLButtonElement>(
       "#expand-project-folder, #collapse-project-folder",
     ).forEach((button) => {
@@ -4251,17 +4147,10 @@ export class AsterlynApp {
     if (!workspaceRoot) return;
     const activePath = this.activeProjectWorkspacePath(workspaceRoot);
     if (!activePath) return;
-    if (!findProjectTreeNode(this.projectTree(), activePath)) {
+    if (!this.filesController.revealFile(activePath)) {
       this.setStatus("The current file is outside the bounded project tree", "warning");
       return;
     }
-    for (const path of ancestorProjectDirectories(activePath)) {
-      this.state.expandedProjectDirectories.add(path);
-    }
-    this.state.projectTreeSelection = {
-      path: activePath,
-      kind: "file",
-    };
     this.renderLeftTool();
     queueMicrotask(() => {
       const target = Array.from(
@@ -4280,21 +4169,16 @@ export class AsterlynApp {
     }
     if (active.kind === "working-diff") return active.selection.path;
     return (
-      this.state.repositoryFiles.find(
+      this.filesState.files.find(
         (file) => file.repositoryId === active.repositoryId && file.path === active.path,
       )?.workspacePath ?? null
     );
   }
 
   private setSelectedProjectFolderExpanded(expanded: boolean): void {
-    const selection = this.state.projectTreeSelection;
+    const selection = this.filesState.selection;
     if (!selection || selection.kind !== "directory" || !this.state.workspaceRoot) return;
-    const node = findProjectTreeNode(this.projectTree(), selection.path);
-    if (!node || node.kind !== "directory") return;
-    for (const path of descendantProjectDirectories(node)) {
-      if (expanded) this.state.expandedProjectDirectories.add(path);
-      else this.state.expandedProjectDirectories.delete(path);
-    }
+    if (!this.filesController.setSelectedSubtreeExpanded(expanded)) return;
     this.renderLeftTool();
     queueMicrotask(() => {
       const target = Array.from(
@@ -4323,7 +4207,7 @@ export class AsterlynApp {
       workspacePath: file.workspacePath,
     };
     const documentKey = editorDocumentKey(document);
-    const existing = textTab(this.state.editor, documentKey);
+    const existing = textTab(this.editorState.session, documentKey);
     if (searchMatch && existing && (isTextTabDirty(existing) || existing.saveRequest)) {
       this.setStatus(
         "Search location was not applied because this file has unsaved edits",
@@ -4338,18 +4222,19 @@ export class AsterlynApp {
     const markdownMode = isMarkdownPath(document.path)
       ? markdownModeForDocument(this.markdownModePreferences, documentKey)
       : "source";
-    const session =
-      existing && isMarkdownPath(document.path)
-        ? setTextTabMarkdownMode(this.state.editor, existing.id, markdownMode)
-        : this.state.editor;
-    let opened = openTextDocument(session, document, markdownMode);
-    if (opened.limitReached) {
+    const opened = await this.editorController.openText(
+      repositoryRoot,
+      file,
+      markdownMode,
+      Boolean(searchMatch && existing?.status === "ready"),
+    );
+    if (opened.status === "limit") {
       const currentRoot = this.state.workspaceRoot;
       const activePath = currentRoot
         ? this.activeProjectWorkspacePath(currentRoot)
         : null;
       if (activePath) {
-        this.state.projectTreeSelection = { path: activePath, kind: "file" };
+        this.filesController.select(activePath, "file");
         this.markProjectTreeSelection(activePath);
       }
       this.setStatus(
@@ -4358,58 +4243,15 @@ export class AsterlynApp {
       );
       return;
     }
-    if (searchMatch && existing?.status === "ready" && opened.tabId) {
-      const reload = beginTextReload(opened.session, opened.tabId);
-      if (reload.loadEpoch === null) {
+    if (opened.status === "stale") {
+      if (searchMatch && this.state.workspaceRoot === repositoryRoot) {
         this.setStatus("Search location could not be refreshed safely", "warning");
-        return;
-      }
-      opened = {
-        ...opened,
-        session: reload.session,
-        loadEpoch: reload.loadEpoch,
-        needsLoad: true,
-      };
-    }
-    this.state.editor = opened.session;
-    this.renderEditor();
-    if (!opened.needsLoad || !opened.tabId || opened.loadEpoch === null) {
-      const current = opened.tabId ? textTab(this.state.editor, opened.tabId) : null;
-      if (current?.status === "ready") {
-        this.rememberRecentFile(repositoryRoot, file);
-        if (searchMatch) this.applySearchNavigation(current, searchMatch);
       }
       return;
     }
-
-    try {
-      const snapshot = await bridge.readTextFile(
-        repositoryRoot,
-        file.repositoryId,
-        file.path,
-      );
-      this.state.editor = completeTextLoad(
-        this.state.editor,
-        opened.tabId,
-        opened.loadEpoch,
-        snapshot,
-      );
-      this.renderEditor();
-      const current = textTab(this.state.editor, opened.tabId);
-      if (current?.status === "ready" && current.revision === snapshot.revision) {
-        this.rememberRecentFile(repositoryRoot, file);
-        if (searchMatch) this.applySearchNavigation(current, searchMatch);
-      }
-    } catch (error) {
-      this.state.editor = failTextLoad(
-        this.state.editor,
-        opened.tabId,
-        opened.loadEpoch,
-        errorMessage(error),
-      );
-      this.renderEditor();
-      this.showError(error);
-    }
+    if (opened.status === "failure") return;
+    this.rememberRecentFile(repositoryRoot, file);
+    if (searchMatch) this.applySearchNavigation(opened.tab, searchMatch);
   }
 
   private async openProjectImage(
@@ -4425,21 +4267,16 @@ export class AsterlynApp {
       workspacePath: file.workspacePath,
     };
     const key = editorDocumentKey(document);
-    this.state.editor = activatePreview(this.state.editor, document);
+    this.editorController.activatePreview(document);
     if (this.imageSurface?.key === key && this.imageSurface.status === "ready") {
       this.renderLeftTool();
       this.renderEditor();
       return;
     }
-    const generation = ++this.imageRequestGeneration;
-    const requestIdentity = {
-      generation,
-      workspaceRoot: repositoryRoot,
-      documentKey: key,
-    };
+    const request = this.editorController.beginImageLoad(document);
     this.imageSurface = {
       key,
-      version: generation,
+      version: request.version,
       status: "loading",
       error: null,
       image: null,
@@ -4447,47 +4284,33 @@ export class AsterlynApp {
     };
     this.renderLeftTool();
     this.renderEditor();
-    try {
-      const image = await bridge.readImageFile(
-        repositoryRoot,
-        file.repositoryId,
-        file.path,
-      );
-      if (!isCurrentImageRequest(requestIdentity, {
-        generation: this.imageRequestGeneration,
-        workspaceRoot: this.state.workspaceRoot,
-        documentKey: editorDocumentKey(this.activeDocument()),
-      })) {
-        return;
-      }
+    const result = await request.completion;
+    if (
+      result.status === "stale" ||
+      editorDocumentKey(this.activeDocument()) !== key
+    ) return;
+    if (result.status === "ready") {
       this.imageSurface = {
         key,
-        version: generation,
+        version: request.version,
         status: "ready",
         error: null,
-        image,
+        image: result.image,
         diff: null,
       };
       this.rememberRecentFile(repositoryRoot, file);
       this.renderEditor();
-    } catch (error) {
-      if (!isCurrentImageRequest(requestIdentity, {
-        generation: this.imageRequestGeneration,
-        workspaceRoot: this.state.workspaceRoot,
-        documentKey: editorDocumentKey(this.activeDocument()),
-      })) {
-        return;
-      }
+    } else {
       this.imageSurface = {
         key,
-        version: generation,
+        version: request.version,
         status: "error",
-        error: errorMessage(error),
+        error: errorMessage(result.error),
         image: null,
         diff: null,
       };
       this.renderEditor();
-      this.showError(error);
+      this.showError(result.error);
     }
   }
 
@@ -4874,7 +4697,7 @@ export class AsterlynApp {
       this.state.historyRepositoryIds,
     );
     const recent = this.state.historyRecentPaths.flatMap((path) => {
-      const candidate = historyPathCandidates(this.state.repositoryFiles).find(
+      const candidate = historyPathCandidates(this.filesState.files).find(
         (item) => historyPathKey(item) === historyPathKey(path),
       );
       return candidate ? [candidate] : [];
@@ -4884,9 +4707,9 @@ export class AsterlynApp {
       <button class="history-menu-option" type="button" data-history-open-dialog="paths-tree"><span>Select in Tree…</span></button>
       ${roots.length > 1 ? `<div class="history-menu-heading">Roots</div>${roots.map((root) => this.renderHistoryRootOption(root, selectedRoots)).join("")}` : ""}
       ${recent.length > 0 ? `<div class="history-menu-heading">Recent</div>${recent.map((path) => this.renderHistoryQuickPath(path)).join("")}` : ""}
-      ${this.state.projectFilesLoading ? '<div class="history-menu-note">Loading tracked paths…</div>' : ""}
-      ${this.state.projectFilesError ? '<div class="history-menu-note warning">Tracked paths could not be loaded.</div>' : ""}
-      ${this.state.projectFilesTruncated ? '<div class="history-menu-note">Tree selection uses the bounded project file set.</div>' : ""}`;
+      ${this.filesState.loading ? '<div class="history-menu-note">Loading tracked paths…</div>' : ""}
+      ${this.filesState.error ? '<div class="history-menu-note warning">Tracked paths could not be loaded.</div>' : ""}
+      ${this.filesState.truncated ? '<div class="history-menu-note">Tree selection uses the bounded project file set.</div>' : ""}`;
   }
 
   private renderHistoryRootOption(
@@ -4899,7 +4722,7 @@ export class AsterlynApp {
   }
 
   private renderHistoryQuickPath(path: HistoryPath): string {
-    const label = historyPathWorkspaceLabel(path, this.state.repositoryFiles);
+    const label = historyPathWorkspaceLabel(path, this.filesState.files);
     const selected = this.state.historyPaths.has(historyPathKey(path));
     return `<button class="history-menu-option" type="button" data-history-quick-path="${escapeAttribute(historyPathKey(path))}" aria-pressed="${selected}" title="${escapeAttribute(label)}"><span>${icon("file", 13)}${escapeHtml(label)}</span>${selected ? icon("check", 13) : ""}</button>`;
   }
@@ -4919,7 +4742,7 @@ export class AsterlynApp {
     } else {
       this.state.historyPathDraft = new Map(this.state.historyPaths);
       this.state.historyPathText = Array.from(this.state.historyPaths.values())
-        .map((path) => historyPathWorkspaceLabel(path, this.state.repositoryFiles))
+        .map((path) => historyPathWorkspaceLabel(path, this.filesState.files))
         .join("\n");
     }
     this.renderHistoryPane();
@@ -4997,7 +4820,7 @@ export class AsterlynApp {
   private renderHistoryPathTreeDialog(): string {
     const snapshot = this.state.snapshot!;
     const roots = snapshot.repositoryRoots.map((root) => {
-      const files = this.state.repositoryFiles.filter((file) => file.repositoryId === root.id);
+      const files = this.filesState.files.filter((file) => file.repositoryId === root.id);
       const tree = buildProjectTree(files.map((file) => file.path));
       return `<section class="history-path-tree-root"><h3>${icon("folder", 14)}${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${tree.length > 0 ? tree.map((node) => this.renderHistoryPathTreeNode(node, root.id, 0)).join("") : '<div class="history-dialog-empty">No tracked paths.</div>'}</section>`;
     }).join("");
@@ -5135,7 +4958,7 @@ export class AsterlynApp {
     if (pathCount > 1) return `Paths ${pathCount}`;
     if (pathCount === 1) {
       const path = Array.from(this.state.historyPaths.values())[0]!;
-      return basename(historyPathWorkspaceLabel(path, this.state.repositoryFiles));
+      return basename(historyPathWorkspaceLabel(path, this.filesState.files));
     }
     return rootCount > 0 ? `Roots ${rootCount}` : "Paths";
   }
@@ -5674,7 +5497,7 @@ export class AsterlynApp {
       input.addEventListener("change", () => {
         const key = input.dataset.historyDialogPath;
         const candidate = key
-          ? historyPathCandidates(this.state.repositoryFiles).find(
+          ? historyPathCandidates(this.filesState.files).find(
               (path) => historyPathKey(path) === key,
             )
           : null;
@@ -5746,7 +5569,7 @@ export class AsterlynApp {
     } else if (kind === "paths-text") {
       const result = resolveHistoryPathText(
         this.state.historyPathText,
-        historyPathCandidates(this.state.repositoryFiles),
+        historyPathCandidates(this.filesState.files),
       );
       if (result.error) {
         this.state.historyDialogError = result.error;
@@ -5949,7 +5772,7 @@ export class AsterlynApp {
     const workspaceRoot = this.state.workspaceRoot;
     const snapshot = this.state.snapshot;
     if (!workspaceRoot) return;
-    this.textEditor.retain(this.state.editor.textTabs.map((tab) => tab.id));
+    this.textEditor.retain(this.editorState.session.textTabs.map((tab) => tab.id));
     const document = this.activeDocument();
     const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
@@ -5986,9 +5809,9 @@ export class AsterlynApp {
     }
 
     if (document.kind === "project-file") {
-      const tab = activeTextTab(this.state.editor);
+      const tab = activeTextTab(this.editorState.session);
       if (!tab) {
-        this.state.editor = activateWelcome(this.state.editor);
+        this.editorController.activateWelcome();
         this.renderEditor();
         return;
       }
@@ -6077,7 +5900,7 @@ export class AsterlynApp {
     }
 
     if (!snapshot) {
-      this.state.editor = closePreview(this.state.editor);
+      this.editorController.closePreview();
       this.renderEditor();
       return;
     }
@@ -6340,10 +6163,10 @@ export class AsterlynApp {
       this.state.preferences,
       (content) => {
         if (this.mountedTextTabId !== tab.id) return;
-        const previous = textTab(this.state.editor, tab.id);
+        const previous = textTab(this.editorState.session, tab.id);
         const wasDirty = previous ? isTextTabDirty(previous) : false;
-        this.state.editor = markTextEdited(this.state.editor, tab.id, content);
-        const current = textTab(this.state.editor, tab.id);
+        this.editorController.markEdited(tab.id, content);
+        const current = textTab(this.editorState.session, tab.id);
         if (current?.markdownMode === "split") {
           this.queueMarkdownPreview(tab.id, content);
         }
@@ -6392,7 +6215,7 @@ export class AsterlynApp {
       const result = await renderMarkdownPreview(request.content);
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
-      const active = activeTextTab(this.state.editor);
+      const active = activeTextTab(this.editorState.session);
       if (
         !preview ||
         active?.id !== request.tabId ||
@@ -6408,7 +6231,7 @@ export class AsterlynApp {
     } catch (error) {
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
-      const active = activeTextTab(this.state.editor);
+      const active = activeTextTab(this.editorState.session);
       if (!preview || active?.id !== request.tabId) return;
       preview.innerHTML = `<div class="markdown-preview-message error" role="alert"><strong>Markdown preview failed</strong><span>${escapeHtml(errorMessage(error))}</span></div>`;
     }
@@ -6421,7 +6244,7 @@ export class AsterlynApp {
   private attachMarkdownScrollSync(): void {
     this.markdownScrollDisposer?.();
     this.markdownScrollDisposer = null;
-    const active = activeTextTab(this.state.editor);
+    const active = activeTextTab(this.editorState.session);
     const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
     if (!preview || active?.markdownMode !== "split") return;
     preview.dataset.scrollSync = "proportional";
@@ -6455,7 +6278,7 @@ export class AsterlynApp {
 
   private renderEditorContextActions(document: EditorDocument): void {
     const host = this.query("#editor-context-actions");
-    const tab = document.kind === "project-file" ? activeTextTab(this.state.editor) : null;
+    const tab = document.kind === "project-file" ? activeTextTab(this.editorState.session) : null;
     if (!tab || tab.status !== "ready" || !isMarkdownPath(tab.document.path)) {
       host.innerHTML = "";
       return;
@@ -6475,11 +6298,11 @@ export class AsterlynApp {
       .querySelectorAll<HTMLButtonElement>("[data-markdown-mode]")
       .forEach((button) => {
         button.addEventListener("click", () => {
-          const active = activeTextTab(this.state.editor);
+          const active = activeTextTab(this.editorState.session);
           const mode = button.dataset.markdownMode as MarkdownEditorMode;
           if (!active || active.id !== tab.id || active.markdownMode === mode) return;
           this.captureMountedTextEditor();
-          this.state.editor = setTextTabMarkdownMode(this.state.editor, tab.id, mode);
+          this.editorController.setMarkdownMode(tab.id, mode);
           this.markdownModePreferences = rememberMarkdownMode(
             this.markdownModePreferences,
             tab.id,
@@ -6495,7 +6318,7 @@ export class AsterlynApp {
   }
 
   private renderEditorTabs(document: EditorDocument): string {
-    const textTabs = this.state.editor.textTabs
+    const textTabs = this.editorState.session.textTabs
       .map((tab, index) => {
         const active = document.kind === "project-file" && editorDocumentKey(document) === tab.id;
         const dirty = isTextTabDirty(tab);
@@ -6517,12 +6340,12 @@ export class AsterlynApp {
           </div>`;
       })
       .join("");
-    const preview = this.state.editor.preview;
+    const preview = this.editorState.session.preview;
     const previewPath =
       preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
     const previewLabel = preview?.kind === "project-image" ? "Preview" : "Diff";
     const previewTab = preview
-      ? `<div class="editor-tab preview ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : preview.kind === "project-image" ? this.editorTabFileStatusClass(preview.workspacePath) : ""} ${this.state.editor.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${this.state.editor.active.kind === "preview"}">
+      ? `<div class="editor-tab preview ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : preview.kind === "project-image" ? this.editorTabFileStatusClass(preview.workspacePath) : ""} ${this.editorState.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${this.editorState.session.active.kind === "preview"}">
           <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
           <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="Close ${previewLabel} preview" title="Close">${icon("close", 12)}</button>
         </div>`
@@ -6537,7 +6360,7 @@ export class AsterlynApp {
     const toggle = this.query<HTMLButtonElement>("#editor-tab-menu-toggle");
     const menu = this.query("#editor-tab-menu");
     const hasDocuments =
-      this.state.editor.textTabs.length > 0 || this.state.editor.preview !== null;
+      this.editorState.session.textTabs.length > 0 || this.editorState.session.preview !== null;
     if (!hasDocuments) this.editorTabMenuOpen = false;
     toggle.disabled = !hasDocuments;
     toggle.setAttribute("aria-expanded", String(this.editorTabMenuOpen));
@@ -6546,21 +6369,21 @@ export class AsterlynApp {
       menu.innerHTML = "";
       return;
     }
-    const textItems = this.state.editor.textTabs
+    const textItems = this.editorState.session.textTabs
       .map((tab, index) => {
         const active =
-          this.state.editor.active.kind === "text" &&
-          this.state.editor.active.id === tab.id;
+          this.editorState.session.active.kind === "text" &&
+          this.editorState.session.active.id === tab.id;
         const dirty = isTextTabDirty(tab);
         return `<button class="editor-tab-menu-item ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}${active ? icon("check", 14) : ""}</button>`;
       })
       .join("");
-    const preview = this.state.editor.preview;
+    const preview = this.editorState.session.preview;
     const previewPath =
       preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
     const previewLabel = preview?.kind === "project-image" ? "Image preview" : "Diff preview";
     const previewItem = preview
-      ? `<button class="editor-tab-menu-item ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : preview.kind === "project-image" ? this.editorTabFileStatusClass(preview.workspacePath) : ""} ${this.state.editor.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${this.state.editor.active.kind === "preview" ? icon("check", 14) : ""}</button>`
+      ? `<button class="editor-tab-menu-item ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : preview.kind === "project-image" ? this.editorTabFileStatusClass(preview.workspacePath) : ""} ${this.editorState.session.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${this.editorState.session.active.kind === "preview" ? icon("check", 14) : ""}</button>`
       : "";
     menu.innerHTML = `${textItems}${previewItem}`;
   }
@@ -6571,7 +6394,7 @@ export class AsterlynApp {
       .forEach((button) => {
         button.addEventListener("click", () => {
           const index = Number(button.dataset.editorMenuTabIndex);
-          const tab = this.state.editor.textTabs[index];
+          const tab = this.editorState.session.textTabs[index];
           if (!tab) return;
           this.editorTabMenuOpen = false;
           this.activateEditorTextTab(tab, true);
@@ -6580,11 +6403,11 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("[data-editor-menu-preview]")
       ?.addEventListener("click", () => {
-        const preview = this.state.editor.preview;
+        const preview = this.editorState.session.preview;
         if (!preview) return;
         this.editorTabMenuOpen = false;
         this.captureMountedTextEditor();
-        this.state.editor = activatePreview(this.state.editor, preview);
+        this.editorController.reactivatePreview();
         this.renderLeftTool();
         this.renderEditor();
         this.revealActiveEditorTab();
@@ -6598,7 +6421,7 @@ export class AsterlynApp {
 
   private renderDocumentStatus(): void {
     const encoding = this.query("#document-encoding");
-    const tab = activeTextTab(this.state.editor);
+    const tab = activeTextTab(this.editorState.session);
     const visible = tab?.status === "ready";
     const label = visible ? (tab.utf8Bom ? "UTF-8 BOM" : "UTF-8") : "";
     encoding.textContent = label;
@@ -6622,7 +6445,7 @@ export class AsterlynApp {
 
   private activateEditorTextTab(tab: TextTabState, forceReveal = false): void {
     this.captureMountedTextEditor();
-    this.state.editor = activateTextTab(this.state.editor, tab.id);
+    this.editorController.activateText(tab.id);
     this.renderEditor();
     if (forceReveal) this.revealActiveEditorTab();
   }
@@ -6631,7 +6454,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-editor-tab-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const index = Number(button.dataset.editorTabIndex);
-        const tab = this.state.editor.textTabs[index];
+        const tab = this.editorState.session.textTabs[index];
         if (!tab) return;
         this.activateEditorTextTab(tab);
       });
@@ -6641,17 +6464,17 @@ export class AsterlynApp {
       .forEach((button) => {
         button.addEventListener("click", () => {
           const index = Number(button.dataset.closeEditorTabIndex);
-          const tab = this.state.editor.textTabs[index];
+          const tab = this.editorState.session.textTabs[index];
           if (tab) void this.requestCloseTextTab(tab.id);
         });
       });
     this.root.querySelector<HTMLButtonElement>("[data-editor-preview]")?.addEventListener(
       "click",
       () => {
-        const preview = this.state.editor.preview;
+        const preview = this.editorState.session.preview;
         if (!preview) return;
         this.captureMountedTextEditor();
-        this.state.editor = activatePreview(this.state.editor, preview);
+        this.editorController.reactivatePreview();
         this.renderLeftTool();
         this.renderEditor();
       },
@@ -6660,8 +6483,7 @@ export class AsterlynApp {
       .querySelector<HTMLButtonElement>("[data-close-editor-preview]")
       ?.addEventListener("click", () => {
         this.captureMountedTextEditor();
-        this.state.editor = closePreview(this.state.editor);
-        this.imageRequestGeneration += 1;
+        this.editorController.closePreview();
         this.imageSurface = null;
         this.renderEditor();
       });
@@ -6670,66 +6492,33 @@ export class AsterlynApp {
 
   private captureMountedTextEditor(): void {
     const tabId = this.mountedTextTabId;
-    if (!tabId || !textTab(this.state.editor, tabId)) return;
+    if (!tabId || !textTab(this.editorState.session, tabId)) return;
     this.textEditor.flushChanges();
-    this.state.editor = captureTextContent(
-      this.state.editor,
-      tabId,
-      this.textEditor.content(),
-    );
+    this.editorController.captureText(tabId, this.textEditor.content());
   }
 
   private async saveTextTab(tabId: string): Promise<boolean> {
     if (this.mountedTextTabId === tabId) this.captureMountedTextEditor();
-    const tab = textTab(this.state.editor, tabId);
+    const tab = textTab(this.editorState.session, tabId);
     if (!tab) return true;
-    const requestId = `text-save-${Date.now()}-${++this.textSaveSequence}`;
-    const prepared = beginTextSave(this.state.editor, tabId, tab.content, requestId);
-    this.state.editor = prepared.session;
-    const request = prepared.request;
-    if (!request) {
-      if (isTextTabDirty(tab)) {
-        this.setStatus("Wait for the current file operation before continuing", "warning");
-        return false;
-      }
+    const result = await this.editorController.saveText(tabId, tab.content);
+    if (result.status === "clean") return true;
+    if (result.status === "busy") {
+      this.setStatus("Wait for the current file operation before continuing", "warning");
+      return false;
+    }
+    if (result.status === "stale" || result.status === "failure") {
+      this.renderLeftTool();
+      return false;
+    }
+    this.renderLeftTool();
+    this.scheduleSavedRepositoryRefresh(result.tab.document.repositoryRoot);
+    if (result.status === "saved") {
+      this.setStatus(`Saved ${basename(result.tab.document.workspacePath)}`, "success");
       return true;
     }
-    this.renderEditor();
-    try {
-      const result = await bridge.saveTextFile(
-        request.document.repositoryRoot,
-        request.document.repositoryId,
-        request.document.path,
-        request.expectedRevision,
-        request.content,
-        request.utf8Bom,
-        request.requestId,
-      );
-      this.state.editor = completeTextSave(this.state.editor, tabId, result);
-      const current = textTab(this.state.editor, tabId);
-      this.renderEditor();
-      this.renderLeftTool();
-      this.scheduleSavedRepositoryRefresh(request.document.repositoryRoot);
-      if (current && !isTextTabDirty(current)) {
-        this.setStatus(`Saved ${basename(current.document.workspacePath)}`, "success");
-        return true;
-      }
-      this.setStatus("Saved captured changes; newer edits remain unsaved", "warning");
-      return false;
-    } catch (error) {
-      const conflict = isWorkspaceConflict(error);
-      this.state.editor = failTextSave(
-        this.state.editor,
-        tabId,
-        request.requestId,
-        errorMessage(error),
-        conflict,
-      );
-      this.renderEditor();
-      this.renderLeftTool();
-      this.showError(error);
-      return false;
-    }
+    this.setStatus("Saved captured changes; newer edits remain unsaved", "warning");
+    return false;
   }
 
   private scheduleSavedRepositoryRefresh(repositoryRoot: string): void {
@@ -6770,6 +6559,7 @@ export class AsterlynApp {
       }
       this.state.snapshot = mergeTrackedChanges(snapshot, scan);
       this.changesController.installSnapshot(this.state.snapshot);
+      this.filesController.updateChanges(this.state.snapshot.changes);
       this.reconcileWorkingDocument(this.state.snapshot);
       this.renderWorkspace();
       void this.completeUntrackedScan(repositoryRoot, generation, false);
@@ -6792,7 +6582,7 @@ export class AsterlynApp {
 
   private async requestCloseTextTab(tabId: string): Promise<void> {
     this.captureMountedTextEditor();
-    const tab = textTab(this.state.editor, tabId);
+    const tab = textTab(this.editorState.session, tabId);
     if (!tab) return;
     if (isTextTabDirty(tab) || tab.saveRequest) {
       if (tab.saveRequest) {
@@ -6804,9 +6594,7 @@ export class AsterlynApp {
       );
       if (!save || !(await this.saveTextTab(tabId))) return;
     }
-    const closed = closeTextTab(this.state.editor, tabId);
-    this.state.editor = closed.session;
-    if (!closed.blocked) {
+    if (this.editorController.closeText(tabId)) {
       this.textEditor.dispose(tabId);
       this.renderLeftTool();
       this.renderEditor();
@@ -6815,7 +6603,7 @@ export class AsterlynApp {
 
   private async saveDirtyTabsBefore(action: string): Promise<boolean> {
     this.captureMountedTextEditor();
-    const dirty = dirtyTextTabs(this.state.editor);
+    const dirty = dirtyTextTabs(this.editorState.session);
     if (dirty.length === 0) return true;
     const save = window.confirm(
       `Save ${dirty.length} unsaved file${dirty.length === 1 ? "" : "s"} before ${action}?\n\nCancel keeps the current workspace open.`,
@@ -6824,18 +6612,18 @@ export class AsterlynApp {
     for (const tab of dirty) {
       if (!(await this.saveTextTab(tab.id))) return false;
     }
-    return dirtyTextTabs(this.state.editor).length === 0;
+    return dirtyTextTabs(this.editorState.session).length === 0;
   }
 
   private activeDocument(): EditorDocument {
-    return activeEditorDocument(this.state.editor);
+    return this.editorController.activeDocument();
   }
 
   private activateDiffPreview(
     document: Exclude<EditorDocument, { kind: "welcome" | "project-file" }>,
   ): void {
     this.captureMountedTextEditor();
-    this.state.editor = activatePreview(this.state.editor, document);
+    this.editorController.activatePreview(document);
   }
 
   private contentHeading(title: string, subtitle: string): string {
@@ -6951,10 +6739,10 @@ export class AsterlynApp {
     document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
   ): ProjectFile | null {
     return document.kind === "working-diff"
-      ? this.state.repositoryFiles.find(
+      ? this.filesState.files.find(
           (file) => file.repositoryId === "." && file.path === document.selection.path,
         ) ?? null
-      : this.state.repositoryFiles.find(
+      : this.filesState.files.find(
           (file) => file.repositoryId === document.repositoryId && file.path === document.path,
         ) ?? null;
   }
@@ -7412,7 +7200,7 @@ export class AsterlynApp {
   }
 
   private pathForKey(key: string): HistoryPath | null {
-    const candidate = historyPathCandidates(this.state.repositoryFiles).find(
+    const candidate = historyPathCandidates(this.filesState.files).find(
       (path) => historyPathKey(path) === key,
     );
     return candidate
@@ -7477,7 +7265,7 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
     if (!snapshot || !selected || this.state.loading) return;
-    const dirty = dirtyTextTabs(this.state.editor).find(
+    const dirty = dirtyTextTabs(this.editorState.session).find(
       (tab) => tab.document.repositoryId === "." && tab.document.path === selected.path,
     );
     if (dirty) {
@@ -7509,6 +7297,7 @@ export class AsterlynApp {
         this.state.snapshot = next;
         this.remoteController.installSnapshot(next);
         this.changesController.installSnapshot(next);
+        this.filesController.updateChanges(next.changes);
         this.reconcileWorkingDocument(next);
         this.renderWorkspace();
         if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
@@ -7769,7 +7558,7 @@ export class AsterlynApp {
 
   private async commit(): Promise<void> {
     this.captureMountedTextEditor();
-    if (dirtyTextTabs(this.state.editor).length > 0) {
+    if (dirtyTextTabs(this.editorState.session).length > 0) {
       if (await this.saveDirtyTabsBefore("creating the commit")) {
         await this.refresh();
         this.setStatus("Files saved; review the refreshed selection before committing", "warning");
@@ -7798,6 +7587,7 @@ export class AsterlynApp {
           this.state.snapshot = next;
           this.remoteController.installSnapshot(next);
           this.changesController.installSnapshot(next);
+          this.filesController.updateChanges(next.changes);
           this.state.selectedBranch = null;
           this.installSnapshotHistory(next, true);
           this.reconcileWorkingDocument(next);
@@ -7892,11 +7682,12 @@ export class AsterlynApp {
         clearInclusion: true,
         clearSelection: true,
       });
+      this.filesController.installWorkspace(next.root, next.changes);
       this.state.selectedBranch = null;
       this.installSnapshotHistory(next, true);
       this.captureMountedTextEditor();
-      if (dirtyTextTabs(this.state.editor).length === 0) {
-        this.state.editor = createEditorSession();
+      if (dirtyTextTabs(this.editorState.session).length === 0) {
+        this.editorController.resetSession();
       }
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
@@ -7956,6 +7747,7 @@ export class AsterlynApp {
         untrackedState: "complete",
       };
       this.changesController.installSnapshot(this.state.snapshot);
+      this.filesController.updateChanges(this.state.snapshot.changes);
       this.reconcileWorkingDocument(this.state.snapshot);
       this.renderWorkspace();
       if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
@@ -8023,7 +7815,7 @@ export class AsterlynApp {
       this.loadSelectedDiff();
       return;
     }
-    this.state.editor = closePreview(this.state.editor);
+    this.editorController.closePreview();
     this.clearWorkingDiff();
   }
 
@@ -8569,14 +8361,6 @@ function errorMessage(error: unknown): string {
     if (message) return message;
   }
   return "An unexpected operation error occurred.";
-}
-
-function isWorkspaceConflict(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      (error as Record<string, unknown>).kind === "conflict",
-  );
 }
 
 function escapeHtml(value: string): string {
