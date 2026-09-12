@@ -22,6 +22,11 @@ import {
   type RemotePushChange,
   type RemotePushState,
 } from "./features/remote-push/remote-push-controller";
+import {
+  ChangesCommitController,
+  type ChangesCommitChange,
+  type ChangesCommitState,
+} from "./features/changes-commit/changes-commit-controller";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -177,7 +182,6 @@ import {
   descendantChangePaths,
   effectiveChangeKind,
   includedChanges,
-  reconcileExcludedChangePaths,
   type ChangeFileTreeNode,
   type ChangeFileView,
   type ChangeGroupId,
@@ -237,12 +241,10 @@ import {
 import type {
   BranchSummary,
   ChangeKind,
-  ChangeSelection,
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
   CommitSummary,
-  DiffResult,
   FileChange,
   GitRootDescriptor,
   HistoryPath,
@@ -300,10 +302,6 @@ interface AppState {
   replacementText: string;
   replacementDialog: "preview" | "recovery" | null;
   replacementRecoveryBusy: { id: string; action: "keep" | "rollback" } | null;
-  selectedChange: ChangeSelection | null;
-  excludedChangePaths: Set<string>;
-  changeFileView: ChangeFileView;
-  collapsedChangeDirectories: Set<string>;
   historyQuery: string;
   historyCaseSensitive: boolean;
   historyRegularExpression: boolean;
@@ -337,14 +335,9 @@ interface AppState {
   commitPatchLoading: boolean;
   commitPatchError: string | null;
   commitPatchVersion: number;
-  workingPatch: DiffResult | null;
-  workingPatchLoading: boolean;
-  workingPatchError: string | null;
-  workingPatchVersion: number;
   selectedBranch: string | null;
   collapsedBranchGroups: Set<BranchSummary["kind"]>;
   newBranchName: string;
-  commitMessage: string;
   loading: boolean;
   error: string | null;
 }
@@ -384,10 +377,6 @@ export class AsterlynApp {
     replacementText: "",
     replacementDialog: null,
     replacementRecoveryBusy: null,
-    selectedChange: null,
-    excludedChangePaths: new Set(),
-    changeFileView: loadChangeFileView(window.localStorage),
-    collapsedChangeDirectories: new Set(),
     historyQuery: "",
     historyCaseSensitive: false,
     historyRegularExpression: false,
@@ -421,14 +410,9 @@ export class AsterlynApp {
     commitPatchLoading: false,
     commitPatchError: null,
     commitPatchVersion: 0,
-    workingPatch: null,
-    workingPatchLoading: false,
-    workingPatchError: null,
-    workingPatchVersion: 0,
     selectedBranch: null,
     collapsedBranchGroups: new Set(),
     newBranchName: "",
-    commitMessage: "",
     loading: false,
     error: null,
   };
@@ -440,7 +424,6 @@ export class AsterlynApp {
     source?: EditorFontLoadSource;
     message?: string;
   } = { id: null, kind: "idle" };
-  private diffGeneration = 0;
   private expandedUnchangedDiffKey: string | null = null;
   private commitDiffGeneration = 0;
   private scanSequence = 0;
@@ -487,6 +470,8 @@ export class AsterlynApp {
   private readonly releaseHistoryController: () => void;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
+  private readonly changesController: ChangesCommitController;
+  private readonly releaseChangesController: () => void;
   private workspaceResizeObserver: ResizeObserver | null = null;
   private editorMeasureFrame: number | null = null;
   private projectTreeCache: {
@@ -528,6 +513,18 @@ export class AsterlynApp {
     this.releaseRemoteController = this.remoteController.subscribe((change) =>
       this.handleRemoteControllerChange(change),
     );
+    this.changesController = new ChangesCommitController(
+      {
+        readLocalDiff: (...args) => bridge.readLocalDiff(...args),
+        readLocalImageDiff: (...args) => bridge.readLocalImageDiff(...args),
+        revertChanges: (...args) => bridge.revertChanges(...args),
+        commitChanges: (...args) => bridge.commitChanges(...args),
+      },
+      loadChangeFileView(window.localStorage),
+    );
+    this.releaseChangesController = this.changesController.subscribe((change) =>
+      this.handleChangesControllerChange(change),
+    );
   }
 
   private get historyState(): GitHistoryDetailsState {
@@ -536,6 +533,10 @@ export class AsterlynApp {
 
   private get remoteState(): RemotePushState {
     return this.remoteController.state;
+  }
+
+  private get changesState(): ChangesCommitState {
+    return this.changesController.state;
   }
 
   private handleRemoteControllerChange(change: RemotePushChange): void {
@@ -550,6 +551,21 @@ export class AsterlynApp {
     }
     if (change.reason === "file-selection") this.updatePushFileSelection();
     if (change.error && change.reason === "operation-complete") this.showError(change.error);
+  }
+
+  private handleChangesControllerChange(change: ChangesCommitChange): void {
+    if (change.reason === "presentation" && this.state.layout.leftTool === "changes") {
+      this.renderLeftTool();
+    } else if (change.inclusionChanged) {
+      this.syncChangeInclusionUi();
+      this.refreshCommitComposer();
+    }
+    if (change.diffChanged && change.reason !== "selection" && this.isWorkingDiffActive()) {
+      this.syncWorkingImageSurface();
+      this.renderEditor();
+    }
+    if (change.warning) this.setStatus(change.warning, "warning");
+    if (change.error) this.showError(change.error);
   }
 
   private handleHistoryControllerChange(change: HistoryDetailsChange): void {
@@ -1256,6 +1272,8 @@ export class AsterlynApp {
         this.historyController.dispose();
         this.releaseRemoteController();
         this.remoteController.dispose();
+        this.releaseChangesController();
+        this.changesController.dispose();
         this.historyListView.unmount();
       },
       { once: true },
@@ -1682,14 +1700,16 @@ export class AsterlynApp {
       }
       this.state.workspaceRoot = opened.root;
       this.state.snapshot = snapshot;
-      this.state.excludedChangePaths.clear();
-      this.state.collapsedChangeDirectories.clear();
+      this.changesController.installSnapshot(snapshot, {
+        clearInclusion: true,
+        clearDisclosure: true,
+        clearSelection: true,
+      });
       this.state.historyQuery = "";
       this.state.historyRecentPaths = [];
       this.closeHistoryDialog();
       this.resetHistoryFilters();
       this.state.gitDetail = "commit";
-      this.clearWorkingDiff();
       this.state.projectFiles = [];
       this.state.repositoryFiles = [];
       this.state.ignoredProjectEntries = [];
@@ -1712,7 +1732,6 @@ export class AsterlynApp {
         };
       }
       this.remoteController.installSnapshot(snapshot);
-      if (snapshot) this.chooseValidChangeSelection();
       this.state.error = null;
       this.closeRepositoryDialog();
       this.renderWorkspace();
@@ -1774,12 +1793,8 @@ export class AsterlynApp {
       }
       this.state.snapshot = next;
       this.remoteController.installSnapshot(next);
-      this.state.excludedChangePaths = reconcileExcludedChangePaths(
-        this.state.excludedChangePaths,
-        next.changes,
-      );
+      this.changesController.installSnapshot(next);
       this.reconcileHistoryScope(next);
-      this.chooseValidChangeSelection();
       this.reconcileWorkingDocument(next);
 
       const query = this.activeHistoryQuery();
@@ -2798,12 +2813,10 @@ export class AsterlynApp {
       ? { ...refreshed, commits: current.commits }
       : refreshed;
     if (this.state.snapshot) {
-      this.state.excludedChangePaths = reconcileExcludedChangePaths(
-        this.state.excludedChangePaths,
-        this.state.snapshot.changes,
-      );
-      this.chooseValidChangeSelection();
+      this.changesController.installSnapshot(this.state.snapshot);
       this.reconcileWorkingDocument(this.state.snapshot);
+    } else {
+      this.changesController.installSnapshot(null);
     }
     this.renderWorkspace();
     await this.loadProjectFiles(repositoryRoot, generation);
@@ -3530,14 +3543,9 @@ export class AsterlynApp {
   ): void {
     this.state.snapshot = snapshot;
     this.remoteController.installSnapshot(snapshot);
+    this.changesController.installSnapshot(snapshot, { clearSelection: true });
     this.state.selectedBranch = null;
     this.installSnapshotHistory(snapshot);
-    this.state.excludedChangePaths = reconcileExcludedChangePaths(
-      this.state.excludedChangePaths,
-      snapshot.changes,
-    );
-    this.state.selectedChange = null;
-    this.chooseValidChangeSelection();
     if (focusConflicts) this.prepareConflictResolution(snapshot);
     this.reconcileWorkingDocument(snapshot);
     this.renderWorkspace();
@@ -3556,15 +3564,13 @@ export class AsterlynApp {
       leftTool: "changes",
     };
     saveWorkbenchLayout(window.localStorage, this.state.layout);
-    this.state.excludedChangePaths.delete(conflict.path);
-    this.state.selectedChange = { path: conflict.path, staged: false };
+    this.changesController.selectConflict(conflict.path);
     this.activateDiffPreview({
       kind: "working-diff",
       repositoryRoot: snapshot.root,
-      selection: { ...this.state.selectedChange },
+      selection: { path: conflict.path, staged: false },
     });
-    this.clearWorkingDiff();
-    this.state.workingPatchLoading = true;
+    this.loadSelectedDiff();
     this.remoteController.setDialogError(
       "Git reported unresolved files. They are listed in Changes and the first conflict is open in the current read-only Diff. Editable conflict resolution, Continue, and Abort are not available yet.",
     );
@@ -4544,16 +4550,16 @@ export class AsterlynApp {
       selected.worktreeStatus === "untracked" ||
       selected.indexStatus === "added" ||
       selected.indexStatus === "copied";
-    const nextView = this.state.changeFileView === "tree" ? "flat list" : "directory tree";
+    const nextView = this.changesState.fileView === "tree" ? "flat list" : "directory tree";
     return `
       <div class="change-toolbar" role="toolbar" aria-label="Commit file actions">
         <button class="compact-icon-button" type="button" data-change-action="refresh" title="Refresh changes" aria-label="Refresh changes">${icon("refresh", 15)}</button>
         <button class="compact-icon-button" type="button" data-change-action="revert" title="${revertUnsupported ? "Select an ordinary tracked file to revert" : "Revert selected file to HEAD"}" aria-label="Revert selected file" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
         <button class="compact-icon-button" type="button" data-change-action="diff" title="Open selected file Diff" aria-label="Open selected file Diff" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
         <span class="toolbar-separator" aria-hidden="true"></span>
-        <button class="compact-icon-button ${this.state.changeFileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="Show changes as ${nextView}" aria-label="Show changes as ${nextView}" aria-pressed="${this.state.changeFileView === "tree"}">${icon("eye", 15)}</button>
-        <button class="compact-icon-button" type="button" data-change-action="expand" title="Expand all folders" aria-label="Expand all folders" ${this.state.changeFileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
-        <button class="compact-icon-button" type="button" data-change-action="collapse" title="Collapse all folders" aria-label="Collapse all folders" ${this.state.changeFileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
+        <button class="compact-icon-button ${this.changesState.fileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="Show changes as ${nextView}" aria-label="Show changes as ${nextView}" aria-pressed="${this.changesState.fileView === "tree"}">${icon("eye", 15)}</button>
+        <button class="compact-icon-button" type="button" data-change-action="expand" title="Expand all folders" aria-label="Expand all folders" ${this.changesState.fileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
+        <button class="compact-icon-button" type="button" data-change-action="collapse" title="Collapse all folders" aria-label="Collapse all folders" ${this.changesState.fileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
       </div>`;
   }
 
@@ -4590,9 +4596,9 @@ export class AsterlynApp {
     group: ChangeGroupId,
   ): string {
     if (changes.length === 0) return "";
-    const collapsed = this.state.collapsedChangeDirectories.has(`group:${group}`);
+    const collapsed = this.changesState.collapsedDirectories.has(`group:${group}`);
     const rows =
-      this.state.changeFileView === "tree"
+      this.changesState.fileView === "tree"
         ? buildChangeFileTree(changes)
             .map((node) => this.renderChangeTreeNode(node, group, 0))
             .join("")
@@ -4620,7 +4626,7 @@ export class AsterlynApp {
     if (node.kind === "file") return this.changeRow(node.change!, depth);
     const key = `directory:${group}:${node.path}`;
     const paths = descendantChangePaths(node);
-    const collapsed = this.state.collapsedChangeDirectories.has(key);
+    const collapsed = this.changesState.collapsedDirectories.has(key);
     return `<details class="change-directory" data-change-disclosure="${escapeAttribute(key)}" ${collapsed ? "" : "open"}>
       <summary style="--tree-depth:${depth}">
         <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(node.path)}" data-include-directory-group="${group}" aria-label="Include ${escapeAttribute(node.path)}" />
@@ -4633,8 +4639,8 @@ export class AsterlynApp {
 
   private changeRow(change: FileChange, depth: number | null): string {
     const kind = effectiveChangeKind(change);
-    const primary = this.state.selectedChange?.path === change.path;
-    const included = !this.state.excludedChangePaths.has(change.path);
+    const primary = this.changesState.selectedChange?.path === change.path;
+    const included = !this.changesState.excludedPaths.has(change.path);
     return `
       <div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="option" tabindex="0" ${depth === null ? "" : `style="--tree-depth:${depth}"`} data-change-path="${escapeAttribute(change.path)}" aria-selected="${primary}" aria-label="${primary ? "Selected, " : ""}open complete local diff for ${escapeAttribute(change.path)}">
         <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(change.path)}" aria-label="Include ${escapeAttribute(change.path)} in commit" ${included ? "checked" : ""} />
@@ -5290,18 +5296,16 @@ export class AsterlynApp {
         } else if (action === "diff") {
           this.openSelectedChangeDiff();
         } else if (action === "view") {
-          this.state.changeFileView = this.state.changeFileView === "tree" ? "flat" : "tree";
-          saveChangeFileView(window.localStorage, this.state.changeFileView);
-          this.renderLeftTool();
+          const view = this.changesState.fileView === "tree" ? "flat" : "tree";
+          this.changesController.setFileView(view);
+          saveChangeFileView(window.localStorage, view);
         } else if (action === "expand") {
-          this.state.collapsedChangeDirectories.clear();
-          this.renderLeftTool();
+          this.changesController.expandDirectories();
         } else if (action === "collapse") {
-          this.state.collapsedChangeDirectories = new Set(
+          this.changesController.collapseDirectories(
             Array.from(this.root.querySelectorAll<HTMLElement>("[data-change-disclosure]"))
               .flatMap((item) => item.dataset.changeDisclosure ? [item.dataset.changeDisclosure] : []),
           );
-          this.renderLeftTool();
         }
       });
     });
@@ -5348,8 +5352,7 @@ export class AsterlynApp {
       details.addEventListener("toggle", () => {
         const key = details.dataset.changeDisclosure;
         if (!key) return;
-        if (details.open) this.state.collapsedChangeDirectories.delete(key);
-        else this.state.collapsedChangeDirectories.add(key);
+        this.changesController.setDirectoryExpanded(key, details.open);
       });
     });
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
@@ -5372,7 +5375,7 @@ export class AsterlynApp {
           event.preventDefault();
           this.setChangePathsIncluded(
             [path],
-            this.state.excludedChangePaths.has(path),
+            this.changesState.excludedPaths.has(path),
           );
           return;
         }
@@ -5400,15 +5403,13 @@ export class AsterlynApp {
   ): void {
     const path = row.dataset.changePath;
     if (!path || !this.state.snapshot) return;
-    this.state.selectedChange = { path, staged: false };
-    if (this.state.selectedChange && this.state.snapshot) {
+    this.changesController.selectChange(path);
+    if (this.changesState.selectedChange && this.state.snapshot) {
       this.activateDiffPreview({
         kind: "working-diff",
         repositoryRoot: this.state.snapshot.root,
-        selection: { ...this.state.selectedChange },
+        selection: { ...this.changesState.selectedChange },
       });
-      this.clearWorkingDiff();
-      this.state.workingPatchLoading = true;
     }
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((candidate) => {
       const primary = candidate.dataset.changePath === path;
@@ -5434,17 +5435,12 @@ export class AsterlynApp {
         : "Revert selected file to HEAD";
     }
     this.renderEditor();
-    if (this.state.selectedChange) void this.loadSelectedDiff();
+    if (this.changesState.selectedChange) void this.loadSelectedDiff();
     if (restoreFocus) this.focusChangeRow(path);
   }
 
   private setChangePathsIncluded(paths: string[], included: boolean): void {
-    for (const path of paths) {
-      if (included) this.state.excludedChangePaths.delete(path);
-      else this.state.excludedChangePaths.add(path);
-    }
-    this.syncChangeInclusionUi();
-    this.refreshCommitComposer();
+    this.changesController.setPathsIncluded(paths, included);
   }
 
   private syncChangeInclusionUi(): void {
@@ -5452,7 +5448,7 @@ export class AsterlynApp {
     if (!snapshot || this.state.layout.leftTool !== "changes") return;
     this.root.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
       const path = checkbox.dataset.includePath!;
-      checkbox.checked = !this.state.excludedChangePaths.has(path);
+      checkbox.checked = !this.changesState.excludedPaths.has(path);
       checkbox.indeterminate = false;
       checkbox.closest(".change-row")?.classList.toggle("excluded", !checkbox.checked);
     });
@@ -5478,7 +5474,7 @@ export class AsterlynApp {
   }
 
   private setAggregateCheckbox(checkbox: HTMLInputElement, paths: string[]): void {
-    const included = paths.filter((path) => !this.state.excludedChangePaths.has(path)).length;
+    const included = paths.filter((path) => !this.changesState.excludedPaths.has(path)).length;
     checkbox.checked = paths.length > 0 && included === paths.length;
     checkbox.indeterminate = included > 0 && included < paths.length;
   }
@@ -6045,20 +6041,20 @@ export class AsterlynApp {
         this.renderImageDiff(document, () => void this.loadSelectedDiff());
         return;
       }
-      if (this.state.workingPatchLoading) {
+      if (this.changesState.workingPatchLoading) {
         this.showEditorHtml(
           editorDocumentContentKey(document, "loading"),
           this.loadingBlock("Loading patch…"),
         );
-      } else if (this.state.workingPatchError) {
+      } else if (this.changesState.workingPatchError) {
         this.showEditorHtml(
           editorDocumentContentKey(
             document,
-            `error:${this.state.workingPatchError}`,
+            `error:${this.changesState.workingPatchError}`,
           ),
           this.retryState(
             "Could not load patch",
-            this.state.workingPatchError,
+            this.changesState.workingPatchError,
             "retry-working-diff",
             "changes",
           ),
@@ -6066,13 +6062,13 @@ export class AsterlynApp {
         this.query("#retry-working-diff").addEventListener("click", () => {
           void this.loadSelectedDiff();
         });
-      } else if (this.state.workingPatch) {
+      } else if (this.changesState.workingPatch) {
         this.mountEditorDiff(
           editorDocumentContentKey(
             document,
-            `patch:${this.state.workingPatchVersion}`,
+            `patch:${this.changesState.workingPatchVersion}`,
           ),
-          this.state.workingPatch.patch ||
+          this.changesState.workingPatch.patch ||
             "No textual diff is available for this selection.",
           selected.path,
         );
@@ -6773,11 +6769,7 @@ export class AsterlynApp {
         return;
       }
       this.state.snapshot = mergeTrackedChanges(snapshot, scan);
-      this.state.excludedChangePaths = reconcileExcludedChangePaths(
-        this.state.excludedChangePaths,
-        this.state.snapshot.changes,
-      );
-      this.chooseValidChangeSelection();
+      this.changesController.installSnapshot(this.state.snapshot);
       this.reconcileWorkingDocument(this.state.snapshot);
       this.renderWorkspace();
       void this.completeUntrackedScan(repositoryRoot, generation, false);
@@ -6855,7 +6847,7 @@ export class AsterlynApp {
     imageDiff: boolean,
   ): string {
     const textReady = !imageDiff && (document.kind === "working-diff"
-      ? this.state.workingPatch !== null
+      ? this.changesState.workingPatch !== null
       : this.state.commitPatch !== null);
     const previousFile = this.adjacentDiffPath(document, -1);
     const nextFile = this.adjacentDiffPath(document, 1);
@@ -6944,17 +6936,15 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     const selected = snapshot?.changes.find((change) => change.path === path);
     if (!snapshot || !selected) return;
-    this.state.selectedChange = { path: selected.path, staged: false };
+    this.changesController.selectChange(selected.path);
     this.activateDiffPreview({
       kind: "working-diff",
       repositoryRoot: snapshot.root,
-      selection: { ...this.state.selectedChange },
+      selection: { path: selected.path, staged: false },
     });
-    this.clearWorkingDiff();
-    this.state.workingPatchLoading = true;
     if (this.state.layout.leftTool === "changes") this.renderLeftTool();
     this.renderEditor();
-    void this.loadSelectedDiff();
+    this.loadSelectedDiff();
   }
 
   private diffProjectFile(
@@ -7035,108 +7025,38 @@ export class AsterlynApp {
     };
   }
 
-  private async loadSelectedDiff(): Promise<void> {
+  private loadSelectedDiff(): void {
     const snapshot = this.state.snapshot;
     const document = this.activeDocument();
+    const selected = this.changesController.selectedChange();
     if (
       !snapshot ||
+      !selected ||
       document.kind !== "working-diff" ||
-      document.repositoryRoot !== snapshot.root
-    ) {
+      document.repositoryRoot !== snapshot.root ||
+      document.selection.path !== selected.path
+    ) return;
+    void this.changesController.loadSelectedDiff(this.isDiffExpanded(document));
+  }
+
+  private isWorkingDiffActive(): boolean {
+    const document = this.activeDocument();
+    return document.kind === "working-diff" && document.repositoryRoot === this.state.snapshot?.root;
+  }
+
+  private syncWorkingImageSurface(): void {
+    const document = this.activeDocument();
+    if (document.kind !== "working-diff" || !isImagePreviewPath(document.selection.path)) {
+      if (this.imageSurface?.key.startsWith("working\0")) this.imageSurface = null;
       return;
     }
-    const selected = document.selection;
-    const selectedModel = this.selectedChangeModel(snapshot);
-    if (!selectedModel || selectedModel.path !== selected.path) return;
-    const generation = ++this.diffGeneration;
-    this.state.workingPatch = null;
-    this.state.workingPatchLoading = true;
-    this.state.workingPatchError = null;
-    const imageDiff = isImagePreviewPath(selected.path);
-    const imageKey = editorDocumentKey(document);
-    if (imageDiff) {
-      this.imageSurface = {
-        key: imageKey,
-        version: generation,
-        status: "loading",
-        error: null,
-        image: null,
-        diff: null,
-      };
-    }
-    this.renderEditor();
-    try {
-      if (imageDiff) {
-        const diff = await bridge.readLocalImageDiff(snapshot.root, selectedModel);
-        const current = this.activeDocument();
-        if (
-          generation !== this.diffGeneration ||
-          current.kind !== "working-diff" ||
-          editorDocumentKey(current) !== imageKey ||
-          diff.path !== selected.path
-        ) {
-          return;
-        }
-        this.imageSurface = {
-          key: imageKey,
-          version: generation,
-          status: "ready",
-          error: null,
-          image: null,
-          diff,
-        };
-        this.state.workingPatchLoading = false;
-        this.state.workingPatchVersion = generation;
-        this.renderEditor();
-        return;
-      }
-      const diff = await bridge.readLocalDiff(
-        snapshot.root,
-        selectedModel,
-        this.isDiffExpanded(document),
-      );
-      const current = this.activeDocument();
-      if (
-        generation !== this.diffGeneration ||
-        current.kind !== "working-diff" ||
-        current.repositoryRoot !== snapshot.root ||
-        current.selection.path !== selected.path ||
-        current.selection.staged !== selected.staged ||
-        diff.path !== selected.path
-      ) {
-        return;
-      }
-      this.state.workingPatch = diff;
-      this.state.workingPatchLoading = false;
-      this.state.workingPatchVersion = generation;
-      this.renderEditor();
-      if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
-    } catch (error) {
-      const current = this.activeDocument();
-      if (
-        generation !== this.diffGeneration ||
-        current.kind !== "working-diff" ||
-        current.repositoryRoot !== snapshot.root ||
-        current.selection.path !== selected.path ||
-        current.selection.staged !== selected.staged
-      ) {
-        return;
-      }
-      this.state.workingPatchLoading = false;
-      this.state.workingPatchError = errorMessage(error);
-      if (imageDiff) {
-        this.imageSurface = {
-          key: imageKey,
-          version: generation,
-          status: "error",
-          error: errorMessage(error),
-          image: null,
-          diff: null,
-        };
-      }
-      this.renderEditor();
-      this.showError(error);
-    }
+    const key = editorDocumentKey(document);
+    const version = this.changesState.workingPatchVersion;
+    this.imageSurface = this.changesState.workingPatchLoading
+      ? { key, version, status: "loading", error: null, image: null, diff: null }
+      : this.changesState.workingPatchError
+        ? { key, version, status: "error", error: this.changesState.workingPatchError, image: null, diff: null }
+        : { key, version, status: "ready", error: null, image: null, diff: this.changesState.workingImageDiff };
   }
 
   private loadVisibleCommitDetails(): void {
@@ -7531,32 +7451,26 @@ export class AsterlynApp {
   }
 
   private clearWorkingDiff(): void {
-    this.diffGeneration += 1;
-    this.state.workingPatch = null;
-    this.state.workingPatchLoading = false;
-    this.state.workingPatchError = null;
+    this.changesController.clearWorkingDiff(false);
     if (this.imageSurface?.key.startsWith("working\0")) this.imageSurface = null;
   }
 
-  private selectedChangeModel(snapshot: RepositorySnapshot): FileChange | null {
-    const path = this.state.selectedChange?.path;
-    return path ? snapshot.changes.find((change) => change.path === path) ?? null : null;
+  private selectedChangeModel(_snapshot: RepositorySnapshot): FileChange | null {
+    return this.changesController.selectedChange();
   }
 
   private openSelectedChangeDiff(): void {
     const snapshot = this.state.snapshot;
     const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
     if (!snapshot || !selected) return;
-    this.state.selectedChange = { path: selected.path, staged: false };
+    this.changesController.selectChange(selected.path);
     this.activateDiffPreview({
       kind: "working-diff",
       repositoryRoot: snapshot.root,
-      selection: { ...this.state.selectedChange },
+      selection: { path: selected.path, staged: false },
     });
-    this.clearWorkingDiff();
-    this.state.workingPatchLoading = true;
     this.renderEditor();
-    void this.loadSelectedDiff();
+    this.loadSelectedDiff();
   }
 
   private async revertSelectedChange(): Promise<void> {
@@ -7588,23 +7502,22 @@ export class AsterlynApp {
     let revertFailure: unknown = null;
     this.setLoading(true, "Reverting selected file…");
     try {
-      const next = await bridge.revertChanges(snapshot.root, [selected]);
-      if (generation !== this.requestGeneration) return;
-      this.state.snapshot = next;
-      this.state.excludedChangePaths = reconcileExcludedChangePaths(
-        this.state.excludedChangePaths,
-        next.changes,
-      );
-      this.chooseValidChangeSelection();
-      this.reconcileWorkingDocument(next);
-      this.renderWorkspace();
-      if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
-      pendingRoot = next.root;
-      this.setStatus("Selected file reverted", "success");
-    } catch (error) {
-      if (generation !== this.requestGeneration) return;
-      refreshAfterFailure = true;
-      revertFailure = error;
+      const result = await this.changesController.revertSelected();
+      if (generation !== this.requestGeneration || result.status === "stale") return;
+      if (result.status === "success") {
+        const next = result.value;
+        this.state.snapshot = next;
+        this.remoteController.installSnapshot(next);
+        this.changesController.installSnapshot(next);
+        this.reconcileWorkingDocument(next);
+        this.renderWorkspace();
+        if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
+        pendingRoot = next.root;
+        this.setStatus("Selected file reverted", "success");
+      } else if (result.status === "failure") {
+        refreshAfterFailure = true;
+        revertFailure = result.error;
+      }
     } finally {
       if (generation === this.requestGeneration) this.setLoading(false, "Ready");
     }
@@ -7617,7 +7530,7 @@ export class AsterlynApp {
   }
 
   private renderCommitComposer(snapshot: RepositorySnapshot): string {
-    const included = includedChanges(snapshot.changes, this.state.excludedChangePaths);
+    const included = includedChanges(snapshot.changes, this.changesState.excludedPaths);
     const conflict = snapshot.changes.some((change) => change.conflicted);
     const submodule = included.some((change) => change.submodule);
     const blockedMessage = conflict
@@ -7631,14 +7544,14 @@ export class AsterlynApp {
       included.length === 0 ||
       conflict ||
       submodule ||
-      this.state.commitMessage.trim().length === 0 ||
+      this.changesState.commitMessage.trim().length === 0 ||
       this.state.loading;
     return `
       <section class="commit-tool" id="commit-tool" aria-label="Create commit">
         <div class="commit-form">
           <label for="commit-message">Commit Message</label>
-          <textarea id="commit-message" placeholder="Commit Message">${escapeHtml(this.state.commitMessage)}</textarea>
-          <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.state.commitMessage.trim().length}/72</span></div>
+          <textarea id="commit-message" placeholder="Commit Message">${escapeHtml(this.changesState.commitMessage)}</textarea>
+          <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.changesState.commitMessage.trim().length}/72</span></div>
           ${blockedMessage ? `<div class="commit-blocker" role="status">${escapeHtml(blockedMessage)}</div>` : ""}
           <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>Commit ${included.length || ""}</button></div>
         </div>
@@ -7646,14 +7559,14 @@ export class AsterlynApp {
   }
 
   private bindCommitComposer(snapshot: RepositorySnapshot): void {
-    const included = includedChanges(snapshot.changes, this.state.excludedChangePaths);
+    const included = includedChanges(snapshot.changes, this.changesState.excludedPaths);
     const blocked =
       snapshot.changes.some((change) => change.conflicted) ||
       included.some((change) => change.submodule);
     const textarea = this.root.querySelector<HTMLTextAreaElement>("#commit-message");
     const button = this.root.querySelector<HTMLButtonElement>("#commit-button");
     textarea?.addEventListener("input", () => {
-      this.state.commitMessage = textarea.value;
+      this.changesController.setCommitMessage(textarea.value);
       if (button) {
         button.disabled = textarea.value.trim().length === 0 || included.length === 0 || blocked;
       }
@@ -7864,20 +7777,7 @@ export class AsterlynApp {
       return;
     }
     const snapshot = this.state.snapshot;
-    const message = this.state.commitMessage.trim();
-    const selected = snapshot
-      ? includedChanges(snapshot.changes, this.state.excludedChangePaths)
-      : [];
-    if (
-      !snapshot ||
-      !message ||
-      selected.length === 0 ||
-      snapshot.changes.some((change) => change.conflicted) ||
-      selected.some((change) => change.submodule) ||
-      this.state.loading
-    ) {
-      return;
-    }
+    if (!snapshot || !this.changesController.canCommit() || this.state.loading) return;
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
     let pendingRoot: string | null = null;
@@ -7885,39 +7785,38 @@ export class AsterlynApp {
     let commitFailure: unknown = null;
     this.setLoading(true, "Creating commit…");
     try {
-      const result = await bridge.commitChanges(snapshot.root, message, selected);
-      if (generation !== this.requestGeneration) return;
-      this.state.commitMessage = "";
-      if (result.snapshot) {
-        const next = result.snapshot;
-        this.state.snapshot = next;
-        this.state.excludedChangePaths = reconcileExcludedChangePaths(
-          this.state.excludedChangePaths,
-          next.changes,
-        );
-        this.state.selectedBranch = null;
-        this.installSnapshotHistory(next, true);
-        this.chooseValidChangeSelection();
-        this.reconcileWorkingDocument(next);
-        this.renderWorkspace();
-        this.loadVisibleCommitDetails();
-        if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
-        pendingRoot = next.root;
-      } else {
+      const outcome = await this.changesController.commit();
+      if (generation !== this.requestGeneration || outcome.status === "stale") return;
+      if (outcome.status === "failure") {
+        commitFailure = outcome.error;
         refreshAfter = true;
+      } else {
+        if (outcome.status !== "success") return;
+        const result = outcome.value;
+        if (result.snapshot) {
+          const next = result.snapshot;
+          this.state.snapshot = next;
+          this.remoteController.installSnapshot(next);
+          this.changesController.installSnapshot(next);
+          this.state.selectedBranch = null;
+          this.installSnapshotHistory(next, true);
+          this.reconcileWorkingDocument(next);
+          this.renderWorkspace();
+          this.loadVisibleCommitDetails();
+          if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
+          pendingRoot = next.root;
+        } else {
+          refreshAfter = true;
+        }
+        this.setStatus(
+          result.verificationWarning
+            ? "Commit finished, but Git changed concurrently; inspect refreshed history before committing again"
+            : result.refreshError
+              ? "Commit created; refreshing repository status…"
+              : "Commit created",
+          result.verificationWarning || result.refreshError ? "warning" : "success",
+        );
       }
-      this.setStatus(
-        result.verificationWarning
-          ? "Commit finished, but Git changed concurrently; inspect refreshed history before committing again"
-          : result.refreshError
-            ? "Commit created; refreshing repository status…"
-            : "Commit created",
-        result.verificationWarning || result.refreshError ? "warning" : "success",
-      );
-    } catch (error) {
-      if (generation !== this.requestGeneration) return;
-      commitFailure = error;
-      refreshAfter = true;
     } finally {
       if (generation === this.requestGeneration) this.setLoading(false, "Ready");
     }
@@ -7988,16 +7887,17 @@ export class AsterlynApp {
       const next = await mutation(snapshot.root);
       if (generation !== this.requestGeneration) return;
       this.state.snapshot = next;
+      this.remoteController.installSnapshot(next);
+      this.changesController.installSnapshot(next, {
+        clearInclusion: true,
+        clearSelection: true,
+      });
       this.state.selectedBranch = null;
       this.installSnapshotHistory(next, true);
-      this.state.excludedChangePaths.clear();
-      this.state.selectedChange = null;
-      this.chooseValidChangeSelection();
       this.captureMountedTextEditor();
       if (dirtyTextTabs(this.state.editor).length === 0) {
         this.state.editor = createEditorSession();
       }
-      this.clearWorkingDiff();
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
       void this.loadProjectFiles(next.root, generation);
@@ -8055,11 +7955,7 @@ export class AsterlynApp {
         ),
         untrackedState: "complete",
       };
-      this.state.excludedChangePaths = reconcileExcludedChangePaths(
-        this.state.excludedChangePaths,
-        this.state.snapshot.changes,
-      );
-      this.chooseValidChangeSelection();
+      this.changesController.installSnapshot(this.state.snapshot);
       this.reconcileWorkingDocument(this.state.snapshot);
       this.renderWorkspace();
       if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
@@ -8102,18 +7998,6 @@ export class AsterlynApp {
     });
   }
 
-  private chooseValidChangeSelection(): void {
-    const changes = this.state.snapshot?.changes ?? [];
-    const current = this.state.selectedChange;
-    if (current && changes.some((change) => change.path === current.path)) {
-      this.state.selectedChange = { path: current.path, staged: false };
-      return;
-    }
-    this.state.selectedChange = changes[0]
-      ? { path: changes[0].path, staged: false }
-      : null;
-  }
-
   private reconcileWorkingDocument(snapshot: RepositorySnapshot): void {
     const document = this.activeDocument();
     if (document.kind !== "working-diff") return;
@@ -8122,12 +8006,12 @@ export class AsterlynApp {
     );
     if (stillValid) {
       this.clearWorkingDiff();
-      this.state.workingPatchLoading = true;
+      this.loadSelectedDiff();
       return;
     }
     const replacement =
-      this.state.selectedChange?.path === document.selection.path
-        ? this.state.selectedChange
+      this.changesState.selectedChange?.path === document.selection.path
+        ? this.changesState.selectedChange
         : null;
     if (replacement) {
       this.activateDiffPreview({
@@ -8136,7 +8020,7 @@ export class AsterlynApp {
         selection: { ...replacement },
       });
       this.clearWorkingDiff();
-      this.state.workingPatchLoading = true;
+      this.loadSelectedDiff();
       return;
     }
     this.state.editor = closePreview(this.state.editor);
