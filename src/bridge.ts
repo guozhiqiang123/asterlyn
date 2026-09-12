@@ -1,5 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import {
+  invokeDesktopCommand as invoke,
+  isTauriRuntime,
+  openDialog,
+} from "./adapters/tauri/desktop-command-adapter";
+import { tauriDesktopBridge } from "./adapters/tauri/tauri-desktop-bridge";
 import {
   demoCommitDetails,
   demoCommitDiff,
@@ -47,8 +51,9 @@ import {
   parseWindowChromeMode,
   type WindowChromeMode,
 } from "./workbench/window-chrome";
+import type { DesktopBridge, DirectoryChoice } from "./protocol/desktop-bridge";
 
-const isTauri = "__TAURI_INTERNALS__" in window;
+const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
 let browserGitEnabled = true;
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
@@ -103,12 +108,7 @@ interface DemoReplacementRecovery extends DemoReplacementPlan {
   selectedPaths: string[];
 }
 
-export type DirectoryChoice =
-  | { kind: "selected"; path: string }
-  | { kind: "cancelled" }
-  | { kind: "unsupported" };
-
-export const bridge = {
+const demoBridge: DesktopBridge = {
   isDemo: !isTauri,
 
   async windowChromeMode(): Promise<WindowChromeMode> {
@@ -873,6 +873,9 @@ export const bridge = {
     });
   },
 };
+
+export const bridge: DesktopBridge = isTauri ? tauriDesktopBridge : demoBridge;
+export type { DirectoryChoice } from "./protocol/desktop-bridge";
 
 function demoPushPreview(
   remote: string,

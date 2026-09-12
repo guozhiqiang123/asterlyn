@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "icons:generate": "node scripts/generate-desktop-icons.mjs",
+    "protocol:generate": "node scripts/generate-desktop-protocol.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
     "tauri": "tauri"
   },
