@@ -77,6 +77,7 @@ struct PushTargetContext {
     head_oid: String,
     comparison_base_oid: Option<String>,
     publish: bool,
+    set_upstream_after_push: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -2185,7 +2186,7 @@ impl GitRepository {
                 .map(|tag| OsString::from(format!("{}:{}", tag.object_oid, tag.full_ref))),
         );
         self.run_remote_operation("push", &target.remote, args, cancellation, true, true)?;
-        if target.publish {
+        if target.set_upstream_after_push {
             let tracking_ref = format!("refs/remotes/{}/{}", target.remote, target.branch);
             if self
                 .run_mutation(
@@ -2218,21 +2219,17 @@ impl GitRepository {
             .strip_prefix("refs/heads/")
             .expect("current branch refs are validated")
             .to_string();
+        let set_upstream_after_push = context.upstream.is_none();
         let (destination_ref, comparison_base_oid, publish) = match context.upstream.as_ref() {
-            Some(upstream) => {
+            Some(upstream) if upstream.remote == configured_remote.name => {
                 self.validated_upstream(upstream, true)?;
-                if upstream.remote != configured_remote.name {
-                    return Err(GitError::InvalidInput {
-                        field: "push remote".to_string(),
-                        message: "the selected remote does not match the current upstream"
-                            .to_string(),
-                    });
-                }
                 let base =
                     self.resolve_commit(&upstream.tracking_ref, "read push comparison base")?;
                 (upstream.merge_ref.clone(), Some(base), false)
             }
-            None => {
+            _ => {
+                // Choosing another remote is an explicit review action. Keep the current
+                // upstream unchanged and target the same branch name on that remote.
                 let tracking_ref = format!("refs/remotes/{}/{}", configured_remote.name, branch);
                 let base =
                     if self.reference_exists(&tracking_ref)? {
@@ -2255,6 +2252,7 @@ impl GitRepository {
             head_oid: context.oid,
             comparison_base_oid,
             publish,
+            set_upstream_after_push,
         })
     }
 
@@ -3108,7 +3106,12 @@ fn push_preview_token_with_tags(
         if target.publish {
             "publish"
         } else {
-            "upstream"
+            "existing-destination"
+        },
+        if target.set_upstream_after_push {
+            "configure-upstream"
+        } else {
+            "keep-upstream"
         },
         match tag_mode {
             PushTagMode::None => "no-tags",
@@ -3116,7 +3119,7 @@ fn push_preview_token_with_tags(
             PushTagMode::CurrentBranch => "current-branch-tags",
         },
     ];
-    let mut token = String::from("v2");
+    let mut token = String::from("v3");
     for field in fields {
         token.push('|');
         token.push_str(&field.len().to_string());
@@ -5633,12 +5636,35 @@ mod tests {
         assert_eq!(second_page.commits[0].subject, "First outgoing");
         assert!(!second_page.has_more);
 
-        let remote_path = fixture.remote.to_string_lossy().into_owned();
-        git(&fixture.local, &["remote", "add", "backup", &remote_path]);
-        let wrong_remote = repository
+        let backup = fixture._directory.path().join("backup.git");
+        let backup_path = backup.to_string_lossy().into_owned();
+        git(fixture._directory.path(), &["init", "--bare", &backup_path]);
+        git(&fixture.local, &["remote", "add", "backup", &backup_path]);
+        let backup_preview = repository
             .push_preview("backup", 0, 1)
-            .expect_err("a tracked branch cannot be redirected during confirmation");
-        assert!(matches!(wrong_remote, GitError::InvalidInput { .. }));
+            .expect("a tracked branch can explicitly target another remote");
+        assert_eq!(backup_preview.remote, "backup");
+        assert_eq!(backup_preview.destination_ref, "refs/heads/main");
+        assert!(backup_preview.publish);
+        assert_ne!(backup_preview.preview_token, first_page.preview_token);
+        repository
+            .push_current_confirmed(
+                "backup",
+                &backup_preview.preview_token,
+                &CancellationToken::new(),
+            )
+            .expect("alternate remote push succeeds");
+        assert_eq!(
+            git_stdout(&backup, &["rev-parse", "refs/heads/main"]),
+            second_oid
+        );
+        assert_eq!(
+            git_stdout(
+                &fixture.local,
+                &["rev-parse", "--abbrev-ref", "@{upstream}"]
+            ),
+            "origin/main"
+        );
 
         commit_file(&fixture.local, "third.txt", "third\n", "Third outgoing");
         let stale = repository
@@ -5895,6 +5921,7 @@ mod tests {
             head_oid: "a".repeat(40),
             comparison_base_oid: Some("b".repeat(40)),
             publish: false,
+            set_upstream_after_push: false,
         };
         let first = common("one|refs", "heads/main");
         let second = common("one", "refs|heads/main");

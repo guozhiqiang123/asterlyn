@@ -113,9 +113,9 @@ function pushState(
     return blocked("Push blocked", "This remote is mirrored or uses an unsupported mapping.");
   }
   if (branch.upstreamRemote && remote.name !== branch.upstreamRemote) {
-    return blocked(
-      "Push blocked",
-      `Select ${branch.upstreamRemote}, the configured upstream for this branch.`,
+    return ready(
+      "Review Push",
+      `Review the same-named branch on ${remote.name}. A successful Push keeps ${branch.upstreamRemote} as the configured upstream.`,
     );
   }
   if (!branch.upstreamRemote) {

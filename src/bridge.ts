@@ -798,7 +798,8 @@ export const bridge = {
         throw new Error("The Push review is stale. Refresh it before opening Diff.");
       }
       const commit = browserSnapshot.commits.find((candidate) =>
-        (browserCommitFiles.get(candidate.oid) ?? []).some((file) => file.path === path),
+        (browserCommitFiles.get(candidate.oid) ?? demoCommitDetails(candidate.oid).files)
+          .some((file) => file.path === path),
       );
       return commit ? demoCommitDetails(commit.oid) : null;
     }
@@ -886,12 +887,16 @@ function demoPushPreview(
   if (!browserSnapshot.remotes.some((item) => item.name === remote && item.pushSupported)) {
     throw new Error("Select a supported push remote.");
   }
-  if (branch.upstreamRemote && branch.upstreamRemote !== remote) {
-    throw new Error(`Select ${branch.upstreamRemote}, the configured upstream remote.`);
-  }
   const sourceRef = `refs/heads/${branch.head}`;
-  const destinationRef = branch.upstreamRef ?? sourceRef;
-  const publish = !branch.upstreamRemote;
+  const targetsUpstream = branch.upstreamRemote === remote;
+  const destinationRef = targetsUpstream ? branch.upstreamRef ?? sourceRef : sourceRef;
+  const comparisonBaseOid = browserSnapshot.branches.find(
+    (candidate) =>
+      candidate.kind === "remote" &&
+      candidate.fullName ===
+        `refs/remotes/${remote}/${destinationRef.replace(/^refs\/heads\//, "")}`,
+  )?.oid ?? null;
+  const publish = comparisonBaseOid === null;
   const totalCommits = publish
     ? Math.max(branch.ahead, 1)
     : branch.ahead;
@@ -899,22 +904,15 @@ function demoPushPreview(
     offset,
     Math.min(offset + pageSize, totalCommits),
   );
-  const comparisonBaseOid = publish
-    ? null
-    : browserSnapshot.branches.find(
-        (candidate) =>
-          candidate.kind === "remote" &&
-          candidate.fullName ===
-            `refs/remotes/${remote}/${destinationRef.replace(/^refs\/heads\//, "")}`,
-      )?.oid ?? null;
   const previewToken = [
-    "demo-v2",
+    "demo-v3",
     remote,
     sourceRef,
     destinationRef,
     branch.oid,
     comparisonBaseOid ?? "new",
-    publish ? "publish" : "upstream",
+    publish ? "publish" : "existing-destination",
+    branch.upstreamRemote ? "keep-upstream" : "configure-upstream",
     tagMode,
   ].join("|");
   const filesByPath = new Map<string, CommitFileChange>();

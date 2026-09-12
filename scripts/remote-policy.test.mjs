@@ -109,6 +109,7 @@ test("the selected remote governs every current-branch toolbar action", () => {
   );
   assert.equal(mismatched.pull.enabled, false);
   assert.match(mismatched.pull.detail, /Select origin/);
-  assert.equal(mismatched.push.enabled, false);
-  assert.match(mismatched.push.detail, /Select origin/);
+  assert.equal(mismatched.push.enabled, true);
+  assert.match(mismatched.push.detail, /same-named branch on team/);
+  assert.match(mismatched.push.detail, /keeps origin/);
 });

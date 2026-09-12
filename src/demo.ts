@@ -237,6 +237,11 @@ export const demoSnapshot: RepositorySnapshot = {
       fetchSupported: true,
       pushSupported: true,
     },
+    {
+      name: "backup",
+      fetchSupported: true,
+      pushSupported: true,
+    },
   ],
   untrackedState: "complete",
 };
@@ -313,6 +318,14 @@ export function demoCommitDetails(oid: string): CommitDetails {
             status: "added",
           },
         ]
+      : commit?.subject === "test(git): cover safe remote synchronization"
+        ? [
+            {
+              path: "crates/asterlyn-git/src/repository.rs",
+              originalPath: null,
+              status: "modified",
+            },
+          ]
       : [
           {
             path: "crates/asterlyn-git/src/repository.rs",
