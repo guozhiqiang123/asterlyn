@@ -24,6 +24,11 @@ import {
   type HistoryDetailsChange,
 } from "./features/git-history/history-details-controller";
 import {
+  HistoryFilterController,
+  createHistoryFilterState,
+  type HistoryFilterState,
+} from "./features/git-history/history-filter-controller";
+import {
   filteredBranches as filteredBranchesForView,
   logicalBranches as logicalBranchesForView,
   matchingBranches,
@@ -117,6 +122,8 @@ import type {
   SessionInvalidationSlice,
 } from "./application/session-invalidation";
 import { repositoryReconciliationPlan } from "./application/repository-mutation";
+import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
+import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -169,11 +176,9 @@ import {
   touchRecentRepository,
 } from "./workbench/startup-repository";
 import {
-  defaultHistoryQuery,
   filterHistoryText,
   historyDateSince,
   isSnapshotHistoryQuery,
-  normalizeHistoryQuery,
   type HistoryDatePreset,
 } from "./workbench/history-query";
 import {
@@ -188,12 +193,6 @@ import {
   resolveHistoryPathText,
 } from "./workbench/history-path-selection";
 import { toggleHistoryRootSelection } from "./workbench/history-root-selection";
-import {
-  loadHistoryRefPreferences,
-  saveHistoryRefPreferences,
-  toggleFavoriteRef,
-  touchRecentRef,
-} from "./workbench/history-preferences";
 import {
   findProjectTreeNode,
   type ProjectTreeNode,
@@ -283,7 +282,7 @@ const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
   "operation",
 ];
 
-interface AppState {
+interface AppState extends HistoryFilterState {
   gitDetail: "branch" | "commit";
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
@@ -295,22 +294,8 @@ interface AppState {
   historyQuery: string;
   historyCaseSensitive: boolean;
   historyRegularExpression: boolean;
-  historyRefs: Map<string, HistoryRef>;
-  historyAuthorEmails: Set<string>;
-  historyCurrentAuthor: boolean;
-  historyDatePreset: HistoryDatePreset;
-  historySinceEpoch: number | null;
-  historyPaths: Map<string, HistoryPath>;
-  historyRepositoryIds: Set<string>;
-  historyRecentPaths: HistoryPath[];
-  historyOrder: HistoryQuery["order"];
-  historyFirstParent: boolean;
-  historyExcludeMerges: boolean;
-  historyCollapseLinear: boolean;
   historyFilterMenu: HistoryFilterMenu | null;
   historyBranchSubmenu: string | null;
-  historyFavoriteRefs: Map<string, HistoryRef>;
-  historyRecentRefs: HistoryRef[];
   historyDialog: "branches" | "paths-text" | "paths-tree" | null;
   historyDialogQuery: string;
   historyDialogError: string | null;
@@ -348,25 +333,12 @@ export class AsterlynApp {
     replacementText: "",
     replacementDialog: null,
     replacementRecoveryBusy: null,
+    ...createHistoryFilterState(),
     historyQuery: "",
     historyCaseSensitive: false,
     historyRegularExpression: false,
-    historyRefs: new Map(),
-    historyAuthorEmails: new Set(),
-    historyCurrentAuthor: false,
-    historyDatePreset: "all",
-    historySinceEpoch: null,
-    historyPaths: new Map(),
-    historyRepositoryIds: new Set(),
-    historyRecentPaths: [],
-    historyOrder: "topological",
-    historyFirstParent: false,
-    historyExcludeMerges: false,
-    historyCollapseLinear: false,
     historyFilterMenu: null,
     historyBranchSubmenu: null,
-    historyFavoriteRefs: new Map(),
-    historyRecentRefs: [],
     historyDialog: null,
     historyDialogQuery: "",
     historyDialogError: null,
@@ -387,6 +359,10 @@ export class AsterlynApp {
     loading: false,
     error: null,
   };
+  private readonly historyFilters = new HistoryFilterController(
+    this.state,
+    window.localStorage,
+  );
   private editorFontRequestGeneration = 0;
   private editorFontStatus: {
     id: EditorFontId | null;
@@ -398,8 +374,6 @@ export class AsterlynApp {
   private commitDiffGeneration = 0;
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
-  private workspaceSearchSequence = 0;
-  private workspaceReplacementSequence = 0;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
@@ -426,10 +400,19 @@ export class AsterlynApp {
   private changeTreeScrollFrame: number | null = null;
   private changeTreeWindowStart = 0;
   private readonly windowSession = new WindowSession({
+    openProject: (path) => bridge.openProject(path),
     readTrackedChanges: (root) => bridge.readTrackedChanges(root),
     scanUntracked: (root, scanId) => bridge.scanUntracked(root, scanId),
     cancelUntrackedScan: (scanId) => bridge.cancelUntrackedScan(scanId),
   });
+  private readonly workspaceOperations = new WorkspaceOperationCoordinator(
+    bridge,
+    () => {
+      const root = this.windowSession.workspace.state.root;
+      return root ? { root, generation: this.windowSession.generation } : null;
+    },
+  );
+  private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
   private readonly releaseWindowSession: () => void;
 
   constructor(private readonly root: HTMLElement) {
@@ -1098,13 +1081,19 @@ export class AsterlynApp {
     if (this.remoteState.dialog && !this.remoteState.operation) {
       this.closeRemoteDialog(false);
     }
-    const generation = this.windowSession.beginTransition();
+    const transition = this.windowSession.openProject(
+      path,
+      "activation",
+      COMPLETE_REPOSITORY_SLICES,
+    );
+    const generation = this.windowSession.generation;
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.setLoading(true, "Opening project…");
     try {
-      const opened = await bridge.openProject(path);
-      if (generation !== this.windowSession.generation) return false;
+      const result = await transition;
+      if (!result) return false;
+      const opened = result.project;
       const snapshot = opened.repository;
       const repositoryChanged = previousRoot !== null && previousRoot !== opened.root;
       touchRecentRepository(window.localStorage, opened.root);
@@ -1112,7 +1101,6 @@ export class AsterlynApp {
         this.captureMountedTextEditor();
         this.imageSurface = null;
       }
-      this.windowSession.activate(opened, "activation", COMPLETE_REPOSITORY_SLICES);
       this.windowSession.repository.consumeInvalidation();
       this.editorController.installWorkspace(opened.root);
       this.changesController.installSnapshot(snapshot, {
@@ -1175,16 +1163,21 @@ export class AsterlynApp {
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
-    const generation = this.windowSession.beginTransition();
+    const transition = this.windowSession.openProject(
+      workspaceRoot,
+      "manualRefresh",
+      COMPLETE_REPOSITORY_SLICES,
+    );
+    const generation = this.windowSession.generation;
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.clearError();
     this.setLoading(true, snapshot ? "Refreshing repository…" : "Refreshing project files…");
     try {
-      const opened = await bridge.openProject(workspaceRoot);
-      if (generation !== this.windowSession.generation) return;
+      const result = await transition;
+      if (!result) return;
+      const opened = result.project;
       const next = opened.repository;
-      this.windowSession.activate(opened, "manualRefresh", COMPLETE_REPOSITORY_SLICES);
       this.windowSession.repository.consumeInvalidation();
       if (!next) {
         this.historyController.clear();
@@ -1233,22 +1226,11 @@ export class AsterlynApp {
 
   private reconcileHistoryScope(snapshot: RepositorySnapshot): void {
     const refKeys = new Set(snapshot.branches.map((branch) => branchKey(branch)));
-    this.state.historyRefs = new Map(
-      Array.from(this.state.historyRefs).filter(([key]) => refKeys.has(key)),
-    );
     if (this.state.selectedBranch && !refKeys.has(this.state.selectedBranch)) {
       this.state.selectedBranch = null;
       this.state.gitDetail = "commit";
     }
-    const repositoryIds = new Set(snapshot.repositoryRoots.map((root) => root.id));
-    this.state.historyRepositoryIds = new Set(
-      Array.from(this.state.historyRepositoryIds).filter((id) => repositoryIds.has(id)),
-    );
-    this.state.historyPaths = new Map(
-      Array.from(this.state.historyPaths).filter(([, path]) =>
-        repositoryIds.has(path.repositoryId),
-      ),
-    );
+    this.historyFilters.reconcile(snapshot);
     this.closeHistoryDialog();
   }
 
@@ -1597,48 +1579,43 @@ export class AsterlynApp {
     const query = this.state.commandSurface.query;
     if (!workspaceRoot || query.trim().length === 0) return;
     this.cancelActiveWorkspaceSearch();
-    const requestId = `workspace-search-${Date.now()}-${++this.workspaceSearchSequence}`;
     const options = workspaceSearchOptions(this.state.workspaceSearchControls);
+    const operation = this.workspaceOperations.startSearch(
+      { root: workspaceRoot, generation: this.windowSession.generation },
+      query,
+      options,
+    );
     const started = beginWorkspaceSearch(
       this.state.workspaceSearch,
       this.windowSession.generation,
       workspaceRoot,
-      requestId,
+      operation.operationId,
       query,
       options,
     );
     this.state.workspaceSearch = started.state;
     this.renderCommandSurface(true);
-    try {
-      const report = await bridge.searchWorkspaceText(workspaceRoot, requestId, query, options);
-      if (
-        this.windowSession.generation !== started.request.repositoryGeneration ||
-        this.windowSession.workspace.state.root !== started.request.repositoryRoot
-      ) {
-        return;
-      }
+    const completion = await operation.completion;
+    if (completion.status === "stale") return;
+    if (completion.status === "success") {
       this.state.workspaceSearch = completeWorkspaceSearch(
         this.state.workspaceSearch,
         started.request,
-        report,
+        completion.value,
       );
       this.renderCommandSurface(true);
-    } catch (error) {
+    } else {
       this.state.workspaceSearch = failWorkspaceSearch(
         this.state.workspaceSearch,
         started.request,
-        errorMessage(error),
+        errorMessage(completion.error),
       );
       if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface(true);
     }
   }
 
   private cancelActiveWorkspaceSearch(): void {
-    const request = this.state.workspaceSearch.request;
-    if (this.state.workspaceSearch.status !== "loading" || !request) return;
-    void bridge
-      .cancelWorkspaceTextSearch(request.repositoryRoot, request.requestId)
-      .catch(() => undefined);
+    this.workspaceOperations.cancelSearch();
   }
 
   private invalidateWorkspaceReplacementPreview(): void {
@@ -1661,12 +1638,7 @@ export class AsterlynApp {
     ) {
       return;
     }
-    void bridge
-      .cancelWorkspaceReplacement(
-        replacement.request.repositoryRoot,
-        replacement.request.operationId,
-      )
-      .catch(() => undefined);
+    this.workspaceOperations.cancelReplacement();
   }
 
   private async previewWorkspaceReplacement(): Promise<void> {
@@ -1683,12 +1655,17 @@ export class AsterlynApp {
       return;
     }
     this.cancelActiveWorkspaceReplacement();
-    const planId = `workspace-replace-${Date.now()}-${++this.workspaceReplacementSequence}`;
+    const operation = this.workspaceOperations.startReplacementPreview(
+      { root: workspaceRoot, generation: this.windowSession.generation },
+      searchRequest.query,
+      this.state.replacementText,
+      searchRequest.options,
+    );
     const started = beginReplacementPreview(
       this.state.workspaceReplacement,
       this.windowSession.generation,
       workspaceRoot,
-      planId,
+      operation.operationId,
       searchRequest.query,
       this.state.replacementText,
       searchRequest.options,
@@ -1696,31 +1673,20 @@ export class AsterlynApp {
     this.state.workspaceReplacement = started.state;
     this.state.replacementDialog = "preview";
     this.renderWorkspaceReplacementDialog();
-    try {
-      const preview = await bridge.previewWorkspaceReplacement(
-        workspaceRoot,
-        planId,
-        searchRequest.query,
-        this.state.replacementText,
-        searchRequest.options,
-      );
-      if (
-        this.windowSession.generation !== started.request.repositoryGeneration ||
-        this.windowSession.workspace.state.root !== started.request.repositoryRoot
-      ) {
-        return;
-      }
+    const completion = await operation.completion;
+    if (completion.status === "stale") return;
+    if (completion.status === "success") {
       this.state.workspaceReplacement = completeReplacementPreview(
         this.state.workspaceReplacement,
         started.request,
-        preview,
+        completion.value,
       );
       this.renderWorkspaceReplacementDialog();
-    } catch (error) {
+    } else {
       this.state.workspaceReplacement = failReplacement(
         this.state.workspaceReplacement,
         started.request,
-        errorMessage(error),
+        errorMessage(completion.error),
       );
       this.renderWorkspaceReplacementDialog();
     }
@@ -1832,13 +1798,14 @@ export class AsterlynApp {
     this.state.workspaceReplacement = beginReplacementApply(this.state.workspaceReplacement);
     this.renderWorkspaceReplacementDialog();
     try {
-      const result = await bridge.applyWorkspaceReplacement(workspaceRoot, preview.planId, selectedPaths);
-      if (
-        this.windowSession.generation !== request.repositoryGeneration ||
-        this.windowSession.workspace.state.root !== request.repositoryRoot
-      ) {
-        return;
-      }
+      const completion = await this.workspaceOperations.applyReplacement(
+        { root: workspaceRoot, generation: request.repositoryGeneration },
+        preview.planId,
+        selectedPaths,
+      );
+      if (completion.status === "stale") return;
+      if (completion.status === "failure") throw completion.error;
+      const result = completion.value;
       this.state.workspaceReplacement = completeReplacementApply(
         this.state.workspaceReplacement,
         request,
@@ -1885,7 +1852,7 @@ export class AsterlynApp {
       recoveriesLoading: true,
     };
     try {
-      const recoveries = await bridge.listWorkspaceReplacementRecoveries(repositoryRoot);
+      const recoveries = await this.workspaceOperations.listRecoveries(repositoryRoot);
       if (generation !== this.windowSession.generation || this.windowSession.workspace.state.root !== repositoryRoot) return;
       this.state.workspaceReplacement = setReplacementRecoveries(
         this.state.workspaceReplacement,
@@ -1951,9 +1918,9 @@ export class AsterlynApp {
     try {
       let rollbackResult: ReplacementApplyResult | null = null;
       if (action === "keep") {
-        await bridge.finalizeWorkspaceReplacement(workspaceRoot, recoveryId);
+        await this.workspaceOperations.finalize(workspaceRoot, recoveryId);
       } else {
-        rollbackResult = await bridge.rollbackWorkspaceReplacement(workspaceRoot, recoveryId);
+        rollbackResult = await this.workspaceOperations.rollback(workspaceRoot, recoveryId);
         await this.reloadReplacementFiles(paths);
       }
       this.state.replacementRecoveryBusy = null;
@@ -5029,77 +4996,27 @@ export class AsterlynApp {
   }
 
   private resetHistoryFilters(): void {
-    const query = defaultHistoryQuery();
-    this.state.historyRefs = new Map(query.refs.map((reference) => [historyRefKey(reference), reference]));
-    this.state.historyAuthorEmails = new Set(query.authorEmails);
-    this.state.historyCurrentAuthor = query.currentAuthor;
-    this.state.historyDatePreset = "all";
-    this.state.historySinceEpoch = query.sinceEpoch;
-    this.state.historyPaths = new Map(query.paths.map((path) => [historyPathKey(path), path]));
-    this.state.historyRepositoryIds = new Set(query.repositoryIds);
-    this.state.historyOrder = query.order;
-    this.state.historyFirstParent = query.firstParent;
-    this.state.historyExcludeMerges = query.excludeMerges;
-    this.state.historyCollapseLinear = false;
+    this.historyFilters.reset();
     this.state.historyFilterMenu = null;
     this.state.historyBranchSubmenu = null;
   }
 
   private loadHistoryPreferences(snapshot: RepositorySnapshot): void {
-    const preferences = loadHistoryRefPreferences(
-      window.localStorage,
-      snapshot.root,
-      snapshot.branches.map(historyReference),
-    );
-    this.state.historyFavoriteRefs = new Map(
-      preferences.favoriteRefs.map((reference) => [historyRefKey(reference), reference]),
-    );
-    this.state.historyRecentRefs = preferences.recentRefs;
-  }
-
-  private currentHistoryPreferences(): {
-    favoriteRefs: HistoryRef[];
-    recentRefs: HistoryRef[];
-  } {
-    return {
-      favoriteRefs: Array.from(this.state.historyFavoriteRefs.values()),
-      recentRefs: [...this.state.historyRecentRefs],
-    };
-  }
-
-  private saveHistoryPreferences(): void {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    if (!snapshot) return;
-    saveHistoryRefPreferences(
-      window.localStorage,
-      snapshot.root,
-      this.currentHistoryPreferences(),
-    );
+    this.historyFilters.loadPreferences(snapshot);
   }
 
   private recordRecentHistoryRef(reference: HistoryRef): void {
-    const preferences = touchRecentRef(this.currentHistoryPreferences(), reference);
-    this.state.historyRecentRefs = preferences.recentRefs;
-    this.saveHistoryPreferences();
+    const root = this.windowSession.repository.state.snapshot?.root;
+    if (root) this.historyFilters.recordRecentRef(root, reference);
   }
 
   private toggleFavoriteHistoryRef(branch: BranchSummary): void {
-    const preferences = toggleFavoriteRef(
-      this.currentHistoryPreferences(),
-      historyReference(branch),
-    );
-    this.state.historyFavoriteRefs = new Map(
-      preferences.favoriteRefs.map((reference) => [historyRefKey(reference), reference]),
-    );
-    this.saveHistoryPreferences();
+    const root = this.windowSession.repository.state.snapshot?.root;
+    if (root) this.historyFilters.toggleFavorite(root, branch);
   }
 
   private recordRecentHistoryPath(path: HistoryPath): void {
-    const key = historyPathKey(path);
-    this.state.historyRecentPaths = [
-      path,
-      ...this.state.historyRecentPaths.filter((item) => historyPathKey(item) !== key),
-    ].slice(0, 8);
+    this.historyFilters.recordRecentPath(path);
   }
 
   private branchForKey(key: string): BranchSummary | null {
@@ -5116,17 +5033,7 @@ export class AsterlynApp {
   }
 
   private activeHistoryQuery(): HistoryQuery {
-    return normalizeHistoryQuery({
-      repositoryIds: Array.from(this.state.historyRepositoryIds),
-      refs: Array.from(this.state.historyRefs.values()),
-      authorEmails: Array.from(this.state.historyAuthorEmails),
-      currentAuthor: this.state.historyCurrentAuthor,
-      sinceEpoch: this.state.historySinceEpoch,
-      paths: Array.from(this.state.historyPaths.values()),
-      firstParent: this.state.historyFirstParent,
-      excludeMerges: this.state.historyExcludeMerges,
-      order: this.state.historyOrder,
-    });
+    return this.historyFilters.query();
   }
 
   private applyHistoryQuery(preferTip = false): void {
@@ -5531,16 +5438,18 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
     if (!(await this.saveDirtyTabsBefore("changing branches"))) return;
-    const generation = this.windowSession.beginTransition();
+    const operation = this.repositoryOperations.start(snapshot.root, () => mutation(snapshot.root));
+    const generation = operation.generation;
     this.clearError();
     let pendingRoot: string | null = null;
     let succeeded = false;
     this.setLoading(true, loadingMessage);
     this.renderBottomTool();
     try {
-      const outcome = await mutation(snapshot.root);
-      if (generation !== this.windowSession.generation) return;
-      const next = this.applyRepositoryMutation(outcome, "gitMutation", {
+      const completion = await operation.completion;
+      if (completion.status === "stale") return;
+      if (completion.status === "failure") throw completion.error;
+      const next = this.applyRepositoryMutation(completion.outcome, "gitMutation", {
         clearChanges: true,
       });
       this.filesController.installWorkspace(next.root, next.changes);

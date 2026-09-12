@@ -13,9 +13,16 @@ import { RepositorySession } from "./repository-session.ts";
 import { WorkspaceSession, type WorkspaceActivation } from "./workspace-session.ts";
 
 export interface WindowSessionGateway {
+  openProject(path: string): Promise<OpenedProject>;
   readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan>;
   scanUntracked(repositoryRoot: string, scanId: string): Promise<UntrackedScan>;
   cancelUntrackedScan(scanId: string): Promise<void>;
+}
+
+export interface ProjectTransition {
+  readonly generation: number;
+  readonly project: OpenedProject;
+  readonly activation: WorkspaceActivation;
 }
 
 export type WindowSessionChangeReason =
@@ -89,6 +96,18 @@ export class WindowSession {
     const activation = this.workspace.activate(project);
     this.repository.install(activation.identity, project.repository, cause, slices);
     return activation;
+  }
+
+  async openProject(
+    path: string,
+    cause: SessionInvalidationCause,
+    slices: Iterable<SessionInvalidationSlice>,
+  ): Promise<ProjectTransition | null> {
+    const generation = this.beginTransition();
+    const project = await this.gateway.openProject(path);
+    if (!this.matches(generation)) return null;
+    const activation = this.activate(project, cause, slices);
+    return { generation, project, activation };
   }
 
   installRepository(

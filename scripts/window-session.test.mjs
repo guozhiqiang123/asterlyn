@@ -8,6 +8,7 @@ globalThis.window ??= globalThis;
 test("tracked refresh updates only working state and follows with one untracked scan", async () => {
   const events = [];
   const session = new WindowSession({
+    async openProject(root) { return { root, repository: snapshot(root) }; },
     async readTrackedChanges(root) {
       return { root, changes: [change("src/a.ts", "modified")] };
     },
@@ -53,6 +54,7 @@ test("a new transition cancels the active scan and rejects its late result", asy
   const cancelled = [];
   const events = [];
   const session = new WindowSession({
+    async openProject(root) { return { root, repository: snapshot(root) }; },
     async readTrackedChanges(root) { return { root, changes: [] }; },
     scanUntracked() { return pending.promise; },
     async cancelUntrackedScan(id) { cancelled.push(id); },
@@ -73,6 +75,28 @@ test("a new transition cancels the active scan and rejects its late result", asy
   assert.equal(cancelled.length, 1);
   assert.deepEqual(events.map((event) => event.reason), ["untracked-scan-start"]);
   assert.deepEqual(session.repository.state.snapshot.changes, []);
+});
+
+test("project transitions activate only the latest window request", async () => {
+  const first = deferred();
+  const session = new WindowSession({
+    openProject(path) {
+      return path === "/first" ? first.promise : Promise.resolve({
+        root: path,
+        repository: snapshot(path),
+      });
+    },
+    async readTrackedChanges(root) { return { root, changes: [] }; },
+    async scanUntracked(root) { return { root, changes: [] }; },
+    async cancelUntrackedScan() {},
+  });
+  const stale = session.openProject("/first", "activation", ["workingTree"]);
+  const current = await session.openProject("/second", "activation", ["workingTree"]);
+  first.resolve({ root: "/first", repository: snapshot("/first") });
+
+  assert.equal((await stale), null);
+  assert.equal(current.project.root, "/second");
+  assert.equal(session.workspace.state.root, "/second");
 });
 
 function snapshot(root) {
