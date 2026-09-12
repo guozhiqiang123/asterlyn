@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, FileChange, GitError,
-    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushPreview,
-    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview,
+    PushTagMode, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
@@ -2123,6 +2123,7 @@ async fn fetch_remote(
 async fn read_push_preview(
     repository_root: String,
     remote: String,
+    tag_mode: PushTagMode,
     offset: usize,
     page_size: usize,
     window: tauri::WebviewWindow,
@@ -2130,7 +2131,24 @@ async fn read_push_preview(
 ) -> Result<PushPreview, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read push preview", move || {
-        GitRepository::open(root)?.push_preview(&remote, offset, page_size)
+        GitRepository::open(root)?.push_preview_with_tags(&remote, tag_mode, offset, page_size)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_push_file_commit(
+    repository_root: String,
+    remote: String,
+    tag_mode: PushTagMode,
+    preview_token: String,
+    path: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<Option<CommitDetails>, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read pushed file commit", move || {
+        GitRepository::open(root)?.push_file_commit(&remote, tag_mode, &preview_token, &path)
     })
     .await
 }
@@ -2164,6 +2182,8 @@ async fn pull_current(
 async fn push_current(
     repository_root: String,
     remote: String,
+    mode: PushMode,
+    tag_mode: PushTagMode,
     preview_token: String,
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
@@ -2182,7 +2202,13 @@ async fn push_current(
         mutations.inner(),
         "push",
         move |repository, cancellation| {
-            repository.push_current_confirmed(&remote, &preview_token, cancellation)
+            repository.push_current_with_options(
+                &remote,
+                mode,
+                tag_mode,
+                &preview_token,
+                cancellation,
+            )
         },
     )
     .await
@@ -2376,6 +2402,7 @@ pub fn run() {
             create_branch,
             fetch_remote,
             read_push_preview,
+            read_push_file_commit,
             pull_current,
             push_current,
             cancel_remote_operation

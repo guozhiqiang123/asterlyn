@@ -17,8 +17,8 @@ use crate::model::{
     BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
     DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    PushPreview, RemoteSummary, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
-    UntrackedScan, UntrackedState,
+    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteSummary, RepositorySnapshot,
+    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -32,6 +32,9 @@ const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
 const MAX_PUSH_PREVIEW_WINDOW: usize = 1_000;
 const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
+const MAX_PUSH_PREVIEW_FILES: usize = 20_000;
+const MAX_PUSH_PREVIEW_FILE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PUSH_TAGS: usize = 1_000;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 fn diff_context_argument(expanded_unchanged: bool) -> OsString {
@@ -1923,9 +1926,37 @@ impl GitRepository {
         self.push_current_internal(remote, Some(expected_preview_token), cancellation, || {})
     }
 
+    pub fn push_current_with_options(
+        &self,
+        remote: &str,
+        mode: PushMode,
+        tag_mode: PushTagMode,
+        expected_preview_token: &str,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
+        self.push_current_with_options_internal(
+            remote,
+            mode,
+            tag_mode,
+            Some(expected_preview_token),
+            cancellation,
+            || {},
+        )
+    }
+
     pub fn push_preview(
         &self,
         remote: &str,
+        offset: usize,
+        page_size: usize,
+    ) -> Result<PushPreview, GitError> {
+        self.push_preview_with_tags(remote, PushTagMode::None, offset, page_size)
+    }
+
+    pub fn push_preview_with_tags(
+        &self,
+        remote: &str,
+        tag_mode: PushTagMode,
         offset: usize,
         page_size: usize,
     ) -> Result<PushPreview, GitError> {
@@ -1944,34 +1975,34 @@ impl GitRepository {
         }
 
         let target = self.push_target_context(remote)?;
+        let tags = self.push_tags(&target, tag_mode)?;
+        let (files, files_truncated) = self.push_preview_files(&target)?;
+        let ordinary_allowed = match target.comparison_base_oid.as_ref() {
+            Some(base) => self.is_ancestor(base, &target.head_oid)?,
+            None => true,
+        };
+        let ordinary_block_reason = (!ordinary_allowed).then(|| {
+            "The local branch is not a descendant of the last-fetched remote branch. Fetch and reconcile it, or explicitly choose Force Push with Lease."
+                .to_string()
+        });
+        let force_with_lease_allowed = target.comparison_base_oid.is_some();
+        let force_with_lease_block_reason = (!force_with_lease_allowed).then(|| {
+            "The destination branch is not present in local remote-tracking refs, so there is no exact lease to protect a force push."
+                .to_string()
+        });
         let selectors = push_revision_selectors(&target);
         let total_commits = self.count_revisions(&selectors, "count outgoing commits")?;
-        let preview_token = push_preview_token(&target);
-        if offset == MAX_PUSH_PREVIEW_WINDOW || offset >= total_commits {
-            return Ok(PushPreview {
-                remote: target.remote,
-                branch: target.branch,
-                source_ref: target.source_ref,
-                destination_ref: target.destination_ref,
-                head_oid: target.head_oid,
-                comparison_base_oid: target.comparison_base_oid,
-                publish: target.publish,
-                commits: Vec::new(),
-                offset,
-                total_commits,
-                has_more: false,
-                truncated: total_commits > MAX_PUSH_PREVIEW_WINDOW,
-                preview_token,
-            });
-        }
-
-        let page_size = page_size
-            .min(MAX_PUSH_PREVIEW_WINDOW - offset)
-            .min(total_commits - offset);
-        let mut log_selectors = vec![OsString::from(format!("--skip={offset}"))];
-        log_selectors.extend(selectors.iter().map(OsString::from));
-        let mut commits =
-            self.run_commit_history("read outgoing commits", log_selectors, page_size)?;
+        let preview_token = push_preview_token_with_tags(&target, tag_mode, &tags);
+        let mut commits = if offset == MAX_PUSH_PREVIEW_WINDOW || offset >= total_commits {
+            Vec::new()
+        } else {
+            let page_size = page_size
+                .min(MAX_PUSH_PREVIEW_WINDOW - offset)
+                .min(total_commits - offset);
+            let mut log_selectors = vec![OsString::from(format!("--skip={offset}"))];
+            log_selectors.extend(selectors.iter().map(OsString::from));
+            self.run_commit_history("read outgoing commits", log_selectors, page_size)?
+        };
         scope_commits(&mut commits, ".");
         let next_offset = offset.saturating_add(commits.len());
         Ok(PushPreview {
@@ -1982,6 +2013,14 @@ impl GitRepository {
             head_oid: target.head_oid,
             comparison_base_oid: target.comparison_base_oid,
             publish: target.publish,
+            ordinary_allowed,
+            ordinary_block_reason,
+            force_with_lease_allowed,
+            force_with_lease_block_reason,
+            tag_mode,
+            tags,
+            files,
+            files_truncated,
             commits,
             offset,
             total_commits,
@@ -1989,6 +2028,40 @@ impl GitRepository {
             truncated: total_commits > MAX_PUSH_PREVIEW_WINDOW,
             preview_token,
         })
+    }
+
+    pub fn push_file_commit(
+        &self,
+        remote: &str,
+        tag_mode: PushTagMode,
+        expected_preview_token: &str,
+        path: &str,
+    ) -> Result<Option<CommitDetails>, GitError> {
+        validate_relative_path(path)?;
+        self.ensure_no_repository_operation("read pushed file commit")?;
+        let target = self.push_target_context(remote)?;
+        let tags = self.push_tags(&target, tag_mode)?;
+        if expected_preview_token != push_preview_token_with_tags(&target, tag_mode, &tags) {
+            return Err(GitError::UnsafeOperation {
+                operation: "read pushed file commit".to_string(),
+                message: "the Push review is stale; refresh it before opening Diff".to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        let mut args = vec![OsString::from("rev-list"), OsString::from("--max-count=1")];
+        args.extend(
+            push_revision_selectors(&target)
+                .into_iter()
+                .map(OsString::from),
+        );
+        args.extend([OsString::from("--"), OsString::from(path)]);
+        let output = self.run_read_owned("find pushed file commit", args)?;
+        let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if oid.is_empty() {
+            return Ok(None);
+        }
+        validate_object_id(&oid)?;
+        self.commit_details(&oid).map(Some)
     }
 
     fn push_current_internal<F>(
@@ -2001,15 +2074,64 @@ impl GitRepository {
     where
         F: FnOnce(),
     {
+        self.push_current_with_options_internal(
+            remote,
+            PushMode::Ordinary,
+            PushTagMode::None,
+            expected_preview_token,
+            cancellation,
+            before_execute,
+        )
+    }
+
+    fn push_current_with_options_internal<F>(
+        &self,
+        remote: &str,
+        mode: PushMode,
+        tag_mode: PushTagMode,
+        expected_preview_token: Option<&str>,
+        cancellation: &CancellationToken,
+        before_execute: F,
+    ) -> Result<(), GitError>
+    where
+        F: FnOnce(),
+    {
         self.ensure_no_repository_operation("push")?;
         let target = self.push_target_context(remote)?;
-        if expected_preview_token.is_some_and(|expected| expected != push_preview_token(&target)) {
+        let tags = self.push_tags(&target, tag_mode)?;
+        if expected_preview_token.is_some_and(|expected| {
+            expected != push_preview_token_with_tags(&target, tag_mode, &tags)
+        }) {
             return Err(GitError::UnsafeOperation {
                 operation: "push".to_string(),
-                message: "the branch, HEAD, upstream, or remote-tracking state changed after confirmation; review the push again"
+                message: "the branch, HEAD, upstream, remote-tracking state, or selected tags changed after confirmation; review the push again"
                     .to_string(),
                 blockers: Vec::new(),
             });
+        }
+
+        let ordinary_allowed = match target.comparison_base_oid.as_ref() {
+            Some(base) => self.is_ancestor(base, &target.head_oid)?,
+            None => true,
+        };
+        match mode {
+            PushMode::Ordinary if !ordinary_allowed => {
+                return Err(GitError::UnsafeOperation {
+                    operation: "push".to_string(),
+                    message: "ordinary push cannot update the last-fetched destination without rewriting it; review Force Push with Lease explicitly"
+                        .to_string(),
+                    blockers: Vec::new(),
+                });
+            }
+            PushMode::ForceWithLease if target.comparison_base_oid.is_none() => {
+                return Err(GitError::UnsafeOperation {
+                    operation: "force push with lease".to_string(),
+                    message: "force push is unavailable because no last-fetched destination object exists for an exact lease"
+                        .to_string(),
+                    blockers: Vec::new(),
+                });
+            }
+            _ => {}
         }
 
         let mut args = vec![
@@ -2020,28 +2142,48 @@ impl GitRepository {
             OsString::from("push"),
             OsString::from("--porcelain"),
             OsString::from("--no-progress"),
-            OsString::from("--no-force"),
             OsString::from("--no-mirror"),
             OsString::from("--no-follow-tags"),
             OsString::from("--no-signed"),
             OsString::from("--recurse-submodules=no"),
         ];
+        if !tags.is_empty() {
+            // A branch rejection must not publish only the independent tag refspecs.
+            // Unsupported atomic pushes fail closed instead of degrading to partial success.
+            args.push(OsString::from("--atomic"));
+        }
+        match mode {
+            PushMode::Ordinary => args.push(OsString::from("--no-force")),
+            PushMode::ForceWithLease => args.push(OsString::from(format!(
+                "--force-with-lease={}:{}",
+                target.destination_ref,
+                target
+                    .comparison_base_oid
+                    .as_deref()
+                    .expect("force-with-lease availability was checked")
+            ))),
+        }
         self.ensure_no_repository_operation("push")?;
         let before_push = self.push_target_context(remote)?;
-        if before_push != target {
+        let before_tags = self.push_tags(&before_push, tag_mode)?;
+        if before_push != target || before_tags != tags {
             return Err(GitError::UnsafeOperation {
                 operation: "push".to_string(),
-                message: "branch or upstream state changed before push; review the push again"
+                message: "branch, upstream, or selected tag state changed before push; review the push again"
                     .to_string(),
                 blockers: Vec::new(),
             });
         }
         before_execute();
-        args.extend([
-            OsString::from("--"),
-            OsString::from(&target.remote),
-            OsString::from(format!("{}:{}", target.head_oid, target.destination_ref)),
-        ]);
+        args.extend([OsString::from("--"), OsString::from(&target.remote)]);
+        args.push(OsString::from(format!(
+            "{}:{}",
+            target.head_oid, target.destination_ref
+        )));
+        args.extend(
+            tags.iter()
+                .map(|tag| OsString::from(format!("{}:{}", tag.object_oid, tag.full_ref))),
+        );
         self.run_remote_operation("push", &target.remote, args, cancellation, true, true)?;
         if target.publish {
             let tracking_ref = format!("refs/remotes/{}/{}", target.remote, target.branch);
@@ -2086,25 +2228,8 @@ impl GitRepository {
                             .to_string(),
                     });
                 }
-                if context.behind > 0 {
-                    return Err(GitError::UnsafeOperation {
-                        operation: "push".to_string(),
-                        message:
-                            "the current branch is behind or diverged; fetch and reconcile it first"
-                                .to_string(),
-                        blockers: Vec::new(),
-                    });
-                }
                 let base =
                     self.resolve_commit(&upstream.tracking_ref, "read push comparison base")?;
-                if !self.is_ancestor(&base, &context.oid)? {
-                    return Err(GitError::UnsafeOperation {
-                            operation: "push".to_string(),
-                            message: "the current branch has diverged from its locally known upstream; fetch and reconcile it first"
-                                .to_string(),
-                            blockers: Vec::new(),
-                        });
-                }
                 (upstream.merge_ref.clone(), Some(base), false)
             }
             None => {
@@ -2118,16 +2243,6 @@ impl GitRepository {
                     } else {
                         None
                     };
-                if let Some(base_oid) = base.as_ref() {
-                    if !self.is_ancestor(base_oid, &context.oid)? {
-                        return Err(GitError::UnsafeOperation {
-                                operation: "push".to_string(),
-                                message: "the same-named remote-tracking branch has diverged; fetch and reconcile it before publishing"
-                                    .to_string(),
-                                blockers: Vec::new(),
-                            });
-                    }
-                }
                 (context.full_ref.clone(), base, true)
             }
         };
@@ -2141,6 +2256,115 @@ impl GitRepository {
             comparison_base_oid,
             publish,
         })
+    }
+
+    fn push_preview_files(
+        &self,
+        target: &PushTargetContext,
+    ) -> Result<(Vec<CommitFileChange>, bool), GitError> {
+        let (output, output_truncated) = if let Some(base) = &target.comparison_base_oid {
+            self.run_read_owned_bounded(
+                "read pushed file range",
+                vec![
+                    OsString::from("diff"),
+                    OsString::from("--no-ext-diff"),
+                    OsString::from("--name-status"),
+                    OsString::from("-z"),
+                    OsString::from("-M"),
+                    OsString::from("-C"),
+                    OsString::from(base),
+                    OsString::from(&target.head_oid),
+                    OsString::from("--"),
+                ],
+                MAX_PUSH_PREVIEW_FILE_BYTES,
+            )?
+        } else {
+            self.run_read_owned_bounded(
+                "read published branch files",
+                vec![
+                    OsString::from("ls-tree"),
+                    OsString::from("-r"),
+                    OsString::from("-z"),
+                    OsString::from("--name-only"),
+                    OsString::from(&target.head_oid),
+                    OsString::from("--"),
+                ],
+                MAX_PUSH_PREVIEW_FILE_BYTES,
+            )?
+        };
+        if output_truncated {
+            return Ok((Vec::new(), true));
+        }
+        let mut files = if target.comparison_base_oid.is_some() {
+            parse_commit_files(&output.stdout)?
+        } else {
+            output
+                .stdout
+                .split(|byte| *byte == 0)
+                .filter(|path| !path.is_empty())
+                .map(|path| CommitFileChange {
+                    path: String::from_utf8_lossy(path).into_owned(),
+                    original_path: None,
+                    status: ChangeKind::Added,
+                })
+                .collect()
+        };
+        files.sort_by(|left, right| left.path.cmp(&right.path));
+        let files_truncated = files.len() > MAX_PUSH_PREVIEW_FILES;
+        files.truncate(MAX_PUSH_PREVIEW_FILES);
+        Ok((files, files_truncated))
+    }
+
+    fn push_tags(
+        &self,
+        target: &PushTargetContext,
+        mode: PushTagMode,
+    ) -> Result<Vec<PushTagSummary>, GitError> {
+        if mode == PushTagMode::None {
+            return Ok(Vec::new());
+        }
+        let mut args = vec![
+            OsString::from("for-each-ref"),
+            OsString::from("--format=%(refname)%00%(objectname)"),
+        ];
+        if mode == PushTagMode::CurrentBranch {
+            args.push(OsString::from(format!("--merged={}", target.head_oid)));
+        }
+        args.push(OsString::from("refs/tags"));
+        let output = self.run_read_owned("read push tags", args)?;
+        let mut tags = Vec::new();
+        for record in output.stdout.split(|byte| *byte == b'\n') {
+            let record = record.strip_suffix(b"\r").unwrap_or(record);
+            if record.is_empty() {
+                continue;
+            }
+            let mut fields = record.splitn(2, |byte| *byte == 0);
+            let full_ref = String::from_utf8_lossy(fields.next().unwrap_or_default()).into_owned();
+            let object_oid =
+                String::from_utf8_lossy(fields.next().unwrap_or_default()).into_owned();
+            if !full_ref.starts_with("refs/tags/") || object_oid.is_empty() {
+                return Err(GitError::Parse {
+                    context: "push tags".to_string(),
+                    message: "Git returned an incomplete tag record".to_string(),
+                });
+            }
+            tags.push(PushTagSummary {
+                name: full_ref.trim_start_matches("refs/tags/").to_string(),
+                full_ref,
+                object_oid,
+            });
+            if tags.len() > MAX_PUSH_TAGS {
+                return Err(GitError::UnsafeOperation {
+                    operation: "push tags".to_string(),
+                    message: format!(
+                        "the selected tag scope exceeds the review limit of {MAX_PUSH_TAGS} tags"
+                    ),
+                    blockers: Vec::new(),
+                });
+            }
+        }
+        tags.sort_by(|left, right| left.full_ref.cmp(&right.full_ref));
+        Ok(tags)
     }
 
     fn count_revisions(&self, selectors: &[String], operation: &str) -> Result<usize, GitError> {
@@ -2865,7 +3089,16 @@ fn push_revision_selectors(target: &PushTargetContext) -> Vec<String> {
     }
 }
 
+#[cfg(test)]
 fn push_preview_token(target: &PushTargetContext) -> String {
+    push_preview_token_with_tags(target, PushTagMode::None, &[])
+}
+
+fn push_preview_token_with_tags(
+    target: &PushTargetContext,
+    tag_mode: PushTagMode,
+    tags: &[PushTagSummary],
+) -> String {
     let fields = [
         target.remote.as_str(),
         target.source_ref.as_str(),
@@ -2877,13 +3110,26 @@ fn push_preview_token(target: &PushTargetContext) -> String {
         } else {
             "upstream"
         },
+        match tag_mode {
+            PushTagMode::None => "no-tags",
+            PushTagMode::All => "all-tags",
+            PushTagMode::CurrentBranch => "current-branch-tags",
+        },
     ];
-    let mut token = String::from("v1");
+    let mut token = String::from("v2");
     for field in fields {
         token.push('|');
         token.push_str(&field.len().to_string());
         token.push(':');
         token.push_str(field);
+    }
+    for tag in tags {
+        for field in [&tag.full_ref, &tag.object_oid] {
+            token.push('|');
+            token.push_str(&field.len().to_string());
+            token.push(':');
+            token.push_str(field);
+        }
     }
     token
 }
@@ -5361,6 +5607,24 @@ mod tests {
         assert_eq!(first_page.commits.len(), 1);
         assert_eq!(first_page.commits[0].subject, "Second outgoing");
         assert!(first_page.has_more);
+        assert_eq!(
+            first_page
+                .files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            ["first.txt", "second.txt"]
+        );
+        let file_commit = repository
+            .push_file_commit(
+                "origin",
+                PushTagMode::None,
+                &first_page.preview_token,
+                "second.txt",
+            )
+            .expect("pushed file commit lookup succeeds")
+            .expect("outgoing file has a commit");
+        assert_eq!(file_commit.oid, second_oid);
 
         let second_page = repository
             .push_preview("origin", 1, 1)
@@ -5461,6 +5725,125 @@ mod tests {
         assert_eq!(
             git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
             remote_oid
+        );
+    }
+
+    #[test]
+    fn divergent_push_requires_explicit_force_with_exact_lease() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let local_oid = commit_file(&fixture.local, "local.txt", "local\n", "Local outgoing");
+        commit_file(&fixture.peer, "remote.txt", "remote\n", "Remote outgoing");
+        git(&fixture.peer, &["push", "origin", "main"]);
+        repository
+            .fetch_remote("origin", &CancellationToken::new())
+            .expect("fetch observes divergence");
+
+        let preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("divergent branch can be reviewed");
+        assert!(!preview.ordinary_allowed);
+        assert!(preview.force_with_lease_allowed);
+        assert_eq!(preview.total_commits, 1);
+        assert!(preview.files.iter().any(|file| file.path == "local.txt"));
+        assert!(preview.files.iter().any(|file| file.path == "remote.txt"));
+
+        let ordinary = repository
+            .push_current_with_options(
+                "origin",
+                PushMode::Ordinary,
+                PushTagMode::None,
+                &preview.preview_token,
+                &CancellationToken::new(),
+            )
+            .expect_err("ordinary divergent push is blocked before Git writes");
+        assert!(matches!(ordinary, GitError::UnsafeOperation { .. }));
+
+        repository
+            .push_current_with_options(
+                "origin",
+                PushMode::ForceWithLease,
+                PushTagMode::None,
+                &preview.preview_token,
+                &CancellationToken::new(),
+            )
+            .expect("explicit exact-lease force push succeeds");
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            local_oid
+        );
+    }
+
+    #[test]
+    fn force_lease_rejects_remote_movement_and_tag_scope_is_explicit() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let base_oid = git_stdout(&fixture.local, &["rev-parse", "HEAD"]);
+        let local_oid = commit_file(&fixture.local, "local.txt", "local\n", "Local outgoing");
+        git(&fixture.local, &["tag", "base-tag", &base_oid]);
+        git(&fixture.local, &["tag", "head-tag", &local_oid]);
+        git(&fixture.local, &["checkout", "-b", "side", &base_oid]);
+        let side_oid = commit_file(&fixture.local, "side.txt", "side\n", "Side commit");
+        git(&fixture.local, &["tag", "side-tag", &side_oid]);
+        git(&fixture.local, &["checkout", "main"]);
+
+        let current_tags = repository
+            .push_preview_with_tags("origin", PushTagMode::CurrentBranch, 0, 100)
+            .expect("current branch tags load");
+        assert_eq!(
+            current_tags
+                .tags
+                .iter()
+                .map(|tag| tag.name.as_str())
+                .collect::<Vec<_>>(),
+            ["base-tag", "head-tag"]
+        );
+        let all_tags = repository
+            .push_preview_with_tags("origin", PushTagMode::All, 0, 100)
+            .expect("all tags load");
+        assert_eq!(all_tags.tags.len(), 3);
+        assert_ne!(current_tags.preview_token, all_tags.preview_token);
+
+        let remote_oid = commit_file(&fixture.peer, "remote.txt", "remote\n", "Remote movement");
+        git(&fixture.peer, &["push", "origin", "main"]);
+        let rejected = repository
+            .push_current_with_options(
+                "origin",
+                PushMode::ForceWithLease,
+                PushTagMode::CurrentBranch,
+                &current_tags.preview_token,
+                &CancellationToken::new(),
+            )
+            .expect_err("exact lease rejects a remote that moved after review");
+        assert!(matches!(rejected, GitError::RemoteFailed { .. }));
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            remote_oid
+        );
+        assert!(git_stdout(&fixture.remote, &["tag", "--list"]).is_empty());
+
+        repository
+            .fetch_remote("origin", &CancellationToken::new())
+            .expect("refresh exact lease after rejection");
+        let retry = repository
+            .push_preview_with_tags("origin", PushTagMode::CurrentBranch, 0, 100)
+            .expect("fresh tagged force review loads");
+        repository
+            .push_current_with_options(
+                "origin",
+                PushMode::ForceWithLease,
+                PushTagMode::CurrentBranch,
+                &retry.preview_token,
+                &CancellationToken::new(),
+            )
+            .expect("atomic branch and current-branch tag push succeeds");
+        assert_eq!(
+            git_stdout(&fixture.remote, &["tag", "--list"]),
+            "base-tag\nhead-tag"
+        );
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            local_oid
         );
     }
 

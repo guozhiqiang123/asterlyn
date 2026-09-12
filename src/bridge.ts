@@ -30,6 +30,8 @@ import type {
   ProjectFileList,
   OpenedProject,
   PushPreview,
+  PushMode,
+  PushTagMode,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositorySnapshot,
@@ -766,18 +768,46 @@ export const bridge = {
   async readPushPreview(
     repositoryRoot: string,
     remote: string,
+    tagMode: PushTagMode,
     offset: number,
     pageSize: number,
   ): Promise<PushPreview> {
     if (!isTauri) {
       await demoDelay(120);
-      return demoPushPreview(remote, offset, pageSize);
+      return demoPushPreview(remote, tagMode, offset, pageSize);
     }
     return invoke<PushPreview>("read_push_preview", {
       repositoryRoot,
       remote,
+      tagMode,
       offset,
       pageSize,
+    });
+  },
+
+  async readPushFileCommit(
+    repositoryRoot: string,
+    remote: string,
+    tagMode: PushTagMode,
+    previewToken: string,
+    path: string,
+  ): Promise<CommitDetails | null> {
+    if (!isTauri) {
+      await demoDelay(100);
+      if (demoPushPreview(remote, tagMode, 0, 1).previewToken !== previewToken) {
+        throw new Error("The Push review is stale. Refresh it before opening Diff.");
+      }
+      const commit = browserSnapshot.commits.find((candidate) =>
+        (browserCommitFiles.get(candidate.oid) ?? []).some((file) => file.path === path),
+      );
+      return commit ? demoCommitDetails(commit.oid) : null;
+    }
+    return invoke<CommitDetails | null>("read_push_file_commit", {
+      repositoryRoot,
+      remote,
+      tagMode,
+      previewToken,
+      path,
     });
   },
 
@@ -802,6 +832,8 @@ export const bridge = {
   async pushCurrent(
     repositoryRoot: string,
     remote: string,
+    mode: PushMode,
+    tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
   ): Promise<RepositorySnapshot> {
@@ -810,7 +842,7 @@ export const bridge = {
       if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
         throw new Error("Push was cancelled; the remote outcome is unknown until fetch.");
       }
-      if (demoPushPreview(remote, 0, 1).previewToken !== previewToken) {
+      if (demoPushPreview(remote, tagMode, 0, 1).previewToken !== previewToken) {
         throw new Error("The branch or HEAD changed after confirmation. Review the push again.");
       }
       browserSnapshot = demoPushCurrent(browserSnapshot, remote);
@@ -819,6 +851,8 @@ export const bridge = {
     return invoke<RepositorySnapshot>("push_current", {
       repositoryRoot,
       remote,
+      mode,
+      tagMode,
       previewToken,
       operationId,
     });
@@ -839,7 +873,12 @@ export const bridge = {
   },
 };
 
-function demoPushPreview(remote: string, offset: number, pageSize: number): PushPreview {
+function demoPushPreview(
+  remote: string,
+  tagMode: PushTagMode,
+  offset: number,
+  pageSize: number,
+): PushPreview {
   const branch = browserSnapshot.branch;
   if (!branch.head || !branch.oid || branch.detached || branch.unborn) {
     throw new Error("A checked-out branch with a commit is required.");
@@ -869,14 +908,23 @@ function demoPushPreview(remote: string, offset: number, pageSize: number): Push
             `refs/remotes/${remote}/${destinationRef.replace(/^refs\/heads\//, "")}`,
       )?.oid ?? null;
   const previewToken = [
-    "demo-v1",
+    "demo-v2",
     remote,
     sourceRef,
     destinationRef,
     branch.oid,
     comparisonBaseOid ?? "new",
     publish ? "publish" : "upstream",
+    tagMode,
   ].join("|");
+  const filesByPath = new Map<string, CommitFileChange>();
+  for (const commit of browserSnapshot.commits.slice(0, totalCommits)) {
+    for (const file of browserCommitFiles.get(commit.oid) ?? demoCommitDetails(commit.oid).files) {
+      filesByPath.set(file.path, file);
+    }
+  }
+  const files = [...filesByPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+  const ordinaryAllowed = branch.behind === 0;
   return {
     remote,
     branch: branch.head,
@@ -885,6 +933,18 @@ function demoPushPreview(remote: string, offset: number, pageSize: number): Push
     headOid: branch.oid,
     comparisonBaseOid,
     publish,
+    ordinaryAllowed,
+    ordinaryBlockReason: ordinaryAllowed
+      ? null
+      : "The local branch is not a descendant of the last-fetched remote branch.",
+    forceWithLeaseAllowed: comparisonBaseOid !== null,
+    forceWithLeaseBlockReason: comparisonBaseOid === null
+      ? "No last-fetched destination object exists for an exact lease."
+      : null,
+    tagMode,
+    tags: [],
+    files,
+    filesTruncated: false,
     commits,
     offset,
     totalCommits,

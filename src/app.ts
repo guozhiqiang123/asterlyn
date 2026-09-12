@@ -246,7 +246,9 @@ import type {
   ImagePreview,
   ProjectFile,
   ProjectIgnoredEntry,
+  PushMode,
   PushPreview,
+  PushTagMode,
   ReplacementApplyResult,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
@@ -363,9 +365,14 @@ interface AppState {
   pushPreview: PushPreview | null;
   pushPreviewLoading: boolean;
   pushPreviewLoadingMore: boolean;
-  pushSelectedCommit: string | null;
-  pushCommitDetails: CommitDetails | null;
-  pushCommitDetailsLoading: boolean;
+  pushSelectedFile: string | null;
+  pushFileView: CommitFileView;
+  pushCollapsedFileDirectories: Set<string>;
+  pushTagsEnabled: boolean;
+  pushTagMode: Exclude<PushTagMode, "none">;
+  pushMode: PushMode;
+  pushModeMenuOpen: boolean;
+  pushFileActionLoading: boolean;
   commitMessage: string;
   loading: boolean;
   error: string | null;
@@ -466,9 +473,14 @@ export class AsterlynApp {
     pushPreview: null,
     pushPreviewLoading: false,
     pushPreviewLoadingMore: false,
-    pushSelectedCommit: null,
-    pushCommitDetails: null,
-    pushCommitDetailsLoading: false,
+    pushSelectedFile: null,
+    pushFileView: "tree",
+    pushCollapsedFileDirectories: new Set(),
+    pushTagsEnabled: false,
+    pushTagMode: "all",
+    pushMode: "ordinary",
+    pushModeMenuOpen: false,
+    pushFileActionLoading: false,
     commitMessage: "",
     loading: false,
     error: null,
@@ -587,12 +599,10 @@ export class AsterlynApp {
             </button>
             <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="Current branch remote actions">
               <label class="topbar-remote-select" for="topbar-remote-select" title="Remote used by current branch actions">
-                <span>Remote</span>
                 <select id="topbar-remote-select" aria-label="Remote for current branch actions" disabled>
                   <option>No remote</option>
                 </select>
               </label>
-              <span class="topbar-remote-state" id="topbar-remote-state" role="status" aria-live="polite">No Git</span>
               <span class="topbar-remote-action" id="remote-fetch-hint" tabindex="-1">
                 <button class="icon-button remote-action-button" id="remote-fetch" type="button" data-remote-action="fetch" aria-label="Fetch current branch" title="Fetch current branch" disabled>${icon("download", 18)}</button>
               </span>
@@ -2691,7 +2701,6 @@ export class AsterlynApp {
   private renderRemoteToolbar(snapshot: RepositorySnapshot | null): void {
     const toolbar = this.query("#remote-toolbar");
     const select = this.query<HTMLSelectElement>("#topbar-remote-select");
-    const status = this.query("#topbar-remote-state");
     const cancel = this.query<HTMLButtonElement>("#cancel-remote-operation");
     toolbar.classList.toggle("git-unavailable", !snapshot);
     if (!snapshot) {
@@ -2699,13 +2708,11 @@ export class AsterlynApp {
       select.disabled = true;
       select.title = "Remote selection is unavailable because this project is not an active Git repository.";
       select.setAttribute("aria-label", select.title);
-      status.textContent = "No Git";
-      status.title = "Git is unavailable for this folder";
       cancel.classList.add("hidden");
       const unavailable: Array<[string, string]> = [
         ["#remote-fetch", "Fetch is unavailable because this project is not an active Git repository. Fetch would refresh the selected remote's standard branch-tracking refs without changing working files."],
         ["#remote-update", "Update is unavailable because this project is not an active Git repository. Update would affect only the checked-out branch and would require a confirmed fast-forward."],
-        ["#remote-push", "Push is unavailable because this project is not an active Git repository. Push would require review before an ordinary non-force current-branch push without tags."],
+        ["#remote-push", "Push is unavailable because this project is not an active Git repository. Push would open a current-branch review before any remote write."],
       ];
       for (const [selector, description] of unavailable) {
         const button = this.query<HTMLButtonElement>(selector);
@@ -2748,43 +2755,6 @@ export class AsterlynApp {
     select.title = remoteScope;
     select.setAttribute("aria-label", remoteScope);
     const tracksSelected = snapshot.branch.upstreamRemote === policy.selectedRemote?.name;
-    const divergence = tracksSelected
-      ? [
-          snapshot.branch.ahead ? `↑${snapshot.branch.ahead}` : "",
-          snapshot.branch.behind ? `↓${snapshot.branch.behind}` : "",
-        ]
-          .filter(Boolean)
-          .join(" ")
-      : "";
-    const operationLabel = operation
-      ? operation.cancelling
-        ? "Cancelling…"
-        : `${remoteActionLabel(operation.kind)}…`
-      : null;
-    status.textContent = operationLabel
-      ? `${branchName} · ${operationLabel}`
-      : !snapshot.branch.head || snapshot.branch.detached
-        ? "No branch"
-        : !policy.selectedRemote
-          ? `${branchName} · No remote`
-          : !snapshot.branch.upstreamRemote
-            ? `${branchName} · Unpublished`
-            : !tracksSelected
-              ? `${branchName} · Not upstream`
-              : divergence || `${branchName} · Up to date`;
-    status.title = `Current branch: ${branchName}. Selected remote: ${selectedName}.${
-      tracksSelected
-        ? ` Tracking state: ${divergence || "up to date"}.`
-        : snapshot.branch.upstreamRemote
-          ? ` Configured upstream remote: ${snapshot.branch.upstreamRemote}.`
-          : " No upstream is configured."
-    }`;
-    status.classList.toggle(
-      "diverged",
-      tracksSelected && snapshot.branch.ahead > 0 && snapshot.branch.behind > 0,
-    );
-    status.classList.toggle("busy", Boolean(operation));
-
     const actions: Array<{
       kind: "fetch" | "pull" | "push";
       button: string;
@@ -2800,10 +2770,10 @@ export class AsterlynApp {
       const button = this.query<HTMLButtonElement>(action.button);
       const exactScope =
         action.kind === "fetch"
-          ? `Fetch from ${selectedName}. Refresh all standard branch-tracking refs for this remote without changing the checked-out branch or working files.`
+          ? `Fetch from ${selectedName}. Refresh all standard branch-tracking refs for this remote without changing the checked-out branch or working files. The badge shows ${tracksSelected ? snapshot.branch.behind : 0} incoming commit${tracksSelected && snapshot.branch.behind === 1 ? "" : "s"} known after the last Fetch.`
           : action.kind === "pull"
             ? `Update ${sourceRef} from ${selectedName}:${destinationRef}. Opens a confirmation and performs fast-forward only; it never creates a merge commit or starts a rebase.`
-            : `Review Push from ${sourceRef} to ${selectedName}:${destinationRef}. Opens a confirmation before an ordinary non-force current-branch push; tags are not included.`;
+            : `Review Push from ${sourceRef} to ${selectedName}:${destinationRef}. The badge shows ${tracksSelected ? snapshot.branch.ahead : 0} outgoing commit${tracksSelected && snapshot.branch.ahead === 1 ? "" : "s"} known from the last Fetch. Review can explicitly include tags or choose Force Push with an exact lease; it never retries automatically.`;
       const title = `${exactScope} ${action.state.enabled ? action.state.detail : `Unavailable: ${action.state.detail}`}`;
       button.disabled = Boolean(operation) || this.state.loading || !action.state.enabled;
       button.title = title;
@@ -2812,7 +2782,7 @@ export class AsterlynApp {
       button.innerHTML =
         operation?.kind === action.kind && !operation.cancelling
           ? '<span class="spinner" aria-hidden="true"></span>'
-          : icon(action.iconName, 18);
+          : `${icon(action.iconName, 18)}${action.kind === "fetch" && tracksSelected && snapshot.branch.behind > 0 ? `<span class="remote-count-badge" aria-hidden="true">${compactCount(snapshot.branch.behind)}</span>` : ""}${action.kind === "push" && tracksSelected && snapshot.branch.ahead > 0 ? `<span class="remote-count-badge" aria-hidden="true">${compactCount(snapshot.branch.ahead)}</span>` : ""}`;
       const hint = this.query(action.hint);
       hint.title = title;
       hint.setAttribute("aria-label", title);
@@ -2842,9 +2812,13 @@ export class AsterlynApp {
     this.state.pushPreview = null;
     this.state.pushPreviewLoading = dialog === "push";
     this.state.pushPreviewLoadingMore = false;
-    this.state.pushSelectedCommit = null;
-    this.state.pushCommitDetails = null;
-    this.state.pushCommitDetailsLoading = false;
+    this.state.pushSelectedFile = null;
+    this.state.pushCollapsedFileDirectories.clear();
+    this.state.pushTagsEnabled = false;
+    this.state.pushTagMode = "all";
+    this.state.pushMode = "ordinary";
+    this.state.pushModeMenuOpen = false;
+    this.state.pushFileActionLoading = false;
     const sequence = ++this.remoteDialogSequence;
     this.renderRemoteDialog();
     queueMicrotask(() => {
@@ -2863,9 +2837,10 @@ export class AsterlynApp {
     this.state.pushPreview = null;
     this.state.pushPreviewLoading = false;
     this.state.pushPreviewLoadingMore = false;
-    this.state.pushSelectedCommit = null;
-    this.state.pushCommitDetails = null;
-    this.state.pushCommitDetailsLoading = false;
+    this.state.pushSelectedFile = null;
+    this.state.pushCollapsedFileDirectories.clear();
+    this.state.pushModeMenuOpen = false;
+    this.state.pushFileActionLoading = false;
     this.renderRemoteDialog();
     const target = this.remoteDialogReturnFocus;
     this.remoteDialogReturnFocus = null;
@@ -2942,54 +2917,110 @@ export class AsterlynApp {
       ? `<div class="remote-dialog-error" role="alert">${escapeHtml(this.state.remoteDialogError)}</div>`
       : "";
     const body = this.state.pushPreviewLoading
-      ? `<div class="remote-dialog-loading" role="status"><span class="spinner"></span><span>Reading outgoing commits from the last-fetched refs…</span></div>`
+      ? `<div class="remote-dialog-loading" role="status"><span class="spinner"></span><span>Reading outgoing commits, tags, and files from the last-fetched refs…</span></div>`
       : preview
         ? this.renderPushPreviewBody(preview)
         : `<div class="remote-dialog-empty">Push preview is unavailable. Close this window and refresh before retrying.</div>`;
     const route = preview
       ? `${preview.sourceRef} to ${preview.remote}:${preview.destinationRef}`
       : "the selected current-branch route";
-    const actionable = Boolean(preview && (preview.publish || preview.totalCommits > 0));
+    const forceSelected = this.state.pushMode === "forceWithLease";
+    const modeAllowed = Boolean(
+      preview && (forceSelected ? preview.forceWithLeaseAllowed : preview.ordinaryAllowed),
+    );
+    const actionable = Boolean(
+      preview &&
+        (preview.publish ||
+          preview.totalCommits > 0 ||
+          preview.tags.length > 0 ||
+          (forceSelected && preview.comparisonBaseOid !== preview.headOid)),
+    );
+    const modeBlocker = preview
+      ? forceSelected
+        ? preview.forceWithLeaseBlockReason
+        : preview.ordinaryBlockReason
+      : null;
+    const actionLabel = forceSelected
+      ? "Force Push with Lease"
+      : preview?.publish
+        ? "Publish"
+        : "Push";
+    const tagsLabel = preview?.tags.length
+      ? `${preview.tags.length} tag${preview.tags.length === 1 ? "" : "s"}`
+      : "No matching tags";
     return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
       <div class="dialog-heading">
-        <div><span class="panel-eyebrow">Review first</span><h2 id="remote-dialog-title">Push commits to ${escapeHtml(snapshot.branch.head ?? "current branch")}</h2></div>
+        <div><h2 id="remote-dialog-title">Push Commits to ${escapeHtml(snapshot.branch.head ?? "current branch")}</h2></div>
         <button class="icon-button" id="remote-dialog-close" type="button" aria-label="Cancel Push confirmation" title="Cancel" ${operation ? "disabled" : ""}>${icon("close", 18)}</button>
       </div>
-      <p id="remote-dialog-description">Review the exact current-branch route and outgoing commits before an ordinary non-force push. The comparison is based on locally known refs from the last Fetch.</p>
+      <p id="remote-dialog-description" class="visually-hidden">Review the exact current-branch route, outgoing commits, aggregate changed files, optional tags, and push mode before writing to the selected remote.</p>
       ${error}
       ${body}
-      <p class="remote-dialog-note">This action never force-pushes, pushes tags, updates first, or retries automatically. A server rejection ends the operation and remains visible here.</p>
-      <div class="dialog-actions">
-        ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel push"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
-        <button class="primary-button" id="remote-dialog-confirm-push" type="button" aria-label="Push ${preview?.totalCommits ?? 0} outgoing commits over ${escapeAttribute(route)} using ordinary non-force push without tags" ${operation || this.state.pushPreviewLoading || !actionable ? "disabled" : ""}>${operation?.cancelling ? "Cancelling…" : operation ? "Pushing…" : preview?.publish ? "Publish branch" : "Push"}</button>
+      ${modeBlocker ? `<div class="remote-dialog-warning" role="status">${escapeHtml(modeBlocker)}</div>` : ""}
+      <p class="remote-dialog-note">${forceSelected ? "Force Push uses an exact --force-with-lease bound to the last-fetched destination object. If the remote changed, Git rejects the push." : "Ordinary Push never rewrites the destination."} Tags are sent only when the checkbox is enabled. A rejection ends the operation; Asterlyn never retries automatically.</p>
+      <div class="push-dialog-footer">
+        <div class="push-tags-control">
+          <label><input id="push-tags-enabled" type="checkbox" ${this.state.pushTagsEnabled ? "checked" : ""} ${operation ? "disabled" : ""}/><span>Push tags:</span></label>
+          <select id="push-tag-mode" aria-label="Tag scope" ${!this.state.pushTagsEnabled || operation ? "disabled" : ""}>
+            <option value="all" ${this.state.pushTagMode === "all" ? "selected" : ""}>All</option>
+            <option value="currentBranch" ${this.state.pushTagMode === "currentBranch" ? "selected" : ""}>Current Branch</option>
+          </select>
+          <span class="push-tag-count" aria-live="polite">${this.state.pushTagsEnabled && preview ? escapeHtml(tagsLabel) : ""}</span>
+        </div>
+        <div class="push-dialog-actions">
+          ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel push"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
+          <div class="push-split-action">
+            <button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(actionLabel)} ${preview?.totalCommits ?? 0} outgoing commits and ${preview?.tags.length ?? 0} selected tags over ${escapeAttribute(route)}" ${operation || this.state.pushPreviewLoading || !actionable || !modeAllowed ? "disabled" : ""}>${operation?.cancelling ? "Cancelling…" : operation ? "Pushing…" : actionLabel}</button>
+            <button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="Choose Push mode" aria-haspopup="menu" aria-expanded="${this.state.pushModeMenuOpen}" ${operation || !preview ? "disabled" : ""}>${icon("chevron-down", 13)}</button>
+            <div class="push-mode-menu ${this.state.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="Push mode">
+              <button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>Push</strong><small>Ordinary non-force update</small></span>${!forceSelected ? icon("check", 13) : ""}</button>
+              <button type="button" role="menuitemradio" data-push-mode="forceWithLease" aria-checked="${forceSelected}" ${preview?.forceWithLeaseAllowed ? "" : "disabled"}><span><strong>Force Push with Lease</strong><small>Rewrite only if the remote still matches the reviewed object</small></span>${forceSelected ? icon("check", 13) : ""}</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>`;
   }
 
   private renderPushPreviewBody(preview: PushPreview): string {
-    const selectedOid = this.state.pushSelectedCommit;
     const commits = preview.commits.length
       ? preview.commits
-          .map((commit) => `<button class="push-commit-row ${commit.oid === selectedOid ? "selected" : ""}" type="button" role="option" data-push-commit="${escapeAttribute(commit.oid)}" aria-selected="${commit.oid === selectedOid}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.shortOid)} · ${escapeHtml(commit.authorName)} · ${escapeHtml(formatAbsolute(commit.authoredAt))}</small></button>`)
+          .map((commit) => `<div class="push-commit-row" role="listitem" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.authorName)} · ${escapeHtml(formatAbsolute(commit.authoredAt))}</small></div>`)
           .join("")
       : `<div class="remote-dialog-empty">No new commit objects are visible against the selected remote's last-fetched refs.${preview.publish ? " Publishing will still create the destination branch." : ""}</div>`;
-    const details =
-      this.state.pushCommitDetails?.oid === selectedOid
-        ? this.state.pushCommitDetails
-        : null;
-    const files = this.state.pushCommitDetailsLoading
-      ? `<div class="remote-dialog-loading"><span class="spinner"></span><span>Reading files for the selected commit…</span></div>`
-      : details
-        ? details.files.length
-          ? details.files.map((file) => `<div class="push-file-row file-status-${file.status}" title="${escapeAttribute(file.path)}"><span class="change-status status-${file.status}">${changeCode(file.status)}</span><span class="commit-file-glyph">${fileTypeIcon(file.path)}</span><span>${escapeHtml(file.path)}</span></div>`).join("")
-          : `<div class="remote-dialog-empty">This commit has no file changes to display.</div>`
-        : `<div class="remote-dialog-empty">Select an outgoing commit to inspect its files.</div>`;
-    return `<div class="remote-dialog-route" aria-label="Push route"><code>${escapeHtml(preview.sourceRef)}</code><span>→</span><code>${escapeHtml(`${preview.remote}:${preview.destinationRef}`)}</code></div>
-      <div class="push-preview-summary"><strong>${preview.publish ? "First publication" : "Configured upstream"}</strong><span>${preview.totalCommits} outgoing commit${preview.totalCommits === 1 ? "" : "s"}</span><code title="${escapeAttribute(preview.headOid)}">HEAD ${escapeHtml(preview.headOid.slice(0, 10))}</code></div>
+    const selectedFile = this.state.pushSelectedFile;
+    const files = preview.files.length
+      ? this.state.pushFileView === "tree"
+        ? `<details class="push-file-directory push-file-root" data-push-directory="." ${this.state.pushCollapsedFileDirectories.has(".") ? "" : "open"}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<strong>${escapeHtml(basename(this.state.workspaceRoot ?? preview.branch))}</strong><small>${preview.files.length} file${preview.files.length === 1 ? "" : "s"}</small></summary><div role="group">${this.state.pushCollapsedFileDirectories.has(".") ? "" : buildCommitFileTree(preview.files).map((node) => this.renderPushFileTreeNode(node, 1)).join("")}</div></details>`
+        : preview.files.map((file) => this.pushFileRow(file, file.path === selectedFile, null)).join("")
+      : `<div class="remote-dialog-empty">${preview.filesTruncated ? "The pushed file range exceeded the bounded review limit." : "No net file changes are present in the reviewed range."}</div>`;
+    return `<div class="push-route-row selected" aria-label="Push route"><span>${icon("branch", 14)}<strong>${escapeHtml(preview.branch)}</strong></span><code>${escapeHtml(preview.sourceRef)} → ${escapeHtml(`${preview.remote}:${preview.destinationRef}`)}</code></div>
       <div class="push-preview-grid">
-        <section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">Outgoing commits</h3><span>${preview.commits.length}/${preview.totalCommits}</span></div><div class="push-commit-list" role="listbox">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${this.state.pushPreviewLoadingMore ? "disabled" : ""}>${this.state.pushPreviewLoadingMore ? "Loading…" : "Show more"}</button>` : preview.truncated ? `<p class="push-preview-limit">Showing the first 1,000 of ${preview.totalCommits} commits. Push includes all ${preview.totalCommits}.</p>` : ""}</section>
-        <section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading"><h3 id="push-files-title">Files in selected commit</h3><span>${details?.files.length ?? 0}</span></div><div class="push-file-list">${files}</div></section>
+        <section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">Outgoing commits</h3><span>${preview.commits.length}/${preview.totalCommits}</span></div><div class="push-commit-list" role="list">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${this.state.pushPreviewLoadingMore ? "disabled" : ""}>${this.state.pushPreviewLoadingMore ? "Loading…" : "Show more"}</button>` : preview.truncated ? `<p class="push-preview-limit">Showing the first 1,000 of ${preview.totalCommits} commits. Push includes all ${preview.totalCommits}.</p>` : ""}</section>
+        <section class="push-preview-files" aria-labelledby="push-files-title">
+          <div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">Files</h3><span>${preview.files.length}${preview.filesTruncated ? "+" : ""}</span><div class="push-file-toolbar" role="toolbar" aria-label="Pushed file presentation and navigation">
+            <button class="compact-icon-button" type="button" data-push-file-action="diff" title="Open the latest outgoing commit Diff for the selected file" aria-label="Open the latest outgoing commit Diff for the selected file" ${selectedFile && !this.state.pushFileActionLoading ? "" : "disabled"}>${this.state.pushFileActionLoading ? '<span class="spinner"></span>' : icon("diff", 14)}</button>
+            <button class="compact-icon-button" type="button" data-push-file-action="open" title="Open selected file and reveal it in Project" aria-label="Open selected file and reveal it in Project" ${selectedFile && this.pushSelectedProjectFile() ? "" : "disabled"}>${icon("locate", 14)}</button>
+            <button class="compact-icon-button ${this.state.pushFileView === "tree" ? "active" : ""}" type="button" data-push-file-action="view" title="Show pushed files as ${this.state.pushFileView === "tree" ? "a flat list" : "a folder tree"}" aria-label="Show pushed files as ${this.state.pushFileView === "tree" ? "a flat list" : "a folder tree"}" aria-pressed="${this.state.pushFileView === "tree"}">${icon("eye", 14)}</button>
+            <button class="compact-icon-button" type="button" data-push-file-action="expand" title="Expand all pushed file folders" aria-label="Expand all pushed file folders" ${this.state.pushFileView === "flat" ? "disabled" : ""}>${icon("expand", 14)}</button>
+            <button class="compact-icon-button" type="button" data-push-file-action="collapse" title="Collapse all pushed file folders" aria-label="Collapse all pushed file folders" ${this.state.pushFileView === "flat" ? "disabled" : ""}>${icon("collapse", 14)}</button>
+          </div></div>
+          <div class="push-file-list" role="tree">${files}</div>
+        </section>
       </div>`;
+  }
+
+  private renderPushFileTreeNode(node: CommitFileTreeNode, depth: number): string {
+    if (node.kind === "directory") {
+      const expanded = !this.state.pushCollapsedFileDirectories.has(node.path);
+      return `<details class="push-file-directory" data-push-directory="${escapeAttribute(node.path)}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countCommitTreeFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => this.renderPushFileTreeNode(child, depth + 1)).join("") : ""}</div></details>`;
+    }
+    const file = node.file!;
+    return this.pushFileRow(file, file.path === this.state.pushSelectedFile, depth);
+  }
+
+  private pushFileRow(file: CommitFileChange, selected: boolean, depth: number | null): string {
+    return `<button class="push-file-row file-status-${file.status} ${selected ? "selected" : ""}" type="button" role="treeitem" ${depth === null ? "" : `style="--tree-depth:${depth}"`} data-push-file="${escapeAttribute(file.path)}" aria-selected="${selected}" title="${escapeAttribute(file.path)}"><span class="change-status status-${file.status}">${changeCode(file.status)}</span><span class="commit-file-glyph">${fileTypeIcon(file.path)}</span><span>${escapeHtml(basename(file.path))}</span>${depth === null ? `<small>${escapeHtml(dirname(file.path))}</small>` : ""}</button>`;
   }
 
   private bindRemoteDialogEvents(): void {
@@ -3010,14 +3041,69 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
       ?.addEventListener("click", () => void this.confirmRemoteDialog("push"));
-    this.root.querySelectorAll<HTMLButtonElement>("[data-push-commit]").forEach((button) => {
+    this.root.querySelector<HTMLInputElement>("#push-tags-enabled")?.addEventListener("change", (event) => {
+      this.state.pushTagsEnabled = (event.currentTarget as HTMLInputElement).checked;
+      this.reloadPushPreview();
+    });
+    this.root.querySelector<HTMLSelectElement>("#push-tag-mode")?.addEventListener("change", (event) => {
+      this.state.pushTagMode = (event.currentTarget as HTMLSelectElement).value as Exclude<PushTagMode, "none">;
+      this.reloadPushPreview();
+    });
+    this.root.querySelector<HTMLButtonElement>("#push-mode-toggle")?.addEventListener("click", () => {
+      this.state.pushModeMenuOpen = !this.state.pushModeMenuOpen;
+      this.renderRemoteDialog();
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-push-mode]").forEach((button) => {
       button.addEventListener("click", () => {
-        const oid = button.dataset.pushCommit;
-        if (!oid || oid === this.state.pushSelectedCommit) return;
-        this.state.pushSelectedCommit = oid;
-        this.state.pushCommitDetails = null;
+        this.state.pushMode = button.dataset.pushMode as PushMode;
+        this.state.pushModeMenuOpen = false;
         this.renderRemoteDialog();
-        void this.loadPushCommitDetails(oid, this.remoteDialogSequence);
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-push-file]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const path = button.dataset.pushFile;
+        if (!path) return;
+        this.state.pushSelectedFile = path;
+        this.root.querySelectorAll<HTMLButtonElement>("[data-push-file]").forEach((row) => {
+          const selected = row.dataset.pushFile === path;
+          row.classList.toggle("selected", selected);
+          row.setAttribute("aria-selected", String(selected));
+        });
+        this.renderPushFileToolbarState();
+      });
+      button.addEventListener("dblclick", () => void this.openSelectedPushFileDiff());
+    });
+    this.root.querySelectorAll<HTMLDetailsElement>("[data-push-directory]").forEach((details) => {
+      details.addEventListener("toggle", () => {
+        const path = details.dataset.pushDirectory;
+        if (!path) return;
+        if (details.open) this.state.pushCollapsedFileDirectories.delete(path);
+        else this.state.pushCollapsedFileDirectories.add(path);
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-push-file-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.pushFileAction;
+        if (action === "view") {
+          this.state.pushFileView = this.state.pushFileView === "tree" ? "flat" : "tree";
+          this.renderRemoteDialog();
+        } else if (action === "expand") {
+          this.state.pushCollapsedFileDirectories.clear();
+          this.renderRemoteDialog();
+        } else if (action === "collapse") {
+          const preview = this.state.pushPreview;
+          if (!preview) return;
+          this.state.pushCollapsedFileDirectories = new Set([
+            ".",
+            ...commitFileDirectoryPaths(buildCommitFileTree(preview.files)),
+          ]);
+          this.renderRemoteDialog();
+        } else if (action === "open") {
+          void this.openSelectedPushFile();
+        } else if (action === "diff") {
+          void this.openSelectedPushFileDiff();
+        }
       });
     });
     this.root.querySelector<HTMLButtonElement>("#push-load-more")?.addEventListener(
@@ -3032,15 +3118,20 @@ export class AsterlynApp {
     const remote = remotePolicy(snapshot, this.state.selectedRemote).selectedRemote;
     if (!remote) return;
     try {
-      const preview = await bridge.readPushPreview(snapshot.root, remote.name, 0, 100);
+      const preview = await bridge.readPushPreview(
+        snapshot.root,
+        remote.name,
+        this.effectivePushTagMode(),
+        0,
+        100,
+      );
       if (sequence !== this.remoteDialogSequence || this.state.remoteDialog !== "push") return;
       this.state.pushPreview = preview;
       this.state.pushPreviewLoading = false;
-      this.state.pushSelectedCommit = preview.commits[0]?.oid ?? null;
-      this.renderRemoteDialog();
-      if (this.state.pushSelectedCommit) {
-        void this.loadPushCommitDetails(this.state.pushSelectedCommit, sequence);
+      if (!preview.files.some((file) => file.path === this.state.pushSelectedFile)) {
+        this.state.pushSelectedFile = preview.files[0]?.path ?? null;
       }
+      this.renderRemoteDialog();
     } catch (error) {
       if (sequence !== this.remoteDialogSequence || this.state.remoteDialog !== "push") return;
       this.state.pushPreviewLoading = false;
@@ -3060,6 +3151,7 @@ export class AsterlynApp {
       const page = await bridge.readPushPreview(
         snapshot.root,
         preview.remote,
+        preview.tagMode,
         preview.commits.length,
         100,
       );
@@ -3082,28 +3174,105 @@ export class AsterlynApp {
     }
   }
 
-  private async loadPushCommitDetails(oid: string, sequence: number): Promise<void> {
-    const snapshot = this.state.snapshot;
-    if (!snapshot || this.state.remoteDialog !== "push") return;
-    this.state.pushCommitDetailsLoading = true;
+  private effectivePushTagMode(): PushTagMode {
+    return this.state.pushTagsEnabled ? this.state.pushTagMode : "none";
+  }
+
+  private reloadPushPreview(): void {
+    if (this.state.remoteDialog !== "push" || this.state.remoteOperation) return;
+    const sequence = ++this.remoteDialogSequence;
+    this.state.pushPreview = null;
+    this.state.pushPreviewLoading = true;
+    this.state.remoteDialogError = null;
+    this.state.pushModeMenuOpen = false;
     this.renderRemoteDialog();
+    void this.loadPushPreview(sequence);
+  }
+
+  private renderPushFileToolbarState(): void {
+    const selected = this.state.pushSelectedFile !== null;
+    const diff = this.root.querySelector<HTMLButtonElement>('[data-push-file-action="diff"]');
+    const open = this.root.querySelector<HTMLButtonElement>('[data-push-file-action="open"]');
+    if (diff) diff.disabled = !selected || this.state.pushFileActionLoading;
+    if (open) open.disabled = !selected || this.pushSelectedProjectFile() === null;
+  }
+
+  private pushSelectedProjectFile(): ProjectFile | null {
+    const path = this.state.pushSelectedFile;
+    return path
+      ? this.state.repositoryFiles.find(
+          (file) => file.repositoryId === "." && file.path === path,
+        ) ?? null
+      : null;
+  }
+
+  private async openSelectedPushFile(): Promise<void> {
+    const workspaceRoot = this.state.workspaceRoot;
+    const file = this.pushSelectedProjectFile();
+    if (!workspaceRoot || !file) return;
+    this.closeRemoteDialog(false);
+    this.state.layout = { ...this.state.layout, leftTool: "files" };
+    this.applyWorkbenchLayout(true);
+    this.renderActivityRail();
+    await this.openProjectFile(workspaceRoot, file);
+    if (this.state.workspaceRoot === workspaceRoot) this.locateCurrentProjectFile();
+  }
+
+  private async openSelectedPushFileDiff(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const preview = this.state.pushPreview;
+    const path = this.state.pushSelectedFile;
+    if (!snapshot || !preview || !path || this.state.pushFileActionLoading) return;
+    const sequence = this.remoteDialogSequence;
+    this.state.pushFileActionLoading = true;
+    this.renderPushFileToolbarState();
     try {
-      const details = await bridge.readCommitDetails(snapshot.root, ".", oid);
+      const details = await bridge.readPushFileCommit(
+        snapshot.root,
+        preview.remote,
+        preview.tagMode,
+        preview.previewToken,
+        path,
+      );
       if (
         sequence !== this.remoteDialogSequence ||
         this.state.remoteDialog !== "push" ||
-        this.state.pushSelectedCommit !== oid
+        this.state.pushSelectedFile !== path
       ) return;
-      this.state.pushCommitDetails = details;
+      if (!details) {
+        this.setStatus("No outgoing commit contains this file", "warning");
+        return;
+      }
+      const file = details.files.find((candidate) => candidate.path === path);
+      if (!file) {
+        this.setStatus("The selected file is not present in its latest outgoing commit", "warning");
+        return;
+      }
+      this.state.selectedCommit = commitKey(details);
+      this.state.commitDetails = details;
+      this.state.selectedCommitFile = path;
+      this.state.gitDetail = "commit";
+      this.activateDiffPreview({
+        kind: "commit-diff",
+        repositoryRoot: snapshot.root,
+        repositoryId: details.repositoryId,
+        oid: details.oid,
+        path,
+      });
+      this.closeRemoteDialog(false);
+      this.state.commitPatch = null;
+      this.state.commitPatchLoading = true;
+      this.state.commitPatchError = null;
+      this.renderEditor();
+      void this.loadSelectedCommitDiff();
     } catch (error) {
       if (sequence === this.remoteDialogSequence) {
         this.state.remoteDialogError = errorMessage(error);
-      }
-    } finally {
-      if (sequence === this.remoteDialogSequence) {
-        this.state.pushCommitDetailsLoading = false;
         this.renderRemoteDialog();
       }
+    } finally {
+      this.state.pushFileActionLoading = false;
+      this.renderPushFileToolbarState();
     }
   }
 
@@ -3152,6 +3321,8 @@ export class AsterlynApp {
           : await bridge.pushCurrent(
               snapshot.root,
               remote!.name,
+              this.state.pushMode,
+              pushPreview!.tagMode,
               pushPreview!.previewToken,
               operationId,
             );
@@ -8799,6 +8970,10 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function compactCount(count: number): string {
+  return count > 99 ? "99+" : String(count);
 }
 
 function capitalize(value: string): string {

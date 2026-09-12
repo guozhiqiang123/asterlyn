@@ -179,12 +179,45 @@ pub struct PushPreview {
     pub head_oid: String,
     pub comparison_base_oid: Option<String>,
     pub publish: bool,
+    pub ordinary_allowed: bool,
+    pub ordinary_block_reason: Option<String>,
+    pub force_with_lease_allowed: bool,
+    pub force_with_lease_block_reason: Option<String>,
+    pub tag_mode: PushTagMode,
+    pub tags: Vec<PushTagSummary>,
+    pub files: Vec<CommitFileChange>,
+    pub files_truncated: bool,
     pub commits: Vec<CommitSummary>,
     pub offset: usize,
     pub total_commits: usize,
     pub has_more: bool,
     pub truncated: bool,
     pub preview_token: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PushMode {
+    #[default]
+    Ordinary,
+    ForceWithLease,
+}
+
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PushTagMode {
+    #[default]
+    None,
+    All,
+    CurrentBranch,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PushTagSummary {
+    pub name: String,
+    pub full_ref: String,
+    pub object_oid: String,
 }
 
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

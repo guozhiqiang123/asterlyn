@@ -118,16 +118,19 @@ function pushState(
       `Select ${branch.upstreamRemote}, the configured upstream for this branch.`,
     );
   }
-  if (branch.behind > 0) {
-    return blocked("Push blocked", "Fetch and reconcile upstream commits first.");
-  }
   if (!branch.upstreamRemote) {
     return ready("Publish branch", `Create the same-named branch on ${remote.name}.`);
+  }
+  if (branch.behind > 0) {
+    return ready(
+      "Review Push",
+      "The branch is behind or diverged. Ordinary Push will remain blocked in review; Force Push with Lease is available only as an explicit choice.",
+    );
   }
   if (branch.ahead > 0) {
     return ready("Push", `Send ${branch.ahead} commit${branch.ahead === 1 ? "" : "s"} to ${remote.name}.`);
   }
-  return blocked("Up to date", "No local commits need to be pushed.");
+  return ready("Review Push", "No branch commits are pending; open review to inspect optional tags.");
 }
 
 function ready(label: string, detail: string): RemoteActionState {

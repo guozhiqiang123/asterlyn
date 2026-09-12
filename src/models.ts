@@ -65,12 +65,29 @@ export interface PushPreview {
   headOid: string;
   comparisonBaseOid: string | null;
   publish: boolean;
+  ordinaryAllowed: boolean;
+  ordinaryBlockReason: string | null;
+  forceWithLeaseAllowed: boolean;
+  forceWithLeaseBlockReason: string | null;
+  tagMode: PushTagMode;
+  tags: PushTagSummary[];
+  files: CommitFileChange[];
+  filesTruncated: boolean;
   commits: CommitSummary[];
   offset: number;
   totalCommits: number;
   hasMore: boolean;
   truncated: boolean;
   previewToken: string;
+}
+
+export type PushMode = "ordinary" | "forceWithLease";
+export type PushTagMode = "none" | "all" | "currentBranch";
+
+export interface PushTagSummary {
+  name: string;
+  fullRef: string;
+  objectOid: string;
 }
 
 export type HistoryOrder = "topological" | "date";

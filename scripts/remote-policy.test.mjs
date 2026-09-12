@@ -67,7 +67,8 @@ test("enables only clean behind-only fast-forward pull", () => {
     "origin",
   );
   assert.equal(policy.pull.enabled, true);
-  assert.equal(policy.push.enabled, false);
+  assert.equal(policy.push.enabled, true);
+  assert.match(policy.push.detail, /Force Push with Lease/);
 
   const dirty = remotePolicy(
     snapshot({ branch: { ahead: 0, behind: 2 }, changes: [{ path: "dirty.txt" }] }),
@@ -76,13 +77,14 @@ test("enables only clean behind-only fast-forward pull", () => {
   assert.equal(dirty.pull.enabled, false);
 });
 
-test("blocks divergence and mirror push while allowing new-branch publish", () => {
+test("reviews divergence and blocks mirror push while allowing new-branch publish", () => {
   const diverged = remotePolicy(
     snapshot({ branch: { ahead: 1, behind: 1 } }),
     "origin",
   );
   assert.equal(diverged.pull.enabled, false);
-  assert.equal(diverged.push.enabled, false);
+  assert.equal(diverged.push.enabled, true);
+  assert.match(diverged.push.detail, /Ordinary Push will remain blocked/);
 
   const unpublished = snapshot({
     branch: { upstream: null, upstreamRemote: null, upstreamRef: null, ahead: 0 },
