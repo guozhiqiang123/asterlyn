@@ -6,6 +6,7 @@ import type {
   PushMode,
   PushPreview,
   PushTagMode,
+  RepositoryMutationOutcome,
   RepositorySnapshot,
 } from "../../models.ts";
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
@@ -96,8 +97,8 @@ export interface RemotePushGateway {
     repositoryRoot: string,
     remote: string,
     operationId: string,
-  ): Promise<RepositorySnapshot>;
-  pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositorySnapshot>;
+  ): Promise<RepositoryMutationOutcome>;
+  pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositoryMutationOutcome>;
   pushCurrent(
     repositoryRoot: string,
     remote: string,
@@ -105,12 +106,12 @@ export interface RemotePushGateway {
     tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
-  ): Promise<RepositorySnapshot>;
+  ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
 }
 
 export type RemoteOperationResult =
-  | { status: "success"; snapshot: RepositorySnapshot }
+  | { status: "success"; outcome: RepositoryMutationOutcome }
   | { status: "failure"; error: unknown }
   | { status: "stale" }
   | { status: "unavailable" };
@@ -503,7 +504,7 @@ export class RemotePushController {
     this.state.dialogError = null;
     this.emit({ reason: "operation-start", toolbarChanged: true, dialogChanged: true });
     try {
-      const next = kind === "fetch"
+      const outcome = kind === "fetch"
         ? await this.gateway.fetchRemote(snapshot.root, remote!.name, operationId)
         : kind === "pull"
           ? await this.gateway.pullCurrent(snapshot.root, operationId)
@@ -518,7 +519,7 @@ export class RemotePushController {
       if (!this.operationRequestMatches(generation, snapshot.root, operationId)) {
         return { status: "stale" };
       }
-      return { status: "success", snapshot: next };
+      return { status: "success", outcome };
     } catch (error) {
       if (!this.operationRequestMatches(generation, snapshot.root, operationId)) {
         return { status: "stale" };

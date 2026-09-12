@@ -7,7 +7,7 @@ pub(crate) async fn stage_paths(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -15,7 +15,9 @@ pub(crate) async fn stage_paths(
     git_operations
         .run_local(repository_root, "stage paths", move |repository| {
             repository.stage(&paths)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
+            repository
+                .tracked_snapshot(COMMIT_LIMIT)
+                .map(|snapshot| mutation_outcome(snapshot, &[RepositoryStateSlice::WorkingTree]))
         })
         .await
 }
@@ -27,7 +29,7 @@ pub(crate) async fn unstage_paths(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -35,7 +37,9 @@ pub(crate) async fn unstage_paths(
     git_operations
         .run_local(repository_root, "unstage paths", move |repository| {
             repository.unstage(&paths)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
+            repository
+                .tracked_snapshot(COMMIT_LIMIT)
+                .map(|snapshot| mutation_outcome(snapshot, &[RepositoryStateSlice::WorkingTree]))
         })
         .await
 }
@@ -63,12 +67,24 @@ pub(crate) async fn commit_changes(
                     Ok(snapshot) => Ok(CommitSelectedResult {
                         oid: committed.oid,
                         snapshot: Some(snapshot),
+                        invalidated_slices: vec![
+                            RepositoryStateSlice::WorkingTree,
+                            RepositoryStateSlice::Head,
+                            RepositoryStateSlice::Refs,
+                            RepositoryStateSlice::History,
+                        ],
                         refresh_error: None,
                         verification_warning: committed.verification_warning,
                     }),
                     Err(error) => Ok(CommitSelectedResult {
                         oid: committed.oid,
                         snapshot: None,
+                        invalidated_slices: vec![
+                            RepositoryStateSlice::WorkingTree,
+                            RepositoryStateSlice::Head,
+                            RepositoryStateSlice::Refs,
+                            RepositoryStateSlice::History,
+                        ],
                         refresh_error: Some(error.to_string()),
                         verification_warning: committed.verification_warning,
                     }),
@@ -85,7 +101,7 @@ pub(crate) async fn revert_changes(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -96,7 +112,16 @@ pub(crate) async fn revert_changes(
             "revert selected changes",
             move |repository| {
                 repository.revert_selected(&selected)?;
-                repository.tracked_snapshot(COMMIT_LIMIT)
+                repository.tracked_snapshot(COMMIT_LIMIT).map(|snapshot| {
+                    mutation_outcome(
+                        snapshot,
+                        &[
+                            RepositoryStateSlice::WorkspaceCatalog,
+                            RepositoryStateSlice::OpenDocuments,
+                            RepositoryStateSlice::WorkingTree,
+                        ],
+                    )
+                })
             },
         )
         .await
@@ -109,7 +134,7 @@ pub(crate) async fn switch_branch(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -117,7 +142,9 @@ pub(crate) async fn switch_branch(
     git_operations
         .run_local(repository_root, "switch branch", move |repository| {
             repository.switch_branch(&target_full_name)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
+            repository
+                .tracked_snapshot(COMMIT_LIMIT)
+                .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
         })
         .await
 }
@@ -129,7 +156,7 @@ pub(crate) async fn create_branch(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -137,7 +164,9 @@ pub(crate) async fn create_branch(
     git_operations
         .run_local(repository_root, "create branch", move |repository| {
             repository.create_branch(&name)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
+            repository
+                .tracked_snapshot(COMMIT_LIMIT)
+                .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
         })
         .await
 }
@@ -150,7 +179,7 @@ pub(crate) async fn fetch_remote(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -164,6 +193,16 @@ pub(crate) async fn fetch_remote(
             move |repository, cancellation| repository.fetch_remote(&remote, cancellation),
         )
         .await
+        .map(|snapshot| {
+            mutation_outcome(
+                snapshot,
+                &[
+                    RepositoryStateSlice::Head,
+                    RepositoryStateSlice::Refs,
+                    RepositoryStateSlice::History,
+                ],
+            )
+        })
 }
 
 #[tauri::command]
@@ -207,7 +246,7 @@ pub(crate) async fn pull_current(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -221,6 +260,7 @@ pub(crate) async fn pull_current(
             move |repository, cancellation| repository.pull_ff_only(cancellation),
         )
         .await
+        .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
 }
 
 #[tauri::command]
@@ -235,7 +275,7 @@ pub(crate) async fn push_current(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
+) -> Result<RepositoryMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -257,6 +297,16 @@ pub(crate) async fn push_current(
             },
         )
         .await
+        .map(|snapshot| {
+            mutation_outcome(
+                snapshot,
+                &[
+                    RepositoryStateSlice::Head,
+                    RepositoryStateSlice::Refs,
+                    RepositoryStateSlice::History,
+                ],
+            )
+        })
 }
 
 #[tauri::command]
@@ -269,4 +319,26 @@ pub(crate) fn cancel_remote_operation(
 ) -> Result<(), GitError> {
     active_workspaces.require_git(window.label(), &repository_root)?;
     git_operations.cancel_remote(repository_root, operation_id)
+}
+
+fn mutation_outcome(
+    snapshot: RepositorySnapshot,
+    invalidated_slices: &[RepositoryStateSlice],
+) -> RepositoryMutationOutcome {
+    RepositoryMutationOutcome {
+        snapshot,
+        invalidated_slices: invalidated_slices.to_vec(),
+    }
+}
+
+fn complete_repository_slices() -> Vec<RepositoryStateSlice> {
+    vec![
+        RepositoryStateSlice::WorkspaceCatalog,
+        RepositoryStateSlice::OpenDocuments,
+        RepositoryStateSlice::WorkingTree,
+        RepositoryStateSlice::Head,
+        RepositoryStateSlice::Refs,
+        RepositoryStateSlice::History,
+        RepositoryStateSlice::Operation,
+    ]
 }

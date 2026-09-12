@@ -116,6 +116,7 @@ import type {
   SessionInvalidationCause,
   SessionInvalidationSlice,
 } from "./application/session-invalidation";
+import { repositoryReconciliationPlan } from "./application/repository-mutation";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -263,6 +264,7 @@ import type {
   PushMode,
   PushTagMode,
   ReplacementApplyResult,
+  RepositoryMutationOutcome,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
 } from "./models";
@@ -621,6 +623,33 @@ export class AsterlynApp {
     const installed = this.windowSession.installRepository(snapshot, cause, slices, options);
     this.windowSession.repository.consumeInvalidation();
     return installed;
+  }
+
+  private applyRepositoryMutation(
+    outcome: RepositoryMutationOutcome,
+    cause: "gitMutation" | "remoteOperation",
+    options: { clearChanges?: boolean; focusConflicts?: boolean } = {},
+  ): RepositorySnapshot {
+    const snapshot = outcome.snapshot;
+    const plan = repositoryReconciliationPlan(outcome);
+    this.installRepositorySnapshot(snapshot, cause, plan.slices);
+    if (plan.updateRemote) {
+      this.remoteController.installSnapshot(snapshot);
+      this.state.selectedBranch = null;
+    }
+    if (plan.updateWorkingTree) {
+      this.changesController.installSnapshot(snapshot, {
+        clearInclusion: options.clearChanges,
+        clearSelection: options.clearChanges,
+      });
+      this.filesController.updateChanges(snapshot.changes);
+    }
+    if (plan.updateHistory) this.installSnapshotHistory(snapshot, true);
+    if (plan.reconcileOpenDocuments) {
+      this.reconcileWorkingDocument(snapshot);
+    }
+    if (options.focusConflicts) this.prepareConflictResolution(snapshot);
+    return snapshot;
   }
 
   private handleEditorSessionChange(change: EditorSessionChange): void {
@@ -2305,8 +2334,7 @@ export class AsterlynApp {
       const result = await this.remoteController.runOperation(kind);
       if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
-        const next = result.snapshot;
-        this.acceptRemoteSnapshot(next);
+        const next = this.acceptRemoteOutcome(result.outcome);
         if (kind === "pull") {
           this.captureMountedTextEditor();
           if (dirtyTextTabs(this.editorState.session).length === 0) {
@@ -2325,7 +2353,10 @@ export class AsterlynApp {
           const reconciled = opened.repository;
           if (generation !== this.windowSession.generation) return false;
           if (!reconciled) throw new Error("The active project is no longer a Git repository.");
-          this.acceptRemoteSnapshot(reconciled, true);
+          this.acceptRemoteOutcome(
+            { snapshot: reconciled, invalidatedSlices: [...COMPLETE_REPOSITORY_SLICES] },
+            true,
+          );
           pendingRoot = reconciled.root;
         } catch {
           this.setStatus("Remote operation ended; refresh required", "warning");
@@ -2344,32 +2375,26 @@ export class AsterlynApp {
     return succeeded;
   }
 
-  private acceptRemoteSnapshot(
-    snapshot: RepositorySnapshot,
+  private acceptRemoteOutcome(
+    outcome: RepositoryMutationOutcome,
     focusConflicts = false,
-  ): void {
-    this.installRepositorySnapshot(snapshot, "remoteOperation", [
-      "workspaceCatalog",
-      "openDocuments",
-      "workingTree",
-      "head",
-      "refs",
-      "history",
-      "operation",
-    ]);
-    this.remoteController.installSnapshot(snapshot);
-    this.changesController.installSnapshot(snapshot, { clearSelection: true });
-    this.filesController.installWorkspace(snapshot.root, snapshot.changes);
-    this.state.selectedBranch = null;
-    this.installSnapshotHistory(snapshot);
-    if (focusConflicts) this.prepareConflictResolution(snapshot);
-    this.reconcileWorkingDocument(snapshot);
+  ): RepositorySnapshot {
+    const snapshot = this.applyRepositoryMutation(outcome, "remoteOperation", {
+      clearChanges: true,
+      focusConflicts,
+    });
+    if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
+      this.filesController.installWorkspace(snapshot.root, snapshot.changes);
+    }
     this.renderWorkspace();
-    this.loadVisibleCommitDetails();
+    if (outcome.invalidatedSlices.includes("history")) this.loadVisibleCommitDetails();
     if (this.activeDocument().kind === "working-diff") {
       void this.loadSelectedDiff();
     }
-    void this.loadProjectFiles(snapshot.root);
+    if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
+      void this.loadProjectFiles(snapshot.root);
+    }
+    return snapshot;
   }
 
   private prepareConflictResolution(snapshot: RepositorySnapshot): boolean {
@@ -5152,16 +5177,7 @@ export class AsterlynApp {
       const result = await this.changesController.revertSelected();
       if (generation !== this.windowSession.generation || result.status === "stale") return;
       if (result.status === "success") {
-        const next = result.value;
-        this.installRepositorySnapshot(next, "gitMutation", [
-          "workspaceCatalog",
-          "openDocuments",
-          "workingTree",
-        ]);
-        this.remoteController.installSnapshot(next);
-        this.changesController.installSnapshot(next);
-        this.filesController.updateChanges(next.changes);
-        this.reconcileWorkingDocument(next);
+        const next = this.applyRepositoryMutation(result.value, "gitMutation");
         this.renderWorkspace();
         if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
         pendingRoot = next.root;
@@ -5414,13 +5430,10 @@ export class AsterlynApp {
         const result = outcome.value;
         if (result.snapshot) {
           const next = result.snapshot;
-          this.installRepositorySnapshot(next, "gitMutation", COMPLETE_REPOSITORY_SLICES);
-          this.remoteController.installSnapshot(next);
-          this.changesController.installSnapshot(next);
-          this.filesController.updateChanges(next.changes);
-          this.state.selectedBranch = null;
-          this.installSnapshotHistory(next, true);
-          this.reconcileWorkingDocument(next);
+          this.applyRepositoryMutation(
+            { snapshot: next, invalidatedSlices: result.invalidatedSlices },
+            "gitMutation",
+          );
           this.renderWorkspace();
           this.loadVisibleCommitDetails();
           if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
@@ -5491,7 +5504,7 @@ export class AsterlynApp {
   private async runBranchMutation(
     loadingMessage: string,
     successMessage: string,
-    mutation: (repositoryRoot: string) => Promise<RepositorySnapshot>,
+    mutation: (repositoryRoot: string) => Promise<RepositoryMutationOutcome>,
   ): Promise<void> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
@@ -5503,17 +5516,12 @@ export class AsterlynApp {
     this.setLoading(true, loadingMessage);
     this.renderBottomTool();
     try {
-      const next = await mutation(snapshot.root);
+      const outcome = await mutation(snapshot.root);
       if (generation !== this.windowSession.generation) return;
-      this.installRepositorySnapshot(next, "gitMutation", COMPLETE_REPOSITORY_SLICES);
-      this.remoteController.installSnapshot(next);
-      this.changesController.installSnapshot(next, {
-        clearInclusion: true,
-        clearSelection: true,
+      const next = this.applyRepositoryMutation(outcome, "gitMutation", {
+        clearChanges: true,
       });
       this.filesController.installWorkspace(next.root, next.changes);
-      this.state.selectedBranch = null;
-      this.installSnapshotHistory(next, true);
       this.captureMountedTextEditor();
       if (dirtyTextTabs(this.editorState.session).length === 0) {
         this.editorController.resetSession();

@@ -15,7 +15,7 @@ import type {
   PushTagMode,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
-  RepositorySnapshot,
+  RepositoryMutationOutcome,
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
@@ -148,8 +148,8 @@ export interface GitReadBridge {
 }
 
 export interface GitOperationBridge {
-  stagePaths(repositoryRoot: string, paths: string[]): Promise<RepositorySnapshot>;
-  unstagePaths(repositoryRoot: string, paths: string[]): Promise<RepositorySnapshot>;
+  stagePaths(repositoryRoot: string, paths: string[]): Promise<RepositoryMutationOutcome>;
+  unstagePaths(repositoryRoot: string, paths: string[]): Promise<RepositoryMutationOutcome>;
   commitChanges(
     repositoryRoot: string,
     message: string,
@@ -158,15 +158,15 @@ export interface GitOperationBridge {
   revertChanges(
     repositoryRoot: string,
     selected: FileChange[],
-  ): Promise<RepositorySnapshot>;
-  switchBranch(repositoryRoot: string, targetFullName: string): Promise<RepositorySnapshot>;
-  createBranch(repositoryRoot: string, name: string): Promise<RepositorySnapshot>;
+  ): Promise<RepositoryMutationOutcome>;
+  switchBranch(repositoryRoot: string, targetFullName: string): Promise<RepositoryMutationOutcome>;
+  createBranch(repositoryRoot: string, name: string): Promise<RepositoryMutationOutcome>;
   fetchRemote(
     repositoryRoot: string,
     remote: string,
     operationId: string,
-  ): Promise<RepositorySnapshot>;
-  pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositorySnapshot>;
+  ): Promise<RepositoryMutationOutcome>;
+  pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositoryMutationOutcome>;
   pushCurrent(
     repositoryRoot: string,
     remote: string,
@@ -174,7 +174,7 @@ export interface GitOperationBridge {
     tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
-  ): Promise<RepositorySnapshot>;
+  ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
 }
 

@@ -11,7 +11,7 @@ import type {
   PushPreview,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
-  RepositorySnapshot,
+  RepositoryMutationOutcome,
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
@@ -173,9 +173,9 @@ export const tauriDesktopBridge: DesktopBridge = {
       originalPath,
     }),
   stagePaths: (repositoryRoot, paths) =>
-    invokeDesktopCommand<RepositorySnapshot>("stage_paths", { repositoryRoot, paths }),
+    invokeDesktopCommand<RepositoryMutationOutcome>("stage_paths", { repositoryRoot, paths }),
   unstagePaths: (repositoryRoot, paths) =>
-    invokeDesktopCommand<RepositorySnapshot>("unstage_paths", { repositoryRoot, paths }),
+    invokeDesktopCommand<RepositoryMutationOutcome>("unstage_paths", { repositoryRoot, paths }),
   commitChanges: (repositoryRoot, message, selected) =>
     invokeDesktopCommand<CommitSelectedResult>("commit_changes", {
       repositoryRoot,
@@ -183,16 +183,19 @@ export const tauriDesktopBridge: DesktopBridge = {
       selected,
     }),
   revertChanges: (repositoryRoot, selected) =>
-    invokeDesktopCommand<RepositorySnapshot>("revert_changes", { repositoryRoot, selected }),
+    invokeDesktopCommand<RepositoryMutationOutcome>("revert_changes", {
+      repositoryRoot,
+      selected,
+    }),
   switchBranch: (repositoryRoot, targetFullName) =>
-    invokeDesktopCommand<RepositorySnapshot>("switch_branch", {
+    invokeDesktopCommand<RepositoryMutationOutcome>("switch_branch", {
       repositoryRoot,
       targetFullName,
     }),
   createBranch: (repositoryRoot, name) =>
-    invokeDesktopCommand<RepositorySnapshot>("create_branch", { repositoryRoot, name }),
+    invokeDesktopCommand<RepositoryMutationOutcome>("create_branch", { repositoryRoot, name }),
   fetchRemote: (repositoryRoot, remote, operationId) =>
-    invokeDesktopCommand<RepositorySnapshot>("fetch_remote", {
+    invokeDesktopCommand<RepositoryMutationOutcome>("fetch_remote", {
       repositoryRoot,
       remote,
       operationId,
@@ -214,9 +217,12 @@ export const tauriDesktopBridge: DesktopBridge = {
       path,
     }),
   pullCurrent: (repositoryRoot, operationId) =>
-    invokeDesktopCommand<RepositorySnapshot>("pull_current", { repositoryRoot, operationId }),
+    invokeDesktopCommand<RepositoryMutationOutcome>("pull_current", {
+      repositoryRoot,
+      operationId,
+    }),
   pushCurrent: (repositoryRoot, remote, mode, tagMode, previewToken, operationId) =>
-    invokeDesktopCommand<RepositorySnapshot>("push_current", {
+    invokeDesktopCommand<RepositoryMutationOutcome>("push_current", {
       repositoryRoot,
       remote,
       mode,

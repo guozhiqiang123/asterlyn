@@ -68,8 +68,28 @@ pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
 struct CommitSelectedResult {
     oid: Option<String>,
     snapshot: Option<RepositorySnapshot>,
+    invalidated_slices: Vec<RepositoryStateSlice>,
     refresh_error: Option<String>,
     verification_warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum RepositoryStateSlice {
+    WorkspaceCatalog,
+    OpenDocuments,
+    WorkingTree,
+    Head,
+    Refs,
+    History,
+    Operation,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepositoryMutationOutcome {
+    snapshot: RepositorySnapshot,
+    invalidated_slices: Vec<RepositoryStateSlice>,
 }
 
 #[derive(serde::Serialize)]

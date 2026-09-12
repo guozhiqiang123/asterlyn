@@ -41,6 +41,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "repositorySnapshot":
       assert(isRepositorySnapshot(value), command, "expected a repository snapshot");
       break;
+    case "repositoryMutationOutcome": {
+      const result = record(value, command);
+      assert(isRepositorySnapshot(result.snapshot), command, "expected a mutation snapshot");
+      assertRepositorySlices(result.invalidatedSlices, command);
+      break;
+    }
     case "trackedChangeScan":
     case "untrackedScan": {
       const result = record(value, command);
@@ -141,6 +147,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "commitSelectedResult": {
       const result = record(value, command);
       nullableStrings(result, command, "oid", "refreshError", "verificationWarning");
+      assertRepositorySlices(result.invalidatedSlices, command);
       assert(
         result.snapshot === null || isRepositorySnapshot(result.snapshot),
         command,
@@ -186,6 +193,23 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       throw new Error(`No desktop response validator is registered for ${command}.`);
   }
   return value as DesktopCommandMap[Command]["result"];
+}
+
+function assertRepositorySlices(value: unknown, command: DesktopCommandName): void {
+  const known = new Set([
+    "workspaceCatalog",
+    "openDocuments",
+    "workingTree",
+    "head",
+    "refs",
+    "history",
+    "operation",
+  ]);
+  assert(
+    Array.isArray(value) && value.every((slice) => typeof slice === "string" && known.has(slice)),
+    command,
+    "invalidatedSlices contains an unknown repository slice",
+  );
 }
 
 function isRepositorySnapshot(value: unknown): value is TransportRecord {

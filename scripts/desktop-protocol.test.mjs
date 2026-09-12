@@ -32,3 +32,28 @@ test("desktop response validation accepts representative valid payloads", () => 
   assert.equal(validateDesktopResult("window_chrome_mode", "macos-native"), "macos-native");
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
 });
+
+test("desktop response validation rejects unknown mutation slices", () => {
+  assert.throws(
+    () => validateDesktopResult("stage_paths", {
+      snapshot: repositorySnapshot(),
+      invalidatedSlices: ["everything"],
+    }),
+    /unknown repository slice/,
+  );
+});
+
+function repositorySnapshot() {
+  return {
+    root: "/repo",
+    gitDir: "/repo/.git",
+    repositoryRoots: [],
+    branch: {},
+    operation: null,
+    changes: [],
+    commits: [],
+    branches: [],
+    remotes: [],
+    untrackedState: "complete",
+  };
+}

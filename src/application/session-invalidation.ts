@@ -1,3 +1,5 @@
+import type { RepositoryStateSlice } from "../models.ts";
+
 export const SESSION_INVALIDATION_SLICES = [
   "workspaceCatalog",
   "openDocuments",
@@ -6,9 +8,9 @@ export const SESSION_INVALIDATION_SLICES = [
   "refs",
   "history",
   "operation",
-] as const;
+] as const satisfies readonly RepositoryStateSlice[];
 
-export type SessionInvalidationSlice = typeof SESSION_INVALIDATION_SLICES[number];
+export type SessionInvalidationSlice = RepositoryStateSlice;
 
 export type SessionInvalidationCause =
   | "activation"

@@ -41,6 +41,7 @@ export interface FileChange {
 export interface CommitSelectedResult {
   oid: string | null;
   snapshot: RepositorySnapshot | null;
+  invalidatedSlices: RepositoryStateSlice[];
   refreshError: string | null;
   verificationWarning: string | null;
 }
@@ -168,6 +169,20 @@ export interface RepositorySnapshot {
   branches: BranchSummary[];
   remotes: RemoteSummary[];
   untrackedState: "pending" | "complete" | "failed";
+}
+
+export type RepositoryStateSlice =
+  | "workspaceCatalog"
+  | "openDocuments"
+  | "workingTree"
+  | "head"
+  | "refs"
+  | "history"
+  | "operation";
+
+export interface RepositoryMutationOutcome {
+  snapshot: RepositorySnapshot;
+  invalidatedSlices: RepositoryStateSlice[];
 }
 
 export interface OpenedProject {

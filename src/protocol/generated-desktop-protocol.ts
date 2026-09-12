@@ -31,17 +31,17 @@ export interface DesktopCommandMap {
   read_commit_details: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; }; result: Model.CommitDetails };
   read_commit_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
   read_commit_image_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
-  stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.RepositorySnapshot };
-  unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.RepositorySnapshot };
+  stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.RepositoryMutationOutcome };
+  unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.RepositoryMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
-  revert_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RepositorySnapshot };
-  switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositorySnapshot };
-  create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositorySnapshot };
-  fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositorySnapshot };
+  revert_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RepositoryMutationOutcome };
+  switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositoryMutationOutcome };
+  create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
+  fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
   read_push_preview: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; offset: number; pageSize: number; }; result: Model.PushPreview };
   read_push_file_commit: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; previewToken: string; path: string; }; result: Model.CommitDetails | null };
-  pull_current: { args: { repositoryRoot: string; operationId: string; }; result: Model.RepositorySnapshot };
-  push_current: { args: { repositoryRoot: string; remote: string; mode: Model.PushMode; tagMode: Model.PushTagMode; previewToken: string; operationId: string; }; result: Model.RepositorySnapshot };
+  pull_current: { args: { repositoryRoot: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  push_current: { args: { repositoryRoot: string; remote: string; mode: Model.PushMode; tagMode: Model.PushTagMode; previewToken: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
   cancel_remote_operation: { args: { repositoryRoot: string; operationId: string; }; result: void };
 }
 
@@ -76,17 +76,17 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_commit_details: "commitDetails",
   read_commit_diff: "commitDiffResult",
   read_commit_image_diff: "imageDiffPreview",
-  stage_paths: "repositorySnapshot",
-  unstage_paths: "repositorySnapshot",
+  stage_paths: "repositoryMutationOutcome",
+  unstage_paths: "repositoryMutationOutcome",
   commit_changes: "commitSelectedResult",
-  revert_changes: "repositorySnapshot",
-  switch_branch: "repositorySnapshot",
-  create_branch: "repositorySnapshot",
-  fetch_remote: "repositorySnapshot",
+  revert_changes: "repositoryMutationOutcome",
+  switch_branch: "repositoryMutationOutcome",
+  create_branch: "repositoryMutationOutcome",
+  fetch_remote: "repositoryMutationOutcome",
   read_push_preview: "pushPreview",
   read_push_file_commit: "nullableCommitDetails",
-  pull_current: "repositorySnapshot",
-  push_current: "repositorySnapshot",
+  pull_current: "repositoryMutationOutcome",
+  push_current: "repositoryMutationOutcome",
   cancel_remote_operation: "void",
 };
 

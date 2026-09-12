@@ -38,7 +38,7 @@ import type {
   PushTagMode,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
-  RepositorySnapshot,
+  RepositoryMutationOutcome,
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
@@ -597,13 +597,16 @@ const demoBridge: DesktopBridge = {
   async stagePaths(
     repositoryRoot: string,
     paths: string[],
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoStage(browserSnapshot, paths);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: ["workingTree"],
+      };
     }
-    return invoke<RepositorySnapshot>("stage_paths", {
+    return invoke<RepositoryMutationOutcome>("stage_paths", {
       repositoryRoot,
       paths,
     });
@@ -612,13 +615,16 @@ const demoBridge: DesktopBridge = {
   async unstagePaths(
     repositoryRoot: string,
     paths: string[],
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoUnstage(browserSnapshot, paths);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: ["workingTree"],
+      };
     }
-    return invoke<RepositorySnapshot>("unstage_paths", {
+    return invoke<RepositoryMutationOutcome>("unstage_paths", {
       repositoryRoot,
       paths,
     });
@@ -673,6 +679,7 @@ const demoBridge: DesktopBridge = {
       return {
         oid,
         snapshot: demoTrackedSnapshot(next),
+        invalidatedSlices: ["workingTree", "head", "refs", "history"],
         refreshError: null,
         verificationWarning: null,
       };
@@ -687,7 +694,7 @@ const demoBridge: DesktopBridge = {
   async revertChanges(
     repositoryRoot: string,
     selected: FileChange[],
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(220);
       if (
@@ -707,9 +714,12 @@ const demoBridge: DesktopBridge = {
         ...browserSnapshot,
         changes: browserSnapshot.changes.filter((change) => !paths.has(change.path)),
       };
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
+      };
     }
-    return invoke<RepositorySnapshot>("revert_changes", {
+    return invoke<RepositoryMutationOutcome>("revert_changes", {
       repositoryRoot,
       selected,
     });
@@ -718,13 +728,16 @@ const demoBridge: DesktopBridge = {
   async switchBranch(
     repositoryRoot: string,
     targetFullName: string,
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(260);
       browserSnapshot = demoSwitchBranch(browserSnapshot, targetFullName);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
+      };
     }
-    return invoke<RepositorySnapshot>("switch_branch", {
+    return invoke<RepositoryMutationOutcome>("switch_branch", {
       repositoryRoot,
       targetFullName,
     });
@@ -733,13 +746,16 @@ const demoBridge: DesktopBridge = {
   async createBranch(
     repositoryRoot: string,
     name: string,
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(260);
       browserSnapshot = demoCreateBranch(browserSnapshot, name);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
+      };
     }
-    return invoke<RepositorySnapshot>("create_branch", {
+    return invoke<RepositoryMutationOutcome>("create_branch", {
       repositoryRoot,
       name,
     });
@@ -749,16 +765,19 @@ const demoBridge: DesktopBridge = {
     repositoryRoot: string,
     remote: string,
     operationId: string,
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(480);
       if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
         throw new Error("Fetch was cancelled; local tracking refs may have changed.");
       }
       browserSnapshot = demoFetchRemote(browserSnapshot, remote);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: ["head", "refs", "history"],
+      };
     }
-    return invoke<RepositorySnapshot>("fetch_remote", {
+    return invoke<RepositoryMutationOutcome>("fetch_remote", {
       repositoryRoot,
       remote,
       operationId,
@@ -815,16 +834,19 @@ const demoBridge: DesktopBridge = {
   async pullCurrent(
     repositoryRoot: string,
     operationId: string,
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(560);
       if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
         throw new Error("Pull was cancelled; refresh before continuing.");
       }
       browserSnapshot = demoPullCurrent(browserSnapshot);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
+      };
     }
-    return invoke<RepositorySnapshot>("pull_current", {
+    return invoke<RepositoryMutationOutcome>("pull_current", {
       repositoryRoot,
       operationId,
     });
@@ -837,7 +859,7 @@ const demoBridge: DesktopBridge = {
     tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
-  ): Promise<RepositorySnapshot> {
+  ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(520);
       if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
@@ -847,9 +869,12 @@ const demoBridge: DesktopBridge = {
         throw new Error("The branch or HEAD changed after confirmation. Review the push again.");
       }
       browserSnapshot = demoPushCurrent(browserSnapshot, remote);
-      return demoTrackedSnapshot(browserSnapshot);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: ["head", "refs", "history"],
+      };
     }
-    return invoke<RepositorySnapshot>("push_current", {
+    return invoke<RepositoryMutationOutcome>("push_current", {
       repositoryRoot,
       remote,
       mode,
@@ -876,6 +901,16 @@ const demoBridge: DesktopBridge = {
 
 export const bridge: DesktopBridge = isTauri ? tauriDesktopBridge : demoBridge;
 export type { DirectoryChoice } from "./protocol/desktop-bridge";
+
+const COMPLETE_DEMO_REPOSITORY_SLICES = [
+  "workspaceCatalog",
+  "openDocuments",
+  "workingTree",
+  "head",
+  "refs",
+  "history",
+  "operation",
+] as const;
 
 function demoPushPreview(
   remote: string,
