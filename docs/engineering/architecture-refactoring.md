@@ -107,13 +107,28 @@ presentation, commit metadata, and branch inspection into Git History-owned view
 workspace-search presentation remain before closing acceptance. The eleventh slice moves quick
 navigation, workspace-search and replacement presentation, editor chrome, image/Diff presentation,
 and the complete lazy CodeMirror/Markdown surface lifecycle into Files/Editor-owned boundaries.
-Remaining shell event wiring and closing native acceptance are the final R2 work.
+The twelfth and closing slice moves global shell routing, the workspace resize observer, tab-wheel
+handling, native window controls, native resize/close subscriptions, and their complete disposal
+lifecycle into Shell-owned bindings. R2 passes frontend, Rust, browser, resource, native-smoke, and
+Debian acceptance. The remaining 5,955-line migration-era composition adapter is frozen below a
+6,000-line automated ceiling and tracked as R3-01; unrelated capability expansion remains blocked
+until its application-service seams replace the remaining cross-feature coordination.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.
 
+Status: **accepted on 2026-09-12**. In this migration stage, “composition root” includes the existing
+window-level workflow adapter required to coordinate canonical repository/workspace results. It does
+not reclaim extracted feature markup, CodeMirror/Markdown runtime objects, native window
+subscriptions, list listeners, or controller disposal. The workflow state and request identities
+that still remain are named by R3-01 rather than treated as a finished terminal design; the explicit
+source ceiling prevents this adapter from becoming a feature-growth destination in the interim.
+
 ### R3 — Application services and protocol
 
+- Resolve R3-01 before unrelated capability work: move remaining search/replacement, History-filter,
+  branch-operation, refresh, and host coordination out of the 5,955-line migration adapter as the
+  window-scoped sessions and typed invalidation protocol become available.
 - Introduce window-scoped `WorkspaceSession` and `RepositorySession` catalogs.
 - Move Git mutation serialization and task supervision from Tauri commands into application
   services.
