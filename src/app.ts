@@ -1,7 +1,6 @@
 import { bridge } from "./bridge";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
-import { windowControls } from "./window-controls";
 import {
   GitHistoryListView,
   HISTORY_ROW_LIMIT,
@@ -94,7 +93,6 @@ import {
 } from "./features/files-editor/editor-session-controller";
 import {
   SettingsController,
-  type SettingsChange,
   type SettingsSection,
   type SettingsState,
 } from "./features/settings/settings-controller";
@@ -104,11 +102,12 @@ import {
 } from "./features/settings/settings-view";
 import {
   ShellController,
-  type ShellChange,
   type ShellState,
 } from "./shell/shell-controller";
 import { renderShellView } from "./shell/shell-view";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
+import { ShellEventBinding } from "./shell/shell-event-binding";
+import { WindowChromeBinding } from "./shell/window-chrome-binding";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -142,7 +141,7 @@ import {
   rememberMarkdownMode,
   saveMarkdownModePreferences,
 } from "./workbench/markdown-mode-preferences";
-import { revealTabInStrip, scrollTabStrip } from "./workbench/tab-strip";
+import { revealTabInStrip } from "./workbench/tab-strip";
 import { isImagePreviewPath } from "./workbench/image-preview";
 import {
   DEFAULT_EDITOR_FONT_ID,
@@ -395,6 +394,8 @@ export class AsterlynApp {
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private readonly activityRailBinding: ActivityRailBinding;
+  private readonly shellEventBinding: ShellEventBinding;
+  private readonly windowChromeBinding: WindowChromeBinding;
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
@@ -409,10 +410,7 @@ export class AsterlynApp {
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
   private readonly settingsController: SettingsController;
-  private readonly releaseSettingsController: () => void;
   private readonly shellController: ShellController;
-  private readonly releaseShellController: () => void;
-  private workspaceResizeObserver: ResizeObserver | null = null;
   private projectTreeScrollFrame: number | null = null;
   private projectTreeWindowStart = 0;
   private changeTreeScrollFrame: number | null = null;
@@ -431,13 +429,7 @@ export class AsterlynApp {
       commitOrder: (order, focusTool) => this.commitActivityOrder(order, focusTool),
     });
     this.settingsController = new SettingsController(window.localStorage);
-    this.releaseSettingsController = this.settingsController.subscribe((change) =>
-      this.handleSettingsChange(change),
-    );
     this.shellController = new ShellController(window.localStorage);
-    this.releaseShellController = this.shellController.subscribe((change) =>
-      this.handleShellChange(change),
-    );
     this.historyController = new GitHistoryDetailsController(
       {
         readHistoryPage: (repositoryRoot, query, offset, limit) =>
@@ -490,6 +482,95 @@ export class AsterlynApp {
     this.releaseEditorController = this.editorController.subscribe((change) =>
       this.handleEditorSessionChange(change),
     );
+    this.shellEventBinding = new ShellEventBinding(root, {
+      workspaceOpen: () => this.state.workspaceRoot !== null,
+      remoteDialogOpen: () => this.remoteState.dialog !== null,
+      remoteOperationActive: () => this.remoteState.operation !== null,
+      pushDiffOpen: () => this.remoteState.pushDiff !== null,
+      repositoryMenuOpen: () => this.shellState.repositoryMenuOpen,
+      editorTabMenuOpen: () => this.shellState.editorTabMenuOpen,
+      settingsOpen: () => this.shellState.page === "settings",
+      replacementClosable: () => Boolean(
+        this.state.replacementDialog &&
+        this.state.workspaceReplacement.status !== "applying" &&
+        !this.state.replacementRecoveryBusy
+      ),
+      commandSurfaceOpen: () => this.state.commandSurface.mode !== null,
+      historyFilterOpen: () => this.state.historyFilterMenu !== null,
+      historyToolOpen: () => this.shellState.layout.bottomTool === "branches",
+      activeReadyTextTab: () => {
+        const tab = activeTextTab(this.editorState.session);
+        return tab?.status === "ready" ? tab.id : null;
+      },
+      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length,
+      toggleRepositoryMenu: () => {
+        this.shellController.toggleRepositoryMenu();
+        this.renderRepositoryMenu();
+      },
+      selectRemote: (remote) => {
+        if (this.remoteState.dialog) this.closeRemoteDialog(false);
+        this.remoteController.selectRemote(remote);
+      },
+      remoteAction: (kind, anchor) => {
+        if (kind === "fetch") void this.runRemoteOperation(kind);
+        else this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor);
+      },
+      cancelRemoteOperation: () => void this.cancelActiveRemoteOperation(),
+      refresh: () => void this.refresh(),
+      openSettings: () => this.openSettings(),
+      closeSettings: () => this.closeSettings(),
+      openCommandSurface: (mode) => this.openCommandSurface(mode),
+      clearError: () => this.clearError(),
+      closeRepositoryDialog: () => this.closeRepositoryDialog(),
+      closeRepositoryTargetDialog: () => this.closeRepositoryTargetDialog(),
+      openRepositoryTarget: (path, target) => {
+        const selected = this.takeRepositoryTargetPath() ?? path;
+        if (target === "current") void this.openRepository(selected);
+        else void this.openRepositoryInNewWindow(selected);
+      },
+      requestRepositoryTarget: (path) => void this.requestRepositoryTarget(path),
+      closeHistoryDialog: () => this.closeHistoryDialog(),
+      dismissCommandSurface: () => this.dismissCommandSurface(),
+      closeWorkspaceReplacement: () => this.closeWorkspaceReplacementDialog(),
+      closeRemoteDialog: (restoreFocus = true) => this.closeRemoteDialog(restoreFocus),
+      toggleEditorTabMenu: () => {
+        if (this.editorState.session.textTabs.length === 0 && !this.editorState.session.preview) return;
+        this.shellController.toggleEditorTabMenu();
+        this.renderEditorTabMenu();
+        this.bindEditorTabMenuEvents();
+      },
+      hideGitTool: () => this.toggleTool("branches"),
+      hideLeftTool: () => {
+        const tool = this.shellState.layout.leftTool;
+        if (tool) this.toggleTool(tool);
+      },
+      applyLayout: () => this.applyWorkbenchLayout(false),
+      closePushDiff: () => this.closePushDiff(),
+      closeRepositoryMenu: (restoreFocus) => {
+        this.shellController.closeRepositoryMenu();
+        this.renderRepositoryMenu();
+        if (restoreFocus) this.query<HTMLButtonElement>("#repository-switcher").focus();
+      },
+      closeEditorTabMenu: () => {
+        this.shellController.closeEditorTabMenu();
+        this.renderEditorTabMenu();
+      },
+      closeHistoryFilter: () => {
+        this.state.historyFilterMenu = null;
+        if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
+      },
+      saveTextTab: (tabId) => void this.saveTextTab(tabId),
+      focusHistoryFilter: () => this.focusHistoryFilter(),
+      openEditorFind: () => this.editorSurface.openFindReplace(),
+      captureEditor: () => this.captureMountedTextEditor(),
+      disposeFeatures: () => this.disposeFeatures(),
+    });
+    this.windowChromeBinding = new WindowChromeBinding(root, {
+      captureEditor: () => this.captureMountedTextEditor(),
+      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length,
+      confirmClose: () => this.saveDirtyTabsBefore("closing Asterlyn"),
+      reportError: (error) => this.showError(error),
+    });
   }
 
   private get historyState(): GitHistoryDetailsState {
@@ -519,10 +600,6 @@ export class AsterlynApp {
   private get shellState(): ShellState {
     return this.shellController.state;
   }
-
-  private handleSettingsChange(_change: SettingsChange): void {}
-
-  private handleShellChange(_change: ShellChange): void {}
 
   private handleEditorSessionChange(change: EditorSessionChange): void {
     if (
@@ -623,7 +700,10 @@ export class AsterlynApp {
     this.shellController.setWindowChromeMode(await bridge.windowChromeMode());
     this.renderShell();
     this.applyAppPreferences();
-    this.bindShellEvents();
+    this.shellEventBinding.bind();
+    this.windowChromeBinding.bind();
+    this.activityRailBinding.bind();
+    this.bindWorkbenchSplitters();
     this.renderActivityRail();
     this.renderRepositoryMenu();
     void this.activateConfiguredEditorFont();
@@ -652,7 +732,7 @@ export class AsterlynApp {
       workspaceOpen: Boolean(this.state.workspaceRoot),
       gitAvailable: Boolean(this.state.snapshot),
       demo: bridge.isDemo,
-      windowControlsAvailable: windowControls.available,
+      windowControlsAvailable: this.windowChromeBinding.available,
     });
   }
 
@@ -662,321 +742,28 @@ export class AsterlynApp {
     this.root.querySelector<HTMLButtonElement>(`[data-tool="${focusTool}"]`)?.focus();
   }
 
-  private bindShellEvents(): void {
-    this.query("#repository-switcher").addEventListener("click", (event) => {
-      event.stopPropagation();
-      this.shellController.toggleRepositoryMenu();
-      this.renderRepositoryMenu();
-    });
-    this.query<HTMLSelectElement>("#topbar-remote-select").addEventListener(
-      "change",
-      (event) => {
-        if (this.remoteState.dialog) this.closeRemoteDialog(false);
-        this.remoteController.selectRemote((event.currentTarget as HTMLSelectElement).value);
-      },
-    );
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-remote-action]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const kind = button.dataset.remoteAction as "fetch" | "pull" | "push";
-          if (kind === "fetch") void this.runRemoteOperation(kind);
-          else this.openRemoteDialog(kind === "pull" ? "update" : "push", button);
-        });
-      });
-    this.query("#cancel-remote-operation").addEventListener("click", () => {
-      void this.cancelActiveRemoteOperation();
-    });
-    this.query("#refresh-button").addEventListener("click", () => void this.refresh());
-    this.query("#settings-button").addEventListener("click", () => this.openSettings());
-    this.query("#settings-back").addEventListener("click", () => this.closeSettings());
-    this.query("#command-center-button").addEventListener("click", () => {
-      this.openCommandSurface("files");
-    });
-    this.bindWindowControls();
-    this.query("#toast-close").addEventListener("click", () => this.clearError());
-    this.query("#dialog-close").addEventListener("click", () =>
-      this.closeRepositoryDialog(),
-    );
-    this.query("#dialog-cancel").addEventListener("click", () =>
-      this.closeRepositoryDialog(),
-    );
-    this.query("#repository-dialog").addEventListener("click", (event) => {
-      if (event.target === event.currentTarget) this.closeRepositoryDialog();
-    });
-    this.query("#repository-target-close").addEventListener("click", () =>
-      this.closeRepositoryTargetDialog(),
-    );
-    this.query("#repository-target-cancel").addEventListener("click", () =>
-      this.closeRepositoryTargetDialog(),
-    );
-    this.query("#repository-target-current").addEventListener("click", () => {
-      const path = this.takeRepositoryTargetPath();
-      if (path) void this.openRepository(path);
-    });
-    this.query("#repository-target-new").addEventListener("click", () => {
-      const path = this.takeRepositoryTargetPath();
-      if (path) void this.openRepositoryInNewWindow(path);
-    });
-    this.query("#repository-target-dialog").addEventListener("click", (event) => {
-      if (event.target === event.currentTarget) this.closeRepositoryTargetDialog();
-    });
-    this.query("#history-dialog").addEventListener("click", (event) => {
-      if (event.target === event.currentTarget) this.closeHistoryDialog();
-    });
-    this.query("#command-surface").addEventListener("click", (event) => {
-      if (event.target === event.currentTarget) this.dismissCommandSurface();
-    });
-    this.query("#workspace-replacement-dialog").addEventListener("click", (event) => {
-      if (
-        event.target === event.currentTarget &&
-        this.state.workspaceReplacement.status !== "applying" &&
-        !this.state.replacementRecoveryBusy
-      ) {
-        this.closeWorkspaceReplacementDialog();
-      }
-    });
-    this.query("#remote-action-dialog").addEventListener("click", (event) => {
-      if (event.target === event.currentTarget && !this.remoteState.operation) {
-        this.closeRemoteDialog();
-      }
-    });
-    this.query("#remote-action-dialog").addEventListener("keydown", (event) => {
-      if (event.key !== "Tab" || !this.remoteState.dialog) return;
-      const focusable = Array.from(
-        this.query("#remote-action-dialog").querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]',
-        ),
-      ).filter((element) => !element.closest(".hidden, [inert]"));
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    });
-    this.query<HTMLFormElement>("#repository-form").addEventListener(
-      "submit",
-      (event) => {
-        event.preventDefault();
-        const path = this.query<HTMLInputElement>("#repository-input").value.trim();
-        if (path) void this.requestRepositoryTarget(path);
-      },
-    );
-    const editorTabbar = this.query<HTMLElement>("#editor-tabbar");
-    editorTabbar.addEventListener(
-      "wheel",
-      (event) => {
-        if (scrollTabStrip(editorTabbar, event.deltaX, event.deltaY)) {
-          event.preventDefault();
-        }
-      },
-      { passive: false },
-    );
-    this.query("#editor-tab-menu-toggle").addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (
-        this.editorState.session.textTabs.length === 0 &&
-        this.editorState.session.preview === null
-      ) {
-        return;
-      }
-      this.shellController.toggleEditorTabMenu();
-      this.renderEditorTabMenu();
-      this.bindEditorTabMenuEvents();
-    });
-    this.activityRailBinding.bind();
-    this.query("#hide-git-tool").addEventListener("click", () => {
-      this.toggleTool("branches");
-    });
-    this.query("#hide-left-tool").addEventListener("click", () => {
-      const tool = this.shellState.layout.leftTool;
-      if (tool) this.toggleTool(tool);
-    });
-    this.bindWorkbenchSplitters();
-    this.workspaceResizeObserver = new ResizeObserver(() => {
-      this.applyWorkbenchLayout(false);
-    });
-    this.workspaceResizeObserver.observe(this.query("#workbench"));
-    window.addEventListener("keydown", (event) => {
-      if (event.isComposing) return;
-      const mod = event.ctrlKey || event.metaKey;
-      if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        this.openCommandSurface("commands");
-        return;
-      }
-      if (mod && event.shiftKey && event.key.toLowerCase() === "f") {
-        if (!this.state.workspaceRoot) return;
-        event.preventDefault();
-        this.openCommandSurface("workspace");
-        return;
-      }
-      if (mod && !event.shiftKey && event.key.toLowerCase() === "p") {
-        if (!this.state.workspaceRoot) return;
-        event.preventDefault();
-        this.openCommandSurface("files");
-        return;
-      }
-      if (mod && !event.shiftKey && event.key.toLowerCase() === "e") {
-        if (!this.state.workspaceRoot) return;
-        event.preventDefault();
-        this.openCommandSurface("recent");
-        return;
-      }
-      if (event.key === "Escape") {
-        if (this.remoteState.pushDiff) {
-          event.preventDefault();
-          this.closePushDiff();
-          return;
-        }
-        if (this.remoteState.dialog && !this.remoteState.operation) {
-          event.preventDefault();
-          this.closeRemoteDialog();
-          return;
-        }
-        if (this.shellState.repositoryMenuOpen) {
-          event.preventDefault();
-          this.shellController.closeRepositoryMenu();
-          this.renderRepositoryMenu();
-          this.query<HTMLButtonElement>("#repository-switcher").focus();
-          return;
-        }
-        if (this.shellState.editorTabMenuOpen) {
-          event.preventDefault();
-          this.shellController.closeEditorTabMenu();
-          this.renderEditorTabMenu();
-          return;
-        }
-        if (!this.query("#repository-target-dialog").classList.contains("hidden")) {
-          event.preventDefault();
-          this.closeRepositoryTargetDialog();
-          return;
-        }
-        if (this.shellState.page === "settings") {
-          event.preventDefault();
-          this.closeSettings();
-          return;
-        }
-        if (
-          this.state.replacementDialog &&
-          this.state.workspaceReplacement.status !== "applying" &&
-          !this.state.replacementRecoveryBusy
-        ) {
-          event.preventDefault();
-          this.closeWorkspaceReplacementDialog();
-          return;
-        }
-        if (this.state.commandSurface.mode) {
-          event.preventDefault();
-          this.dismissCommandSurface();
-          return;
-        }
-        this.closeRepositoryDialog();
-        this.closeHistoryDialog();
-        if (this.state.historyFilterMenu) {
-          this.state.historyFilterMenu = null;
-          if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
-        }
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        void this.refresh();
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        const tab = activeTextTab(this.editorState.session);
-        if (tab) {
-          event.preventDefault();
-          void this.saveTextTab(tab.id);
-        }
-      }
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key.toLowerCase() === "f" &&
-        !this.state.commandSurface.mode &&
-        !event.defaultPrevented &&
-        !(event.target instanceof Element && event.target.closest(".cm-editor"))
-      ) {
-        event.preventDefault();
-        if (
-          event.target instanceof Element &&
-          event.target.closest("#bottom-tool") &&
-          this.shellState.layout.bottomTool === "branches"
-        ) {
-          this.focusHistoryFilter();
-        } else if (activeTextTab(this.editorState.session)?.status === "ready") {
-          this.editorSurface.openFindReplace();
-        }
-      }
-    });
-    window.addEventListener("pointerdown", (event) => {
-      if (
-        this.shellState.repositoryMenuOpen &&
-        event.target instanceof Element &&
-        !event.target.closest("#repository-switcher-anchor")
-      ) {
-        this.shellController.closeRepositoryMenu();
-        this.renderRepositoryMenu();
-      }
-      if (
-        this.shellState.editorTabMenuOpen &&
-        event.target instanceof Element &&
-        !event.target.closest("#editor-tab-menu-anchor")
-      ) {
-        this.shellController.closeEditorTabMenu();
-        this.renderEditorTabMenu();
-      }
-      if (
-        this.state.historyFilterMenu &&
-        event.target instanceof Element &&
-        !event.target.closest(".history-toolbar")
-      ) {
-        this.state.historyFilterMenu = null;
-        if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
-      }
-    });
-    window.addEventListener("beforeunload", (event) => {
-      this.captureMountedTextEditor();
-      if (dirtyTextTabs(this.editorState.session).length === 0) return;
-      event.preventDefault();
-      event.returnValue = "";
-    });
-    window.addEventListener(
-      "pagehide",
-      () => {
-        if (this.projectTreeScrollFrame !== null) {
-          cancelAnimationFrame(this.projectTreeScrollFrame);
-          this.projectTreeScrollFrame = null;
-        }
-        if (this.changeTreeScrollFrame !== null) {
-          cancelAnimationFrame(this.changeTreeScrollFrame);
-          this.changeTreeScrollFrame = null;
-        }
-        this.releaseHistoryController();
-        this.historyController.dispose();
-        this.releaseRemoteController();
-        this.remoteController.dispose();
-        this.releaseChangesController();
-        this.changesController.dispose();
-        this.releaseFilesController();
-        this.filesController.dispose();
-        this.releaseEditorController();
-        this.editorController.dispose();
-        this.releaseSettingsController();
-        this.settingsController.dispose();
-        this.releaseShellController();
-        this.shellController.dispose();
-        this.activityRailBinding.dispose();
-        this.historyListView.unmount();
-        this.editorSurface.destroy();
-        this.pushDiffEditor.destroy();
-      },
-      { once: true },
-    );
+  private disposeFeatures(): void {
+    if (this.projectTreeScrollFrame !== null) cancelAnimationFrame(this.projectTreeScrollFrame);
+    if (this.changeTreeScrollFrame !== null) cancelAnimationFrame(this.changeTreeScrollFrame);
+    this.projectTreeScrollFrame = null;
+    this.changeTreeScrollFrame = null;
+    this.releaseHistoryController();
+    this.historyController.dispose();
+    this.releaseRemoteController();
+    this.remoteController.dispose();
+    this.releaseChangesController();
+    this.changesController.dispose();
+    this.releaseFilesController();
+    this.filesController.dispose();
+    this.releaseEditorController();
+    this.editorController.dispose();
+    this.settingsController.dispose();
+    this.shellController.dispose();
+    this.windowChromeBinding.dispose();
+    this.activityRailBinding.dispose();
+    this.historyListView.unmount();
+    this.editorSurface.destroy();
+    this.pushDiffEditor.destroy();
   }
 
   private openSettings(): void {
@@ -1176,62 +963,6 @@ export class AsterlynApp {
       }
       this.showError(error);
     }
-  }
-
-  private bindWindowControls(): void {
-    if (!windowControls.available) return;
-
-    this.query("#window-minimize").addEventListener("click", () => {
-      void this.runWindowAction(() => windowControls.minimize());
-    });
-    this.query("#window-maximize").addEventListener("click", () => {
-      void this.runWindowAction(async () => {
-        await windowControls.toggleMaximize();
-        await this.syncMaximizeControl();
-      });
-    });
-    this.query("#window-close").addEventListener("click", () => {
-      void this.requestWindowClose();
-    });
-
-    this.refreshMaximizeControl();
-    void windowControls
-      .onResized(() => this.refreshMaximizeControl())
-      .catch((error) => this.showError(error));
-    void windowControls
-      .onCloseRequested((event) => {
-        this.captureMountedTextEditor();
-        if (dirtyTextTabs(this.editorState.session).length === 0) return;
-        event.preventDefault();
-        void this.requestWindowClose();
-      })
-      .catch((error) => this.showError(error));
-  }
-
-  private async requestWindowClose(): Promise<void> {
-    if (!(await this.saveDirtyTabsBefore("closing Asterlyn"))) return;
-    await this.runWindowAction(() => windowControls.close());
-  }
-
-  private async runWindowAction(action: () => Promise<void>): Promise<void> {
-    try {
-      await action();
-    } catch (error) {
-      this.showError(error);
-    }
-  }
-
-  private async syncMaximizeControl(): Promise<void> {
-    const maximized = await windowControls.isMaximized();
-    const button = this.query<HTMLButtonElement>("#window-maximize");
-    const label = maximized ? "Restore window" : "Maximize window";
-    button.setAttribute("aria-label", label);
-    button.title = maximized ? "Restore" : "Maximize";
-    button.innerHTML = icon(maximized ? "restore" : "maximize", 16);
-  }
-
-  private refreshMaximizeControl(): void {
-    void this.syncMaximizeControl().catch((error) => this.showError(error));
   }
 
   private async openRepository(path: string, reportError = true): Promise<boolean> {
