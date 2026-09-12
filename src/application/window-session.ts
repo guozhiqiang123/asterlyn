@@ -110,6 +110,13 @@ export class WindowSession {
     return { generation, project, activation };
   }
 
+  async refreshProject(path: string, generation: number): Promise<OpenedProject | null> {
+    if (!this.matches(generation, path)) return null;
+    const project = await this.gateway.openProject(path);
+    if (!this.matches(generation, path) || project.root !== path) return null;
+    return project;
+  }
+
   installRepository(
     snapshot: RepositorySnapshot | null,
     cause: SessionInvalidationCause,

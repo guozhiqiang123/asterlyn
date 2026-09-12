@@ -1885,15 +1885,9 @@ export class AsterlynApp {
     const current = this.windowSession.repository.state.snapshot;
     if (this.windowSession.workspace.state.root !== repositoryRoot || generation !== this.windowSession.generation) return;
     this.windowSession.cancelUntrackedScan();
-    const opened = await bridge.openProject(repositoryRoot);
+    const opened = await this.windowSession.refreshProject(repositoryRoot, generation);
+    if (!opened) return;
     const refreshed = opened.repository;
-    if (
-      generation !== this.windowSession.generation ||
-      this.windowSession.workspace.state.root !== repositoryRoot ||
-      opened.root !== repositoryRoot
-    ) {
-      return;
-    }
     const next = refreshed && current
       ? { ...refreshed, commits: current.commits }
       : refreshed;
@@ -2261,9 +2255,9 @@ export class AsterlynApp {
         failed = true;
         this.showError(result.error);
         try {
-          const opened = await bridge.openProject(snapshot.root);
+          const opened = await this.windowSession.refreshProject(snapshot.root, generation);
+          if (!opened) return false;
           const reconciled = opened.repository;
-          if (generation !== this.windowSession.generation) return false;
           if (!reconciled) throw new Error("The active project is no longer a Git repository.");
           this.acceptRemoteOutcome(
             { snapshot: reconciled, invalidatedSlices: [...COMPLETE_REPOSITORY_SLICES] },

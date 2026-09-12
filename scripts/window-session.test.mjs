@@ -99,6 +99,34 @@ test("project transitions activate only the latest window request", async () => 
   assert.equal(session.workspace.state.root, "/second");
 });
 
+test("project refresh rejects a result after the window changes workspace", async () => {
+  const pending = deferred();
+  const session = new WindowSession({
+    openProject(path) {
+      return path === "/first" ? pending.promise : Promise.resolve({
+        root: path,
+        repository: snapshot(path),
+      });
+    },
+    async readTrackedChanges(root) { return { root, changes: [] }; },
+    async scanUntracked(root) { return { root, changes: [] }; },
+    async cancelUntrackedScan() {},
+  });
+  const generation = session.beginTransition();
+  session.activate(
+    { root: "/first", repository: snapshot("/first") },
+    "activation",
+    ["workingTree"],
+  );
+  const refresh = session.refreshProject("/first", generation);
+
+  await session.openProject("/second", "activation", ["workingTree"]);
+  pending.resolve({ root: "/first", repository: snapshot("/first") });
+
+  assert.equal(await refresh, null);
+  assert.equal(session.workspace.state.root, "/second");
+});
+
 function snapshot(root) {
   return {
     root,
