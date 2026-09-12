@@ -237,16 +237,6 @@ fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceE
     }
 }
 
-#[tauri::command]
-async fn list_project_files(
-    repository_root: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<ProjectFileList, WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    run_workspace_blocking("list project files", move || load_project_catalog(&root)).await
-}
-
 fn load_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> {
     if let Some(repository) = exact_git_repository(root)? {
         return repository
@@ -275,49 +265,6 @@ fn load_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> 
         repository_roots: Vec::new(),
         truncated: catalog.truncated,
     })
-}
-
-#[tauri::command]
-async fn search_workspace_text(
-    repository_root: String,
-    request_id: String,
-    query: String,
-    options: Option<SearchOptions>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    searches: State<'_, WorkspaceSearchRegistry>,
-) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
-    let window_label = window.label().to_string();
-    let root = active_workspaces.resolve(&window_label, &repository_root)?;
-    let cancellation = searches.register(&window_label, &repository_root, &request_id)?;
-
-    let task_root = root.clone();
-    let task_request_id = request_id.clone();
-    let task_cancellation = cancellation.clone();
-    let task_options = options.unwrap_or_default();
-    let result = run_workspace_blocking("search workspace text", move || {
-        search_authorized_workspace(
-            &task_root,
-            &task_request_id,
-            &query,
-            &task_options,
-            &task_cancellation,
-        )
-    })
-    .await;
-
-    searches.finish(&window_label, &repository_root, &request_id, &cancellation)?;
-    result
-}
-
-#[tauri::command]
-fn cancel_workspace_text_search(
-    repository_root: String,
-    request_id: String,
-    window: tauri::WebviewWindow,
-    searches: State<'_, WorkspaceSearchRegistry>,
-) -> Result<(), WorkspaceError> {
-    searches.cancel(window.label().to_string(), repository_root, request_id)
 }
 
 fn search_authorized_workspace(
@@ -410,169 +357,6 @@ fn search_authorized_workspace(
         skipped_files,
         coverage_reasons: report.coverage_reasons,
     })
-}
-
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-async fn preview_workspace_replacement(
-    repository_root: String,
-    plan_id: String,
-    query: String,
-    replacement: String,
-    options: SearchOptions,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    replacements: State<'_, WorkspaceReplacementRegistry>,
-) -> Result<WorkspaceReplacementPreview, WorkspaceError> {
-    let window_label = window.label().to_string();
-    let root = active_workspaces.resolve(&window_label, &repository_root)?;
-    let cancellation = replacements.register(&window_label, &repository_root, &plan_id)?;
-    let task_root = root.clone();
-    let task_plan_id = plan_id.clone();
-    let task_cancellation = cancellation.clone();
-    let result = run_workspace_blocking("preview workspace replacement", move || {
-        prepare_authorized_replacement(
-            &task_root,
-            &task_plan_id,
-            &query,
-            &replacement,
-            &options,
-            &task_cancellation,
-        )
-    })
-    .await;
-
-    match result {
-        Ok((stored, preview)) => {
-            replacements.finish_preview(
-                &window_label,
-                &repository_root,
-                &plan_id,
-                &cancellation,
-                Some(stored),
-            )?;
-            Ok(preview)
-        }
-        Err(error) => {
-            replacements.finish_preview(
-                &window_label,
-                &repository_root,
-                &plan_id,
-                &cancellation,
-                None,
-            )?;
-            Err(error)
-        }
-    }
-}
-
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-async fn apply_workspace_replacement(
-    repository_root: String,
-    plan_id: String,
-    selected_paths: Vec<String>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    writes: State<'_, WorkspaceWriteRegistry>,
-    replacements: State<'_, WorkspaceReplacementRegistry>,
-    app: tauri::AppHandle,
-) -> Result<ReplacementApplyResult, WorkspaceError> {
-    let window_label = window.label().to_string();
-    let root = active_workspaces.resolve(&window_label, &repository_root)?;
-    let (stored, cancellation) =
-        replacements.start_application(&window_label, &repository_root, &root, &plan_id)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
-    let recovery_root = replacement_recovery_root(&app)?;
-    let task_plan = stored.plan.clone();
-    let task_stored = stored.clone();
-    let task_cancellation = cancellation.clone();
-    let result = run_workspace_blocking("apply workspace replacement", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        authorize_replacement_selection(&root, &task_stored, &selected_paths)?;
-        Workspace::open(&root)?.apply_replacement_plan(
-            &recovery_root,
-            &task_plan,
-            &selected_paths,
-            &task_cancellation,
-        )
-    })
-    .await;
-
-    replacements.finish_application(&window_label, &repository_root, &plan_id, &cancellation)?;
-    result
-}
-
-#[tauri::command]
-fn cancel_workspace_replacement(
-    repository_root: String,
-    operation_id: String,
-    window: tauri::WebviewWindow,
-    replacements: State<'_, WorkspaceReplacementRegistry>,
-) -> Result<(), WorkspaceError> {
-    replacements.cancel(window.label().to_string(), repository_root, operation_id)
-}
-
-#[tauri::command]
-async fn list_workspace_replacement_recoveries(
-    repository_root: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    app: tauri::AppHandle,
-) -> Result<Vec<ReplacementRecoverySummary>, WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let recovery_root = replacement_recovery_root(&app)?;
-    run_workspace_blocking("list replacement recoveries", move || {
-        Workspace::open(root)?.list_replacement_recoveries(&recovery_root)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn rollback_workspace_replacement(
-    repository_root: String,
-    recovery_id: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    writes: State<'_, WorkspaceWriteRegistry>,
-    app: tauri::AppHandle,
-) -> Result<ReplacementApplyResult, WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
-    let recovery_root = replacement_recovery_root(&app)?;
-    run_workspace_blocking("rollback workspace replacement", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        Workspace::open(root)?.rollback_replacement(&recovery_root, &recovery_id)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn finalize_workspace_replacement(
-    repository_root: String,
-    recovery_id: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    writes: State<'_, WorkspaceWriteRegistry>,
-    app: tauri::AppHandle,
-) -> Result<(), WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
-    let recovery_root = replacement_recovery_root(&app)?;
-    run_workspace_blocking("finalize workspace replacement", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        Workspace::open(root)?.finalize_replacement(&recovery_root, &recovery_id)
-    })
-    .await
 }
 
 fn prepare_authorized_replacement(
@@ -700,79 +484,6 @@ fn replacement_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, Workspac
             operation: "resolve replacement recovery location".to_string(),
             message: error.to_string(),
         })
-}
-
-#[tauri::command]
-async fn read_text_file(
-    repository_root: String,
-    repository_id: String,
-    path: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<TextFileSnapshot, WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    run_workspace_blocking("read text file", move || {
-        read_authorized_text_file(&root, &repository_id, &path)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn read_image_file(
-    repository_root: String,
-    repository_id: String,
-    path: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<ImagePreview, WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    run_workspace_blocking("read image file", move || {
-        let authorized = authorize_project_file(&root, &repository_id, &path)?;
-        let snapshot = Workspace::open(&root)?
-            .read_binary_file(&authorized.workspace_path, IMAGE_PREVIEW_LIMIT_BYTES)?;
-        encode_image_preview(&snapshot.workspace_path, snapshot.bytes)
-            .map_err(|message| WorkspaceError::UnsupportedFile { message })
-    })
-    .await
-}
-
-#[tauri::command]
-async fn read_local_image_diff(
-    repository_root: String,
-    selected: FileChange,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<ImageDiffPreview, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read local image diff", move || {
-        let diff = GitRepository::open(root)?.local_binary_diff(&selected)?;
-        encode_image_diff(diff.path, diff.before, diff.after)
-    })
-    .await
-}
-
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-async fn read_commit_image_diff(
-    repository_root: String,
-    repository_id: String,
-    commit_oid: String,
-    path: String,
-    original_path: Option<String>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<ImageDiffPreview, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read commit image diff", move || {
-        let diff = GitRepository::open(root)?.repository_commit_binary_diff(
-            &repository_id,
-            &commit_oid,
-            &path,
-            original_path.as_deref(),
-        )?;
-        encode_image_diff(diff.path, diff.before, diff.after)
-    })
-    .await
 }
 
 fn encode_image_diff(
@@ -1074,40 +785,6 @@ fn webp_dimensions(bytes: &[u8]) -> Result<(u32, u32, bool), String> {
         .ok_or_else(|| "the WebP dimensions could not be read".to_string())
 }
 
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-async fn save_text_file(
-    repository_root: String,
-    repository_id: String,
-    path: String,
-    expected_revision: String,
-    content: String,
-    utf8_bom: bool,
-    request_id: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-    writes: State<'_, WorkspaceWriteRegistry>,
-) -> Result<SaveTextFileResult, WorkspaceError> {
-    let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
-    run_workspace_blocking("save text file", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        save_authorized_text_file(
-            &root,
-            &repository_id,
-            &path,
-            expected_revision,
-            content,
-            utf8_bom,
-            request_id,
-        )
-    })
-    .await
-}
-
 fn read_authorized_text_file(
     root: &Path,
     repository_id: &str,
@@ -1165,46 +842,6 @@ fn authorize_project_file(
         path: path.to_string(),
         workspace_path: path.to_string(),
     })
-}
-
-#[tauri::command]
-async fn read_commit_details(
-    repository_root: String,
-    repository_id: String,
-    commit_oid: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<CommitDetails, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read commit details", move || {
-        GitRepository::open(root)?.repository_commit_details(&repository_id, &commit_oid)
-    })
-    .await
-}
-
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-async fn read_commit_diff(
-    repository_root: String,
-    repository_id: String,
-    commit_oid: String,
-    path: String,
-    original_path: Option<String>,
-    expanded_unchanged: bool,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<CommitDiffResult, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read commit diff", move || {
-        GitRepository::open(root)?.repository_commit_diff_with_unchanged(
-            &repository_id,
-            &commit_oid,
-            &path,
-            original_path.as_deref(),
-            expanded_unchanged,
-        )
-    })
-    .await
 }
 
 async fn run_blocking<T, F>(operation: &str, task: F) -> Result<T, GitError>

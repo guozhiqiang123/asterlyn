@@ -89,3 +89,43 @@ pub(crate) async fn read_local_diff(
     })
     .await
 }
+
+#[tauri::command]
+pub(crate) async fn read_commit_details(
+    repository_root: String,
+    repository_id: String,
+    commit_oid: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<CommitDetails, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read commit details", move || {
+        GitRepository::open(root)?.repository_commit_details(&repository_id, &commit_oid)
+    })
+    .await
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn read_commit_diff(
+    repository_root: String,
+    repository_id: String,
+    commit_oid: String,
+    path: String,
+    original_path: Option<String>,
+    expanded_unchanged: bool,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<CommitDiffResult, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read commit diff", move || {
+        GitRepository::open(root)?.repository_commit_diff_with_unchanged(
+            &repository_id,
+            &commit_oid,
+            &path,
+            original_path.as_deref(),
+            expanded_unchanged,
+        )
+    })
+    .await
+}
