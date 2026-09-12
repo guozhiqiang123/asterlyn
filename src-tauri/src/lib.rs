@@ -94,6 +94,13 @@ struct RepositoryMutationOutcome {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct WorkingTreeMutationOutcome {
+    tracked: TrackedChangeScan,
+    invalidated_slices: Vec<RepositoryStateSlice>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct OpenedProject {
     root: String,
     repository: Option<RepositorySnapshot>,

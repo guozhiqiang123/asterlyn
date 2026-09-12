@@ -36,7 +36,7 @@ test("desktop response validation accepts representative valid payloads", () => 
 test("desktop response validation rejects unknown mutation slices", () => {
   assert.throws(
     () => validateDesktopResult("stage_paths", {
-      snapshot: repositorySnapshot(),
+      tracked: { root: "/repo", changes: [] },
       invalidatedSlices: ["everything"],
     }),
     /unknown repository slice/,

@@ -7,7 +7,7 @@ pub(crate) async fn stage_paths(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositoryMutationOutcome, GitError> {
+) -> Result<WorkingTreeMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -16,8 +16,8 @@ pub(crate) async fn stage_paths(
         .run_local(repository_root, "stage paths", move |repository| {
             repository.stage(&paths)?;
             repository
-                .tracked_snapshot(COMMIT_LIMIT)
-                .map(|snapshot| mutation_outcome(snapshot, &[RepositoryStateSlice::WorkingTree]))
+                .tracked_changes()
+                .map(|tracked| working_tree_outcome(tracked, &[RepositoryStateSlice::WorkingTree]))
         })
         .await
 }
@@ -29,7 +29,7 @@ pub(crate) async fn unstage_paths(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositoryMutationOutcome, GitError> {
+) -> Result<WorkingTreeMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -38,8 +38,8 @@ pub(crate) async fn unstage_paths(
         .run_local(repository_root, "unstage paths", move |repository| {
             repository.unstage(&paths)?;
             repository
-                .tracked_snapshot(COMMIT_LIMIT)
-                .map(|snapshot| mutation_outcome(snapshot, &[RepositoryStateSlice::WorkingTree]))
+                .tracked_changes()
+                .map(|tracked| working_tree_outcome(tracked, &[RepositoryStateSlice::WorkingTree]))
         })
         .await
 }
@@ -101,7 +101,7 @@ pub(crate) async fn revert_changes(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositoryMutationOutcome, GitError> {
+) -> Result<WorkingTreeMutationOutcome, GitError> {
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -112,11 +112,10 @@ pub(crate) async fn revert_changes(
             "revert selected changes",
             move |repository| {
                 repository.revert_selected(&selected)?;
-                repository.tracked_snapshot(COMMIT_LIMIT).map(|snapshot| {
-                    mutation_outcome(
-                        snapshot,
+                repository.tracked_changes().map(|tracked| {
+                    working_tree_outcome(
+                        tracked,
                         &[
-                            RepositoryStateSlice::WorkspaceCatalog,
                             RepositoryStateSlice::OpenDocuments,
                             RepositoryStateSlice::WorkingTree,
                         ],
@@ -327,6 +326,16 @@ fn mutation_outcome(
 ) -> RepositoryMutationOutcome {
     RepositoryMutationOutcome {
         snapshot,
+        invalidated_slices: invalidated_slices.to_vec(),
+    }
+}
+
+fn working_tree_outcome(
+    tracked: TrackedChangeScan,
+    invalidated_slices: &[RepositoryStateSlice],
+) -> WorkingTreeMutationOutcome {
+    WorkingTreeMutationOutcome {
+        tracked,
         invalidated_slices: invalidated_slices.to_vec(),
     }
 }

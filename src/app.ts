@@ -266,6 +266,7 @@ import type {
   ReplacementApplyResult,
   RepositoryMutationOutcome,
   RepositorySnapshot,
+  WorkingTreeMutationOutcome,
   WorkspaceTextSearchMatch,
 } from "./models";
 
@@ -649,6 +650,27 @@ export class AsterlynApp {
       this.reconcileWorkingDocument(snapshot);
     }
     if (options.focusConflicts) this.prepareConflictResolution(snapshot);
+    return snapshot;
+  }
+
+  private applyWorkingTreeMutation(
+    outcome: WorkingTreeMutationOutcome,
+    options: { clearChanges?: boolean } = {},
+  ): RepositorySnapshot {
+    const plan = repositoryReconciliationPlan(outcome);
+    const snapshot = this.windowSession.installTracked(
+      outcome.tracked,
+      "gitMutation",
+      plan.slices,
+    );
+    if (!snapshot) throw new Error("Working-tree result belongs to a stale repository session.");
+    this.windowSession.repository.consumeInvalidation();
+    this.changesController.installSnapshot(snapshot, {
+      clearInclusion: options.clearChanges,
+      clearSelection: options.clearChanges,
+    });
+    this.filesController.updateChanges(snapshot.changes);
+    if (plan.reconcileOpenDocuments) this.reconcileWorkingDocument(snapshot);
     return snapshot;
   }
 
@@ -5177,7 +5199,7 @@ export class AsterlynApp {
       const result = await this.changesController.revertSelected();
       if (generation !== this.windowSession.generation || result.status === "stale") return;
       if (result.status === "success") {
-        const next = this.applyRepositoryMutation(result.value, "gitMutation");
+        const next = this.applyWorkingTreeMutation(result.value);
         this.renderWorkspace();
         if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
         pendingRoot = next.root;

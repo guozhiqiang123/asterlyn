@@ -47,11 +47,15 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       assertRepositorySlices(result.invalidatedSlices, command);
       break;
     }
+    case "workingTreeMutationOutcome": {
+      const result = record(value, command);
+      assertTrackedChangeScan(result.tracked, command);
+      assertRepositorySlices(result.invalidatedSlices, command);
+      break;
+    }
     case "trackedChangeScan":
     case "untrackedScan": {
-      const result = record(value, command);
-      strings(result, command, "root");
-      arrays(result, command, "changes");
+      assertTrackedChangeScan(value, command);
       break;
     }
     case "historyPage": {
@@ -193,6 +197,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       throw new Error(`No desktop response validator is registered for ${command}.`);
   }
   return value as DesktopCommandMap[Command]["result"];
+}
+
+function assertTrackedChangeScan(value: unknown, command: DesktopCommandName): void {
+  const result = record(value, command);
+  strings(result, command, "root");
+  arrays(result, command, "changes");
 }
 
 function assertRepositorySlices(value: unknown, command: DesktopCommandName): void {

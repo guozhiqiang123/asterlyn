@@ -102,6 +102,17 @@ export class WindowSession {
     return this.repository.install(identity, snapshot, cause, slices, options).snapshot;
   }
 
+  installTracked(
+    scan: TrackedChangeScan,
+    cause: SessionInvalidationCause,
+    slices: Iterable<SessionInvalidationSlice>,
+    paths: Iterable<string> = [],
+  ): RepositorySnapshot | null {
+    const identity = this.workspace.identity();
+    if (!identity) throw new Error("Open a workspace before installing working-tree state.");
+    return this.repository.mergeTracked(identity, scan, cause, paths, slices)?.snapshot ?? null;
+  }
+
   scheduleTrackedRefresh(
     repositoryRoot: string,
     cause: SessionInvalidationCause,

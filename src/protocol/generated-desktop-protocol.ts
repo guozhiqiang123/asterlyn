@@ -31,10 +31,10 @@ export interface DesktopCommandMap {
   read_commit_details: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; }; result: Model.CommitDetails };
   read_commit_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
   read_commit_image_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
-  stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.RepositoryMutationOutcome };
-  unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.RepositoryMutationOutcome };
+  stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
+  unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
-  revert_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RepositoryMutationOutcome };
+  revert_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.WorkingTreeMutationOutcome };
   switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositoryMutationOutcome };
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
   fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
@@ -76,10 +76,10 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_commit_details: "commitDetails",
   read_commit_diff: "commitDiffResult",
   read_commit_image_diff: "imageDiffPreview",
-  stage_paths: "repositoryMutationOutcome",
-  unstage_paths: "repositoryMutationOutcome",
+  stage_paths: "workingTreeMutationOutcome",
+  unstage_paths: "workingTreeMutationOutcome",
   commit_changes: "commitSelectedResult",
-  revert_changes: "repositoryMutationOutcome",
+  revert_changes: "workingTreeMutationOutcome",
   switch_branch: "repositoryMutationOutcome",
   create_branch: "repositoryMutationOutcome",
   fetch_remote: "repositoryMutationOutcome",

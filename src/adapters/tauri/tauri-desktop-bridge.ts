@@ -15,6 +15,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
+  WorkingTreeMutationOutcome,
   UntrackedScan,
   WorkspaceReplacementPreview,
   WorkspaceTextSearchReport,
@@ -173,9 +174,9 @@ export const tauriDesktopBridge: DesktopBridge = {
       originalPath,
     }),
   stagePaths: (repositoryRoot, paths) =>
-    invokeDesktopCommand<RepositoryMutationOutcome>("stage_paths", { repositoryRoot, paths }),
+    invokeDesktopCommand<WorkingTreeMutationOutcome>("stage_paths", { repositoryRoot, paths }),
   unstagePaths: (repositoryRoot, paths) =>
-    invokeDesktopCommand<RepositoryMutationOutcome>("unstage_paths", { repositoryRoot, paths }),
+    invokeDesktopCommand<WorkingTreeMutationOutcome>("unstage_paths", { repositoryRoot, paths }),
   commitChanges: (repositoryRoot, message, selected) =>
     invokeDesktopCommand<CommitSelectedResult>("commit_changes", {
       repositoryRoot,
@@ -183,7 +184,7 @@ export const tauriDesktopBridge: DesktopBridge = {
       selected,
     }),
   revertChanges: (repositoryRoot, selected) =>
-    invokeDesktopCommand<RepositoryMutationOutcome>("revert_changes", {
+    invokeDesktopCommand<WorkingTreeMutationOutcome>("revert_changes", {
       repositoryRoot,
       selected,
     }),

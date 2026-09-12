@@ -185,6 +185,11 @@ export interface RepositoryMutationOutcome {
   invalidatedSlices: RepositoryStateSlice[];
 }
 
+export interface WorkingTreeMutationOutcome {
+  tracked: TrackedChangeScan;
+  invalidatedSlices: RepositoryStateSlice[];
+}
+
 export interface OpenedProject {
   root: string;
   repository: RepositorySnapshot | null;

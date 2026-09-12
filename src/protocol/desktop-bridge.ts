@@ -19,6 +19,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
+  WorkingTreeMutationOutcome,
   UntrackedScan,
   WorkspaceReplacementPreview,
   WorkspaceTextSearchOptions,
@@ -148,8 +149,8 @@ export interface GitReadBridge {
 }
 
 export interface GitOperationBridge {
-  stagePaths(repositoryRoot: string, paths: string[]): Promise<RepositoryMutationOutcome>;
-  unstagePaths(repositoryRoot: string, paths: string[]): Promise<RepositoryMutationOutcome>;
+  stagePaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  unstagePaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
   commitChanges(
     repositoryRoot: string,
     message: string,
@@ -158,7 +159,7 @@ export interface GitOperationBridge {
   revertChanges(
     repositoryRoot: string,
     selected: FileChange[],
-  ): Promise<RepositoryMutationOutcome>;
+  ): Promise<WorkingTreeMutationOutcome>;
   switchBranch(repositoryRoot: string, targetFullName: string): Promise<RepositoryMutationOutcome>;
   createBranch(repositoryRoot: string, name: string): Promise<RepositoryMutationOutcome>;
   fetchRemote(

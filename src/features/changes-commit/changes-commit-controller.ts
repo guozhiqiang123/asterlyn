@@ -4,8 +4,8 @@ import type {
   DiffResult,
   FileChange,
   ImageDiffPreview,
-  RepositoryMutationOutcome,
   RepositorySnapshot,
+  WorkingTreeMutationOutcome,
 } from "../../models.ts";
 import {
   includedChanges,
@@ -65,7 +65,7 @@ export interface ChangesCommitGateway {
   revertChanges(
     repositoryRoot: string,
     changes: FileChange[],
-  ): Promise<RepositoryMutationOutcome>;
+  ): Promise<WorkingTreeMutationOutcome>;
   commitChanges(
     repositoryRoot: string,
     message: string,
@@ -289,7 +289,7 @@ export class ChangesCommitController {
     }
   }
 
-  async revertSelected(): Promise<ChangesMutationResult<RepositoryMutationOutcome>> {
+  async revertSelected(): Promise<ChangesMutationResult<WorkingTreeMutationOutcome>> {
     const snapshot = this.snapshot;
     const selected = this.selectedChange();
     if (!snapshot || !selected || this.state.mutation) return { status: "unavailable" };

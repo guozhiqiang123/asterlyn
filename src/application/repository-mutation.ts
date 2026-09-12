@@ -1,4 +1,4 @@
-import type { RepositoryMutationOutcome, RepositoryStateSlice } from "../models.ts";
+import type { RepositoryStateSlice } from "../models.ts";
 
 export interface RepositoryReconciliationPlan {
   readonly slices: ReadonlySet<RepositoryStateSlice>;
@@ -11,7 +11,7 @@ export interface RepositoryReconciliationPlan {
 }
 
 export function repositoryReconciliationPlan(
-  outcome: RepositoryMutationOutcome,
+  outcome: { invalidatedSlices: RepositoryStateSlice[] },
 ): RepositoryReconciliationPlan {
   const slices = new Set(outcome.invalidatedSlices);
   return {

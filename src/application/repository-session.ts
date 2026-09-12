@@ -60,6 +60,7 @@ export class RepositorySession {
     scan: TrackedChangeScan,
     cause: SessionInvalidationCause,
     paths: Iterable<string> = [],
+    slices: Iterable<SessionInvalidationSlice> = ["workingTree"],
   ): RepositorySessionState | null {
     const snapshot = this.value.snapshot;
     if (!snapshot || snapshot.root !== identity.root || scan.root !== identity.root) return null;
@@ -67,7 +68,7 @@ export class RepositorySession {
       identity,
       mergeTrackedChanges(snapshot, scan),
       cause,
-      ["workingTree"],
+      slices,
       { paths },
     );
   }

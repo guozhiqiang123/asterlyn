@@ -42,6 +42,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
+  WorkingTreeMutationOutcome,
   UntrackedScan,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
@@ -597,16 +598,19 @@ const demoBridge: DesktopBridge = {
   async stagePaths(
     repositoryRoot: string,
     paths: string[],
-  ): Promise<RepositoryMutationOutcome> {
+  ): Promise<WorkingTreeMutationOutcome> {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoStage(browserSnapshot, paths);
       return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
+        tracked: {
+          root: browserSnapshot.root,
+          changes: demoTrackedSnapshot(browserSnapshot).changes,
+        },
         invalidatedSlices: ["workingTree"],
       };
     }
-    return invoke<RepositoryMutationOutcome>("stage_paths", {
+    return invoke<WorkingTreeMutationOutcome>("stage_paths", {
       repositoryRoot,
       paths,
     });
@@ -615,16 +619,19 @@ const demoBridge: DesktopBridge = {
   async unstagePaths(
     repositoryRoot: string,
     paths: string[],
-  ): Promise<RepositoryMutationOutcome> {
+  ): Promise<WorkingTreeMutationOutcome> {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoUnstage(browserSnapshot, paths);
       return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
+        tracked: {
+          root: browserSnapshot.root,
+          changes: demoTrackedSnapshot(browserSnapshot).changes,
+        },
         invalidatedSlices: ["workingTree"],
       };
     }
-    return invoke<RepositoryMutationOutcome>("unstage_paths", {
+    return invoke<WorkingTreeMutationOutcome>("unstage_paths", {
       repositoryRoot,
       paths,
     });
@@ -694,7 +701,7 @@ const demoBridge: DesktopBridge = {
   async revertChanges(
     repositoryRoot: string,
     selected: FileChange[],
-  ): Promise<RepositoryMutationOutcome> {
+  ): Promise<WorkingTreeMutationOutcome> {
     if (!isTauri) {
       await demoDelay(220);
       if (
@@ -715,11 +722,14 @@ const demoBridge: DesktopBridge = {
         changes: browserSnapshot.changes.filter((change) => !paths.has(change.path)),
       };
       return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
-        invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
+        tracked: {
+          root: browserSnapshot.root,
+          changes: demoTrackedSnapshot(browserSnapshot).changes,
+        },
+        invalidatedSlices: ["openDocuments", "workingTree"],
       };
     }
-    return invoke<RepositoryMutationOutcome>("revert_changes", {
+    return invoke<WorkingTreeMutationOutcome>("revert_changes", {
       repositoryRoot,
       selected,
     });
