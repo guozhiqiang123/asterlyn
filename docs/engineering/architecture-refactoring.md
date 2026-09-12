@@ -76,6 +76,12 @@ then Settings/Shell. Split CSS with each owning feature. Replace broad rerender 
 feature actions. Add viewport virtualization to bounded history and project/change trees before
 their mounted rows exceed the architecture gate.
 
+Progress: the first R2 slice moves Git History query loading, page-window reconciliation,
+scroll-triggered append/refresh, commit selection, commit-detail caching, stale-result rejection,
+and disposal into `GitHistoryDetailsController`. `AsterlynApp` now routes typed controller changes
+to the stable History list and Details hosts. Remote/Push is the next extraction; R2 remains open
+until the complete exit gate below is met.
+
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.
 

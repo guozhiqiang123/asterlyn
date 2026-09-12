@@ -68,7 +68,12 @@ export class GitHistoryListView {
   }
 
   render(presentation: HistoryListPresentation): void {
-    if (this.host) this.host.innerHTML = renderHistoryList(presentation);
+    if (!this.host) return;
+    const scrollTop = this.host.scrollTop;
+    const scrollLeft = this.host.scrollLeft;
+    this.host.innerHTML = renderHistoryList(presentation);
+    this.host.scrollTop = scrollTop;
+    this.host.scrollLeft = scrollLeft;
   }
 
   updateSelection(key: string): void {
