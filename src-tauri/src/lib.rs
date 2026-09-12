@@ -20,6 +20,7 @@ use tauri::TitleBarStyle;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 mod application;
+mod commands;
 
 use application::{
     ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator, PendingRepositoryWindows,
@@ -28,6 +29,7 @@ use application::{
 };
 #[cfg(test)]
 use application::{GitMutationRegistry, RemoteOperationRegistry};
+use commands::*;
 
 const COMMIT_LIMIT: usize = 150;
 const PROJECT_FILE_LIMIT: usize = 100_000;
@@ -159,31 +161,12 @@ struct WorkspaceReplacementFilePreview {
     after_preview: String,
 }
 
-#[tauri::command]
-fn initial_repository(
-    window: tauri::WebviewWindow,
-    pending: State<'_, PendingRepositoryWindows>,
-) -> Result<Option<String>, GitError> {
-    if let Some(path) = pending.take(window.label())? {
-        return Ok(Some(path));
-    }
-    Ok(std::env::args_os()
-        .skip(1)
-        .find(|argument| !argument.to_string_lossy().starts_with('-'))
-        .map(|argument| argument.to_string_lossy().into_owned()))
-}
-
 fn window_chrome_mode_for(is_macos: bool) -> &'static str {
     if is_macos {
         "macos-native"
     } else {
         "custom-right"
     }
-}
-
-#[tauri::command]
-fn window_chrome_mode() -> &'static str {
-    window_chrome_mode_for(cfg!(target_os = "macos"))
 }
 
 fn build_project_window(
@@ -209,39 +192,6 @@ fn build_project_window(
     builder.build()
 }
 
-#[tauri::command]
-async fn open_project(
-    path: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<OpenedProject, WorkspaceError> {
-    let project = run_workspace_blocking("open project", move || {
-        let workspace = Workspace::open(path)?;
-        let root = workspace.root().to_path_buf();
-        let repository = exact_git_repository(&root)?
-            .map(|repository| {
-                repository
-                    .tracked_snapshot(COMMIT_LIMIT)
-                    .map_err(|error| WorkspaceError::Io {
-                        operation: "read Git project".to_string(),
-                        message: error.to_string(),
-                    })
-            })
-            .transpose()?;
-        Ok(OpenedProject {
-            root: root.to_string_lossy().into_owned(),
-            repository,
-        })
-    })
-    .await?;
-    active_workspaces.activate(
-        window.label(),
-        Path::new(&project.root),
-        project.repository.is_some(),
-    )?;
-    Ok(project)
-}
-
 fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceError> {
     match GitRepository::open(root) {
         Ok(repository) => {
@@ -258,127 +208,6 @@ fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceE
         }),
         Err(_) => Ok(None),
     }
-}
-
-#[tauri::command]
-async fn read_tracked_changes(
-    repository_root: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<TrackedChangeScan, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read tracked changes", move || {
-        GitRepository::open(root)?.tracked_changes()
-    })
-    .await
-}
-
-#[tauri::command]
-fn open_repository_window(
-    path: String,
-    app: tauri::AppHandle,
-    pending: State<'_, PendingRepositoryWindows>,
-) -> Result<String, GitError> {
-    let canonical = std::fs::canonicalize(&path).map_err(|error| GitError::Io {
-        operation: "open repository window".to_string(),
-        message: error.to_string(),
-    })?;
-    Workspace::open(&canonical).map_err(|error| GitError::InvalidInput {
-        field: "project path".to_string(),
-        message: error.to_string(),
-    })?;
-    let label = pending.reserve(canonical.clone())?;
-    let title = canonical
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| format!("Asterlyn — {name}"))
-        .unwrap_or_else(|| "Asterlyn".to_string());
-    let result = build_project_window(&app, label.clone(), title);
-    if let Err(error) = result {
-        pending.remove(&label);
-        return Err(GitError::Io {
-            operation: "open repository window".to_string(),
-            message: error.to_string(),
-        });
-    }
-    Ok(label)
-}
-
-#[tauri::command]
-async fn read_history_page(
-    repository_root: String,
-    query: HistoryQuery,
-    offset: usize,
-    limit: usize,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<HistoryPage, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read history page", move || {
-        GitRepository::open(root)?.query_commit_history_page(&query, offset, limit)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn scan_untracked(
-    repository_root: String,
-    scan_id: String,
-    window: tauri::WebviewWindow,
-    scans: State<'_, ScanRegistry>,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<UntrackedScan, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    let (window_label, scan_id, cancellation) = scans.register(window.label(), scan_id)?;
-    let scan_key = (window_label, scan_id);
-
-    let task_cancellation = cancellation.clone();
-    let result = run_blocking("scan untracked files", move || {
-        GitRepository::open(root)?.untracked_changes(&task_cancellation)
-    })
-    .await;
-
-    scans.finish(&scan_key, &cancellation)?;
-    result
-}
-
-#[tauri::command]
-fn cancel_untracked_scan(
-    scan_id: String,
-    window: tauri::WebviewWindow,
-    scans: State<'_, ScanRegistry>,
-) -> Result<(), GitError> {
-    scans.cancel(window.label(), scan_id)
-}
-
-#[tauri::command]
-async fn read_diff(
-    repository_root: String,
-    path: String,
-    staged: bool,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<DiffResult, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read diff", move || {
-        GitRepository::open(root)?.diff(&path, staged)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn read_local_diff(
-    repository_root: String,
-    selected: FileChange,
-    expanded_unchanged: bool,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<DiffResult, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read complete local diff", move || {
-        GitRepository::open(root)?.local_diff_with_unchanged(&selected, expanded_unchanged)
-    })
-    .await
 }
 
 #[tauri::command]
@@ -1349,277 +1178,6 @@ async fn read_commit_diff(
         )
     })
     .await
-}
-
-#[tauri::command]
-async fn stage_paths(
-    repository_root: String,
-    paths: Vec<String>,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_local(repository_root, "stage paths", move |repository| {
-            repository.stage(&paths)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn unstage_paths(
-    repository_root: String,
-    paths: Vec<String>,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_local(repository_root, "unstage paths", move |repository| {
-            repository.unstage(&paths)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn commit_changes(
-    repository_root: String,
-    message: String,
-    selected: Vec<FileChange>,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<CommitSelectedResult, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_local(
-            repository_root,
-            "create selected commit",
-            move |repository| {
-                let committed = repository.commit_selected(&message, &selected)?;
-                match repository.tracked_snapshot(COMMIT_LIMIT) {
-                    Ok(snapshot) => Ok(CommitSelectedResult {
-                        oid: committed.oid,
-                        snapshot: Some(snapshot),
-                        refresh_error: None,
-                        verification_warning: committed.verification_warning,
-                    }),
-                    Err(error) => Ok(CommitSelectedResult {
-                        oid: committed.oid,
-                        snapshot: None,
-                        refresh_error: Some(error.to_string()),
-                        verification_warning: committed.verification_warning,
-                    }),
-                }
-            },
-        )
-        .await
-}
-
-#[tauri::command]
-async fn revert_changes(
-    repository_root: String,
-    selected: Vec<FileChange>,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_local(
-            repository_root,
-            "revert selected changes",
-            move |repository| {
-                repository.revert_selected(&selected)?;
-                repository.tracked_snapshot(COMMIT_LIMIT)
-            },
-        )
-        .await
-}
-
-#[tauri::command]
-async fn switch_branch(
-    repository_root: String,
-    target_full_name: String,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_local(repository_root, "switch branch", move |repository| {
-            repository.switch_branch(&target_full_name)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn create_branch(
-    repository_root: String,
-    name: String,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_local(repository_root, "create branch", move |repository| {
-            repository.create_branch(&name)?;
-            repository.tracked_snapshot(COMMIT_LIMIT)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn fetch_remote(
-    repository_root: String,
-    remote: String,
-    operation_id: String,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_remote(
-            repository_root,
-            operation_id,
-            "fetch",
-            COMMIT_LIMIT,
-            move |repository, cancellation| repository.fetch_remote(&remote, cancellation),
-        )
-        .await
-}
-
-#[tauri::command]
-async fn read_push_preview(
-    repository_root: String,
-    remote: String,
-    tag_mode: PushTagMode,
-    offset: usize,
-    page_size: usize,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<PushPreview, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read push preview", move || {
-        GitRepository::open(root)?.push_preview_with_tags(&remote, tag_mode, offset, page_size)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn read_push_file_commit(
-    repository_root: String,
-    remote: String,
-    tag_mode: PushTagMode,
-    preview_token: String,
-    path: String,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<Option<CommitDetails>, GitError> {
-    let root = active_workspaces.require_git(window.label(), &repository_root)?;
-    run_blocking("read pushed file commit", move || {
-        GitRepository::open(root)?.push_file_commit(&remote, tag_mode, &preview_token, &path)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn pull_current(
-    repository_root: String,
-    operation_id: String,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_remote(
-            repository_root,
-            operation_id,
-            "pull",
-            COMMIT_LIMIT,
-            move |repository, cancellation| repository.pull_ff_only(cancellation),
-        )
-        .await
-}
-
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-async fn push_current(
-    repository_root: String,
-    remote: String,
-    mode: PushMode,
-    tag_mode: PushTagMode,
-    preview_token: String,
-    operation_id: String,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<RepositorySnapshot, GitError> {
-    let repository_root = active_workspaces
-        .require_git(window.label(), &repository_root)?
-        .to_string_lossy()
-        .into_owned();
-    git_operations
-        .run_remote(
-            repository_root,
-            operation_id,
-            "push",
-            COMMIT_LIMIT,
-            move |repository, cancellation| {
-                repository.push_current_with_options(
-                    &remote,
-                    mode,
-                    tag_mode,
-                    &preview_token,
-                    cancellation,
-                )
-            },
-        )
-        .await
-}
-
-#[tauri::command]
-fn cancel_remote_operation(
-    repository_root: String,
-    operation_id: String,
-    git_operations: State<'_, GitOperationCoordinator>,
-    window: tauri::WebviewWindow,
-    active_workspaces: State<'_, ActiveWorkspaces>,
-) -> Result<(), GitError> {
-    active_workspaces.require_git(window.label(), &repository_root)?;
-    git_operations.cancel_remote(repository_root, operation_id)
 }
 
 async fn run_blocking<T, F>(operation: &str, task: F) -> Result<T, GitError>
