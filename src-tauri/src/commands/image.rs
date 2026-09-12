@@ -9,8 +9,14 @@ pub(crate) async fn read_image_file(
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<ImagePreview, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let catalogued = active_workspaces.authorize_catalogued_file(
+        window.label(),
+        &root,
+        &repository_id,
+        &path,
+    )?;
     run_workspace_blocking("read image file", move || {
-        let authorized = authorize_project_file(&root, &repository_id, &path)?;
+        let authorized = reauthorize_session_file(&root, &catalogued)?;
         let snapshot = Workspace::open(&root)?
             .read_binary_file(&authorized.workspace_path, IMAGE_PREVIEW_LIMIT_BYTES)?;
         encode_image_preview(&snapshot.workspace_path, snapshot.bytes)

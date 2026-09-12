@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use asterlyn_git::GitError;
+use asterlyn_git::{GitError, ProjectFile, ProjectFileList};
 use asterlyn_workspace::WorkspaceError;
 
 #[derive(Default)]
@@ -15,6 +15,7 @@ pub(crate) struct ActiveWorkspaces {
 struct ActiveWorkspace {
     root: PathBuf,
     git_enabled: bool,
+    catalog: HashMap<String, HashMap<String, ProjectFile>>,
 }
 
 #[derive(Default)]
@@ -55,6 +56,7 @@ impl ActiveWorkspaces {
                 ActiveWorkspace {
                     root: canonical,
                     git_enabled,
+                    catalog: HashMap::new(),
                 },
             );
         Ok(())
@@ -119,6 +121,68 @@ impl ActiveWorkspaces {
             });
         }
         Ok(active.root)
+    }
+
+    pub(crate) fn install_catalog(
+        &self,
+        window_label: &str,
+        root: &Path,
+        catalog: &ProjectFileList,
+    ) -> Result<(), WorkspaceError> {
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "install project catalog".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get_mut(window_label)
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "open a project folder before installing its file catalog".to_string(),
+            })?;
+        if active.root != root || catalog.root != root.to_string_lossy() {
+            return Err(WorkspaceError::NotAuthorized {
+                message: "the project catalog belongs to a stale workspace session".to_string(),
+            });
+        }
+        let mut files = HashMap::<String, HashMap<String, ProjectFile>>::new();
+        for file in &catalog.files {
+            files
+                .entry(file.repository_id.clone())
+                .or_default()
+                .insert(file.path.clone(), file.clone());
+        }
+        active.catalog = files;
+        Ok(())
+    }
+
+    pub(crate) fn authorize_catalogued_file(
+        &self,
+        window_label: &str,
+        root: &Path,
+        repository_id: &str,
+        path: &str,
+    ) -> Result<ProjectFile, WorkspaceError> {
+        let roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "authorize project file".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get(window_label)
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "open a project folder before reading or saving files".to_string(),
+            })?;
+        if active.root != root {
+            return Err(WorkspaceError::NotAuthorized {
+                message: "the file belongs to a stale workspace session".to_string(),
+            });
+        }
+        active
+            .catalog
+            .get(repository_id)
+            .and_then(|files| files.get(path))
+            .cloned()
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "select a file from the current project catalog".to_string(),
+            })
     }
 
     pub(crate) fn remove(&self, window_label: &str) {

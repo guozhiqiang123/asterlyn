@@ -785,15 +785,25 @@ fn webp_dimensions(bytes: &[u8]) -> Result<(u32, u32, bool), String> {
         .ok_or_else(|| "the WebP dimensions could not be read".to_string())
 }
 
+#[cfg(test)]
 fn read_authorized_text_file(
     root: &Path,
     repository_id: &str,
     path: &str,
 ) -> Result<TextFileSnapshot, WorkspaceError> {
     let authorized = authorize_project_file(root, repository_id, path)?;
+    read_session_text_file(root, &authorized)
+}
+
+fn read_session_text_file(
+    root: &Path,
+    catalogued: &ProjectFile,
+) -> Result<TextFileSnapshot, WorkspaceError> {
+    let authorized = reauthorize_session_file(root, catalogued)?;
     Workspace::open(root)?.read_text_file(&authorized.workspace_path)
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn save_authorized_text_file(
     root: &Path,
@@ -805,6 +815,26 @@ fn save_authorized_text_file(
     request_id: String,
 ) -> Result<SaveTextFileResult, WorkspaceError> {
     let authorized = authorize_project_file(root, repository_id, path)?;
+    save_session_text_file(
+        root,
+        &authorized,
+        expected_revision,
+        content,
+        utf8_bom,
+        request_id,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn save_session_text_file(
+    root: &Path,
+    catalogued: &ProjectFile,
+    expected_revision: String,
+    content: String,
+    utf8_bom: bool,
+    request_id: String,
+) -> Result<SaveTextFileResult, WorkspaceError> {
+    let authorized = reauthorize_session_file(root, catalogued)?;
     Workspace::open(root)?.save_text_file(&SaveTextFileRequest {
         workspace_path: authorized.workspace_path,
         expected_revision,
@@ -814,6 +844,26 @@ fn save_authorized_text_file(
     })
 }
 
+fn reauthorize_session_file(
+    root: &Path,
+    catalogued: &ProjectFile,
+) -> Result<ProjectFile, WorkspaceError> {
+    if let Some(repository) = exact_git_repository(root)? {
+        return repository
+            .reauthorize_project_file(catalogued)
+            .map_err(|_| WorkspaceError::NotAuthorized {
+                message: "select a current tracked or non-ignored project file".to_string(),
+            });
+    }
+    if catalogued.repository_id != "workspace" || catalogued.path != catalogued.workspace_path {
+        return Err(WorkspaceError::NotAuthorized {
+            message: "select a current file from the active ordinary folder".to_string(),
+        });
+    }
+    Ok(catalogued.clone())
+}
+
+#[cfg(test)]
 fn authorize_project_file(
     root: &Path,
     repository_id: &str,
@@ -1370,6 +1420,43 @@ mod tests {
             active.resolve("main", &first_path),
             Err(WorkspaceError::NotAuthorized { .. })
         ));
+    }
+
+    #[test]
+    fn active_workspace_catalog_authorizes_constant_identity_lookups_until_refresh() {
+        let active = ActiveWorkspaces::default();
+        let directory = tempfile::tempdir().expect("ordinary workspace");
+        fs::write(directory.path().join("first.txt"), "first\n").expect("first file");
+        active
+            .activate("main", directory.path(), false)
+            .expect("workspace activates");
+        let root = std::fs::canonicalize(directory.path()).expect("canonical workspace");
+        let first_catalog = load_project_catalog(&root).expect("initial catalog");
+        active
+            .install_catalog("main", &root, &first_catalog)
+            .expect("catalog installs");
+        assert_eq!(
+            active
+                .authorize_catalogued_file("main", &root, "workspace", "first.txt")
+                .expect("catalogued identity resolves")
+                .workspace_path,
+            "first.txt"
+        );
+
+        fs::write(directory.path().join("second.txt"), "second\n").expect("second file");
+        assert!(matches!(
+            active.authorize_catalogued_file("main", &root, "workspace", "second.txt"),
+            Err(WorkspaceError::NotAuthorized { .. })
+        ));
+        let refreshed = load_project_catalog(&root).expect("refreshed catalog");
+        active
+            .install_catalog("main", &root, &refreshed)
+            .expect("refreshed catalog installs");
+        assert!(
+            active
+                .authorize_catalogued_file("main", &root, "workspace", "second.txt")
+                .is_ok()
+        );
     }
 
     #[test]

@@ -7,7 +7,13 @@ pub(crate) async fn list_project_files(
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<ProjectFileList, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    run_workspace_blocking("list project files", move || load_project_catalog(&root)).await
+    let task_root = root.clone();
+    let catalog = run_workspace_blocking("list project files", move || {
+        load_project_catalog(&task_root)
+    })
+    .await?;
+    active_workspaces.install_catalog(window.label(), &root, &catalog)?;
+    Ok(catalog)
 }
 
 #[tauri::command]
@@ -221,8 +227,14 @@ pub(crate) async fn read_text_file(
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<TextFileSnapshot, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let authorized = active_workspaces.authorize_catalogued_file(
+        window.label(),
+        &root,
+        &repository_id,
+        &path,
+    )?;
     run_workspace_blocking("read text file", move || {
-        read_authorized_text_file(&root, &repository_id, &path)
+        read_session_text_file(&root, &authorized)
     })
     .await
 }
@@ -242,16 +254,21 @@ pub(crate) async fn save_text_file(
     writes: State<'_, WorkspaceWriteRegistry>,
 ) -> Result<SaveTextFileResult, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let authorized = active_workspaces.authorize_catalogued_file(
+        window.label(),
+        &root,
+        &repository_id,
+        &path,
+    )?;
     let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
     run_workspace_blocking("save text file", move || {
         let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
             operation: "serialize workspace writes".to_string(),
             message: "workspace-write lock was poisoned".to_string(),
         })?;
-        save_authorized_text_file(
+        save_session_text_file(
             &root,
-            &repository_id,
-            &path,
+            &authorized,
             expected_revision,
             content,
             utf8_bom,

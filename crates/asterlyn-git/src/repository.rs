@@ -795,6 +795,107 @@ impl GitRepository {
             })
     }
 
+    /// Revalidates one file identity without rebuilding the complete project catalog.
+    ///
+    /// The caller must first obtain `file` from this repository's bounded project catalog. This
+    /// method rechecks the exact repository root and current ignore policy, while the workspace
+    /// boundary remains responsible for component-by-component non-link traversal and file type.
+    pub fn reauthorize_project_file(&self, file: &ProjectFile) -> Result<ProjectFile, GitError> {
+        validate_relative_path(&file.path)?;
+        let repository = if file.repository_id == "." {
+            self.clone()
+        } else {
+            validate_relative_path(&file.repository_id)?;
+            let candidate = self.root.join(&file.repository_id);
+            let canonical_main = fs::canonicalize(&self.root).map_err(|error| GitError::Io {
+                operation: "resolve project root".to_string(),
+                message: error.to_string(),
+            })?;
+            let canonical_candidate =
+                fs::canonicalize(&candidate).map_err(|error| GitError::InvalidInput {
+                    field: "project file".to_string(),
+                    message: format!("the selected repository root is unavailable: {error}"),
+                })?;
+            if !canonical_candidate.starts_with(&canonical_main) {
+                return Err(GitError::InvalidInput {
+                    field: "project file".to_string(),
+                    message: "the selected repository root is outside the active project"
+                        .to_string(),
+                });
+            }
+            let repository = GitRepository::open(&canonical_candidate)?;
+            if fs::canonicalize(repository.root()).ok().as_ref() != Some(&canonical_candidate) {
+                return Err(GitError::InvalidInput {
+                    field: "project file".to_string(),
+                    message: "the selected nested repository identity is stale".to_string(),
+                });
+            }
+            repository
+        };
+        let expected_workspace_path = if file.repository_id == "." {
+            file.path.clone()
+        } else {
+            format!("{}/{}", file.repository_id, file.path)
+        };
+        if file.workspace_path != expected_workspace_path {
+            return Err(GitError::InvalidInput {
+                field: "project file".to_string(),
+                message: "the selected project-file identity is inconsistent".to_string(),
+            });
+        }
+
+        let tracked = repository.run_read_owned(
+            "reauthorize tracked project file",
+            vec![
+                OsString::from("--literal-pathspecs"),
+                OsString::from("ls-files"),
+                OsString::from("--cached"),
+                OsString::from("-z"),
+                OsString::from("--"),
+                OsString::from(&file.path),
+            ],
+        )?;
+        let is_tracked = tracked
+            .stdout
+            .split(|byte| *byte == 0)
+            .any(|candidate| candidate == file.path.as_bytes());
+        if !is_tracked {
+            let ignored = run_git_output(
+                repository.root(),
+                [
+                    OsStr::new("check-ignore"),
+                    OsStr::new("--quiet"),
+                    OsStr::new("--"),
+                    OsStr::new(&file.path),
+                ],
+            )
+            .map_err(|error| GitError::Io {
+                operation: "reauthorize untracked project file".to_string(),
+                message: error.to_string(),
+            })?;
+            match ignored.status.code() {
+                Some(0) => {
+                    return Err(GitError::InvalidInput {
+                        field: "project file".to_string(),
+                        message: "the selected project file is now ignored".to_string(),
+                    });
+                }
+                Some(1) => {}
+                status => {
+                    return Err(GitError::CommandFailed {
+                        operation: "reauthorize untracked project file".to_string(),
+                        status,
+                        message: sanitize_stderr(
+                            &ignored.stderr,
+                            "Git could not evaluate the current ignore policy",
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(file.clone())
+    }
+
     fn project_file_paths(&self) -> Result<Vec<String>, GitError> {
         let output = self.run_read(
             "list project files",
@@ -4447,6 +4548,28 @@ mod tests {
         ));
         assert!(matches!(
             repository.authorize_project_file(".", "../outside", 10),
+            Err(GitError::InvalidInput { .. })
+        ));
+
+        let cached_untracked = complete
+            .files
+            .iter()
+            .find(|file| file.path == "untracked.txt")
+            .expect("catalogued untracked file")
+            .clone();
+        assert_eq!(
+            repository
+                .reauthorize_project_file(&cached_untracked)
+                .expect("catalogued file passes targeted authorization"),
+            cached_untracked
+        );
+        fs::write(
+            directory.path().join(".gitignore"),
+            "ignored.txt\nignored-dir/\nuntracked.txt\n",
+        )
+        .expect("ignore policy changes");
+        assert!(matches!(
+            repository.reauthorize_project_file(&cached_untracked),
             Err(GitError::InvalidInput { .. })
         ));
 
