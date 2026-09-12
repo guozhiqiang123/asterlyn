@@ -6,14 +6,33 @@ import { windowControls } from "./window-controls";
 import {
   GitHistoryListView,
   HISTORY_ROW_LIMIT,
-  renderHistoryList,
   type HistoryListPresentation,
 } from "./features/git-history/history-list-view";
+import {
+  historyScope,
+  renderHistoryNavigation as renderHistoryNavigationView,
+  type HistoryFilterMenu,
+  type HistoryNavigationViewModel,
+} from "./features/git-history/history-navigation-view";
+import { renderHistoryDialogView } from "./features/git-history/history-dialog-view";
+import {
+  inspectorPlaceholder,
+  renderBranchDetail,
+  renderCommitDetail,
+} from "./features/git-history/git-detail-view";
 import {
   GitHistoryDetailsController,
   type GitHistoryDetailsState,
   type HistoryDetailsChange,
 } from "./features/git-history/history-details-controller";
+import {
+  filteredBranches as filteredBranchesForView,
+  logicalBranches as logicalBranchesForView,
+  matchingBranches,
+  renderBranchGroups as renderBranchGroupsView,
+  renderBranchNavigation as renderBranchNavigationView,
+  type BranchNavigationViewModel,
+} from "./features/git-history/branch-navigation-view";
 import {
   RemotePushController,
   type RemotePushChange,
@@ -131,7 +150,6 @@ import {
 import {
   defaultHistoryQuery,
   filterHistoryText,
-  historyAuthorChoices,
   historyDateSince,
   isSnapshotHistoryQuery,
   normalizeHistoryQuery,
@@ -148,10 +166,7 @@ import {
   historyPathWorkspaceLabel,
   resolveHistoryPathText,
 } from "./workbench/history-path-selection";
-import {
-  effectiveHistoryRootIds,
-  toggleHistoryRootSelection,
-} from "./workbench/history-root-selection";
+import { toggleHistoryRootSelection } from "./workbench/history-root-selection";
 import {
   loadHistoryRefPreferences,
   saveHistoryRefPreferences,
@@ -159,7 +174,6 @@ import {
   touchRecentRef,
 } from "./workbench/history-preferences";
 import {
-  buildProjectTree,
   findProjectTreeNode,
   type ProjectTreeNode,
 } from "./workbench/project-tree";
@@ -214,23 +228,16 @@ import {
 } from "./workbench/workspace-replacement";
 import {
   buildCommitFileTree,
-  commitReferences,
-  groupRemoteBranches,
-  matchingLogicalBranches,
-  uniqueLogicalBranches,
   type CommitFileTreeNode,
   type CommitFileView,
-  type CommitReference,
 } from "./workbench/git-presentation";
 import type {
   BranchSummary,
-  ChangeKind,
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
   CommitSummary,
   FileChange,
-  GitRootDescriptor,
   HistoryPath,
   HistoryQuery,
   HistoryRef,
@@ -253,8 +260,6 @@ type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
   | { key: string; version: number; status: "ready"; error: null; image: ImagePreview | null; diff: ImageDiffPreview | null }
   | { key: string; version: number; status: "error"; error: string; image: null; diff: null };
-
-type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
 
 interface AppState {
   workspaceRoot: string | null;
@@ -3571,174 +3576,44 @@ export class AsterlynApp {
   }
 
   private renderHistoryNavigation(): string {
-    const scope = this.historyScope();
+    return renderHistoryNavigationView(this.historyNavigationViewModel());
+  }
+
+  private historyNavigationViewModel(): HistoryNavigationViewModel {
     const snapshot = this.state.snapshot!;
-    return `
-      <div class="history-navigation">
-        <div class="history-toolbar">
-          <div class="history-search-control">
-            <label class="history-filter" for="history-filter">
-              ${icon("search", 14)}
-              <input id="history-filter" type="search" value="${escapeAttribute(this.state.historyQuery)}" placeholder="Text or hash" autocomplete="off" spellcheck="false" aria-label="Filter commit history" aria-keyshortcuts="Control+F Meta+F" />
-            </label>
-            <button class="history-mode-button ${this.state.historyRegularExpression ? "active" : ""}" type="button" data-history-text-mode="regex" aria-pressed="${this.state.historyRegularExpression}" title="Use regular expression">.*</button>
-            <button class="history-mode-button ${this.state.historyCaseSensitive ? "active" : ""}" type="button" data-history-text-mode="case" aria-pressed="${this.state.historyCaseSensitive}" title="Match case">Cc</button>
-          </div>
-          <div class="history-filter-strip" aria-label="History query filters">
-            ${this.historyFilterButton("branch", scope.label, this.state.historyRefs.size > 0, scope.title)}
-            ${this.historyFilterButton("user", this.historyUserLabel(), this.state.historyCurrentAuthor || this.state.historyAuthorEmails.size > 0, "Filter by commit author")}
-            ${this.historyFilterButton("date", this.historyDateLabel(), this.state.historyDatePreset !== "all", "Filter by commit date")}
-            ${this.historyFilterButton("paths", this.historyPathLabel(), this.state.historyPaths.size > 0 || this.state.historyRepositoryIds.size > 0, "Filter by repository paths or Git roots")}
-            ${this.historyFilterButton("graph", "", this.state.historyOrder !== "topological" || this.state.historyFirstParent || this.state.historyExcludeMerges, "Graph order and traversal options", "sort")}
-          </div>
-          <span class="compact-count" id="history-count">0</span>
-          <span class="history-refresh-status" id="history-refresh-status" role="status"></span>
-          ${this.renderHistoryFilterPopover(snapshot)}
-        </div>
-        <div class="history-results" id="history-results" aria-live="polite">
-          ${renderHistoryList(this.historyListPresentation())}
-        </div>
-      </div>`;
-  }
-
-  private historyFilterButton(
-    menu: HistoryFilterMenu,
-    label: string,
-    active: boolean,
-    title: string,
-    iconName?: "sort",
-  ): string {
-    const open = this.state.historyFilterMenu === menu;
-    const menuIcon =
-      iconName ??
-      (menu === "branch"
-        ? "branch"
-        : menu === "user"
-          ? "user"
-          : menu === "date"
-            ? "calendar"
-            : "folder");
-    return `<button class="history-filter-button ${active ? "active" : ""} ${open ? "open" : ""}" type="button" data-history-menu="${menu}" aria-expanded="${open}" aria-label="${escapeAttribute(title)}" title="${escapeAttribute(title)}">${icon(menuIcon, 13)}${iconName ? "" : `<span>${escapeHtml(label)}</span><span class="history-filter-chevron">${icon("chevron-down", 10)}</span>`}</button>`;
-  }
-
-  private renderHistoryFilterPopover(snapshot: RepositorySnapshot): string {
-    const menu = this.state.historyFilterMenu;
-    if (!menu) return "";
-    const body =
-      menu === "branch"
-        ? this.renderHistoryBranchMenu(snapshot)
-        : menu === "user"
-          ? this.renderHistoryUserMenu(snapshot)
-          : menu === "date"
-            ? this.renderHistoryDateMenu()
-            : menu === "paths"
-              ? this.renderHistoryPathMenu()
-              : this.renderHistoryGraphMenu();
-    return `<div class="history-filter-popover history-filter-popover-${menu}" role="menu">${body}</div>`;
-  }
-
-  private renderHistoryBranchMenu(snapshot: RepositorySnapshot): string {
-    const selectedRootIds = effectiveHistoryRootIds(
-      snapshot.repositoryRoots.map((root) => root.id),
-      this.state.historyRepositoryIds,
-    );
-    const activeBranches = snapshot.branches.filter((branch) =>
-      selectedRootIds.has(branch.repositoryId),
-    );
-    const available = new Map(snapshot.branches.map((branch) => [branchKey(branch), branch]));
-    const favorites = uniqueLogicalBranches(
-      Array.from(this.state.historyFavoriteRefs.keys()).flatMap((key) => {
-        const branch = available.get(key);
-        return branch && selectedRootIds.has(branch.repositoryId) ? [branch] : [];
-      }),
-    );
-    const recent = uniqueLogicalBranches(
-      this.state.historyRecentRefs.flatMap((reference) => {
-        const branch = available.get(historyRefKey(reference));
-        return branch && selectedRootIds.has(branch.repositoryId) ? [branch] : [];
-      }),
-    );
-    const local = uniqueLogicalBranches(
-      activeBranches.filter((branch) => branch.kind === "local"),
-    );
-    const tags = uniqueLogicalBranches(
-      activeBranches.filter((branch) => branch.kind === "tag"),
-    );
-    const remotes = groupRemoteBranches(
-      uniqueLogicalBranches(activeBranches.filter((branch) => branch.kind === "remote")),
-    );
-    const submenu = this.renderHistoryBranchSubmenu(snapshot, recent, local, tags, remotes);
-    return `
-      <button class="history-menu-option" type="button" data-history-open-dialog="branches"><span>Select…</span></button>
-      ${recent.length > 0 ? this.historySubmenuLauncher("recent", "Recent") : ""}
-      ${favorites.length > 0 ? `<div class="history-menu-heading">Favorites</div>${favorites.map((branch) => this.renderHistoryQuickRef(branch, snapshot)).join("")}` : ""}
-      ${local.length > 0 ? this.historySubmenuLauncher("local", "Local") : ""}
-      ${remotes.map((remote) => this.historySubmenuLauncher(`remote:${remote.name}`, `${remote.name}/…`)).join("")}
-      ${tags.length > 0 ? this.historySubmenuLauncher("tags", "Tags") : ""}
-      ${submenu}`;
-  }
-
-  private historySubmenuLauncher(id: string, label: string): string {
-    const open = this.state.historyBranchSubmenu === id;
-    return `<button class="history-menu-option history-submenu-launcher" type="button" data-history-branch-submenu="${escapeAttribute(id)}" aria-expanded="${open}"><span>${escapeHtml(label)}</span>${icon("chevron", 12)}</button>`;
-  }
-
-  private renderHistoryBranchSubmenu(
-    snapshot: RepositorySnapshot,
-    recent: BranchSummary[],
-    local: BranchSummary[],
-    tags: BranchSummary[],
-    remotes: ReturnType<typeof groupRemoteBranches>,
-  ): string {
-    const id = this.state.historyBranchSubmenu;
-    if (!id) return "";
-    const branches =
-      id === "recent"
-        ? recent
-        : id === "local"
-          ? local
-          : id === "tags"
-            ? tags
-            : remotes.find((remote) => `remote:${remote.name}` === id)?.branches.map(({ branch }) => branch) ?? [];
-    if (branches.length === 0) return "";
-    return `<div class="history-branch-submenu" role="menu" aria-label="${escapeAttribute(id)}">${branches.map((branch) => this.renderHistoryQuickRef(branch, snapshot)).join("")}</div>`;
-  }
-
-  private renderHistoryQuickRef(branch: BranchSummary, snapshot: RepositorySnapshot): string {
-    const matches = this.matchingHistoryBranches(branch, snapshot);
-    const selected = matches.length > 0 && matches.every((candidate) =>
-      this.state.historyRefs.has(branchKey(candidate)),
-    );
-    const glyph = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
-    const root = snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
-    const suffix = matches.length > 1
-      ? `<small>${matches.length} roots</small>`
-      : snapshot.repositoryRoots.length > 1
-        ? `<small>${escapeHtml(root?.displayName ?? branch.repositoryId)}</small>`
-        : "";
-    return `<button class="history-menu-option two-line" type="button" data-history-quick-ref="${escapeAttribute(branchKey(branch))}" aria-pressed="${selected}" title="${escapeAttribute(branch.fullName)}"><span><strong>${icon(glyph, 13)}${escapeHtml(branch.name)}</strong>${suffix}</span>${selected ? icon("check", 13) : ""}</button>`;
-  }
-
-  private matchingHistoryBranches(
-    branch: BranchSummary,
-    snapshot: RepositorySnapshot,
-  ): BranchSummary[] {
-    const selectedRootIds = effectiveHistoryRootIds(
-      snapshot.repositoryRoots.map((root) => root.id),
-      this.state.historyRepositoryIds,
-    );
-    return matchingLogicalBranches(snapshot.branches, branch, selectedRootIds);
+    return {
+      snapshot,
+      files: this.filesState.files,
+      filesLoading: this.filesState.loading,
+      filesError: this.filesState.error,
+      filesTruncated: this.filesState.truncated,
+      presentation: this.historyListPresentation(),
+      query: this.state.historyQuery,
+      caseSensitive: this.state.historyCaseSensitive,
+      regularExpression: this.state.historyRegularExpression,
+      refs: this.state.historyRefs,
+      authorEmails: this.state.historyAuthorEmails,
+      currentAuthor: this.state.historyCurrentAuthor,
+      datePreset: this.state.historyDatePreset,
+      paths: this.state.historyPaths,
+      repositoryIds: this.state.historyRepositoryIds,
+      recentPaths: this.state.historyRecentPaths,
+      order: this.state.historyOrder,
+      firstParent: this.state.historyFirstParent,
+      excludeMerges: this.state.historyExcludeMerges,
+      collapseLinear: this.state.historyCollapseLinear,
+      filterMenu: this.state.historyFilterMenu,
+      branchSubmenu: this.state.historyBranchSubmenu,
+      favoriteRefs: this.state.historyFavoriteRefs,
+      recentRefs: this.state.historyRecentRefs,
+    };
   }
 
   private allMatchingHistoryBranches(
     branch: BranchSummary,
     snapshot: RepositorySnapshot,
   ): BranchSummary[] {
-    return matchingLogicalBranches(
-      snapshot.branches,
-      branch,
-      new Set(snapshot.repositoryRoots.map((root) => root.id)),
-    );
+    return matchingBranches(branch, this.branchNavigationViewModel(snapshot), true);
   }
 
   private setLogicalBranchScope(
@@ -3753,73 +3628,6 @@ export class AsterlynApp {
     this.state.selectedBranch = branches.length === 1 ? branchKey(branches[0]!) : null;
     this.state.gitDetail = branches.length === 1 ? "branch" : "commit";
     for (const reference of references) this.recordRecentHistoryRef(reference);
-  }
-
-  private renderHistoryUserMenu(snapshot: RepositorySnapshot): string {
-    const choices = historyAuthorChoices(snapshot.commits);
-    const allSelected = !this.state.historyCurrentAuthor && this.state.historyAuthorEmails.size === 0;
-    return `<button class="history-menu-option" type="button" data-history-clear-users aria-pressed="${allSelected}"><span>All users</span>${allSelected ? icon("check", 13) : ""}</button><div class="history-menu-heading">Identity</div><button class="history-menu-option" type="button" data-history-me aria-pressed="${this.state.historyCurrentAuthor}"><span>me</span>${this.state.historyCurrentAuthor ? icon("check", 13) : ""}</button><div class="history-menu-heading">Loaded authors</div>${choices
-      .map((choice) => {
-        const selected = this.state.historyAuthorEmails.has(choice.email);
-        return `<button class="history-menu-option two-line" type="button" data-history-author="${escapeAttribute(choice.email)}" aria-pressed="${selected}"><span><strong>${escapeHtml(choice.name)}</strong><small>${escapeHtml(choice.email)}</small></span><em>${choice.count}</em>${selected ? icon("check", 13) : ""}</button>`;
-      })
-      .join("")}`;
-  }
-
-  private renderHistoryDateMenu(): string {
-    const options: Array<[HistoryDatePreset, string]> = [
-      ["all", "All dates"],
-      ["day", "Last 24 hours"],
-      ["week", "Last 7 days"],
-    ];
-    return options
-      .map(([preset, label]) => {
-        const selected = this.state.historyDatePreset === preset;
-        return `<button class="history-menu-option" type="button" data-history-date="${preset}" aria-pressed="${selected}"><span>${label}</span>${selected ? icon("check", 13) : ""}</button>`;
-      })
-      .join("");
-  }
-
-  private renderHistoryPathMenu(): string {
-    const snapshot = this.state.snapshot!;
-    const roots = snapshot.repositoryRoots;
-    const selectedRoots = effectiveHistoryRootIds(
-      roots.map((root) => root.id),
-      this.state.historyRepositoryIds,
-    );
-    const recent = this.state.historyRecentPaths.flatMap((path) => {
-      const candidate = historyPathCandidates(this.filesState.files).find(
-        (item) => historyPathKey(item) === historyPathKey(path),
-      );
-      return candidate ? [candidate] : [];
-    });
-    return `
-      <button class="history-menu-option" type="button" data-history-open-dialog="paths-text"><span>Select…</span></button>
-      <button class="history-menu-option" type="button" data-history-open-dialog="paths-tree"><span>Select in Tree…</span></button>
-      ${roots.length > 1 ? `<div class="history-menu-heading">Roots</div>${roots.map((root) => this.renderHistoryRootOption(root, selectedRoots)).join("")}` : ""}
-      ${recent.length > 0 ? `<div class="history-menu-heading">Recent</div>${recent.map((path) => this.renderHistoryQuickPath(path)).join("")}` : ""}
-      ${this.filesState.loading ? '<div class="history-menu-note">Loading tracked paths…</div>' : ""}
-      ${this.filesState.error ? '<div class="history-menu-note warning">Tracked paths could not be loaded.</div>' : ""}
-      ${this.filesState.truncated ? '<div class="history-menu-note">Tree selection uses the bounded project file set.</div>' : ""}`;
-  }
-
-  private renderHistoryRootOption(
-    root: GitRootDescriptor,
-    selectedRoots: ReadonlySet<string>,
-  ): string {
-    const selected = selectedRoots.has(root.id);
-    const lastSelected = selected && selectedRoots.size === 1;
-    return `<label class="history-menu-option history-root-option two-line" title="${lastSelected ? "At least one module must remain selected" : `Include ${escapeAttribute(root.displayName)} history`}"><input type="checkbox" data-history-root="${escapeAttribute(root.id)}" ${selected ? "checked" : ""} ${lastSelected ? "disabled" : ""} /><span><strong>${icon("folder", 13)}${escapeHtml(root.displayName)}</strong><small>${escapeHtml(root.relativePath)}</small></span></label>`;
-  }
-
-  private renderHistoryQuickPath(path: HistoryPath): string {
-    const label = historyPathWorkspaceLabel(path, this.filesState.files);
-    const selected = this.state.historyPaths.has(historyPathKey(path));
-    return `<button class="history-menu-option" type="button" data-history-quick-path="${escapeAttribute(historyPathKey(path))}" aria-pressed="${selected}" title="${escapeAttribute(label)}"><span>${icon("file", 13)}${escapeHtml(label)}</span>${selected ? icon("check", 13) : ""}</button>`;
-  }
-
-  private renderHistoryGraphMenu(): string {
-    return `<div class="history-menu-heading">Sort</div><button class="history-menu-option" type="button" data-history-order="date" aria-pressed="${this.state.historyOrder === "date"}"><span>By commit date</span>${this.state.historyOrder === "date" ? icon("check", 13) : ""}</button><button class="history-menu-option" type="button" data-history-order="topological" aria-pressed="${this.state.historyOrder === "topological"}"><span>Topologically</span>${this.state.historyOrder === "topological" ? icon("check", 13) : ""}</button><div class="history-menu-heading">Options</div><button class="history-menu-option" type="button" data-history-graph-option="first-parent" aria-pressed="${this.state.historyFirstParent}"><span>First Parent</span>${this.state.historyFirstParent ? icon("check", 13) : ""}</button><button class="history-menu-option" type="button" data-history-graph-option="no-merges" aria-pressed="${this.state.historyExcludeMerges}"><span>No Merges</span>${this.state.historyExcludeMerges ? icon("check", 13) : ""}</button><div class="history-menu-heading">Branch actions</div><button class="history-menu-option" type="button" data-history-collapse-linear aria-pressed="${this.state.historyCollapseLinear}"><span>${this.state.historyCollapseLinear ? "Expand Linear Branches" : "Collapse Linear Branches"}</span>${this.state.historyCollapseLinear ? icon("check", 13) : ""}</button>`;
   }
 
   private openHistoryDialog(kind: NonNullable<AppState["historyDialog"]>): void {
@@ -3858,89 +3666,19 @@ export class AsterlynApp {
       return;
     }
     host.classList.remove("hidden");
-    host.innerHTML =
-      kind === "branches"
-        ? this.renderHistoryBranchDialog()
-        : kind === "paths-text"
-          ? this.renderHistoryPathTextDialog()
-          : this.renderHistoryPathTreeDialog();
-    this.bindHistoryDialogEvents();
-  }
-
-  private renderHistoryBranchDialog(): string {
-    const snapshot = this.state.snapshot!;
-    const query = this.state.historyDialogQuery.trim().toLocaleLowerCase();
-    const branches = snapshot.branches.filter((branch) => {
-      const root = snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
-      return !query || [branch.name, branch.fullName, branch.subject, root?.displayName ?? ""]
-        .some((value) => value.toLocaleLowerCase().includes(query));
+    host.innerHTML = renderHistoryDialogView({
+      kind,
+      snapshot: this.state.snapshot!,
+      files: this.filesState.files,
+      query: this.state.historyDialogQuery,
+      error: this.state.historyDialogError,
+      refDraft: this.state.historyRefDraft,
+      favoriteRefs: this.state.historyFavoriteRefs,
+      pathDraft: this.state.historyPathDraft,
+      pathText: this.state.historyPathText,
+      collapsedTreePaths: this.state.historyTreeCollapsed,
     });
-    const groups = snapshot.repositoryRoots.map((root) => ({
-      root,
-      branches: branches.filter((branch) => branch.repositoryId === root.id),
-    })).filter(({ branches: items }) => items.length > 0);
-    const rows = groups.length === 0
-      ? '<div class="history-dialog-empty">No matching branches or tags.</div>'
-      : groups.map(({ root, branches: items }) => `<section class="history-dialog-group"><h3>${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${items.map((branch) => this.renderHistoryDialogRef(branch)).join("")}</section>`).join("");
-    return `<section class="dialog history-selection-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">
-      ${this.historyDialogHeading("Select Branches or Tags")}
-      <label class="history-dialog-search" for="history-dialog-search">${icon("search", 14)}<input id="history-dialog-search" type="search" value="${escapeAttribute(this.state.historyDialogQuery)}" placeholder="Branch or tag" autocomplete="off" spellcheck="false" /></label>
-      <div class="history-dialog-list" role="group" aria-label="Available branches and tags">${rows}</div>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-clear>Clear</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-history-dialog-cancel>Cancel</button><button class="primary-button" type="button" data-history-dialog-apply>Apply ${this.state.historyRefDraft.size || "all"}</button></div>
-    </section>`;
-  }
-
-  private renderHistoryDialogRef(branch: BranchSummary): string {
-    const key = branchKey(branch);
-    const selected = this.state.historyRefDraft.has(key);
-    const favorite = this.state.historyFavoriteRefs.has(key);
-    const glyph = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
-    return `<div class="history-dialog-ref"><label><input type="checkbox" data-history-dialog-ref="${escapeAttribute(key)}" ${selected ? "checked" : ""} /><span>${icon(glyph, 13)}<strong>${escapeHtml(branch.name)}</strong><small>${escapeHtml(branch.subject)}</small></span></label><button class="history-favorite-button ${favorite ? "active" : ""}" type="button" data-history-dialog-favorite="${escapeAttribute(key)}" aria-pressed="${favorite}" aria-label="${favorite ? "Remove from" : "Add to"} favorites">${icon("star", 13)}</button></div>`;
-  }
-
-  private renderHistoryPathTextDialog(): string {
-    return `<section class="dialog history-selection-dialog history-path-text-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">
-      ${this.historyDialogHeading("Select Paths to Filter by")}
-      <textarea id="history-path-text" spellcheck="false" autocomplete="off" aria-describedby="history-path-text-help">${escapeHtml(this.state.historyPathText)}</textarea>
-      ${this.state.historyDialogError ? `<div class="history-dialog-error" role="alert">${escapeHtml(this.state.historyDialogError)}</div>` : ""}
-      <p id="history-path-text-help">Enter one or more exact tracked files or directories on separate lines. Ctrl/Cmd+Enter applies the selection.</p>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-cancel>Cancel</button><button class="primary-button" type="button" data-history-dialog-apply>Apply</button></div>
-    </section>`;
-  }
-
-  private renderHistoryPathTreeDialog(): string {
-    const snapshot = this.state.snapshot!;
-    const roots = snapshot.repositoryRoots.map((root) => {
-      const files = this.filesState.files.filter((file) => file.repositoryId === root.id);
-      const tree = buildProjectTree(files.map((file) => file.path));
-      return `<section class="history-path-tree-root"><h3>${icon("folder", 14)}${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${tree.length > 0 ? tree.map((node) => this.renderHistoryPathTreeNode(node, root.id, 0)).join("") : '<div class="history-dialog-empty">No tracked paths.</div>'}</section>`;
-    }).join("");
-    return `<section class="dialog history-selection-dialog history-path-tree-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">
-      ${this.historyDialogHeading("Select Paths to Filter by")}
-      <div class="history-path-tree" role="tree" aria-label="Tracked repository paths">${roots}</div>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-clear>Clear</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-history-dialog-cancel>Cancel</button><button class="primary-button" type="button" data-history-dialog-apply>Apply ${this.state.historyPathDraft.size}</button></div>
-    </section>`;
-  }
-
-  private renderHistoryPathTreeNode(
-    node: ProjectTreeNode,
-    repositoryId: string,
-    depth: number,
-  ): string {
-    const key = historyPathKey({ repositoryId, path: node.path });
-    const selected = this.state.historyPathDraft.has(key);
-    if (node.kind === "file") {
-      return `<label class="history-path-tree-row file" role="treeitem" style="--tree-depth:${depth}"><span class="tree-chevron"></span><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" ${selected ? "checked" : ""} />${icon("file", 13)}<span>${escapeHtml(node.name)}</span></label>`;
-    }
-    const collapsed = this.state.historyTreeCollapsed.has(key);
-    return `<div class="history-path-tree-node" role="treeitem" aria-expanded="${!collapsed}">
-      <div class="history-path-tree-row directory" style="--tree-depth:${depth}"><button type="button" data-history-tree-toggle="${escapeAttribute(key)}" aria-label="${collapsed ? "Expand" : "Collapse"} ${escapeAttribute(node.path)}">${icon("chevron", 11)}</button><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" ${selected ? "checked" : ""} />${icon("folder", 13)}<span>${escapeHtml(node.name)}</span></div>
-      <div role="group" ${collapsed ? "hidden" : ""}>${node.children.map((child) => this.renderHistoryPathTreeNode(child, repositoryId, depth + 1)).join("")}</div>
-    </div>`;
-  }
-
-  private historyDialogHeading(title: string): string {
-    return `<div class="dialog-heading"><h2 id="history-dialog-title">${escapeHtml(title)}</h2><button class="icon-button" type="button" data-history-dialog-cancel aria-label="Close">${icon("close", 16)}</button></div>`;
+    this.bindHistoryDialogEvents();
   }
 
   private historyListPresentation(): HistoryListPresentation {
@@ -3985,93 +3723,6 @@ export class AsterlynApp {
     );
   }
 
-  private historyScope(): {
-    icon: "head" | "branch" | "tag";
-    label: string;
-    title: string;
-  } {
-    let refs = Array.from(this.state.historyRefs.values());
-    if (refs.length === 0) {
-      return {
-        icon: "branch",
-        label: "All refs",
-        title: "History from local branches, remote-tracking branches, and tags",
-      };
-    }
-    const snapshot = this.state.snapshot;
-    if (snapshot) {
-      const selectedRootIds = effectiveHistoryRootIds(
-        snapshot.repositoryRoots.map((root) => root.id),
-        this.state.historyRepositoryIds,
-      );
-      const activeRefs = refs.filter((reference) =>
-        selectedRootIds.has(reference.repositoryId),
-      );
-      if (activeRefs.length > 0) refs = activeRefs;
-    }
-    const fullNames = new Set(refs.map((reference) => reference.fullName));
-    if (fullNames.size === 1) {
-      const reference = refs[0]!;
-      const branch = this.state.snapshot?.branches.find(
-        (candidate) => branchKey(candidate) === historyRefKey(reference),
-      );
-      return {
-        icon: branch?.kind === "tag" ? "tag" : "branch",
-        label: branch?.name ?? reference.fullName,
-        title: refs.length === 1
-          ? `${reference.fullName} — ${reference.repositoryId}`
-          : `${reference.fullName} — ${refs.length} Git roots`,
-      };
-    }
-    if (refs.length > 1) {
-      return {
-        icon: "branch",
-        label: `Branch ${refs.length}`,
-        title: refs
-          .map((reference) => `${reference.fullName} — ${reference.repositoryId}`)
-          .join(", "),
-      };
-    }
-    const reference = refs[0]!;
-    const branch = this.state.snapshot?.branches.find(
-      (candidate) => branchKey(candidate) === historyRefKey(reference),
-    );
-    return {
-      icon: branch?.kind === "tag" ? "tag" : "branch",
-      label: branch?.name ?? reference.fullName,
-      title: `${reference.fullName} — ${reference.repositoryId}`,
-    };
-  }
-
-  private historyPathLabel(): string {
-    const pathCount = this.state.historyPaths.size;
-    const rootCount = this.state.historyRepositoryIds.size;
-    if (pathCount > 1) return `Paths ${pathCount}`;
-    if (pathCount === 1) {
-      const path = Array.from(this.state.historyPaths.values())[0]!;
-      return basename(historyPathWorkspaceLabel(path, this.filesState.files));
-    }
-    return rootCount > 0 ? `Roots ${rootCount}` : "Paths";
-  }
-
-  private historyUserLabel(): string {
-    const count = this.state.historyAuthorEmails.size + (this.state.historyCurrentAuthor ? 1 : 0);
-    return count === 0 ? "User" : count === 1 && this.state.historyCurrentAuthor ? "me" : `User ${count}`;
-  }
-
-  private historyDateLabel(): string {
-    return this.state.historyDatePreset === "day"
-      ? "24 hours"
-      : this.state.historyDatePreset === "week"
-        ? "7 days"
-        : "Date";
-  }
-
-  private commitReferenceBadge(reference: CommitReference): string {
-    const iconName = reference.kind === "head" ? "head" : reference.kind === "tag" || reference.kind === "other" ? "tag" : "branch";
-    return `<span class="commit-reference ${reference.kind}" title="${escapeAttribute(capitalize(reference.kind))}: ${escapeAttribute(reference.label)}">${icon(iconName, 12)}<span>${escapeHtml(reference.label)}</span></span>`;
-  }
-
   private filteredHistory(): ReturnType<typeof filterHistoryText> {
     return filterHistoryText(this.historyState.history.commits, this.state.historyQuery, {
       caseSensitive: this.state.historyCaseSensitive,
@@ -4084,119 +3735,29 @@ export class AsterlynApp {
   }
 
   private renderBranchNavigation(snapshot: RepositorySnapshot): string {
-    if (snapshot.branches.length === 0) {
-      return this.emptyState("No refs", "Branches and tags will appear here.", "branch", true);
-    }
-    return `
-      <div class="branch-navigation">
-        <label class="branch-filter" for="branch-filter">
-          ${icon("search", 14)}
-          <input id="branch-filter" type="search" value="${escapeAttribute(this.state.branchQuery)}" placeholder="Branch or tag" autocomplete="off" spellcheck="false" aria-label="Filter branches and tags" />
-          <span class="compact-count" id="branch-count">0</span>
-        </label>
-        <div class="branch-results" id="branch-results">${this.renderBranchGroups(snapshot)}</div>
-      </div>`;
+    return renderBranchNavigationView(this.branchNavigationViewModel(snapshot));
   }
 
   private renderBranchGroups(snapshot: RepositorySnapshot): string {
-    const visible = this.filteredBranches(snapshot);
-    if (visible.length === 0) {
-      return `<div class="branch-no-results"><strong>No matching refs</strong><span>Try another branch, remote, or tag name.</span></div>`;
-    }
-    const groups: Array<[string, BranchSummary["kind"]]> = [
-      ["Local", "local"],
-      ["Remote", "remote"],
-      ["Tags", "tag"],
-    ];
-    return groups
-      .map(([label, kind]) => {
-        const branches = visible.filter((branch) => branch.kind === kind);
-        if (branches.length === 0) return "";
-        const collapsed = this.state.collapsedBranchGroups.has(kind);
-        const groupId = `branch-group-${kind}`;
-        return `<section class="branch-group">
-          <button class="group-header branch-group-toggle" type="button" data-branch-group-toggle="${kind}" aria-expanded="${!collapsed}" aria-controls="${groupId}">
-            <span><span class="branch-group-chevron">${icon("chevron", 12)}</span>${label}<b>${branches.length}</b></span>
-          </button>
-          <div id="${groupId}" role="group" ${collapsed ? "hidden" : ""}>${kind === "remote" ? this.renderRemoteBranches(branches, snapshot) : branches.map((branch) => this.branchRow(branch, snapshot)).join("")}</div>
-        </section>`;
-      })
-      .join("");
-  }
-
-  private activeBranches(snapshot: RepositorySnapshot): BranchSummary[] {
-    const selectedRootIds = effectiveHistoryRootIds(
-      snapshot.repositoryRoots.map((root) => root.id),
-      this.state.historyRepositoryIds,
-    );
-    return snapshot.branches.filter((branch) => selectedRootIds.has(branch.repositoryId));
+    return renderBranchGroupsView(this.branchNavigationViewModel(snapshot));
   }
 
   private logicalBranches(snapshot: RepositorySnapshot): BranchSummary[] {
-    return uniqueLogicalBranches(this.activeBranches(snapshot));
+    return logicalBranchesForView(this.branchNavigationViewModel(snapshot));
   }
 
   private filteredBranches(snapshot: RepositorySnapshot): BranchSummary[] {
-    const query = this.state.branchQuery.trim().toLocaleLowerCase();
-    if (!query) return this.logicalBranches(snapshot);
-    return uniqueLogicalBranches(
-      this.activeBranches(snapshot).filter((branch) =>
-        [branch.name, branch.fullName, branch.subject].some((value) =>
-          value.toLocaleLowerCase().includes(query),
-        ),
-      ),
-    );
+    return filteredBranchesForView(this.branchNavigationViewModel(snapshot));
   }
 
-  private renderRemoteBranches(
-    branches: BranchSummary[],
-    snapshot: RepositorySnapshot,
-  ): string {
-    return groupRemoteBranches(branches)
-      .map(
-        (group) => `
-          <section class="remote-ref-group">
-            <div class="remote-root-row">${icon("chevron", 11)}${icon("folder", 14)}<span>${escapeHtml(group.name)}</span><small>${group.branches.length}</small></div>
-            <div role="group">${group.branches.map(({ branch, displayName }) => this.branchRow(branch, snapshot, displayName, true)).join("")}</div>
-          </section>`,
-      )
-      .join("");
-  }
-
-  private branchRow(
-    branch: BranchSummary,
-    snapshot: RepositorySnapshot,
-    displayName = branch.name,
-    nested = false,
-  ): string {
-    const key = branchKey(branch);
-    const activeMatches = this.matchingHistoryBranches(branch, snapshot);
-    const allMatches = this.allMatchingHistoryBranches(branch, snapshot);
-    const selected = activeMatches.length > 0 && activeMatches.every((candidate) =>
-      this.state.historyRefs.has(branchKey(candidate)),
-    );
-    const exclusive =
-      allMatches.length === this.state.historyRefs.size &&
-      allMatches.every((candidate) => this.state.historyRefs.has(branchKey(candidate)));
-    const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
-    const title = exclusive
-      ? `${branch.name} — ${branch.subject} — Activate again to show all refs`
-      : `${branch.name} — ${branch.subject}`;
-    const root = snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
-    const meta = [
-      branch.current ? "HEAD" : "",
-      activeMatches.length > 1
-        ? `${activeMatches.length} roots`
-        : snapshot.repositoryRoots.length > 1
-          ? (root?.displayName ?? branch.repositoryId)
-          : "",
-    ].filter(Boolean);
-    return `
-      <button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" data-branch-key="${escapeAttribute(key)}" aria-pressed="${selected}" title="${escapeAttribute(title)}">
-        <span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span>
-        <span class="branch-name">${escapeHtml(displayName)}</span>
-        ${meta.length > 0 ? `<span class="branch-row-meta">${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span>` : ""}
-      </button>`;
+  private branchNavigationViewModel(snapshot: RepositorySnapshot): BranchNavigationViewModel {
+    return {
+      snapshot,
+      query: this.state.branchQuery,
+      selectedRepositoryIds: this.state.historyRepositoryIds,
+      selectedRefs: this.state.historyRefs,
+      collapsedGroups: this.state.collapsedBranchGroups,
+    };
   }
 
   private bindChangeEvents(): void {
@@ -4739,7 +4300,7 @@ export class AsterlynApp {
         : this.historyState.history.status === "error"
           ? "!"
           : filteredCount.toString();
-    count.title = `${filteredCount} of ${this.historyState.history.commits.length} commits in ${this.historyScope().label}`;
+    count.title = `${filteredCount} of ${this.historyState.history.commits.length} commits in ${historyScope(this.historyNavigationViewModel()).label}`;
     const refresh = this.root.querySelector<HTMLElement>("#history-refresh-status");
     if (refresh) refresh.textContent = this.historyState.refreshing ? "Refreshing…" : "";
   }
@@ -6125,35 +5686,6 @@ export class AsterlynApp {
     }
   }
 
-  private renderCommitFileTreeNode(node: CommitFileTreeNode, depth: number): string {
-    if (node.kind === "directory") {
-      const expanded = !this.state.collapsedCommitFileDirectories.has(node.path);
-      return `<details class="commit-file-directory" data-commit-file-directory="${escapeAttribute(node.path)}" data-commit-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countCommitTreeFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => this.renderCommitFileTreeNode(child, depth + 1)).join("") : ""}</div></details>`;
-    }
-    return this.commitFileRow(node.file!, node.file!.path === this.historyState.selectedFile, depth);
-  }
-
-  private commitFileRow(
-    file: CommitFileChange,
-    selected: boolean,
-    depth: number | null = null,
-  ): string {
-    const previous = file.originalPath
-      ? `<span class="commit-file-origin">${escapeHtml(file.originalPath)} →</span>`
-      : "";
-    const tree = depth !== null;
-    return `
-      <button class="commit-file-row file-status-${file.status} ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" ${tree ? `style="--tree-depth:${depth}"` : ""} data-commit-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}">
-        <span class="change-status status-${file.status}" title="${escapeAttribute(changeLabel(file.status))}">${changeCode(file.status)}</span>
-        <span class="commit-file-glyph">${fileTypeIcon(file.path)}</span>
-        <span class="change-path">
-          ${previous}
-          <span class="file-name">${escapeHtml(basename(file.path))}</span>
-          ${tree ? "" : `<span class="file-directory">${escapeHtml(dirname(file.path))}</span>`}
-        </span>
-      </button>`;
-  }
-
   private bindCommitFileEvents(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-commit-file]").forEach((row) => {
       row.addEventListener("click", () => {
@@ -6545,67 +6077,35 @@ export class AsterlynApp {
     if (this.state.gitDetail === "branch") {
       const branch = selectedBranch(snapshot, this.state.selectedBranch);
       return branch
-        ? this.branchInspector(branch, snapshot)
-        : this.inspectorPlaceholder();
+        ? renderBranchDetail({
+            snapshot,
+            branch,
+            safety: this.branchSafety(snapshot),
+            loading: this.state.loading,
+            newBranchName: this.state.newBranchName,
+          })
+        : inspectorPlaceholder();
     }
-    const commit = selectedCommit(this.historyState.history.commits, this.historyState.selectedCommit);
-    if (!commit) return this.inspectorPlaceholder();
+    const commit = selectedCommit(
+      this.historyState.history.commits,
+      this.historyState.selectedCommit,
+    );
+    if (!commit) return inspectorPlaceholder();
     const details =
       this.historyState.details?.oid === commit.oid &&
       this.historyState.details.repositoryId === commit.repositoryId
         ? this.historyState.details
         : null;
-    const fileCount = this.historyState.detailsLoading
-      ? "…"
-      : this.historyState.detailsError
-        ? "!"
-        : (details?.files.length.toString() ?? "…");
-    const fileRows = this.historyState.detailsLoading
-      ? this.loadingBlock("Loading changed files…")
-      : this.historyState.detailsError
-        ? this.retryState(
-            "Could not load commit",
-            this.historyState.detailsError,
-            "retry-commit-details",
-            "history",
-          )
-        : details
-          ? details.files.length
-            ? this.state.commitFileView === "tree"
-              ? `<div class="commit-file-tree" role="tree" aria-label="Changed files by directory">
-                  <details class="commit-file-directory commit-file-root" data-commit-file-directory="." data-commit-file-rendered-expanded="${!this.state.collapsedCommitFileDirectories.has(".")}" ${this.state.collapsedCommitFileDirectories.has(".") ? "" : "open"}>
-                    <summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(snapshot.repositoryRoots.find((root) => root.id === commit.repositoryId)?.displayName ?? basename(snapshot.root))}</span><small>${details.files.length} ${details.files.length === 1 ? "file" : "files"}</small></summary>
-                    <div role="group">${this.state.collapsedCommitFileDirectories.has(".") ? "" : buildCommitFileTree(details.files).map((node) => this.renderCommitFileTreeNode(node, 1)).join("")}</div>
-                  </details>
-                </div>`
-              : `<div class="commit-file-flat-list" role="listbox" aria-label="Changed files as a flat list">${[...details.files]
-                  .sort((left, right) => left.path.localeCompare(right.path))
-                  .map((file) =>
-                    this.commitFileRow(
-                      file,
-                      file.path === this.historyState.selectedFile,
-                    ),
-                  )
-                  .join("")}</div>`
-            : '<div class="group-empty">No first-parent changes</div>'
-          : this.loadingBlock("Loading changed files…");
-    const nextView = this.state.commitFileView === "tree" ? "flat list" : "directory tree";
-    return `
-      <div class="commit-detail-layout">
-        <section class="git-detail-files" aria-label="Changed files">
-          <div class="commit-files-toolbar">
-            <span class="commit-files-label">${icon("folder", 13)}<span>Files</span><b>${fileCount}</b></span>
-            <button class="compact-icon-button" id="commit-file-view-toggle" type="button" aria-label="Show changed files as a ${nextView}" aria-pressed="${this.state.commitFileView === "tree"}" title="Show as ${nextView}">
-              ${icon("eye", 14)}
-            </button>
-            <button class="compact-icon-button" id="commit-file-expand-all" type="button" aria-label="Expand all changed-file folders" title="Expand all folders" ${this.state.commitFileView === "flat" || !details?.files.length ? "disabled" : ""}>${icon("expand", 14)}</button>
-            <button class="compact-icon-button" id="commit-file-collapse-all" type="button" aria-label="Collapse all changed-file folders" title="Collapse all folders" ${this.state.commitFileView === "flat" || !details?.files.length ? "disabled" : ""}>${icon("collapse", 14)}</button>
-          </div>
-          <div class="commit-file-list ${this.state.commitFileView}">${fileRows}</div>
-        </section>
-        <div class="workbench-splitter horizontal commit-summary-splitter" id="commit-summary-splitter" aria-label="Resize commit message and details"></div>
-        ${this.commitInspector(commit)}
-      </div>`;
+    return renderCommitDetail({
+      snapshot,
+      commit,
+      details,
+      loading: this.historyState.detailsLoading,
+      error: this.historyState.detailsError,
+      selectedFile: this.historyState.selectedFile,
+      fileView: this.state.commitFileView,
+      collapsedDirectories: this.state.collapsedCommitFileDirectories,
+    });
   }
 
   private bindGitDetailEvents(snapshot: RepositorySnapshot): void {
@@ -7071,91 +6571,6 @@ export class AsterlynApp {
     this.query("#repository-dialog").classList.add("hidden");
   }
 
-  private commitInspector(commit: CommitSummary): string {
-    const details =
-      this.historyState.details?.oid === commit.oid &&
-      this.historyState.details.repositoryId === commit.repositoryId
-        ? this.historyState.details
-        : null;
-    const comparison = details
-      ? details.parentOid?.slice(0, 10) ?? "Empty tree"
-      : commit.parents[0]?.slice(0, 10) ?? "Empty tree";
-    const references = commitReferences(
-      commit.decorations,
-      (this.state.snapshot?.branches ?? []).filter(
-        (branch) => branch.repositoryId === commit.repositoryId,
-      ),
-    );
-    const referenceRows = references
-      .map((reference) => this.commitReferenceBadge(reference))
-      .join("");
-    const referenceSummary = references
-      .slice(0, 3)
-      .map((reference) => reference.label)
-      .join(", ");
-    return `
-      <section class="commit-information" aria-label="Commit message and details">
-        <h2>${escapeHtml(commit.subject)}</h2>
-        <p class="commit-authorship">
-          <code title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.shortOid)}</code>
-          <span>${escapeHtml(commit.authorName)}</span>
-          <span class="commit-email">&lt;${escapeHtml(commit.authorEmail)}&gt;</span>
-          <span>on</span>
-          <time datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time>
-        </p>
-        ${(this.state.snapshot?.repositoryRoots.length ?? 0) > 1 ? `<span class="commit-comparison">Git root: ${escapeHtml(this.state.snapshot?.repositoryRoots.find((root) => root.id === commit.repositoryId)?.relativePath ?? commit.repositoryId)}</span>` : ""}
-        ${references.length === 0 ? '<span class="commit-no-references">No named refs point to this commit</span>' : references.length <= 3 ? `<div class="commit-reference-list">${referenceRows}</div>` : `<details class="commit-reference-overflow"><summary><span>In ${references.length} refs: ${escapeHtml(referenceSummary)}…</span><b>Show all</b></summary><div class="commit-reference-list">${referenceRows}</div></details>`}
-        <span class="commit-comparison" title="First-parent comparison">Compared with ${escapeHtml(comparison)}</span>
-      </section>`;
-  }
-
-  private branchInspector(
-    branch: BranchSummary,
-    snapshot: RepositorySnapshot,
-  ): string {
-    const safety = this.branchSafety(snapshot);
-    const mainRoot = branch.repositoryId === ".";
-    const localTarget = branch.kind === "local" && mainRoot;
-    const canCheckout =
-      localTarget && !branch.current && safety.ready && !this.state.loading;
-    const checkoutLabel = branch.current
-      ? "Current branch"
-      : localTarget
-        ? safety.ready
-          ? `Checkout ${branch.name}`
-          : "Checkout blocked"
-        : mainRoot ? "Local branches only" : "Submodule history only";
-    const blockers = safety.blockers.length
-      ? `<ul class="branch-blockers">${safety.blockers
-          .slice(0, 5)
-          .map((path) => `<li>${escapeHtml(path)}</li>`)
-          .join("")}</ul>${safety.blockers.length > 5 ? `<small>and ${safety.blockers.length - 5} more</small>` : ""}`
-      : "";
-    return `
-      <div class="inspector-header"><span class="panel-eyebrow">${escapeHtml(branch.kind)}</span><h2>${escapeHtml(branch.name)}</h2></div>
-      <dl class="metadata-list">
-        <div><dt>State</dt><dd>${branch.current ? "Checked out" : "Available"}</dd></div>
-        <div><dt>Upstream</dt><dd>${escapeHtml(branch.upstream ?? "None")}</dd></div>
-        <div><dt>Tracking</dt><dd>${escapeHtml(branch.tracking ?? "No divergence")}</dd></div>
-        <div><dt>Updated</dt><dd>${formatRelative(branch.committedAt)}</dd></div>
-      </dl>
-      <section class="branch-action-card ${safety.ready ? "ready" : "blocked"}">
-        <div class="branch-action-heading"><span>${icon("branch", 15)}</span><strong>Checkout</strong></div>
-        <p>${localTarget ? escapeHtml(safety.message) : mainRoot ? "Select a local branch to check it out. Remote and tag checkout remain deferred." : "This initialized submodule is available for history inspection only; branch mutations remain scoped to the main repository."}</p>
-        ${localTarget ? blockers : ""}
-        <button class="primary-button" id="checkout-branch" type="button" ${canCheckout ? "" : "disabled"}>${escapeHtml(checkoutLabel)}</button>
-      </section>
-      ${mainRoot ? `<section class="branch-action-card create-branch-card ${safety.ready ? "ready" : "blocked"}">
-        <div class="branch-action-heading"><span>${icon("plus", 15)}</span><strong>New local branch</strong></div>
-        <p>Create from the current <code>HEAD</code>. The same clean-worktree gate applies.</p>
-        <form id="create-branch-form">
-          <label for="new-branch-name">Branch name</label>
-          <input id="new-branch-name" type="text" value="${escapeAttribute(this.state.newBranchName)}" placeholder="feature/name" autocomplete="off" spellcheck="false" />
-          <button class="secondary-button" id="create-branch-button" type="submit" ${safety.ready && this.state.newBranchName.trim() && !this.state.loading ? "" : "disabled"}>Create and checkout</button>
-        </form>
-      </section>` : ""}`;
-  }
-
   private branchSafety(snapshot: RepositorySnapshot): {
     ready: boolean;
     message: string;
@@ -7218,10 +6633,6 @@ export class AsterlynApp {
     );
   }
 
-  private inspectorPlaceholder(): string {
-    return `<div class="inspector-header"><span class="panel-eyebrow">Details</span><h2>Nothing selected</h2></div><p class="muted-copy inspector-copy">Select an item to inspect its metadata and available actions.</p>`;
-  }
-
   private emptyState(
     title: string,
     detail: string,
@@ -7249,11 +6660,6 @@ export class AsterlynApp {
     if (!element) throw new Error(`Missing application element: ${selector}`);
     return element;
   }
-}
-
-function countCommitTreeFiles(node: CommitFileTreeNode): number {
-  if (node.kind === "file") return 1;
-  return node.children.reduce((total, child) => total + countCommitTreeFiles(child), 0);
 }
 
 function commitFileDirectoryPaths(nodes: readonly CommitFileTreeNode[]): string[] {
@@ -7324,40 +6730,6 @@ function historyReference(
   return { repositoryId: branch.repositoryId, fullName: branch.fullName };
 }
 
-function changeCode(kind: ChangeKind): string {
-  const codes: Record<ChangeKind, string> = {
-    unmodified: "·",
-    added: "A",
-    modified: "M",
-    deleted: "D",
-    renamed: "R",
-    copied: "C",
-    typeChanged: "T",
-    unmerged: "U",
-    untracked: "?",
-    ignored: "!",
-    unknown: "·",
-  };
-  return codes[kind];
-}
-
-function changeLabel(kind: ChangeKind): string {
-  const labels: Record<ChangeKind, string> = {
-    unmodified: "Unmodified",
-    added: "Added",
-    modified: "Modified",
-    deleted: "Deleted",
-    renamed: "Renamed",
-    copied: "Copied",
-    typeChanged: "Type changed",
-    unmerged: "Unmerged",
-    untracked: "Untracked",
-    ignored: "Ignored",
-    unknown: "Unknown",
-  };
-  return labels[kind];
-}
-
 function commandSurfaceTitle(mode: NavigationMode): string {
   const titles: Record<NavigationMode, string> = {
     files: "Search project files",
@@ -7417,26 +6789,6 @@ function dirname(path: string): string {
   const normalized = path.replaceAll("\\", "/");
   const offset = normalized.lastIndexOf("/");
   return offset < 0 ? "" : normalized.slice(0, offset);
-}
-
-function formatRelative(epochSeconds: number): string {
-  if (!epochSeconds) return "Unknown time";
-  const difference = epochSeconds * 1000 - Date.now();
-  const absolute = Math.abs(difference);
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  if (absolute < 60_000) return formatter.format(Math.round(difference / 1000), "second");
-  if (absolute < 3_600_000) return formatter.format(Math.round(difference / 60_000), "minute");
-  if (absolute < 86_400_000) return formatter.format(Math.round(difference / 3_600_000), "hour");
-  if (absolute < 2_592_000_000) return formatter.format(Math.round(difference / 86_400_000), "day");
-  return new Date(epochSeconds * 1000).toLocaleDateString();
-}
-
-function formatAbsolute(epochSeconds: number): string {
-  if (!epochSeconds) return "Unknown time";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(epochSeconds * 1000));
 }
 
 function formatBytes(bytes: number): string {

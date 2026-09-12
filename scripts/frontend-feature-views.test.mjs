@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { renderBranchNavigation } from "../src/features/git-history/branch-navigation-view.ts";
+import { renderCommitDetail } from "../src/features/git-history/git-detail-view.ts";
+import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
+import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
 import { createRemotePushState } from "../src/features/remote-push/remote-push-state.ts";
 import { renderRemoteDialogContent } from "../src/features/remote-push/remote-push-view.ts";
 import { renderSettingsNavigation, renderSettingsSection } from "../src/features/settings/settings-view.ts";
@@ -55,9 +59,123 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.match(push, /Force Push with Lease/);
 });
 
+test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
+  const snapshot = repositorySnapshot();
+  snapshot.branches = branchFixtures();
+  const html = renderBranchNavigation({
+    snapshot,
+    query: "",
+    selectedRepositoryIds: new Set(),
+    selectedRefs: new Map([[".:refs%2Fheads%2Fmain", { repositoryId: ".", fullName: "refs/heads/main" }]]),
+    collapsedGroups: new Set(),
+  });
+
+  assert.match(html, />Local</);
+  assert.match(html, />Remote</);
+  assert.match(html, /remote-ref-group/);
+  assert.match(html, /origin/);
+  assert.match(html, /branch-row[^>]*selected/);
+});
+
+test("history navigation owns filter menus and list host presentation", () => {
+  const snapshot = repositorySnapshot();
+  snapshot.branches = branchFixtures();
+  const html = renderHistoryNavigation({
+    snapshot,
+    files: [],
+    filesLoading: false,
+    filesError: null,
+    filesTruncated: false,
+    presentation: {
+      status: "ready",
+      error: null,
+      loadedCommits: [],
+      commits: [],
+      textError: null,
+      selectedCommit: null,
+      collapseLinear: false,
+      bridgeOmittedParents: false,
+      repositoryRoots: snapshot.repositoryRoots,
+      branches: snapshot.branches,
+      loadingMore: false,
+      pagingError: null,
+      hasMore: false,
+    },
+    query: "",
+    caseSensitive: false,
+    regularExpression: false,
+    refs: new Map(),
+    authorEmails: new Set(),
+    currentAuthor: false,
+    datePreset: "all",
+    paths: new Map(),
+    repositoryIds: new Set(),
+    recentPaths: [],
+    order: "topological",
+    firstParent: false,
+    excludeMerges: false,
+    collapseLinear: false,
+    filterMenu: "date",
+    branchSubmenu: null,
+    favoriteRefs: new Map(),
+    recentRefs: [],
+  });
+
+  assert.match(html, /history-filter-popover-date/);
+  assert.match(html, /Last 24 hours/);
+  assert.match(html, /No commits match these filters/);
+});
+
+test("history dialogs and commit details render without the application shell", () => {
+  const snapshot = repositorySnapshot();
+  snapshot.branches = branchFixtures();
+  const dialog = renderHistoryDialogView({
+    kind: "branches",
+    snapshot,
+    files: [],
+    query: "",
+    error: null,
+    refDraft: new Map(),
+    favoriteRefs: new Map(),
+    pathDraft: new Map(),
+    pathText: "",
+    collapsedTreePaths: new Set(),
+  });
+  const commit = commitFixture();
+  const detail = renderCommitDetail({
+    snapshot,
+    commit,
+    details: {
+      repositoryId: ".",
+      oid: commit.oid,
+      parentOid: "1111111111111111",
+      files: [{ path: "src/main.ts", originalPath: null, status: "modified" }],
+    },
+    loading: false,
+    error: null,
+    selectedFile: "src/main.ts",
+    fileView: "tree",
+    collapsedDirectories: new Set(),
+  });
+
+  assert.match(dialog, /Select Branches or Tags/);
+  assert.match(dialog, /data-history-dialog-ref/);
+  assert.match(detail, /src\/main\.ts|main\.ts/);
+  assert.match(detail, /Compared with 1111111111/);
+});
+
 function viewModel(state) {
   return {
-    snapshot: {
+    snapshot: repositorySnapshot(),
+    state,
+    workspaceRoot: "/workspace/repository",
+    preferences: DEFAULT_APP_PREFERENCES,
+    selectedProjectFileAvailable: false,
+  };
+}
+
+function repositorySnapshot() {
+  return {
       root: "/workspace/repository",
       gitDir: "/workspace/repository/.git",
       repositoryRoots: [{ id: ".", relativePath: ".", displayName: "repository", kind: "main" }],
@@ -78,11 +196,49 @@ function viewModel(state) {
       branches: [],
       remotes: [{ name: "origin", fetchSupported: true, pushSupported: true }],
       untrackedState: "complete",
+  };
+}
+
+function branchFixtures() {
+  return [
+    {
+      repositoryId: ".",
+      fullName: "refs/heads/main",
+      name: "main",
+      oid: "0123456789abcdef",
+      current: true,
+      kind: "local",
+      upstream: "origin/main",
+      tracking: "ahead 2, behind 1",
+      committedAt: 1_700_000_000,
+      subject: "Main subject",
     },
-    state,
-    workspaceRoot: "/workspace/repository",
-    preferences: DEFAULT_APP_PREFERENCES,
-    selectedProjectFileAvailable: false,
+    {
+      repositoryId: ".",
+      fullName: "refs/remotes/origin/main",
+      name: "origin/main",
+      oid: "fedcba9876543210",
+      current: false,
+      kind: "remote",
+      upstream: null,
+      tracking: null,
+      committedAt: 1_699_999_000,
+      subject: "Remote subject",
+    },
+  ];
+}
+
+function commitFixture() {
+  return {
+    repositoryId: ".",
+    oid: "2222222222222222",
+    shortOid: "2222222",
+    parents: ["1111111111111111"],
+    authorName: "Asterlyn",
+    authorEmail: "asterlyn@example.com",
+    authoredAt: 1_700_000_000,
+    decorations: ["HEAD -> main"],
+    subject: "Extract history views",
   };
 }
 

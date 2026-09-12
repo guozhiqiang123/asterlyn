@@ -102,7 +102,9 @@ capability-owned and shared layers whose largest file is 790 lines; browser chec
 workbench, editor, Diff, and Git surfaces. Remaining composition-root reduction and closing
 acceptance are still required. The ninth slice moves shell, Settings, Remote/Push, and pushed-Diff
 presentation into capability-owned views and gives the activity rail an explicit listener disposal
-lifecycle. Git History/branch and editor presentation remain before closing acceptance.
+lifecycle. The tenth slice moves branch navigation, History filters and dialogs, commit changed-file
+presentation, commit metadata, and branch inspection into Git History-owned views. Editor and
+workspace-search presentation remain before closing acceptance.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.
