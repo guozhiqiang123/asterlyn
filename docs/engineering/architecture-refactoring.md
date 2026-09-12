@@ -97,6 +97,9 @@ ownership, remaining composition-root reduction, and closing acceptance are stil
 seventh slice moves CodeMirror text/Diff engines and Markdown preview parsing/highlighting behind
 first-use dynamic imports, reducing the startup chunk from 768.53 kB to 410.51 kB and passing the
 below-500-kB gate. Stylesheet ownership, remaining composition-root reduction, and closing
+acceptance are still required. The eighth slice replaces the 6,338-line global stylesheet with
+capability-owned and shared layers whose largest file is 790 lines; browser checks preserve the
+workbench, editor, Diff, and Git surfaces. Remaining composition-root reduction and closing
 acceptance are still required.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature

@@ -1,0 +1,230 @@
+/* changes capability-owned presentation. */
+.milestone-pill,
+.demo-badge,
+.scope-pill,
+.current-pill,
+.conflict-pill {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 17px;
+  padding: 0 6px;
+  text-transform: uppercase;
+}
+
+.changes-tool-layout {
+  display: grid;
+  overflow: hidden;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(110px, 1fr) 5px var(--changes-commit-height);
+}
+
+.changes-tool-navigation {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.changes-commit-splitter {
+  width: 100%;
+}
+
+.change-group > summary,
+.change-directory > summary,
+.change-directory-row {
+  list-style: none;
+}
+
+.change-group > summary::-webkit-details-marker,
+.change-directory > summary::-webkit-details-marker {
+  display: none;
+}
+
+.change-group > .group-header {
+  display: grid;
+  height: 28px;
+  grid-template-columns: 18px 15px minmax(0, 1fr);
+  justify-content: initial;
+  gap: 4px;
+  padding: 0 7px 0 12px;
+  cursor: default;
+  text-transform: none;
+}
+
+.change-group > .group-header .tree-chevron,
+.change-directory > summary .tree-chevron,
+.change-directory-row .tree-chevron {
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+}
+
+.change-group[open] > .group-header .tree-chevron,
+.change-directory[open] > summary .tree-chevron {
+  transform: rotate(90deg);
+}
+
+.change-group .tree-chevron.expanded,
+.change-directory-row .tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.change-tree-toggle {
+  display: inline-grid;
+  width: 15px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  place-items: center;
+}
+
+.change-list {
+  min-width: max-content;
+}
+
+.change-directory > summary,
+.change-directory-row {
+  display: grid;
+  height: 27px;
+  grid-template-columns: 18px 15px 18px minmax(90px, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 calc(7px + var(--tree-depth) * 13px);
+  border-radius: 3px;
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.change-directory > summary:hover,
+.change-directory-row:hover {
+  background: var(--bg-hover);
+}
+
+.change-directory > summary small,
+.change-directory-row small {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.change-virtual-spacer {
+  width: 1px;
+  pointer-events: none;
+}
+
+.change-row {
+  grid-template-columns: 18px 18px 18px minmax(90px, 1fr) auto;
+  min-height: 28px;
+  gap: 4px;
+  padding: 2px 7px 2px calc(7px + var(--tree-depth, 0) * 13px);
+}
+
+.change-row.primary {
+  background: #214283;
+}
+
+.change-checkbox {
+  align-self: center;
+}
+
+.change-status {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.untracked-scan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 9px 10px;
+  padding: 7px 8px;
+  border: 1px solid #3d4657;
+  border-radius: 5px;
+  background: #292e38;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.untracked-scan.failed {
+  border-color: #624345;
+  background: #382a2d;
+  color: #d99a9a;
+}
+
+.change-row:hover .row-action,
+.change-row:focus-visible .row-action,
+.change-row.selected .row-action {
+  opacity: 1;
+}
+
+.conflict-pill {
+  margin-right: 4px;
+  border-color: #874248;
+  background: #542e32;
+  color: #f0a1a7;
+  font-size: 8px;
+}
+
+.changes-navigation {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: 32px minmax(0, 1fr);
+}
+
+.change-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.change-toolbar .compact-icon-button {
+  margin-left: 0;
+}
+
+.change-toolbar .toolbar-separator {
+  width: 1px;
+  height: 17px;
+  margin: 0 3px;
+  background: var(--border-strong);
+}
+
+.change-results {
+  overflow: auto;
+  min-height: 0;
+}
+
+.change-no-results {
+  display: flex;
+  min-height: 150px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.change-no-results strong {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.change-no-results span {
+  font-size: 9px;
+}

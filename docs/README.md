@@ -58,3 +58,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-12-r2e-settings-shell-controllers.md`](benchmarks/2026-09-12-r2e-settings-shell-controllers.md) — feature-owned Settings preferences and Shell layout/navigation/persistence with interim build evidence.
 - [`benchmarks/2026-09-12-r2f-bounded-workbench-lists.md`](benchmarks/2026-09-12-r2f-bounded-workbench-lists.md) — feature-owned project/Changes views and bounded History, project-tree, and change-tree DOM mounting.
 - [`benchmarks/2026-09-12-r2g-lazy-editor-runtime.md`](benchmarks/2026-09-12-r2g-lazy-editor-runtime.md) — lazy CodeMirror, Diff, and Markdown-preview runtimes with a startup chunk below the architecture budget.
+- [`benchmarks/2026-09-12-r2h-style-ownership.md`](benchmarks/2026-09-12-r2h-style-ownership.md) — capability-owned stylesheets, enforced source limits, and browser cascade acceptance.

@@ -1,0 +1,75 @@
+/* Shared controls and interaction states. */
+.project-node-row.selected,
+.change-row.selected,
+.change-row.primary,
+.commit-file-row.selected {
+  color: #f0f5ff;
+}
+
+.selection-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 0 7px 4px 10px;
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.selection-toolbar > div {
+  display: flex;
+  gap: 2px;
+}
+
+.selection-toolbar button {
+  height: 23px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.selection-toolbar button:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.selection-toolbar button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.retry-button {
+  margin-top: 12px;
+}
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid #4b4e54;
+  border-top-color: #8fb5ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.search-result-location {
+  overflow: hidden;
+  color: #9ebcf4;
+  font-size: 9px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-search-result.selected code,
+.workspace-search-result:hover code {
+  color: #dbe6fb;
+}
+
+.replacement-file.selected {
+  border-color: #4d6fa8;
+}

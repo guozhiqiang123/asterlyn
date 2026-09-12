@@ -1,0 +1,107 @@
+/* Project files capability-owned presentation. */
+.project-tree {
+  min-width: max-content;
+  padding: 5px 4px 12px;
+}
+
+.project-directory > summary,
+.project-directory-row,
+.project-file-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 calc(7px + var(--tree-depth) * 14px);
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: default;
+  font-size: 10px;
+  list-style: none;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.project-node-row.selected {
+  background: #214283;
+  color: #f0f5ff;
+}
+
+.project-directory > summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-directory > summary:hover,
+.project-directory-row:hover,
+.project-file-row:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.project-node-row.selected:hover {
+  background: #214283;
+  color: #f0f5ff;
+}
+
+.project-directory[open] > summary .tree-chevron {
+  transform: rotate(90deg);
+}
+
+.project-directory-row .tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.project-tree-toggle {
+  display: inline-grid;
+  width: 12px;
+  height: 20px;
+  flex: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  place-items: center;
+}
+
+.project-file-row {
+  padding-left: calc(25px + var(--tree-depth) * 14px);
+}
+
+.project-file-glyph {
+  display: inline-grid;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  place-items: center;
+}
+
+.project-directory.file-status-ignored > summary {
+  color: var(--file-ignored);
+}
+
+.project-directory.file-status-ignored > .project-directory-row {
+  color: var(--file-ignored);
+}
+
+.file-status-deleted .project-node-label,
+.file-status-deleted .file-name {
+  text-decoration: line-through;
+}
+
+.project-tree-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.project-tree-notice.warning {
+  color: #d9b36c;
+}

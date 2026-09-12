@@ -1,0 +1,209 @@
+/* Git branch navigation and actions. */
+.branch-group-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  font: inherit;
+  text-align: left;
+}
+
+.branch-group-toggle > span {
+  display: flex;
+  align-items: center;
+}
+
+.branch-filter {
+  display: grid;
+  height: 27px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 6px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-deep);
+  color: var(--text-faint);
+}
+
+.branch-filter:focus-within {
+  border-color: #6b9bfa;
+  box-shadow: 0 0 0 1px #6b9bfa;
+}
+
+.branch-filter input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.branch-filter input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.branch-filter input::placeholder {
+  color: #6f737b;
+}
+
+.branch-group-chevron {
+  display: inline-grid;
+  width: 16px;
+  place-items: center;
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+}
+
+.branch-group-toggle[aria-expanded="true"] .branch-group-chevron {
+  transform: rotate(90deg);
+}
+
+.branch-group {
+  padding-bottom: 2px;
+}
+
+.branch-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  min-height: 27px;
+  margin: 0 4px;
+  width: calc(100% - 8px);
+  padding: 2px 6px 2px 14px;
+  font-size: 10px;
+}
+
+.branch-glyph {
+  color: var(--text-faint);
+}
+
+.branch-glyph.current {
+  color: #e7c461;
+}
+
+.branch-row.kind-tag .branch-glyph {
+  color: #a986cf;
+}
+
+.branch-row.nested {
+  padding-left: 30px;
+}
+
+.branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #88d09a;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.branch-row-meta span + span {
+  color: var(--text-faint);
+}
+
+.branch-no-results {
+  display: flex;
+  min-height: 110px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.branch-no-results strong {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.branch-no-results span {
+  font-size: 9px;
+}
+
+.branch-action-card {
+  margin: 10px 12px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.branch-action-card.ready {
+  border-color: #3a4c3f;
+}
+
+.branch-action-card.blocked {
+  border-color: #5d4548;
+}
+
+.branch-action-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-soft);
+}
+
+.branch-action-heading .icon {
+  color: var(--accent);
+}
+
+.branch-action-heading strong {
+  font-size: 10px;
+}
+
+.branch-action-card > p {
+  margin: 8px 0 10px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.branch-action-card > .primary-button,
+.branch-action-card form .secondary-button {
+  width: 100%;
+}
+
+.branch-blockers {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 0;
+  color: #d99a9a;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  list-style: none;
+}
+
+.branch-blockers li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-action-card > small {
+  display: block;
+  margin: -5px 0 10px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.branch-hero {
+  background: #263652;
+  color: #8fb5ff;
+}
+
+.branch-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

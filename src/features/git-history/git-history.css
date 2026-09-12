@@ -1,0 +1,77 @@
+/* Shared Git History, branch, and detail presentation. */
+.branch-navigation,
+.history-navigation {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: 35px minmax(0, 1fr);
+}
+
+.branch-results,
+.history-results {
+  overflow: auto;
+  min-height: 0;
+}
+
+.history-row.selected,
+.branch-row.selected {
+  background: #214283;
+}
+
+.file-name,
+.history-subject,
+.branch-copy > span {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-directory,
+.history-meta,
+.branch-copy small {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected .file-directory,
+.selected .history-meta,
+.selected .branch-copy small {
+  color: #a9bee7;
+}
+
+.history-row:hover .commit-graph-node {
+  fill: var(--bg-hover);
+}
+
+.history-row.selected .commit-graph-node {
+  fill: #214283;
+}
+
+.commit-avatar,
+.branch-hero {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  margin-bottom: 15px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #315b9f, #294436);
+  color: white;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.app-shell .panel-eyebrow,
+.app-shell .content-kicker,
+.app-shell .file-directory,
+.app-shell .history-meta,
+.app-shell .branch-copy small,
+.app-shell .commit-file-row .file-directory {
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
+}

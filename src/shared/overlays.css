@@ -1,0 +1,200 @@
+/* Shared dialogs, toasts, status, and scrollbars. */
+.commit-form label,
+.dialog label {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.commit-form textarea,
+.dialog input {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-deep);
+  color: var(--text);
+}
+
+.commit-form textarea::placeholder,
+.dialog input::placeholder {
+  color: #62666d;
+}
+
+.document-encoding {
+  padding: 0 6px;
+  border-right: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+.sync-status {
+  color: #8fb5ff;
+}
+
+.operation-status {
+  border-radius: 8px;
+  background: #5b4527;
+  color: #e4c27e;
+  padding: 1px 5px;
+}
+
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 39px;
+  display: grid;
+  z-index: 20;
+  max-width: 460px;
+  grid-template-columns: 22px minmax(0, 1fr) 26px;
+  align-items: start;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #874248;
+  border-radius: 7px;
+  background: #4a292d;
+  box-shadow: 0 8px 28px #0008;
+  color: #f0c3c6;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.toast-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--red);
+  color: white;
+  font-weight: 800;
+}
+
+.toast-close {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #dcaeb1;
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  background: #ffffff14;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  z-index: 30;
+  place-items: center;
+  background: #0d0e10b8;
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  --dialog-titlebar-height: 38px;
+  width: min(510px, calc(100vw - 44px));
+  padding: 0 18px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--bg-panel);
+  box-shadow: 0 18px 60px #000c;
+}
+
+.dialog-heading {
+  display: flex;
+  min-height: var(--dialog-titlebar-height);
+  height: var(--dialog-titlebar-height);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.dialog > p {
+  margin: 15px 0 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.dialog form {
+  display: grid;
+  gap: 7px;
+}
+
+.dialog input {
+  height: 35px;
+  padding: 0 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dialog-spacer {
+  flex: 1;
+}
+
+.dialog #history-path-text {
+  min-height: 190px;
+  margin-top: 12px;
+  padding: 9px;
+  resize: vertical;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--bg-deep);
+  color: var(--text);
+  font: 10px/1.55 ui-monospace, monospace;
+}
+
+.dialog #history-path-text:focus {
+  border-color: #6b9bfa;
+  box-shadow: 0 0 0 1px #6b9bfa;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 7px;
+  background: #55585e;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #686b72;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
