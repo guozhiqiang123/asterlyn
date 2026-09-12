@@ -140,8 +140,31 @@ source ceiling prevents this adapter from becoming a feature-growth destination 
   boundary.
 - Replace broad repository mutation responses with typed outcomes and slice invalidations.
 
+Progress: R3-01 now routes workspace search/replacement, History-filter normalization and
+persistence, branch mutations, tracked refresh, untracked supplements, project transitions, and
+project rereads through window-scoped services. `WorkspaceSession` and `RepositorySession` own the
+canonical root, generation, optional Git snapshot, invalidation revision, and stale-result checks.
+The host retains a bounded root-qualified file catalog per window, then performs targeted current
+authorization for one read/save instead of rebuilding the complete catalog.
+
+All 38 desktop commands are registered from shell, workspace, Git-read, Git-operation, and image
+capability modules; `src-tauri/src/lib.rs` falls from 3,073 to 1,397 lines. Native bridge adapters
+follow the same capabilities. Protocol version one generates the TypeScript command map from one
+schema and validates every response before application code receives it. Working-tree mutations
+return a tracked-only outcome, while branch and remote mutations declare the broader canonical
+slices they invalidate. Search/replacement, remote operations, untracked scans, workspace writes,
+and local Git mutations have explicit supervision or serialization ownership.
+
 Exit gate: opening or saving a file is not proportional to total project files after session
 activation, and a status mutation does not reload history or refs.
+
+Status: **accepted on 2026-09-12**. The complete validation and resource record is
+[`R3 application-services and protocol acceptance`](../benchmarks/2026-09-12-r3-application-services-protocol.md).
+Native watcher activation follows through ADR-0009 as planned. The 5,754-line migration adapter is
+not a terminal composition-root claim: unrelated capability growth remains blocked, its automated
+ceiling tightens to 5,800 lines, and later operation integration must continue moving presentation
+routing toward owned feature bindings. The deterministic demo bridge is likewise retained only as
+a bounded fixture, not as a second native protocol implementation.
 
 ### R4 — Recoverable Git operations
 

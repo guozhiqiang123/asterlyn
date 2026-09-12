@@ -64,3 +64,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-12-r2j-history-views.md`](benchmarks/2026-09-12-r2j-history-views.md) — feature-owned branch navigation, History filters/dialogs, and Git detail presentation.
 - [`benchmarks/2026-09-12-r2k-files-editor-views.md`](benchmarks/2026-09-12-r2k-files-editor-views.md) — feature-owned Files/Search/Editor presentation and disposable CodeMirror/Markdown surfaces.
 - [`benchmarks/2026-09-12-r2-frontend-capability-ownership.md`](benchmarks/2026-09-12-r2-frontend-capability-ownership.md) — final R2 ownership, lifecycle, source-budget, native, resource, and Debian acceptance evidence.
+- [`benchmarks/2026-09-12-r3-application-services-protocol.md`](benchmarks/2026-09-12-r3-application-services-protocol.md) — R3 window sessions, typed reconciliation, versioned protocol, host coordinators, resource results, and Debian acceptance evidence.
