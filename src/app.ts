@@ -53,6 +53,14 @@ import { attachSplitter } from "./workbench/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
 import { filesForPushReview } from "./workbench/push-review";
 import {
+  loadActivityOrder,
+  moveActivityTool,
+  moveActivityToolByOffset,
+  saveActivityOrder,
+  type ActivityDropPosition,
+  type ActivityTool,
+} from "./workbench/activity-order";
+import {
   MARKDOWN_PREVIEW_MAX_BYTES,
   isMarkdownPath,
   renderMarkdownPreview,
@@ -291,6 +299,7 @@ interface AppState {
   settingsSection: SettingsSection;
   preferences: AppPreferences;
   layout: WorkbenchLayout;
+  activityOrder: ActivityTool[];
   editor: EditorSession;
   gitDetail: "branch" | "commit";
   projectFiles: string[];
@@ -411,6 +420,7 @@ export class AsterlynApp {
     settingsSection: "general",
     preferences: loadAppPreferences(window.localStorage),
     layout: loadWorkbenchLayout(window.localStorage),
+    activityOrder: loadActivityOrder(window.localStorage),
     editor: createEditorSession(),
     gitDetail: "commit",
     projectFiles: [],
@@ -556,6 +566,15 @@ export class AsterlynApp {
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
+  private activityPointerDrag: {
+    source: ActivityTool;
+    pointerId: number;
+    startY: number;
+    dragging: boolean;
+    target: ActivityTool | null;
+    position: ActivityDropPosition | null;
+  } | null = null;
+  private suppressedActivityClick: ActivityTool | null = null;
   private windowChromeMode: WindowChromeMode = "custom-right";
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
@@ -821,7 +840,7 @@ export class AsterlynApp {
   }
 
   private activityButton(
-    tool: "files" | "branches" | "changes",
+    tool: ActivityTool,
     label: string,
     iconName: "folder" | "changes" | "branch",
   ): string {
@@ -833,11 +852,134 @@ export class AsterlynApp {
       this.state.workspaceRoot && (tool === "files" || this.state.snapshot),
     );
     const title = enabled
-      ? label
+      ? `${label} — drag to reorder`
       : tool === "files"
-        ? "Open a project folder first"
-        : "Git is unavailable for this folder";
-    return `<button class="activity-button ${active ? "active" : ""}" data-tool="${tool}" type="button" aria-label="${label}" title="${title}" aria-pressed="${active}" ${enabled ? "" : "disabled"}>${icon(iconName, 20)}<span>${label}</span></button>`;
+        ? "Open a project folder first — drag to reorder"
+        : "Git is unavailable for this folder — drag to reorder";
+    return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${label}" title="${title}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown">${icon(iconName, 20)}<span>${label}</span></button>`;
+  }
+
+  private bindActivityRailEvents(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
+      const tool = button.dataset.tool as ActivityTool;
+      button.addEventListener("click", () => {
+        if (this.suppressedActivityClick === tool) {
+          this.suppressedActivityClick = null;
+          return;
+        }
+        if (button.getAttribute("aria-disabled") === "true") return;
+        this.toggleTool(tool);
+      });
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        this.activityPointerDrag = {
+          source: tool,
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          dragging: false,
+          target: null,
+          position: null,
+        };
+      });
+      button.addEventListener("keydown", (event) => {
+        if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
+          return;
+        }
+        event.preventDefault();
+        const offset = event.key === "ArrowUp" ? -1 : 1;
+        this.commitActivityOrder(
+          moveActivityToolByOffset(this.state.activityOrder, tool, offset),
+          tool,
+        );
+      });
+    });
+    window.addEventListener("pointermove", (event) => this.moveActivityPointerDrag(event));
+    window.addEventListener("pointerup", (event) => this.finishActivityPointerDrag(event));
+    window.addEventListener("pointercancel", () => this.clearActivityDragState());
+  }
+
+  private moveActivityPointerDrag(event: PointerEvent): void {
+    const drag = this.activityPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.dragging && Math.abs(event.clientY - drag.startY) < 5) return;
+    drag.dragging = true;
+    this.root
+      .querySelector<HTMLElement>(`[data-tool="${drag.source}"]`)
+      ?.classList.add("dragging");
+    event.preventDefault();
+    const target = this.activityButtonAt(event.clientX, event.clientY);
+    this.clearActivityDropMarkers();
+    if (!target || target.dataset.tool === drag.source) {
+      drag.target = null;
+      drag.position = null;
+      return;
+    }
+    drag.target = target.dataset.tool as ActivityTool;
+    drag.position = this.activityDropPosition(target, event.clientY);
+    target.classList.add(drag.position === "before" ? "drop-before" : "drop-after");
+  }
+
+  private finishActivityPointerDrag(event: PointerEvent): void {
+    const drag = this.activityPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.dragging) {
+      event.preventDefault();
+      this.suppressedActivityClick = drag.source;
+      window.setTimeout(() => {
+        if (this.suppressedActivityClick === drag.source) {
+          this.suppressedActivityClick = null;
+        }
+      }, 0);
+      if (drag.target && drag.position) {
+        this.commitActivityOrder(
+          moveActivityTool(
+            this.state.activityOrder,
+            drag.source,
+            drag.target,
+            drag.position,
+          ),
+          drag.source,
+        );
+      }
+    }
+    this.clearActivityDragState();
+  }
+
+  private activityDropPosition(
+    button: HTMLButtonElement,
+    pointerY: number,
+  ): ActivityDropPosition {
+    const bounds = button.getBoundingClientRect();
+    return pointerY < bounds.top + bounds.height / 2 ? "before" : "after";
+  }
+
+  private activityButtonAt(clientX: number, clientY: number): HTMLButtonElement | null {
+    return document
+      .elementFromPoint(clientX, clientY)
+      ?.closest<HTMLButtonElement>(".activity-rail [data-tool]") ?? null;
+  }
+
+  private commitActivityOrder(order: ActivityTool[], focusTool: ActivityTool): void {
+    if (order.every((tool, index) => tool === this.state.activityOrder[index])) return;
+    this.state.activityOrder = order;
+    saveActivityOrder(window.localStorage, order);
+    this.renderActivityRail();
+    this.root.querySelector<HTMLButtonElement>(`[data-tool="${focusTool}"]`)?.focus();
+  }
+
+  private clearActivityDropMarkers(): void {
+    this.root.querySelectorAll<HTMLElement>("[data-tool]").forEach((button) => {
+      button.classList.remove("drop-before", "drop-after");
+      delete button.dataset.dropPosition;
+    });
+  }
+
+  private clearActivityDragState(): void {
+    this.activityPointerDrag = null;
+    this.clearActivityDropMarkers();
+    this.root.querySelectorAll<HTMLElement>("[data-tool]").forEach((button) => {
+      button.classList.remove("dragging");
+    });
   }
 
   private bindShellEvents(): void {
@@ -968,12 +1110,7 @@ export class AsterlynApp {
       this.renderEditorTabMenu();
       this.bindEditorTabMenuEvents();
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const tool = button.dataset.tool as "files" | "branches" | "changes";
-        this.toggleTool(tool);
-      });
-    });
+    this.bindActivityRailEvents();
     this.query("#hide-git-tool").addEventListener("click", () => {
       this.toggleTool("branches");
     });
@@ -3814,7 +3951,7 @@ export class AsterlynApp {
     }
   }
 
-  private toggleTool(tool: "files" | "branches" | "changes"): void {
+  private toggleTool(tool: ActivityTool): void {
     if (!this.state.workspaceRoot || (tool !== "files" && !this.state.snapshot)) return;
     this.state.layout =
       tool === "branches"
@@ -3837,8 +3974,14 @@ export class AsterlynApp {
   }
 
   private renderActivityRail(): void {
+    const rail = this.query<HTMLElement>(".activity-rail");
+    const spacer = this.query<HTMLElement>(".rail-spacer");
+    for (const tool of this.state.activityOrder) {
+      const button = rail.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
+      if (button) rail.insertBefore(button, spacer);
+    }
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
-      const tool = button.dataset.tool;
+      const tool = button.dataset.tool as ActivityTool;
       const enabled = Boolean(
         this.state.workspaceRoot && (tool === "files" || this.state.snapshot),
       );
@@ -3847,13 +3990,14 @@ export class AsterlynApp {
           ? this.state.layout.bottomTool === "branches"
           : this.state.layout.leftTool === tool;
       button.classList.toggle("active", active);
+      button.classList.toggle("unavailable", !enabled);
       button.setAttribute("aria-pressed", String(active));
-      button.disabled = !enabled;
+      button.setAttribute("aria-disabled", String(!enabled));
       button.title = enabled
-        ? button.getAttribute("aria-label") ?? ""
+        ? `${button.getAttribute("aria-label") ?? "Tool window"} — drag to reorder`
         : tool === "files"
-          ? "Open a project folder first"
-          : "Git is unavailable for this folder";
+          ? "Open a project folder first — drag to reorder"
+          : "Git is unavailable for this folder — drag to reorder";
     });
   }
 
@@ -4818,8 +4962,8 @@ export class AsterlynApp {
     return `
       <details class="change-group" data-change-disclosure="group:${group}" ${collapsed ? "" : "open"}>
         <summary class="group-header">
-          <span class="tree-chevron">${icon("chevron", 11)}</span>
           <input class="change-checkbox" type="checkbox" data-include-group="${group}" aria-label="Include all ${escapeAttribute(title)}" />
+          <span class="tree-chevron">${icon("chevron", 11)}</span>
           <span class="group-title">${escapeHtml(title)}<b>${changes.length} ${changes.length === 1 ? "file" : "files"}</b></span>
         </summary>
         <div class="change-list" role="tree">${rows}</div>
@@ -4838,8 +4982,8 @@ export class AsterlynApp {
     const collapsed = this.state.collapsedChangeDirectories.has(key);
     return `<details class="change-directory" data-change-disclosure="${escapeAttribute(key)}" ${collapsed ? "" : "open"}>
       <summary style="--tree-depth:${depth}">
-        <span class="tree-chevron">${icon("chevron", 11)}</span>
         <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(node.path)}" data-include-directory-group="${group}" aria-label="Include ${escapeAttribute(node.path)}" />
+        <span class="tree-chevron">${icon("chevron", 11)}</span>
         ${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${paths.length}</small>
       </summary>
       <div role="group">${node.children.map((child) => this.renderChangeTreeNode(child, group, depth + 1)).join("")}</div>

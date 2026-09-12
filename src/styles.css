@@ -768,7 +768,14 @@ textarea:focus-visible {
   border-radius: 5px;
   background: transparent;
   color: #858991;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.activity-button:active {
+  cursor: grabbing;
 }
 
 .activity-button span {
@@ -787,6 +794,27 @@ textarea:focus-visible {
 .activity-button.active {
   background: var(--accent);
   color: white;
+}
+
+.activity-button.unavailable {
+  color: #60636a;
+}
+
+.activity-button.dragging {
+  opacity: 0.42;
+}
+
+.activity-button.drop-before {
+  box-shadow: 0 -2px 0 #8ab4ff;
+}
+
+.activity-button.drop-after {
+  box-shadow: 0 2px 0 #8ab4ff;
+}
+
+.activity-button:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: -2px;
 }
 
 .workbench {
@@ -1522,10 +1550,10 @@ textarea:focus-visible {
 .change-group > .group-header {
   display: grid;
   height: 28px;
-  grid-template-columns: 15px 18px minmax(0, 1fr);
+  grid-template-columns: 18px 15px minmax(0, 1fr);
   justify-content: initial;
   gap: 4px;
-  padding: 0 7px;
+  padding: 0 7px 0 12px;
   cursor: default;
   text-transform: none;
 }
@@ -1660,10 +1688,10 @@ textarea:focus-visible {
 .change-directory > summary {
   display: grid;
   height: 27px;
-  grid-template-columns: 15px 18px 18px minmax(90px, 1fr) auto;
+  grid-template-columns: 18px 15px 18px minmax(90px, 1fr) auto;
   align-items: center;
   gap: 4px;
-  padding: 0 8px 0 calc(3px + var(--tree-depth) * 13px);
+  padding: 0 8px 0 calc(7px + var(--tree-depth) * 13px);
   border-radius: 3px;
   color: var(--text-soft);
   cursor: default;
@@ -1697,7 +1725,7 @@ textarea:focus-visible {
   grid-template-columns: 18px 18px 18px minmax(90px, 1fr) auto;
   min-height: 28px;
   gap: 4px;
-  padding: 2px 7px 2px calc(4px + var(--tree-depth, 0) * 13px);
+  padding: 2px 7px 2px calc(7px + var(--tree-depth, 0) * 13px);
 }
 
 .change-row:hover,
@@ -2724,7 +2752,7 @@ textarea:focus-visible {
   min-height: 27px;
   margin: 0 4px;
   width: calc(100% - 8px);
-  padding: 2px 6px;
+  padding: 2px 6px 2px 14px;
   font-size: 10px;
 }
 
@@ -2741,7 +2769,7 @@ textarea:focus-visible {
 }
 
 .branch-row.nested {
-  padding-left: 23px;
+  padding-left: 30px;
 }
 
 .branch-name {
