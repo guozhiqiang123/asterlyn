@@ -169,6 +169,24 @@ pub struct CommitSummary {
     pub subject: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PushPreview {
+    pub remote: String,
+    pub branch: String,
+    pub source_ref: String,
+    pub destination_ref: String,
+    pub head_oid: String,
+    pub comparison_base_oid: Option<String>,
+    pub publish: bool,
+    pub commits: Vec<CommitSummary>,
+    pub offset: usize,
+    pub total_commits: usize,
+    pub has_more: bool,
+    pub truncated: bool,
+    pub preview_token: String,
+}
+
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum HistoryOrder {

@@ -91,3 +91,22 @@ test("blocks divergence and mirror push while allowing new-branch publish", () =
   assert.equal(remotePolicy(unpublished, "origin").push.enabled, true);
   assert.equal(remotePolicy(unpublished, "mirror").push.enabled, false);
 });
+
+test("the selected remote governs every current-branch toolbar action", () => {
+  const repository = snapshot({
+    remotes: [
+      { name: "origin", fetchSupported: true, pushSupported: true },
+      { name: "team", fetchSupported: true, pushSupported: true },
+    ],
+  });
+  const mismatched = remotePolicy(repository, "team");
+  assert.equal(mismatched.fetch.enabled, true);
+  assert.equal(
+    mismatched.fetch.detail,
+    "Refresh all standard branch-tracking refs from team.",
+  );
+  assert.equal(mismatched.pull.enabled, false);
+  assert.match(mismatched.pull.detail, /Select origin/);
+  assert.equal(mismatched.push.enabled, false);
+  assert.match(mismatched.push.detail, /Select origin/);
+});

@@ -56,6 +56,12 @@ import {
   isMarkdownPath,
   renderMarkdownPreview,
 } from "./workbench/markdown-preview";
+import {
+  loadMarkdownModePreferences,
+  markdownModeForDocument,
+  rememberMarkdownMode,
+  saveMarkdownModePreferences,
+} from "./workbench/markdown-mode-preferences";
 import { revealTabInStrip, scrollTabStrip } from "./workbench/tab-strip";
 import {
   isCurrentImageRequest,
@@ -240,6 +246,7 @@ import type {
   ImagePreview,
   ProjectFile,
   ProjectIgnoredEntry,
+  PushPreview,
   ReplacementApplyResult,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
@@ -344,7 +351,6 @@ interface AppState {
   selectedBranch: string | null;
   collapsedBranchGroups: Set<BranchSummary["kind"]>;
   newBranchName: string;
-  syncPopoverOpen: boolean;
   selectedRemote: string | null;
   remoteOperation: {
     id: string;
@@ -352,6 +358,14 @@ interface AppState {
     kind: "fetch" | "pull" | "push";
     cancelling: boolean;
   } | null;
+  remoteDialog: "update" | "push" | null;
+  remoteDialogError: string | null;
+  pushPreview: PushPreview | null;
+  pushPreviewLoading: boolean;
+  pushPreviewLoadingMore: boolean;
+  pushSelectedCommit: string | null;
+  pushCommitDetails: CommitDetails | null;
+  pushCommitDetailsLoading: boolean;
   commitMessage: string;
   loading: boolean;
   error: string | null;
@@ -361,6 +375,7 @@ export class AsterlynApp {
   private readonly diffEditor = new DiffEditor();
   private readonly textEditor = new TextEditor();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
+  private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
   private imageRequestGeneration = 0;
   private readonly state: AppState = {
@@ -444,9 +459,16 @@ export class AsterlynApp {
     selectedBranch: null,
     collapsedBranchGroups: new Set(),
     newBranchName: "",
-    syncPopoverOpen: false,
     selectedRemote: null,
     remoteOperation: null,
+    remoteDialog: null,
+    remoteDialogError: null,
+    pushPreview: null,
+    pushPreviewLoading: false,
+    pushPreviewLoadingMore: false,
+    pushSelectedCommit: null,
+    pushCommitDetails: null,
+    pushCommitDetailsLoading: false,
     commitMessage: "",
     loading: false,
     error: null,
@@ -465,6 +487,8 @@ export class AsterlynApp {
   private commitDiffGeneration = 0;
   private scanSequence = 0;
   private remoteOperationSequence = 0;
+  private remoteDialogSequence = 0;
+  private remoteDialogReturnFocus: HTMLElement | null = null;
   private projectFilesGeneration = 0;
   private historyPageSequence = 0;
   private historyTopRefreshArmed = false;
@@ -561,12 +585,24 @@ export class AsterlynApp {
               <span>Search</span>
               <kbd>Ctrl P</kbd>
             </button>
-            <div class="sync-anchor" id="sync-anchor">
-              <button class="icon-button sync-button" id="sync-button" type="button" aria-label="Remote sync" title="Remote sync" aria-haspopup="dialog" aria-expanded="false">
-                ${icon("sync", 20)}
-                <span class="sync-badge hidden" id="sync-badge"></span>
-              </button>
-              <section class="sync-popover hidden" id="sync-popover" role="dialog" aria-label="Remote sync"></section>
+            <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="Current branch remote actions">
+              <label class="topbar-remote-select" for="topbar-remote-select" title="Remote used by current branch actions">
+                <span>Remote</span>
+                <select id="topbar-remote-select" aria-label="Remote for current branch actions" disabled>
+                  <option>No remote</option>
+                </select>
+              </label>
+              <span class="topbar-remote-state" id="topbar-remote-state" role="status" aria-live="polite">No Git</span>
+              <span class="topbar-remote-action" id="remote-fetch-hint" tabindex="-1">
+                <button class="icon-button remote-action-button" id="remote-fetch" type="button" data-remote-action="fetch" aria-label="Fetch current branch" title="Fetch current branch" disabled>${icon("download", 18)}</button>
+              </span>
+              <span class="topbar-remote-action" id="remote-update-hint" tabindex="-1">
+                <button class="icon-button remote-action-button" id="remote-update" type="button" data-remote-action="pull" aria-label="Update current branch" title="Update current branch" disabled>${icon("sync", 18)}</button>
+              </span>
+              <span class="topbar-remote-action" id="remote-push-hint" tabindex="-1">
+                <button class="icon-button remote-action-button" id="remote-push" type="button" data-remote-action="push" aria-label="Push current branch" title="Push current branch" disabled>${icon("upload", 18)}</button>
+              </span>
+              <button class="icon-button remote-cancel-button hidden" id="cancel-remote-operation" type="button" aria-label="Cancel remote operation" title="Cancel remote operation">${icon("close", 16)}</button>
             </div>
             <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh project" title="Refresh (Ctrl/Cmd+R)" disabled>
               ${icon("refresh", 20)}
@@ -742,6 +778,7 @@ export class AsterlynApp {
         <div class="dialog-backdrop hidden history-dialog-backdrop" id="history-dialog" role="presentation"></div>
         <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
         <div class="dialog-backdrop hidden replacement-dialog-backdrop" id="workspace-replacement-dialog" role="presentation"></div>
+        <div class="dialog-backdrop hidden remote-dialog-backdrop" id="remote-action-dialog" role="presentation"></div>
       </main>
     `;
   }
@@ -772,11 +809,25 @@ export class AsterlynApp {
       this.repositoryMenuOpen = !this.repositoryMenuOpen;
       this.renderRepositoryMenu();
     });
-    this.query("#sync-button").addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (!this.state.snapshot) return;
-      this.state.syncPopoverOpen = !this.state.syncPopoverOpen;
-      this.renderRemotePopover(this.state.snapshot);
+    this.query<HTMLSelectElement>("#topbar-remote-select").addEventListener(
+      "change",
+      (event) => {
+        if (this.state.remoteDialog) this.closeRemoteDialog(false);
+        this.state.selectedRemote = (event.currentTarget as HTMLSelectElement).value;
+        this.renderRemoteToolbar(this.state.snapshot);
+      },
+    );
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-remote-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const kind = button.dataset.remoteAction as "fetch" | "pull" | "push";
+          if (kind === "fetch") void this.runRemoteOperation(kind);
+          else this.openRemoteDialog(kind === "pull" ? "update" : "push", button);
+        });
+      });
+    this.query("#cancel-remote-operation").addEventListener("click", () => {
+      void this.cancelActiveRemoteOperation();
     });
     this.query("#refresh-button").addEventListener("click", () => void this.refresh());
     this.query("#settings-button").addEventListener("click", () => this.openSettings());
@@ -825,6 +876,29 @@ export class AsterlynApp {
         !this.state.replacementRecoveryBusy
       ) {
         this.closeWorkspaceReplacementDialog();
+      }
+    });
+    this.query("#remote-action-dialog").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget && !this.state.remoteOperation) {
+        this.closeRemoteDialog();
+      }
+    });
+    this.query("#remote-action-dialog").addEventListener("keydown", (event) => {
+      if (event.key !== "Tab" || !this.state.remoteDialog) return;
+      const focusable = Array.from(
+        this.query("#remote-action-dialog").querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]',
+        ),
+      ).filter((element) => !element.closest(".hidden"));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     });
     this.query<HTMLFormElement>("#repository-form").addEventListener(
@@ -902,6 +976,11 @@ export class AsterlynApp {
         return;
       }
       if (event.key === "Escape") {
+        if (this.state.remoteDialog && !this.state.remoteOperation) {
+          event.preventDefault();
+          this.closeRemoteDialog();
+          return;
+        }
         if (this.repositoryMenuOpen) {
           event.preventDefault();
           this.repositoryMenuOpen = false;
@@ -944,10 +1023,6 @@ export class AsterlynApp {
         if (this.state.historyFilterMenu) {
           this.state.historyFilterMenu = null;
           if (this.state.layout.bottomTool === "branches") this.renderBottomTool();
-        }
-        if (this.state.syncPopoverOpen && !this.state.remoteOperation) {
-          this.state.syncPopoverOpen = false;
-          if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
         }
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r") {
@@ -1005,15 +1080,6 @@ export class AsterlynApp {
         this.state.historyFilterMenu = null;
         if (this.state.layout.bottomTool === "branches") this.renderBottomTool();
       }
-      if (
-        this.state.syncPopoverOpen &&
-        !this.state.remoteOperation &&
-        event.target instanceof Element &&
-        !event.target.closest("#sync-anchor")
-      ) {
-        this.state.syncPopoverOpen = false;
-        if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
-      }
     });
     window.addEventListener("beforeunload", (event) => {
       this.captureMountedTextEditor();
@@ -1026,10 +1092,11 @@ export class AsterlynApp {
   private openSettings(): void {
     if (this.state.activePage === "settings") return;
     this.captureMountedTextEditor();
+    if (this.state.remoteDialog && !this.state.remoteOperation) {
+      this.closeRemoteDialog(false);
+    }
     if (this.state.commandSurface.mode) this.dismissCommandSurface();
     this.closeHistoryDialog();
-    this.state.syncPopoverOpen = false;
-    if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
     this.state.activePage = "settings";
     this.query("#workspace").classList.add("settings-mode");
     this.query("#workbench").classList.add("hidden");
@@ -1416,6 +1483,9 @@ export class AsterlynApp {
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
+    if (this.state.remoteDialog && !this.state.remoteOperation) {
+      this.closeRemoteDialog(false);
+    }
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
     void this.cancelActiveRemoteOperation();
@@ -2618,101 +2688,443 @@ export class AsterlynApp {
     await this.openProjectFile(workspaceRoot, match, match);
   }
 
-  private renderRemotePopover(snapshot: RepositorySnapshot): void {
-    const button = this.query<HTMLButtonElement>("#sync-button");
-    const badge = this.query("#sync-badge");
-    const popover = this.query("#sync-popover");
-    const divergence = [
-      snapshot.branch.ahead ? `↑${snapshot.branch.ahead}` : "",
-      snapshot.branch.behind ? `↓${snapshot.branch.behind}` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    badge.textContent = divergence;
-    badge.classList.toggle("hidden", !divergence);
-    button.setAttribute("aria-expanded", this.state.syncPopoverOpen.toString());
-    button.disabled = false;
-    popover.classList.toggle("hidden", !this.state.syncPopoverOpen);
-    if (!this.state.syncPopoverOpen) {
-      popover.innerHTML = "";
+  private renderRemoteToolbar(snapshot: RepositorySnapshot | null): void {
+    const toolbar = this.query("#remote-toolbar");
+    const select = this.query<HTMLSelectElement>("#topbar-remote-select");
+    const status = this.query("#topbar-remote-state");
+    const cancel = this.query<HTMLButtonElement>("#cancel-remote-operation");
+    toolbar.classList.toggle("git-unavailable", !snapshot);
+    if (!snapshot) {
+      select.innerHTML = "<option>No remote</option>";
+      select.disabled = true;
+      select.title = "Remote selection is unavailable because this project is not an active Git repository.";
+      select.setAttribute("aria-label", select.title);
+      status.textContent = "No Git";
+      status.title = "Git is unavailable for this folder";
+      cancel.classList.add("hidden");
+      const unavailable: Array<[string, string]> = [
+        ["#remote-fetch", "Fetch is unavailable because this project is not an active Git repository. Fetch would refresh the selected remote's standard branch-tracking refs without changing working files."],
+        ["#remote-update", "Update is unavailable because this project is not an active Git repository. Update would affect only the checked-out branch and would require a confirmed fast-forward."],
+        ["#remote-push", "Push is unavailable because this project is not an active Git repository. Push would require review before an ordinary non-force current-branch push without tags."],
+      ];
+      for (const [selector, description] of unavailable) {
+        const button = this.query<HTMLButtonElement>(selector);
+        button.disabled = true;
+        button.title = description;
+        button.setAttribute("aria-label", description);
+        const hint = button.closest<HTMLElement>(".topbar-remote-action");
+        hint?.setAttribute("aria-label", description);
+        if (hint) {
+          hint.title = description;
+          hint.tabIndex = 0;
+        }
+      }
       return;
     }
 
+    this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
     const policy = remotePolicy(snapshot, this.state.selectedRemote);
     const operation =
       this.state.remoteOperation?.root === snapshot.root
         ? this.state.remoteOperation
         : null;
-    const pushTarget =
-      policy.pushRemote && policy.destination
-        ? `${policy.pushRemote.name}:${policy.destination}`
-        : "Not configured";
-    const remoteOptions = snapshot.remotes
-      .map(
-        (remote) =>
-          `<option value="${escapeAttribute(remote.name)}" ${remote.name === policy.selectedRemote?.name ? "selected" : ""}>${escapeHtml(remote.name)}${remote.fetchSupported ? "" : " · unsupported mapping"}</option>`,
-      )
-      .join("");
-    const action = (
-      kind: "fetch" | "pull" | "push",
-      state: ReturnType<typeof remotePolicy>["fetch"],
-      iconName: "download" | "upload" | "sync",
-    ) => `
-      <div class="sync-action-row">
-        <span class="sync-action-icon">${icon(iconName, 16)}</span>
-        <div><strong>${escapeHtml(state.label)}</strong><p>${escapeHtml(state.detail)}</p></div>
-        <button class="secondary-button compact" type="button" data-remote-action="${kind}" ${state.enabled && !this.state.loading ? "" : "disabled"}>${escapeHtml(state.label)}</button>
-      </div>`;
+    select.innerHTML = snapshot.remotes.length
+      ? snapshot.remotes
+          .map(
+            (remote) =>
+              `<option value="${escapeAttribute(remote.name)}" ${remote.name === policy.selectedRemote?.name ? "selected" : ""}>${escapeHtml(remote.name)}${remote.fetchSupported ? "" : " · unsupported"}</option>`,
+          )
+          .join("")
+      : "<option>No remote</option>";
+    select.disabled = Boolean(operation) || this.state.loading || snapshot.remotes.length === 0;
 
-    popover.innerHTML = `
-      <div class="sync-popover-header">
-        <div><span class="panel-eyebrow">Remote</span><h2>Sync repository</h2></div>
-        <span class="sync-state ${snapshot.branch.ahead > 0 && snapshot.branch.behind > 0 ? "diverged" : ""}">${divergence || "Up to date"}</span>
-      </div>
-      <label class="remote-select" for="remote-select"><span>Remote</span><select id="remote-select" ${operation ? "disabled" : ""}>${remoteOptions}</select></label>
-      <div class="sync-route" aria-label="Remote ref target">
-        <code title="${escapeAttribute(policy.source ?? "No local branch")}">${escapeHtml(policy.source ?? "No local branch")}</code>
-        <span>→</span>
-        <code title="${escapeAttribute(pushTarget)}">${escapeHtml(pushTarget)}</code>
-      </div>
-      <p class="sync-advisory">Ahead/behind values use local tracking refs. Fetch refreshes them before the next decision.</p>
-      ${
-        operation
-          ? `<div class="remote-operation-banner"><span class="spinner"></span><div><strong>${operation.cancelling ? "Cancelling…" : `${capitalize(operation.kind)} in progress`}</strong><p>${operation.kind === "push" ? "If cancelled, the remote outcome remains unknown until fetch." : "Cancellation never rolls repository state back."}</p></div><button class="secondary-button compact" id="cancel-remote-operation" type="button" ${operation.cancelling ? "disabled" : ""}>Cancel</button></div>`
-          : `${action("fetch", policy.fetch, "download")}${action("pull", policy.pull, "sync")}${action("push", policy.push, "upload")}`
-      }
-      <div class="credential-note"><span>${icon("check", 14)}</span><p>Uses configured non-interactive Git credentials or SSH agent. Asterlyn never stores remote secrets.</p></div>`;
+    const branchName = snapshot.branch.head ?? "No branch";
+    const selectedName = policy.selectedRemote?.name ?? "No remote";
+    const sourceRef = snapshot.branch.head
+      ? `refs/heads/${snapshot.branch.head}`
+      : "no checked-out branch";
+    const destinationRef = snapshot.branch.upstreamRef ?? sourceRef;
+    const remoteScope = `Selected remote: ${selectedName}. Fetch refreshes all standard branch-tracking refs from this remote. Update and Push apply only to the checked-out branch.`;
+    select.title = remoteScope;
+    select.setAttribute("aria-label", remoteScope);
+    const tracksSelected = snapshot.branch.upstreamRemote === policy.selectedRemote?.name;
+    const divergence = tracksSelected
+      ? [
+          snapshot.branch.ahead ? `↑${snapshot.branch.ahead}` : "",
+          snapshot.branch.behind ? `↓${snapshot.branch.behind}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+    const operationLabel = operation
+      ? operation.cancelling
+        ? "Cancelling…"
+        : `${remoteActionLabel(operation.kind)}…`
+      : null;
+    status.textContent = operationLabel
+      ? `${branchName} · ${operationLabel}`
+      : !snapshot.branch.head || snapshot.branch.detached
+        ? "No branch"
+        : !policy.selectedRemote
+          ? `${branchName} · No remote`
+          : !snapshot.branch.upstreamRemote
+            ? `${branchName} · Unpublished`
+            : !tracksSelected
+              ? `${branchName} · Not upstream`
+              : divergence || `${branchName} · Up to date`;
+    status.title = `Current branch: ${branchName}. Selected remote: ${selectedName}.${
+      tracksSelected
+        ? ` Tracking state: ${divergence || "up to date"}.`
+        : snapshot.branch.upstreamRemote
+          ? ` Configured upstream remote: ${snapshot.branch.upstreamRemote}.`
+          : " No upstream is configured."
+    }`;
+    status.classList.toggle(
+      "diverged",
+      tracksSelected && snapshot.branch.ahead > 0 && snapshot.branch.behind > 0,
+    );
+    status.classList.toggle("busy", Boolean(operation));
 
-    this.root
-      .querySelector<HTMLSelectElement>("#remote-select")
-      ?.addEventListener("change", (event) => {
-        this.state.selectedRemote = (event.currentTarget as HTMLSelectElement).value;
-        this.renderRemotePopover(snapshot);
-      });
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-remote-action]")
-      .forEach((actionButton) => {
-        actionButton.addEventListener("click", () => {
-          const kind = actionButton.dataset.remoteAction as "fetch" | "pull" | "push";
-          void this.runRemoteOperation(kind);
-        });
-      });
-    this.root
-      .querySelector<HTMLButtonElement>("#cancel-remote-operation")
-      ?.addEventListener("click", () => void this.cancelActiveRemoteOperation());
+    const actions: Array<{
+      kind: "fetch" | "pull" | "push";
+      button: string;
+      hint: string;
+      state: ReturnType<typeof remotePolicy>["fetch"];
+      iconName: "download" | "sync" | "upload";
+    }> = [
+      { kind: "fetch", button: "#remote-fetch", hint: "#remote-fetch-hint", state: policy.fetch, iconName: "download" },
+      { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", state: policy.pull, iconName: "sync" },
+      { kind: "push", button: "#remote-push", hint: "#remote-push-hint", state: policy.push, iconName: "upload" },
+    ];
+    for (const action of actions) {
+      const button = this.query<HTMLButtonElement>(action.button);
+      const exactScope =
+        action.kind === "fetch"
+          ? `Fetch from ${selectedName}. Refresh all standard branch-tracking refs for this remote without changing the checked-out branch or working files.`
+          : action.kind === "pull"
+            ? `Update ${sourceRef} from ${selectedName}:${destinationRef}. Opens a confirmation and performs fast-forward only; it never creates a merge commit or starts a rebase.`
+            : `Review Push from ${sourceRef} to ${selectedName}:${destinationRef}. Opens a confirmation before an ordinary non-force current-branch push; tags are not included.`;
+      const title = `${exactScope} ${action.state.enabled ? action.state.detail : `Unavailable: ${action.state.detail}`}`;
+      button.disabled = Boolean(operation) || this.state.loading || !action.state.enabled;
+      button.title = title;
+      button.setAttribute("aria-label", title);
+      button.classList.toggle("running", operation?.kind === action.kind);
+      button.innerHTML =
+        operation?.kind === action.kind && !operation.cancelling
+          ? '<span class="spinner" aria-hidden="true"></span>'
+          : icon(action.iconName, 18);
+      const hint = this.query(action.hint);
+      hint.title = title;
+      hint.setAttribute("aria-label", title);
+      hint.tabIndex = button.disabled ? 0 : -1;
+    }
+
+    cancel.classList.toggle("hidden", !operation);
+    cancel.disabled = !operation || operation.cancelling;
+    cancel.title = operation
+      ? `Cancel ${remoteActionLabel(operation.kind).toLowerCase()} for ${branchName} using ${selectedName}. Git may already have changed local or remote state, so Asterlyn will refresh before another action.`
+      : "Cancel remote operation";
+    cancel.setAttribute("aria-label", cancel.title);
   }
 
-  private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<void> {
+  private openRemoteDialog(
+    dialog: "update" | "push",
+    returnFocus: HTMLElement,
+  ): void {
     const snapshot = this.state.snapshot;
     if (!snapshot || this.state.loading || this.state.remoteOperation) return;
     const policy = remotePolicy(snapshot, this.state.selectedRemote);
-    const actionState = policy[kind];
-    if (!actionState.enabled) return;
-    const remote = kind === "push" ? policy.pushRemote : policy.selectedRemote;
-    if (kind !== "pull" && !remote) return;
-    if (kind === "pull" && !(await this.saveDirtyTabsBefore("pulling changes"))) {
+    const action = dialog === "update" ? policy.pull : policy.push;
+    if (!action.enabled) return;
+    this.remoteDialogReturnFocus = returnFocus;
+    this.state.remoteDialog = dialog;
+    this.state.remoteDialogError = null;
+    this.state.pushPreview = null;
+    this.state.pushPreviewLoading = dialog === "push";
+    this.state.pushPreviewLoadingMore = false;
+    this.state.pushSelectedCommit = null;
+    this.state.pushCommitDetails = null;
+    this.state.pushCommitDetailsLoading = false;
+    const sequence = ++this.remoteDialogSequence;
+    this.renderRemoteDialog();
+    queueMicrotask(() => {
+      this.root
+        .querySelector<HTMLButtonElement>("#remote-dialog-close")
+        ?.focus();
+    });
+    if (dialog === "push") void this.loadPushPreview(sequence);
+  }
+
+  private closeRemoteDialog(restoreFocus = true): void {
+    if (this.state.remoteOperation) return;
+    ++this.remoteDialogSequence;
+    this.state.remoteDialog = null;
+    this.state.remoteDialogError = null;
+    this.state.pushPreview = null;
+    this.state.pushPreviewLoading = false;
+    this.state.pushPreviewLoadingMore = false;
+    this.state.pushSelectedCommit = null;
+    this.state.pushCommitDetails = null;
+    this.state.pushCommitDetailsLoading = false;
+    this.renderRemoteDialog();
+    const target = this.remoteDialogReturnFocus;
+    this.remoteDialogReturnFocus = null;
+    if (restoreFocus) queueMicrotask(() => target?.focus());
+  }
+
+  private renderRemoteDialog(): void {
+    const host = this.query("#remote-action-dialog");
+    const dialog = this.state.remoteDialog;
+    const snapshot = this.state.snapshot;
+    if (!dialog || !snapshot) {
+      host.classList.add("hidden");
+      host.innerHTML = "";
       return;
     }
+    const focusedId =
+      document.activeElement instanceof HTMLElement && host.contains(document.activeElement)
+        ? document.activeElement.id
+        : null;
+    host.classList.remove("hidden");
+    host.innerHTML =
+      dialog === "update"
+        ? this.renderUpdateDialog(snapshot)
+        : this.renderPushDialog(snapshot);
+    this.bindRemoteDialogEvents();
+    if (focusedId) {
+      queueMicrotask(() =>
+        this.root.querySelector<HTMLElement>(`#${focusedId}`)?.focus(),
+      );
+    }
+  }
+
+  private renderUpdateDialog(snapshot: RepositorySnapshot): string {
+    const policy = remotePolicy(snapshot, this.state.selectedRemote);
+    const remote = policy.selectedRemote?.name ?? "No remote";
+    const branch = snapshot.branch.head ?? "No branch";
+    const source = snapshot.branch.head ? `refs/heads/${snapshot.branch.head}` : "No branch";
+    const destination = snapshot.branch.upstreamRef ?? "No upstream";
+    const operation = this.state.remoteOperation?.kind === "pull"
+      ? this.state.remoteOperation
+      : null;
+    const busyLabel = operation?.cancelling ? "Cancelling…" : operation ? "Updating…" : "Update";
+    const error = this.state.remoteDialogError
+      ? `<div class="remote-dialog-error" role="alert">${escapeHtml(this.state.remoteDialogError)}</div>`
+      : "";
+    return `<section class="dialog remote-action-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
+      <div class="dialog-heading">
+        <div><span class="panel-eyebrow">Current branch</span><h2 id="remote-dialog-title">Update ${escapeHtml(branch)}</h2></div>
+        <button class="icon-button" id="remote-dialog-close" type="button" aria-label="Cancel Update confirmation" title="Cancel" ${operation ? "disabled" : ""}>${icon("close", 18)}</button>
+      </div>
+      <p id="remote-dialog-description">Fetch the configured upstream and integrate it into the checked-out branch. Only a clean fast-forward is executable in this version.</p>
+      <div class="remote-dialog-route" aria-label="Update route"><code>${escapeHtml(source)}</code><span>←</span><code>${escapeHtml(`${remote}:${destination}`)}</code></div>
+      ${error}
+      <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}>
+        <legend>Update method</legend>
+        <label class="remote-strategy-card selected"><input type="radio" name="update-strategy" value="ff-only" checked /><span><strong>Fast-forward only</strong><small>Fetch the configured upstream, then move the current branch only when no merge or rebase is required.</small></span></label>
+        <label class="remote-strategy-card unavailable"><input type="radio" name="update-strategy" value="merge" disabled /><span><strong>Merge incoming changes <b>Unavailable</b></strong><small>Requires editable conflict Diff plus Continue and Abort lifecycle support.</small></span></label>
+        <label class="remote-strategy-card unavailable"><input type="radio" name="update-strategy" value="rebase" disabled /><span><strong>Rebase current branch <b>Unavailable</b></strong><small>Requires editable conflict Diff plus Continue, Skip, and Abort lifecycle support.</small></span></label>
+      </fieldset>
+      <p class="remote-dialog-note">No merge commit, rebase, reset, stash, or force operation will be started. Git credentials come from your configured credential helper or SSH agent.</p>
+      <div class="dialog-actions">
+        ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel update"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
+        <button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="Update ${escapeAttribute(source)} from ${escapeAttribute(`${remote}:${destination}`)} using fast-forward only" ${operation || !policy.pull.enabled ? "disabled" : ""}>${busyLabel}</button>
+      </div>
+    </section>`;
+  }
+
+  private renderPushDialog(snapshot: RepositorySnapshot): string {
+    const preview = this.state.pushPreview;
+    const operation = this.state.remoteOperation?.kind === "push"
+      ? this.state.remoteOperation
+      : null;
+    const error = this.state.remoteDialogError
+      ? `<div class="remote-dialog-error" role="alert">${escapeHtml(this.state.remoteDialogError)}</div>`
+      : "";
+    const body = this.state.pushPreviewLoading
+      ? `<div class="remote-dialog-loading" role="status"><span class="spinner"></span><span>Reading outgoing commits from the last-fetched refs…</span></div>`
+      : preview
+        ? this.renderPushPreviewBody(preview)
+        : `<div class="remote-dialog-empty">Push preview is unavailable. Close this window and refresh before retrying.</div>`;
+    const route = preview
+      ? `${preview.sourceRef} to ${preview.remote}:${preview.destinationRef}`
+      : "the selected current-branch route";
+    const actionable = Boolean(preview && (preview.publish || preview.totalCommits > 0));
+    return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
+      <div class="dialog-heading">
+        <div><span class="panel-eyebrow">Review first</span><h2 id="remote-dialog-title">Push commits to ${escapeHtml(snapshot.branch.head ?? "current branch")}</h2></div>
+        <button class="icon-button" id="remote-dialog-close" type="button" aria-label="Cancel Push confirmation" title="Cancel" ${operation ? "disabled" : ""}>${icon("close", 18)}</button>
+      </div>
+      <p id="remote-dialog-description">Review the exact current-branch route and outgoing commits before an ordinary non-force push. The comparison is based on locally known refs from the last Fetch.</p>
+      ${error}
+      ${body}
+      <p class="remote-dialog-note">This action never force-pushes, pushes tags, updates first, or retries automatically. A server rejection ends the operation and remains visible here.</p>
+      <div class="dialog-actions">
+        ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel push"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
+        <button class="primary-button" id="remote-dialog-confirm-push" type="button" aria-label="Push ${preview?.totalCommits ?? 0} outgoing commits over ${escapeAttribute(route)} using ordinary non-force push without tags" ${operation || this.state.pushPreviewLoading || !actionable ? "disabled" : ""}>${operation?.cancelling ? "Cancelling…" : operation ? "Pushing…" : preview?.publish ? "Publish branch" : "Push"}</button>
+      </div>
+    </section>`;
+  }
+
+  private renderPushPreviewBody(preview: PushPreview): string {
+    const selectedOid = this.state.pushSelectedCommit;
+    const commits = preview.commits.length
+      ? preview.commits
+          .map((commit) => `<button class="push-commit-row ${commit.oid === selectedOid ? "selected" : ""}" type="button" role="option" data-push-commit="${escapeAttribute(commit.oid)}" aria-selected="${commit.oid === selectedOid}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.shortOid)} · ${escapeHtml(commit.authorName)} · ${escapeHtml(formatAbsolute(commit.authoredAt))}</small></button>`)
+          .join("")
+      : `<div class="remote-dialog-empty">No new commit objects are visible against the selected remote's last-fetched refs.${preview.publish ? " Publishing will still create the destination branch." : ""}</div>`;
+    const details =
+      this.state.pushCommitDetails?.oid === selectedOid
+        ? this.state.pushCommitDetails
+        : null;
+    const files = this.state.pushCommitDetailsLoading
+      ? `<div class="remote-dialog-loading"><span class="spinner"></span><span>Reading files for the selected commit…</span></div>`
+      : details
+        ? details.files.length
+          ? details.files.map((file) => `<div class="push-file-row file-status-${file.status}" title="${escapeAttribute(file.path)}"><span class="change-status status-${file.status}">${changeCode(file.status)}</span><span class="commit-file-glyph">${fileTypeIcon(file.path)}</span><span>${escapeHtml(file.path)}</span></div>`).join("")
+          : `<div class="remote-dialog-empty">This commit has no file changes to display.</div>`
+        : `<div class="remote-dialog-empty">Select an outgoing commit to inspect its files.</div>`;
+    return `<div class="remote-dialog-route" aria-label="Push route"><code>${escapeHtml(preview.sourceRef)}</code><span>→</span><code>${escapeHtml(`${preview.remote}:${preview.destinationRef}`)}</code></div>
+      <div class="push-preview-summary"><strong>${preview.publish ? "First publication" : "Configured upstream"}</strong><span>${preview.totalCommits} outgoing commit${preview.totalCommits === 1 ? "" : "s"}</span><code title="${escapeAttribute(preview.headOid)}">HEAD ${escapeHtml(preview.headOid.slice(0, 10))}</code></div>
+      <div class="push-preview-grid">
+        <section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">Outgoing commits</h3><span>${preview.commits.length}/${preview.totalCommits}</span></div><div class="push-commit-list" role="listbox">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${this.state.pushPreviewLoadingMore ? "disabled" : ""}>${this.state.pushPreviewLoadingMore ? "Loading…" : "Show more"}</button>` : preview.truncated ? `<p class="push-preview-limit">Showing the first 1,000 of ${preview.totalCommits} commits. Push includes all ${preview.totalCommits}.</p>` : ""}</section>
+        <section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading"><h3 id="push-files-title">Files in selected commit</h3><span>${details?.files.length ?? 0}</span></div><div class="push-file-list">${files}</div></section>
+      </div>`;
+  }
+
+  private bindRemoteDialogEvents(): void {
+    this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.addEventListener(
+      "click",
+      () => this.closeRemoteDialog(),
+    );
+    this.root.querySelector<HTMLButtonElement>("#remote-dialog-cancel")?.addEventListener(
+      "click",
+      () => this.closeRemoteDialog(),
+    );
+    this.root
+      .querySelector<HTMLButtonElement>("#remote-dialog-cancel-operation")
+      ?.addEventListener("click", () => void this.cancelActiveRemoteOperation());
+    this.root
+      .querySelector<HTMLButtonElement>("#remote-dialog-confirm-update")
+      ?.addEventListener("click", () => void this.confirmRemoteDialog("pull"));
+    this.root
+      .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
+      ?.addEventListener("click", () => void this.confirmRemoteDialog("push"));
+    this.root.querySelectorAll<HTMLButtonElement>("[data-push-commit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const oid = button.dataset.pushCommit;
+        if (!oid || oid === this.state.pushSelectedCommit) return;
+        this.state.pushSelectedCommit = oid;
+        this.state.pushCommitDetails = null;
+        this.renderRemoteDialog();
+        void this.loadPushCommitDetails(oid, this.remoteDialogSequence);
+      });
+    });
+    this.root.querySelector<HTMLButtonElement>("#push-load-more")?.addEventListener(
+      "click",
+      () => void this.loadMorePushPreview(),
+    );
+  }
+
+  private async loadPushPreview(sequence: number): Promise<void> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || this.state.remoteDialog !== "push") return;
+    const remote = remotePolicy(snapshot, this.state.selectedRemote).selectedRemote;
+    if (!remote) return;
+    try {
+      const preview = await bridge.readPushPreview(snapshot.root, remote.name, 0, 100);
+      if (sequence !== this.remoteDialogSequence || this.state.remoteDialog !== "push") return;
+      this.state.pushPreview = preview;
+      this.state.pushPreviewLoading = false;
+      this.state.pushSelectedCommit = preview.commits[0]?.oid ?? null;
+      this.renderRemoteDialog();
+      if (this.state.pushSelectedCommit) {
+        void this.loadPushCommitDetails(this.state.pushSelectedCommit, sequence);
+      }
+    } catch (error) {
+      if (sequence !== this.remoteDialogSequence || this.state.remoteDialog !== "push") return;
+      this.state.pushPreviewLoading = false;
+      this.state.remoteDialogError = errorMessage(error);
+      this.renderRemoteDialog();
+    }
+  }
+
+  private async loadMorePushPreview(): Promise<void> {
+    const snapshot = this.state.snapshot;
+    const preview = this.state.pushPreview;
+    if (!snapshot || !preview || !preview.hasMore || this.state.pushPreviewLoadingMore) return;
+    const sequence = this.remoteDialogSequence;
+    this.state.pushPreviewLoadingMore = true;
+    this.renderRemoteDialog();
+    try {
+      const page = await bridge.readPushPreview(
+        snapshot.root,
+        preview.remote,
+        preview.commits.length,
+        100,
+      );
+      if (sequence !== this.remoteDialogSequence || this.state.remoteDialog !== "push") return;
+      if (page.previewToken !== preview.previewToken) {
+        throw new Error("The branch or remote-tracking state changed. Close and review Push again.");
+      }
+      this.state.pushPreview = {
+        ...page,
+        offset: 0,
+        commits: [...preview.commits, ...page.commits],
+      };
+      this.state.pushPreviewLoadingMore = false;
+      this.renderRemoteDialog();
+    } catch (error) {
+      if (sequence !== this.remoteDialogSequence) return;
+      this.state.pushPreviewLoadingMore = false;
+      this.state.remoteDialogError = errorMessage(error);
+      this.renderRemoteDialog();
+    }
+  }
+
+  private async loadPushCommitDetails(oid: string, sequence: number): Promise<void> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || this.state.remoteDialog !== "push") return;
+    this.state.pushCommitDetailsLoading = true;
+    this.renderRemoteDialog();
+    try {
+      const details = await bridge.readCommitDetails(snapshot.root, ".", oid);
+      if (
+        sequence !== this.remoteDialogSequence ||
+        this.state.remoteDialog !== "push" ||
+        this.state.pushSelectedCommit !== oid
+      ) return;
+      this.state.pushCommitDetails = details;
+    } catch (error) {
+      if (sequence === this.remoteDialogSequence) {
+        this.state.remoteDialogError = errorMessage(error);
+      }
+    } finally {
+      if (sequence === this.remoteDialogSequence) {
+        this.state.pushCommitDetailsLoading = false;
+        this.renderRemoteDialog();
+      }
+    }
+  }
+
+  private async confirmRemoteDialog(kind: "pull" | "push"): Promise<void> {
+    const succeeded = await this.runRemoteOperation(kind);
+    if (succeeded) this.closeRemoteDialog();
+  }
+
+  private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<boolean> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot || this.state.loading || this.state.remoteOperation) return false;
+    const policy = remotePolicy(snapshot, this.state.selectedRemote);
+    const actionState = policy[kind];
+    if (!actionState.enabled) return false;
+    const remote = policy.selectedRemote;
+    if (kind !== "pull" && !remote) return false;
+    if (kind === "pull" && !(await this.saveDirtyTabsBefore("pulling changes"))) {
+      return false;
+    }
+    const pushPreview = kind === "push" ? this.state.pushPreview : null;
+    if (kind === "push" && !pushPreview) return false;
 
     const generation = ++this.requestGeneration;
     this.cancelActiveUntrackedScan();
@@ -2724,8 +3136,9 @@ export class AsterlynApp {
       cancelling: false,
     };
     this.clearError();
-    this.setLoading(true, `${capitalize(kind)} in progress…`);
-    this.renderRemotePopover(snapshot);
+    this.setLoading(true, `${remoteActionLabel(kind)} in progress…`);
+    this.renderRemoteToolbar(snapshot);
+    this.renderRemoteDialog();
     let pendingRoot: string | null = null;
     let succeeded = false;
     let failed = false;
@@ -2736,8 +3149,13 @@ export class AsterlynApp {
           ? await bridge.fetchRemote(snapshot.root, remote!.name, operationId)
           : kind === "pull"
             ? await bridge.pullCurrent(snapshot.root, operationId)
-            : await bridge.pushCurrent(snapshot.root, remote!.name, operationId);
-      if (generation !== this.requestGeneration) return;
+          : await bridge.pushCurrent(
+              snapshot.root,
+              remote!.name,
+              pushPreview!.previewToken,
+              operationId,
+            );
+      if (generation !== this.requestGeneration) return false;
       this.acceptRemoteSnapshot(next);
       if (kind === "pull") {
         this.captureMountedTextEditor();
@@ -2750,15 +3168,16 @@ export class AsterlynApp {
       pendingRoot = next.root;
       succeeded = true;
     } catch (error) {
-      if (generation !== this.requestGeneration) return;
+      if (generation !== this.requestGeneration) return false;
       failed = true;
+      this.state.remoteDialogError = errorMessage(error);
       this.showError(error);
       try {
         const opened = await bridge.openProject(snapshot.root);
         const reconciled = opened.repository;
-        if (generation !== this.requestGeneration) return;
+        if (generation !== this.requestGeneration) return false;
         if (!reconciled) throw new Error("The active project is no longer a Git repository.");
-        this.acceptRemoteSnapshot(reconciled);
+        this.acceptRemoteSnapshot(reconciled, true);
         pendingRoot = reconciled.root;
       } catch {
         this.setStatus("Remote operation ended; refresh required", "warning");
@@ -2767,17 +3186,22 @@ export class AsterlynApp {
       if (generation === this.requestGeneration) {
         this.state.remoteOperation = null;
         this.setLoading(false, "Ready");
-        if (this.state.snapshot) this.renderRemotePopover(this.state.snapshot);
-        if (succeeded) this.setStatus(`${capitalize(kind)} completed`, "success");
+        if (this.state.snapshot) this.renderRemoteToolbar(this.state.snapshot);
+        this.renderRemoteDialog();
+        if (succeeded) this.setStatus(`${remoteActionLabel(kind)} completed`, "success");
         else if (failed) this.setStatus("Remote operation needs review", "warning");
       }
     }
     if (pendingRoot && generation === this.requestGeneration) {
       void this.completeUntrackedScan(pendingRoot, generation);
     }
+    return succeeded;
   }
 
-  private acceptRemoteSnapshot(snapshot: RepositorySnapshot): void {
+  private acceptRemoteSnapshot(
+    snapshot: RepositorySnapshot,
+    focusConflicts = false,
+  ): void {
     this.state.snapshot = snapshot;
     this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
     this.state.selectedBranch = null;
@@ -2788,6 +3212,7 @@ export class AsterlynApp {
     );
     this.state.selectedChange = null;
     this.chooseValidChangeSelection();
+    if (focusConflicts) this.prepareConflictResolution(snapshot);
     this.reconcileWorkingDocument(snapshot);
     this.renderWorkspace();
     this.loadVisibleCommitDetails();
@@ -2797,13 +3222,36 @@ export class AsterlynApp {
     void this.loadProjectFiles(snapshot.root);
   }
 
+  private prepareConflictResolution(snapshot: RepositorySnapshot): boolean {
+    const conflict = snapshot.changes.find((change) => change.conflicted);
+    if (!conflict) return false;
+    this.state.layout = {
+      ...this.state.layout,
+      leftTool: "changes",
+    };
+    saveWorkbenchLayout(window.localStorage, this.state.layout);
+    this.state.excludedChangePaths.delete(conflict.path);
+    this.state.selectedChange = { path: conflict.path, staged: false };
+    this.activateDiffPreview({
+      kind: "working-diff",
+      repositoryRoot: snapshot.root,
+      selection: { ...this.state.selectedChange },
+    });
+    this.clearWorkingDiff();
+    this.state.workingPatchLoading = true;
+    this.state.remoteDialogError =
+      "Git reported unresolved files. They are listed in Changes and the first conflict is open in the current read-only Diff. Editable conflict resolution, Continue, and Abort are not available yet.";
+    return true;
+  }
+
   private async cancelActiveRemoteOperation(): Promise<void> {
     const operation = this.state.remoteOperation;
     if (!operation || operation.cancelling) return;
     operation.cancelling = true;
     if (this.state.snapshot?.root === operation.root) {
       this.setStatus(`Cancelling ${operation.kind}…`, "busy");
-      this.renderRemotePopover(this.state.snapshot);
+      this.renderRemoteToolbar(this.state.snapshot);
+      this.renderRemoteDialog();
     }
     try {
       await bridge.cancelRemoteOperation(operation.root, operation.id);
@@ -2811,7 +3259,8 @@ export class AsterlynApp {
       operation.cancelling = false;
       this.showError(error);
       if (this.state.snapshot?.root === operation.root) {
-        this.renderRemotePopover(this.state.snapshot);
+        this.renderRemoteToolbar(this.state.snapshot);
+        this.renderRemoteDialog();
       }
     }
   }
@@ -3064,16 +3513,7 @@ export class AsterlynApp {
     snapshot: RepositorySnapshot | null,
   ): void {
     this.renderRepositoryMenu(workspaceRoot);
-    const sync = this.query<HTMLButtonElement>("#sync-button");
-    sync.disabled = !snapshot;
-    sync.title = snapshot ? "Remote sync" : "Git is unavailable for this folder";
-    if (snapshot) {
-      this.state.selectedRemote = preferredRemote(snapshot, this.state.selectedRemote);
-      this.renderRemotePopover(snapshot);
-    } else {
-      this.state.syncPopoverOpen = false;
-      this.query("#sync-popover").classList.add("hidden");
-    }
+    this.renderRemoteToolbar(snapshot);
   }
 
   private renderRepositoryMenu(currentRoot = this.state.workspaceRoot): void {
@@ -3542,7 +3982,8 @@ export class AsterlynApp {
       path: file.path,
       workspacePath: file.workspacePath,
     };
-    const existing = textTab(this.state.editor, editorDocumentKey(document));
+    const documentKey = editorDocumentKey(document);
+    const existing = textTab(this.state.editor, documentKey);
     if (searchMatch && existing && (isTextTabDirty(existing) || existing.saveRequest)) {
       this.setStatus(
         "Search location was not applied because this file has unsaved edits",
@@ -3554,7 +3995,14 @@ export class AsterlynApp {
       this.setStatus("Wait for the current file load, then run the search again", "warning");
       return;
     }
-    let opened = openTextDocument(this.state.editor, document);
+    const markdownMode = isMarkdownPath(document.path)
+      ? markdownModeForDocument(this.markdownModePreferences, documentKey)
+      : "source";
+    const session =
+      existing && isMarkdownPath(document.path)
+        ? setTextTabMarkdownMode(this.state.editor, existing.id, markdownMode)
+        : this.state.editor;
+    let opened = openTextDocument(session, document, markdownMode);
     if (opened.limitReached) {
       const currentRoot = this.state.workspaceRoot;
       const activePath = currentRoot
@@ -6109,6 +6557,15 @@ export class AsterlynApp {
           if (!active || active.id !== tab.id || active.markdownMode === mode) return;
           this.captureMountedTextEditor();
           this.state.editor = setTextTabMarkdownMode(this.state.editor, tab.id, mode);
+          this.markdownModePreferences = rememberMarkdownMode(
+            this.markdownModePreferences,
+            tab.id,
+            mode,
+          );
+          saveMarkdownModePreferences(
+            window.localStorage,
+            this.markdownModePreferences,
+          );
           this.renderEditor();
         });
       });
@@ -7873,6 +8330,7 @@ export class AsterlynApp {
     this.root.classList.toggle("is-busy", loading);
     this.query<HTMLButtonElement>("#refresh-button").disabled =
       loading || !this.state.workspaceRoot;
+    this.renderRemoteToolbar(this.state.snapshot);
     this.setStatus(message, loading ? "busy" : "normal");
   }
 
@@ -8345,6 +8803,10 @@ function formatBytes(bytes: number): string {
 
 function capitalize(value: string): string {
   return value.charAt(0).toLocaleUpperCase() + value.slice(1);
+}
+
+function remoteActionLabel(kind: "fetch" | "pull" | "push"): string {
+  return kind === "pull" ? "Update" : capitalize(kind);
 }
 
 function errorMessage(error: unknown): string {

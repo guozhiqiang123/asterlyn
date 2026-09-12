@@ -73,6 +73,15 @@ test("Markdown presentation mode belongs to one text tab", () => {
   assert.equal(unchanged, session);
 });
 
+test("a new Markdown tab accepts its restored presentation mode", () => {
+  const opened = openTextDocument(
+    createEditorSession(),
+    document("README.md"),
+    "preview",
+  );
+  assert.equal(opened.session.textTabs[0].markdownMode, "preview");
+});
+
 test("stale loads and saves cannot replace newer tab state", () => {
   const opened = openTextDocument(createEditorSession(), document("one.ts"));
   const stale = completeTextLoad(opened.session, opened.tabId, 0, {

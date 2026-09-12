@@ -17,8 +17,8 @@ use crate::model::{
     BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
     DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    RemoteSummary, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
-    UntrackedState,
+    PushPreview, RemoteSummary, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
+    UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -30,6 +30,8 @@ const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
+const MAX_PUSH_PREVIEW_WINDOW: usize = 1_000;
+const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 fn diff_context_argument(expanded_unchanged: bool) -> OsString {
@@ -61,6 +63,17 @@ struct CurrentBranchContext {
     oid: String,
     upstream: Option<UpstreamTarget>,
     behind: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PushTargetContext {
+    remote: String,
+    branch: String,
+    source_ref: String,
+    destination_ref: String,
+    head_oid: String,
+    comparison_base_oid: Option<String>,
+    publish: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1901,15 +1914,169 @@ impl GitRepository {
         Ok(())
     }
 
-    pub fn push_current(
+    pub fn push_current_confirmed(
         &self,
         remote: &str,
+        expected_preview_token: &str,
         cancellation: &CancellationToken,
     ) -> Result<(), GitError> {
+        self.push_current_internal(remote, Some(expected_preview_token), cancellation, || {})
+    }
+
+    pub fn push_preview(
+        &self,
+        remote: &str,
+        offset: usize,
+        page_size: usize,
+    ) -> Result<PushPreview, GitError> {
         self.ensure_no_repository_operation("push")?;
+        if page_size == 0 || page_size > MAX_PUSH_PREVIEW_PAGE_SIZE {
+            return Err(GitError::InvalidInput {
+                field: "push preview page size".to_string(),
+                message: format!("must be between 1 and {MAX_PUSH_PREVIEW_PAGE_SIZE}"),
+            });
+        }
+        if offset > MAX_PUSH_PREVIEW_WINDOW {
+            return Err(GitError::InvalidInput {
+                field: "push preview offset".to_string(),
+                message: format!("must not exceed {MAX_PUSH_PREVIEW_WINDOW}"),
+            });
+        }
+
+        let target = self.push_target_context(remote)?;
+        let selectors = push_revision_selectors(&target);
+        let total_commits = self.count_revisions(&selectors, "count outgoing commits")?;
+        let preview_token = push_preview_token(&target);
+        if offset == MAX_PUSH_PREVIEW_WINDOW || offset >= total_commits {
+            return Ok(PushPreview {
+                remote: target.remote,
+                branch: target.branch,
+                source_ref: target.source_ref,
+                destination_ref: target.destination_ref,
+                head_oid: target.head_oid,
+                comparison_base_oid: target.comparison_base_oid,
+                publish: target.publish,
+                commits: Vec::new(),
+                offset,
+                total_commits,
+                has_more: false,
+                truncated: total_commits > MAX_PUSH_PREVIEW_WINDOW,
+                preview_token,
+            });
+        }
+
+        let page_size = page_size
+            .min(MAX_PUSH_PREVIEW_WINDOW - offset)
+            .min(total_commits - offset);
+        let mut log_selectors = vec![OsString::from(format!("--skip={offset}"))];
+        log_selectors.extend(selectors.iter().map(OsString::from));
+        let mut commits =
+            self.run_commit_history("read outgoing commits", log_selectors, page_size)?;
+        scope_commits(&mut commits, ".");
+        let next_offset = offset.saturating_add(commits.len());
+        Ok(PushPreview {
+            remote: target.remote,
+            branch: target.branch,
+            source_ref: target.source_ref,
+            destination_ref: target.destination_ref,
+            head_oid: target.head_oid,
+            comparison_base_oid: target.comparison_base_oid,
+            publish: target.publish,
+            commits,
+            offset,
+            total_commits,
+            has_more: next_offset < total_commits && next_offset < MAX_PUSH_PREVIEW_WINDOW,
+            truncated: total_commits > MAX_PUSH_PREVIEW_WINDOW,
+            preview_token,
+        })
+    }
+
+    fn push_current_internal<F>(
+        &self,
+        remote: &str,
+        expected_preview_token: Option<&str>,
+        cancellation: &CancellationToken,
+        before_execute: F,
+    ) -> Result<(), GitError>
+    where
+        F: FnOnce(),
+    {
+        self.ensure_no_repository_operation("push")?;
+        let target = self.push_target_context(remote)?;
+        if expected_preview_token.is_some_and(|expected| expected != push_preview_token(&target)) {
+            return Err(GitError::UnsafeOperation {
+                operation: "push".to_string(),
+                message: "the branch, HEAD, upstream, or remote-tracking state changed after confirmation; review the push again"
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+
+        let mut args = vec![
+            OsString::from("-c"),
+            OsString::from("push.followTags=false"),
+            OsString::from("-c"),
+            OsString::from("push.recurseSubmodules=no"),
+            OsString::from("push"),
+            OsString::from("--porcelain"),
+            OsString::from("--no-progress"),
+            OsString::from("--no-force"),
+            OsString::from("--no-mirror"),
+            OsString::from("--no-follow-tags"),
+            OsString::from("--no-signed"),
+            OsString::from("--recurse-submodules=no"),
+        ];
+        self.ensure_no_repository_operation("push")?;
+        let before_push = self.push_target_context(remote)?;
+        if before_push != target {
+            return Err(GitError::UnsafeOperation {
+                operation: "push".to_string(),
+                message: "branch or upstream state changed before push; review the push again"
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        before_execute();
+        args.extend([
+            OsString::from("--"),
+            OsString::from(&target.remote),
+            OsString::from(format!("{}:{}", target.head_oid, target.destination_ref)),
+        ]);
+        self.run_remote_operation("push", &target.remote, args, cancellation, true, true)?;
+        if target.publish {
+            let tracking_ref = format!("refs/remotes/{}/{}", target.remote, target.branch);
+            if self
+                .run_mutation(
+                    "configure published branch upstream",
+                    vec![
+                        OsString::from("branch"),
+                        OsString::from(format!("--set-upstream-to={tracking_ref}")),
+                        OsString::from("--"),
+                        OsString::from(&target.branch),
+                    ],
+                )
+                .is_err()
+            {
+                return Err(GitError::UnsafeOperation {
+                    operation: "configure published branch upstream".to_string(),
+                    message: "the remote branch was published, but its local upstream could not be configured; do not retry Push, refresh and inspect the branch"
+                        .to_string(),
+                    blockers: Vec::new(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn push_target_context(&self, remote: &str) -> Result<PushTargetContext, GitError> {
         let context = self.current_branch_context("push")?;
         let configured_remote = self.validated_remote(remote, true)?;
-        let (destination, publish) = match context.upstream.as_ref() {
+        let branch = context
+            .full_ref
+            .strip_prefix("refs/heads/")
+            .expect("current branch refs are validated")
+            .to_string();
+        let (destination_ref, comparison_base_oid, publish) = match context.upstream.as_ref() {
             Some(upstream) => {
                 self.validated_upstream(upstream, true)?;
                 if upstream.remote != configured_remote.name {
@@ -1928,53 +2095,66 @@ impl GitRepository {
                         blockers: Vec::new(),
                     });
                 }
-                (upstream.merge_ref.clone(), false)
+                let base =
+                    self.resolve_commit(&upstream.tracking_ref, "read push comparison base")?;
+                if !self.is_ancestor(&base, &context.oid)? {
+                    return Err(GitError::UnsafeOperation {
+                            operation: "push".to_string(),
+                            message: "the current branch has diverged from its locally known upstream; fetch and reconcile it first"
+                                .to_string(),
+                            blockers: Vec::new(),
+                        });
+                }
+                (upstream.merge_ref.clone(), Some(base), false)
             }
-            None => (context.full_ref.clone(), true),
+            None => {
+                let tracking_ref = format!("refs/remotes/{}/{}", configured_remote.name, branch);
+                let base =
+                    if self.reference_exists(&tracking_ref)? {
+                        Some(self.resolve_commit(
+                            &tracking_ref,
+                            "read unpublished branch comparison base",
+                        )?)
+                    } else {
+                        None
+                    };
+                if let Some(base_oid) = base.as_ref() {
+                    if !self.is_ancestor(base_oid, &context.oid)? {
+                        return Err(GitError::UnsafeOperation {
+                                operation: "push".to_string(),
+                                message: "the same-named remote-tracking branch has diverged; fetch and reconcile it before publishing"
+                                    .to_string(),
+                                blockers: Vec::new(),
+                            });
+                    }
+                }
+                (context.full_ref.clone(), base, true)
+            }
         };
 
-        let mut args = vec![
-            OsString::from("-c"),
-            OsString::from("push.followTags=false"),
-            OsString::from("-c"),
-            OsString::from("push.recurseSubmodules=no"),
-            OsString::from("push"),
-            OsString::from("--porcelain"),
-            OsString::from("--no-progress"),
-            OsString::from("--no-force"),
-            OsString::from("--no-mirror"),
-            OsString::from("--no-follow-tags"),
-            OsString::from("--no-signed"),
-            OsString::from("--recurse-submodules=no"),
-        ];
-        self.ensure_no_repository_operation("push")?;
-        let before_push = self.current_branch_context("push")?;
-        if before_push != context {
-            return Err(GitError::UnsafeOperation {
-                operation: "push".to_string(),
-                message: "branch or upstream state changed before push; refresh before retrying"
-                    .to_string(),
-                blockers: Vec::new(),
-            });
-        }
-        self.validated_remote(&configured_remote.name, true)?;
-        if publish {
-            args.push(OsString::from("--set-upstream"));
-        }
-        args.extend([
-            OsString::from("--"),
-            OsString::from(&configured_remote.name),
-            OsString::from(format!("{}:{destination}", context.full_ref)),
-        ]);
-        self.run_remote_operation(
-            "push",
-            &configured_remote.name,
-            args,
-            cancellation,
-            true,
-            true,
-        )?;
-        Ok(())
+        Ok(PushTargetContext {
+            remote: configured_remote.name,
+            branch,
+            source_ref: context.full_ref,
+            destination_ref,
+            head_oid: context.oid,
+            comparison_base_oid,
+            publish,
+        })
+    }
+
+    fn count_revisions(&self, selectors: &[String], operation: &str) -> Result<usize, GitError> {
+        let mut arguments = vec![OsString::from("rev-list"), OsString::from("--count")];
+        arguments.extend(selectors.iter().map(OsString::from));
+        arguments.push(OsString::from("--"));
+        let output = self.run_read_owned(operation, arguments)?;
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<usize>()
+            .map_err(|error| GitError::Parse {
+                context: operation.to_string(),
+                message: error.to_string(),
+            })
     }
 
     fn remote_summaries(&self) -> Result<Vec<RemoteSummary>, GitError> {
@@ -2352,18 +2532,22 @@ impl GitRepository {
     }
 
     fn local_branch_exists(&self, full_name: &str) -> Result<bool, GitError> {
+        self.reference_exists(full_name)
+    }
+
+    fn reference_exists(&self, full_name: &str) -> Result<bool, GitError> {
         let output = run_git_output(&self.root, ["show-ref", "--verify", "--quiet", full_name])
             .map_err(|error| GitError::Io {
-                operation: "verify local branch".to_string(),
+                operation: "verify Git ref".to_string(),
                 message: error.to_string(),
             })?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
             _ => Err(GitError::CommandFailed {
-                operation: "verify local branch".to_string(),
+                operation: "verify Git ref".to_string(),
                 status: output.status.code(),
-                message: sanitize_stderr(&output.stderr, "could not verify local branch"),
+                message: sanitize_stderr(&output.stderr, "could not verify Git ref"),
             }),
         }
     }
@@ -2668,6 +2852,40 @@ impl GitRepository {
             .find(|(marker, _)| self.git_dir.join(marker).exists())
             .map(|(_, operation)| (*operation).to_string())
     }
+}
+
+fn push_revision_selectors(target: &PushTargetContext) -> Vec<String> {
+    match target.comparison_base_oid.as_ref() {
+        Some(base) => vec![format!("{base}..{}", target.head_oid)],
+        None => vec![
+            target.head_oid.clone(),
+            "--not".to_string(),
+            format!("--remotes={}", target.remote),
+        ],
+    }
+}
+
+fn push_preview_token(target: &PushTargetContext) -> String {
+    let fields = [
+        target.remote.as_str(),
+        target.source_ref.as_str(),
+        target.destination_ref.as_str(),
+        target.head_oid.as_str(),
+        target.comparison_base_oid.as_deref().unwrap_or("new"),
+        if target.publish {
+            "publish"
+        } else {
+            "upstream"
+        },
+    ];
+    let mut token = String::from("v1");
+    for field in fields {
+        token.push('|');
+        token.push_str(&field.len().to_string());
+        token.push(':');
+        token.push_str(field);
+    }
+    token
 }
 
 fn path_to_git_string(path: &Path) -> Option<String> {
@@ -5070,8 +5288,15 @@ mod tests {
         let repository = GitRepository::open(&fixture.local).expect("repository opens");
         let main_oid = commit_file(&fixture.local, "local.txt", "local\n", "Local change");
         fs::write(fixture.local.join("pending.txt"), "pending\n").expect("untracked local file");
+        let main_preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("main push preview loads");
         repository
-            .push_current("origin", &CancellationToken::new())
+            .push_current_confirmed(
+                "origin",
+                &main_preview.preview_token,
+                &CancellationToken::new(),
+            )
             .expect("push ignores uncommitted worktree content");
         assert_eq!(
             git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
@@ -5084,8 +5309,15 @@ mod tests {
             .create_branch("feature/publish")
             .expect("clean branch creation succeeds");
         let feature_oid = commit_file(&fixture.local, "feature.txt", "feature\n", "Feature change");
+        let feature_preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("publication preview loads");
         repository
-            .push_current("origin", &CancellationToken::new())
+            .push_current_confirmed(
+                "origin",
+                &feature_preview.preview_token,
+                &CancellationToken::new(),
+            )
             .expect("new branch is published with upstream");
         assert_eq!(
             git_stdout(
@@ -5104,9 +5336,186 @@ mod tests {
 
         git(&fixture.local, &["config", "remote.origin.mirror", "TRUE"]);
         let mirror = repository
-            .push_current("origin", &CancellationToken::new())
+            .push_preview("origin", 0, 100)
             .expect_err("mirror remote is rejected");
         assert!(matches!(mirror, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn previews_outgoing_commits_and_rejects_a_stale_confirmation() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        commit_file(&fixture.local, "first.txt", "first\n", "First outgoing");
+        let second_oid = commit_file(&fixture.local, "second.txt", "second\n", "Second outgoing");
+
+        let first_page = repository
+            .push_preview("origin", 0, 1)
+            .expect("push preview loads");
+        assert_eq!(first_page.remote, "origin");
+        assert_eq!(first_page.branch, "main");
+        assert_eq!(first_page.source_ref, "refs/heads/main");
+        assert_eq!(first_page.destination_ref, "refs/heads/main");
+        assert_eq!(first_page.head_oid, second_oid);
+        assert!(!first_page.publish);
+        assert_eq!(first_page.total_commits, 2);
+        assert_eq!(first_page.commits.len(), 1);
+        assert_eq!(first_page.commits[0].subject, "Second outgoing");
+        assert!(first_page.has_more);
+
+        let second_page = repository
+            .push_preview("origin", 1, 1)
+            .expect("second push preview page loads");
+        assert_eq!(second_page.preview_token, first_page.preview_token);
+        assert_eq!(second_page.commits[0].subject, "First outgoing");
+        assert!(!second_page.has_more);
+
+        let remote_path = fixture.remote.to_string_lossy().into_owned();
+        git(&fixture.local, &["remote", "add", "backup", &remote_path]);
+        let wrong_remote = repository
+            .push_preview("backup", 0, 1)
+            .expect_err("a tracked branch cannot be redirected during confirmation");
+        assert!(matches!(wrong_remote, GitError::InvalidInput { .. }));
+
+        commit_file(&fixture.local, "third.txt", "third\n", "Third outgoing");
+        let stale = repository
+            .push_current_confirmed(
+                "origin",
+                &first_page.preview_token,
+                &CancellationToken::new(),
+            )
+            .expect_err("a changed HEAD invalidates confirmation");
+        assert!(matches!(stale, GitError::UnsafeOperation { .. }));
+
+        let current = repository
+            .push_preview("origin", 0, 100)
+            .expect("fresh push preview loads");
+        repository
+            .push_current_confirmed("origin", &current.preview_token, &CancellationToken::new())
+            .expect("confirmed non-force push succeeds");
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            current.head_oid
+        );
+    }
+
+    #[test]
+    fn confirmed_push_pins_the_previewed_head_across_a_branch_race() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let previewed_oid = commit_file(
+            &fixture.local,
+            "previewed.txt",
+            "previewed\n",
+            "Previewed outgoing",
+        );
+        let raced_oid = commit_file(
+            &fixture.local,
+            "raced.txt",
+            "raced\n",
+            "Concurrent outgoing",
+        );
+        git(&fixture.local, &["reset", "--hard", &previewed_oid]);
+        let preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("push preview loads");
+
+        repository
+            .push_current_internal(
+                "origin",
+                Some(&preview.preview_token),
+                &CancellationToken::new(),
+                || {
+                    git(
+                        &fixture.local,
+                        &["update-ref", "refs/heads/main", &raced_oid, &previewed_oid],
+                    );
+                },
+            )
+            .expect("push uses the already confirmed object id");
+
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            previewed_oid
+        );
+        assert_eq!(
+            git_stdout(&fixture.local, &["rev-parse", "refs/heads/main"]),
+            raced_oid
+        );
+    }
+
+    #[test]
+    fn pinned_push_retains_remote_non_fast_forward_protection() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        commit_file(&fixture.local, "local.txt", "local\n", "Local outgoing");
+        let preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("push preview loads");
+        let remote_oid = commit_file(&fixture.peer, "remote.txt", "remote\n", "Remote outgoing");
+        git(&fixture.peer, &["push", "origin", "main"]);
+
+        let error = repository
+            .push_current_confirmed("origin", &preview.preview_token, &CancellationToken::new())
+            .expect_err("the remote rejects the pinned non-fast-forward update");
+        assert!(matches!(error, GitError::RemoteFailed { .. }));
+        assert_eq!(
+            git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
+            remote_oid
+        );
+    }
+
+    #[test]
+    fn previews_first_publication_against_locally_known_remote_refs() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        repository
+            .create_branch("feature/preview")
+            .expect("branch is created");
+        let feature_oid = commit_file(
+            &fixture.local,
+            "feature-preview.txt",
+            "feature\n",
+            "Feature preview",
+        );
+
+        let preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("publication preview loads");
+        assert!(preview.publish);
+        assert_eq!(preview.branch, "feature/preview");
+        assert_eq!(preview.destination_ref, "refs/heads/feature/preview");
+        assert_eq!(preview.head_oid, feature_oid);
+        assert_eq!(preview.commits.len(), 1);
+        assert_eq!(preview.commits[0].subject, "Feature preview");
+        assert_eq!(preview.total_commits, 1);
+
+        let remote_path = fixture.remote.to_string_lossy().into_owned();
+        git(&fixture.local, &["remote", "add", "backup", &remote_path]);
+        let backup_preview = repository
+            .push_preview("backup", 0, 100)
+            .expect("an unpublished branch can explicitly target another supported remote");
+        assert_eq!(backup_preview.remote, "backup");
+        assert_ne!(backup_preview.preview_token, preview.preview_token);
+        let cross_remote = repository
+            .push_current_confirmed("backup", &preview.preview_token, &CancellationToken::new())
+            .expect_err("a preview token is bound to its selected remote");
+        assert!(matches!(cross_remote, GitError::UnsafeOperation { .. }));
+    }
+
+    #[test]
+    fn push_preview_identity_is_unambiguous_for_legal_ref_separators() {
+        let common = |remote: &str, source_ref: &str| PushTargetContext {
+            remote: remote.to_string(),
+            branch: "main".to_string(),
+            source_ref: source_ref.to_string(),
+            destination_ref: "refs/heads/main".to_string(),
+            head_oid: "a".repeat(40),
+            comparison_base_oid: Some("b".repeat(40)),
+            publish: false,
+        };
+        let first = common("one|refs", "heads/main");
+        let second = common("one", "refs|heads/main");
+        assert_ne!(push_preview_token(&first), push_preview_token(&second));
     }
 
     #[test]
@@ -5142,7 +5551,7 @@ mod tests {
 
         git(&fixture.local, &["checkout", "--detach"]);
         let detached = repository
-            .push_current("origin", &CancellationToken::new())
+            .push_preview("origin", 0, 100)
             .expect_err("detached HEAD cannot be pushed implicitly");
         assert!(matches!(detached, GitError::UnsafeOperation { .. }));
     }

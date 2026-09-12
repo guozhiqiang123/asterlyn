@@ -57,6 +57,22 @@ export interface CommitSummary {
   subject: string;
 }
 
+export interface PushPreview {
+  remote: string;
+  branch: string;
+  sourceRef: string;
+  destinationRef: string;
+  headOid: string;
+  comparisonBaseOid: string | null;
+  publish: boolean;
+  commits: CommitSummary[];
+  offset: number;
+  totalCommits: number;
+  hasMore: boolean;
+  truncated: boolean;
+  previewToken: string;
+}
+
 export type HistoryOrder = "topological" | "date";
 
 export interface HistoryQuery {

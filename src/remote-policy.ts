@@ -8,9 +8,6 @@ export interface RemoteActionState {
 
 export interface RemotePolicy {
   selectedRemote: RemoteSummary | null;
-  pushRemote: RemoteSummary | null;
-  source: string | null;
-  destination: string | null;
   fetch: RemoteActionState;
   pull: RemoteActionState;
   push: RemoteActionState;
@@ -35,22 +32,12 @@ export function remotePolicy(
 ): RemotePolicy {
   const selectedRemote =
     snapshot.remotes.find((remote) => remote.name === selectedName) ?? null;
-  const pushRemoteName = snapshot.branch.upstreamRemote ?? selectedRemote?.name ?? null;
-  const pushRemote =
-    snapshot.remotes.find((remote) => remote.name === pushRemoteName) ?? null;
-  const source = snapshot.branch.head
-    ? `refs/heads/${snapshot.branch.head}`
-    : null;
-  const destination = snapshot.branch.upstreamRef ?? source;
 
   return {
     selectedRemote,
-    pushRemote,
-    source,
-    destination,
     fetch: fetchState(snapshot, selectedRemote),
-    pull: pullState(snapshot),
-    push: pushState(snapshot, pushRemote),
+    pull: pullState(snapshot, selectedRemote),
+    push: pushState(snapshot, selectedRemote),
   };
 }
 
@@ -65,40 +52,47 @@ function fetchState(
   if (!remote.fetchSupported) {
     return blocked("Fetch blocked", "This remote uses an unsupported fetch mapping.");
   }
-  return ready("Fetch", `Refresh branch-tracking refs from ${remote.name}.`);
+  return ready("Fetch", `Refresh all standard branch-tracking refs from ${remote.name}.`);
 }
 
-function pullState(snapshot: RepositorySnapshot): RemoteActionState {
+function pullState(
+  snapshot: RepositorySnapshot,
+  remote: RemoteSummary | null,
+): RemoteActionState {
   const branch = snapshot.branch;
   if (!branch.head || branch.detached || branch.unborn) {
-    return blocked("Pull", "A checked-out branch with a commit is required.");
+    return blocked("Update", "A checked-out branch with a commit is required.");
   }
   if (snapshot.operation) {
-    return blocked("Pull", `Finish the active ${snapshot.operation} operation first.`);
+    return blocked("Update", `Finish the active ${snapshot.operation} operation first.`);
   }
   if (!branch.upstreamRemote || !branch.upstreamRef) {
-    return blocked("Pull", "Publish the branch or configure a supported upstream first.");
+    return blocked("Update", "Publish the branch or configure a supported upstream first.");
   }
-  const upstream = snapshot.remotes.find(
-    (remote) => remote.name === branch.upstreamRemote,
-  );
-  if (!upstream?.fetchSupported) {
-    return blocked("Pull blocked", "The upstream uses an unsupported fetch mapping.");
+  if (!remote) return blocked("Update", "Select the current branch's upstream remote.");
+  if (remote.name !== branch.upstreamRemote) {
+    return blocked(
+      "Update blocked",
+      `Select ${branch.upstreamRemote}, the configured upstream for this branch.`,
+    );
+  }
+  if (!remote.fetchSupported) {
+    return blocked("Update blocked", "The upstream uses an unsupported fetch mapping.");
   }
   if (branch.ahead > 0 && branch.behind > 0) {
-    return blocked("Pull blocked", "The branch has diverged; merge or rebase explicitly.");
+    return blocked("Update blocked", "The branch has diverged; merge or rebase explicitly.");
   }
   if (snapshot.untrackedState === "pending") {
-    return blocked("Pull blocked", "Wait for the complete worktree scan.");
+    return blocked("Update blocked", "Wait for the complete worktree scan.");
   }
   if (snapshot.untrackedState === "failed") {
-    return blocked("Pull blocked", "Refresh after the worktree scan failure.");
+    return blocked("Update blocked", "Refresh after the worktree scan failure.");
   }
   if (snapshot.changes.length > 0) {
-    return blocked("Pull blocked", "Commit, stash, or remove local changes first.");
+    return blocked("Update blocked", "Commit, stash, or remove local changes first.");
   }
   if (branch.behind > 0 && branch.ahead === 0) {
-    return ready("Pull fast-forward", `Apply ${branch.behind} upstream commit${branch.behind === 1 ? "" : "s"}.`);
+    return ready("Update", `Fast-forward by ${branch.behind} upstream commit${branch.behind === 1 ? "" : "s"}.`);
   }
   return blocked("Up to date", "No upstream commits need to be pulled.");
 }
@@ -117,6 +111,12 @@ function pushState(
   if (!remote) return blocked("Push", "Select a configured remote.");
   if (!remote.pushSupported) {
     return blocked("Push blocked", "This remote is mirrored or uses an unsupported mapping.");
+  }
+  if (branch.upstreamRemote && remote.name !== branch.upstreamRemote) {
+    return blocked(
+      "Push blocked",
+      `Select ${branch.upstreamRemote}, the configured upstream for this branch.`,
+    );
   }
   if (branch.behind > 0) {
     return blocked("Push blocked", "Fetch and reconcile upstream commits first.");

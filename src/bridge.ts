@@ -29,6 +29,7 @@ import type {
   ImagePreview,
   ProjectFileList,
   OpenedProject,
+  PushPreview,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositorySnapshot,
@@ -762,6 +763,24 @@ export const bridge = {
     });
   },
 
+  async readPushPreview(
+    repositoryRoot: string,
+    remote: string,
+    offset: number,
+    pageSize: number,
+  ): Promise<PushPreview> {
+    if (!isTauri) {
+      await demoDelay(120);
+      return demoPushPreview(remote, offset, pageSize);
+    }
+    return invoke<PushPreview>("read_push_preview", {
+      repositoryRoot,
+      remote,
+      offset,
+      pageSize,
+    });
+  },
+
   async pullCurrent(
     repositoryRoot: string,
     operationId: string,
@@ -783,6 +802,7 @@ export const bridge = {
   async pushCurrent(
     repositoryRoot: string,
     remote: string,
+    previewToken: string,
     operationId: string,
   ): Promise<RepositorySnapshot> {
     if (!isTauri) {
@@ -790,12 +810,16 @@ export const bridge = {
       if (cancelledDemoRemoteOperations.delete(remoteOperationKey(repositoryRoot, operationId))) {
         throw new Error("Push was cancelled; the remote outcome is unknown until fetch.");
       }
+      if (demoPushPreview(remote, 0, 1).previewToken !== previewToken) {
+        throw new Error("The branch or HEAD changed after confirmation. Review the push again.");
+      }
       browserSnapshot = demoPushCurrent(browserSnapshot, remote);
       return demoTrackedSnapshot(browserSnapshot);
     }
     return invoke<RepositorySnapshot>("push_current", {
       repositoryRoot,
       remote,
+      previewToken,
       operationId,
     });
   },
@@ -814,6 +838,61 @@ export const bridge = {
     });
   },
 };
+
+function demoPushPreview(remote: string, offset: number, pageSize: number): PushPreview {
+  const branch = browserSnapshot.branch;
+  if (!branch.head || !branch.oid || branch.detached || branch.unborn) {
+    throw new Error("A checked-out branch with a commit is required.");
+  }
+  if (!browserSnapshot.remotes.some((item) => item.name === remote && item.pushSupported)) {
+    throw new Error("Select a supported push remote.");
+  }
+  if (branch.upstreamRemote && branch.upstreamRemote !== remote) {
+    throw new Error(`Select ${branch.upstreamRemote}, the configured upstream remote.`);
+  }
+  const sourceRef = `refs/heads/${branch.head}`;
+  const destinationRef = branch.upstreamRef ?? sourceRef;
+  const publish = !branch.upstreamRemote;
+  const totalCommits = publish
+    ? Math.max(branch.ahead, 1)
+    : branch.ahead;
+  const commits = browserSnapshot.commits.slice(
+    offset,
+    Math.min(offset + pageSize, totalCommits),
+  );
+  const comparisonBaseOid = publish
+    ? null
+    : browserSnapshot.branches.find(
+        (candidate) =>
+          candidate.kind === "remote" &&
+          candidate.fullName ===
+            `refs/remotes/${remote}/${destinationRef.replace(/^refs\/heads\//, "")}`,
+      )?.oid ?? null;
+  const previewToken = [
+    "demo-v1",
+    remote,
+    sourceRef,
+    destinationRef,
+    branch.oid,
+    comparisonBaseOid ?? "new",
+    publish ? "publish" : "upstream",
+  ].join("|");
+  return {
+    remote,
+    branch: branch.head,
+    sourceRef,
+    destinationRef,
+    headOid: branch.oid,
+    comparisonBaseOid,
+    publish,
+    commits,
+    offset,
+    totalCommits,
+    hasMore: offset + commits.length < totalCommits,
+    truncated: false,
+    previewToken,
+  };
+}
 
 function remoteOperationKey(repositoryRoot: string, operationId: string): string {
   return `${repositoryRoot}\0${operationId}`;

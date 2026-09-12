@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use asterlyn_git::{
     CancellationToken, CommitDetails, CommitDiffResult, DiffResult, FileChange, GitError,
-    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, RepositorySnapshot,
-    TrackedChangeScan, UntrackedScan,
+    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushPreview,
+    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
@@ -2120,6 +2120,22 @@ async fn fetch_remote(
 }
 
 #[tauri::command]
+async fn read_push_preview(
+    repository_root: String,
+    remote: String,
+    offset: usize,
+    page_size: usize,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<PushPreview, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read push preview", move || {
+        GitRepository::open(root)?.push_preview(&remote, offset, page_size)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn pull_current(
     repository_root: String,
     operation_id: String,
@@ -2144,9 +2160,11 @@ async fn pull_current(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn push_current(
     repository_root: String,
     remote: String,
+    preview_token: String,
     operation_id: String,
     operations: State<'_, RemoteOperationRegistry>,
     mutations: State<'_, GitMutationRegistry>,
@@ -2163,7 +2181,9 @@ async fn push_current(
         operations.inner(),
         mutations.inner(),
         "push",
-        move |repository, cancellation| repository.push_current(&remote, cancellation),
+        move |repository, cancellation| {
+            repository.push_current_confirmed(&remote, &preview_token, cancellation)
+        },
     )
     .await
 }
@@ -2355,6 +2375,7 @@ pub fn run() {
             switch_branch,
             create_branch,
             fetch_remote,
+            read_push_preview,
             pull_current,
             push_current,
             cancel_remote_operation

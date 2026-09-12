@@ -197,6 +197,12 @@ Fenced Markdown code now receives static syntax highlighting through the same on
 
 Text Diff now exposes previous/next change within the current file, previous/next changed file, open-and-reveal current source, and per-document expand/collapse unchanged-line controls. Current-file navigation stops at the file boundary, while cross-file navigation follows the current working-change or selected-commit file order. Open-and-reveal uses the existing bounded project catalog and is unavailable for a deleted or otherwise absent source. Expanded context is loaded from Git on demand and remains subject to the four-MiB patch cap; image Diff supports cross-file and source navigation but not text-hunk or context controls. Exact acceptance results are recorded in [`Markdown and Diff navigation evidence`](../benchmarks/2026-09-11-markdown-diff-navigation.md).
 
+### E3.1 Markdown-mode memory and conflict destination — 2026-09-12
+
+Markdown presentation choice is now bounded profile state rather than incidental active-tab state. A versioned store remembers Source, Split, or Preview for up to 128 root-qualified documents and records the last-used mode as the default for newly opened Markdown files. Existing editor sessions still own the live mode and source buffer; storage failure, malformed data, or an unknown mode falls back safely without changing content, dirty state, or save behavior. Only document identity and presentation choice persist—drafts, rendered HTML, split ratios, and editor state do not.
+
+Remote-operation reconciliation defines one future conflict destination across Git and editor surfaces. A canonical refresh exposing unresolved paths activates Changes, includes and selects the first conflict, and opens it in Diff. Diff remains read-only in this slice, so the Update confirmation permits only fast-forward and labels Merge/Rebase unavailable instead of starting an operation the editor cannot finish. The later editable implementation must preserve this destination while adding ours/base/theirs content, resolution validation, Continue/Abort, restart recovery, and fault testing. Validation and package evidence are recorded in [`remote toolbar and Markdown-mode evidence`](../benchmarks/2026-09-12-remote-toolbar-markdown-memory.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

@@ -70,6 +70,7 @@ export function activeEditorDocument(session: EditorSession): EditorDocument {
 export function openTextDocument(
   session: EditorSession,
   document: ProjectFileDocument,
+  initialMarkdownMode: MarkdownEditorMode = "source",
 ): {
   session: EditorSession;
   tabId: string | null;
@@ -144,7 +145,7 @@ export function openTextDocument(
     saveRequest: null,
     error: null,
     conflict: false,
-    markdownMode: "source",
+    markdownMode: initialMarkdownMode,
   };
   return {
     session: {
