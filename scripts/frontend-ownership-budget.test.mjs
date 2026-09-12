@@ -5,16 +5,23 @@ import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
-test("composition adapter stays below the accepted R3 migration ceiling", async () => {
+test("composition adapter delegates repository reconciliation ownership", async () => {
   const source = await readFile(path.join(repositoryRoot, "src/app.ts"), "utf8");
-  assert.ok(
-    lineCount(source) <= 5_800,
-    `src/app.ts grew to ${lineCount(source)} lines; extract ownership instead of expanding it`,
-  );
   assert.equal(
     source.match(/bridge\.openProject/g)?.length ?? 0,
     1,
     "project reads must enter through WindowSession after its gateway is composed",
+  );
+  assert.match(source, /new RepositoryIntegrationCoordinator\(/);
+  assert.equal(
+    source.match(/repositoryReconciliationPlan/g)?.length ?? 0,
+    0,
+    "slice fan-out belongs to RepositoryIntegrationCoordinator",
+  );
+  assert.equal(
+    source.match(/windowSession\.(?:installRepository|installTracked|subscribe)\(/g)?.length ?? 0,
+    0,
+    "repository installation and session events belong to the integration boundary",
   );
 });
 

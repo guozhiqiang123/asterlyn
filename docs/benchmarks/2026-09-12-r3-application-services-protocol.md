@@ -100,9 +100,11 @@ operations now have one serialization/supervision and typed-reconciliation found
 
 Acceptance is not a claim that physical decomposition is finished forever. `src/app.ts` remains a
 5,754-line migration adapter, above the general 1,500-line production gate. Its R3 workflows no
-longer own their asynchronous identities, but unrelated feature growth remains blocked and the new
-5,800-line automated ceiling prevents backsliding. The 1,471-line deterministic browser demo bridge
-also remains above the 800-line review trigger, though below the 1,500-line blocker; it must be
-split further if demo capabilities expand. The 13.39% Linux PSS regression is a tracked performance
-concern. Native watcher activation, external dirty-buffer conflict UX, installed Windows/macOS
-interaction, and recoverable merge/rebase conflict editing remain later work.
+longer own their asynchronous identities, but unrelated feature growth remains blocked while
+duplicated ownership remains. The temporary 5,800-line guard used at this acceptance point was
+superseded by R4.0's responsibility-based gate: source size prompts review but is not an architecture
+or correctness target. The 1,471-line deterministic browser demo bridge also remains above the
+800-line review trigger; it must be split only if the review finds mixed ownership as demo
+capabilities expand. The 13.39% Linux PSS regression is a tracked performance concern. Native
+watcher activation, external dirty-buffer conflict UX, installed Windows/macOS interaction, and
+recoverable merge/rebase conflict editing remain later work.

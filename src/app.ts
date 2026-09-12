@@ -111,15 +111,13 @@ import { renderShellView } from "./shell/shell-view";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
-import {
-  WindowSession,
-  type WindowSessionChange,
-} from "./application/window-session";
+import { WindowSession } from "./application/window-session";
 import type {
-  SessionInvalidationCause,
   SessionInvalidationSlice,
 } from "./application/session-invalidation";
-import { repositoryReconciliationPlan } from "./application/repository-mutation";
+import {
+  RepositoryIntegrationCoordinator,
+} from "./application/repository-integration-coordinator";
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import { createAppState, type AppState } from "./application/app-state";
@@ -259,8 +257,6 @@ import type {
   ReplacementApplyResult,
   RepositoryMutationOutcome,
   RepositorySnapshot,
-  RepositoryStateSlice,
-  WorkingTreeMutationOutcome,
   WorkspaceTextSearchMatch,
 } from "./models";
 
@@ -339,7 +335,7 @@ export class AsterlynApp {
     },
   );
   private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
-  private readonly releaseWindowSession: () => void;
+  private readonly repositoryIntegration: RepositoryIntegrationCoordinator;
   private readonly workspaceWatch: WorkspaceWatchCoordinator;
 
   constructor(private readonly root: HTMLElement) {
@@ -403,8 +399,63 @@ export class AsterlynApp {
     this.releaseEditorController = this.editorController.subscribe((change) =>
       this.handleEditorSessionChange(change),
     );
-    this.releaseWindowSession = this.windowSession.subscribe((change) =>
-      this.handleWindowSessionChange(change),
+    this.repositoryIntegration = new RepositoryIntegrationCoordinator(
+      this.windowSession,
+      {
+        remote: this.remoteController,
+        changes: this.changesController,
+        files: this.filesController,
+        history: this.historyController,
+      },
+      {
+        clearBranchSelection: () => {
+          this.state.selectedBranch = null;
+        },
+        installSnapshotHistory: (snapshot, preferTip) =>
+          this.installSnapshotHistory(snapshot, preferTip),
+        reconcileRefreshedHistory: (snapshot) => {
+          this.reconcileHistoryScope(snapshot);
+          const query = this.activeHistoryQuery();
+          if (isSnapshotHistoryQuery(query)) {
+            this.installSnapshotHistory(snapshot, false, true);
+          } else {
+            this.historyController.loadQuery(snapshot.root, query);
+          }
+        },
+        reconcileWorkingDocument: (snapshot) => this.reconcileWorkingDocument(snapshot),
+        hideHistoryTool: () => this.shellController.setLayout({
+          ...this.shellState.layout,
+          bottomTool: null,
+        }),
+        showWorkspaceOnlyTools: () => this.shellController.setLayout({
+          ...this.shellState.layout,
+          leftTool: "files",
+          bottomTool: null,
+        }),
+        renderWorkspace: () => this.renderWorkspace(),
+        loadVisibleCommitDetails: () => this.loadVisibleCommitDetails(),
+        reloadWorkingDiff: () => {
+          if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
+        },
+        loadProjectFiles: (repositoryRoot, generation) => {
+          void this.loadProjectFiles(repositoryRoot, generation);
+        },
+        showChangesTool: () => this.shellController.setLayout({
+          ...this.shellState.layout,
+          leftTool: "changes",
+        }, true),
+        openWorkingDiff: (repositoryRoot, path) => {
+          this.activateDiffPreview({
+            kind: "working-diff",
+            repositoryRoot,
+            selection: { path, staged: false },
+          });
+          void this.loadSelectedDiff();
+        },
+        replacementRecoveryCount: () => this.state.workspaceReplacement.recoveries.length,
+        setStatus: (message, kind) => this.setStatus(message, kind),
+        reportError: (error) => this.showError(error),
+      },
     );
     this.workspaceWatch = new WorkspaceWatchCoordinator(
       workspaceWatchBridge,
@@ -413,7 +464,7 @@ export class AsterlynApp {
       this.editorController,
       {
         reconcileRepository: (snapshot, slices, cause) =>
-          this.reconcileWatchedRepository(snapshot, slices, cause),
+          this.repositoryIntegration.reconcileWatchedRepository(snapshot, slices, cause),
         reportWarning: (message) => this.setStatus(message, "warning"),
       },
     );
@@ -536,86 +587,6 @@ export class AsterlynApp {
     return this.shellController.state;
   }
 
-  private installRepositorySnapshot(
-    snapshot: RepositorySnapshot | null,
-    cause: SessionInvalidationCause,
-    slices: Iterable<SessionInvalidationSlice>,
-    options: { paths?: Iterable<string>; overflowed?: boolean } = {},
-  ): RepositorySnapshot | null {
-    const installed = this.windowSession.installRepository(snapshot, cause, slices, options);
-    this.windowSession.repository.consumeInvalidation();
-    return installed;
-  }
-
-  private applyRepositoryMutation(
-    outcome: RepositoryMutationOutcome,
-    cause: SessionInvalidationCause,
-    options: { clearChanges?: boolean; focusConflicts?: boolean } = {},
-  ): RepositorySnapshot {
-    const snapshot = outcome.snapshot;
-    const plan = repositoryReconciliationPlan(outcome);
-    this.installRepositorySnapshot(snapshot, cause, plan.slices);
-    if (plan.updateRemote) {
-      this.remoteController.installSnapshot(snapshot);
-      this.state.selectedBranch = null;
-    }
-    if (plan.updateWorkingTree) {
-      this.changesController.installSnapshot(snapshot, {
-        clearInclusion: options.clearChanges,
-        clearSelection: options.clearChanges,
-      });
-      this.filesController.updateChanges(snapshot.changes);
-    }
-    if (plan.updateHistory) this.installSnapshotHistory(snapshot, true);
-    if (plan.reconcileOpenDocuments) {
-      this.reconcileWorkingDocument(snapshot);
-    }
-    if (options.focusConflicts) this.prepareConflictResolution(snapshot);
-    return snapshot;
-  }
-
-  private reconcileWatchedRepository(
-    snapshot: RepositorySnapshot | null,
-    slices: RepositoryStateSlice[],
-    cause: SessionInvalidationCause,
-  ): void {
-    if (!snapshot) {
-      this.installRepositorySnapshot(null, cause, slices);
-      this.remoteController.installSnapshot(null);
-      this.changesController.installSnapshot(null);
-      this.filesController.updateChanges([]);
-      this.historyController.clear();
-      this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
-      this.renderWorkspace();
-      return;
-    }
-    this.applyRepositoryMutation({ snapshot, invalidatedSlices: slices }, cause);
-    this.renderWorkspace();
-    if (slices.includes("history")) this.loadVisibleCommitDetails();
-    if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
-  }
-
-  private applyWorkingTreeMutation(
-    outcome: WorkingTreeMutationOutcome,
-    options: { clearChanges?: boolean } = {},
-  ): RepositorySnapshot {
-    const plan = repositoryReconciliationPlan(outcome);
-    const snapshot = this.windowSession.installTracked(
-      outcome.tracked,
-      "gitMutation",
-      plan.slices,
-    );
-    if (!snapshot) throw new Error("Working-tree result belongs to a stale repository session.");
-    this.windowSession.repository.consumeInvalidation();
-    this.changesController.installSnapshot(snapshot, {
-      clearInclusion: options.clearChanges,
-      clearSelection: options.clearChanges,
-    });
-    this.filesController.updateChanges(snapshot.changes);
-    if (plan.reconcileOpenDocuments) this.reconcileWorkingDocument(snapshot);
-    return snapshot;
-  }
-
   private handleEditorSessionChange(change: EditorSessionChange): void {
     if (
       change.reason === "load-start" ||
@@ -629,43 +600,6 @@ export class AsterlynApp {
       this.renderEditor();
     }
     if (change.error) this.showError(change.error);
-  }
-
-  private handleWindowSessionChange(change: WindowSessionChange): void {
-    if (change.reason === "untracked-scan-start") {
-      if (change.announce) this.setStatus("Scanning untracked files…", "busy");
-      return;
-    }
-    if (
-      change.reason === "tracked-refresh-complete" ||
-      change.reason === "untracked-scan-complete"
-    ) {
-      if (!change.snapshot) return;
-      this.changesController.installSnapshot(change.snapshot);
-      this.filesController.updateChanges(change.snapshot.changes);
-      this.reconcileWorkingDocument(change.snapshot);
-      this.renderWorkspace();
-      if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
-      if (change.reason === "untracked-scan-complete" && change.announce) {
-        const recoveries = this.state.workspaceReplacement.recoveries.length;
-        this.setStatus(
-          recoveries > 0
-            ? `${recoveries} replacement recovery ${recoveries === 1 ? "record needs" : "records need"} review`
-            : "Ready",
-          recoveries > 0 ? "warning" : "normal",
-        );
-      }
-      return;
-    }
-    if (change.reason === "tracked-refresh-error") {
-      this.setStatus("File saved; Git status refresh failed", "warning");
-      this.showError(change.error);
-      return;
-    }
-    if (change.reason === "untracked-scan-error") {
-      if (change.snapshot) this.renderWorkspace();
-      this.showError(change.error);
-    }
   }
 
   private handleProjectFilesChange(change: ProjectFilesChange): void {
@@ -800,6 +734,8 @@ export class AsterlynApp {
     if (this.changeTreeScrollFrame !== null) cancelAnimationFrame(this.changeTreeScrollFrame);
     this.projectTreeScrollFrame = null;
     this.changeTreeScrollFrame = null;
+    this.workspaceWatch.dispose();
+    this.repositoryIntegration.dispose();
     this.releaseHistoryController();
     this.historyController.dispose();
     this.releaseRemoteController();
@@ -810,8 +746,6 @@ export class AsterlynApp {
     this.filesController.dispose();
     this.releaseEditorController();
     this.editorController.dispose();
-    this.releaseWindowSession();
-    this.workspaceWatch.dispose();
     this.windowSession.dispose();
     this.settingsController.dispose();
     this.shellController.dispose();
@@ -1138,41 +1072,12 @@ export class AsterlynApp {
       const result = await transition;
       if (!result) return;
       const opened = result.project;
-      const next = opened.repository;
-      this.windowSession.repository.consumeInvalidation();
-      if (!next) {
-        this.historyController.clear();
-        this.remoteController.installSnapshot(null);
-        this.changesController.installSnapshot(null);
-        this.filesController.installWorkspace(opened.root, []);
-        this.shellController.setLayout({
-          ...this.shellState.layout,
-          leftTool: "files",
-          bottomTool: null,
-        });
-        this.renderWorkspace();
-        void this.loadProjectFiles(opened.root, generation);
-        return;
-      }
-      this.remoteController.installSnapshot(next);
-      this.changesController.installSnapshot(next);
-      this.filesController.installWorkspace(next.root, next.changes);
-      this.reconcileHistoryScope(next);
-      this.reconcileWorkingDocument(next);
-
-      const query = this.activeHistoryQuery();
-      if (isSnapshotHistoryQuery(query)) {
-        this.installSnapshotHistory(next, false, true);
-      } else {
-        this.historyController.loadQuery(next.root, query);
-      }
-
-      this.renderWorkspace();
-      this.loadVisibleCommitDetails();
-      if (this.activeDocument().kind === "working-diff") {
-        void this.loadSelectedDiff();
-      }
-      void this.loadProjectFiles(next.root, generation);
+      const next = this.repositoryIntegration.acceptManualRefresh(
+        opened.root,
+        opened.repository,
+        generation,
+      );
+      if (!next) return;
       pendingRoot = next.root;
     } catch (error) {
       if (generation !== this.windowSession.generation) return;
@@ -1929,20 +1834,7 @@ export class AsterlynApp {
     const next = refreshed && current
       ? { ...refreshed, commits: current.commits }
       : refreshed;
-    this.installRepositorySnapshot(
-      next,
-      "workspaceReplacement",
-      ["workspaceCatalog", "openDocuments", "workingTree"],
-    );
-    if (next) {
-      this.changesController.installSnapshot(next);
-      this.filesController.updateChanges(next.changes);
-      this.reconcileWorkingDocument(next);
-    } else {
-      this.changesController.installSnapshot(null);
-      this.filesController.updateChanges([]);
-    }
-    this.renderWorkspace();
+    this.repositoryIntegration.acceptWorkspaceReplacement(next);
     await this.loadProjectFiles(repositoryRoot, generation);
     if (this.windowSession.repository.state.snapshot) {
       await this.windowSession.scanUntracked(
@@ -2278,7 +2170,7 @@ export class AsterlynApp {
       const result = await this.remoteController.runOperation(kind);
       if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
-        const next = this.acceptRemoteOutcome(result.outcome);
+        const next = this.repositoryIntegration.acceptRemoteOutcome(result.outcome);
         if (kind === "pull") {
           this.captureMountedTextEditor();
           if (dirtyTextTabs(this.editorState.session).length === 0) {
@@ -2297,7 +2189,7 @@ export class AsterlynApp {
           if (!opened) return false;
           const reconciled = opened.repository;
           if (!reconciled) throw new Error("The active project is no longer a Git repository.");
-          this.acceptRemoteOutcome(
+          this.repositoryIntegration.acceptRemoteOutcome(
             { snapshot: reconciled, invalidatedSlices: [...COMPLETE_REPOSITORY_SLICES] },
             true,
           );
@@ -2317,48 +2209,6 @@ export class AsterlynApp {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "remoteOperation");
     }
     return succeeded;
-  }
-
-  private acceptRemoteOutcome(
-    outcome: RepositoryMutationOutcome,
-    focusConflicts = false,
-  ): RepositorySnapshot {
-    const snapshot = this.applyRepositoryMutation(outcome, "remoteOperation", {
-      clearChanges: true,
-      focusConflicts,
-    });
-    if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
-      this.filesController.installWorkspace(snapshot.root, snapshot.changes);
-    }
-    this.renderWorkspace();
-    if (outcome.invalidatedSlices.includes("history")) this.loadVisibleCommitDetails();
-    if (this.activeDocument().kind === "working-diff") {
-      void this.loadSelectedDiff();
-    }
-    if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
-      void this.loadProjectFiles(snapshot.root);
-    }
-    return snapshot;
-  }
-
-  private prepareConflictResolution(snapshot: RepositorySnapshot): boolean {
-    const conflict = snapshot.changes.find((change) => change.conflicted);
-    if (!conflict) return false;
-    this.shellController.setLayout({
-      ...this.shellState.layout,
-      leftTool: "changes",
-    }, true);
-    this.changesController.selectConflict(conflict.path);
-    this.activateDiffPreview({
-      kind: "working-diff",
-      repositoryRoot: snapshot.root,
-      selection: { path: conflict.path, staged: false },
-    });
-    this.loadSelectedDiff();
-    this.remoteController.setDialogError(
-      "Git reported unresolved files. They are listed in Changes and the first conflict is open in the current read-only Diff. Editable conflict resolution, Continue, and Abort are not available yet.",
-    );
-    return true;
   }
 
   private async cancelActiveRemoteOperation(): Promise<void> {
@@ -5065,7 +4915,7 @@ export class AsterlynApp {
       const result = await this.changesController.revertSelected();
       if (generation !== this.windowSession.generation || result.status === "stale") return;
       if (result.status === "success") {
-        const next = this.applyWorkingTreeMutation(result.value);
+        const next = this.repositoryIntegration.applyWorkingTreeMutation(result.value);
         this.renderWorkspace();
         if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
         pendingRoot = next.root;
@@ -5318,7 +5168,7 @@ export class AsterlynApp {
         const result = outcome.value;
         if (result.snapshot) {
           const next = result.snapshot;
-          this.applyRepositoryMutation(
+          this.repositoryIntegration.applyMutation(
             { snapshot: next, invalidatedSlices: result.invalidatedSlices },
             "gitMutation",
           );
@@ -5408,10 +5258,10 @@ export class AsterlynApp {
       const completion = await operation.completion;
       if (completion.status === "stale") return;
       if (completion.status === "failure") throw completion.error;
-      const next = this.applyRepositoryMutation(completion.outcome, "gitMutation", {
-        clearChanges: true,
+      const next = this.repositoryIntegration.applyMutation(completion.outcome, "gitMutation", {
+        clearInclusion: true,
+        clearSelection: true,
       });
-      this.filesController.installWorkspace(next.root, next.changes);
       this.captureMountedTextEditor();
       if (dirtyTextTabs(this.editorState.session).length === 0) {
         this.editorController.resetSession();

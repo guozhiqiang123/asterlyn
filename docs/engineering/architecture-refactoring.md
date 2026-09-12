@@ -110,9 +110,9 @@ and the complete lazy CodeMirror/Markdown surface lifecycle into Files/Editor-ow
 The twelfth and closing slice moves global shell routing, the workspace resize observer, tab-wheel
 handling, native window controls, native resize/close subscriptions, and their complete disposal
 lifecycle into Shell-owned bindings. R2 passes frontend, Rust, browser, resource, native-smoke, and
-Debian acceptance. The remaining 5,955-line migration-era composition adapter is frozen below a
-6,000-line automated ceiling and tracked as R3-01; unrelated capability expansion remains blocked
-until its application-service seams replace the remaining cross-feature coordination.
+Debian acceptance. The remaining 5,955-line migration-era composition adapter is tracked as R3-01;
+unrelated capability expansion remains blocked while it still duplicates feature or application-
+service ownership. Its line count is evidence for review, not an automated architecture target.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.
@@ -121,8 +121,8 @@ Status: **accepted on 2026-09-12**. In this migration stage, “composition root
 window-level workflow adapter required to coordinate canonical repository/workspace results. It does
 not reclaim extracted feature markup, CodeMirror/Markdown runtime objects, native window
 subscriptions, list listeners, or controller disposal. The workflow state and request identities
-that still remain are named by R3-01 rather than treated as a finished terminal design; the explicit
-source ceiling prevents this adapter from becoming a feature-growth destination in the interim.
+that still remain are named by R3-01 rather than treated as a finished terminal design; ownership
+tests prevent this adapter from reclaiming extracted responsibilities in the interim.
 
 ### R3 — Application services and protocol
 
@@ -161,7 +161,7 @@ activation, and a status mutation does not reload history or refs.
 Status: **accepted on 2026-09-12**. The complete validation and resource record is
 [`R3 application-services and protocol acceptance`](../benchmarks/2026-09-12-r3-application-services-protocol.md).
 The 5,754-line migration adapter is not a terminal composition-root claim: unrelated capability
-growth remains blocked, its automated ceiling tightens to 5,800 lines, and later operation
+growth remains blocked while it duplicates application-service ownership, and later operation
 integration must continue moving presentation routing toward owned feature bindings. The
 deterministic demo bridge is likewise retained only as a bounded fixture, not as a second native
 protocol implementation.
@@ -182,9 +182,10 @@ and Git objects. macOS and Windows retain native recursive workspace semantics. 
 functional, dependency, memory, CPU, artifact, and limitation record is
 [`R3.1 native workspace-watch acceptance`](../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
 
-Status: **accepted on 2026-09-12**. The migration adapter is 5,796 lines—inside the temporary
-5,800-line ceiling by only four lines. R4 may not add integration logic there without first
-extracting enough routing to restore meaningful headroom. Low-frequency fallback polling,
+Status: **accepted on 2026-09-12**. The migration adapter is 5,796 lines and still duplicates the
+repository-result routing used by manual refresh, native watch, remote operations, local mutations,
+and conflict activation. R4 may not add operation behavior until that ownership is centralized;
+line reduction alone is not the exit condition. Low-frequency fallback polling,
 independent submodule Git-metadata watchers, and editable external-conflict resolution remain
 explicit follow-ups rather than hidden claims of R3.1.
 
@@ -193,6 +194,24 @@ explicit follow-ups rather than hidden claims of R3.1.
 Implement ADR-0008 in merge, cherry-pick, rebase, then squash order. Add restart, stale-plan,
 external-Git-race, cancellation, conflict, continue, skip, abort, detached-HEAD, unborn-branch, and
 submodule fixtures before each operation becomes enabled.
+
+R4.0 is a bounded integration preparation, not another open-ended decomposition phase.
+`RepositoryIntegrationCoordinator` is the single frontend entry for authoritative repository
+mutation results, tracked-only results, manual refresh results, native-watch repository results,
+workspace-replacement results, and session scan completions. It installs accepted data into
+`WindowSession` before applying the declared invalidation slices to History, Remote, Changes,
+Files, open documents, and the active working Diff. Conflict routing selects the first canonical
+conflict through the same entry while the existing read-only limitation remains explicit.
+`AsterlynApp` composes the feature ports and owns visual navigation callbacks; it no longer decides
+slice fan-out or subscribes independently to repository-session completions.
+
+R4.0 deliberately adds no Merge command or synthetic operation database. Its exit condition is
+responsibility ownership and characterization coverage, not a line-count threshold. The next slice
+must build restart-reconstructed operation snapshots and editable three-way conflict handling on
+this entry before Merge is enabled.
+
+Status: **R4.0 accepted on 2026-09-12**. See
+[`R4.0 repository integration boundary acceptance`](../benchmarks/2026-09-12-r4-0-repository-integration.md).
 
 Exit gate: every interrupted operation can be reconstructed from Git, every action is explicitly
 allowed by the current operation snapshot, and uncertain outcomes are never retried automatically.

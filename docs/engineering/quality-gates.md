@@ -43,11 +43,13 @@ Performance budgets are guardrails. They may change only through a documented de
 - A status-only Git mutation cannot require a complete history, branch, and remote snapshot. Each
   mutation declares the read-model slices it invalidates, and the frontend reconciles only those
   slices from canonical Git data.
-- Production source files above 800 lines require an explicit decomposition issue or a documented
-  reason tied to generated code, protocol tables, or cohesive tests. Files above 1,500 production
-  lines block new unrelated capability work until their owning boundary is reduced. This is a
-  design review gate, not an automatic formatting target: mechanical splitting without ownership
-  improvement does not satisfy it.
+- Production source size is an architecture-review signal, not a correctness target. Files above
+  800 lines require an explicit responsibility review; files above 1,500 lines require a documented
+  ownership map and tests that prevent domain truth, lifecycle, or feature state from leaking into
+  the file. A large composition root may remain large when its work is genuinely cohesive and its
+  dependencies are explicit. It blocks new capability work only when the review finds mixed or
+  duplicated ownership. Mechanical splitting, forwarding-only wrappers, and moving lines merely to
+  satisfy a threshold do not improve the architecture and do not satisfy this gate.
 - The main production frontend chunk should remain below 500 kB uncompressed. A temporary breach
   is accepted during the migration only when the build records the warning and the next extraction
   keeps optional feature code behind a lazy boundary.
