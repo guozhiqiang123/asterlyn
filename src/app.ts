@@ -1,5 +1,4 @@
 import { bridge } from "./bridge";
-import { BRAND } from "./brand";
 import { fileTypeIcon } from "./file-icons";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
@@ -20,6 +19,11 @@ import {
   type RemotePushChange,
   type RemotePushState,
 } from "./features/remote-push/remote-push-controller";
+import {
+  pushReviewFiles,
+  renderRemoteDialogContent,
+  renderRemoteToolbarView,
+} from "./features/remote-push/remote-push-view";
 import {
   ChangesCommitController,
   type ChangesCommitChange,
@@ -60,10 +64,16 @@ import {
   type SettingsState,
 } from "./features/settings/settings-controller";
 import {
+  renderSettingsNavigation,
+  renderSettingsSection,
+} from "./features/settings/settings-view";
+import {
   ShellController,
   type ShellChange,
   type ShellState,
 } from "./shell/shell-controller";
+import { renderShellView } from "./shell/shell-view";
+import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -87,16 +97,9 @@ import {
 import { attachSplitter } from "./workbench/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
 import {
-  filesForPushReview,
   nextPushCommitSelection,
-  pushConfirmationAvailability,
 } from "./workbench/push-review";
-import {
-  moveActivityTool,
-  moveActivityToolByOffset,
-  type ActivityDropPosition,
-  type ActivityTool,
-} from "./workbench/activity-order";
+import type { ActivityTool } from "./workbench/activity-order";
 import {
   MARKDOWN_PREVIEW_MAX_BYTES,
   isMarkdownPath,
@@ -110,27 +113,14 @@ import {
 import { revealTabInStrip, scrollTabStrip } from "./workbench/tab-strip";
 import { isImagePreviewPath } from "./workbench/image-preview";
 import {
-  showCustomWindowControls,
-  windowChromeClass,
-} from "./workbench/window-chrome";
-import {
-  EDITOR_FONTS,
   DEFAULT_EDITOR_FONT_ID,
   EditorFontLoader,
-  editorFont,
   editorFontFamilyStack,
-  editorFontOptionLabel,
   isEditorFontId,
   type EditorFontId,
   type EditorFontLoadSource,
 } from "./workbench/editor-fonts";
 import {
-  EDITOR_INDENT_SIZES,
-  EDITOR_LETTER_SPACINGS,
-  EDITOR_FONT_SIZES,
-  EDITOR_LINE_HEIGHTS,
-  EDITOR_TAB_SIZES,
-  UI_FONT_SIZES,
   type AppPreferences,
 } from "./workbench/preferences";
 import {
@@ -248,7 +238,6 @@ import type {
   ImagePreview,
   ProjectFile,
   PushMode,
-  PushPreview,
   PushTagMode,
   ReplacementApplyResult,
   RepositorySnapshot,
@@ -409,15 +398,7 @@ export class AsterlynApp {
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
-  private activityPointerDrag: {
-    source: ActivityTool;
-    pointerId: number;
-    startY: number;
-    dragging: boolean;
-    target: ActivityTool | null;
-    position: ActivityDropPosition | null;
-  } | null = null;
-  private suppressedActivityClick: ActivityTool | null = null;
+  private readonly activityRailBinding: ActivityRailBinding;
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
@@ -448,6 +429,11 @@ export class AsterlynApp {
   } | null = null;
 
   constructor(private readonly root: HTMLElement) {
+    this.activityRailBinding = new ActivityRailBinding(root, {
+      order: () => this.shellState.activityOrder,
+      activate: (tool) => this.toggleTool(tool),
+      commitOrder: (order, focusTool) => this.commitActivityOrder(order, focusTool),
+    });
     this.settingsController = new SettingsController(window.localStorage);
     this.releaseSettingsController = this.settingsController.subscribe((change) =>
       this.handleSettingsChange(change),
@@ -665,358 +651,19 @@ export class AsterlynApp {
   }
 
   private renderShell(): void {
-    this.root.innerHTML = `
-      <main class="app-shell ${windowChromeClass(this.shellState.windowChromeMode)}">
-        <header class="topbar" data-tauri-drag-region>
-          <div class="repository-switcher-anchor" id="repository-switcher-anchor">
-            <button class="repository-switcher" id="repository-switcher" type="button" aria-label="Project menu" aria-haspopup="menu" aria-controls="repository-menu" aria-expanded="false" title="Open a project">
-              <span class="repository-name" id="repository-name">No project</span>
-              ${icon("chevron-down", 13)}
-            </button>
-            <div class="repository-menu hidden" id="repository-menu" role="menu" aria-label="Project menu"></div>
-          </div>
-          <div class="topbar-actions" data-tauri-drag-region>
-            <span class="demo-badge ${bridge.isDemo ? "" : "hidden"}">Browser demo</span>
-            <button class="command-center-button" id="command-center-button" type="button" aria-label="Search files and commands" title="Search files and commands (Ctrl/Cmd+P)">
-              ${icon("search", 18)}
-              <span>Search</span>
-              <kbd>Ctrl P</kbd>
-            </button>
-            <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="Current branch remote actions">
-              <label class="topbar-remote-select" for="topbar-remote-select" title="Remote used by current branch actions">
-                <select id="topbar-remote-select" aria-label="Remote for current branch actions" disabled>
-                  <option>No remote</option>
-                </select>
-              </label>
-              <span class="topbar-remote-action" id="remote-fetch-hint" tabindex="-1">
-                <button class="icon-button remote-action-button" id="remote-fetch" type="button" data-remote-action="fetch" aria-label="Fetch current branch" title="Fetch current branch" disabled>${icon("download", 18)}</button>
-              </span>
-              <span class="topbar-remote-action" id="remote-update-hint" tabindex="-1">
-                <button class="icon-button remote-action-button" id="remote-update" type="button" data-remote-action="pull" aria-label="Update current branch" title="Update current branch" disabled>${icon("sync", 18)}</button>
-              </span>
-              <span class="topbar-remote-action" id="remote-push-hint" tabindex="-1">
-                <button class="icon-button remote-action-button" id="remote-push" type="button" data-remote-action="push" aria-label="Push current branch" title="Push current branch" disabled>${icon("upload", 18)}</button>
-              </span>
-              <button class="icon-button remote-cancel-button hidden" id="cancel-remote-operation" type="button" aria-label="Cancel remote operation" title="Cancel remote operation">${icon("close", 16)}</button>
-            </div>
-            <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh project" title="Refresh (Ctrl/Cmd+R)" disabled>
-              ${icon("refresh", 20)}
-            </button>
-            <button class="icon-button" id="settings-button" type="button" aria-label="Open settings" title="Settings" aria-pressed="false">
-              ${icon("settings", 20)}
-            </button>
-            <div class="window-controls ${showCustomWindowControls(this.shellState.windowChromeMode, windowControls.available) ? "" : "hidden"}" role="group" aria-label="Window controls">
-              <button class="window-control-button" id="window-minimize" type="button" aria-label="Minimize window" title="Minimize">
-                ${icon("minimize", 16)}
-              </button>
-              <button class="window-control-button" id="window-maximize" type="button" aria-label="Maximize window" title="Maximize">
-                ${icon("maximize", 16)}
-              </button>
-              <button class="window-control-button close" id="window-close" type="button" aria-label="Close window" title="Close">
-                ${icon("close", 16)}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <div class="workspace" id="workspace">
-          <nav class="activity-rail" aria-label="Tool windows">
-            ${this.activityButton("files", "Files", "folder")}
-            ${this.activityButton("branches", "Branches", "branch")}
-            ${this.activityButton("changes", "Changes", "changes")}
-            <span class="rail-spacer"></span>
-            <span class="rail-version" aria-label="${BRAND.name} version ${BRAND.version}">${BRAND.version}</span>
-          </nav>
-
-          <section class="workbench" id="workbench">
-            <div class="editor-row" id="editor-row">
-              <aside class="navigator tool-window" id="left-tool" aria-label="Left tool window">
-                <div class="panel-header">
-                  <div class="navigator-title-group">
-                    <h1 id="navigator-title">Files</h1>
-                    <span class="panel-count" id="navigator-count">0</span>
-                  </div>
-                  <div class="navigator-header-actions">
-                    <div class="navigator-context-actions" id="navigator-actions"></div>
-                    <button class="compact-icon-button tool-window-hide" id="hide-left-tool" type="button" aria-label="Hide Files tool window" title="Hide Files tool window">
-                      ${icon("close", 14)}
-                    </button>
-                  </div>
-                </div>
-                <div class="navigator-body" id="navigator-body">
-                  ${this.loadingBlock("Waiting for a project")}
-                </div>
-              </aside>
-
-              <div class="workbench-splitter vertical" id="left-splitter" aria-label="Resize left tool window"></div>
-
-              <section class="content-panel editor-panel" id="editor-panel" aria-label="Editor">
-                <div class="editor-tabbar-shell">
-                  <div class="editor-tabbar" id="editor-tabbar">
-                    <span class="editor-tab active">Welcome</span>
-                  </div>
-                  <div class="editor-context-actions" id="editor-context-actions"></div>
-                  <div class="editor-tab-menu-anchor" id="editor-tab-menu-anchor">
-                    <button class="editor-tab-menu-toggle" id="editor-tab-menu-toggle" type="button" aria-label="Show open files" title="Show open files" aria-haspopup="menu" aria-expanded="false" disabled>
-                      ${icon("chevron-down", 15)}
-                    </button>
-                    <div class="editor-tab-menu hidden" id="editor-tab-menu" role="menu" aria-label="Open files"></div>
-                  </div>
-                </div>
-                <div class="content-header" id="content-header">
-                  <div class="content-title-group">
-                    <span class="content-kicker">Welcome</span>
-                    <h2>${BRAND.name} Editor</h2>
-                  </div>
-                </div>
-                <div class="content-body" id="content-body">
-                  ${this.emptyState("Open a project folder", "Browse ordinary folders, or use Git tools when the selected folder is a repository root.", "folder")}
-                </div>
-              </section>
-            </div>
-
-            <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="Resize Git tool window"></div>
-
-            <section class="bottom-tool tool-window" id="bottom-tool" aria-label="Branches and Git log">
-              <div class="bottom-tool-header">
-                <strong>Git</strong>
-                <span>Branches and Log</span>
-                <button class="bottom-tool-hide" id="hide-git-tool" type="button" aria-label="Hide Git tool window" title="Hide Git tool window">
-                  ${icon("close", 14)}
-                </button>
-              </div>
-              <div class="git-tool-grid" id="git-tool-grid">
-                <section class="git-tool-pane branch-tree-pane" aria-label="Branches">
-                  <div class="git-pane-body" id="branch-navigation-body"></div>
-                </section>
-                <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="Resize branch tree"></div>
-                <section class="git-tool-pane commit-log-pane" aria-label="Commit log">
-                  <div class="git-pane-body" id="history-navigation-body"></div>
-                </section>
-                <div class="workbench-splitter vertical" id="branch-details-splitter" aria-label="Resize Git details"></div>
-                <aside class="git-tool-pane git-details-pane" aria-label="Git details">
-                  <div class="git-pane-body" id="git-detail-body">${this.inspectorPlaceholder()}</div>
-                </aside>
-              </div>
-            </section>
-          </section>
-
-          <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">
-            <header class="settings-page-header">
-              <button class="icon-button" id="settings-back" type="button" aria-label="Return to workbench" title="Back to workbench">${icon("back", 17)}</button>
-              <h1 id="settings-page-title">Settings</h1>
-            </header>
-            <div class="settings-page-layout">
-              <nav class="settings-navigation" id="settings-navigation" aria-label="Settings groups"></nav>
-              <div class="settings-content" id="settings-content"></div>
-            </div>
-          </section>
-        </div>
-
-        <footer class="statusbar">
-          <div class="status-left">
-            <span class="status-indicator" id="status-indicator"></span>
-            <span id="status-message">Ready</span>
-          </div>
-          <div class="status-right">
-            <span class="document-encoding hidden" id="document-encoding" aria-label="Current file encoding"></span>
-            <div class="branch-status" id="branch-status"></div>
-          </div>
-        </footer>
-
-        <div class="toast hidden" id="toast" role="status" aria-live="polite">
-          <span class="toast-icon">!</span>
-          <span id="toast-message"></span>
-          <button class="toast-close" id="toast-close" type="button" aria-label="Dismiss error">${icon("close", 15)}</button>
-        </div>
-
-        <div class="dialog-backdrop hidden" id="repository-dialog" role="presentation">
-          <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-            <div class="dialog-heading">
-              <div>
-                <span class="panel-eyebrow">Browser demo</span>
-                <h2 id="dialog-title">Simulate opening a project folder</h2>
-              </div>
-              <button class="icon-button" id="dialog-close" type="button" aria-label="Close">${icon("close", 17)}</button>
-            </div>
-            <p>Enter a sample path for browser-only interaction testing. This demo does not read that folder from your computer.</p>
-            <form id="repository-form">
-              <label for="repository-input">Project folder path</label>
-              <input id="repository-input" name="path" type="text" spellcheck="false" autocomplete="off" placeholder="/path/to/project" />
-              <div class="dialog-actions">
-                <button class="secondary-button" id="dialog-cancel" type="button">Cancel</button>
-                <button class="primary-button" type="submit">Open project</button>
-              </div>
-            </form>
-          </section>
-        </div>
-
-        <div class="dialog-backdrop hidden" id="repository-target-dialog" role="presentation">
-          <section class="dialog repository-target-dialog" role="dialog" aria-modal="true" aria-labelledby="repository-target-title">
-            <div class="dialog-heading">
-              <div>
-                <span class="panel-eyebrow">Open project</span>
-                <h2 id="repository-target-title">Where should this project open?</h2>
-              </div>
-              <button class="icon-button" id="repository-target-close" type="button" aria-label="Cancel opening project">${icon("close", 18)}</button>
-            </div>
-            <p>The current window already contains a project. Open the selected folder here or keep this workspace and open another window.</p>
-            <code class="repository-target-path" id="repository-target-path"></code>
-            <div class="dialog-actions">
-              <button class="secondary-button" id="repository-target-cancel" type="button">Cancel</button>
-              <button class="secondary-button" id="repository-target-current" type="button">Current window</button>
-              <button class="primary-button" id="repository-target-new" type="button">New window</button>
-            </div>
-          </section>
-        </div>
-
-        <div class="dialog-backdrop hidden history-dialog-backdrop" id="history-dialog" role="presentation"></div>
-        <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
-        <div class="dialog-backdrop hidden replacement-dialog-backdrop" id="workspace-replacement-dialog" role="presentation"></div>
-        <div class="dialog-backdrop hidden remote-dialog-backdrop" id="remote-action-dialog" role="presentation"></div>
-      </main>
-    `;
-  }
-
-  private activityButton(
-    tool: ActivityTool,
-    label: string,
-    iconName: "folder" | "changes" | "branch",
-  ): string {
-    const active =
-      tool === "branches"
-        ? this.shellState.layout.bottomTool === tool
-        : this.shellState.layout.leftTool === tool;
-    const enabled = Boolean(
-      this.state.workspaceRoot && (tool === "files" || this.state.snapshot),
-    );
-    const title = enabled
-      ? `${label} — drag to reorder`
-      : tool === "files"
-        ? "Open a project folder first — drag to reorder"
-        : "Git is unavailable for this folder — drag to reorder";
-    return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${label}" title="${title}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown">${icon(iconName, 20)}<span>${label}</span></button>`;
-  }
-
-  private bindActivityRailEvents(): void {
-    this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
-      const tool = button.dataset.tool as ActivityTool;
-      button.addEventListener("click", () => {
-        if (this.suppressedActivityClick === tool) {
-          this.suppressedActivityClick = null;
-          return;
-        }
-        if (button.getAttribute("aria-disabled") === "true") return;
-        this.toggleTool(tool);
-      });
-      button.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        this.activityPointerDrag = {
-          source: tool,
-          pointerId: event.pointerId,
-          startY: event.clientY,
-          dragging: false,
-          target: null,
-          position: null,
-        };
-      });
-      button.addEventListener("keydown", (event) => {
-        if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
-          return;
-        }
-        event.preventDefault();
-        const offset = event.key === "ArrowUp" ? -1 : 1;
-        this.commitActivityOrder(
-          moveActivityToolByOffset(this.shellState.activityOrder, tool, offset),
-          tool,
-        );
-      });
+    this.root.innerHTML = renderShellView({
+      shell: this.shellState,
+      workspaceOpen: Boolean(this.state.workspaceRoot),
+      gitAvailable: Boolean(this.state.snapshot),
+      demo: bridge.isDemo,
+      windowControlsAvailable: windowControls.available,
     });
-    window.addEventListener("pointermove", (event) => this.moveActivityPointerDrag(event));
-    window.addEventListener("pointerup", (event) => this.finishActivityPointerDrag(event));
-    window.addEventListener("pointercancel", () => this.clearActivityDragState());
-  }
-
-  private moveActivityPointerDrag(event: PointerEvent): void {
-    const drag = this.activityPointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    if (!drag.dragging && Math.abs(event.clientY - drag.startY) < 5) return;
-    drag.dragging = true;
-    this.root
-      .querySelector<HTMLElement>(`[data-tool="${drag.source}"]`)
-      ?.classList.add("dragging");
-    event.preventDefault();
-    const target = this.activityButtonAt(event.clientX, event.clientY);
-    this.clearActivityDropMarkers();
-    if (!target || target.dataset.tool === drag.source) {
-      drag.target = null;
-      drag.position = null;
-      return;
-    }
-    drag.target = target.dataset.tool as ActivityTool;
-    drag.position = this.activityDropPosition(target, event.clientY);
-    target.classList.add(drag.position === "before" ? "drop-before" : "drop-after");
-  }
-
-  private finishActivityPointerDrag(event: PointerEvent): void {
-    const drag = this.activityPointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    if (drag.dragging) {
-      event.preventDefault();
-      this.suppressedActivityClick = drag.source;
-      window.setTimeout(() => {
-        if (this.suppressedActivityClick === drag.source) {
-          this.suppressedActivityClick = null;
-        }
-      }, 0);
-      if (drag.target && drag.position) {
-        this.commitActivityOrder(
-          moveActivityTool(
-            this.shellState.activityOrder,
-            drag.source,
-            drag.target,
-            drag.position,
-          ),
-          drag.source,
-        );
-      }
-    }
-    this.clearActivityDragState();
-  }
-
-  private activityDropPosition(
-    button: HTMLButtonElement,
-    pointerY: number,
-  ): ActivityDropPosition {
-    const bounds = button.getBoundingClientRect();
-    return pointerY < bounds.top + bounds.height / 2 ? "before" : "after";
-  }
-
-  private activityButtonAt(clientX: number, clientY: number): HTMLButtonElement | null {
-    return document
-      .elementFromPoint(clientX, clientY)
-      ?.closest<HTMLButtonElement>(".activity-rail [data-tool]") ?? null;
   }
 
   private commitActivityOrder(order: ActivityTool[], focusTool: ActivityTool): void {
     if (!this.shellController.setActivityOrder(order)) return;
     this.renderActivityRail();
     this.root.querySelector<HTMLButtonElement>(`[data-tool="${focusTool}"]`)?.focus();
-  }
-
-  private clearActivityDropMarkers(): void {
-    this.root.querySelectorAll<HTMLElement>("[data-tool]").forEach((button) => {
-      button.classList.remove("drop-before", "drop-after");
-      delete button.dataset.dropPosition;
-    });
-  }
-
-  private clearActivityDragState(): void {
-    this.activityPointerDrag = null;
-    this.clearActivityDropMarkers();
-    this.root.querySelectorAll<HTMLElement>("[data-tool]").forEach((button) => {
-      button.classList.remove("dragging");
-    });
   }
 
   private bindShellEvents(): void {
@@ -1146,7 +793,7 @@ export class AsterlynApp {
       this.renderEditorTabMenu();
       this.bindEditorTabMenuEvents();
     });
-    this.bindActivityRailEvents();
+    this.activityRailBinding.bind();
     this.query("#hide-git-tool").addEventListener("click", () => {
       this.toggleTool("branches");
     });
@@ -1327,6 +974,7 @@ export class AsterlynApp {
         this.settingsController.dispose();
         this.releaseShellController();
         this.shellController.dispose();
+        this.activityRailBinding.dispose();
         this.historyListView.unmount();
         this.textEditor.destroy();
         this.diffEditor.destroy();
@@ -1369,135 +1017,14 @@ export class AsterlynApp {
   }
 
   private renderSettingsPage(): void {
-    const sections: Array<[SettingsSection, string]> = [
-      ["general", "General"],
-      ["appearance", "Appearance"],
-      ["editor", "Editor"],
-      ["version-control", "Version Control"],
-      ["code", "Code"],
-    ];
-    this.query("#settings-navigation").innerHTML = sections
-      .map(([id, label]) => {
-        const selected = this.settingsState.section === id;
-        return `<button class="settings-navigation-item ${selected ? "selected" : ""}" type="button" data-settings-section="${id}" aria-current="${selected ? "page" : "false"}">${label}</button>`;
-      })
-      .join("");
-    this.query("#settings-content").innerHTML = this.renderSettingsSection();
+    this.query("#settings-navigation").innerHTML = renderSettingsNavigation(
+      this.settingsState.section,
+    );
+    this.query("#settings-content").innerHTML = renderSettingsSection(
+      this.settingsState,
+      this.editorFontStatus,
+    );
     this.bindSettingsEvents();
-  }
-
-  private renderSettingsSection(): string {
-    const preferences = this.settingsState.preferences;
-    switch (this.settingsState.section) {
-      case "general":
-        return this.settingsGroup(
-          "General",
-          "Application-wide behavior with explicit support status.",
-          `
-            ${this.settingsRow("Application language", "English is the only complete interface language in this build.", '<span class="setting-value-pill">English · Current</span>')}
-            ${this.settingsRow("简体中文", "Planned after every visible string moves into the localization catalog.", '<span class="setting-planned">Planned</span>')}
-          `,
-        );
-      case "appearance":
-        return this.settingsGroup(
-          "Appearance",
-          "Interface color and application-menu typography.",
-          `
-            ${this.settingsRow("Theme", "Dark is implemented. Light and system-following themes remain explicit future work.", '<span class="setting-value-pill">Dark · Current</span><span class="setting-planned">Light/System planned</span>')}
-            ${this.settingsRow("Application menu font", "Changes navigation, toolbar, tabs, settings, and status text without scaling the editor.", this.settingsSelect("setting-ui-font", "Application menu font size", "uiFontSize", UI_FONT_SIZES, preferences.uiFontSize, (value) => `${value} px`))}
-          `,
-        );
-      case "editor":
-        return this.settingsGroup(
-          "Editor",
-          "Shared defaults for text editors and source-aware Diff panes.",
-          `
-            ${this.settingsRow("Editor font", "JetBrains Mono is included. Other fonts download only when selected, pass an integrity check, and remain cached in this profile.", this.editorFontControl())}
-            ${this.settingsRow("Editor font size", "Applies immediately to text files and Diff code.", this.settingsSelect("setting-editor-font", "Editor font size", "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}
-            ${this.settingsRow("Line spacing", "Controls vertical code density without changing file content.", this.settingsSelect("setting-editor-line-height", "Editor line spacing", "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}
-            ${this.settingsRow("Letter spacing", "Adjusts horizontal spacing between code glyphs. Android Studio's editor default is represented by 0 px.", this.settingsSelect("setting-editor-letter-spacing", "Editor letter spacing", "editorLetterSpacing", EDITOR_LETTER_SPACINGS, preferences.editorLetterSpacing, (value) => value === 0 ? "Default · 0 px" : `${value > 0 ? "+" : ""}${value} px`))}
-            ${this.settingsRow("Indent size", "Sets the spaces inserted for one editor indentation level.", this.settingsSelect("setting-editor-indent", "Editor indent size", "editorIndentSize", EDITOR_INDENT_SIZES, preferences.editorIndentSize, (value) => `${value} spaces`))}
-            ${this.settingsRow("Tab width", "Controls the visual width of an existing tab character without rewriting content.", this.settingsSelect("setting-editor-tab", "Editor tab width", "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, (value) => `${value} spaces`))}
-          `,
-        );
-      case "version-control":
-        return this.settingsGroup(
-          "Version Control",
-          "Defaults shared by working-tree and commit Diff views.",
-          `
-            ${this.settingsRow("Diff layout", "Choose the default presentation used by every Diff preview.", `<div class="setting-segmented" role="group" aria-label="Default Diff layout"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">Side by side</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">Unified</button></div>`)}
-            ${this.settingsRow("Whitespace", "Show spaces and tabs in Diff panes.", `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>Show whitespace characters</span></label>`)}
-          `,
-        );
-      case "code":
-        return this.settingsGroup(
-          "Code",
-          "Syntax and language-specific services are introduced only when their boundaries are real.",
-          `
-            ${this.settingsRow("Syntax highlighting", "CodeMirror language packages load on demand for editors and Diff panes.", '<span class="setting-value-pill success">Available</span>')}
-            ${this.settingsRow("Per-language formatting", "Formatter choice, style profiles, and format-on-save need the future language-service boundary.", '<span class="setting-planned">Planned</span>')}
-          `,
-        );
-    }
-  }
-
-  private settingsGroup(title: string, description: string, rows: string): string {
-    return `<section class="settings-group"><header><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></header><div class="settings-list">${rows}</div></section>`;
-  }
-
-  private settingsRow(label: string, description: string, control: string): string {
-    return `<div class="settings-row"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(description)}</span></div><div class="settings-control">${control}</div></div>`;
-  }
-
-  private editorFontControl(): string {
-    const selected =
-      this.editorFontStatus.kind === "loading" && this.editorFontStatus.id
-        ? this.editorFontStatus.id
-        : this.settingsState.preferences.editorFontFamily;
-    const status = this.editorFontStatus;
-    let message = "Included with Asterlyn";
-    let statusClass = "";
-    if (status.kind === "loading" && status.id) {
-      message = `Downloading and verifying ${editorFont(status.id).label}…`;
-      statusClass = "loading";
-    } else if (status.kind === "error" && status.message) {
-      message = status.message;
-      statusClass = "error";
-    } else if (status.kind === "ready" && status.id !== DEFAULT_EDITOR_FONT_ID) {
-      message =
-        status.source === "download"
-          ? "Downloaded, verified, and cached"
-          : status.source === "download-uncached"
-            ? "Loaded for this window; local cache is unavailable"
-          : status.source === "cache"
-            ? "Loaded from verified local cache"
-            : "Ready in this window";
-      statusClass = "success";
-    }
-    const retry =
-      status.kind === "error" && status.id
-        ? `<button class="setting-retry-button" id="setting-editor-font-retry" type="button">Retry ${escapeHtml(editorFont(status.id).label)}</button>`
-        : "";
-    return `<div class="editor-font-setting"><select id="setting-editor-font-family" aria-label="Editor font family" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select><span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
-  }
-
-  private settingsSelect(
-    id: string,
-    ariaLabel: string,
-    field: keyof Pick<
-      AppPreferences,
-      | "uiFontSize"
-      | "editorFontSize"
-      | "editorLineHeight"
-      | "editorLetterSpacing"
-      | "editorIndentSize"
-      | "editorTabSize"
-    >,
-    values: readonly number[],
-    selected: number,
-    label: (value: number) => string,
-  ): string {
-    return `<select id="${id}" data-setting-number="${field}" aria-label="${escapeAttribute(ariaLabel)}">${values.map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${escapeHtml(label(value))}</option>`).join("")}</select>`;
   }
 
   private bindSettingsEvents(): void {
@@ -2888,101 +2415,12 @@ export class AsterlynApp {
   }
 
   private renderRemoteToolbar(snapshot: RepositorySnapshot | null): void {
-    const toolbar = this.query("#remote-toolbar");
-    const select = this.query<HTMLSelectElement>("#topbar-remote-select");
-    const cancel = this.query<HTMLButtonElement>("#cancel-remote-operation");
-    toolbar.classList.toggle("git-unavailable", !snapshot);
-    if (!snapshot) {
-      select.innerHTML = "<option>No remote</option>";
-      select.disabled = true;
-      select.title = "Remote selection is unavailable because this project is not an active Git repository.";
-      select.setAttribute("aria-label", select.title);
-      cancel.classList.add("hidden");
-      const unavailable: Array<[string, string]> = [
-        ["#remote-fetch", "Fetch is unavailable because this project is not an active Git repository. Fetch would refresh the selected remote's standard branch-tracking refs without changing working files."],
-        ["#remote-update", "Update is unavailable because this project is not an active Git repository. Update would affect only the checked-out branch and would require a confirmed fast-forward."],
-        ["#remote-push", "Push is unavailable because this project is not an active Git repository. Push would open a current-branch review before any remote write."],
-      ];
-      for (const [selector, description] of unavailable) {
-        const button = this.query<HTMLButtonElement>(selector);
-        button.disabled = true;
-        button.title = description;
-        button.setAttribute("aria-label", description);
-        const hint = button.closest<HTMLElement>(".topbar-remote-action");
-        hint?.setAttribute("aria-label", description);
-        if (hint) {
-          hint.title = description;
-          hint.tabIndex = 0;
-        }
-      }
-      return;
-    }
-
-    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote);
-    const operation =
-      this.remoteState.operation?.root === snapshot.root
-        ? this.remoteState.operation
-        : null;
-    select.innerHTML = snapshot.remotes.length
-      ? snapshot.remotes
-          .map(
-            (remote) =>
-              `<option value="${escapeAttribute(remote.name)}" ${remote.name === policy.selectedRemote?.name ? "selected" : ""}>${escapeHtml(remote.name)}${remote.fetchSupported ? "" : " · unsupported"}</option>`,
-          )
-          .join("")
-      : "<option>No remote</option>";
-    select.disabled = Boolean(operation) || this.state.loading || snapshot.remotes.length === 0;
-
-    const branchName = snapshot.branch.head ?? "No branch";
-    const selectedName = policy.selectedRemote?.name ?? "No remote";
-    const sourceRef = snapshot.branch.head
-      ? `refs/heads/${snapshot.branch.head}`
-      : "no checked-out branch";
-    const destinationRef = snapshot.branch.upstreamRef ?? sourceRef;
-    const remoteScope = `Selected remote: ${selectedName}. Fetch refreshes all standard branch-tracking refs from this remote. Update and Push apply only to the checked-out branch.`;
-    select.title = remoteScope;
-    select.setAttribute("aria-label", remoteScope);
-    const tracksSelected = snapshot.branch.upstreamRemote === policy.selectedRemote?.name;
-    const actions: Array<{
-      kind: "fetch" | "pull" | "push";
-      button: string;
-      hint: string;
-      state: ReturnType<typeof remotePolicy>["fetch"];
-      iconName: "download" | "sync" | "upload";
-    }> = [
-      { kind: "fetch", button: "#remote-fetch", hint: "#remote-fetch-hint", state: policy.fetch, iconName: "download" },
-      { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", state: policy.pull, iconName: "sync" },
-      { kind: "push", button: "#remote-push", hint: "#remote-push-hint", state: policy.push, iconName: "upload" },
-    ];
-    for (const action of actions) {
-      const button = this.query<HTMLButtonElement>(action.button);
-      const exactScope =
-        action.kind === "fetch"
-          ? `Fetch from ${selectedName}. Refresh all standard branch-tracking refs for this remote without changing the checked-out branch or working files. The badge shows ${tracksSelected ? snapshot.branch.behind : 0} incoming commit${tracksSelected && snapshot.branch.behind === 1 ? "" : "s"} known after the last Fetch.`
-          : action.kind === "pull"
-            ? `Update ${sourceRef} from ${selectedName}:${destinationRef}. Opens a confirmation and performs fast-forward only; it never creates a merge commit or starts a rebase.`
-            : `Review Push from ${sourceRef} to ${selectedName}:${destinationRef}. The badge shows ${tracksSelected ? snapshot.branch.ahead : 0} outgoing commit${tracksSelected && snapshot.branch.ahead === 1 ? "" : "s"} known from the last Fetch. Review can explicitly include tags or choose Force Push with an exact lease; it never retries automatically.`;
-      const title = `${exactScope} ${action.state.enabled ? action.state.detail : `Unavailable: ${action.state.detail}`}`;
-      button.disabled = Boolean(operation) || this.state.loading || !action.state.enabled;
-      button.title = title;
-      button.setAttribute("aria-label", title);
-      button.classList.toggle("running", operation?.kind === action.kind);
-      button.innerHTML =
-        operation?.kind === action.kind && !operation.cancelling
-          ? '<span class="spinner" aria-hidden="true"></span>'
-          : `${icon(action.iconName, 18)}${action.kind === "fetch" && tracksSelected && snapshot.branch.behind > 0 ? `<span class="remote-count-badge" aria-hidden="true">${compactCount(snapshot.branch.behind)}</span>` : ""}${action.kind === "push" && tracksSelected && snapshot.branch.ahead > 0 ? `<span class="remote-count-badge" aria-hidden="true">${compactCount(snapshot.branch.ahead)}</span>` : ""}`;
-      const hint = this.query(action.hint);
-      hint.title = title;
-      hint.setAttribute("aria-label", title);
-      hint.tabIndex = button.disabled ? 0 : -1;
-    }
-
-    cancel.classList.toggle("hidden", !operation);
-    cancel.disabled = !operation || operation.cancelling;
-    cancel.title = operation
-      ? `Cancel ${remoteActionLabel(operation.kind).toLowerCase()} for ${branchName} using ${selectedName}. Git may already have changed local or remote state, so Asterlyn will refresh before another action.`
-      : "Cancel remote operation";
-    cancel.setAttribute("aria-label", cancel.title);
+    renderRemoteToolbarView(
+      this.root,
+      snapshot,
+      this.remoteState,
+      this.state.loading,
+    );
   }
 
   private openRemoteDialog(
@@ -3019,10 +2457,13 @@ export class AsterlynApp {
         ? document.activeElement.id
         : null;
     host.classList.remove("hidden");
-    host.innerHTML =
-      dialog === "update"
-        ? this.renderUpdateDialog(snapshot)
-        : `${this.renderPushDialog(snapshot)}${this.renderPushDiffDialog()}`;
+    host.innerHTML = renderRemoteDialogContent({
+      snapshot,
+      state: this.remoteState,
+      workspaceRoot: this.state.workspaceRoot,
+      preferences: this.settingsState.preferences,
+      selectedProjectFileAvailable: this.pushSelectedProjectFile() !== null,
+    });
     this.bindRemoteDialogEvents();
     if (dialog === "push" && this.remoteState.pushDiff) {
       queueMicrotask(() => this.mountPushDiffSurface());
@@ -3032,210 +2473,6 @@ export class AsterlynApp {
         this.root.querySelector<HTMLElement>(`#${focusedId}`)?.focus(),
       );
     }
-  }
-
-  private renderUpdateDialog(snapshot: RepositorySnapshot): string {
-    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote);
-    const remote = policy.selectedRemote?.name ?? "No remote";
-    const branch = snapshot.branch.head ?? "No branch";
-    const source = snapshot.branch.head ? `refs/heads/${snapshot.branch.head}` : "No branch";
-    const destination = snapshot.branch.upstreamRef ?? "No upstream";
-    const operation = this.remoteState.operation?.kind === "pull"
-      ? this.remoteState.operation
-      : null;
-    const busyLabel = operation?.cancelling ? "Cancelling…" : operation ? "Updating…" : "Update";
-    const error = this.remoteState.dialogError
-      ? `<div class="remote-dialog-error" role="alert">${escapeHtml(this.remoteState.dialogError)}</div>`
-      : "";
-    return `<section class="dialog remote-action-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
-      <div class="dialog-heading">
-        <div><span class="panel-eyebrow">Current branch</span><h2 id="remote-dialog-title">Update ${escapeHtml(branch)}</h2></div>
-        <button class="icon-button" id="remote-dialog-close" type="button" aria-label="Cancel Update confirmation" title="Cancel" ${operation ? "disabled" : ""}>${icon("close", 18)}</button>
-      </div>
-      <p id="remote-dialog-description">Fetch the configured upstream and integrate it into the checked-out branch. Only a clean fast-forward is executable in this version.</p>
-      <div class="remote-dialog-route" aria-label="Update route"><code>${escapeHtml(source)}</code><span>←</span><code>${escapeHtml(`${remote}:${destination}`)}</code></div>
-      ${error}
-      <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}>
-        <legend>Update method</legend>
-        <label class="remote-strategy-card selected"><input type="radio" name="update-strategy" value="ff-only" checked /><span><strong>Fast-forward only</strong><small>Fetch the configured upstream, then move the current branch only when no merge or rebase is required.</small></span></label>
-        <label class="remote-strategy-card unavailable"><input type="radio" name="update-strategy" value="merge" disabled /><span><strong>Merge incoming changes <b>Unavailable</b></strong><small>Requires editable conflict Diff plus Continue and Abort lifecycle support.</small></span></label>
-        <label class="remote-strategy-card unavailable"><input type="radio" name="update-strategy" value="rebase" disabled /><span><strong>Rebase current branch <b>Unavailable</b></strong><small>Requires editable conflict Diff plus Continue, Skip, and Abort lifecycle support.</small></span></label>
-      </fieldset>
-      <p class="remote-dialog-note">No merge commit, rebase, reset, stash, or force operation will be started. Git credentials come from your configured credential helper or SSH agent.</p>
-      <div class="dialog-actions">
-        ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel update"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
-        <button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="Update ${escapeAttribute(source)} from ${escapeAttribute(`${remote}:${destination}`)} using fast-forward only" ${operation || !policy.pull.enabled ? "disabled" : ""}>${busyLabel}</button>
-      </div>
-    </section>`;
-  }
-
-  private renderPushDialog(snapshot: RepositorySnapshot): string {
-    const preview = this.remoteState.pushPreview;
-    const operation = this.remoteState.operation?.kind === "push"
-      ? this.remoteState.operation
-      : null;
-    const error = this.remoteState.dialogError
-      ? `<div class="remote-dialog-error" role="alert">${escapeHtml(this.remoteState.dialogError)}</div>`
-      : "";
-    const body = preview
-      ? this.renderPushPreviewBody(preview)
-      : this.remoteState.pushPreviewLoading
-        ? `<div class="remote-dialog-loading" role="status"><span class="spinner"></span><span>Reading outgoing commits, tags, and files from the last-fetched refs…</span></div>`
-        : `<div class="remote-dialog-empty">Push preview is unavailable. Close this window and refresh before retrying.</div>`;
-    const route = preview
-      ? `${preview.sourceRef} to ${preview.remote}:${preview.destinationRef}`
-      : "the selected current-branch route";
-    const forceSelected = this.remoteState.pushMode === "forceWithLease";
-    const modeAllowed = Boolean(
-      preview && (forceSelected ? preview.forceWithLeaseAllowed : preview.ordinaryAllowed),
-    );
-    const actionable = Boolean(
-      preview &&
-        (preview.publish ||
-          preview.totalCommits > 0 ||
-          preview.tags.length > 0 ||
-          (forceSelected && preview.comparisonBaseOid !== preview.headOid)),
-    );
-    const modeBlocker = preview
-      ? forceSelected
-        ? preview.forceWithLeaseBlockReason
-        : preview.ordinaryBlockReason
-      : null;
-    const actionLabel = forceSelected
-      ? "Force Push with Lease"
-      : preview?.publish
-        ? "Publish"
-        : "Push";
-    const tagsLabel = preview?.tags.length
-      ? `${preview.tags.length} tag${preview.tags.length === 1 ? "" : "s"}`
-      : "No matching tags";
-    const confirmation = pushConfirmationAvailability({
-      operationActive: Boolean(operation),
-      previewLoading: this.remoteState.pushPreviewLoading,
-      previewRefreshing: this.remoteState.pushPreviewRefreshing,
-      actionable,
-      modeAllowed,
-    });
-    return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="${this.remoteState.pushDiff ? "false" : "true"}" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description" ${this.remoteState.pushDiff ? 'aria-hidden="true" inert' : ""}>
-      <div class="dialog-heading">
-        <div><h2 id="remote-dialog-title">Push Commits to ${escapeHtml(snapshot.branch.head ?? "current branch")}</h2></div>
-        <button class="icon-button" id="remote-dialog-close" type="button" aria-label="Cancel Push confirmation" title="Cancel" ${operation ? "disabled" : ""}>${icon("close", 18)}</button>
-      </div>
-      <p id="remote-dialog-description" class="visually-hidden">Review the exact current-branch route, outgoing commits, aggregate changed files, optional tags, and push mode before writing to the selected remote.</p>
-      ${error}
-      ${this.renderPushRoute(snapshot, preview)}
-      ${body}
-      ${modeBlocker ? `<div class="remote-dialog-warning" role="status">${escapeHtml(modeBlocker)}</div>` : ""}
-      <p class="remote-dialog-note">${forceSelected ? "Force Push uses an exact --force-with-lease bound to the last-fetched destination object. If the remote changed, Git rejects the push." : "Ordinary Push never rewrites the destination."} Tags are sent only when the checkbox is enabled. A rejection ends the operation; Asterlyn never retries automatically.</p>
-      <div class="push-dialog-footer">
-        <div class="push-tags-control">
-          <label><input id="push-tags-enabled" type="checkbox" ${this.remoteState.pushTagsEnabled ? "checked" : ""} ${operation ? "disabled" : ""}/><span>Push tags:</span></label>
-          <select id="push-tag-mode" aria-label="Tag scope" ${!this.remoteState.pushTagsEnabled || operation ? "disabled" : ""}>
-            <option value="all" ${this.remoteState.pushTagMode === "all" ? "selected" : ""}>All</option>
-            <option value="currentBranch" ${this.remoteState.pushTagMode === "currentBranch" ? "selected" : ""}>Current Branch</option>
-          </select>
-          <span class="push-tag-count" aria-live="polite">${this.remoteState.pushPreviewRefreshing ? '<span class="spinner" aria-hidden="true"></span> Refreshing review…' : this.remoteState.pushTagsEnabled && preview ? escapeHtml(tagsLabel) : ""}</span>
-        </div>
-        <div class="push-dialog-actions">
-          ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel push"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
-          <div class="push-split-action">
-            <button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(actionLabel)} ${preview?.totalCommits ?? 0} outgoing commits and ${preview?.tags.length ?? 0} selected tags over ${escapeAttribute(route)}" aria-disabled="${confirmation.ariaDisabled}" data-refreshing="${this.remoteState.pushPreviewRefreshing}" ${confirmation.nativeDisabled ? "disabled" : ""}>${operation?.cancelling ? "Cancelling…" : operation ? "Pushing…" : actionLabel}</button>
-            <button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="Choose Push mode" aria-haspopup="menu" aria-expanded="${this.remoteState.pushModeMenuOpen}" ${operation || !preview ? "disabled" : ""}>${icon("chevron-down", 13)}</button>
-            <div class="push-mode-menu ${this.remoteState.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="Push mode">
-              <button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>Push</strong><small>Ordinary non-force update</small></span>${!forceSelected ? icon("check", 13) : ""}</button>
-              <button type="button" role="menuitemradio" data-push-mode="forceWithLease" aria-checked="${forceSelected}" ${preview?.forceWithLeaseAllowed ? "" : "disabled"}><span><strong>Force Push with Lease</strong><small>Rewrite only if the remote still matches the reviewed object</small></span>${forceSelected ? icon("check", 13) : ""}</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>`;
-  }
-
-  private renderPushRoute(
-    snapshot: RepositorySnapshot,
-    preview: PushPreview | null,
-  ): string {
-    const branch = snapshot.branch.head ?? "current branch";
-    const selectedRemote = preview?.remote ?? this.remoteState.selectedRemote ?? "";
-    const destination = preview?.destinationRef ?? `refs/heads/${branch}`;
-    const destinationBranch = destination.replace(/^refs\/heads\//, "");
-    const outgoingCount = preview?.totalCommits ?? 0;
-    const options = snapshot.remotes
-      .map(
-        (remote) =>
-          `<option value="${escapeAttribute(remote.name)}" ${remote.name === selectedRemote ? "selected" : ""} ${remote.pushSupported ? "" : "disabled"}>${escapeHtml(remote.name)}${remote.pushSupported ? "" : " · unsupported"}</option>`,
-      )
-      .join("");
-    return `<div class="push-route-row" aria-label="Push route from local branch ${escapeAttribute(branch)} to remote branch ${escapeAttribute(`${selectedRemote}/${destinationBranch}`)}">
-      <button class="push-route-endpoint push-route-scope ${this.remoteState.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${this.remoteState.pushSelectedCommit === null}" title="Show files changed by all outgoing commits">
-        <span class="push-route-kind">Local branch</span>
-        <span class="push-route-name">${icon("branch", 14)}<strong>${escapeHtml(branch)}</strong></span>
-        <small>${outgoingCount} outgoing commit${outgoingCount === 1 ? "" : "s"} · show all files</small>
-      </button>
-      <span class="push-route-arrow" aria-hidden="true"><small>Push</small><strong>→</strong></span>
-      <label class="push-route-endpoint push-remote-target">
-        <span class="push-route-kind">Remote branch</span>
-        <span class="push-route-name push-route-destination">${icon("upload", 14)}<select id="push-remote-select" aria-label="Push remote" ${this.remoteState.pushPreviewRefreshing || this.remoteState.operation ? "disabled" : ""}>${options}</select><span class="push-route-separator">/</span><strong>${escapeHtml(destinationBranch)}</strong></span>
-        <small>Selected destination for this push</small>
-      </label>
-    </div>`;
-  }
-
-  private renderPushPreviewBody(preview: PushPreview): string {
-    const commits = preview.commits.length
-      ? preview.commits
-          .map((commit) => {
-            const selected = this.remoteState.pushSelectedCommit === commit.oid;
-            return `<button class="push-commit-row ${selected ? "selected" : ""}" type="button" role="option" data-push-commit="${escapeAttribute(commit.oid)}" aria-selected="${selected}" aria-pressed="${selected}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.authorName)} · ${escapeHtml(formatAbsolute(commit.authoredAt))}</small></button>`;
-          })
-          .join("")
-      : `<div class="remote-dialog-empty">No new commit objects are visible against the selected remote's last-fetched refs.${preview.publish ? " Publishing will still create the destination branch." : ""}</div>`;
-    const reviewFiles = this.pushReviewFiles(preview);
-    const selectedFile = this.remoteState.pushSelectedFile;
-    const files = this.remoteState.pushCommitDetailsLoading
-      ? `<div class="remote-dialog-loading compact" role="status"><span class="spinner"></span><span>Reading files in the selected commit…</span></div>`
-      : this.remoteState.pushCommitDetailsError
-        ? `<div class="remote-dialog-empty error">${escapeHtml(this.remoteState.pushCommitDetailsError)}</div>`
-        : reviewFiles.length
-      ? this.remoteState.pushFileView === "tree"
-        ? `<details class="push-file-directory push-file-root" data-push-directory="." ${this.remoteState.pushCollapsedFileDirectories.has(".") ? "" : "open"}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<strong>${escapeHtml(basename(this.state.workspaceRoot ?? preview.branch))}</strong><small>${reviewFiles.length} file${reviewFiles.length === 1 ? "" : "s"}</small></summary><div role="group">${this.remoteState.pushCollapsedFileDirectories.has(".") ? "" : buildCommitFileTree(reviewFiles).map((node) => this.renderPushFileTreeNode(node, 1)).join("")}</div></details>`
-        : reviewFiles.map((file) => this.pushFileRow(file, file.path === selectedFile, null)).join("")
-      : `<div class="remote-dialog-empty">${preview.filesTruncated && !this.remoteState.pushSelectedCommit ? "The pushed file range exceeded the bounded review limit." : this.remoteState.pushSelectedCommit ? "No files are reported for the selected commit." : "No net file changes are present in the reviewed range."}</div>`;
-    const fileScope = this.remoteState.pushSelectedCommit ? "Files in selected commit" : "Files in all outgoing commits";
-    return `<div class="push-preview-grid">
-        <section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">Outgoing commits</h3><span>${preview.commits.length}/${preview.totalCommits}</span></div><div class="push-commit-list" role="listbox" aria-label="Outgoing commits; activate the selected commit again to show all outgoing files">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${this.remoteState.pushPreviewLoadingMore ? "disabled" : ""}>${this.remoteState.pushPreviewLoadingMore ? "Loading…" : "Show more"}</button>` : preview.truncated ? `<p class="push-preview-limit">Showing the first 1,000 of ${preview.totalCommits} commits. Push includes all ${preview.totalCommits}.</p>` : ""}</section>
-        <section class="push-preview-files" aria-labelledby="push-files-title">
-          <div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${fileScope}</h3><span>${reviewFiles.length}${preview.filesTruncated && !this.remoteState.pushSelectedCommit ? "+" : ""}</span><div class="push-file-toolbar" role="toolbar" aria-label="Pushed file presentation and navigation">
-            <button class="compact-icon-button" type="button" data-push-file-action="diff" title="Open the latest outgoing commit Diff for the selected file" aria-label="Open the latest outgoing commit Diff for the selected file" ${selectedFile && !this.remoteState.pushFileActionLoading ? "" : "disabled"}>${this.remoteState.pushFileActionLoading ? '<span class="spinner"></span>' : icon("diff", 14)}</button>
-            <button class="compact-icon-button" type="button" data-push-file-action="open" title="Open selected file and reveal it in Project" aria-label="Open selected file and reveal it in Project" ${selectedFile && this.pushSelectedProjectFile() ? "" : "disabled"}>${icon("locate", 14)}</button>
-            <button class="compact-icon-button ${this.remoteState.pushFileView === "tree" ? "active" : ""}" type="button" data-push-file-action="view" title="Show pushed files as ${this.remoteState.pushFileView === "tree" ? "a flat list" : "a folder tree"}" aria-label="Show pushed files as ${this.remoteState.pushFileView === "tree" ? "a flat list" : "a folder tree"}" aria-pressed="${this.remoteState.pushFileView === "tree"}">${icon("eye", 14)}</button>
-            <button class="compact-icon-button" type="button" data-push-file-action="expand" title="Expand all pushed file folders" aria-label="Expand all pushed file folders" ${this.remoteState.pushFileView === "flat" ? "disabled" : ""}>${icon("expand", 14)}</button>
-            <button class="compact-icon-button" type="button" data-push-file-action="collapse" title="Collapse all pushed file folders" aria-label="Collapse all pushed file folders" ${this.remoteState.pushFileView === "flat" ? "disabled" : ""}>${icon("collapse", 14)}</button>
-          </div></div>
-          <div class="push-file-list" role="tree">${files}</div>
-        </section>
-      </div>`;
-  }
-
-  private pushReviewFiles(preview: PushPreview): CommitFileChange[] {
-    return filesForPushReview(
-      preview.files,
-      this.remoteState.pushSelectedCommit,
-      this.remoteState.pushCommitDetails,
-    );
-  }
-
-  private renderPushFileTreeNode(node: CommitFileTreeNode, depth: number): string {
-    if (node.kind === "directory") {
-      const expanded = !this.remoteState.pushCollapsedFileDirectories.has(node.path);
-      return `<details class="push-file-directory" data-push-directory="${escapeAttribute(node.path)}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countCommitTreeFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => this.renderPushFileTreeNode(child, depth + 1)).join("") : ""}</div></details>`;
-    }
-    const file = node.file!;
-    return this.pushFileRow(file, file.path === this.remoteState.pushSelectedFile, depth);
-  }
-
-  private pushFileRow(file: CommitFileChange, selected: boolean, depth: number | null): string {
-    return `<button class="push-file-row file-status-${file.status} ${selected ? "selected" : ""}" type="button" role="treeitem" ${depth === null ? "" : `style="--tree-depth:${depth}"`} data-push-file="${escapeAttribute(file.path)}" aria-selected="${selected}" title="${escapeAttribute(file.path)}"><span class="change-status status-${file.status}">${changeCode(file.status)}</span><span class="commit-file-glyph">${fileTypeIcon(file.path)}</span><span>${escapeHtml(basename(file.path))}</span>${depth === null ? `<small>${escapeHtml(dirname(file.path))}</small>` : ""}</button>`;
   }
 
   private bindRemoteDialogEvents(): void {
@@ -3316,7 +2553,7 @@ export class AsterlynApp {
         } else if (action === "collapse") {
           const preview = this.remoteState.pushPreview;
           if (!preview) return;
-          const files = this.pushReviewFiles(preview);
+          const files = pushReviewFiles(preview, this.remoteState);
           this.remoteController.collapsePushDirectories([
             ".",
             ...commitFileDirectoryPaths(buildCommitFileTree(files)),
@@ -3401,40 +2638,6 @@ export class AsterlynApp {
   }
 
 
-  private renderPushDiffDialog(): string {
-    const state = this.remoteState.pushDiff;
-    if (!state) return "";
-    const image = isImagePreviewPath(state.file.path);
-    const body = state.loading
-      ? this.loadingBlock("Loading pushed file Diff…")
-      : state.error
-        ? `<div class="remote-dialog-empty error" role="alert">${escapeHtml(state.error)}</div>`
-        : state.image
-          ? `<section class="image-diff-surface" aria-label="Image Diff">${state.image.before ? this.imagePreviewCard(state.image.before, "Before") : this.emptyImageSide("Before", "File did not exist")}${state.image.after ? this.imagePreviewCard(state.image.after, "After") : this.emptyImageSide("After", "File was removed")}</section>`
-          : `<div class="push-diff-editor-host" id="push-diff-editor-host"></div>`;
-    const files = this.remoteState.pushPreview ? this.pushReviewFiles(this.remoteState.pushPreview) : [];
-    const previous = adjacentDiffItem(files.map((file) => file.path), state.file.path, -1);
-    const next = adjacentDiffItem(files.map((file) => file.path), state.file.path, 1);
-    return `<div class="push-diff-backdrop" id="push-diff-backdrop" role="presentation">
-      <section class="dialog push-diff-dialog" role="dialog" aria-modal="true" aria-labelledby="push-diff-title">
-        <div class="dialog-heading push-diff-heading"><div><h2 id="push-diff-title">${escapeHtml(basename(state.file.path))}</h2><small>${escapeHtml(state.file.path)}${state.oid ? ` · ${escapeHtml(state.oid.slice(0, 8))}` : ""}</small></div><button class="icon-button" id="push-diff-close" type="button" aria-label="Close pushed file Diff" title="Close">${icon("close", 18)}</button></div>
-        <div class="diff-toolbar push-diff-toolbar" aria-label="Pushed file Diff navigation and presentation">
-          <div class="diff-navigation-controls" role="group" aria-label="Diff navigation">
-            <button class="compact-icon-button" type="button" data-push-diff-action="previous-change" aria-label="Previous change in file" title="Previous change in file" ${!state.patch ? "disabled" : ""}>${icon("up", 15)}</button>
-            <button class="compact-icon-button" type="button" data-push-diff-action="next-change" aria-label="Next change in file" title="Next change in file" ${!state.patch ? "disabled" : ""}>${icon("down", 15)}</button>
-            <span class="diff-control-separator" aria-hidden="true"></span>
-            <button class="compact-icon-button" type="button" data-push-diff-action="previous-file" aria-label="Previous pushed file" title="Previous pushed file" ${previous ? "" : "disabled"}>${icon("back", 15)}</button>
-            <button class="compact-icon-button" type="button" data-push-diff-action="next-file" aria-label="Next pushed file" title="Next pushed file" ${next ? "" : "disabled"}>${icon("forward", 15)}</button>
-            <button class="compact-icon-button" type="button" data-push-diff-action="open-source" aria-label="Open file and reveal in Project" title="Open file and reveal in Project" ${this.pushSelectedProjectFile() ? "" : "disabled"}>${icon("locate", 15)}</button>
-            <button class="compact-icon-button ${state.expandedUnchanged ? "active" : ""}" type="button" data-push-diff-action="toggle-unchanged" aria-label="${state.expandedUnchanged ? "Collapse" : "Expand"} unchanged lines" title="${state.expandedUnchanged ? "Collapse" : "Expand"} unchanged lines" aria-pressed="${state.expandedUnchanged}" ${!state.patch ? "disabled" : ""}>${icon(state.expandedUnchanged ? "collapse" : "expand", 15)}</button>
-          </div>
-          ${image ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation"><button type="button" data-push-diff-layout="unified" aria-pressed="${this.settingsState.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button><button type="button" data-push-diff-layout="split" aria-pressed="${this.settingsState.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button><button type="button" data-push-diff-whitespace aria-pressed="${this.settingsState.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button></div>`}
-        </div>
-        <div class="push-diff-body ${image ? "image-surface" : "diff-surface"}" id="push-diff-body">${body}</div>
-      </section>
-    </div>`;
-  }
-
   private mountPushDiffSurface(): void {
     const state = this.remoteState.pushDiff;
     const host = this.root.querySelector<HTMLElement>("#push-diff-editor-host");
@@ -3459,7 +2662,7 @@ export class AsterlynApp {
           const current = this.remoteState.pushDiff?.file.path;
           if (!preview || !current) return;
           const path = adjacentDiffItem(
-            this.pushReviewFiles(preview).map((file) => file.path),
+            pushReviewFiles(preview, this.remoteState).map((file) => file.path),
             current,
             action === "next-file" ? 1 : -1,
           );
@@ -8240,10 +7443,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-}
-
-function compactCount(count: number): string {
-  return count > 99 ? "99+" : String(count);
 }
 
 function capitalize(value: string): string {
