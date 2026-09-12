@@ -1,0 +1,134 @@
+# Architecture refactoring plan
+
+## Purpose
+
+Asterlyn pauses high-blast-radius feature expansion long enough to turn its proven first vertical
+slices into durable capability boundaries. This is an incremental refactoring program, not a
+rewrite, framework migration, or visual redesign. Tauri 2, TypeScript, CodeMirror 6,
+`asterlyn-git`, and `asterlyn-workspace` remain the baseline.
+
+Merge, rebase, cherry-pick, squash, and multi-file mutation do not enter implementation until their
+owning boundaries below exist. Small defect corrections may continue when they do not add another
+state owner or broad rendering path.
+
+## Audit baseline
+
+The 2026-09-12 clean baseline passes TypeScript checking, all 183 frontend script tests, all 48
+`asterlyn-git` tests, all 25 `asterlyn-workspace` tests, the Tauri workspace tests through the
+project Linux environment wrapper, and a production frontend build. The build reports a 733.90 kB
+uncompressed main JavaScript chunk, above the 500 kB architectural target.
+
+Current concentration points are:
+
+| Area | File | Lines | Coupled responsibilities |
+| --- | --- | ---: | --- |
+| Frontend application | `src/app.ts` | 9,611 | shell, feature state, rendering, events, async orchestration |
+| Global presentation | `src/styles.css` | 6,282 | tokens, shell, controls, and every feature |
+| Git capability | `crates/asterlyn-git/src/repository.rs` | 5,968 | repository discovery, reads, writes, process policy, parsing, tests |
+| Desktop boundary | `src-tauri/src/lib.rs` | 3,073 | commands, sessions, task registries, mutation locks, preview adapters |
+| Frontend bridge | `src/bridge.ts` | 1,476 | native protocol and browser-demo implementation |
+
+Approximately 2,100 lines of `repository.rs` are inline tests, so line count alone is not the Git
+core diagnosis. Its production section still owns too many capabilities, while `app.ts` remains the
+highest immediate correctness and performance risk.
+
+## Target boundaries
+
+```text
+src/shell                         window composition and cross-feature routing
+src/features/<capability>         state, actions, controller, stable view, disposal
+src/adapters/{tauri,demo}         protocol implementations
+src/protocol                      generated versioned transport models
+
+src-tauri/commands                thin DTO validation and dispatch
+src-tauri/application             workspace/repository sessions and coordinators
+src-tauri/adapters                Tauri window, dialog, preview, and task adapters
+
+crates/asterlyn-git/repository    identity and root catalog
+crates/asterlyn-git/reads         status, refs, history, and diff
+crates/asterlyn-git/operations    bounded mutations
+crates/asterlyn-git/operation     reviewed plans, lifecycle, conflicts, outcomes
+crates/asterlyn-git/process       command runner and output policy
+
+crates/asterlyn-workspace/catalog existing authorization and discovery
+crates/asterlyn-workspace/editing existing read/save and revisions
+crates/asterlyn-workspace/operations create, move, copy, and trash
+crates/asterlyn-workspace/recovery recoverable multi-file work
+```
+
+## Migration sequence
+
+### R1 — Decisions, characterization, and reference boundary
+
+- Accept ADR-0007 and ADR-0008.
+- Add the architecture and rendering gates to the definition of done.
+- Extract Git History list rendering and event delegation behind its stable host without changing
+  visible behavior or Git queries.
+- Record focused behavior, build-size, and source-concentration evidence.
+
+Exit gate: commit selection, keyboard navigation, paging, graph projection, scroll identity, and
+detail loading remain compatible; selection does not rebuild the history host.
+
+### R2 — Frontend capability ownership
+
+Extract in this order: Git History/Details, Remote/Push, Changes/Commit, Files/Editor coordination,
+then Settings/Shell. Split CSS with each owning feature. Replace broad rerender calls with typed
+feature actions. Add viewport virtualization to bounded history and project/change trees before
+their mounted rows exceed the architecture gate.
+
+Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
+has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.
+
+### R3 — Application services and protocol
+
+- Introduce window-scoped `WorkspaceSession` and `RepositorySession` catalogs.
+- Move Git mutation serialization and task supervision from Tauri commands into application
+  services.
+- Split Tauri commands and bridge adapters by capability.
+- Generate TypeScript protocol types from one versioned schema and validate responses at the
+  boundary.
+- Replace broad repository mutation responses with typed outcomes and slice invalidations.
+
+Exit gate: opening or saving a file is not proportional to total project files after session
+activation, and a status mutation does not reload history or refs.
+
+### R4 — Recoverable Git operations
+
+Implement ADR-0008 in merge, cherry-pick, rebase, then squash order. Add restart, stale-plan,
+external-Git-race, cancellation, conflict, continue, skip, abort, detached-HEAD, unborn-branch, and
+submodule fixtures before each operation becomes enabled.
+
+Exit gate: every interrupted operation can be reconstructed from Git, every action is explicitly
+allowed by the current operation snapshot, and uncertain outcomes are never retried automatically.
+
+### R5 — Workspace mutation foundation
+
+Add one coalesced watcher as an invalidation hint, then create, rename/move, copy/paste, and
+trash-first delete. File operations use typed identities, source/destination revisions, explicit
+collision policy, case-only rename handling, cross-device behavior, and recoverable multi-file
+outcomes. The Files tree, editor tabs, search, and Git status reconcile from one session catalog.
+
+Exit gate: file operations cannot escape the workspace, destroy an unreviewed destination, or lose
+open-buffer identity, disclosure, selection, and scroll state.
+
+## Performance budgets
+
+- Commit selection updates row state and one detail region; it does not replace branch or history
+  containers.
+- A cached immutable commit-detail selection performs no native request.
+- A 3,000-commit session mounts no more than 200 ordinary rows once virtualization lands.
+- Splitter pointer updates perform no synchronous layout read after their write and target a 16.7 ms
+  frame budget on supported hardware.
+- File activation and save perform bounded targeted authorization after session warm-up rather than
+  a full project scan.
+- Status-only reconciliation neither reads nor serializes complete history, branches, or remotes.
+- Optional Markdown, language, preview, and Git-dialog code remains lazy; the main production chunk
+  returns below 500 kB.
+
+## Delivery policy
+
+Each R phase is one remotely published development milestone after its complete gate passes. Local
+commits may preserve safe rollback boundaries, but packaging and remote publication occur at the
+phase boundary rather than after every mechanical extraction. Every phase records focused tests,
+broader validation, performance interpretation, accessibility evidence, artifact size, and known
+limitations. The locally built Debian package remains the manual Linux acceptance artifact.

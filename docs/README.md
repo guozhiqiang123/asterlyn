@@ -16,11 +16,14 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0004-safe-text-editing.md`](architecture/decisions/0004-safe-text-editing.md) — authorized text-file access, optimistic save, and editor-session ownership.
 - [`architecture/decisions/0005-bounded-navigation-search.md`](architecture/decisions/0005-bounded-navigation-search.md) — keyboard-first navigation, bounded cancellable text search, and safe replacement scope.
 - [`architecture/decisions/0006-language-adapter-evolution.md`](architecture/decisions/0006-language-adapter-evolution.md) — syntax adapters now, optional Tree-sitter language packs later, and deferred semantic intelligence.
+- [`architecture/decisions/0007-workbench-feature-ownership.md`](architecture/decisions/0007-workbench-feature-ownership.md) — feature-owned workbench state, stable DOM hosts, and scoped rendering.
+- [`architecture/decisions/0008-recoverable-git-operations.md`](architecture/decisions/0008-recoverable-git-operations.md) — reviewed, resumable, and conflict-aware Git operation lifecycle.
 
 ## Delivery
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
+- [`engineering/architecture-refactoring.md`](engineering/architecture-refactoring.md) — current architecture audit, target boundaries, migration order, and refactoring gates.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds and artifact trust boundary.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
@@ -47,3 +50,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-11-markdown-diff-navigation.md`](benchmarks/2026-09-11-markdown-diff-navigation.md) — frame-coalesced Markdown scrolling, bounded fenced-code highlighting, Diff navigation, expanded-context limits, and local package evidence.
 - [`benchmarks/2026-09-12-remote-toolbar-markdown-memory.md`](benchmarks/2026-09-12-remote-toolbar-markdown-memory.md) — compact remote counts, complete Push review, exact-lease and atomic tag safety, Update confirmation, conflict destination, Markdown-mode persistence, and local package evidence.
 - [`benchmarks/2026-09-12-navigation-alignment.md`](benchmarks/2026-09-12-navigation-alignment.md) — persistent activity-rail ordering, Changes checkbox alignment, branch hierarchy, browser interaction, and local package evidence.
+- [`benchmarks/2026-09-12-r1-architecture-refactoring.md`](benchmarks/2026-09-12-r1-architecture-refactoring.md) — accepted architecture decisions, first feature-owned Git History list boundary, delegated events, validation, and package evidence.

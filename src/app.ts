@@ -6,6 +6,12 @@ import { fileTypeIcon } from "./file-icons";
 import { icon } from "./icons";
 import { preferredRemote, remotePolicy } from "./remote-policy";
 import { windowControls } from "./window-controls";
+import {
+  GitHistoryListView,
+  HISTORY_ROW_LIMIT,
+  renderHistoryList,
+  type HistoryListPresentation,
+} from "./features/git-history/history-list-view";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -160,10 +166,6 @@ import {
   touchRecentRef,
 } from "./workbench/history-preferences";
 import {
-  collapseLinearHistory,
-  type HistoryDisplayEntry,
-} from "./workbench/history-collapse";
-import {
   ancestorProjectDirectories,
   buildProjectTree,
   defaultExpandedProjectDirectories,
@@ -233,10 +235,7 @@ import {
   commitReferences,
   groupRemoteBranches,
   matchingLogicalBranches,
-  projectCommitGraph,
   uniqueLogicalBranches,
-  type CommitGraphRow,
-  type CommitGraphSegment,
   type CommitFileTreeNode,
   type CommitFileView,
   type CommitReference,
@@ -271,7 +270,6 @@ import type {
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const CHANGE_FILE_VIEW_KEY = "asterlyn.changeFileView.v1";
 const HISTORY_PAGE_SIZE = 150;
-const HISTORY_ROW_LIMIT = 3_000;
 const HISTORY_SCROLL_THRESHOLD = 72;
 const COMMIT_DETAILS_CACHE_LIMIT = 48;
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
@@ -413,6 +411,7 @@ export class AsterlynApp {
   private readonly diffEditor = new DiffEditor();
   private readonly pushDiffEditor = new DiffEditor();
   private readonly textEditor = new TextEditor();
+  private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
@@ -4371,6 +4370,20 @@ export class AsterlynApp {
     const commits = this.filteredHistoryCommits();
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
+    this.historyListView.mount(this.query("#history-results"), {
+      selectCommit: (key, restoreFocus) => this.selectCommit(key, restoreFocus),
+      expandLinearHistory: (firstKey) => {
+        this.state.historyCollapseLinear = false;
+        this.renderHistoryPane();
+        if (firstKey) this.focusHistoryCommit(firstKey);
+      },
+      retryPaging: () => {
+        if (this.state.historyPagingRetry === "refresh") void this.refreshLoadedHistory();
+        else if (this.state.history.status === "error") this.applyHistoryQuery();
+        else void this.loadOlderHistory();
+      },
+      scroll: (host) => this.handleHistoryScroll(host),
+    });
     this.renderHistoryCount(commits.length);
     this.bindHistoryEvents();
   }
@@ -5040,22 +5053,8 @@ export class AsterlynApp {
   }
 
   private renderHistoryNavigation(): string {
-    const filtered = this.filteredHistory();
     const scope = this.historyScope();
     const snapshot = this.state.snapshot!;
-    const results =
-      this.state.history.status === "loading"
-        ? this.loadingBlock("Loading filtered history…")
-        : this.state.history.status === "error"
-          ? this.retryState(
-              "Could not load history",
-              this.state.history.error ?? "The selected history query could not be read.",
-              "retry-ref-history",
-              "history",
-            )
-          : this.state.history.commits.length === 0
-            ? `<div class="history-no-results"><strong>No commits match these filters</strong><span>Clear one or more history filters to widen the query.</span></div>`
-            : this.renderHistoryRows(filtered.commits, filtered.error);
     return `
       <div class="history-navigation">
         <div class="history-toolbar">
@@ -5079,7 +5078,7 @@ export class AsterlynApp {
           ${this.renderHistoryFilterPopover(snapshot)}
         </div>
         <div class="history-results" id="history-results" aria-live="polite">
-          ${results}
+          ${renderHistoryList(this.historyListPresentation())}
         </div>
       </div>`;
   }
@@ -5426,46 +5425,24 @@ export class AsterlynApp {
     return `<div class="dialog-heading"><h2 id="history-dialog-title">${escapeHtml(title)}</h2><button class="icon-button" type="button" data-history-dialog-cancel aria-label="Close">${icon("close", 16)}</button></div>`;
   }
 
-  private renderHistoryRows(commits: CommitSummary[], textError: string | null = null): string {
-    if (commits.length === 0) {
-      return `${textError ? `<div class="history-text-error" role="status">Invalid expression: ${escapeHtml(textError)}</div>` : ""}<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>${this.renderHistoryPagingStatus()}`;
-    }
-    const entries: HistoryDisplayEntry[] = this.state.historyCollapseLinear
-      ? collapseLinearHistory(commits, this.state.selectedCommit)
-      : commits.map((commit) => ({ kind: "commit", commit, graphCommit: commit }));
-    const graph = projectCommitGraph(entries.map((entry) => entry.graphCommit), {
-      bridgeOmittedParents: this.shouldBridgeOmittedGraphParents(commits),
-    });
-    const graphWidth = Math.max(22, 14 + (graph.laneCount - 1) * 12);
-    return `${textError ? `<div class="history-text-error" role="status">Invalid expression: ${escapeHtml(textError)}. Showing the unfiltered result.</div>` : ""}<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${entries
-      .map((entry, index) => {
-        if (entry.kind === "collapsed") {
-          return `<button class="history-row history-collapsed-row" type="button" data-expand-linear-history data-first-collapsed="${escapeAttribute(entry.firstKey)}" title="Expand ${entry.count} linear commits">${this.renderCommitGraph(graph.rows[index]!, graphWidth, true)}<span class="history-subject">${entry.count} linear commits collapsed</span><span class="history-references"></span><span class="history-author">Expand</span><span class="history-date"></span></button>`;
-        }
-        const commit = entry.commit;
-        const key = commitKey(commit);
-        const selected = key === this.state.selectedCommit;
-        const references = this.commitReferenceBadges(
-          commit.decorations,
-          2,
-          commit.repositoryId,
-        );
-        const root = this.state.snapshot?.repositoryRoots.find(
-          (item) => item.id === commit.repositoryId,
-        );
-        const rootBadge = (this.state.snapshot?.repositoryRoots.length ?? 0) > 1
-          ? `<span class="history-root-badge" title="Git root: ${escapeAttribute(root?.relativePath ?? commit.repositoryId)}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
-          : "";
-        return `
-          <button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${commit.oid}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" title="${escapeAttribute(commit.subject)}">
-            ${this.renderCommitGraph(graph.rows[index]!, graphWidth)}
-            <span class="history-subject">${escapeHtml(commit.subject)}</span>
-            <span class="history-references">${references}${rootBadge}</span>
-            <span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span>
-            <time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time>
-          </button>`;
-      })
-      .join("")}</div>${this.renderHistoryPagingStatus()}`;
+  private historyListPresentation(): HistoryListPresentation {
+    const snapshot = this.state.snapshot!;
+    const filtered = this.filteredHistory();
+    return {
+      status: this.state.history.status,
+      error: this.state.history.error,
+      loadedCommits: this.state.history.commits,
+      commits: filtered.commits,
+      textError: filtered.error,
+      selectedCommit: this.state.selectedCommit,
+      collapseLinear: this.state.historyCollapseLinear,
+      bridgeOmittedParents: this.shouldBridgeOmittedGraphParents(filtered.commits),
+      repositoryRoots: snapshot.repositoryRoots,
+      branches: snapshot.branches,
+      loadingMore: this.state.historyLoadingMore,
+      pagingError: this.state.historyPagingError,
+      hasMore: this.state.historyHasMore,
+    };
   }
 
   private shouldBridgeOmittedGraphParents(commits: CommitSummary[]): boolean {
@@ -5488,60 +5465,6 @@ export class AsterlynApp {
     return Array.from(new Set(commits.map((commit) => commit.repositoryId))).every(
       (repositoryId) => refsByRoot.get(repositoryId) === 1,
     );
-  }
-
-  private renderHistoryPagingStatus(): string {
-    if (this.state.historyLoadingMore) {
-      return '<div class="history-page-status" role="status">Loading older commits…</div>';
-    }
-    if (this.state.historyPagingError) {
-      return `<div class="history-page-status error" role="status"><span>${escapeHtml(this.state.historyPagingError)}</span><button type="button" data-retry-history-page>Retry</button></div>`;
-    }
-    if (this.state.history.commits.length >= HISTORY_ROW_LIMIT) {
-      return `<div class="history-page-status">Showing the newest ${HISTORY_ROW_LIMIT.toLocaleString()} commits (session limit)</div>`;
-    }
-    if (this.state.historyHasMore) {
-      return '<div class="history-page-status muted">Scroll to load older commits</div>';
-    }
-    const count = this.state.history.commits.length;
-    return `<div class="history-page-status muted" title="No older commits are available for the current filters.">All history loaded · ${count.toLocaleString()} ${count === 1 ? "commit" : "commits"}</div>`;
-  }
-
-  private renderCommitGraph(
-    row: CommitGraphRow,
-    width: number,
-    collapsed = false,
-  ): string {
-    const parentSummary =
-      row.parentCount === 0
-        ? "root commit"
-        : row.parentCount === 1
-          ? "one parent"
-          : `merge commit with ${row.parentCount} parents`;
-    const lines = row.segments
-      .map(
-        (segment) =>
-          `<path class="commit-graph-line ${collapsed ? "collapsed" : ""} graph-color-${segment.color}" d="${this.commitGraphPath(segment)}" />`,
-      )
-      .join("");
-    const nodeX = 7 + row.nodeLane * 12;
-    const node = collapsed
-      ? `<circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="8" r="1.2"/><circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="14" r="1.2"/><circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="20" r="1.2"/>`
-      : `<circle class="commit-graph-node graph-color-${row.nodeColor} ${row.parentCount > 1 ? "merge" : ""}" cx="${nodeX}" cy="14" r="${row.parentCount > 1 ? 4 : 3.5}" />`;
-    const label = collapsed
-      ? `Collapsed linear continuation in graph lane ${row.nodeLane + 1} of ${row.laneCount}`
-      : `Graph lane ${row.nodeLane + 1} of ${row.laneCount}, ${parentSummary}`;
-    return `<span class="history-graph" role="img" aria-label="${label}"><svg viewBox="0 0 ${width} 28" width="${width}" height="28" aria-hidden="true" focusable="false">${lines}${node}</svg></span>`;
-  }
-
-  private commitGraphPath(segment: CommitGraphSegment): string {
-    const fromX = 7 + segment.fromLane * 12;
-    const toX = 7 + segment.toLane * 12;
-    const fromY = segment.kind === "parent" ? 14 : 0;
-    const toY = segment.kind === "incoming" ? 14 : 28;
-    if (fromX === toX) return `M ${fromX} ${fromY} L ${toX} ${toY}`;
-    const middleY = (fromY + toY) / 2;
-    return `M ${fromX} ${fromY} C ${fromX} ${middleY}, ${toX} ${middleY}, ${toX} ${toY}`;
   }
 
   private historyScope(): {
@@ -5624,23 +5547,6 @@ export class AsterlynApp {
       : this.state.historyDatePreset === "week"
         ? "7 days"
         : "Date";
-  }
-
-  private commitReferenceBadges(
-    decorations: string[],
-    limit: number,
-    repositoryId = ".",
-  ): string {
-    const references = commitReferences(
-      decorations,
-      (this.state.snapshot?.branches ?? []).filter(
-        (branch) => branch.repositoryId === repositoryId,
-      ),
-    );
-    if (references.length === 0) return "";
-    const visible = references.slice(0, limit);
-    const remaining = references.length - visible.length;
-    return `${visible.map((reference) => this.commitReferenceBadge(reference)).join("")}${remaining > 0 ? `<span class="commit-reference-more" title="${escapeAttribute(references.map((reference) => reference.label).join(", "))}">+${remaining}</span>` : ""}`;
   }
 
   private commitReferenceBadge(reference: CommitReference): string {
@@ -6009,11 +5915,6 @@ export class AsterlynApp {
         if (key) this.selectCommit(key, true);
       }
     });
-    this.root
-      .querySelector<HTMLButtonElement>("#retry-ref-history")
-      ?.addEventListener("click", () => {
-        this.applyHistoryQuery();
-      });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-text-mode]").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.historyTextMode === "case") {
@@ -6021,7 +5922,7 @@ export class AsterlynApp {
         } else {
           this.state.historyRegularExpression = !this.state.historyRegularExpression;
         }
-        this.renderBottomTool();
+        this.renderHistoryPane();
         this.focusHistoryFilter();
       });
     });
@@ -6032,7 +5933,7 @@ export class AsterlynApp {
         if (!menu) return;
         this.state.historyFilterMenu = this.state.historyFilterMenu === menu ? null : menu;
         this.state.historyBranchSubmenu = null;
-        this.renderBottomTool();
+        this.renderHistoryPane();
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-branch-submenu]").forEach((button) => {
@@ -6040,7 +5941,7 @@ export class AsterlynApp {
         const submenu = button.dataset.historyBranchSubmenu;
         if (!submenu || this.state.historyBranchSubmenu === submenu) return;
         this.state.historyBranchSubmenu = submenu;
-        this.renderBottomTool();
+        this.renderHistoryPane();
       };
       button.addEventListener("pointerenter", open);
       button.addEventListener("click", open);
@@ -6137,54 +6038,7 @@ export class AsterlynApp {
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-collapse-linear]")?.addEventListener("click", () => {
       this.state.historyCollapseLinear = !this.state.historyCollapseLinear;
-      this.renderBottomTool();
-    });
-    const results = this.root.querySelector<HTMLElement>("#history-results");
-    results?.addEventListener("scroll", () => this.handleHistoryScroll(results), {
-      passive: true,
-    });
-    this.bindHistoryRows();
-  }
-
-  private bindHistoryRows(): void {
-    this.root
-      .querySelector<HTMLButtonElement>("[data-retry-history-page]")
-      ?.addEventListener("click", () => {
-        if (this.state.historyPagingRetry === "refresh") void this.refreshLoadedHistory();
-        else void this.loadOlderHistory();
-      });
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-expand-linear-history]")
-      .forEach((row) => {
-        row.addEventListener("click", () => {
-          const firstKey = row.dataset.firstCollapsed;
-          this.state.historyCollapseLinear = false;
-          this.renderBottomTool();
-          if (firstKey) this.focusHistoryCommit(firstKey);
-        });
-      });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-commit]").forEach((row) => {
-      row.addEventListener("click", () => {
-        const key = row.dataset.commitKey;
-        if (key) this.selectCommit(key);
-      });
-      row.addEventListener("keydown", (event) => {
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        const rows = Array.from(
-          this.root.querySelectorAll<HTMLButtonElement>("[data-commit]"),
-        );
-        const current = rows.indexOf(row);
-        if (current < 0) return;
-        event.preventDefault();
-        const target =
-          event.key === "Home"
-            ? rows[0]
-            : event.key === "End"
-              ? rows.at(-1)
-              : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
-        const key = target?.dataset.commitKey;
-        if (key) this.selectCommit(key, true);
-      });
+      this.renderHistoryPane();
     });
   }
 
@@ -6326,13 +6180,8 @@ export class AsterlynApp {
   private renderHistoryResults(): void {
     if (!this.state.snapshot || this.state.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
-    if (this.state.history.status !== "ready") {
-      this.renderHistoryCount(commits.length);
-      return;
-    }
-    this.query("#history-results").innerHTML = this.renderHistoryRows(commits, this.filteredHistory().error);
+    this.historyListView.render(this.historyListPresentation());
     this.renderHistoryCount(commits.length);
-    this.bindHistoryRows();
   }
 
   private renderHistoryCount(filteredCount: number): void {
@@ -6568,19 +6417,11 @@ export class AsterlynApp {
   }
 
   private updateHistoryCommitSelection(key: string): void {
-    this.root
-      .querySelectorAll<HTMLButtonElement>("#history-results [data-commit-key]")
-      .forEach((row) => {
-        const selected = row.dataset.commitKey === key;
-        row.classList.toggle("selected", selected);
-        row.setAttribute("aria-selected", String(selected));
-      });
+    this.historyListView.updateSelection(key);
   }
 
   private focusHistoryCommit(key: string): void {
-    Array.from(this.root.querySelectorAll<HTMLButtonElement>("[data-commit-key]"))
-      .find((row) => row.dataset.commitKey === key)
-      ?.focus();
+    this.historyListView.focusCommit(key);
   }
 
   private bindBranchEvents(): void {

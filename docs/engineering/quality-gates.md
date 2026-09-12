@@ -27,6 +27,31 @@ Every accepted benchmark records:
 
 Performance budgets are guardrails. They may change only through a documented decision with measured tradeoffs.
 
+## Architecture and rendering gates
+
+- A feature owns its serializable state, actions, asynchronous-result identity, stable DOM host,
+  listeners, and disposal. The application shell may compose features but cannot become their
+  alternate state owner.
+- Selection, progress, and detail-result changes must update only affected feature regions.
+  Replacing a list scroll container is reserved for a changed query, repository, ordering, or page
+  projection and must preserve valid focus and selection identities.
+- High-cardinality lists use event delegation and gain viewport virtualization before their
+  session ceiling creates more than 300 simultaneously mounted rows in a supported workflow.
+- Opening or saving one authorized file must not require a new full-workspace traversal after the
+  active workspace session has established its catalog. Final path and revision revalidation still
+  fail closed.
+- A status-only Git mutation cannot require a complete history, branch, and remote snapshot. Each
+  mutation declares the read-model slices it invalidates, and the frontend reconciles only those
+  slices from canonical Git data.
+- Production source files above 800 lines require an explicit decomposition issue or a documented
+  reason tied to generated code, protocol tables, or cohesive tests. Files above 1,500 production
+  lines block new unrelated capability work until their owning boundary is reduced. This is a
+  design review gate, not an automatic formatting target: mechanical splitting without ownership
+  improvement does not satisfy it.
+- The main production frontend chunk should remain below 500 kB uncompressed. A temporary breach
+  is accepted during the migration only when the build records the warning and the next extraction
+  keeps optional feature code behind a lazy boundary.
+
 ## Compatibility
 
 - Support the Git versions named in the release policy and test the oldest supported version.
@@ -45,4 +70,3 @@ Performance budgets are guardrails. They may change only through a documented de
 ## Release channels
 
 Use development builds first, then preview, then stable only after migration/rollback and crash-rate evidence. Preview data must remain forward-migratable; stable users are never used as schema testers.
-
