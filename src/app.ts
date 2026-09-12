@@ -37,6 +37,17 @@ import {
   type EditorSessionChange,
   type EditorSessionState,
 } from "./features/files-editor/editor-session-controller";
+import {
+  SettingsController,
+  type SettingsChange,
+  type SettingsSection,
+  type SettingsState,
+} from "./features/settings/settings-controller";
+import {
+  ShellController,
+  type ShellChange,
+  type ShellState,
+} from "./shell/shell-controller";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -56,11 +67,6 @@ import {
 import {
   WORKBENCH_LAYOUT_DEFAULTS,
   WORKBENCH_LIMITS,
-  clampWorkbenchLayout,
-  loadWorkbenchLayout,
-  reduceWorkbenchLayout,
-  saveWorkbenchLayout,
-  type WorkbenchLayout,
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
@@ -70,10 +76,8 @@ import {
   pushConfirmationAvailability,
 } from "./workbench/push-review";
 import {
-  loadActivityOrder,
   moveActivityTool,
   moveActivityToolByOffset,
-  saveActivityOrder,
   type ActivityDropPosition,
   type ActivityTool,
 } from "./workbench/activity-order";
@@ -93,7 +97,6 @@ import { isImagePreviewPath } from "./workbench/image-preview";
 import {
   showCustomWindowControls,
   windowChromeClass,
-  type WindowChromeMode,
 } from "./workbench/window-chrome";
 import {
   EDITOR_FONTS,
@@ -113,9 +116,6 @@ import {
   EDITOR_LINE_HEIGHTS,
   EDITOR_TAB_SIZES,
   UI_FONT_SIZES,
-  loadAppPreferences,
-  saveAppPreferences,
-  updateAppPreferences,
   type AppPreferences,
 } from "./workbench/preferences";
 import {
@@ -255,16 +255,10 @@ type ImageSurfaceState =
   | { key: string; version: number; status: "error"; error: string; image: null; diff: null };
 
 type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
-type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "code";
 
 interface AppState {
   workspaceRoot: string | null;
   snapshot: RepositorySnapshot | null;
-  activePage: "workbench" | "settings";
-  settingsSection: SettingsSection;
-  preferences: AppPreferences;
-  layout: WorkbenchLayout;
-  activityOrder: ActivityTool[];
   gitDetail: "branch" | "commit";
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
@@ -324,11 +318,6 @@ export class AsterlynApp {
   private readonly state: AppState = {
     workspaceRoot: null,
     snapshot: null,
-    activePage: "workbench",
-    settingsSection: "general",
-    preferences: loadAppPreferences(window.localStorage),
-    layout: loadWorkbenchLayout(window.localStorage),
-    activityOrder: loadActivityOrder(window.localStorage),
     gitDetail: "commit",
     commandSurface: createCommandSurfaceState(),
     workspaceSearch: createWorkspaceSearchState(),
@@ -391,8 +380,6 @@ export class AsterlynApp {
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
-  private editorTabMenuOpen = false;
-  private repositoryMenuOpen = false;
   private markdownSourcePercent = 50;
   private markdownSplitterDisposer: (() => void) | null = null;
   private markdownScrollDisposer: (() => void) | null = null;
@@ -420,7 +407,6 @@ export class AsterlynApp {
     position: ActivityDropPosition | null;
   } | null = null;
   private suppressedActivityClick: ActivityTool | null = null;
-  private windowChromeMode: WindowChromeMode = "custom-right";
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
@@ -434,6 +420,10 @@ export class AsterlynApp {
   private readonly releaseFilesController: () => void;
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
+  private readonly settingsController: SettingsController;
+  private readonly releaseSettingsController: () => void;
+  private readonly shellController: ShellController;
+  private readonly releaseShellController: () => void;
   private workspaceResizeObserver: ResizeObserver | null = null;
   private editorMeasureFrame: number | null = null;
   private activeUntrackedScan: {
@@ -443,6 +433,14 @@ export class AsterlynApp {
   } | null = null;
 
   constructor(private readonly root: HTMLElement) {
+    this.settingsController = new SettingsController(window.localStorage);
+    this.releaseSettingsController = this.settingsController.subscribe((change) =>
+      this.handleSettingsChange(change),
+    );
+    this.shellController = new ShellController(window.localStorage);
+    this.releaseShellController = this.shellController.subscribe((change) =>
+      this.handleShellChange(change),
+    );
     this.historyController = new GitHistoryDetailsController(
       {
         readHistoryPage: (repositoryRoot, query, offset, limit) =>
@@ -517,6 +515,18 @@ export class AsterlynApp {
     return this.editorController.state;
   }
 
+  private get settingsState(): SettingsState {
+    return this.settingsController.state;
+  }
+
+  private get shellState(): ShellState {
+    return this.shellController.state;
+  }
+
+  private handleSettingsChange(_change: SettingsChange): void {}
+
+  private handleShellChange(_change: ShellChange): void {}
+
   private handleEditorSessionChange(change: EditorSessionChange): void {
     if (
       change.reason === "load-start" ||
@@ -535,7 +545,7 @@ export class AsterlynApp {
     if (
       change.reason !== "selection" &&
       change.reason !== "disclosure" &&
-      this.state.layout.leftTool === "files"
+      this.shellState.layout.leftTool === "files"
     ) this.renderLeftTool();
     if (
       change.catalogChanged &&
@@ -545,7 +555,7 @@ export class AsterlynApp {
     }
     if (
       change.catalogChanged &&
-      this.state.layout.bottomTool === "branches" &&
+      this.shellState.layout.bottomTool === "branches" &&
       this.state.historyFilterMenu === "paths"
     ) {
       this.renderHistoryPane();
@@ -568,7 +578,7 @@ export class AsterlynApp {
   }
 
   private handleChangesControllerChange(change: ChangesCommitChange): void {
-    if (change.reason === "presentation" && this.state.layout.leftTool === "changes") {
+    if (change.reason === "presentation" && this.shellState.layout.leftTool === "changes") {
       this.renderLeftTool();
     } else if (change.inclusionChanged) {
       this.syncChangeInclusionUi();
@@ -613,7 +623,7 @@ export class AsterlynApp {
   }
 
   async start(): Promise<void> {
-    this.windowChromeMode = await bridge.windowChromeMode();
+    this.shellController.setWindowChromeMode(await bridge.windowChromeMode());
     this.renderShell();
     this.applyAppPreferences();
     this.bindShellEvents();
@@ -641,7 +651,7 @@ export class AsterlynApp {
 
   private renderShell(): void {
     this.root.innerHTML = `
-      <main class="app-shell ${windowChromeClass(this.windowChromeMode)}">
+      <main class="app-shell ${windowChromeClass(this.shellState.windowChromeMode)}">
         <header class="topbar" data-tauri-drag-region>
           <div class="repository-switcher-anchor" id="repository-switcher-anchor">
             <button class="repository-switcher" id="repository-switcher" type="button" aria-label="Project menu" aria-haspopup="menu" aria-controls="repository-menu" aria-expanded="false" title="Open a project">
@@ -680,7 +690,7 @@ export class AsterlynApp {
             <button class="icon-button" id="settings-button" type="button" aria-label="Open settings" title="Settings" aria-pressed="false">
               ${icon("settings", 20)}
             </button>
-            <div class="window-controls ${showCustomWindowControls(this.windowChromeMode, windowControls.available) ? "" : "hidden"}" role="group" aria-label="Window controls">
+            <div class="window-controls ${showCustomWindowControls(this.shellState.windowChromeMode, windowControls.available) ? "" : "hidden"}" role="group" aria-label="Window controls">
               <button class="window-control-button" id="window-minimize" type="button" aria-label="Minimize window" title="Minimize">
                 ${icon("minimize", 16)}
               </button>
@@ -860,8 +870,8 @@ export class AsterlynApp {
   ): string {
     const active =
       tool === "branches"
-        ? this.state.layout.bottomTool === tool
-        : this.state.layout.leftTool === tool;
+        ? this.shellState.layout.bottomTool === tool
+        : this.shellState.layout.leftTool === tool;
     const enabled = Boolean(
       this.state.workspaceRoot && (tool === "files" || this.state.snapshot),
     );
@@ -902,7 +912,7 @@ export class AsterlynApp {
         event.preventDefault();
         const offset = event.key === "ArrowUp" ? -1 : 1;
         this.commitActivityOrder(
-          moveActivityToolByOffset(this.state.activityOrder, tool, offset),
+          moveActivityToolByOffset(this.shellState.activityOrder, tool, offset),
           tool,
         );
       });
@@ -947,7 +957,7 @@ export class AsterlynApp {
       if (drag.target && drag.position) {
         this.commitActivityOrder(
           moveActivityTool(
-            this.state.activityOrder,
+            this.shellState.activityOrder,
             drag.source,
             drag.target,
             drag.position,
@@ -974,9 +984,7 @@ export class AsterlynApp {
   }
 
   private commitActivityOrder(order: ActivityTool[], focusTool: ActivityTool): void {
-    if (order.every((tool, index) => tool === this.state.activityOrder[index])) return;
-    this.state.activityOrder = order;
-    saveActivityOrder(window.localStorage, order);
+    if (!this.shellController.setActivityOrder(order)) return;
     this.renderActivityRail();
     this.root.querySelector<HTMLButtonElement>(`[data-tool="${focusTool}"]`)?.focus();
   }
@@ -999,7 +1007,7 @@ export class AsterlynApp {
   private bindShellEvents(): void {
     this.query("#repository-switcher").addEventListener("click", (event) => {
       event.stopPropagation();
-      this.repositoryMenuOpen = !this.repositoryMenuOpen;
+      this.shellController.toggleRepositoryMenu();
       this.renderRepositoryMenu();
     });
     this.query<HTMLSelectElement>("#topbar-remote-select").addEventListener(
@@ -1119,7 +1127,7 @@ export class AsterlynApp {
       ) {
         return;
       }
-      this.editorTabMenuOpen = !this.editorTabMenuOpen;
+      this.shellController.toggleEditorTabMenu();
       this.renderEditorTabMenu();
       this.bindEditorTabMenuEvents();
     });
@@ -1128,7 +1136,7 @@ export class AsterlynApp {
       this.toggleTool("branches");
     });
     this.query("#hide-left-tool").addEventListener("click", () => {
-      const tool = this.state.layout.leftTool;
+      const tool = this.shellState.layout.leftTool;
       if (tool) this.toggleTool(tool);
     });
     this.bindWorkbenchSplitters();
@@ -1173,16 +1181,16 @@ export class AsterlynApp {
           this.closeRemoteDialog();
           return;
         }
-        if (this.repositoryMenuOpen) {
+        if (this.shellState.repositoryMenuOpen) {
           event.preventDefault();
-          this.repositoryMenuOpen = false;
+          this.shellController.closeRepositoryMenu();
           this.renderRepositoryMenu();
           this.query<HTMLButtonElement>("#repository-switcher").focus();
           return;
         }
-        if (this.editorTabMenuOpen) {
+        if (this.shellState.editorTabMenuOpen) {
           event.preventDefault();
-          this.editorTabMenuOpen = false;
+          this.shellController.closeEditorTabMenu();
           this.renderEditorTabMenu();
           return;
         }
@@ -1191,7 +1199,7 @@ export class AsterlynApp {
           this.closeRepositoryTargetDialog();
           return;
         }
-        if (this.state.activePage === "settings") {
+        if (this.shellState.page === "settings") {
           event.preventDefault();
           this.closeSettings();
           return;
@@ -1214,7 +1222,7 @@ export class AsterlynApp {
         this.closeHistoryDialog();
         if (this.state.historyFilterMenu) {
           this.state.historyFilterMenu = null;
-          if (this.state.layout.bottomTool === "branches") this.renderHistoryPane();
+          if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
         }
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r") {
@@ -1239,7 +1247,7 @@ export class AsterlynApp {
         if (
           event.target instanceof Element &&
           event.target.closest("#bottom-tool") &&
-          this.state.layout.bottomTool === "branches"
+          this.shellState.layout.bottomTool === "branches"
         ) {
           this.focusHistoryFilter();
         } else if (activeTextTab(this.editorState.session)?.status === "ready") {
@@ -1249,19 +1257,19 @@ export class AsterlynApp {
     });
     window.addEventListener("pointerdown", (event) => {
       if (
-        this.repositoryMenuOpen &&
+        this.shellState.repositoryMenuOpen &&
         event.target instanceof Element &&
         !event.target.closest("#repository-switcher-anchor")
       ) {
-        this.repositoryMenuOpen = false;
+        this.shellController.closeRepositoryMenu();
         this.renderRepositoryMenu();
       }
       if (
-        this.editorTabMenuOpen &&
+        this.shellState.editorTabMenuOpen &&
         event.target instanceof Element &&
         !event.target.closest("#editor-tab-menu-anchor")
       ) {
-        this.editorTabMenuOpen = false;
+        this.shellController.closeEditorTabMenu();
         this.renderEditorTabMenu();
       }
       if (
@@ -1270,7 +1278,7 @@ export class AsterlynApp {
         !event.target.closest(".history-toolbar")
       ) {
         this.state.historyFilterMenu = null;
-        if (this.state.layout.bottomTool === "branches") this.renderHistoryPane();
+        if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
       }
     });
     window.addEventListener("beforeunload", (event) => {
@@ -1292,6 +1300,10 @@ export class AsterlynApp {
         this.filesController.dispose();
         this.releaseEditorController();
         this.editorController.dispose();
+        this.releaseSettingsController();
+        this.settingsController.dispose();
+        this.releaseShellController();
+        this.shellController.dispose();
         this.historyListView.unmount();
       },
       { once: true },
@@ -1299,14 +1311,14 @@ export class AsterlynApp {
   }
 
   private openSettings(): void {
-    if (this.state.activePage === "settings") return;
+    if (this.shellState.page === "settings") return;
     this.captureMountedTextEditor();
     if (this.remoteState.dialog && !this.remoteState.operation) {
       this.closeRemoteDialog(false);
     }
     if (this.state.commandSurface.mode) this.dismissCommandSurface();
     this.closeHistoryDialog();
-    this.state.activePage = "settings";
+    this.shellController.showPage("settings");
     this.query("#workspace").classList.add("settings-mode");
     this.query("#workbench").classList.add("hidden");
     this.query("#settings-page").classList.remove("hidden");
@@ -1316,8 +1328,8 @@ export class AsterlynApp {
   }
 
   private closeSettings(): void {
-    if (this.state.activePage !== "settings") return;
-    this.state.activePage = "workbench";
+    if (this.shellState.page !== "settings") return;
+    this.shellController.showPage("workbench");
     this.query("#workspace").classList.remove("settings-mode");
     this.query("#settings-page").classList.add("hidden");
     this.query("#workbench").classList.remove("hidden");
@@ -1340,7 +1352,7 @@ export class AsterlynApp {
     ];
     this.query("#settings-navigation").innerHTML = sections
       .map(([id, label]) => {
-        const selected = this.state.settingsSection === id;
+        const selected = this.settingsState.section === id;
         return `<button class="settings-navigation-item ${selected ? "selected" : ""}" type="button" data-settings-section="${id}" aria-current="${selected ? "page" : "false"}">${label}</button>`;
       })
       .join("");
@@ -1349,8 +1361,8 @@ export class AsterlynApp {
   }
 
   private renderSettingsSection(): string {
-    const preferences = this.state.preferences;
-    switch (this.state.settingsSection) {
+    const preferences = this.settingsState.preferences;
+    switch (this.settingsState.section) {
       case "general":
         return this.settingsGroup(
           "General",
@@ -1415,7 +1427,7 @@ export class AsterlynApp {
     const selected =
       this.editorFontStatus.kind === "loading" && this.editorFontStatus.id
         ? this.editorFontStatus.id
-        : this.state.preferences.editorFontFamily;
+        : this.settingsState.preferences.editorFontFamily;
     const status = this.editorFontStatus;
     let message = "Included with Asterlyn";
     let statusClass = "";
@@ -1468,7 +1480,7 @@ export class AsterlynApp {
       .forEach((button) => {
         button.addEventListener("click", () => {
           const section = button.dataset.settingsSection as SettingsSection;
-          this.state.settingsSection = section;
+          this.settingsController.selectSection(section);
           this.renderSettingsPage();
           queueMicrotask(() =>
             this.root
@@ -1525,14 +1537,14 @@ export class AsterlynApp {
     patch: Partial<AppPreferences>,
     restoreFocusId?: string,
   ): void {
-    const previous = this.state.preferences;
-    const next = updateAppPreferences(previous, patch);
-    this.state.preferences = next;
+    const previous = this.settingsState.preferences;
     try {
-      saveAppPreferences(window.localStorage, next);
+      if (!this.settingsController.update(patch)) return;
     } catch (error) {
       this.showError(error);
+      return;
     }
+    const next = this.settingsState.preferences;
     this.applyAppPreferences();
     if (
       previous.diffLayout !== next.diffLayout ||
@@ -1543,7 +1555,7 @@ export class AsterlynApp {
       this.syncDiffControls();
       this.syncPushDiffControls();
     }
-    if (this.state.activePage === "settings") {
+    if (this.shellState.page === "settings") {
       this.renderSettingsPage();
       if (restoreFocusId) {
         queueMicrotask(() => {
@@ -1561,7 +1573,7 @@ export class AsterlynApp {
   }
 
   private applyAppPreferences(): void {
-    const requestedFont = this.state.preferences.editorFontFamily;
+    const requestedFont = this.settingsState.preferences.editorFontFamily;
     const effectiveFont = this.editorFontLoader.isLoaded(requestedFont)
       ? requestedFont
       : DEFAULT_EDITOR_FONT_ID;
@@ -1571,14 +1583,14 @@ export class AsterlynApp {
     );
     this.query(".app-shell").style.setProperty(
       "--ui-font-size",
-      `${this.state.preferences.uiFontSize}px`,
+      `${this.settingsState.preferences.uiFontSize}px`,
     );
-    this.textEditor.setPreferences(this.state.preferences);
-    this.diffEditor.setPreferences(this.state.preferences);
+    this.textEditor.setPreferences(this.settingsState.preferences);
+    this.diffEditor.setPreferences(this.settingsState.preferences);
   }
 
   private async activateConfiguredEditorFont(): Promise<void> {
-    const id = this.state.preferences.editorFontFamily;
+    const id = this.settingsState.preferences.editorFontFamily;
     const request = ++this.editorFontRequestGeneration;
     this.editorFontStatus = { id, kind: "loading" };
     try {
@@ -1586,13 +1598,13 @@ export class AsterlynApp {
       if (request !== this.editorFontRequestGeneration) return;
       this.editorFontStatus = { id, kind: "ready", source };
       this.applyAppPreferences();
-      if (this.state.activePage === "settings") this.renderSettingsPage();
+      if (this.shellState.page === "settings") this.renderSettingsPage();
     } catch (error) {
       if (request !== this.editorFontRequestGeneration) return;
       const message = error instanceof Error ? error.message : String(error);
       this.editorFontStatus = { id, kind: "error", message };
       this.applyAppPreferences();
-      if (this.state.activePage === "settings") this.renderSettingsPage();
+      if (this.shellState.page === "settings") this.renderSettingsPage();
       this.showError(error);
     }
   }
@@ -1600,7 +1612,7 @@ export class AsterlynApp {
   private async selectEditorFont(id: EditorFontId): Promise<void> {
     const request = ++this.editorFontRequestGeneration;
     this.editorFontStatus = { id, kind: "loading" };
-    if (this.state.activePage === "settings") this.renderSettingsPage();
+    if (this.shellState.page === "settings") this.renderSettingsPage();
     try {
       const source = await this.editorFontLoader.load(id);
       if (request !== this.editorFontRequestGeneration) return;
@@ -1610,7 +1622,7 @@ export class AsterlynApp {
       if (request !== this.editorFontRequestGeneration) return;
       const message = error instanceof Error ? error.message : String(error);
       this.editorFontStatus = { id, kind: "error", message };
-      if (this.state.activePage === "settings") {
+      if (this.shellState.page === "settings") {
         this.renderSettingsPage();
         queueMicrotask(() =>
           this.query<HTMLSelectElement>("#setting-editor-font-family").focus(),
@@ -1732,17 +1744,17 @@ export class AsterlynApp {
         this.loadHistoryPreferences(snapshot);
       } else {
         this.historyController.clear();
-        this.state.layout = {
-          ...this.state.layout,
+        this.shellController.setLayout({
+          ...this.shellState.layout,
           leftTool: "files",
           bottomTool: null,
-        };
+        });
       }
       this.remoteController.installSnapshot(snapshot);
       this.state.error = null;
       this.closeRepositoryDialog();
       this.renderWorkspace();
-      if (snapshot && this.state.layout.bottomTool === "branches") {
+      if (snapshot && this.shellState.layout.bottomTool === "branches") {
         this.loadVisibleCommitDetails();
       }
       void this.loadProjectFiles(opened.root, generation);
@@ -1791,11 +1803,11 @@ export class AsterlynApp {
         this.remoteController.installSnapshot(null);
         this.changesController.installSnapshot(null);
         this.filesController.installWorkspace(opened.root, []);
-        this.state.layout = {
-          ...this.state.layout,
+        this.shellController.setLayout({
+          ...this.shellState.layout,
           leftTool: "files",
           bottomTool: null,
-        };
+        });
         this.renderWorkspace();
         void this.loadProjectFiles(opened.root, generation);
         return;
@@ -3355,7 +3367,7 @@ export class AsterlynApp {
     const file = this.pushSelectedProjectFile();
     if (!workspaceRoot || !file) return;
     this.closeRemoteDialog(false);
-    this.state.layout = { ...this.state.layout, leftTool: "files" };
+    this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" });
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     await this.openProjectFile(workspaceRoot, file);
@@ -3390,7 +3402,7 @@ export class AsterlynApp {
             <button class="compact-icon-button" type="button" data-push-diff-action="open-source" aria-label="Open file and reveal in Project" title="Open file and reveal in Project" ${this.pushSelectedProjectFile() ? "" : "disabled"}>${icon("locate", 15)}</button>
             <button class="compact-icon-button ${state.expandedUnchanged ? "active" : ""}" type="button" data-push-diff-action="toggle-unchanged" aria-label="${state.expandedUnchanged ? "Collapse" : "Expand"} unchanged lines" title="${state.expandedUnchanged ? "Collapse" : "Expand"} unchanged lines" aria-pressed="${state.expandedUnchanged}" ${!state.patch ? "disabled" : ""}>${icon(state.expandedUnchanged ? "collapse" : "expand", 15)}</button>
           </div>
-          ${image ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation"><button type="button" data-push-diff-layout="unified" aria-pressed="${this.state.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button><button type="button" data-push-diff-layout="split" aria-pressed="${this.state.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button><button type="button" data-push-diff-whitespace aria-pressed="${this.state.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button></div>`}
+          ${image ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation"><button type="button" data-push-diff-layout="unified" aria-pressed="${this.settingsState.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button><button type="button" data-push-diff-layout="split" aria-pressed="${this.settingsState.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button><button type="button" data-push-diff-whitespace aria-pressed="${this.settingsState.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button></div>`}
         </div>
         <div class="push-diff-body ${image ? "image-surface" : "diff-surface"}" id="push-diff-body">${body}</div>
       </section>
@@ -3405,7 +3417,7 @@ export class AsterlynApp {
       host,
       state.patch.patch || "No textual diff is available for this file.",
       state.file.path,
-      this.state.preferences,
+      this.settingsState.preferences,
       this.diffPresentation(),
     );
   }
@@ -3441,7 +3453,7 @@ export class AsterlynApp {
       });
     });
     this.root.querySelector<HTMLButtonElement>("[data-push-diff-whitespace]")?.addEventListener("click", () => {
-      this.updatePreferences({ showWhitespace: !this.state.preferences.showWhitespace });
+      this.updatePreferences({ showWhitespace: !this.settingsState.preferences.showWhitespace });
     });
   }
 
@@ -3546,11 +3558,10 @@ export class AsterlynApp {
   private prepareConflictResolution(snapshot: RepositorySnapshot): boolean {
     const conflict = snapshot.changes.find((change) => change.conflicted);
     if (!conflict) return false;
-    this.state.layout = {
-      ...this.state.layout,
+    this.shellController.setLayout({
+      ...this.shellState.layout,
       leftTool: "changes",
-    };
-    saveWorkbenchLayout(window.localStorage, this.state.layout);
+    }, true);
     this.changesController.selectConflict(conflict.path);
     this.activateDiffPreview({
       kind: "working-diff",
@@ -3575,22 +3586,17 @@ export class AsterlynApp {
 
   private toggleTool(tool: ActivityTool): void {
     if (!this.state.workspaceRoot || (tool !== "files" && !this.state.snapshot)) return;
-    this.state.layout =
+    this.shellController.reduceLayout(
       tool === "branches"
-        ? reduceWorkbenchLayout(this.state.layout, {
-            type: "toggle-bottom-tool",
-            tool,
-          })
-        : reduceWorkbenchLayout(this.state.layout, {
-            type: "toggle-left-tool",
-            tool,
-          });
+        ? { type: "toggle-bottom-tool", tool }
+        : { type: "toggle-left-tool", tool },
+    );
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
-    if (tool === "branches" && this.state.layout.bottomTool === "branches") {
+    if (tool === "branches" && this.shellState.layout.bottomTool === "branches") {
       this.renderBottomTool();
       this.loadVisibleCommitDetails();
-    } else if (tool !== "branches" && this.state.layout.leftTool === tool) {
+    } else if (tool !== "branches" && this.shellState.layout.leftTool === tool) {
       this.renderLeftTool();
     }
   }
@@ -3598,7 +3604,7 @@ export class AsterlynApp {
   private renderActivityRail(): void {
     const rail = this.query<HTMLElement>(".activity-rail");
     const spacer = this.query<HTMLElement>(".rail-spacer");
-    for (const tool of this.state.activityOrder) {
+    for (const tool of this.shellState.activityOrder) {
       const button = rail.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       if (button) rail.insertBefore(button, spacer);
     }
@@ -3609,8 +3615,8 @@ export class AsterlynApp {
       );
       const active =
         tool === "branches"
-          ? this.state.layout.bottomTool === "branches"
-          : this.state.layout.leftTool === tool;
+          ? this.shellState.layout.bottomTool === "branches"
+          : this.shellState.layout.leftTool === tool;
       button.classList.toggle("active", active);
       button.classList.toggle("unavailable", !enabled);
       button.setAttribute("aria-pressed", String(active));
@@ -3628,7 +3634,7 @@ export class AsterlynApp {
     this.splitterDisposers = [
       attachSplitter(this.query("#left-splitter"), {
         orientation: "vertical",
-        getValue: () => this.state.layout.leftWidth,
+        getValue: () => this.shellState.layout.leftWidth,
         getRange: () => ({
           minimum: WORKBENCH_LIMITS.leftMin,
           maximum: Math.max(
@@ -3652,7 +3658,7 @@ export class AsterlynApp {
       attachSplitter(this.query("#bottom-splitter"), {
         orientation: "horizontal",
         direction: -1,
-        getValue: () => this.state.layout.bottomHeight,
+        getValue: () => this.shellState.layout.bottomHeight,
         getRange: () => ({
           minimum: WORKBENCH_LIMITS.bottomMin,
           maximum: Math.max(
@@ -3672,7 +3678,7 @@ export class AsterlynApp {
       }),
       attachSplitter(this.query("#branch-tree-splitter"), {
         orientation: "vertical",
-        getValue: () => this.state.layout.branchTreeWidth,
+        getValue: () => this.shellState.layout.branchTreeWidth,
         getRange: () => ({
           minimum: WORKBENCH_LIMITS.branchTreeMin,
           maximum: Math.max(
@@ -3697,13 +3703,13 @@ export class AsterlynApp {
       attachSplitter(this.query("#branch-details-splitter"), {
         orientation: "vertical",
         direction: -1,
-        getValue: () => this.state.layout.branchDetailsWidth,
+        getValue: () => this.shellState.layout.branchDetailsWidth,
         getRange: () => ({
           minimum: WORKBENCH_LIMITS.branchDetailsMin,
           maximum: Math.max(
             WORKBENCH_LIMITS.branchDetailsMin,
             this.query("#git-tool-grid").clientWidth -
-              this.state.layout.branchTreeWidth -
+              this.shellState.layout.branchTreeWidth -
               WORKBENCH_LIMITS.branchCommitMin -
               WORKBENCH_LIMITS.separatorSize * 2,
           ),
@@ -3733,7 +3739,7 @@ export class AsterlynApp {
       | "diffBeforePercent",
     value: number,
   ): void {
-    this.state.layout = reduceWorkbenchLayout(this.state.layout, {
+    this.shellController.reduceLayout({
       type: "resize",
       dimension,
       value,
@@ -3750,7 +3756,7 @@ export class AsterlynApp {
     if (property) {
       this.query("#workbench").style.setProperty(
         property,
-        `${this.state.layout[dimension]}px`,
+        `${this.shellState.layout[dimension]}px`,
       );
     }
     if (dimension === "leftWidth" || dimension === "bottomHeight") {
@@ -3759,38 +3765,35 @@ export class AsterlynApp {
   }
 
   private persistWorkbenchLayout(): void {
-    saveWorkbenchLayout(window.localStorage, this.state.layout);
+    this.shellController.persistLayout();
   }
 
   private applyWorkbenchLayout(persist: boolean): void {
     const workbench = this.query("#workbench");
-    this.state.layout = clampWorkbenchLayout(this.state.layout, {
-      width: workbench.clientWidth,
-      height: workbench.clientHeight,
-    });
-    workbench.style.setProperty("--left-tool-width", `${this.state.layout.leftWidth}px`);
+    this.shellController.clampLayout(workbench.clientWidth, workbench.clientHeight);
+    workbench.style.setProperty("--left-tool-width", `${this.shellState.layout.leftWidth}px`);
     workbench.style.setProperty(
       "--bottom-tool-height",
-      `${this.state.layout.bottomHeight}px`,
+      `${this.shellState.layout.bottomHeight}px`,
     );
     workbench.style.setProperty(
       "--branch-tree-width",
-      `${this.state.layout.branchTreeWidth}px`,
+      `${this.shellState.layout.branchTreeWidth}px`,
     );
     workbench.style.setProperty(
       "--branch-details-width",
-      `${this.state.layout.branchDetailsWidth}px`,
+      `${this.shellState.layout.branchDetailsWidth}px`,
     );
     workbench.style.setProperty(
       "--commit-summary-height",
-      `${this.state.layout.commitSummaryHeight}px`,
+      `${this.shellState.layout.commitSummaryHeight}px`,
     );
     workbench.style.setProperty(
       "--changes-commit-height",
-      `${this.state.layout.changesCommitHeight}px`,
+      `${this.shellState.layout.changesCommitHeight}px`,
     );
-    const leftOpen = this.state.layout.leftTool !== null;
-    const bottomOpen = this.state.layout.bottomTool !== null;
+    const leftOpen = this.shellState.layout.leftTool !== null;
+    const bottomOpen = this.shellState.layout.bottomTool !== null;
     workbench.classList.toggle("left-tool-open", leftOpen);
     workbench.classList.toggle("bottom-tool-open", bottomOpen);
     this.query("#left-tool").toggleAttribute("hidden", !leftOpen);
@@ -3841,9 +3844,9 @@ export class AsterlynApp {
       "aria-label",
       currentRoot ? `Project menu for ${currentName}` : "Open project menu",
     );
-    button.setAttribute("aria-expanded", String(this.repositoryMenuOpen));
-    menu.classList.toggle("hidden", !this.repositoryMenuOpen);
-    if (!this.repositoryMenuOpen) {
+    button.setAttribute("aria-expanded", String(this.shellState.repositoryMenuOpen));
+    menu.classList.toggle("hidden", !this.shellState.repositoryMenuOpen);
+    if (!this.shellState.repositoryMenuOpen) {
       menu.innerHTML = "";
       return;
     }
@@ -3869,7 +3872,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#choose-repository-from-menu")
       ?.addEventListener("click", () => {
-        this.repositoryMenuOpen = false;
+        this.shellController.closeRepositoryMenu();
         this.renderRepositoryMenu();
         void this.chooseRepository();
       });
@@ -3879,7 +3882,7 @@ export class AsterlynApp {
         item.addEventListener("click", () => {
           const path = item.dataset.recentRepository;
           if (!path) return;
-          this.repositoryMenuOpen = false;
+          this.shellController.closeRepositoryMenu();
           this.renderRepositoryMenu();
           void this.requestRepositoryTarget(path);
         });
@@ -3889,7 +3892,7 @@ export class AsterlynApp {
   private renderLeftTool(): void {
     const workspaceRoot = this.state.workspaceRoot;
     const snapshot = this.state.snapshot;
-    if (!workspaceRoot || !this.state.layout.leftTool) return;
+    if (!workspaceRoot || !this.shellState.layout.leftTool) return;
     const title = this.query("#navigator-title");
     const count = this.query("#navigator-count");
     const actions = this.query("#navigator-actions");
@@ -3898,7 +3901,7 @@ export class AsterlynApp {
     this.changeCommitSplitterDisposer?.();
     this.changeCommitSplitterDisposer = null;
 
-    if (this.state.layout.leftTool === "changes") {
+    if (this.shellState.layout.leftTool === "changes") {
       if (!snapshot) return;
       const preserveScroll = body.dataset.navigatorView === "changes";
       const scrollTop = preserveScroll
@@ -3944,14 +3947,14 @@ export class AsterlynApp {
 
   private renderBottomTool(): void {
     const snapshot = this.state.snapshot;
-    if (!snapshot || this.state.layout.bottomTool !== "branches") return;
+    if (!snapshot || this.shellState.layout.bottomTool !== "branches") return;
     this.renderBranchPane(snapshot);
     this.renderHistoryPane();
     this.renderGitDetailPane(snapshot);
   }
 
   private renderBranchPane(snapshot: RepositorySnapshot): void {
-    if (this.state.layout.bottomTool !== "branches") return;
+    if (this.shellState.layout.bottomTool !== "branches") return;
     this.query("#branch-navigation-body").innerHTML =
       this.renderBranchNavigation(snapshot);
     this.renderBranchCount(snapshot);
@@ -3959,7 +3962,7 @@ export class AsterlynApp {
   }
 
   private renderHistoryPane(): void {
-    if (!this.state.snapshot || this.state.layout.bottomTool !== "branches") return;
+    if (!this.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
@@ -3980,7 +3983,7 @@ export class AsterlynApp {
   }
 
   private renderGitDetailPane(snapshot = this.state.snapshot): void {
-    if (!snapshot || this.state.layout.bottomTool !== "branches") return;
+    if (!snapshot || this.shellState.layout.bottomTool !== "branches") return;
     this.commitDetailSplitterDisposer?.();
     this.commitDetailSplitterDisposer = null;
     this.query("#git-detail-body").innerHTML = this.renderGitDetail(snapshot);
@@ -5268,7 +5271,7 @@ export class AsterlynApp {
 
   private syncChangeInclusionUi(): void {
     const snapshot = this.state.snapshot;
-    if (!snapshot || this.state.layout.leftTool !== "changes") return;
+    if (!snapshot || this.shellState.layout.leftTool !== "changes") return;
     this.root.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
       const path = checkbox.dataset.includePath!;
       checkbox.checked = !this.changesState.excludedPaths.has(path);
@@ -5595,7 +5598,7 @@ export class AsterlynApp {
   }
 
   private renderHistoryResults(): void {
-    if (!this.state.snapshot || this.state.layout.bottomTool !== "branches") return;
+    if (!this.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
     this.historyListView.render(this.historyListPresentation());
     this.renderHistoryCount(commits.length);
@@ -6063,7 +6066,7 @@ export class AsterlynApp {
       body,
       patch,
       path,
-      this.state.preferences,
+      this.settingsState.preferences,
       this.diffPresentation(),
     );
     this.mountedEditorKey = key;
@@ -6160,7 +6163,7 @@ export class AsterlynApp {
       tab.loadEpoch,
       tab.content,
       tab.document.path,
-      this.state.preferences,
+      this.settingsState.preferences,
       (content) => {
         if (this.mountedTextTabId !== tab.id) return;
         const previous = textTab(this.editorState.session, tab.id);
@@ -6361,11 +6364,11 @@ export class AsterlynApp {
     const menu = this.query("#editor-tab-menu");
     const hasDocuments =
       this.editorState.session.textTabs.length > 0 || this.editorState.session.preview !== null;
-    if (!hasDocuments) this.editorTabMenuOpen = false;
+    if (!hasDocuments) this.shellController.closeEditorTabMenu();
     toggle.disabled = !hasDocuments;
-    toggle.setAttribute("aria-expanded", String(this.editorTabMenuOpen));
-    menu.classList.toggle("hidden", !this.editorTabMenuOpen);
-    if (!this.editorTabMenuOpen) {
+    toggle.setAttribute("aria-expanded", String(this.shellState.editorTabMenuOpen));
+    menu.classList.toggle("hidden", !this.shellState.editorTabMenuOpen);
+    if (!this.shellState.editorTabMenuOpen) {
       menu.innerHTML = "";
       return;
     }
@@ -6396,7 +6399,7 @@ export class AsterlynApp {
           const index = Number(button.dataset.editorMenuTabIndex);
           const tab = this.editorState.session.textTabs[index];
           if (!tab) return;
-          this.editorTabMenuOpen = false;
+          this.shellController.closeEditorTabMenu();
           this.activateEditorTextTab(tab, true);
         });
       });
@@ -6405,7 +6408,7 @@ export class AsterlynApp {
       ?.addEventListener("click", () => {
         const preview = this.editorState.session.preview;
         if (!preview) return;
-        this.editorTabMenuOpen = false;
+        this.shellController.closeEditorTabMenu();
         this.captureMountedTextEditor();
         this.editorController.reactivatePreview();
         this.renderLeftTool();
@@ -6653,9 +6656,9 @@ export class AsterlynApp {
           <button class="compact-icon-button ${expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${expanded ? "Collapse" : "Expand"} unchanged lines" title="${expanded ? "Collapse" : "Expand"} unchanged lines" aria-pressed="${expanded}" ${textReady ? "" : "disabled"}>${icon(expanded ? "collapse" : "expand", 15)}</button>
         </div>
         ${imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation">
-          <button type="button" data-diff-layout="unified" aria-pressed="${this.state.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
-          <button type="button" data-diff-layout="split" aria-pressed="${this.state.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
-          <button type="button" data-diff-whitespace aria-pressed="${this.state.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
+          <button type="button" data-diff-layout="unified" aria-pressed="${this.settingsState.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
+          <button type="button" data-diff-layout="split" aria-pressed="${this.settingsState.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
+          <button type="button" data-diff-whitespace aria-pressed="${this.settingsState.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
         </div>`}
       </div>`;
   }
@@ -6684,7 +6687,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
       button.addEventListener("click", () => {
         const layout = button.dataset.diffLayout as DiffLayout;
-        if (layout === this.state.preferences.diffLayout) return;
+        if (layout === this.settingsState.preferences.diffLayout) return;
         this.updatePreferences({ diffLayout: layout });
       });
     });
@@ -6692,7 +6695,7 @@ export class AsterlynApp {
       "click",
       () => {
         this.updatePreferences({
-          showWhitespace: !this.state.preferences.showWhitespace,
+          showWhitespace: !this.settingsState.preferences.showWhitespace,
         });
       },
     );
@@ -6730,7 +6733,7 @@ export class AsterlynApp {
       repositoryRoot: snapshot.root,
       selection: { path: selected.path, staged: false },
     });
-    if (this.state.layout.leftTool === "changes") this.renderLeftTool();
+    if (this.shellState.layout.leftTool === "changes") this.renderLeftTool();
     this.renderEditor();
     this.loadSelectedDiff();
   }
@@ -6755,7 +6758,7 @@ export class AsterlynApp {
       this.setStatus("The current Diff file is not present in the project tree", "warning");
       return;
     }
-    this.state.layout = { ...this.state.layout, leftTool: "files" };
+    this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" });
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     await this.openProjectFile(document.repositoryRoot, file);
@@ -6781,31 +6784,31 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
       button.setAttribute(
         "aria-pressed",
-        String(button.dataset.diffLayout === this.state.preferences.diffLayout),
+        String(button.dataset.diffLayout === this.settingsState.preferences.diffLayout),
       );
     });
     this.root
       .querySelector<HTMLButtonElement>("[data-diff-whitespace]")
-      ?.setAttribute("aria-pressed", String(this.state.preferences.showWhitespace));
+      ?.setAttribute("aria-pressed", String(this.settingsState.preferences.showWhitespace));
   }
 
   private syncPushDiffControls(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-diff-layout]").forEach((button) => {
       button.setAttribute(
         "aria-pressed",
-        String(button.dataset.pushDiffLayout === this.state.preferences.diffLayout),
+        String(button.dataset.pushDiffLayout === this.settingsState.preferences.diffLayout),
       );
     });
     this.root
       .querySelector<HTMLButtonElement>("[data-push-diff-whitespace]")
-      ?.setAttribute("aria-pressed", String(this.state.preferences.showWhitespace));
+      ?.setAttribute("aria-pressed", String(this.settingsState.preferences.showWhitespace));
   }
 
   private diffPresentation(): DiffPresentation {
     return {
-      layout: this.state.preferences.diffLayout,
-      showWhitespace: this.state.preferences.showWhitespace,
-      splitPercentage: this.state.layout.diffBeforePercent,
+      layout: this.settingsState.preferences.diffLayout,
+      showWhitespace: this.settingsState.preferences.showWhitespace,
+      splitPercentage: this.shellState.layout.diffBeforePercent,
       onSplitPercentageChange: (value, committed) => {
         this.resizeWorkbench("diffBeforePercent", value);
         if (committed) this.persistWorkbenchLayout();
@@ -6851,7 +6854,7 @@ export class AsterlynApp {
     const snapshot = this.state.snapshot;
     if (
       snapshot &&
-      this.state.layout.bottomTool === "branches" &&
+      this.shellState.layout.bottomTool === "branches" &&
       this.state.gitDetail === "commit"
     ) {
       this.historyController.ensureSelectedDetails(snapshot.root);
@@ -7390,7 +7393,7 @@ export class AsterlynApp {
     this.changeCommitSplitterDisposer = attachSplitter(splitter, {
       orientation: "horizontal",
       direction: -1,
-      getValue: () => this.state.layout.changesCommitHeight,
+      getValue: () => this.shellState.layout.changesCommitHeight,
       getRange: () => ({
         minimum: WORKBENCH_LIMITS.changesCommitMin,
         maximum: Math.max(
@@ -7535,7 +7538,7 @@ export class AsterlynApp {
       this.commitDetailSplitterDisposer = attachSplitter(splitter, {
         orientation: "horizontal",
         direction: -1,
-        getValue: () => this.state.layout.commitSummaryHeight,
+        getValue: () => this.shellState.layout.commitSummaryHeight,
         getRange: () => ({
           minimum: WORKBENCH_LIMITS.commitSummaryMin,
           maximum: Math.max(
