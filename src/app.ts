@@ -51,7 +51,11 @@ import {
 } from "./workbench/layout-state";
 import { attachSplitter } from "./workbench/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
-import { filesForPushReview } from "./workbench/push-review";
+import {
+  filesForPushReview,
+  nextPushCommitSelection,
+  pushConfirmationAvailability,
+} from "./workbench/push-review";
 import {
   loadActivityOrder,
   moveActivityTool,
@@ -3138,6 +3142,13 @@ export class AsterlynApp {
     const tagsLabel = preview?.tags.length
       ? `${preview.tags.length} tag${preview.tags.length === 1 ? "" : "s"}`
       : "No matching tags";
+    const confirmation = pushConfirmationAvailability({
+      operationActive: Boolean(operation),
+      previewLoading: this.state.pushPreviewLoading,
+      previewRefreshing: this.state.pushPreviewRefreshing,
+      actionable,
+      modeAllowed,
+    });
     return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="${this.state.pushDiff ? "false" : "true"}" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description" ${this.state.pushDiff ? 'aria-hidden="true" inert' : ""}>
       <div class="dialog-heading">
         <div><h2 id="remote-dialog-title">Push Commits to ${escapeHtml(snapshot.branch.head ?? "current branch")}</h2></div>
@@ -3161,7 +3172,7 @@ export class AsterlynApp {
         <div class="push-dialog-actions">
           ${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${operation.cancelling ? "Cancelling…" : "Cancel push"}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">Cancel</button>`}
           <div class="push-split-action">
-            <button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(actionLabel)} ${preview?.totalCommits ?? 0} outgoing commits and ${preview?.tags.length ?? 0} selected tags over ${escapeAttribute(route)}" ${operation || this.state.pushPreviewLoading || this.state.pushPreviewRefreshing || !actionable || !modeAllowed ? "disabled" : ""}>${operation?.cancelling ? "Cancelling…" : operation ? "Pushing…" : actionLabel}</button>
+            <button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(actionLabel)} ${preview?.totalCommits ?? 0} outgoing commits and ${preview?.tags.length ?? 0} selected tags over ${escapeAttribute(route)}" aria-disabled="${confirmation.ariaDisabled}" data-refreshing="${this.state.pushPreviewRefreshing}" ${confirmation.nativeDisabled ? "disabled" : ""}>${operation?.cancelling ? "Cancelling…" : operation ? "Pushing…" : actionLabel}</button>
             <button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="Choose Push mode" aria-haspopup="menu" aria-expanded="${this.state.pushModeMenuOpen}" ${operation || !preview ? "disabled" : ""}>${icon("chevron-down", 13)}</button>
             <div class="push-mode-menu ${this.state.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="Push mode">
               <button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>Push</strong><small>Ordinary non-force update</small></span>${!forceSelected ? icon("check", 13) : ""}</button>
@@ -3180,16 +3191,26 @@ export class AsterlynApp {
     const branch = snapshot.branch.head ?? "current branch";
     const selectedRemote = preview?.remote ?? this.state.selectedRemote ?? "";
     const destination = preview?.destinationRef ?? `refs/heads/${branch}`;
+    const destinationBranch = destination.replace(/^refs\/heads\//, "");
+    const outgoingCount = preview?.totalCommits ?? 0;
     const options = snapshot.remotes
       .map(
         (remote) =>
           `<option value="${escapeAttribute(remote.name)}" ${remote.name === selectedRemote ? "selected" : ""} ${remote.pushSupported ? "" : "disabled"}>${escapeHtml(remote.name)}${remote.pushSupported ? "" : " · unsupported"}</option>`,
       )
       .join("");
-    return `<div class="push-route-row" aria-label="Push route">
-      <button class="push-route-scope ${this.state.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${this.state.pushSelectedCommit === null}" title="Show files changed by all outgoing commits">${icon("branch", 14)}<span><strong>${escapeHtml(branch)}</strong><small>All outgoing commits</small></span></button>
-      <span class="push-route-arrow" aria-hidden="true">→</span>
-      <label class="push-remote-target"><span class="visually-hidden">Push remote</span><select id="push-remote-select" aria-label="Push remote" ${this.state.pushPreviewRefreshing || this.state.remoteOperation ? "disabled" : ""}>${options}</select><code>:${escapeHtml(destination.replace(/^refs\/heads\//, ""))}</code></label>
+    return `<div class="push-route-row" aria-label="Push route from local branch ${escapeAttribute(branch)} to remote branch ${escapeAttribute(`${selectedRemote}/${destinationBranch}`)}">
+      <button class="push-route-endpoint push-route-scope ${this.state.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${this.state.pushSelectedCommit === null}" title="Show files changed by all outgoing commits">
+        <span class="push-route-kind">Local branch</span>
+        <span class="push-route-name">${icon("branch", 14)}<strong>${escapeHtml(branch)}</strong></span>
+        <small>${outgoingCount} outgoing commit${outgoingCount === 1 ? "" : "s"} · show all files</small>
+      </button>
+      <span class="push-route-arrow" aria-hidden="true"><small>Push</small><strong>→</strong></span>
+      <label class="push-route-endpoint push-remote-target">
+        <span class="push-route-kind">Remote branch</span>
+        <span class="push-route-name push-route-destination">${icon("upload", 14)}<select id="push-remote-select" aria-label="Push remote" ${this.state.pushPreviewRefreshing || this.state.remoteOperation ? "disabled" : ""}>${options}</select><span class="push-route-separator">/</span><strong>${escapeHtml(destinationBranch)}</strong></span>
+        <small>Selected destination for this push</small>
+      </label>
     </div>`;
   }
 
@@ -3198,7 +3219,7 @@ export class AsterlynApp {
       ? preview.commits
           .map((commit) => {
             const selected = this.state.pushSelectedCommit === commit.oid;
-            return `<button class="push-commit-row ${selected ? "selected" : ""}" type="button" role="listitem" data-push-commit="${escapeAttribute(commit.oid)}" aria-pressed="${selected}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.authorName)} · ${escapeHtml(formatAbsolute(commit.authoredAt))}</small></button>`;
+            return `<button class="push-commit-row ${selected ? "selected" : ""}" type="button" role="option" data-push-commit="${escapeAttribute(commit.oid)}" aria-selected="${selected}" aria-pressed="${selected}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.authorName)} · ${escapeHtml(formatAbsolute(commit.authoredAt))}</small></button>`;
           })
           .join("")
       : `<div class="remote-dialog-empty">No new commit objects are visible against the selected remote's last-fetched refs.${preview.publish ? " Publishing will still create the destination branch." : ""}</div>`;
@@ -3215,7 +3236,7 @@ export class AsterlynApp {
       : `<div class="remote-dialog-empty">${preview.filesTruncated && !this.state.pushSelectedCommit ? "The pushed file range exceeded the bounded review limit." : this.state.pushSelectedCommit ? "No files are reported for the selected commit." : "No net file changes are present in the reviewed range."}</div>`;
     const fileScope = this.state.pushSelectedCommit ? "Files in selected commit" : "Files in all outgoing commits";
     return `<div class="push-preview-grid">
-        <section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">Outgoing commits</h3><span>${preview.commits.length}/${preview.totalCommits}</span></div><div class="push-commit-list" role="list">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${this.state.pushPreviewLoadingMore ? "disabled" : ""}>${this.state.pushPreviewLoadingMore ? "Loading…" : "Show more"}</button>` : preview.truncated ? `<p class="push-preview-limit">Showing the first 1,000 of ${preview.totalCommits} commits. Push includes all ${preview.totalCommits}.</p>` : ""}</section>
+        <section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">Outgoing commits</h3><span>${preview.commits.length}/${preview.totalCommits}</span></div><div class="push-commit-list" role="listbox" aria-label="Outgoing commits; activate the selected commit again to show all outgoing files">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${this.state.pushPreviewLoadingMore ? "disabled" : ""}>${this.state.pushPreviewLoadingMore ? "Loading…" : "Show more"}</button>` : preview.truncated ? `<p class="push-preview-limit">Showing the first 1,000 of ${preview.totalCommits} commits. Push includes all ${preview.totalCommits}.</p>` : ""}</section>
         <section class="push-preview-files" aria-labelledby="push-files-title">
           <div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${fileScope}</h3><span>${reviewFiles.length}${preview.filesTruncated && !this.state.pushSelectedCommit ? "+" : ""}</span><div class="push-file-toolbar" role="toolbar" aria-label="Pushed file presentation and navigation">
             <button class="compact-icon-button" type="button" data-push-file-action="diff" title="Open the latest outgoing commit Diff for the selected file" aria-label="Open the latest outgoing commit Diff for the selected file" ${selectedFile && !this.state.pushFileActionLoading ? "" : "disabled"}>${this.state.pushFileActionLoading ? '<span class="spinner"></span>' : icon("diff", 14)}</button>
@@ -3283,7 +3304,9 @@ export class AsterlynApp {
       ?.addEventListener("click", () => void this.confirmRemoteDialog("pull"));
     this.root
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
-      ?.addEventListener("click", () => void this.confirmRemoteDialog("push"));
+      ?.addEventListener("click", () => {
+        if (!this.state.pushPreviewRefreshing) void this.confirmRemoteDialog("push");
+      });
     this.root.querySelector<HTMLInputElement>("#push-tags-enabled")?.addEventListener("change", (event) => {
       this.state.pushTagsEnabled = (event.currentTarget as HTMLInputElement).checked;
       const select = this.root.querySelector<HTMLSelectElement>("#push-tag-mode");
@@ -3308,7 +3331,11 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-commit]").forEach((button) => {
       button.addEventListener("click", () => {
         const oid = button.dataset.pushCommit;
-        if (oid) void this.selectPushCommit(oid);
+        if (oid) {
+          void this.selectPushCommit(
+            nextPushCommitSelection(this.state.pushSelectedCommit, oid),
+          );
+        }
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-file]").forEach((button) => {
@@ -3475,7 +3502,10 @@ export class AsterlynApp {
 
   private renderPushPreviewRefreshState(): void {
     const confirm = this.root.querySelector<HTMLButtonElement>("#remote-dialog-confirm-push");
-    if (confirm) confirm.disabled = true;
+    if (confirm) {
+      confirm.setAttribute("aria-disabled", "true");
+      confirm.dataset.refreshing = "true";
+    }
     const remote = this.root.querySelector<HTMLSelectElement>("#push-remote-select");
     if (remote) remote.disabled = true;
     const count = this.root.querySelector<HTMLElement>(".push-tag-count");
