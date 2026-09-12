@@ -108,6 +108,14 @@ import { renderShellView } from "./shell/shell-view";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
+import {
+  WindowSession,
+  type WindowSessionChange,
+} from "./application/window-session";
+import type {
+  SessionInvalidationCause,
+  SessionInvalidationSlice,
+} from "./application/session-invalidation";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -189,7 +197,6 @@ import {
   findProjectTreeNode,
   type ProjectTreeNode,
 } from "./workbench/project-tree";
-import { mergeTrackedChanges } from "./workbench/repository-changes";
 import {
   changeGroup,
   includedChanges,
@@ -263,10 +270,17 @@ import type {
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const CHANGE_FILE_VIEW_KEY = "asterlyn.changeFileView.v1";
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
+const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
+  "workspaceCatalog",
+  "openDocuments",
+  "workingTree",
+  "head",
+  "refs",
+  "history",
+  "operation",
+];
 
 interface AppState {
-  workspaceRoot: string | null;
-  snapshot: RepositorySnapshot | null;
   gitDetail: "branch" | "commit";
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
@@ -323,8 +337,6 @@ export class AsterlynApp {
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
   private readonly state: AppState = {
-    workspaceRoot: null,
-    snapshot: null,
     gitDetail: "commit",
     commandSurface: createCommandSurfaceState(),
     workspaceSearch: createWorkspaceSearchState(),
@@ -372,7 +384,6 @@ export class AsterlynApp {
     loading: false,
     error: null,
   };
-  private requestGeneration = 0;
   private editorFontRequestGeneration = 0;
   private editorFontStatus: {
     id: EditorFontId | null;
@@ -382,12 +393,8 @@ export class AsterlynApp {
   } = { id: null, kind: "idle" };
   private expandedUnchangedDiffKey: string | null = null;
   private commitDiffGeneration = 0;
-  private scanSequence = 0;
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
-  private saveStatusRefreshTimer: number | null = null;
-  private saveStatusRefreshRoot: string | null = null;
-  private saveStatusRefreshRunning = false;
   private workspaceSearchSequence = 0;
   private workspaceReplacementSequence = 0;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
@@ -415,11 +422,12 @@ export class AsterlynApp {
   private projectTreeWindowStart = 0;
   private changeTreeScrollFrame: number | null = null;
   private changeTreeWindowStart = 0;
-  private activeUntrackedScan: {
-    id: string;
-    generation: number;
-    root: string;
-  } | null = null;
+  private readonly windowSession = new WindowSession({
+    readTrackedChanges: (root) => bridge.readTrackedChanges(root),
+    scanUntracked: (root, scanId) => bridge.scanUntracked(root, scanId),
+    cancelUntrackedScan: (scanId) => bridge.cancelUntrackedScan(scanId),
+  });
+  private readonly releaseWindowSession: () => void;
 
   constructor(private readonly root: HTMLElement) {
     this.editorSurface = new EditorSurface(root);
@@ -482,8 +490,11 @@ export class AsterlynApp {
     this.releaseEditorController = this.editorController.subscribe((change) =>
       this.handleEditorSessionChange(change),
     );
+    this.releaseWindowSession = this.windowSession.subscribe((change) =>
+      this.handleWindowSessionChange(change),
+    );
     this.shellEventBinding = new ShellEventBinding(root, {
-      workspaceOpen: () => this.state.workspaceRoot !== null,
+      workspaceOpen: () => this.windowSession.workspace.state.root !== null,
       remoteDialogOpen: () => this.remoteState.dialog !== null,
       remoteOperationActive: () => this.remoteState.operation !== null,
       pushDiffOpen: () => this.remoteState.pushDiff !== null,
@@ -601,6 +612,17 @@ export class AsterlynApp {
     return this.shellController.state;
   }
 
+  private installRepositorySnapshot(
+    snapshot: RepositorySnapshot | null,
+    cause: SessionInvalidationCause,
+    slices: Iterable<SessionInvalidationSlice>,
+    options: { paths?: Iterable<string>; overflowed?: boolean } = {},
+  ): RepositorySnapshot | null {
+    const installed = this.windowSession.installRepository(snapshot, cause, slices, options);
+    this.windowSession.repository.consumeInvalidation();
+    return installed;
+  }
+
   private handleEditorSessionChange(change: EditorSessionChange): void {
     if (
       change.reason === "load-start" ||
@@ -613,6 +635,43 @@ export class AsterlynApp {
       this.renderEditor();
     }
     if (change.error) this.showError(change.error);
+  }
+
+  private handleWindowSessionChange(change: WindowSessionChange): void {
+    if (change.reason === "untracked-scan-start") {
+      if (change.announce) this.setStatus("Scanning untracked files…", "busy");
+      return;
+    }
+    if (
+      change.reason === "tracked-refresh-complete" ||
+      change.reason === "untracked-scan-complete"
+    ) {
+      if (!change.snapshot) return;
+      this.changesController.installSnapshot(change.snapshot);
+      this.filesController.updateChanges(change.snapshot.changes);
+      this.reconcileWorkingDocument(change.snapshot);
+      this.renderWorkspace();
+      if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
+      if (change.reason === "untracked-scan-complete" && change.announce) {
+        const recoveries = this.state.workspaceReplacement.recoveries.length;
+        this.setStatus(
+          recoveries > 0
+            ? `${recoveries} replacement recovery ${recoveries === 1 ? "record needs" : "records need"} review`
+            : "Ready",
+          recoveries > 0 ? "warning" : "normal",
+        );
+      }
+      return;
+    }
+    if (change.reason === "tracked-refresh-error") {
+      this.setStatus("File saved; Git status refresh failed", "warning");
+      this.showError(change.error);
+      return;
+    }
+    if (change.reason === "untracked-scan-error") {
+      if (change.snapshot) this.renderWorkspace();
+      this.showError(change.error);
+    }
   }
 
   private handleProjectFilesChange(change: ProjectFilesChange): void {
@@ -645,7 +704,7 @@ export class AsterlynApp {
       this.renderRemoteDialog();
     }
     if (change.toolbarChanged && this.root.querySelector("#remote-toolbar")) {
-      this.renderRemoteToolbar(this.state.snapshot);
+      this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     }
     if (change.reason === "file-selection") this.updatePushFileSelection();
     if (change.error && change.reason === "operation-complete") this.showError(change.error);
@@ -729,8 +788,8 @@ export class AsterlynApp {
   private renderShell(): void {
     this.root.innerHTML = renderShellView({
       shell: this.shellState,
-      workspaceOpen: Boolean(this.state.workspaceRoot),
-      gitAvailable: Boolean(this.state.snapshot),
+      workspaceOpen: Boolean(this.windowSession.workspace.state.root),
+      gitAvailable: Boolean(this.windowSession.repository.state.snapshot),
       demo: bridge.isDemo,
       windowControlsAvailable: this.windowChromeBinding.available,
     });
@@ -757,6 +816,8 @@ export class AsterlynApp {
     this.filesController.dispose();
     this.releaseEditorController();
     this.editorController.dispose();
+    this.releaseWindowSession();
+    this.windowSession.dispose();
     this.settingsController.dispose();
     this.shellController.dispose();
     this.windowChromeBinding.dispose();
@@ -966,7 +1027,7 @@ export class AsterlynApp {
   }
 
   private async openRepository(path: string, reportError = true): Promise<boolean> {
-    const previousRoot = this.state.workspaceRoot;
+    const previousRoot = this.windowSession.workspace.state.root;
     if (
       previousRoot !== null &&
       previousRoot !== path &&
@@ -986,14 +1047,13 @@ export class AsterlynApp {
     if (this.remoteState.dialog && !this.remoteState.operation) {
       this.closeRemoteDialog(false);
     }
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
+    const generation = this.windowSession.beginTransition();
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.setLoading(true, "Opening project…");
     try {
       const opened = await bridge.openProject(path);
-      if (generation !== this.requestGeneration) return false;
+      if (generation !== this.windowSession.generation) return false;
       const snapshot = opened.repository;
       const repositoryChanged = previousRoot !== null && previousRoot !== opened.root;
       touchRecentRepository(window.localStorage, opened.root);
@@ -1001,9 +1061,9 @@ export class AsterlynApp {
         this.captureMountedTextEditor();
         this.imageSurface = null;
       }
+      this.windowSession.activate(opened, "activation", COMPLETE_REPOSITORY_SLICES);
+      this.windowSession.repository.consumeInvalidation();
       this.editorController.installWorkspace(opened.root);
-      this.state.workspaceRoot = opened.root;
-      this.state.snapshot = snapshot;
       this.changesController.installSnapshot(snapshot, {
         clearInclusion: true,
         clearDisclosure: true,
@@ -1038,22 +1098,22 @@ export class AsterlynApp {
       void this.loadReplacementRecoveries(opened.root, generation);
       pendingRoot = snapshot?.root ?? null;
     } catch (error) {
-      if (generation !== this.requestGeneration) return false;
+      if (generation !== this.windowSession.generation) return false;
       if (reportError) this.showError(error);
-      if (!this.state.workspaceRoot && bridge.isDemo) this.openRepositoryDialog(path);
+      if (!this.windowSession.workspace.state.root && bridge.isDemo) this.openRepositoryDialog(path);
       return false;
     } finally {
-      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
     }
-    if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
+    if (pendingRoot && generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(pendingRoot, generation, true, "activation");
     }
-    return this.state.workspaceRoot !== null;
+    return this.windowSession.workspace.state.root !== null;
   }
 
   private async refresh(): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
-    const snapshot = this.state.snapshot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot || this.state.loading) return;
     this.cancelActiveWorkspaceSearch();
     this.cancelActiveWorkspaceReplacement();
@@ -1064,18 +1124,18 @@ export class AsterlynApp {
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
+    const generation = this.windowSession.beginTransition();
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.clearError();
     this.setLoading(true, snapshot ? "Refreshing repository…" : "Refreshing project files…");
     try {
       const opened = await bridge.openProject(workspaceRoot);
-      if (generation !== this.requestGeneration) return;
+      if (generation !== this.windowSession.generation) return;
       const next = opened.repository;
+      this.windowSession.activate(opened, "manualRefresh", COMPLETE_REPOSITORY_SLICES);
+      this.windowSession.repository.consumeInvalidation();
       if (!next) {
-        this.state.snapshot = null;
         this.historyController.clear();
         this.remoteController.installSnapshot(null);
         this.changesController.installSnapshot(null);
@@ -1089,7 +1149,6 @@ export class AsterlynApp {
         void this.loadProjectFiles(opened.root, generation);
         return;
       }
-      this.state.snapshot = next;
       this.remoteController.installSnapshot(next);
       this.changesController.installSnapshot(next);
       this.filesController.installWorkspace(next.root, next.changes);
@@ -1111,13 +1170,13 @@ export class AsterlynApp {
       void this.loadProjectFiles(next.root, generation);
       pendingRoot = next.root;
     } catch (error) {
-      if (generation !== this.requestGeneration) return;
+      if (generation !== this.windowSession.generation) return;
       this.showError(error);
     } finally {
-      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
     }
-    if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
+    if (pendingRoot && generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(pendingRoot, generation, true, "manualRefresh");
     }
   }
 
@@ -1143,7 +1202,7 @@ export class AsterlynApp {
   }
 
   private openCommandSurface(mode: NavigationMode): void {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     if (mode !== "commands" && !workspaceRoot) return;
     if (this.state.commandSurface.mode === "workspace" && mode !== "workspace") {
       this.cancelActiveWorkspaceSearch();
@@ -1206,7 +1265,7 @@ export class AsterlynApp {
     const mode = this.state.commandSurface.mode;
     return {
       commandSurface: this.state.commandSurface,
-      workspaceOpen: this.state.workspaceRoot !== null,
+      workspaceOpen: this.windowSession.workspace.state.root !== null,
       filesLoading: this.filesState.loading,
       files: mode === "files" || mode === "recent" ? this.visibleNavigationFiles(mode) : [],
       commands: mode === "commands" ? this.visibleNavigationCommands() : [],
@@ -1362,7 +1421,7 @@ export class AsterlynApp {
   }
 
   private visibleNavigationFiles(mode: "files" | "recent"): ProjectFile[] {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot) return [];
     const recent = loadRecentFiles(
       window.localStorage,
@@ -1412,7 +1471,7 @@ export class AsterlynApp {
     const index = this.state.commandSurface.selectedIndex;
     if (mode === "files" || mode === "recent") {
       const file = this.visibleNavigationFiles(mode)[index];
-      const workspaceRoot = this.state.workspaceRoot;
+      const workspaceRoot = this.windowSession.workspace.state.root;
       if (!file || !workspaceRoot) return;
       this.dismissCommandSurface();
       await this.openProjectFile(workspaceRoot, file);
@@ -1430,8 +1489,8 @@ export class AsterlynApp {
   }
 
   private navigationCommands(): NavigationCommand[] {
-    const snapshot = this.state.snapshot;
-    const hasWorkspace = this.state.workspaceRoot !== null;
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const hasWorkspace = this.windowSession.workspace.state.root !== null;
     const tab = activeTextTab(this.editorState.session);
     return [
       { id: "open-repository", label: "Open Project", detail: "Choose a local folder", shortcut: "Ctrl+O", enabled: true },
@@ -1483,7 +1542,7 @@ export class AsterlynApp {
   }
 
   private async runWorkspaceSearch(): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     const query = this.state.commandSurface.query;
     if (!workspaceRoot || query.trim().length === 0) return;
     this.cancelActiveWorkspaceSearch();
@@ -1491,7 +1550,7 @@ export class AsterlynApp {
     const options = workspaceSearchOptions(this.state.workspaceSearchControls);
     const started = beginWorkspaceSearch(
       this.state.workspaceSearch,
-      this.requestGeneration,
+      this.windowSession.generation,
       workspaceRoot,
       requestId,
       query,
@@ -1502,8 +1561,8 @@ export class AsterlynApp {
     try {
       const report = await bridge.searchWorkspaceText(workspaceRoot, requestId, query, options);
       if (
-        this.requestGeneration !== started.request.repositoryGeneration ||
-        this.state.workspaceRoot !== started.request.repositoryRoot
+        this.windowSession.generation !== started.request.repositoryGeneration ||
+        this.windowSession.workspace.state.root !== started.request.repositoryRoot
       ) {
         return;
       }
@@ -1560,7 +1619,7 @@ export class AsterlynApp {
   }
 
   private async previewWorkspaceReplacement(): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     const searchRequest = this.state.workspaceSearch.request;
     const report = this.state.workspaceSearch.report;
     if (
@@ -1576,7 +1635,7 @@ export class AsterlynApp {
     const planId = `workspace-replace-${Date.now()}-${++this.workspaceReplacementSequence}`;
     const started = beginReplacementPreview(
       this.state.workspaceReplacement,
-      this.requestGeneration,
+      this.windowSession.generation,
       workspaceRoot,
       planId,
       searchRequest.query,
@@ -1595,8 +1654,8 @@ export class AsterlynApp {
         searchRequest.options,
       );
       if (
-        this.requestGeneration !== started.request.repositoryGeneration ||
-        this.state.workspaceRoot !== started.request.repositoryRoot
+        this.windowSession.generation !== started.request.repositoryGeneration ||
+        this.windowSession.workspace.state.root !== started.request.repositoryRoot
       ) {
         return;
       }
@@ -1699,7 +1758,7 @@ export class AsterlynApp {
   }
 
   private async applyWorkspaceReplacement(): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     const request = this.state.workspaceReplacement.request;
     const preview = this.state.workspaceReplacement.preview;
     if (!workspaceRoot || !request || !preview || this.state.workspaceReplacement.status !== "ready") return;
@@ -1724,8 +1783,8 @@ export class AsterlynApp {
     try {
       const result = await bridge.applyWorkspaceReplacement(workspaceRoot, preview.planId, selectedPaths);
       if (
-        this.requestGeneration !== request.repositoryGeneration ||
-        this.state.workspaceRoot !== request.repositoryRoot
+        this.windowSession.generation !== request.repositoryGeneration ||
+        this.windowSession.workspace.state.root !== request.repositoryRoot
       ) {
         return;
       }
@@ -1737,7 +1796,7 @@ export class AsterlynApp {
       await this.reloadReplacementFiles(selectedPaths);
       await this.refreshWorkspaceAfterReplacement(workspaceRoot, request.repositoryGeneration);
       this.refreshWorkspaceSearchAfterReplacement();
-      await this.loadReplacementRecoveries(workspaceRoot, this.requestGeneration);
+      await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       if (result.status === "rolledBack") {
         this.state.replacementDialog = null;
         this.setStatus("Replacement stopped; every changed file was restored", "success");
@@ -1757,7 +1816,7 @@ export class AsterlynApp {
         request,
         errorMessage(error),
       );
-      await this.loadReplacementRecoveries(workspaceRoot, this.requestGeneration);
+      await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       if (this.state.workspaceReplacement.recoveries.length > 0) {
         this.state.replacementDialog = "recovery";
       }
@@ -1768,7 +1827,7 @@ export class AsterlynApp {
 
   private async loadReplacementRecoveries(
     repositoryRoot: string,
-    generation = this.requestGeneration,
+    generation = this.windowSession.generation,
   ): Promise<void> {
     this.state.workspaceReplacement = {
       ...this.state.workspaceReplacement,
@@ -1776,7 +1835,7 @@ export class AsterlynApp {
     };
     try {
       const recoveries = await bridge.listWorkspaceReplacementRecoveries(repositoryRoot);
-      if (generation !== this.requestGeneration || this.state.workspaceRoot !== repositoryRoot) return;
+      if (generation !== this.windowSession.generation || this.windowSession.workspace.state.root !== repositoryRoot) return;
       this.state.workspaceReplacement = setReplacementRecoveries(
         this.state.workspaceReplacement,
         recoveries,
@@ -1790,7 +1849,7 @@ export class AsterlynApp {
       if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface();
       if (this.state.replacementDialog === "recovery") this.renderWorkspaceReplacementDialog();
     } catch (error) {
-      if (generation !== this.requestGeneration) return;
+      if (generation !== this.windowSession.generation) return;
       this.state.workspaceReplacement = {
         ...this.state.workspaceReplacement,
         recoveriesLoading: false,
@@ -1817,7 +1876,7 @@ export class AsterlynApp {
     recoveryId: string,
     action: "keep" | "rollback",
   ): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     const recovery = this.state.workspaceReplacement.recoveries.find(
       (candidate) => candidate.recoveryId === recoveryId,
     );
@@ -1848,11 +1907,11 @@ export class AsterlynApp {
       }
       this.state.replacementRecoveryBusy = null;
       if (action === "rollback") {
-        await this.refreshWorkspaceAfterReplacement(workspaceRoot, this.requestGeneration);
+        await this.refreshWorkspaceAfterReplacement(workspaceRoot, this.windowSession.generation);
         this.refreshWorkspaceSearchAfterReplacement();
       }
-      if (this.state.workspaceRoot !== workspaceRoot) return;
-      await this.loadReplacementRecoveries(workspaceRoot, this.requestGeneration);
+      if (this.windowSession.workspace.state.root !== workspaceRoot) return;
+      await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       const unresolved = this.state.workspaceReplacement.recoveries.length;
       if (unresolved > 0) {
         this.state.replacementDialog = "recovery";
@@ -1872,7 +1931,7 @@ export class AsterlynApp {
       this.renderWorkspaceReplacementDialog();
     } catch (error) {
       this.state.replacementRecoveryBusy = null;
-      await this.loadReplacementRecoveries(workspaceRoot, this.requestGeneration);
+      await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       this.renderWorkspaceReplacementDialog();
       this.showError(error);
     }
@@ -1882,32 +1941,44 @@ export class AsterlynApp {
     repositoryRoot: string,
     generation: number,
   ): Promise<void> {
-    const current = this.state.snapshot;
-    if (this.state.workspaceRoot !== repositoryRoot || generation !== this.requestGeneration) return;
-    this.cancelActiveUntrackedScan();
+    const current = this.windowSession.repository.state.snapshot;
+    if (this.windowSession.workspace.state.root !== repositoryRoot || generation !== this.windowSession.generation) return;
+    this.windowSession.cancelUntrackedScan();
     const opened = await bridge.openProject(repositoryRoot);
     const refreshed = opened.repository;
     if (
-      generation !== this.requestGeneration ||
-      this.state.workspaceRoot !== repositoryRoot ||
+      generation !== this.windowSession.generation ||
+      this.windowSession.workspace.state.root !== repositoryRoot ||
       opened.root !== repositoryRoot
     ) {
       return;
     }
-    this.state.snapshot = refreshed && current
+    const next = refreshed && current
       ? { ...refreshed, commits: current.commits }
       : refreshed;
-    if (this.state.snapshot) {
-      this.changesController.installSnapshot(this.state.snapshot);
-      this.filesController.updateChanges(this.state.snapshot.changes);
-      this.reconcileWorkingDocument(this.state.snapshot);
+    this.installRepositorySnapshot(
+      next,
+      "workspaceReplacement",
+      ["workspaceCatalog", "openDocuments", "workingTree"],
+    );
+    if (next) {
+      this.changesController.installSnapshot(next);
+      this.filesController.updateChanges(next.changes);
+      this.reconcileWorkingDocument(next);
     } else {
       this.changesController.installSnapshot(null);
       this.filesController.updateChanges([]);
     }
     this.renderWorkspace();
     await this.loadProjectFiles(repositoryRoot, generation);
-    if (this.state.snapshot) await this.completeUntrackedScan(repositoryRoot, generation);
+    if (this.windowSession.repository.state.snapshot) {
+      await this.windowSession.scanUntracked(
+        repositoryRoot,
+        generation,
+        true,
+        "workspaceReplacement",
+      );
+    }
   }
 
   private async reloadReplacementFiles(workspacePaths: string[]): Promise<void> {
@@ -1916,7 +1987,7 @@ export class AsterlynApp {
   }
 
   private async openWorkspaceSearchMatch(match: WorkspaceTextSearchMatch): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot || workspaceRoot !== this.state.workspaceSearch.request?.repositoryRoot) {
       this.setStatus("Search result belongs to another workspace", "warning");
       return;
@@ -1956,7 +2027,7 @@ export class AsterlynApp {
   private renderRemoteDialog(): void {
     const host = this.query("#remote-action-dialog");
     const dialog = this.remoteState.dialog;
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!dialog || !snapshot) {
       host.classList.add("hidden");
       host.innerHTML = "";
@@ -1970,7 +2041,7 @@ export class AsterlynApp {
     host.innerHTML = renderRemoteDialogContent({
       snapshot,
       state: this.remoteState,
-      workspaceRoot: this.state.workspaceRoot,
+      workspaceRoot: this.windowSession.workspace.state.root,
       preferences: this.settingsState.preferences,
       selectedProjectFileAvailable: this.pushSelectedProjectFile() !== null,
     });
@@ -2136,7 +2207,7 @@ export class AsterlynApp {
   }
 
   private async openSelectedPushFile(): Promise<void> {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     const file = this.pushSelectedProjectFile();
     if (!workspaceRoot || !file) return;
     this.closeRemoteDialog(false);
@@ -2144,7 +2215,7 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     await this.openProjectFile(workspaceRoot, file);
-    if (this.state.workspaceRoot === workspaceRoot) this.locateCurrentProjectFile();
+    if (this.windowSession.workspace.state.root === workspaceRoot) this.locateCurrentProjectFile();
   }
 
 
@@ -2214,7 +2285,7 @@ export class AsterlynApp {
   }
 
   private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<boolean> {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.state.loading || this.remoteState.operation) return false;
     const policy = remotePolicy(snapshot, this.remoteState.selectedRemote);
     if (!policy[kind].enabled || (kind !== "pull" && !policy.selectedRemote)) return false;
@@ -2223,8 +2294,7 @@ export class AsterlynApp {
     }
     if (kind === "push" && !this.remoteState.pushPreview) return false;
 
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
+    const generation = this.windowSession.beginTransition();
     this.clearError();
     this.setLoading(true, `${remoteActionLabel(kind)} in progress…`);
     let pendingRoot: string | null = null;
@@ -2233,7 +2303,7 @@ export class AsterlynApp {
 
     try {
       const result = await this.remoteController.runOperation(kind);
-      if (generation !== this.requestGeneration || result.status === "stale") return false;
+      if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
         const next = result.snapshot;
         this.acceptRemoteSnapshot(next);
@@ -2253,7 +2323,7 @@ export class AsterlynApp {
         try {
           const opened = await bridge.openProject(snapshot.root);
           const reconciled = opened.repository;
-          if (generation !== this.requestGeneration) return false;
+          if (generation !== this.windowSession.generation) return false;
           if (!reconciled) throw new Error("The active project is no longer a Git repository.");
           this.acceptRemoteSnapshot(reconciled, true);
           pendingRoot = reconciled.root;
@@ -2262,14 +2332,14 @@ export class AsterlynApp {
         }
       }
     } finally {
-      if (generation === this.requestGeneration) {
+      if (generation === this.windowSession.generation) {
         this.setLoading(false, "Ready");
         if (succeeded) this.setStatus(`${remoteActionLabel(kind)} completed`, "success");
         else if (failed) this.setStatus("Remote operation needs review", "warning");
       }
     }
-    if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
+    if (pendingRoot && generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(pendingRoot, generation, true, "remoteOperation");
     }
     return succeeded;
   }
@@ -2278,7 +2348,15 @@ export class AsterlynApp {
     snapshot: RepositorySnapshot,
     focusConflicts = false,
   ): void {
-    this.state.snapshot = snapshot;
+    this.installRepositorySnapshot(snapshot, "remoteOperation", [
+      "workspaceCatalog",
+      "openDocuments",
+      "workingTree",
+      "head",
+      "refs",
+      "history",
+      "operation",
+    ]);
     this.remoteController.installSnapshot(snapshot);
     this.changesController.installSnapshot(snapshot, { clearSelection: true });
     this.filesController.installWorkspace(snapshot.root, snapshot.changes);
@@ -2317,14 +2395,14 @@ export class AsterlynApp {
   private async cancelActiveRemoteOperation(): Promise<void> {
     const operation = this.remoteState.operation;
     if (!operation || operation.cancelling) return;
-    if (this.state.snapshot?.root === operation.root) {
+    if (this.windowSession.repository.state.snapshot?.root === operation.root) {
       this.setStatus(`Cancelling ${operation.kind}…`, "busy");
     }
     await this.remoteController.cancelActiveOperation();
   }
 
   private toggleTool(tool: ActivityTool): void {
-    if (!this.state.workspaceRoot || (tool !== "files" && !this.state.snapshot)) return;
+    if (!this.windowSession.workspace.state.root || (tool !== "files" && !this.windowSession.repository.state.snapshot)) return;
     this.shellController.reduceLayout(
       tool === "branches"
         ? { type: "toggle-bottom-tool", tool }
@@ -2350,7 +2428,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       const tool = button.dataset.tool as ActivityTool;
       const enabled = Boolean(
-        this.state.workspaceRoot && (tool === "files" || this.state.snapshot),
+        this.windowSession.workspace.state.root && (tool === "files" || this.windowSession.repository.state.snapshot),
       );
       const active =
         tool === "branches"
@@ -2548,8 +2626,8 @@ export class AsterlynApp {
   }
 
   private renderWorkspace(): void {
-    const workspaceRoot = this.state.workspaceRoot;
-    const snapshot = this.state.snapshot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot) return;
     this.renderTopbar(workspaceRoot, snapshot);
     this.applyWorkbenchLayout(false);
@@ -2568,7 +2646,7 @@ export class AsterlynApp {
     this.renderRemoteToolbar(snapshot);
   }
 
-  private renderRepositoryMenu(currentRoot = this.state.workspaceRoot): void {
+  private renderRepositoryMenu(currentRoot = this.windowSession.workspace.state.root): void {
     const button = this.query<HTMLButtonElement>("#repository-switcher");
     const menu = this.query("#repository-menu");
     const currentName = currentRoot ? basename(currentRoot) : "No project";
@@ -2624,8 +2702,8 @@ export class AsterlynApp {
   }
 
   private renderLeftTool(): void {
-    const workspaceRoot = this.state.workspaceRoot;
-    const snapshot = this.state.snapshot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot || !this.shellState.layout.leftTool) return;
     const title = this.query("#navigator-title");
     const count = this.query("#navigator-count");
@@ -2700,7 +2778,7 @@ export class AsterlynApp {
   }
 
   private renderBottomTool(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.shellState.layout.bottomTool !== "branches") return;
     this.renderBranchPane(snapshot);
     this.renderHistoryPane();
@@ -2716,7 +2794,7 @@ export class AsterlynApp {
   }
 
   private renderHistoryPane(): void {
-    if (!this.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
+    if (!this.windowSession.repository.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
@@ -2736,7 +2814,7 @@ export class AsterlynApp {
     this.bindHistoryEvents();
   }
 
-  private renderGitDetailPane(snapshot = this.state.snapshot): void {
+  private renderGitDetailPane(snapshot = this.windowSession.repository.state.snapshot): void {
     if (!snapshot || this.shellState.layout.bottomTool !== "branches") return;
     this.commitDetailSplitterDisposer?.();
     this.commitDetailSplitterDisposer = null;
@@ -2746,11 +2824,11 @@ export class AsterlynApp {
 
   private async loadProjectFiles(
     repositoryRoot: string,
-    repositoryGeneration = this.requestGeneration,
+    repositoryGeneration = this.windowSession.generation,
   ): Promise<void> {
     if (
-      repositoryGeneration !== this.requestGeneration ||
-      this.state.workspaceRoot !== repositoryRoot ||
+      repositoryGeneration !== this.windowSession.generation ||
+      this.windowSession.workspace.state.root !== repositoryRoot ||
       this.filesState.root !== repositoryRoot
     ) return;
     await this.filesController.refresh();
@@ -2761,7 +2839,7 @@ export class AsterlynApp {
   }
 
   private bindProjectEvents(): void {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot) return;
     this.root
       .querySelector<HTMLButtonElement>("#retry-project-files")
@@ -2809,7 +2887,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-project-file]").forEach((row) => {
       row.addEventListener("click", () => {
         const path = row.dataset.projectFile;
-        const currentRoot = this.state.workspaceRoot;
+        const currentRoot = this.windowSession.workspace.state.root;
         if (!path || !currentRoot) return;
         this.filesController.select(path, "file");
         this.markProjectTreeSelection(path);
@@ -2859,7 +2937,7 @@ export class AsterlynApp {
   }
 
   private locateCurrentProjectFile(): void {
-    const workspaceRoot = this.state.workspaceRoot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot) return;
     const activePath = this.activeProjectWorkspacePath(workspaceRoot);
     if (!activePath) return;
@@ -2899,7 +2977,7 @@ export class AsterlynApp {
 
   private setSelectedProjectFolderExpanded(expanded: boolean): void {
     const selection = this.filesState.selection;
-    if (!selection || selection.kind !== "directory" || !this.state.workspaceRoot) return;
+    if (!selection || selection.kind !== "directory" || !this.windowSession.workspace.state.root) return;
     if (!this.filesController.setSelectedSubtreeExpanded(expanded)) return;
     this.renderLeftTool();
     queueMicrotask(() => {
@@ -2951,7 +3029,7 @@ export class AsterlynApp {
       Boolean(searchMatch && existing?.status === "ready"),
     );
     if (opened.status === "limit") {
-      const currentRoot = this.state.workspaceRoot;
+      const currentRoot = this.windowSession.workspace.state.root;
       const activePath = currentRoot
         ? this.activeProjectWorkspacePath(currentRoot)
         : null;
@@ -2966,7 +3044,7 @@ export class AsterlynApp {
       return;
     }
     if (opened.status === "stale") {
-      if (searchMatch && this.state.workspaceRoot === repositoryRoot) {
+      if (searchMatch && this.windowSession.workspace.state.root === repositoryRoot) {
         this.setStatus("Search location could not be refreshed safely", "warning");
       }
       return;
@@ -3050,7 +3128,7 @@ export class AsterlynApp {
     match: WorkspaceTextSearchMatch,
   ): void {
     const decision = evaluateSearchNavigation(
-      this.state.workspaceRoot,
+      this.windowSession.workspace.state.root,
       tab,
       match,
     );
@@ -3080,7 +3158,7 @@ export class AsterlynApp {
   }
 
   private historyNavigationViewModel(): HistoryNavigationViewModel {
-    const snapshot = this.state.snapshot!;
+    const snapshot = this.windowSession.repository.state.snapshot!;
     return {
       snapshot,
       files: this.filesState.files,
@@ -3168,7 +3246,7 @@ export class AsterlynApp {
     host.classList.remove("hidden");
     host.innerHTML = renderHistoryDialogView({
       kind,
-      snapshot: this.state.snapshot!,
+      snapshot: this.windowSession.repository.state.snapshot!,
       files: this.filesState.files,
       query: this.state.historyDialogQuery,
       error: this.state.historyDialogError,
@@ -3182,7 +3260,7 @@ export class AsterlynApp {
   }
 
   private historyListPresentation(): HistoryListPresentation {
-    const snapshot = this.state.snapshot!;
+    const snapshot = this.windowSession.repository.state.snapshot!;
     const filtered = this.filteredHistory();
     return {
       status: this.historyState.history.status,
@@ -3277,7 +3355,7 @@ export class AsterlynApp {
         } else if (action === "expand") {
           this.changesController.expandDirectories();
         } else if (action === "collapse") {
-          const snapshot = this.state.snapshot;
+          const snapshot = this.windowSession.repository.state.snapshot;
           if (snapshot) {
             this.changesController.collapseDirectories(changeDisclosureKeys(snapshot));
           }
@@ -3295,7 +3373,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLInputElement>("[data-include-group]").forEach((checkbox) => {
       checkbox.addEventListener("click", (event) => event.stopPropagation());
       checkbox.addEventListener("change", () => {
-        const snapshot = this.state.snapshot;
+        const snapshot = this.windowSession.repository.state.snapshot;
         const group = checkbox.dataset.includeGroup as ChangeGroupId | undefined;
         if (!snapshot || !group) return;
         this.setChangePathsIncluded(
@@ -3307,7 +3385,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLInputElement>("[data-include-directory]").forEach((checkbox) => {
       checkbox.addEventListener("click", (event) => event.stopPropagation());
       checkbox.addEventListener("change", () => {
-        const snapshot = this.state.snapshot;
+        const snapshot = this.windowSession.repository.state.snapshot;
         const path = checkbox.dataset.includeDirectory;
         const group = checkbox.dataset.includeDirectoryGroup as ChangeGroupId | undefined;
         if (!snapshot || !path || !group) return;
@@ -3375,8 +3453,8 @@ export class AsterlynApp {
   }
 
   private handleChangeTreeScroll(results: HTMLElement): void {
-    if (this.shellState.layout.leftTool !== "changes" || !this.state.snapshot) return;
-    const rows = changeViewRows(this.state.snapshot, this.changesState);
+    if (this.shellState.layout.leftTool !== "changes" || !this.windowSession.repository.state.snapshot) return;
+    const rows = changeViewRows(this.windowSession.repository.state.snapshot, this.changesState);
     const window = changeTreeRenderWindow(
       rows.length,
       results.scrollTop,
@@ -3399,12 +3477,12 @@ export class AsterlynApp {
     restoreFocus: boolean,
   ): void {
     const path = row.dataset.changePath;
-    if (!path || !this.state.snapshot) return;
+    if (!path || !this.windowSession.repository.state.snapshot) return;
     this.changesController.selectChange(path);
-    if (this.changesState.selectedChange && this.state.snapshot) {
+    if (this.changesState.selectedChange && this.windowSession.repository.state.snapshot) {
       this.activateDiffPreview({
         kind: "working-diff",
-        repositoryRoot: this.state.snapshot.root,
+        repositoryRoot: this.windowSession.repository.state.snapshot.root,
         selection: { ...this.changesState.selectedChange },
       });
     }
@@ -3413,14 +3491,14 @@ export class AsterlynApp {
       candidate.classList.toggle("primary", primary);
       candidate.setAttribute("aria-selected", String(primary));
     });
-    const selected = this.selectedChangeModel(this.state.snapshot);
+    const selected = this.selectedChangeModel(this.windowSession.repository.state.snapshot);
     const diff = this.root.querySelector<HTMLButtonElement>("[data-change-action='diff']");
     const revert = this.root.querySelector<HTMLButtonElement>("[data-change-action='revert']");
     if (diff) diff.disabled = false;
     if (revert) {
       const unsupported =
         !selected ||
-        this.state.snapshot.branch.unborn ||
+        this.windowSession.repository.state.snapshot.branch.unborn ||
         selected.conflicted ||
         selected.submodule ||
         selected.worktreeStatus === "untracked" ||
@@ -3441,7 +3519,7 @@ export class AsterlynApp {
   }
 
   private syncChangeInclusionUi(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.shellState.layout.leftTool !== "changes") return;
     this.root.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
       const path = checkbox.dataset.includePath!;
@@ -3484,7 +3562,7 @@ export class AsterlynApp {
       mounted.focus();
       return;
     }
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const results = this.root.querySelector<HTMLElement>("#change-results");
     if (!snapshot || !results) return;
     const index = changeViewRows(snapshot, this.changesState).findIndex(
@@ -3564,7 +3642,7 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const key = button.dataset.historyQuickRef;
         const branch = key ? this.branchForKey(key) : null;
-        const snapshot = this.state.snapshot;
+        const snapshot = this.windowSession.repository.state.snapshot;
         if (!key || !branch || !snapshot) return;
         // Keep every catalog match in the query so later root-checkbox changes preserve the
         // workspace-level branch meaning; repositoryIds still controls which roots participate.
@@ -3612,7 +3690,7 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLInputElement>("[data-history-root]").forEach((checkbox) => {
       checkbox.addEventListener("change", () => {
         const repositoryId = checkbox.dataset.historyRoot;
-        const snapshot = this.state.snapshot;
+        const snapshot = this.windowSession.repository.state.snapshot;
         if (!repositoryId || !snapshot) return;
         this.state.historyRepositoryIds = toggleHistoryRootSelection(
           snapshot.repositoryRoots.map((root) => root.id),
@@ -3786,7 +3864,7 @@ export class AsterlynApp {
   }
 
   private renderHistoryResults(): void {
-    if (!this.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
+    if (!this.windowSession.repository.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
     this.historyListView.render(this.historyListPresentation());
     this.renderHistoryCount(commits.length);
@@ -3828,7 +3906,7 @@ export class AsterlynApp {
   }
 
   private selectCommit(key: string, restoreFocus = false): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
     this.state.gitDetail = "commit";
     if (!this.historyController.selectCommit(snapshot.root, key, true)) return;
@@ -3848,7 +3926,7 @@ export class AsterlynApp {
   private bindBranchEvents(): void {
     const input = this.root.querySelector<HTMLInputElement>("#branch-filter");
     input?.addEventListener("input", () => {
-      const snapshot = this.state.snapshot;
+      const snapshot = this.windowSession.repository.state.snapshot;
       if (!snapshot) return;
       this.state.branchQuery = input.value;
       this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
@@ -3860,7 +3938,7 @@ export class AsterlynApp {
         event.preventDefault();
         input.value = "";
         this.state.branchQuery = "";
-        const snapshot = this.state.snapshot;
+        const snapshot = this.windowSession.repository.state.snapshot;
         if (!snapshot) return;
         this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
         this.renderBranchCount(snapshot);
@@ -3895,8 +3973,8 @@ export class AsterlynApp {
           else collapsed.add(kind);
           this.state.collapsedBranchGroups = collapsed;
           this.query("#branch-navigation-body").innerHTML =
-            this.renderBranchNavigation(this.state.snapshot!);
-          this.renderBranchCount(this.state.snapshot!);
+            this.renderBranchNavigation(this.windowSession.repository.state.snapshot!);
+          this.renderBranchCount(this.windowSession.repository.state.snapshot!);
           this.bindBranchEvents();
           this.root
             .querySelector<HTMLButtonElement>(`[data-branch-group-toggle="${kind}"]`)
@@ -3929,7 +4007,7 @@ export class AsterlynApp {
   }
 
   private selectBranch(key: string, restoreFocus = false): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const branch = snapshot?.branches.find((candidate) => branchKey(candidate) === key);
     if (!snapshot || !branch) return;
     const branches = this.allMatchingHistoryBranches(branch, snapshot);
@@ -3960,8 +4038,8 @@ export class AsterlynApp {
   }
 
   private renderEditor(): void {
-    const workspaceRoot = this.state.workspaceRoot;
-    const snapshot = this.state.snapshot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot) return;
     this.editorSurface.retain(this.editorState.session.textTabs.map((tab) => tab.id));
     const document = this.activeDocument();
@@ -4394,72 +4472,17 @@ export class AsterlynApp {
       return false;
     }
     this.renderLeftTool();
-    this.scheduleSavedRepositoryRefresh(result.tab.document.repositoryRoot);
+    this.windowSession.scheduleTrackedRefresh(
+      result.tab.document.repositoryRoot,
+      "save",
+      [result.tab.document.workspacePath],
+    );
     if (result.status === "saved") {
       this.setStatus(`Saved ${basename(result.tab.document.workspacePath)}`, "success");
       return true;
     }
     this.setStatus("Saved captured changes; newer edits remain unsaved", "warning");
     return false;
-  }
-
-  private scheduleSavedRepositoryRefresh(repositoryRoot: string): void {
-    if (this.state.snapshot?.root !== repositoryRoot) return;
-    this.saveStatusRefreshRoot = repositoryRoot;
-    if (this.saveStatusRefreshRunning) return;
-    if (this.saveStatusRefreshTimer !== null) {
-      window.clearTimeout(this.saveStatusRefreshTimer);
-    }
-    this.saveStatusRefreshTimer = window.setTimeout(() => {
-      this.saveStatusRefreshTimer = null;
-      void this.refreshSavedRepositoryStatus();
-    }, 80);
-  }
-
-  private async refreshSavedRepositoryStatus(): Promise<void> {
-    if (this.saveStatusRefreshRunning) return;
-    const repositoryRoot = this.saveStatusRefreshRoot;
-    if (!repositoryRoot) return;
-    if (this.state.loading) {
-      this.scheduleSavedRepositoryRefresh(repositoryRoot);
-      return;
-    }
-
-    this.saveStatusRefreshRoot = null;
-    this.saveStatusRefreshRunning = true;
-    const generation = this.requestGeneration;
-    try {
-      const scan = await bridge.readTrackedChanges(repositoryRoot);
-      const snapshot = this.state.snapshot;
-      if (
-        generation !== this.requestGeneration ||
-        !snapshot ||
-        snapshot.root !== repositoryRoot ||
-        scan.root !== repositoryRoot
-      ) {
-        return;
-      }
-      this.state.snapshot = mergeTrackedChanges(snapshot, scan);
-      this.changesController.installSnapshot(this.state.snapshot);
-      this.filesController.updateChanges(this.state.snapshot.changes);
-      this.reconcileWorkingDocument(this.state.snapshot);
-      this.renderWorkspace();
-      void this.completeUntrackedScan(repositoryRoot, generation, false);
-    } catch (error) {
-      if (
-        generation === this.requestGeneration &&
-        this.state.snapshot?.root === repositoryRoot
-      ) {
-        this.setStatus("File saved; Git status refresh failed", "warning");
-        this.showError(error);
-      }
-    } finally {
-      this.saveStatusRefreshRunning = false;
-      const pendingRoot = this.saveStatusRefreshRoot;
-      if (pendingRoot && this.state.snapshot?.root === pendingRoot) {
-        this.scheduleSavedRepositoryRefresh(pendingRoot);
-      }
-    }
   }
 
   private async requestCloseTextTab(tabId: string): Promise<void> {
@@ -4569,7 +4592,7 @@ export class AsterlynApp {
     direction: DiffDirection,
   ): string | null {
     const paths = document.kind === "working-diff"
-      ? this.state.snapshot?.changes.map((change) => change.path) ?? []
+      ? this.windowSession.repository.state.snapshot?.changes.map((change) => change.path) ?? []
       : this.historyState.details?.files.map((file) => file.path) ?? [];
     const current = document.kind === "working-diff" ? document.selection.path : document.path;
     return adjacentDiffItem(paths, current, direction);
@@ -4587,7 +4610,7 @@ export class AsterlynApp {
       this.selectCommitFile(path, false);
       return;
     }
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const selected = snapshot?.changes.find((change) => change.path === path);
     if (!snapshot || !selected) return;
     this.changesController.selectChange(selected.path);
@@ -4625,7 +4648,7 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     await this.openProjectFile(document.repositoryRoot, file);
-    if (this.state.workspaceRoot === document.repositoryRoot) this.locateCurrentProjectFile();
+    if (this.windowSession.workspace.state.root === document.repositoryRoot) this.locateCurrentProjectFile();
   }
 
   private isDiffExpanded(
@@ -4680,7 +4703,7 @@ export class AsterlynApp {
   }
 
   private loadSelectedDiff(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const document = this.activeDocument();
     const selected = this.changesController.selectedChange();
     if (
@@ -4695,7 +4718,7 @@ export class AsterlynApp {
 
   private isWorkingDiffActive(): boolean {
     const document = this.activeDocument();
-    return document.kind === "working-diff" && document.repositoryRoot === this.state.snapshot?.root;
+    return document.kind === "working-diff" && document.repositoryRoot === this.windowSession.repository.state.snapshot?.root;
   }
 
   private syncWorkingImageSurface(): void {
@@ -4714,7 +4737,7 @@ export class AsterlynApp {
   }
 
   private loadVisibleCommitDetails(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (
       snapshot &&
       this.shellState.layout.bottomTool === "branches" &&
@@ -4725,7 +4748,7 @@ export class AsterlynApp {
   }
 
   private async loadSelectedCommitDiff(restoreFocus = false): Promise<void> {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const details = this.historyState.details;
     const file = details ? this.selectedCommitFile(details) : null;
     const document = this.activeDocument();
@@ -4775,7 +4798,7 @@ export class AsterlynApp {
         const activeDocument = this.activeDocument();
         if (
           generation !== this.commitDiffGeneration ||
-          this.state.snapshot?.root !== snapshot.root ||
+          this.windowSession.repository.state.snapshot?.root !== snapshot.root ||
           this.historyState.selectedCommit !== key ||
           this.historyState.selectedFile !== file.path ||
           activeDocument.kind !== "commit-diff" ||
@@ -4809,7 +4832,7 @@ export class AsterlynApp {
       const activeDocument = this.activeDocument();
       if (
         generation !== this.commitDiffGeneration ||
-        this.state.snapshot?.root !== snapshot.root ||
+        this.windowSession.repository.state.snapshot?.root !== snapshot.root ||
         this.historyState.selectedCommit !== key ||
         this.historyState.selectedFile !== file.path ||
         activeDocument.kind !== "commit-diff" ||
@@ -4832,7 +4855,7 @@ export class AsterlynApp {
       const activeDocument = this.activeDocument();
       if (
         generation !== this.commitDiffGeneration ||
-        this.state.snapshot?.root !== snapshot.root ||
+        this.windowSession.repository.state.snapshot?.root !== snapshot.root ||
         this.historyState.selectedCommit !== key ||
         this.historyState.selectedFile !== file.path ||
         activeDocument.kind !== "commit-diff" ||
@@ -4888,7 +4911,7 @@ export class AsterlynApp {
   }
 
   private selectCommitFile(path: string, restoreFocus: boolean): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const details = this.historyState.details;
     if (!snapshot || !details || !details.files.some((file) => file.path === path)) {
       return;
@@ -4998,7 +5021,7 @@ export class AsterlynApp {
   }
 
   private saveHistoryPreferences(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
     saveHistoryRefPreferences(
       window.localStorage,
@@ -5033,7 +5056,7 @@ export class AsterlynApp {
   }
 
   private branchForKey(key: string): BranchSummary | null {
-    return this.state.snapshot?.branches.find((branch) => branchKey(branch) === key) ?? null;
+    return this.windowSession.repository.state.snapshot?.branches.find((branch) => branchKey(branch) === key) ?? null;
   }
 
   private pathForKey(key: string): HistoryPath | null {
@@ -5060,7 +5083,7 @@ export class AsterlynApp {
   }
 
   private applyHistoryQuery(preferTip = false): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
     const query = this.activeHistoryQuery();
     if (isSnapshotHistoryQuery(query)) {
@@ -5085,7 +5108,7 @@ export class AsterlynApp {
   }
 
   private openSelectedChangeDiff(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
     if (!snapshot || !selected) return;
     this.changesController.selectChange(selected.path);
@@ -5099,7 +5122,7 @@ export class AsterlynApp {
   }
 
   private async revertSelectedChange(): Promise<void> {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
     if (!snapshot || !selected || this.state.loading) return;
     const dirty = dirtyTextTabs(this.editorState.session).find(
@@ -5120,18 +5143,21 @@ export class AsterlynApp {
       return;
     }
 
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
+    const generation = this.windowSession.beginTransition();
     let pendingRoot: string | null = null;
     let refreshAfterFailure = false;
     let revertFailure: unknown = null;
     this.setLoading(true, "Reverting selected file…");
     try {
       const result = await this.changesController.revertSelected();
-      if (generation !== this.requestGeneration || result.status === "stale") return;
+      if (generation !== this.windowSession.generation || result.status === "stale") return;
       if (result.status === "success") {
         const next = result.value;
-        this.state.snapshot = next;
+        this.installRepositorySnapshot(next, "gitMutation", [
+          "workspaceCatalog",
+          "openDocuments",
+          "workingTree",
+        ]);
         this.remoteController.installSnapshot(next);
         this.changesController.installSnapshot(next);
         this.filesController.updateChanges(next.changes);
@@ -5145,13 +5171,13 @@ export class AsterlynApp {
         revertFailure = result.error;
       }
     } finally {
-      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
     }
-    if (refreshAfterFailure && generation === this.requestGeneration) {
+    if (refreshAfterFailure && generation === this.windowSession.generation) {
       await this.refresh();
       if (revertFailure) this.showError(revertFailure);
-    } else if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
+    } else if (pendingRoot && generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(pendingRoot, generation, true, "gitMutation");
     }
   }
 
@@ -5211,7 +5237,7 @@ export class AsterlynApp {
   }
 
   private refreshCommitComposer(): void {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const current = this.root.querySelector<HTMLElement>("#commit-tool");
     if (!snapshot || !current) return;
     current.outerHTML = this.renderCommitComposer(snapshot);
@@ -5331,7 +5357,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#retry-commit-details")
       ?.addEventListener("click", () => {
-        const root = this.state.snapshot?.root;
+        const root = this.windowSession.repository.state.snapshot?.root;
         if (root) this.historyController.retryDetails(root);
       });
     const splitter = this.root.querySelector<HTMLElement>("#commit-summary-splitter");
@@ -5370,17 +5396,16 @@ export class AsterlynApp {
       }
       return;
     }
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || !this.changesController.canCommit() || this.state.loading) return;
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
+    const generation = this.windowSession.beginTransition();
     let pendingRoot: string | null = null;
     let refreshAfter = false;
     let commitFailure: unknown = null;
     this.setLoading(true, "Creating commit…");
     try {
       const outcome = await this.changesController.commit();
-      if (generation !== this.requestGeneration || outcome.status === "stale") return;
+      if (generation !== this.windowSession.generation || outcome.status === "stale") return;
       if (outcome.status === "failure") {
         commitFailure = outcome.error;
         refreshAfter = true;
@@ -5389,7 +5414,7 @@ export class AsterlynApp {
         const result = outcome.value;
         if (result.snapshot) {
           const next = result.snapshot;
-          this.state.snapshot = next;
+          this.installRepositorySnapshot(next, "gitMutation", COMPLETE_REPOSITORY_SLICES);
           this.remoteController.installSnapshot(next);
           this.changesController.installSnapshot(next);
           this.filesController.updateChanges(next.changes);
@@ -5413,18 +5438,18 @@ export class AsterlynApp {
         );
       }
     } finally {
-      if (generation === this.requestGeneration) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
     }
-    if (refreshAfter && generation === this.requestGeneration) {
+    if (refreshAfter && generation === this.windowSession.generation) {
       await this.refresh();
       if (commitFailure) this.showError(commitFailure);
-    } else if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
+    } else if (pendingRoot && generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(pendingRoot, generation, true, "gitMutation");
     }
   }
 
   private async switchBranch(branch: BranchSummary): Promise<void> {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (
       !snapshot ||
       branch.kind !== "local" ||
@@ -5442,7 +5467,7 @@ export class AsterlynApp {
   }
 
   private async createBranch(): Promise<void> {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     const name = this.state.newBranchName.trim();
     if (
       !snapshot ||
@@ -5457,7 +5482,7 @@ export class AsterlynApp {
       `Created and checked out ${name}`,
       (root) => bridge.createBranch(root, name),
     );
-    if (this.state.snapshot?.branch.head === name) {
+    if (this.windowSession.repository.state.snapshot?.branch.head === name) {
       this.state.newBranchName = "";
       this.renderBottomTool();
     }
@@ -5468,11 +5493,10 @@ export class AsterlynApp {
     successMessage: string,
     mutation: (repositoryRoot: string) => Promise<RepositorySnapshot>,
   ): Promise<void> {
-    const snapshot = this.state.snapshot;
+    const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
     if (!(await this.saveDirtyTabsBefore("changing branches"))) return;
-    const generation = ++this.requestGeneration;
-    this.cancelActiveUntrackedScan();
+    const generation = this.windowSession.beginTransition();
     this.clearError();
     let pendingRoot: string | null = null;
     let succeeded = false;
@@ -5480,8 +5504,8 @@ export class AsterlynApp {
     this.renderBottomTool();
     try {
       const next = await mutation(snapshot.root);
-      if (generation !== this.requestGeneration) return;
-      this.state.snapshot = next;
+      if (generation !== this.windowSession.generation) return;
+      this.installRepositorySnapshot(next, "gitMutation", COMPLETE_REPOSITORY_SLICES);
       this.remoteController.installSnapshot(next);
       this.changesController.installSnapshot(next, {
         clearInclusion: true,
@@ -5500,99 +5524,18 @@ export class AsterlynApp {
       pendingRoot = next.root;
       succeeded = true;
     } catch (error) {
-      if (generation !== this.requestGeneration) return;
+      if (generation !== this.windowSession.generation) return;
       this.showError(error);
     } finally {
-      if (generation === this.requestGeneration) {
+      if (generation === this.windowSession.generation) {
         this.setLoading(false, "Ready");
         this.renderBottomTool();
         if (succeeded) this.setStatus(successMessage, "success");
       }
     }
-    if (pendingRoot && generation === this.requestGeneration) {
-      void this.completeUntrackedScan(pendingRoot, generation);
+    if (pendingRoot && generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(pendingRoot, generation, true, "gitMutation");
     }
-  }
-
-  private async completeUntrackedScan(
-    repositoryRoot: string,
-    generation: number,
-    announce = true,
-  ): Promise<void> {
-    if (generation !== this.requestGeneration) return;
-    const scan = {
-      id: `${generation}-${++this.scanSequence}`,
-      generation,
-      root: repositoryRoot,
-    };
-    this.activeUntrackedScan = scan;
-    if (announce) this.setStatus("Scanning untracked files…", "busy");
-    let completed = false;
-
-    try {
-      const supplement = await bridge.scanUntracked(repositoryRoot, scan.id);
-      if (
-        this.activeUntrackedScan !== scan ||
-        generation !== this.requestGeneration ||
-        supplement.root !== repositoryRoot
-      ) {
-        return;
-      }
-      const snapshot = this.state.snapshot;
-      if (!snapshot || snapshot.root !== repositoryRoot) return;
-
-      const tracked = snapshot.changes.filter(
-        (change) => change.worktreeStatus !== "untracked",
-      );
-      this.state.snapshot = {
-        ...snapshot,
-        changes: [...tracked, ...supplement.changes].sort((left, right) =>
-          left.path.localeCompare(right.path),
-        ),
-        untrackedState: "complete",
-      };
-      this.changesController.installSnapshot(this.state.snapshot);
-      this.filesController.updateChanges(this.state.snapshot.changes);
-      this.reconcileWorkingDocument(this.state.snapshot);
-      this.renderWorkspace();
-      if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
-      completed = true;
-    } catch (error) {
-      if (
-        this.activeUntrackedScan !== scan ||
-        generation !== this.requestGeneration
-      ) {
-        return;
-      }
-      const snapshot = this.state.snapshot;
-      if (snapshot?.root === repositoryRoot) {
-        snapshot.untrackedState = "failed";
-        this.renderWorkspace();
-      }
-      this.showError(error);
-    } finally {
-      if (this.activeUntrackedScan === scan) {
-        this.activeUntrackedScan = null;
-        if (completed && announce) {
-          const recoveries = this.state.workspaceReplacement.recoveries.length;
-          this.setStatus(
-            recoveries > 0
-              ? `${recoveries} replacement recovery ${recoveries === 1 ? "record needs" : "records need"} review`
-              : "Ready",
-            recoveries > 0 ? "warning" : "normal",
-          );
-        }
-      }
-    }
-  }
-
-  private cancelActiveUntrackedScan(): void {
-    const scan = this.activeUntrackedScan;
-    if (!scan) return;
-    this.activeUntrackedScan = null;
-    void bridge.cancelUntrackedScan(scan.id).catch(() => {
-      // Generation checks still prevent an obsolete supplement from being merged.
-    });
   }
 
   private reconcileWorkingDocument(snapshot: RepositorySnapshot): void {
@@ -5647,8 +5590,8 @@ export class AsterlynApp {
     this.editorSurface.setReadOnly(loading);
     this.root.classList.toggle("is-busy", loading);
     this.query<HTMLButtonElement>("#refresh-button").disabled =
-      loading || !this.state.workspaceRoot;
-    this.renderRemoteToolbar(this.state.snapshot);
+      loading || !this.windowSession.workspace.state.root;
+    this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     this.setStatus(message, loading ? "busy" : "normal");
   }
 
@@ -5680,7 +5623,7 @@ export class AsterlynApp {
     switcher.disabled = true;
     try {
       const choice = await bridge.chooseRepositoryDirectory(
-        this.state.workspaceRoot,
+        this.windowSession.workspace.state.root,
       );
       if (choice.kind === "selected") {
         await this.requestRepositoryTarget(choice.path);
@@ -5697,7 +5640,7 @@ export class AsterlynApp {
 
   private async requestRepositoryTarget(path: string): Promise<void> {
     this.closeRepositoryDialog();
-    const currentRoot = this.state.workspaceRoot;
+    const currentRoot = this.windowSession.workspace.state.root;
     if (!currentRoot || currentRoot === path) {
       await this.openRepository(path);
       return;
@@ -5735,13 +5678,13 @@ export class AsterlynApp {
   private openRepositoryDialog(path = ""): void {
     const dialog = this.query("#repository-dialog");
     const input = this.query<HTMLInputElement>("#repository-input");
-    input.value = path || this.state.workspaceRoot || "";
+    input.value = path || this.windowSession.workspace.state.root || "";
     dialog.classList.remove("hidden");
     window.setTimeout(() => input.focus(), 0);
   }
 
   private closeRepositoryDialog(): void {
-    if (!this.state.workspaceRoot && !bridge.isDemo) return;
+    if (!this.windowSession.workspace.state.root && !bridge.isDemo) return;
     this.query("#repository-dialog").classList.add("hidden");
   }
 

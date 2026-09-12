@@ -15,6 +15,7 @@ test("composition adapter stays below the accepted R2 concentration ceiling", as
 
 test("feature and shell boundaries stay below the decomposition trigger", async () => {
   const files = await typescriptFiles([
+    path.join(repositoryRoot, "src/application"),
     path.join(repositoryRoot, "src/features"),
     path.join(repositoryRoot, "src/shell"),
   ]);
