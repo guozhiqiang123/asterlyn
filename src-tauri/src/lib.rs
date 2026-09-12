@@ -22,9 +22,11 @@ mod adapters;
 mod application;
 mod commands;
 
+#[cfg(test)]
+use adapters::image_preview::inspect_image;
 use adapters::image_preview::{
     IMAGE_PREVIEW_LIMIT_BYTES, ImageDiffPreview, ImagePreview, encode_image_diff,
-    encode_image_preview, inspect_image,
+    encode_image_preview,
 };
 use application::{
     ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator, PendingRepositoryWindows,
