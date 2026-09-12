@@ -13,7 +13,15 @@ The first editing slice must establish a safe boundary before search, language i
 
 Create a pure `asterlyn-workspace` crate. It owns bounded text reads, secure path traversal, exact-byte revisions, optimistic conflict checks, same-directory temporary writes, atomic replacement, and the supported durability result. It imports neither Git nor Tauri.
 
-The desktop boundary receives a main repository root plus a root-qualified project-file identity. It asks `asterlyn-git` to resolve that identity against a freshly generated bounded catalog before constructing the workspace-relative path. Only that server-resolved path reaches `asterlyn-workspace`. The active desktop workspace must match the repository most recently opened successfully, so a stale or fabricated client root cannot authorize file content access.
+The desktop boundary receives a main repository root plus a root-qualified project-file identity.
+Project discovery installs a bounded identity catalog in the invoking window's active workspace
+session. A read, image preview, or save must first match that exact window, canonical root,
+repository identity, and catalogued path. Git-backed files then receive a targeted current
+authorization check for their exact nested repository, tracked state, and ignore policy; ordinary
+workspace files continue through the workspace layer's component-by-component existence, file-kind,
+and non-link traversal. Only the revalidated workspace-relative path reaches
+`asterlyn-workspace`. A stale or fabricated client root or path cannot create authority, while one
+file activation no longer regenerates the complete project catalog.
 
 Reads use a fixed two-mebibyte backend limit. Every path component must remain inside the canonical workspace and must not be a symbolic link or platform reparse point; the target must be a regular single-link file. NUL data, invalid UTF-8, and oversized files fail closed. A UTF-8 BOM is separated from editable text and reported explicitly. LF, CRLF, mixed line endings, bare CR, and final-newline state are preserved as exact content rather than normalized silently.
 
@@ -39,7 +47,11 @@ CodeMirror remains behind a text-editor adapter. The adapter edits LF-normalized
 
 ## Consequences and rollback
 
-The editor gains an independently testable content boundary and durable buffer ownership without coupling Git to editor internals. The cost is a new crate, fresh catalog authorization for each read/write, bounded file support, and explicit unsupported states. Undo history may be lost when a tab is unmounted, but exact text remains in the session.
+The editor gains an independently testable content boundary and durable buffer ownership without
+coupling Git to editor internals. The cost is a new crate, a bounded window-session catalog plus a
+targeted current authorization check for each read/write, bounded file support, and explicit
+unsupported states. Undo history may be lost when a tab is unmounted, but exact text remains in the
+session.
 
 The UI can roll back by routing project files to the existing placeholder while leaving the unused workspace crate and commands inert. No Git/Diff state or user file is migrated.
 

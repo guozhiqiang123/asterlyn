@@ -5,11 +5,16 @@ import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
-test("composition adapter stays below the accepted R2 concentration ceiling", async () => {
+test("composition adapter stays below the accepted R3 migration ceiling", async () => {
   const source = await readFile(path.join(repositoryRoot, "src/app.ts"), "utf8");
   assert.ok(
-    lineCount(source) <= 6_000,
+    lineCount(source) <= 5_800,
     `src/app.ts grew to ${lineCount(source)} lines; extract ownership instead of expanding it`,
+  );
+  assert.equal(
+    source.match(/bridge\.openProject/g)?.length ?? 0,
+    1,
+    "project reads must enter through WindowSession after its gateway is composed",
   );
 });
 
