@@ -67,6 +67,7 @@ import {
   operationDisplayName,
   renderGitOperationBanner,
 } from "./features/git-operations/git-operation-banner";
+import { GitOperationDialogBinding } from "./features/git-operations/git-operation-dialog-binding";
 import {
   ProjectFilesController,
   type ProjectFilesChange,
@@ -310,11 +311,6 @@ export class AsterlynApp {
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
-  private gitOperationDialogModule: Promise<
-    typeof import("./features/git-operations/git-operation-dialog-entry")
-  > | null = null;
-  private gitOperationDialogRenderGeneration = 0;
-  private gitOperationFocusReturn: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private readonly activityRailBinding: ActivityRailBinding;
@@ -334,6 +330,7 @@ export class AsterlynApp {
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
   private readonly gitOperationController: GitOperationController;
+  private readonly gitOperationDialogBinding: GitOperationDialogBinding;
   private readonly releaseGitOperationController: () => void;
   private readonly settingsController: SettingsController;
   private readonly shellController: ShellController;
@@ -426,6 +423,16 @@ export class AsterlynApp {
       readConflictContent: (...args) => bridge.readConflictContent(...args),
       resolveConflict: (...args) => bridge.resolveConflict(...args),
     });
+    this.gitOperationDialogBinding = new GitOperationDialogBinding(
+      root,
+      this.gitOperationController,
+      {
+        prepare: () => void this.prepareGitOperation(),
+        execute: () => void this.executeGitOperation(),
+        resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
+        reportError: (error) => this.showError(error),
+      },
+    );
     this.releaseGitOperationController = this.gitOperationController.subscribe((change) =>
       this.handleGitOperationControllerChange(change),
     );
@@ -565,7 +572,7 @@ export class AsterlynApp {
       applyLayout: () => this.applyWorkbenchLayout(false),
       closePushDiff: () => this.closePushDiff(),
       openGitOperation: () => this.openGitOperation(),
-      closeGitOperation: () => this.closeGitOperation(),
+      closeGitOperation: () => this.gitOperationDialogBinding.close(),
       closeRepositoryMenu: (restoreFocus) => {
         this.shellController.closeRepositoryMenu();
         this.renderRepositoryMenu();
@@ -678,8 +685,7 @@ export class AsterlynApp {
 
   private handleGitOperationControllerChange(change: GitOperationChange): void {
     if (change.dialogChanged && this.root.querySelector("#git-operation-dialog")) {
-      this.renderGitOperationDialog();
-      if (!this.gitOperationState.dialog) this.restoreGitOperationFocus();
+      this.gitOperationDialogBinding.render();
     }
     if (change.operationChanged) {
       const snapshot = this.windowSession.repository.state.snapshot;
@@ -797,6 +803,7 @@ export class AsterlynApp {
     this.releaseEditorController();
     this.editorController.dispose();
     this.releaseGitOperationController();
+    this.gitOperationDialogBinding.dispose();
     this.gitOperationController.dispose();
     this.windowSession.dispose();
     this.settingsController.dispose();
@@ -2540,7 +2547,7 @@ export class AsterlynApp {
     this.renderBottomTool();
     this.renderEditor();
     this.renderStatus(snapshot);
-    this.renderGitOperationDialog();
+    this.gitOperationDialogBinding.render();
   }
 
   private renderTopbar(
@@ -3323,7 +3330,7 @@ export class AsterlynApp {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         const path = button.dataset.resolveConflict;
-        if (path) this.openGitConflict(path);
+        if (path) this.gitOperationDialogBinding.openConflict(path);
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-git-operation-action]").forEach((button) => {
@@ -5276,133 +5283,7 @@ export class AsterlynApp {
       );
       return;
     }
-    if (!this.gitOperationState.dialog && document.activeElement instanceof HTMLElement) {
-      this.gitOperationFocusReturn = document.activeElement;
-    }
-    this.gitOperationController.openSetup(kind, targets);
-  }
-
-  private closeGitOperation(): void {
-    this.gitOperationController.closeDialog();
-  }
-
-  private openGitConflict(path: string): void {
-    if (!this.gitOperationState.dialog && document.activeElement instanceof HTMLElement) {
-      this.gitOperationFocusReturn = document.activeElement;
-    }
-    void this.gitOperationController.openConflict(path);
-  }
-
-  private restoreGitOperationFocus(): void {
-    const target = this.gitOperationFocusReturn;
-    this.gitOperationFocusReturn = null;
-    queueMicrotask(() => {
-      if (target?.isConnected) target.focus();
-      else this.root.querySelector<HTMLButtonElement>("#git-operation-open")?.focus();
-    });
-  }
-
-  private renderGitOperationDialog(): void {
-    const host = this.root.querySelector<HTMLElement>("#git-operation-dialog");
-    if (!host) return;
-    const state = this.gitOperationState;
-    host.classList.toggle("hidden", !state.dialog);
-    const generation = ++this.gitOperationDialogRenderGeneration;
-    if (!state.dialog) {
-      host.innerHTML = "";
-      host.onclick = null;
-      return;
-    }
-    if (!this.gitOperationDialogModule) {
-      host.innerHTML = '<section class="dialog git-operation-dialog"><div class="git-operation-loading"><span class="spinner"></span><span>Loading Git operation review…</span></div></section>';
-      this.gitOperationDialogModule = import(
-        "./features/git-operations/git-operation-dialog-entry"
-      );
-    }
-    void this.gitOperationDialogModule.then((view) => {
-      if (
-        generation !== this.gitOperationDialogRenderGeneration ||
-        !this.gitOperationState.dialog
-      ) return;
-      host.innerHTML = view.renderGitOperationDialog(this.gitOperationState);
-      this.bindGitOperationDialogEvents(host);
-    }).catch((error) => {
-      if (generation !== this.gitOperationDialogRenderGeneration) return;
-      this.gitOperationDialogModule = null;
-      host.classList.add("hidden");
-      host.innerHTML = "";
-      this.showError(error);
-    });
-  }
-
-  private bindGitOperationDialogEvents(host: HTMLElement): void {
-    host.onclick = (event) => {
-      if (event.target === host) this.gitOperationController.closeDialog();
-    };
-    host.querySelectorAll<HTMLButtonElement>("[data-git-operation-close]").forEach((button) => {
-      button.addEventListener("click", () => this.closeGitOperation());
-    });
-    host.querySelector<HTMLButtonElement>("[data-git-operation-back]")?.addEventListener(
-      "click",
-      () => {
-        const plan = this.gitOperationState.plan;
-        if (plan) this.gitOperationController.openSetup(
-          plan.kind,
-          plan.targetRefs,
-          plan.message ?? "",
-        );
-      },
-    );
-
-    const kind = host.querySelector<HTMLSelectElement>("#git-operation-kind");
-    const targets = host.querySelector<HTMLTextAreaElement>("#git-operation-targets");
-    const message = host.querySelector<HTMLTextAreaElement>("#git-operation-message");
-    const updateDraft = () => {
-      if (!kind || !targets) return;
-      this.gitOperationController.updateDraft(
-        kind.value as GitOperationKind,
-        targets.value,
-        message?.value ?? "",
-      );
-    };
-    kind?.addEventListener("change", () => {
-      updateDraft();
-      this.renderGitOperationDialog();
-    });
-    targets?.addEventListener("input", updateDraft);
-    message?.addEventListener("input", updateDraft);
-    host.querySelector<HTMLFormElement>("#git-operation-setup-form")?.addEventListener(
-      "submit",
-      (event) => {
-        event.preventDefault();
-        updateDraft();
-        void this.prepareGitOperation();
-      },
-    );
-    host.querySelector<HTMLButtonElement>("#git-operation-execute")?.addEventListener(
-      "click",
-      () => void this.executeGitOperation(),
-    );
-    const result = host.querySelector<HTMLTextAreaElement>("#conflict-result");
-    result?.addEventListener("input", () => {
-      this.gitOperationController.setConflictResult(result.value);
-    });
-    host.querySelector<HTMLButtonElement>("#git-conflict-resolve")?.addEventListener(
-      "click",
-      () => void this.resolveGitConflict(false),
-    );
-    host.querySelector<HTMLButtonElement>("#git-conflict-delete")?.addEventListener(
-      "click",
-      () => void this.resolveGitConflict(true),
-    );
-    queueMicrotask(() => {
-      const preferred = host.querySelector<HTMLElement>(
-        "textarea:not([disabled]), select:not([disabled]), button:not([disabled])",
-      );
-      if (document.activeElement === document.body || !host.contains(document.activeElement)) {
-        preferred?.focus();
-      }
-    });
+    this.gitOperationDialogBinding.openSetup(kind, targets);
   }
 
   private async prepareGitOperation(): Promise<void> {
