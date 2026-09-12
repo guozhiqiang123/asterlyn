@@ -1,7 +1,5 @@
 import { bridge } from "./bridge";
 import { BRAND } from "./brand";
-import { DiffEditor } from "./diff-editor";
-import { TextEditor } from "./text-editor";
 import { fileTypeIcon } from "./file-icons";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
@@ -39,6 +37,10 @@ import {
   type ProjectFilesChange,
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
+import {
+  LazyDiffEditor,
+  LazyTextEditor,
+} from "./features/files-editor/lazy-editor-runtime";
 import {
   PROJECT_TREE_ROW_HEIGHT,
   projectTreeRenderWindow,
@@ -98,8 +100,7 @@ import {
 import {
   MARKDOWN_PREVIEW_MAX_BYTES,
   isMarkdownPath,
-  renderMarkdownPreview,
-} from "./workbench/markdown-preview";
+} from "./workbench/markdown-format";
 import {
   loadMarkdownModePreferences,
   markdownModeForDocument,
@@ -318,9 +319,9 @@ interface AppState {
 }
 
 export class AsterlynApp {
-  private readonly diffEditor = new DiffEditor();
-  private readonly pushDiffEditor = new DiffEditor();
-  private readonly textEditor = new TextEditor();
+  private readonly diffEditor = new LazyDiffEditor();
+  private readonly pushDiffEditor = new LazyDiffEditor();
+  private readonly textEditor = new LazyTextEditor();
   private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
@@ -1327,6 +1328,9 @@ export class AsterlynApp {
         this.releaseShellController();
         this.shellController.dispose();
         this.historyListView.unmount();
+        this.textEditor.destroy();
+        this.diffEditor.destroy();
+        this.pushDiffEditor.destroy();
       },
       { once: true },
     );
@@ -6135,6 +6139,7 @@ export class AsterlynApp {
     request: number;
   }): Promise<void> {
     try {
+      const { renderMarkdownPreview } = await import("./workbench/markdown-preview");
       const result = await renderMarkdownPreview(request.content);
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");

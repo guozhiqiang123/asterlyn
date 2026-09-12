@@ -93,7 +93,11 @@ controller sequence is complete, but view/CSS ownership, bounded mounting and la
 loading remain before the R2 exit gate can pass. The sixth slice moves project-tree and Changes-tree
 presentation into feature-owned views and bounds History, project, and changed-file mounting to 200
 rows with overscan. Long-list DOM growth is now bounded; lazy editor/Diff loading, stylesheet
-ownership, remaining composition-root reduction, and closing acceptance are still required.
+ownership, remaining composition-root reduction, and closing acceptance are still required. The
+seventh slice moves CodeMirror text/Diff engines and Markdown preview parsing/highlighting behind
+first-use dynamic imports, reducing the startup chunk from 768.53 kB to 410.51 kB and passing the
+below-500-kB gate. Stylesheet ownership, remaining composition-root reduction, and closing
+acceptance are still required.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.

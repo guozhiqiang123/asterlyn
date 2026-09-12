@@ -1,8 +1,9 @@
 import type { LanguageSupport } from "@codemirror/language";
 import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
 import { editorLanguageDescriptionByName } from "../editor-language.ts";
+import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
 
-export const MARKDOWN_PREVIEW_MAX_BYTES = 512 * 1024;
+export { MARKDOWN_PREVIEW_MAX_BYTES, isMarkdownPath } from "./markdown-format.ts";
 export const MARKDOWN_HIGHLIGHT_MAX_LANGUAGES = 8;
 export const MARKDOWN_HIGHLIGHT_MAX_CODE_UNITS = 256 * 1024;
 
@@ -134,10 +135,6 @@ const markdownCodeHighlighter = tagHighlighter([
   },
   { tag: tags.invalid, class: "md-code-invalid" },
 ]);
-
-export function isMarkdownPath(path: string): boolean {
-  return /\.(?:md|markdown|mdown|mkd)$/iu.test(path);
-}
 
 export async function renderMarkdownPreview(
   source: string,
