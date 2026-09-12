@@ -27,8 +27,10 @@ import {
   failTextLoad,
   failTextSave,
   isTextTabDirty,
+  markTextExternalConflict,
   markTextEdited,
   openTextDocument,
+  reconcileExternalTextSnapshot,
   setTextTabMarkdownMode,
   textTab,
   type EditorSession,
@@ -54,6 +56,7 @@ export type EditorSessionChangeReason =
   | "save-start"
   | "save-complete"
   | "save-error"
+  | "external-change"
   | "close";
 
 export interface EditorSessionChange {
@@ -331,6 +334,66 @@ export class EditorSessionController {
         this.emit({ reason: "load-error", tabId: tab.id, error: errorMessage(error) });
       }
     }
+  }
+
+  workspacePaths(): string[] {
+    return this.state.session.textTabs.map((tab) => tab.document.workspacePath);
+  }
+
+  async reconcileExternalPaths(workspacePaths: Iterable<string>): Promise<void> {
+    const selected = Array.from(new Set(workspacePaths));
+    const tabs = this.state.session.textTabs.filter((tab) =>
+      selected.length === 0 || selected.some((path) =>
+        tab.document.workspacePath === path || tab.document.workspacePath.startsWith(`${path}/`)
+      )
+    );
+    const generation = this.workspaceGeneration;
+    await Promise.all(tabs.map(async (candidate) => {
+      const expectedRevision = candidate.revision;
+      if (!expectedRevision || candidate.status !== "ready") return;
+      try {
+        const snapshot = await this.gateway.readTextFile(
+          candidate.document.repositoryRoot,
+          candidate.document.repositoryId,
+          candidate.document.path,
+        );
+        if (!this.workspaceMatches(generation, candidate.document.repositoryRoot)) return;
+        const reconciled = reconcileExternalTextSnapshot(
+          this.state.session,
+          candidate.id,
+          expectedRevision,
+          snapshot,
+        );
+        this.state.session = reconciled.session;
+        if (reconciled.status === "reloaded" || reconciled.status === "conflict") {
+          this.emit({
+            reason: "external-change",
+            tabId: candidate.id,
+            contentChanged: true,
+            error: reconciled.status === "conflict"
+              ? "A file with unsaved edits changed outside Asterlyn. The local buffer was preserved."
+              : undefined,
+          });
+        }
+      } catch {
+        if (!this.workspaceMatches(generation, candidate.document.repositoryRoot)) return;
+        const message = "The file changed or became unavailable outside Asterlyn; its open buffer was preserved.";
+        const next = markTextExternalConflict(
+          this.state.session,
+          candidate.id,
+          expectedRevision,
+          message,
+        );
+        if (next === this.state.session) return;
+        this.state.session = next;
+        this.emit({
+          reason: "external-change",
+          tabId: candidate.id,
+          contentChanged: true,
+          error: message,
+        });
+      }
+    }));
   }
 
   async saveText(tabId: string, content: string): Promise<SaveTextResult> {

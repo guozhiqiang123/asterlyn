@@ -4,6 +4,8 @@
     { "name": "window_chrome_mode", "args": {}, "result": "WindowChromeMode", "validator": "windowChromeMode" },
     { "name": "initial_repository", "args": {}, "result": "nullable:string", "validator": "nullableString" },
     { "name": "open_project", "args": { "path": "string" }, "result": "OpenedProject", "validator": "openedProject" },
+    { "name": "start_workspace_watch", "args": { "workspaceRoot": "string", "generation": "number" }, "result": "WorkspaceWatchStatus", "validator": "workspaceWatchStatus" },
+    { "name": "stop_workspace_watch", "args": {}, "result": "void", "validator": "void" },
     { "name": "read_tracked_changes", "args": { "repositoryRoot": "string" }, "result": "TrackedChangeScan", "validator": "trackedChangeScan" },
     { "name": "open_repository_window", "args": { "path": "string" }, "result": "string", "validator": "string" },
     { "name": "read_history_page", "args": { "repositoryRoot": "string", "query": "HistoryQuery", "offset": "number", "limit": "number" }, "result": "HistoryPage", "validator": "historyPage" },

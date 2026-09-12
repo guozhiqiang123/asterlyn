@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted on 2026-09-12. The application/session boundary lands in R3; native watcher activation and
-cross-platform fault evidence follow as a dedicated Stage 3 capability slice. R5 continues to own
-file creation, move, copy, paste, and trash operations, but no longer owns the watcher foundation.
+Accepted on 2026-09-12. The application/session boundary landed in R3 and the first native watcher
+slice is accepted as R3.1. R5 continues to own file creation, move, copy, paste, and trash
+operations, but no longer owns the watcher foundation. The implementation and resource evidence is
+recorded in [`R3.1 native workspace-watch acceptance`](../../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
 
 ## Context
 
@@ -26,6 +27,11 @@ Asterlyn uses one Rust-owned watcher service per canonical active workspace, sha
 through reference-counted session ownership. The service uses the platform backend selected by a
 maintained cross-platform Rust watcher library. A frontend WebView watcher is not the capability
 owner.
+
+R3.1 pins `notify` 8.0.0 exactly. The package is CC0-1.0 licensed and the accepted crates.io
+checksum is recorded with the package-impact evidence. Version 8.0.0 is intentionally retained
+instead of silently moving to the latest release because it preserves the workspace's Rust 1.85
+toolchain contract; upgrades require their own compatibility and resource check.
 
 The data flow is:
 
@@ -62,15 +68,18 @@ one or more slices, optional normalized workspace paths, a cause, and whether th
 have overflowed. Consumers merge pending invalidations, never broaden them implicitly, and perform
 only the reads owned by the requested slices.
 
-Ordinary source-file events normally invalidate `workspaceCatalog`, matching `openDocuments`, and
-`workingTree`. They do not reload History, branches, tags, or remotes. Selected `.git` metadata—
-including `HEAD`, `index`, refs, `packed-refs`, and operation marker directories—maps to the
-corresponding repository slices. Object-store churn is not forwarded as a stream of UI work.
+Ordinary content changes invalidate matching `openDocuments` and `workingTree`. Create, remove,
+rename, `.gitignore`, and `.gitmodules` changes additionally invalidate `workspaceCatalog` because
+membership or display policy may have changed. Neither path reloads History, branches, tags, or
+remotes. Selected `.git` metadata—including `HEAD`, `index`, refs, `packed-refs`, and operation
+marker directories—maps to the corresponding repository slices. Object-store, log, and commit-
+message churn is not forwarded as a stream of UI work.
 
 ### Scheduling and reconciliation
 
-- Event bursts are merged for approximately 80–150 ms, with a bounded maximum wait of roughly
-  500 ms so continuous generators still converge.
+- Event bursts are merged after 120 ms of quiet, with a bounded maximum wait of 500 ms so
+  continuous generators still converge. One event carries at most 512 normalized workspace paths;
+  overflow broadens the invalidation to all seven slices.
 - At most one reconciliation per slice runs for a session. A newer invalidation is retained and
   runs after the current read rather than racing it.
 - Project catalog reconciliation preserves surviving file identity, expanded directories,
@@ -97,9 +106,18 @@ Generated and ignored trees such as build outputs, dependency caches, and Git ob
 filtered as early as correctness allows; filtering cannot exclude tracked files, open documents,
 repository metadata, or submodule roots.
 
-Submodules receive independent canonical watcher roots and repository identities. Multiple windows
+Linux watches the workspace root plus the parent directories represented by the authorized project
+catalog non-recursively, while watching the selected Git metadata and operation/ref directories at
+their required depth. Catalog reconciliation updates this watch plan. This avoids registering every
+directory below generated, dependency, and Git-object trees. macOS and Windows use their native
+recursive workspace backend plus the same separately resolved Git metadata roots. Multiple windows
 showing the same root share the native subscription but retain independent editor and presentation
 state. Closing the last owner releases the subscription and all pending work.
+
+Submodule source paths already present in the workspace catalog are covered by the workspace plan,
+but independent monitoring of each submodule's external Git metadata is deferred. The low-frequency
+polling fallback for unavailable or unreliable native backends is also deferred; the implemented
+recovery paths are overflow broadening, focus-regain reconciliation, and explicit Refresh.
 
 ## Consequences
 
@@ -109,8 +127,11 @@ reconstruction. The design also creates the invalidation seam required by later 
 build tasks, language tools, and recoverable Git operations.
 
 The implementation must maintain platform-specific overflow and lifecycle tests and cannot claim
-perfect event delivery. Network filesystems may converge more slowly through the fallback path.
-Editable external-conflict resolution remains a separate editor capability.
+perfect event delivery. On Linux, creating a file below a previously empty directory that is not
+yet represented by the bounded catalog may not emit a direct hint; focus regain or explicit Refresh
+recovers it and updates the watch plan. Network/virtual filesystems have no accepted polling fallback
+yet. Independent submodule Git-metadata observation and editable external-conflict resolution remain
+separate capabilities.
 
 ## Rejected alternatives
 

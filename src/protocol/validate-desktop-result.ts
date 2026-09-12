@@ -28,6 +28,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         "expected a supported window chrome mode",
       );
       break;
+    case "workspaceWatchStatus": {
+      const result = record(value, command);
+      booleans(result, command, "available");
+      nullableStrings(result, command, "message");
+      break;
+    }
     case "openedProject": {
       const result = record(value, command);
       strings(result, command, "root");

@@ -48,6 +48,12 @@ export interface TextSaveRequest {
   capturedVersion: number;
 }
 
+export type ExternalTextReconciliationStatus =
+  | "unchanged"
+  | "reloaded"
+  | "conflict"
+  | "stale";
+
 export function createEditorSession(): EditorSession {
   return { textTabs: [], preview: null, active: { kind: "welcome" } };
 }
@@ -184,6 +190,63 @@ export function completeTextLoad(
   );
 }
 
+export function reconcileExternalTextSnapshot(
+  session: EditorSession,
+  tabId: string,
+  expectedRevision: string,
+  snapshot: TextFileSnapshot,
+): { session: EditorSession; status: ExternalTextReconciliationStatus } {
+  const tab = textTab(session, tabId);
+  if (
+    !tab ||
+    tab.status !== "ready" ||
+    tab.revision !== expectedRevision ||
+    tab.document.workspacePath !== snapshot.workspacePath
+  ) {
+    return { session, status: "stale" };
+  }
+  if (snapshot.revision === tab.revision) return { session, status: "unchanged" };
+  if (tab.saveRequest || isTextTabDirty(tab)) {
+    return {
+      session: markTextExternalConflict(
+        session,
+        tabId,
+        expectedRevision,
+        "The file changed outside Asterlyn; the unsaved buffer was preserved.",
+      ),
+      status: "conflict",
+    };
+  }
+  return {
+    session: updateMatchingTab(session, tabId, (current) => ({
+      ...current,
+      content: snapshot.content,
+      persistedContent: snapshot.content,
+      utf8Bom: snapshot.utf8Bom,
+      revision: snapshot.revision,
+      loadEpoch: current.loadEpoch + 1,
+      persistedVersion: current.editVersion,
+      error: null,
+      conflict: false,
+    })),
+    status: "reloaded",
+  };
+}
+
+export function markTextExternalConflict(
+  session: EditorSession,
+  tabId: string,
+  expectedRevision: string,
+  error: string,
+): EditorSession {
+  return updateMatchingTab(session, tabId, (tab) =>
+    tab.status !== "ready" || tab.revision !== expectedRevision ||
+      (tab.conflict && tab.error === error)
+      ? tab
+      : { ...tab, conflict: true, error },
+  );
+}
+
 export function beginTextReload(
   session: EditorSession,
   tabId: string,
@@ -253,7 +316,6 @@ export function markTextEdited(
           content,
           editVersion: tab.editVersion + 1,
           error: null,
-          conflict: false,
         },
   );
 }

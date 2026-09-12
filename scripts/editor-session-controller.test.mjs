@@ -63,6 +63,26 @@ test("conflicting saves return ownership to the tab", async () => {
   assert.equal(controller.tab(tab.id).saveRequest, null);
 });
 
+test("watch reconciliation reloads clean tabs and flags dirty tabs without overwriting", async () => {
+  let disk = snapshot("src/a.ts", "base");
+  const controller = new EditorSessionController(gateway({
+    async readTextFile() { return disk; },
+  }));
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("src/a.ts"), "source");
+
+  disk = { ...snapshot("src/a.ts", "external"), revision: "2" };
+  await controller.reconcileExternalPaths(["src"]);
+  const tabId = controller.state.session.textTabs[0].id;
+  assert.equal(controller.tab(tabId).content, "external");
+
+  controller.markEdited(tabId, "local");
+  disk = { ...snapshot("src/a.ts", "external again"), revision: "3" };
+  await controller.reconcileExternalPaths(["src/a.ts"]);
+  assert.equal(controller.tab(tabId).content, "local");
+  assert.equal(controller.tab(tabId).conflict, true);
+});
+
 test("newer image navigation rejects an older completion", async () => {
   const first = deferred();
   const second = deferred();

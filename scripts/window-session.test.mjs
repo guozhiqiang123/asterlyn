@@ -127,6 +127,32 @@ test("project refresh rejects a result after the window changes workspace", asyn
   assert.equal(session.workspace.state.root, "/second");
 });
 
+test("project refresh uses workspace identity after unrelated operation generations advance", async () => {
+  let reads = 0;
+  const session = new WindowSession({
+    async openProject(root) {
+      reads += 1;
+      return { root, repository: snapshot(root) };
+    },
+    async readTrackedChanges(root) { return { root, changes: [] }; },
+    async scanUntracked(root) { return { root, changes: [] }; },
+    async cancelUntrackedScan() {},
+  });
+  session.beginTransition();
+  session.activate(
+    { root: "/repo", repository: snapshot("/repo") },
+    "activation",
+    ["workingTree"],
+  );
+  const identity = session.workspace.identity();
+  session.beginTransition();
+
+  const refreshed = await session.refreshProject(identity.root, identity.generation);
+
+  assert.equal(reads, 1);
+  assert.equal(refreshed.root, "/repo");
+});
+
 function snapshot(root) {
   return {
     root,

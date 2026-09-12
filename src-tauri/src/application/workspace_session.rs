@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +15,15 @@ pub(crate) struct ActiveWorkspaces {
 struct ActiveWorkspace {
     root: PathBuf,
     git_enabled: bool,
+    git_dir: Option<PathBuf>,
+    watch_directories: Vec<PathBuf>,
     catalog: HashMap<String, HashMap<String, ProjectFile>>,
+}
+
+pub(crate) struct WorkspaceWatchRoots {
+    pub(crate) root: PathBuf,
+    pub(crate) git_dir: Option<PathBuf>,
+    pub(crate) directories: Vec<PathBuf>,
 }
 
 #[derive(Default)]
@@ -39,27 +47,64 @@ impl ActiveWorkspaces {
         &self,
         window_label: &str,
         root: &Path,
-        git_enabled: bool,
+        git_dir: Option<&Path>,
     ) -> Result<(), WorkspaceError> {
         let canonical = std::fs::canonicalize(root).map_err(|error| WorkspaceError::Io {
             operation: "activate workspace".to_string(),
             message: error.to_string(),
         })?;
-        self.roots
-            .lock()
-            .map_err(|_| WorkspaceError::Io {
-                operation: "activate workspace".to_string(),
-                message: "active workspace lock was poisoned".to_string(),
-            })?
-            .insert(
-                window_label.to_string(),
-                ActiveWorkspace {
-                    root: canonical,
-                    git_enabled,
-                    catalog: HashMap::new(),
-                },
-            );
+        let git_dir = git_dir
+            .map(std::fs::canonicalize)
+            .transpose()
+            .map_err(|error| WorkspaceError::Io {
+                operation: "activate Git workspace".to_string(),
+                message: error.to_string(),
+            })?;
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "activate workspace".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        if let Some(active) = roots
+            .get_mut(window_label)
+            .filter(|active| active.root == canonical)
+        {
+            active.git_enabled = git_dir.is_some();
+            active.git_dir = git_dir;
+            return Ok(());
+        }
+        roots.insert(
+            window_label.to_string(),
+            ActiveWorkspace {
+                watch_directories: vec![canonical.clone()],
+                root: canonical,
+                git_enabled: git_dir.is_some(),
+                git_dir,
+                catalog: HashMap::new(),
+            },
+        );
         Ok(())
+    }
+
+    pub(crate) fn watch_roots(
+        &self,
+        window_label: &str,
+        requested: &str,
+    ) -> Result<WorkspaceWatchRoots, WorkspaceError> {
+        let root = self.resolve(window_label, requested)?;
+        let roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "authorize workspace watch".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get(window_label)
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "open a project folder before watching files".to_string(),
+            })?;
+        Ok(WorkspaceWatchRoots {
+            root,
+            git_dir: active.git_dir.clone(),
+            directories: active.watch_directories.clone(),
+        })
     }
 
     pub(crate) fn resolve(
@@ -150,6 +195,7 @@ impl ActiveWorkspaces {
                 .or_default()
                 .insert(file.path.clone(), file.clone());
         }
+        active.watch_directories = catalog_watch_directories(&active.root, catalog);
         active.catalog = files;
         Ok(())
     }
@@ -190,6 +236,31 @@ impl ActiveWorkspaces {
             roots.remove(window_label);
         }
     }
+}
+
+fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<PathBuf> {
+    let mut directories = BTreeSet::from([root.to_path_buf()]);
+    for file in &catalog.files {
+        let Some(parent) = Path::new(&file.workspace_path).parent() else {
+            continue;
+        };
+        let mut candidate = root.to_path_buf();
+        for component in parent.components() {
+            let Component::Normal(name) = component else {
+                continue;
+            };
+            candidate.push(name);
+            directories.insert(candidate.clone());
+        }
+    }
+    directories
+        .into_iter()
+        .filter(|directory| {
+            std::fs::symlink_metadata(directory)
+                .map(|metadata| metadata.file_type().is_dir())
+                .unwrap_or(false)
+        })
+        .collect()
 }
 
 impl PendingRepositoryWindows {

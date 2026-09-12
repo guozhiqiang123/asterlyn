@@ -47,7 +47,10 @@ pub(crate) async fn open_project(
     active_workspaces.activate(
         window.label(),
         Path::new(&project.root),
-        project.repository.is_some(),
+        project
+            .repository
+            .as_ref()
+            .map(|repository| Path::new(&repository.git_dir)),
     )?;
     Ok(project)
 }

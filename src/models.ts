@@ -180,6 +180,20 @@ export type RepositoryStateSlice =
   | "history"
   | "operation";
 
+export interface WorkspaceWatchStatus {
+  available: boolean;
+  message: string | null;
+}
+
+export interface WorkspaceWatchInvalidation {
+  root: string;
+  generation: number;
+  slices: RepositoryStateSlice[];
+  paths: string[];
+  causes: Array<"watcher" | "overflowRecovery">;
+  overflowed: boolean;
+}
+
 export interface RepositoryMutationOutcome {
   snapshot: RepositorySnapshot;
   invalidatedSlices: RepositoryStateSlice[];

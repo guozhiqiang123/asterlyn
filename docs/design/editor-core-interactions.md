@@ -203,6 +203,29 @@ Markdown presentation choice is now bounded profile state rather than incidental
 
 Remote-operation reconciliation defines one future conflict destination across Git and editor surfaces. A canonical refresh exposing unresolved paths activates Changes, includes and selects the first conflict, and opens it in Diff. Diff remains read-only in this slice, so the Update confirmation permits only fast-forward and labels Merge/Rebase unavailable instead of starting an operation the editor cannot finish. The later editable implementation must preserve this destination while adding ours/base/theirs content, resolution validation, Continue/Abort, restart recovery, and fault testing. Validation and package evidence are recorded in [`remote toolbar and Markdown-mode evidence`](../benchmarks/2026-09-12-remote-toolbar-markdown-memory.md).
 
+### E3.4 external-change acceptance — 2026-09-12
+
+The first E3.4 slice replaces manual-only freshness with native, coalesced hints. Watching begins
+only after the window has installed its canonical, bounded project catalog. Ordinary external
+content edits target open-document and working-tree reconciliation; membership-changing events also
+refresh the project catalog while preserving surviving path-keyed disclosure, selection, and scroll
+state. Git metadata maps to Head, refs, History, or operation slices rather than forcing one broad
+repository reload. The event itself never becomes workspace or Git truth.
+
+A clean open text document automatically accepts a newly read external revision. A dirty or saving
+document keeps its exact in-memory buffer, records the external revision conflict, and surfaces the
+existing error/status path instead of overwriting work. Reconciliation remains root-, generation-,
+document-, and revision-guarded, so a late event from a previous project or superseded read cannot
+replace the active editor. At most 20 retained tabs are checked concurrently, matching the existing
+session bound.
+
+Linux uses a selective catalog-derived directory plan; macOS and Windows use native recursive
+workspace watching. Focus regained after a stale interval and explicit Refresh remain recovery
+paths. Low-frequency polling on unreliable filesystems, independent submodule Git-metadata roots,
+editable conflict comparison/resolution, and measured large-file degradation are still separate
+work. Complete acceptance and resource evidence is in
+[`R3.1 native workspace-watch acceptance`](../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

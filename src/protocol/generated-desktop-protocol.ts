@@ -8,6 +8,8 @@ export interface DesktopCommandMap {
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   initial_repository: { args: Record<string, never>; result: string | null };
   open_project: { args: { path: string; }; result: Model.OpenedProject };
+  start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
+  stop_workspace_watch: { args: Record<string, never>; result: void };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
   open_repository_window: { args: { path: string; }; result: string };
   read_history_page: { args: { repositoryRoot: string; query: Model.HistoryQuery; offset: number; limit: number; }; result: Model.HistoryPage };
@@ -53,6 +55,8 @@ export const DESKTOP_RESULT_VALIDATORS: {
   window_chrome_mode: "windowChromeMode",
   initial_repository: "nullableString",
   open_project: "openedProject",
+  start_workspace_watch: "workspaceWatchStatus",
+  stop_workspace_watch: "void",
   read_tracked_changes: "trackedChangeScan",
   open_repository_window: "string",
   read_history_page: "historyPage",

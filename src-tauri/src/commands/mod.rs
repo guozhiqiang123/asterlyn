@@ -3,6 +3,7 @@ mod git_reads;
 mod image;
 mod shell;
 mod workspace;
+mod workspace_watch;
 
 pub(crate) use git_operations::{
     cancel_remote_operation, commit_changes, create_branch, fetch_remote, pull_current,
@@ -23,3 +24,4 @@ pub(crate) use workspace::{
     preview_workspace_replacement, read_text_file, rollback_workspace_replacement, save_text_file,
     search_workspace_text,
 };
+pub(crate) use workspace_watch::{start_workspace_watch, stop_workspace_watch};

@@ -123,6 +123,8 @@ import { repositoryReconciliationPlan } from "./application/repository-mutation"
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import { createAppState, type AppState } from "./application/app-state";
+import { WorkspaceWatchCoordinator } from "./application/workspace-watch-coordinator";
+import { workspaceWatchBridge } from "./workspace-watch-bridge";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
   editorDocumentKey,
@@ -257,6 +259,7 @@ import type {
   ReplacementApplyResult,
   RepositoryMutationOutcome,
   RepositorySnapshot,
+  RepositoryStateSlice,
   WorkingTreeMutationOutcome,
   WorkspaceTextSearchMatch,
 } from "./models";
@@ -337,6 +340,7 @@ export class AsterlynApp {
   );
   private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
   private readonly releaseWindowSession: () => void;
+  private readonly workspaceWatch: WorkspaceWatchCoordinator;
 
   constructor(private readonly root: HTMLElement) {
     this.editorSurface = new EditorSurface(root);
@@ -401,6 +405,17 @@ export class AsterlynApp {
     );
     this.releaseWindowSession = this.windowSession.subscribe((change) =>
       this.handleWindowSessionChange(change),
+    );
+    this.workspaceWatch = new WorkspaceWatchCoordinator(
+      workspaceWatchBridge,
+      this.windowSession,
+      this.filesController,
+      this.editorController,
+      {
+        reconcileRepository: (snapshot, slices, cause) =>
+          this.reconcileWatchedRepository(snapshot, slices, cause),
+        reportWarning: (message) => this.setStatus(message, "warning"),
+      },
     );
     this.shellEventBinding = new ShellEventBinding(root, {
       workspaceOpen: () => this.windowSession.workspace.state.root !== null,
@@ -534,7 +549,7 @@ export class AsterlynApp {
 
   private applyRepositoryMutation(
     outcome: RepositoryMutationOutcome,
-    cause: "gitMutation" | "remoteOperation",
+    cause: SessionInvalidationCause,
     options: { clearChanges?: boolean; focusConflicts?: boolean } = {},
   ): RepositorySnapshot {
     const snapshot = outcome.snapshot;
@@ -557,6 +572,27 @@ export class AsterlynApp {
     }
     if (options.focusConflicts) this.prepareConflictResolution(snapshot);
     return snapshot;
+  }
+
+  private reconcileWatchedRepository(
+    snapshot: RepositorySnapshot | null,
+    slices: RepositoryStateSlice[],
+    cause: SessionInvalidationCause,
+  ): void {
+    if (!snapshot) {
+      this.installRepositorySnapshot(null, cause, slices);
+      this.remoteController.installSnapshot(null);
+      this.changesController.installSnapshot(null);
+      this.filesController.updateChanges([]);
+      this.historyController.clear();
+      this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
+      this.renderWorkspace();
+      return;
+    }
+    this.applyRepositoryMutation({ snapshot, invalidatedSlices: slices }, cause);
+    this.renderWorkspace();
+    if (slices.includes("history")) this.loadVisibleCommitDetails();
+    if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
   }
 
   private applyWorkingTreeMutation(
@@ -587,7 +623,8 @@ export class AsterlynApp {
       change.reason === "load-error" ||
       change.reason === "save-start" ||
       change.reason === "save-complete" ||
-      change.reason === "save-error"
+      change.reason === "save-error" ||
+      change.reason === "external-change"
     ) {
       this.renderEditor();
     }
@@ -774,6 +811,7 @@ export class AsterlynApp {
     this.releaseEditorController();
     this.editorController.dispose();
     this.releaseWindowSession();
+    this.workspaceWatch.dispose();
     this.windowSession.dispose();
     this.settingsController.dispose();
     this.shellController.dispose();
@@ -2763,6 +2801,10 @@ export class AsterlynApp {
       this.filesState.root !== repositoryRoot
     ) return;
     await this.filesController.refresh();
+    if (
+      repositoryGeneration === this.windowSession.generation &&
+      this.windowSession.workspace.state.root === repositoryRoot
+    ) this.workspaceWatch.activate();
   }
 
   private projectTree(): ProjectTreeNode[] {

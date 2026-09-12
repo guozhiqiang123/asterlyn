@@ -160,11 +160,33 @@ activation, and a status mutation does not reload history or refs.
 
 Status: **accepted on 2026-09-12**. The complete validation and resource record is
 [`R3 application-services and protocol acceptance`](../benchmarks/2026-09-12-r3-application-services-protocol.md).
-Native watcher activation follows through ADR-0009 as planned. The 5,754-line migration adapter is
-not a terminal composition-root claim: unrelated capability growth remains blocked, its automated
-ceiling tightens to 5,800 lines, and later operation integration must continue moving presentation
-routing toward owned feature bindings. The deterministic demo bridge is likewise retained only as
-a bounded fixture, not as a second native protocol implementation.
+The 5,754-line migration adapter is not a terminal composition-root claim: unrelated capability
+growth remains blocked, its automated ceiling tightens to 5,800 lines, and later operation
+integration must continue moving presentation routing toward owned feature bindings. The
+deterministic demo bridge is likewise retained only as a bounded fixture, not as a second native
+protocol implementation.
+
+### R3.1 — Native workspace-watch activation
+
+The focused R3.1 slice activates [`ADR-0009`](../architecture/decisions/0009-hinted-workspace-reconciliation.md)
+through one Rust-owned native watcher per canonical workspace, shared by owning windows. Its event
+protocol is root- and generation-qualified, coalesces bursts into typed slices, reruns authoritative
+workspace/Git reads, and preserves clean or dirty editor-buffer invariants. Clean open documents
+reload after a verified external revision; dirty or saving buffers remain intact and enter an
+explicit conflict state. Working-tree updates refresh Changes and Git colors without rebuilding
+History, refs, or the complete project for ordinary content edits.
+
+Linux derives a non-recursive directory plan from the authorized catalog and watches selected Git
+metadata separately, avoiding recursive registrations below generated output, dependency caches,
+and Git objects. macOS and Windows retain native recursive workspace semantics. The complete
+functional, dependency, memory, CPU, artifact, and limitation record is
+[`R3.1 native workspace-watch acceptance`](../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
+
+Status: **accepted on 2026-09-12**. The migration adapter is 5,796 lines—inside the temporary
+5,800-line ceiling by only four lines. R4 may not add integration logic there without first
+extracting enough routing to restore meaningful headroom. Low-frequency fallback polling,
+independent submodule Git-metadata watchers, and editable external-conflict resolution remain
+explicit follow-ups rather than hidden claims of R3.1.
 
 ### R4 — Recoverable Git operations
 

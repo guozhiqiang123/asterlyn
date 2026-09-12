@@ -14,6 +14,7 @@ import {
   failTextSave,
   markTextEdited,
   openTextDocument,
+  reconcileExternalTextSnapshot,
   setTextTabMarkdownMode,
 } from "../src/workbench/editor-session.ts";
 
@@ -179,6 +180,47 @@ test("undoing exactly to the persisted content clears the dirty state", () => {
   session = markTextEdited(session, tabId, original);
   assert.equal(dirtyTextTabs(session).length, 0);
   assert.equal(beginTextSave(session, tabId, original, "save-after-undo").request, null);
+});
+
+test("external snapshots reload clean tabs but preserve dirty buffers as conflicts", () => {
+  let clean = loaded(createEditorSession(), "one.ts");
+  const tabId = clean.textTabs[0].id;
+  const refreshed = reconcileExternalTextSnapshot(clean, tabId, "revision-one.ts", {
+    workspacePath: "one.ts",
+    content: "external\n",
+    utf8Bom: false,
+    revision: "external-revision",
+    byteLength: 9,
+  });
+  assert.equal(refreshed.status, "reloaded");
+  assert.equal(refreshed.session.textTabs[0].content, "external\n");
+
+  clean = markTextEdited(clean, tabId, "local edit");
+  const conflicted = reconcileExternalTextSnapshot(clean, tabId, "revision-one.ts", {
+    workspacePath: "one.ts",
+    content: "external\n",
+    utf8Bom: false,
+    revision: "external-revision",
+    byteLength: 9,
+  });
+  assert.equal(conflicted.status, "conflict");
+  assert.equal(conflicted.session.textTabs[0].content, "local edit");
+  assert.equal(conflicted.session.textTabs[0].conflict, true);
+
+  const stale = reconcileExternalTextSnapshot(
+    refreshed.session,
+    tabId,
+    "revision-one.ts",
+    {
+      workspacePath: "one.ts",
+      content: "stale\n",
+      utf8Bom: false,
+      revision: "another-revision",
+      byteLength: 6,
+    },
+  );
+  assert.equal(stale.status, "stale");
+  assert.equal(stale.session, refreshed.session);
 });
 
 test("save completion advances the content baseline captured by that request", () => {

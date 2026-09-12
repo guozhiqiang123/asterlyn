@@ -31,7 +31,7 @@ use adapters::image_preview::{
 use application::{
     ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator, PendingRepositoryWindows,
     ScanRegistry, StoredReplacementPlan, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
-    WorkspaceWriteRegistry,
+    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
 };
 #[cfg(test)]
 use application::{GitMutationRegistry, RemoteOperationRegistry};
@@ -76,7 +76,7 @@ struct CommitSelectedResult {
     verification_warning: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 enum RepositoryStateSlice {
     WorkspaceCatalog,
@@ -616,6 +616,7 @@ pub fn run() {
         .manage(WorkspaceWriteRegistry::default())
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
+        .manage(WorkspaceWatchService::default())
         .setup(|app| {
             build_project_window(app.handle(), "main", "Asterlyn")?;
             Ok(())
@@ -624,6 +625,9 @@ pub fn run() {
             if matches!(event, WindowEvent::Destroyed) {
                 window.state::<ScanRegistry>().remove_window(window.label());
                 window.state::<ActiveWorkspaces>().remove(window.label());
+                window
+                    .state::<WorkspaceWatchService>()
+                    .remove_window(window.label());
                 window
                     .state::<PendingRepositoryWindows>()
                     .remove(window.label());
@@ -640,6 +644,8 @@ pub fn run() {
             window_chrome_mode,
             open_project,
             open_repository_window,
+            start_workspace_watch,
+            stop_workspace_watch,
             read_tracked_changes,
             read_history_page,
             scan_untracked,
@@ -1069,10 +1075,10 @@ mod tests {
             Err(WorkspaceError::NotAuthorized { .. })
         ));
         active
-            .activate("main", first.path(), false)
+            .activate("main", first.path(), None)
             .expect("first workspace activates");
         active
-            .activate("project-1", second.path(), true)
+            .activate("project-1", second.path(), Some(second.path()))
             .expect("second workspace activates");
         assert_eq!(
             active
@@ -1112,14 +1118,23 @@ mod tests {
         let active = ActiveWorkspaces::default();
         let directory = tempfile::tempdir().expect("ordinary workspace");
         fs::write(directory.path().join("first.txt"), "first\n").expect("first file");
+        fs::create_dir(directory.path().join("src")).expect("source directory");
+        fs::write(directory.path().join("src/nested.txt"), "nested\n").expect("nested file");
         active
-            .activate("main", directory.path(), false)
+            .activate("main", directory.path(), None)
             .expect("workspace activates");
         let root = std::fs::canonicalize(directory.path()).expect("canonical workspace");
         let first_catalog = load_project_catalog(&root).expect("initial catalog");
         active
             .install_catalog("main", &root, &first_catalog)
             .expect("catalog installs");
+        active
+            .activate("main", &root, None)
+            .expect("same workspace metadata refreshes");
+        let watch_roots = active
+            .watch_roots("main", root.to_string_lossy().as_ref())
+            .expect("watch roots resolve");
+        assert_eq!(watch_roots.directories, [root.clone(), root.join("src")]);
         assert_eq!(
             active
                 .authorize_catalogued_file("main", &root, "workspace", "first.txt")

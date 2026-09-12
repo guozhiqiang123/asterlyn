@@ -110,10 +110,16 @@ export class WindowSession {
     return { generation, project, activation };
   }
 
-  async refreshProject(path: string, generation: number): Promise<OpenedProject | null> {
-    if (!this.matches(generation, path)) return null;
+  async refreshProject(path: string, workspaceGeneration: number): Promise<OpenedProject | null> {
+    const identity = { root: path, generation: workspaceGeneration };
+    if (this.disposed || !this.workspace.matches(identity)) return null;
+    const operationGeneration = this.operationGeneration;
     const project = await this.gateway.openProject(path);
-    if (!this.matches(generation, path) || project.root !== path) return null;
+    if (
+      !this.matches(operationGeneration, path) ||
+      !this.workspace.matches(identity) ||
+      project.root !== path
+    ) return null;
     return project;
   }
 
