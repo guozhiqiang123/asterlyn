@@ -213,6 +213,37 @@ this entry before Merge is enabled.
 Status: **R4.0 accepted on 2026-09-12**. See
 [`R4.0 repository integration boundary acceptance`](../benchmarks/2026-09-12-r4-0-repository-integration.md).
 
+R4.1–R4.4 implement one shared operation lifecycle rather than four command-specific workflows.
+`asterlyn-git` prepares plans bound to the canonical worktree, checked-out full branch ref, exact
+starting `HEAD`, ordered target objects, clean worktree, operation-specific commit count, and squash
+message. Execution repeats preparation and rejects a changed token before invoking system Git.
+Merge, ordered single/multi-commit Cherry-pick, and Rebase reconstruct conflicts, progress, and
+currently legal Continue/Skip/Abort actions from Git-owned metadata after every action and after an
+application restart. Squash creates one reviewed commit and installs it with an exact old-`HEAD`
+`update-ref` lease; it never uses a broad reset.
+
+The feature-owned operation controller owns request identity and dialog state. A disposable dialog
+binding owns its lazy DOM, listeners, focus return, and loading boundary; its CSS and JavaScript do
+not enter the startup chunk. `AsterlynApp` retains only window-level coordination: save guards,
+canonical mutation installation, editor reload, and navigation to Changes. Conflict resolution
+returns a narrow tracked-plus-operation result, so staging one resolution cannot reload History or
+Refs. The cohesive Rust operation module remains larger than the general review trigger because it
+owns one invariant set and contains its temporary-repository fault fixtures; this is a documented
+ownership decision, not an exemption based on line count.
+
+Update now keeps Fast-forward, Merge, and Rebase as explicit strategies. Merge and Rebase fetch the
+selected upstream first, then open a second exact-object review; a fetch never silently authorizes a
+mutation. History details provide direct Merge, Rebase, Cherry-pick, and Squash entry points, while
+the Git tool exposes a general operation entry. An active operation is always routed to Changes.
+Conflicted text up to four MiB can be reviewed as Base/Ours/Theirs plus an editable result; saving
+revalidates index stages and worktree content, writes, stages, and verifies the resulting blob.
+Binary, over-limit, and symbolic-link conflicts fail closed and remain resolvable with an external
+Git tool or explicit deletion.
+
+Status: **R4 accepted locally on 2026-09-12**. Complete functional, fault, accessibility, build,
+resource, limitation, and Debian-package evidence is recorded in
+[`R4 recoverable Git operations acceptance`](../benchmarks/2026-09-12-r4-recoverable-git-operations.md).
+
 Exit gate: every interrupted operation can be reconstructed from Git, every action is explicitly
 allowed by the current operation snapshot, and uncertain outcomes are never retried automatically.
 

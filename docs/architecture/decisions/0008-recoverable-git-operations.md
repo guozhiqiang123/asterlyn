@@ -1,6 +1,6 @@
 # ADR-0008: Reviewed and recoverable Git operation lifecycle
 
-- **Status:** Accepted before merge, rebase, cherry-pick, and squash implementation
+- **Status:** Implemented for merge, cherry-pick, rebase, and bounded squash
 - **Date:** 2026-09-12
 
 ## Context
@@ -62,6 +62,34 @@ Git operation actions, not cancellation shortcuts.
 
 The first conflict UI may list and open conflicted files before editable three-way resolution is
 available, but its state and actions must already use this lifecycle.
+
+## Implemented boundary
+
+R4 implements the lifecycle with system Git as the only durable operation store. The public query
+model is rebuilt from worktree-specific Git metadata, index stages, current refs, and `HEAD` during
+startup, refresh, mutation completion, and watcher reconciliation. Asterlyn-created Merge,
+Cherry-pick, and Rebase commands use exact reviewed object IDs; a non-zero Git result that leaves a
+matching operation marker is accepted as a paused observation rather than misreported as an
+ordinary failure. Continue, Skip, and Abort are derived from the reconstructed kind and unresolved
+index state.
+
+Squash is intentionally non-interactive and bounded to at most 1,000 commits after a selected
+first-parent ancestor. It creates one commit from the reviewed `HEAD` tree and message, then updates
+the checked-out branch only if that ref still equals the reviewed old `HEAD`. It does not run reset,
+rewrite another branch, or automatically push rewritten history.
+
+Text conflict resolution is bounded to four MiB per side. The revision token covers the path's base,
+ours, and theirs stage objects plus current worktree bytes. Before staging, the core rechecks that
+token and rejects absolute, ambiguous, escaping, or symbolic-link paths; afterward it verifies the
+stage-zero blob. Binary and over-limit conflict editing is not claimed. Resolving a conflict returns
+only tracked state plus the operation snapshot and cannot trigger a complete history/ref read.
+
+Pre-start cancellation is checked both before and after read-only plan revalidation. Once system
+Git starts, Asterlyn does not terminate or retry a local mutation because repository state may have
+changed; explicit Abort is the recovery action when Git exposes it. Tests cover restart recovery,
+stale `HEAD`, changed conflict content, dirty, detached and unborn states, initialized submodule
+identity, pre-start cancellation, Merge continue/abort, Cherry-pick order/skip/continue, Rebase
+continue/abort, and exact-lease Squash.
 
 ## Invariants
 

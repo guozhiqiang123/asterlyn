@@ -226,6 +226,28 @@ editable conflict comparison/resolution, and measured large-file degradation are
 work. Complete acceptance and resource evidence is in
 [`R3.1 native workspace-watch acceptance`](../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
 
+### R4 editable Git-conflict surface — 2026-09-12
+
+The future destination defined by E3.1 is now implemented for active Merge, Cherry-pick, and
+Rebase operations. Changes remains the operation home and automatically selects the first
+unresolved path. Its existing working Diff remains available for ordinary patch navigation; an
+explicit Resolve action opens a separate lazy three-way surface containing bounded Base, Ours, and
+Theirs inputs plus one editable result. This separation keeps the normal two-way Diff read-only and
+prevents a conflict editor from silently changing an ordinary patch document.
+
+The conflict result is not a force-save path. Opening records a token over all available index-stage
+objects and current worktree bytes. Save and Stage repeats that identity check, rejects unsafe or
+symbolic-link paths, writes at most four MiB of UTF-8 text, stages the exact path, and verifies the
+resulting stage-zero blob. Resolve as Deleted is separately labelled and verified. Binary,
+over-limit, and symbolic-link conflicts remain visible but require an external Git tool or explicit
+deletion; the UI does not decode or rewrite unknown bytes.
+
+The dialog owns keyboard focus containment, focus return, listeners, loading/error states, and
+disposal. Its JavaScript and CSS load on first use. Resolving one file returns only tracked and
+operation state, preserving History, Refs, project disclosure, editor tabs, and unrelated buffers.
+Complete behavior and limitation evidence is in
+[`R4 recoverable Git operations acceptance`](../benchmarks/2026-09-12-r4-recoverable-git-operations.md).
+
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.

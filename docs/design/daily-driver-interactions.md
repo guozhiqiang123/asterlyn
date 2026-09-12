@@ -343,6 +343,32 @@ All application modal surfaces use the same 38 px title row, including the neste
 
 Execution recomputes the target and selected tag set, rejects a stale confirmation, and supplies the confirmed `HEAD` and tag object IDs rather than mutable local refs. Ordinary mode refuses a non-descendant destination. Force mode is available only with an exact last-fetched destination lease, so a changed remote is rejected. Branch-plus-tag writes require atomic remote support to prevent a branch rejection from publishing tags independently. This closes blind-push, mutable-ref, partial-tag, and stale-force gaps while retaining the existing non-interactive credential and cancellation boundaries. Exact checks, build movement, limitations, and package evidence are recorded in [`remote toolbar and Markdown-mode evidence`](../benchmarks/2026-09-12-remote-toolbar-markdown-memory.md).
 
+### R4 reviewed and recoverable Git operations
+
+The operation workflow now extends the compact Git workspace without turning History rows into
+direct mutation buttons. Branch details offer Merge and Rebase, commit details offer Cherry-pick
+and “Squash commits after this,” and the Git tool heading provides a general entry. Every route opens
+the same plan form and then a second confirmation showing the current branch, exact starting object,
+selected refs, resolved target objects, affected commit count, and Squash message where applicable.
+Changing `HEAD`, a target, cleanliness, or repository identity invalidates the review instead of
+silently changing what the button will do.
+
+Update now permits Fast-forward, Merge, and Rebase according to the observed ahead/behind state.
+Merge and Rebase first Fetch the selected upstream, then open the same exact-object confirmation;
+they do not treat the earlier Update dialog as authorization to mutate a newly fetched target. A
+paused operation routes to Changes and survives application restart because its kind, conflicts,
+progress, and legal Continue/Skip/Abort actions are reconstructed from Git. Continue is absent while
+unresolved index stages remain. Skip appears only for Cherry-pick and Rebase, and Abort only for
+operations system Git can restore.
+
+Resolving a text conflict is explicit: inspect Base/Ours/Theirs, edit the result, then Save and Stage
+or Resolve as Deleted. The result is revision-checked before writing and stage-checked afterward.
+Operation dialogs trap keyboard focus, return focus when their source still exists, expose named
+busy/error states, and load lazily. The current surface does not implement interactive rebase,
+commit reordering, per-commit squash/fixup selection, binary merging, automatic stashing, raw reset,
+or automatic retry. Complete acceptance is recorded in
+[`R4 recoverable Git operations evidence`](../benchmarks/2026-09-12-r4-recoverable-git-operations.md).
+
 ## Sequencing rule
 
-U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, U6 is locally accepted as the persistent workbench contract, U7 closes the highest-friction desktop interaction mismatches, U8 closes Diff/ref navigation consistency, U9 closes compact Git information layout, and U10 closes all-ref topology presentation. U11 history filters and graph controls precede Stage 3; E1 is locally accepted as the safe editor foundation, E2.1–E2.3 complete bounded navigation, on-demand syntax highlighting, refined search, and recoverable workspace replacement, and E3.1 establishes project navigation plus honest implemented preferences. Its desktop-shell, Git-rendering, checked-commit, and remote-toolbar corrections fix scale, icon generation, tab overflow, multi-project window ownership, splitter layout forcing, commit-selection-wide rerenders, the obsolete manual-stage commit interaction, and blind remote writes without changing the sequence. E3.2 editor groups and tab movement is next. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
+U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, U6 is locally accepted as the persistent workbench contract, U7 closes the highest-friction desktop interaction mismatches, U8 closes Diff/ref navigation consistency, U9 closes compact Git information layout, and U10 closes all-ref topology presentation. U11 history filters and graph controls precede Stage 3; E1 is locally accepted as the safe editor foundation, E2.1–E2.3 complete bounded navigation, on-demand syntax highlighting, refined search, and recoverable workspace replacement, and E3.1 establishes project navigation plus honest implemented preferences. Its desktop-shell, Git-rendering, checked-commit, and remote-toolbar corrections fix scale, icon generation, tab overflow, multi-project window ownership, splitter layout forcing, commit-selection-wide rerenders, the obsolete manual-stage commit interaction, and blind remote writes without changing the sequence. R1–R4 then establish feature ownership, application/protocol boundaries, native reconciliation, and recoverable Merge/Cherry-pick/Rebase/Squash. R5 workspace create/move/copy/trash foundations are next. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
