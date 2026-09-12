@@ -17,7 +17,12 @@ test("the startup graph reaches CodeMirror editors only through dynamic imports"
 
 test("Markdown preview runtime is absent from the static application graph", async () => {
   const app = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
+  const surface = await readFile(
+    new URL("../src/features/files-editor/editor-surface.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.doesNotMatch(app, /from ["']\.\/workbench\/markdown-preview/);
-  assert.match(app, /import\(["']\.\/workbench\/markdown-preview["']\)/);
+  assert.doesNotMatch(surface, /from ["']\.\.\/\.\.\/workbench\/markdown-preview/);
+  assert.match(surface, /import\(["']\.\.\/\.\.\/workbench\/markdown-preview\.ts["']\)/);
 });

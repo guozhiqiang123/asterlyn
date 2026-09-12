@@ -5,12 +5,25 @@ import { renderBranchNavigation } from "../src/features/git-history/branch-navig
 import { renderCommitDetail } from "../src/features/git-history/git-detail-view.ts";
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
 import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
+import {
+  renderDiffControls,
+  renderEditorTabMenu,
+  renderEditorTabs,
+  renderMarkdownModeControls,
+} from "../src/features/files-editor/editor-view.ts";
+import {
+  renderCommandSurface,
+  renderWorkspaceReplacementDialog,
+} from "../src/features/files-editor/workspace-navigation-view.ts";
 import { createRemotePushState } from "../src/features/remote-push/remote-push-state.ts";
 import { renderRemoteDialogContent } from "../src/features/remote-push/remote-push-view.ts";
 import { renderSettingsNavigation, renderSettingsSection } from "../src/features/settings/settings-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
+import { createCommandSurfaceState, openCommandSurface } from "../src/workbench/navigation.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/workbench/preferences.ts";
+import { createWorkspaceReplacementState } from "../src/workbench/workspace-replacement.ts";
+import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/workbench/workspace-search.ts";
 
 test("shell view follows persisted activity order and exposes stable feature hosts", () => {
   const shell = new ShellController(memoryStorage());
@@ -164,6 +177,62 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(detail, /Compared with 1111111111/);
 });
 
+test("workspace navigation and replacement previews are feature-owned", () => {
+  const commandSurface = openCommandSurface(createCommandSurfaceState(), "files");
+  const commandHtml = renderCommandSurface({
+    commandSurface,
+    workspaceOpen: true,
+    filesLoading: false,
+    files: [{ repositoryId: ".", path: "src/app.ts", workspacePath: "src/app.ts" }],
+    commands: [],
+    workspaceSearch: createWorkspaceSearchState(),
+    workspaceSearchControls: createWorkspaceSearchControls(),
+    searchRequestIsCurrent: false,
+    replacementText: "",
+    replacementRecoveryCount: 0,
+  });
+  const replacement = createWorkspaceReplacementState();
+  replacement.status = "error";
+  replacement.error = "Preview expired";
+  const replacementHtml = renderWorkspaceReplacementDialog({
+    dialog: "preview",
+    replacement,
+    recoveryBusy: null,
+    blockedOpenPaths: new Set(),
+  });
+
+  assert.match(commandHtml, /Search project files/);
+  assert.match(commandHtml, /app\.ts/);
+  assert.match(commandHtml, /<small>src<\/small>/);
+  assert.match(replacementHtml, /Replacement preview unavailable/);
+  assert.match(replacementHtml, /Preview expired/);
+});
+
+test("editor chrome renders tabs, Markdown modes, menu, and Diff controls independently", () => {
+  const tab = textTabFixture();
+  const session = { textTabs: [tab], preview: null, active: { kind: "text", id: tab.id } };
+  const document = tab.document;
+  const tabs = renderEditorTabs({ session, document, statusClass: () => "file-status-modified" });
+  const menu = renderEditorTabMenu({ session, open: true, statusClass: () => "file-status-modified" });
+  const markdown = renderMarkdownModeControls(tab);
+  const diff = renderDiffControls({
+    imageDiff: false,
+    textReady: true,
+    previousFile: null,
+    nextFile: "src/next.ts",
+    canOpenSource: true,
+    expanded: false,
+    preferences: DEFAULT_APP_PREFERENCES,
+  });
+
+  assert.match(tabs, /file-status-modified/);
+  assert.match(tabs, /README\.md/);
+  assert.match(menu, /data-editor-menu-tab-index/);
+  assert.match(markdown, /data-markdown-mode="split"/);
+  assert.match(diff, /next-file[^>]*>/);
+  assert.match(diff, /data-diff-layout="split"/);
+});
+
 function viewModel(state) {
   return {
     snapshot: repositorySnapshot(),
@@ -239,6 +308,32 @@ function commitFixture() {
     authoredAt: 1_700_000_000,
     decorations: ["HEAD -> main"],
     subject: "Extract history views",
+  };
+}
+
+function textTabFixture() {
+  const document = {
+    kind: "project-file",
+    repositoryRoot: "/workspace/repository",
+    repositoryId: ".",
+    path: "README.md",
+    workspacePath: "README.md",
+  };
+  return {
+    id: "file\0/workspace/repository\0.\0README.md",
+    document,
+    status: "ready",
+    content: "# Asterlyn",
+    persistedContent: "# Asterlyn",
+    utf8Bom: false,
+    revision: "one",
+    loadEpoch: 1,
+    editVersion: 0,
+    persistedVersion: 0,
+    saveRequest: null,
+    error: null,
+    conflict: false,
+    markdownMode: "split",
   };
 }
 

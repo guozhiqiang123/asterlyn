@@ -61,3 +61,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-12-r2h-style-ownership.md`](benchmarks/2026-09-12-r2h-style-ownership.md) — capability-owned stylesheets, enforced source limits, and browser cascade acceptance.
 - [`benchmarks/2026-09-12-r2i-shell-remote-views.md`](benchmarks/2026-09-12-r2i-shell-remote-views.md) — feature-owned shell, Settings, Remote/Push presentation and disposable activity-rail bindings.
 - [`benchmarks/2026-09-12-r2j-history-views.md`](benchmarks/2026-09-12-r2j-history-views.md) — feature-owned branch navigation, History filters/dialogs, and Git detail presentation.
+- [`benchmarks/2026-09-12-r2k-files-editor-views.md`](benchmarks/2026-09-12-r2k-files-editor-views.md) — feature-owned Files/Search/Editor presentation and disposable CodeMirror/Markdown surfaces.

@@ -104,7 +104,10 @@ acceptance are still required. The ninth slice moves shell, Settings, Remote/Pus
 presentation into capability-owned views and gives the activity rail an explicit listener disposal
 lifecycle. The tenth slice moves branch navigation, History filters and dialogs, commit changed-file
 presentation, commit metadata, and branch inspection into Git History-owned views. Editor and
-workspace-search presentation remain before closing acceptance.
+workspace-search presentation remain before closing acceptance. The eleventh slice moves quick
+navigation, workspace-search and replacement presentation, editor chrome, image/Diff presentation,
+and the complete lazy CodeMirror/Markdown surface lifecycle into Files/Editor-owned boundaries.
+Remaining shell event wiring and closing native acceptance are the final R2 work.
 
 Exit gate: `AsterlynApp` is a composition root rather than a feature implementation, every feature
 has explicit disposal, and unrelated feature state cannot trigger its DOM replacement.

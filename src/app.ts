@@ -1,5 +1,4 @@
 import { bridge } from "./bridge";
-import { fileTypeIcon } from "./file-icons";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
 import { windowControls } from "./window-controls";
@@ -61,9 +60,26 @@ import {
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
 import {
-  LazyDiffEditor,
-  LazyTextEditor,
-} from "./features/files-editor/lazy-editor-runtime";
+  commandSurfaceResultCount as commandSurfaceViewResultCount,
+  renderCommandSurface as renderCommandSurfaceView,
+  renderWorkspaceReplacementDialog as renderWorkspaceReplacementDialogView,
+  type CommandSurfaceViewModel,
+} from "./features/files-editor/workspace-navigation-view";
+import {
+  EditorSurface,
+  type ImageSurfaceState,
+} from "./features/files-editor/editor-surface";
+import { LazyDiffEditor } from "./features/files-editor/lazy-editor-runtime";
+import {
+  contentHeading as renderContentHeading,
+  emptyState as renderEditorEmptyState,
+  loadingBlock as renderEditorLoadingBlock,
+  renderDiffControls as renderEditorDiffControls,
+  renderEditorTabMenu as renderEditorTabMenuView,
+  renderEditorTabs as renderEditorTabsView,
+  renderMarkdownModeControls,
+  retryState as renderEditorRetryState,
+} from "./features/files-editor/editor-view";
 import {
   PROJECT_TREE_ROW_HEIGHT,
   projectTreeRenderWindow,
@@ -119,10 +135,7 @@ import {
   nextPushCommitSelection,
 } from "./workbench/push-review";
 import type { ActivityTool } from "./workbench/activity-order";
-import {
-  MARKDOWN_PREVIEW_MAX_BYTES,
-  isMarkdownPath,
-} from "./workbench/markdown-format";
+import { isMarkdownPath } from "./workbench/markdown-format";
 import {
   loadMarkdownModePreferences,
   markdownModeForDocument,
@@ -206,7 +219,6 @@ import {
   createWorkspaceSearchControls,
   createWorkspaceSearchState,
   failWorkspaceSearch,
-  formatWorkspaceSearchCoverage,
   invalidateWorkspaceSearch,
   sameWorkspaceSearchOptions,
   workspaceSearchOptions,
@@ -241,25 +253,17 @@ import type {
   HistoryPath,
   HistoryQuery,
   HistoryRef,
-  ImageDiffPreview,
-  ImagePreview,
   ProjectFile,
   PushMode,
   PushTagMode,
   ReplacementApplyResult,
   RepositorySnapshot,
   WorkspaceTextSearchMatch,
-  ReplacementRecoverySummary,
 } from "./models";
 
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 const CHANGE_FILE_VIEW_KEY = "asterlyn.changeFileView.v1";
 const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
-
-type ImageSurfaceState =
-  | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
-  | { key: string; version: number; status: "ready"; error: null; image: ImagePreview | null; diff: ImageDiffPreview | null }
-  | { key: string; version: number; status: "error"; error: string; image: null; diff: null };
 
 interface AppState {
   workspaceRoot: string | null;
@@ -313,9 +317,8 @@ interface AppState {
 }
 
 export class AsterlynApp {
-  private readonly diffEditor = new LazyDiffEditor();
   private readonly pushDiffEditor = new LazyDiffEditor();
-  private readonly textEditor = new LazyTextEditor();
+  private readonly editorSurface: EditorSurface;
   private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
@@ -382,19 +385,7 @@ export class AsterlynApp {
   private commitDiffGeneration = 0;
   private scanSequence = 0;
   private remoteDialogReturnFocus: HTMLElement | null = null;
-  private mountedEditorKey: string | null = null;
-  private mountedTextTabId: string | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
-  private markdownSourcePercent = 50;
-  private markdownSplitterDisposer: (() => void) | null = null;
-  private markdownScrollDisposer: (() => void) | null = null;
-  private markdownPreviewTimer: number | null = null;
-  private markdownPreviewSequence = 0;
-  private markdownPreviewPending: {
-    tabId: string;
-    content: string;
-    request: number;
-  } | null = null;
   private saveStatusRefreshTimer: number | null = null;
   private saveStatusRefreshRoot: string | null = null;
   private saveStatusRefreshRunning = false;
@@ -422,7 +413,6 @@ export class AsterlynApp {
   private readonly shellController: ShellController;
   private readonly releaseShellController: () => void;
   private workspaceResizeObserver: ResizeObserver | null = null;
-  private editorMeasureFrame: number | null = null;
   private projectTreeScrollFrame: number | null = null;
   private projectTreeWindowStart = 0;
   private changeTreeScrollFrame: number | null = null;
@@ -434,6 +424,7 @@ export class AsterlynApp {
   } | null = null;
 
   constructor(private readonly root: HTMLElement) {
+    this.editorSurface = new EditorSurface(root);
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
       activate: (tool) => this.toggleTool(tool),
@@ -918,7 +909,7 @@ export class AsterlynApp {
         ) {
           this.focusHistoryFilter();
         } else if (activeTextTab(this.editorState.session)?.status === "ready") {
-          this.textEditor.openFindReplace();
+          this.editorSurface.openFindReplace();
         }
       }
     });
@@ -981,8 +972,7 @@ export class AsterlynApp {
         this.shellController.dispose();
         this.activityRailBinding.dispose();
         this.historyListView.unmount();
-        this.textEditor.destroy();
-        this.diffEditor.destroy();
+        this.editorSurface.destroy();
         this.pushDiffEditor.destroy();
       },
       { once: true },
@@ -1015,8 +1005,7 @@ export class AsterlynApp {
     this.query("#settings-button").setAttribute("aria-pressed", "false");
     this.applyWorkbenchLayout(false);
     window.requestAnimationFrame(() => {
-      this.textEditor.requestMeasure();
-      this.diffEditor.requestMeasure();
+      this.editorSurface.requestMeasure();
       this.query<HTMLButtonElement>("#settings-button").focus();
     });
   }
@@ -1108,7 +1097,7 @@ export class AsterlynApp {
       previous.diffLayout !== next.diffLayout ||
       previous.showWhitespace !== next.showWhitespace
     ) {
-      this.diffEditor.setPresentation(this.diffPresentation());
+      this.editorSurface.setDiffPresentation(this.diffPresentation());
       this.pushDiffEditor.setPresentation(this.diffPresentation());
       this.syncDiffControls();
       this.syncPushDiffControls();
@@ -1143,8 +1132,7 @@ export class AsterlynApp {
       "--ui-font-size",
       `${this.settingsState.preferences.uiFontSize}px`,
     );
-    this.textEditor.setPreferences(this.settingsState.preferences);
-    this.diffEditor.setPreferences(this.settingsState.preferences);
+    this.editorSurface.setPreferences(this.settingsState.preferences);
   }
 
   private async activateConfiguredEditorFont(): Promise<void> {
@@ -1465,39 +1453,15 @@ export class AsterlynApp {
       host.innerHTML = "";
       return;
     }
-
-    const resultCount = this.commandSurfaceResultCount();
+    let model = this.commandSurfaceViewModel();
+    const resultCount = commandSurfaceViewResultCount(model);
     this.state.commandSurface = clampCommandSurfaceSelection(
       this.state.commandSurface,
       resultCount,
     );
+    model = this.commandSurfaceViewModel();
     const selected = this.state.commandSurface.selectedIndex;
-    const title = commandSurfaceTitle(mode);
-    const hint = commandSurfaceHint(mode);
-    host.innerHTML = `
-      <section class="command-surface ${mode === "workspace" ? "workspace-mode" : ""}" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
-        <div class="command-surface-tabs" role="tablist" aria-label="Navigation mode">
-          ${this.commandSurfaceTab("files", "Files")}
-          ${this.commandSurfaceTab("recent", "Recent")}
-          ${this.commandSurfaceTab("workspace", "Text")}
-          ${this.commandSurfaceTab("commands", "Commands")}
-          <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="Close">${icon("close", 15)}</button>
-        </div>
-        <div class="command-surface-input">
-          ${icon("search", 17)}
-          <input id="command-surface-input" type="text" value="${escapeAttribute(this.state.commandSurface.query)}" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}" />
-          ${mode === "workspace" ? `<button class="workspace-search-mode" id="workspace-search-mode" type="button" aria-label="Use regular expressions" aria-pressed="${this.state.workspaceSearchControls.mode === "regex"}" title="Regular expression">.*</button>` : ""}
-          ${mode === "workspace" && this.state.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${mode === "workspace" ? "Enter to search" : "Enter"}</kbd>`}
-        </div>
-        ${mode === "workspace" ? this.renderWorkspaceSearchControls() : ""}
-        <div class="command-surface-results" id="command-surface-results" role="listbox" aria-label="${escapeAttribute(title)}">
-          ${this.renderCommandSurfaceResults(mode, selected)}
-        </div>
-        <footer class="command-surface-footer">
-          <span id="command-surface-title">${escapeHtml(hint)}</span>
-          <span><kbd>↑↓</kbd> Navigate <kbd>Enter</kbd> Open <kbd>Esc</kbd> Close</span>
-        </footer>
-      </section>`;
+    host.innerHTML = renderCommandSurfaceView(model);
     this.bindCommandSurfaceEvents();
     if (focusInput) this.focusCommandSurfaceInput();
     queueMicrotask(() => {
@@ -1507,120 +1471,20 @@ export class AsterlynApp {
     });
   }
 
-  private commandSurfaceTab(mode: NavigationMode, label: string): string {
-    const active = this.state.commandSurface.mode === mode;
-    return `<button type="button" role="tab" data-command-mode="${mode}" aria-selected="${active}" ${mode !== "commands" && !this.state.workspaceRoot ? "disabled" : ""}>${escapeHtml(label)}</button>`;
-  }
-
-  private renderWorkspaceSearchControls(): string {
-    const controls = this.state.workspaceSearchControls;
-    const hasResults = this.workspaceSearchHasCurrentResults() && Boolean(this.state.workspaceSearch.report?.matches.length);
-    const recoveryCount = this.state.workspaceReplacement.recoveries.length;
-    return `<div class="workspace-search-controls" role="group" aria-label="Workspace search options">
-      <label><span>Include</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="Files to include, comma-separated full-path globs" /></label>
-      <label><span>Exclude</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="Files to exclude, comma-separated full-path globs" /></label>
-      <label class="workspace-search-context"><span>Context</span><select id="workspace-search-context" aria-label="Context lines">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select></label>
-      <label class="workspace-replacement-input"><span>Replace</span><input id="workspace-replacement-text" type="text" value="${escapeAttribute(this.state.replacementText)}" placeholder="Replacement text" autocomplete="off" spellcheck="false" aria-label="Replacement text" /></label>
-      <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"}>Preview Replace</button>
-      ${recoveryCount > 0 ? `<button class="workspace-recovery-button" id="workspace-recovery-open" type="button" aria-label="Review ${recoveryCount} replacement recoveries">${recoveryCount} recovery ${recoveryCount === 1 ? "record" : "records"}</button>` : ""}
-    </div>`;
-  }
-
-  private renderCommandSurfaceResults(mode: NavigationMode, selected: number): string {
-    if (mode === "workspace") return this.renderWorkspaceSearchResults(selected);
-    if (mode === "commands") {
-      const commands = this.visibleNavigationCommands();
-      return commands.length
-        ? commands.map((command, index) => this.renderCommandResult(command, index, selected)).join("")
-        : this.commandSurfaceEmpty("No matching commands", "Try a broader command name.");
-    }
-    const files = this.visibleNavigationFiles(mode);
-    if (files.length === 0) {
-      return this.commandSurfaceEmpty(
-        mode === "recent" ? "No recent files" : "No matching files",
-        mode === "recent"
-          ? "Files appear here after they open successfully."
-          : this.filesState.loading
-            ? "The project catalog is still loading."
-            : "Try part of a filename or path.",
-      );
-    }
-    return files
-      .map((file, index) => this.renderFileNavigationResult(file, index, selected))
-      .join("");
-  }
-
-  private renderWorkspaceSearchResults(selected: number): string {
-    const search = this.state.workspaceSearch;
-    if (search.status === "loading") {
-      return this.commandSurfaceEmpty("Searching current project…", "The scan is bounded and cancellable.", true);
-    }
-    if (search.status === "error" && this.workspaceSearchRequestIsCurrent()) {
-      return this.commandSurfaceEmpty("Search could not complete", search.error ?? "Try again.");
-    }
-    if (search.status !== "ready" || !this.workspaceSearchRequestIsCurrent() || !search.report) {
-      return this.commandSurfaceEmpty(
-        "Search file contents",
-        "Enter a case-sensitive literal or regular expression, then press Enter. Replacement always requires a separate preview.",
-      );
-    }
-    if (search.report.matches.length === 0) {
-      const partial = search.report.coverageReasons.length > 0;
-      return this.commandSurfaceEmpty(
-        partial ? "No matches in the searched subset" : "No matches",
-        formatWorkspaceSearchCoverage(search.report),
-      );
-    }
-    const rows = search.report.matches
-      .map((match, index) => this.renderWorkspaceSearchResult(match, index, selected))
-      .join("");
-    return `${rows}<div class="workspace-search-summary">${escapeHtml(formatWorkspaceSearchCoverage(search.report))}</div>`;
-  }
-
-  private renderFileNavigationResult(
-    file: ProjectFile,
-    index: number,
-    selected: number,
-  ): string {
-    const directory = dirname(file.workspacePath);
-    return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
-      <span class="command-result-icon">${icon("file", 15)}</span>
-      <span class="command-result-copy"><strong>${escapeHtml(basename(file.workspacePath))}</strong><small>${escapeHtml(directory || "/")}</small></span>
-      ${file.repositoryId === "." ? "" : `<span class="scope-pill">${escapeHtml(file.repositoryId)}</span>`}
-    </button>`;
-  }
-
-  private renderCommandResult(
-    command: NavigationCommand,
-    index: number,
-    selected: number,
-  ): string {
-    return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}" ${command.enabled ? "" : "disabled"}>
-      <span class="command-result-icon">${icon("search", 15)}</span>
-      <span class="command-result-copy"><strong>${escapeHtml(command.label)}</strong><small>${escapeHtml(command.detail)}</small></span>
-      ${command.shortcut ? `<kbd>${escapeHtml(command.shortcut)}</kbd>` : ""}
-    </button>`;
-  }
-
-  private renderWorkspaceSearchResult(
-    match: WorkspaceTextSearchMatch,
-    index: number,
-    selected: number,
-  ): string {
-    const before = match.preview.slice(0, match.previewFromUtf16);
-    const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
-    const after = match.preview.slice(match.previewToUtf16);
-    const highlighted = found.length > 0
-      ? `<mark>${escapeHtml(found)}</mark>`
-      : '<mark class="zero-width" aria-label="Zero-width match" title="Zero-width match">│</mark>';
-    return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
-      <span class="search-result-location">${escapeHtml(`${match.workspacePath}:${match.line}:${match.columnUtf16}`)}</span>
-      <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
-    </button>`;
-  }
-
-  private commandSurfaceEmpty(title: string, detail: string, busy = false): string {
-    return `<div class="command-surface-empty">${busy ? '<span class="spinner"></span>' : ""}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>`;
+  private commandSurfaceViewModel(): CommandSurfaceViewModel {
+    const mode = this.state.commandSurface.mode;
+    return {
+      commandSurface: this.state.commandSurface,
+      workspaceOpen: this.state.workspaceRoot !== null,
+      filesLoading: this.filesState.loading,
+      files: mode === "files" || mode === "recent" ? this.visibleNavigationFiles(mode) : [],
+      commands: mode === "commands" ? this.visibleNavigationCommands() : [],
+      workspaceSearch: this.state.workspaceSearch,
+      workspaceSearchControls: this.state.workspaceSearchControls,
+      searchRequestIsCurrent: this.workspaceSearchRequestIsCurrent(),
+      replacementText: this.state.replacementText,
+      replacementRecoveryCount: this.state.workspaceReplacement.recoveries.length,
+    };
   }
 
   private bindCommandSurfaceEvents(): void {
@@ -1789,13 +1653,7 @@ export class AsterlynApp {
   }
 
   private commandSurfaceResultCount(): number {
-    const mode = this.state.commandSurface.mode;
-    if (mode === "files" || mode === "recent") return this.visibleNavigationFiles(mode).length;
-    if (mode === "commands") return this.visibleNavigationCommands().length;
-    if (mode === "workspace" && this.workspaceSearchHasCurrentResults()) {
-      return this.state.workspaceSearch.report?.matches.length ?? 0;
-    }
-    return 0;
+    return commandSurfaceViewResultCount(this.commandSurfaceViewModel());
   }
 
   private workspaceSearchHasCurrentResults(): boolean {
@@ -1871,7 +1729,7 @@ export class AsterlynApp {
         void this.chooseRepository();
         break;
       case "find-current":
-        queueMicrotask(() => this.textEditor.openFindReplace());
+        queueMicrotask(() => this.editorSurface.openFindReplace());
         break;
       case "save-current": {
         const tab = activeTextTab(this.editorState.session);
@@ -2031,103 +1889,19 @@ export class AsterlynApp {
     const host = this.query("#workspace-replacement-dialog");
     const mode = this.state.replacementDialog;
     host.classList.toggle("hidden", mode === null);
-    if (!mode) {
-      host.innerHTML = "";
-      return;
-    }
-    if (mode === "recovery") {
-      host.innerHTML = this.renderReplacementRecoveries();
-      this.bindWorkspaceReplacementDialogEvents();
-      return;
-    }
-
-    const replacement = this.state.workspaceReplacement;
-    if (replacement.status === "previewing") {
-      host.innerHTML = `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-        <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Preparing replacement preview</h2></div></div>
-        ${this.loadingBlock("Re-reading the Git-authorized files…")}
-        <div class="dialog-actions"><button class="secondary-button" id="replacement-cancel-operation" type="button">Cancel</button></div>
-      </section>`;
-      this.bindWorkspaceReplacementDialogEvents();
-      return;
-    }
-    if (replacement.status === "error" || !replacement.preview) {
-      host.innerHTML = `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-        <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Replacement preview unavailable</h2></div><button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button></div>
-        <div class="replacement-error" role="alert">${escapeHtml(replacement.error ?? "Create a new search and preview.")}</div>
-        <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button">Close</button></div>
-      </section>`;
-      this.bindWorkspaceReplacementDialogEvents();
-      return;
-    }
-
-    const preview = replacement.preview;
-    const selected = replacement.selectedPaths;
-    const selectedFiles = preview.files.filter((file) => selected.has(file.workspacePath));
-    const selectedMatches = selectedFiles.reduce((total, file) => total + file.matchCount, 0);
-    const applying = replacement.status === "applying";
-    const allSelected = selected.size === preview.files.length;
-    const rows = preview.files.map((file) => {
-      const checked = selected.has(file.workspacePath);
-      const openTab = this.editorState.session.textTabs.find(
-        (tab) => tab.document.workspacePath === file.workspacePath,
-      );
-      const blocked = Boolean(openTab && (isTextTabDirty(openTab) || openTab.saveRequest));
-      const delta = file.byteDelta === 0 ? "same size" : `${file.byteDelta > 0 ? "+" : ""}${file.byteDelta} B`;
-      return `<article class="replacement-file ${checked ? "selected" : ""}">
-        <label class="replacement-file-heading">
-          <input type="checkbox" data-replacement-file="${escapeAttribute(file.workspacePath)}" ${checked ? "checked" : ""} ${applying ? "disabled" : ""} />
-          <span><strong>${escapeHtml(file.workspacePath)}</strong><small>${file.matchCount} ${file.matchCount === 1 ? "match" : "matches"} · ${escapeHtml(delta)}${blocked ? " · save or unselect the open edited file" : ""}</small></span>
-        </label>
-        <div class="replacement-comparison" aria-label="Before and after preview for ${escapeAttribute(file.workspacePath)}">
-          <code class="before"><span>Before</span>${escapeHtml(file.beforePreview)}</code>
-          <code class="after"><span>After</span>${escapeHtml(file.afterPreview)}</code>
-        </div>
-      </article>`;
-    }).join("");
-    const warning = preview.skippedCount > 0
-      ? `<div class="replacement-warning">${preview.skippedCount} unsupported or unreadable files remain outside this reviewed replacement.</div>`
-      : "";
-    host.innerHTML = `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-      <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Review Replace in Files</h2></div>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button>`}</div>
-      <p>${preview.totalMatches} reviewed replacements across ${preview.files.length} files. Only checked files will change.</p>
-      ${replacement.error ? `<div class="replacement-error" role="alert">${escapeHtml(replacement.error)}</div>` : ""}
-      ${warning}
-      <label class="replacement-select-all"><input id="replacement-select-all" type="checkbox" ${allSelected ? "checked" : ""} ${applying ? "disabled" : ""} /> Select all files</label>
-      <div class="replacement-file-list">${rows}</div>
-      <div class="dialog-actions">
-        ${applying ? `<button class="secondary-button" id="replacement-cancel-operation" type="button">Cancel and restore</button><button class="primary-button" type="button" disabled><span class="spinner"></span> Applying safely…</button>` : `<button class="secondary-button" data-replacement-close type="button">Cancel</button><button class="primary-button" id="replacement-apply" type="button" ${selected.size > 0 ? "" : "disabled"}>Replace ${selectedMatches} in ${selected.size} ${selected.size === 1 ? "file" : "files"}</button>`}
-      </div>
-    </section>`;
-    this.bindWorkspaceReplacementDialogEvents();
+    const blockedOpenPaths = new Set(
+      this.editorState.session.textTabs
+        .filter((tab) => isTextTabDirty(tab) || tab.saveRequest !== null)
+        .map((tab) => tab.document.workspacePath),
+    );
+    host.innerHTML = renderWorkspaceReplacementDialogView({
+      dialog: mode,
+      replacement: this.state.workspaceReplacement,
+      recoveryBusy: this.state.replacementRecoveryBusy,
+      blockedOpenPaths,
+    });
+    if (mode) this.bindWorkspaceReplacementDialogEvents();
   }
-
-  private renderReplacementRecoveries(): string {
-    const state = this.state.workspaceReplacement;
-    const cards = state.recoveries.length === 0
-      ? `<div class="command-surface-empty"><strong>No pending replacement recovery</strong><span>Reviewed backups have been resolved.</span></div>`
-      : state.recoveries.map((recovery) => {
-          const busy = this.state.replacementRecoveryBusy?.id === recovery.recoveryId;
-          const conflicts = recovery.files.filter((file) => file.state === "conflict" || file.state === "unavailable").length;
-          const replaced = recovery.files.filter((file) => file.state === "replaced").length;
-          const files = recovery.files.map((file) => `<li><span>${escapeHtml(file.workspacePath)}</span><span class="recovery-state ${file.state}">${escapeHtml(replacementFileStateLabel(file.state))}</span></li>`).join("");
-          return `<article class="recovery-card">
-            <div class="recovery-card-heading"><div><strong>${escapeHtml(recovery.recoveryId)}</strong><small>${replaced}/${recovery.files.length} files contain the reviewed replacement${conflicts ? ` · ${conflicts} need manual review` : ""}</small></div><span class="scope-pill">${escapeHtml(replacementRecoveryLabel(recovery))}</span></div>
-            <ul>${files}</ul>
-            <div class="recovery-actions">
-              <button class="secondary-button" data-recovery-rollback="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy ? "disabled" : ""}>${busy && this.state.replacementRecoveryBusy?.action === "rollback" ? "Restoring…" : "Roll back"}</button>
-              <button class="primary-button" data-recovery-keep="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy || recovery.status !== "applied" ? "disabled" : ""}>${busy && this.state.replacementRecoveryBusy?.action === "keep" ? "Keeping…" : "Keep changes"}</button>
-            </div>
-          </article>`;
-        }).join("");
-    return `<section class="dialog replacement-dialog recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-recovery-title">
-      <div class="dialog-heading"><div><span class="panel-eyebrow">Crash-safe history</span><h2 id="replacement-recovery-title">Replacement recovery</h2></div>${this.state.replacementRecoveryBusy ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button>`}</div>
-      <p>Backups remain until you verify and keep the reviewed changes, or restore the exact originals.</p>
-      <div class="recovery-list">${cards}</div>
-      <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button" ${this.state.replacementRecoveryBusy ? "disabled" : ""}>Close</button></div>
-    </section>`;
-  }
-
   private bindWorkspaceReplacementDialogEvents(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-replacement-close]").forEach((button) => {
       button.addEventListener("click", () => this.closeWorkspaceReplacementDialog());
@@ -3039,12 +2813,7 @@ export class AsterlynApp {
   }
 
   private scheduleEditorMeasure(): void {
-    if (this.editorMeasureFrame !== null) return;
-    this.editorMeasureFrame = window.requestAnimationFrame(() => {
-      this.editorMeasureFrame = null;
-      this.diffEditor.requestMeasure();
-      this.textEditor.requestMeasure();
-    });
+    this.editorSurface.requestMeasure();
   }
 
   private renderWorkspace(): void {
@@ -3569,7 +3338,7 @@ export class AsterlynApp {
     this.dismissCommandSurface();
     this.renderEditor();
     queueMicrotask(() => {
-      if (!this.textEditor.selectRange(match.fromUtf16, match.toUtf16)) {
+      if (!this.editorSurface.selectRange(match.fromUtf16, match.toUtf16)) {
         this.setStatus("Search location is no longer valid; run the search again", "warning");
       }
     });
@@ -4463,7 +4232,7 @@ export class AsterlynApp {
     const workspaceRoot = this.state.workspaceRoot;
     const snapshot = this.state.snapshot;
     if (!workspaceRoot) return;
-    this.textEditor.retain(this.editorState.session.textTabs.map((tab) => tab.id));
+    this.editorSurface.retain(this.editorState.session.textTabs.map((tab) => tab.id));
     const document = this.activeDocument();
     const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
@@ -4471,7 +4240,11 @@ export class AsterlynApp {
     const activeKey = editorDocumentKey(document);
     const revealActiveTab = activeKey !== this.lastRenderedEditorDocumentKey;
     this.lastRenderedEditorDocumentKey = activeKey;
-    tabbar.innerHTML = this.renderEditorTabs(document);
+    tabbar.innerHTML = renderEditorTabsView({
+      session: this.editorState.session,
+      document,
+      statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
+    });
     this.renderEditorContextActions(document);
     this.renderEditorTabMenu();
     this.bindEditorTabEvents();
@@ -4485,7 +4258,7 @@ export class AsterlynApp {
     if (document.kind === "welcome") {
       this.showEditorHtml(
         "welcome",
-        this.emptyState(
+        renderEditorEmptyState(
           "Editor workspace ready",
           "Open a project file to edit it, or choose a changed or committed file to inspect its Diff.",
           "folder",
@@ -4509,12 +4282,12 @@ export class AsterlynApp {
       if (tab.status === "loading") {
         this.showEditorHtml(
           editorDocumentContentKey(document, `loading:${tab.loadEpoch}`),
-          this.loadingBlock("Loading text file…"),
+          renderEditorLoadingBlock("Loading text file…"),
         );
       } else if (tab.status === "error") {
         this.showEditorHtml(
           editorDocumentContentKey(document, `error:${tab.loadEpoch}:${tab.error ?? "unknown"}`),
-          this.retryState(
+          renderEditorRetryState(
             "Could not open text file",
             tab.error ?? "The file could not be loaded.",
             "retry-text-file",
@@ -4547,7 +4320,7 @@ export class AsterlynApp {
       const selected = document.selection;
       const imageDiff = isImagePreviewPath(selected.path);
       header.innerHTML = `
-        ${this.contentHeading(basename(selected.path), selected.path)}
+        ${renderContentHeading(basename(selected.path), selected.path)}
         <div class="header-actions">${this.diffControls(document, imageDiff)}<span class="scope-pill">Local changes</span></div>
       `;
       this.bindDiffControls();
@@ -4558,7 +4331,7 @@ export class AsterlynApp {
       if (this.changesState.workingPatchLoading) {
         this.showEditorHtml(
           editorDocumentContentKey(document, "loading"),
-          this.loadingBlock("Loading patch…"),
+          renderEditorLoadingBlock("Loading patch…"),
         );
       } else if (this.changesState.workingPatchError) {
         this.showEditorHtml(
@@ -4566,7 +4339,7 @@ export class AsterlynApp {
             document,
             `error:${this.changesState.workingPatchError}`,
           ),
-          this.retryState(
+          renderEditorRetryState(
             "Could not load patch",
             this.changesState.workingPatchError,
             "retry-working-diff",
@@ -4599,7 +4372,7 @@ export class AsterlynApp {
     const shortOid = commit?.shortOid ?? document.oid.slice(0, 8);
     const imageDiff = isImagePreviewPath(document.path);
     header.innerHTML = `
-      ${this.contentHeading(basename(document.path), document.path)}
+      ${renderContentHeading(basename(document.path), document.path)}
       <div class="header-actions">${this.diffControls(document, imageDiff)}<code class="oid">${escapeHtml(shortOid)}</code></div>
     `;
     this.bindDiffControls();
@@ -4610,7 +4383,7 @@ export class AsterlynApp {
     if (this.state.commitPatchLoading) {
       this.showEditorHtml(
         editorDocumentContentKey(document, "loading"),
-        this.loadingBlock("Loading commit patch…"),
+        renderEditorLoadingBlock("Loading commit patch…"),
       );
     } else if (this.state.commitPatchError) {
       this.showEditorHtml(
@@ -4618,7 +4391,7 @@ export class AsterlynApp {
           document,
           `error:${this.state.commitPatchError}`,
         ),
-        this.retryState(
+        renderEditorRetryState(
           "Could not load patch",
           this.state.commitPatchError,
           "retry-commit-patch",
@@ -4641,333 +4414,80 @@ export class AsterlynApp {
   }
 
   private showEditorHtml(key: string, html: string): void {
-    if (this.mountedEditorKey === key) return;
-    this.captureMountedTextEditor();
-    this.disposeMarkdownSurface();
-    this.textEditor.detach();
-    this.mountedTextTabId = null;
-    this.diffEditor.destroy();
-    const body = this.query("#content-body");
-    this.resetEditorBodyClasses(body);
-    body.innerHTML = html;
-    this.mountedEditorKey = key;
+    this.editorSurface.showHtml(key, html, () => this.captureMountedTextEditor());
   }
 
   private renderProjectImage(document: ProjectImageDocument): void {
-    const key = editorDocumentKey(document);
-    const surface = this.imageSurface?.key === key ? this.imageSurface : null;
-    if (!surface || surface.status === "loading") {
-      this.showEditorHtml(
-        editorDocumentContentKey(document, "image-loading"),
-        this.loadingBlock("Loading image preview…"),
-      );
-      return;
-    }
-    if (surface.status === "error") {
-      this.showEditorHtml(
-        editorDocumentContentKey(document, `image-error:${surface.error}`),
-        this.retryState(
-          "Could not preview image",
-          surface.error,
-          "retry-project-image",
-          "folder",
-        ),
-      );
-      this.query("#retry-project-image").addEventListener("click", () => {
+    this.editorSurface.renderProjectImage(
+      document,
+      this.imageSurface,
+      () => this.captureMountedTextEditor(),
+      () => {
         void this.openProjectImage(document.repositoryRoot, {
           repositoryId: document.repositoryId,
           path: document.path,
           workspacePath: document.workspacePath,
         });
-      });
-      return;
-    }
-    if (!surface.image) return;
-    this.showEditorHtml(
-      editorDocumentContentKey(document, `image:${surface.version}`),
-      `<section class="image-preview-surface" aria-label="Image preview">${this.imagePreviewCard(surface.image, "Preview")}</section>`,
+      },
     );
-    this.query("#content-body").classList.add("image-surface");
   }
 
   private renderImageDiff(
     document: Exclude<EditorDocument, { kind: "welcome" | "project-file" | "project-image" }>,
     retry: () => void,
   ): void {
-    const key = editorDocumentKey(document);
-    const surface = this.imageSurface?.key === key ? this.imageSurface : null;
-    if (!surface || surface.status === "loading") {
-      this.showEditorHtml(
-        editorDocumentContentKey(document, "image-diff-loading"),
-        this.loadingBlock("Loading image Diff…"),
-      );
-      return;
-    }
-    if (surface.status === "error") {
-      this.showEditorHtml(
-        editorDocumentContentKey(document, `image-diff-error:${surface.error}`),
-        this.retryState("Could not preview image Diff", surface.error, "retry-image-diff", "changes"),
-      );
-      this.query("#retry-image-diff").addEventListener("click", retry);
-      return;
-    }
-    if (!surface.diff) return;
-    const before = surface.diff.before
-      ? this.imagePreviewCard(surface.diff.before, "Before")
-      : this.emptyImageSide("Before", "File did not exist");
-    const after = surface.diff.after
-      ? this.imagePreviewCard(surface.diff.after, "After")
-      : this.emptyImageSide("After", "File was removed");
-    this.showEditorHtml(
-      editorDocumentContentKey(
-        document,
-        `image-diff:${surface.version}`,
-      ),
-      `<section class="image-diff-surface" aria-label="Image Diff">${before}${after}</section>`,
+    this.editorSurface.renderImageDiff(
+      document,
+      this.imageSurface,
+      () => this.captureMountedTextEditor(),
+      retry,
     );
-    this.query("#content-body").classList.add("image-surface");
-  }
-
-  private imagePreviewCard(image: ImagePreview, label: string): string {
-    return `<figure class="image-preview-card"><figcaption><strong>${escapeHtml(label)}</strong><span>${image.width} × ${image.height} · ${formatBytes(image.byteLength)}</span></figcaption><div class="image-preview-canvas"><img src="${escapeAttribute(image.dataUrl)}" alt="${escapeAttribute(`${label} image for ${image.path}`)}" draggable="false" /></div></figure>`;
-  }
-
-  private emptyImageSide(label: string, message: string): string {
-    return `<section class="image-preview-card empty"><header><strong>${escapeHtml(label)}</strong></header><div class="image-preview-empty">${escapeHtml(message)}</div></section>`;
   }
 
   private mountEditorDiff(key: string, patch: string, path: string): void {
-    if (this.mountedEditorKey === key) {
-      this.diffEditor.requestMeasure();
-      return;
-    }
-    this.captureMountedTextEditor();
-    this.disposeMarkdownSurface();
-    this.textEditor.detach();
-    this.mountedTextTabId = null;
-    this.diffEditor.destroy();
-    const body = this.query("#content-body");
-    body.innerHTML = "";
-    this.resetEditorBodyClasses(body);
-    body.classList.add("diff-surface");
-    this.diffEditor.mount(
-      body,
+    this.editorSurface.mountDiff(
+      key,
       patch,
       path,
       this.settingsState.preferences,
       this.diffPresentation(),
+      () => this.captureMountedTextEditor(),
     );
-    this.mountedEditorKey = key;
   }
 
   private mountTextEditor(key: string, tab: TextTabState): void {
-    if (this.mountedEditorKey === key && this.mountedTextTabId === tab.id) {
-      this.textEditor.requestMeasure();
-      return;
-    }
-    const body = this.query("#content-body");
-    const reuseTextSurface = this.textEditor.isMountedIn(body);
-    this.captureMountedTextEditor();
-    this.disposeMarkdownSurface();
-    this.diffEditor.destroy();
-    if (!reuseTextSurface) {
-      this.textEditor.detach();
-      body.innerHTML = "";
-    }
-    this.resetEditorBodyClasses(body);
-    body.classList.add("text-surface");
-    this.mountedTextTabId = tab.id;
-    this.mountTextEditorSurface(body, tab);
-    this.mountedEditorKey = key;
+    this.editorSurface.mountText(
+      key,
+      tab,
+      this.settingsState.preferences,
+      () => this.captureMountedTextEditor(),
+      (tabId, content) => this.handleEditorContentChange(tabId, content),
+    );
   }
 
   private mountMarkdownEditor(key: string, tab: TextTabState): void {
-    if (this.mountedEditorKey === key) {
-      this.textEditor.requestMeasure();
-      return;
-    }
-    this.captureMountedTextEditor();
-    this.disposeMarkdownSurface();
-    this.diffEditor.destroy();
-    this.textEditor.detach();
-    const body = this.query("#content-body");
-    body.innerHTML = "";
-    this.resetEditorBodyClasses(body);
-    body.classList.add("text-surface", "markdown-surface");
-
-    if (tab.markdownMode === "source") {
-      body.classList.add("markdown-source-surface");
-      this.mountedTextTabId = tab.id;
-      this.mountTextEditorSurface(body, tab);
-    } else if (tab.markdownMode === "split") {
-      body.classList.add("markdown-split-surface");
-      body.innerHTML = `
-        <div class="markdown-split-layout" id="markdown-split-layout" style="--markdown-source-width: ${this.markdownSourcePercent}%">
-          <div class="markdown-source-pane" id="markdown-source-pane" aria-label="Markdown source editor"></div>
-          <div class="workbench-splitter vertical markdown-splitter" id="markdown-splitter" aria-label="Resize Markdown source and preview"></div>
-          <section class="markdown-preview-pane" id="markdown-preview" aria-label="Markdown preview">
-            ${this.markdownPreviewLoadingBlock()}
-          </section>
-        </div>`;
-      this.mountedTextTabId = tab.id;
-      this.mountTextEditorSurface(this.query("#markdown-source-pane"), tab);
-      const layout = this.query("#markdown-split-layout");
-      this.markdownSplitterDisposer = attachSplitter(
-        this.query("#markdown-splitter"),
-        {
-          orientation: "vertical",
-          getValue: () => this.query("#markdown-source-pane").getBoundingClientRect().width,
-          getRange: () => markdownSplitRange(layout.clientWidth),
-          onChange: (value) => {
-            if (layout.clientWidth <= 0) return;
-            this.markdownSourcePercent = (value / layout.clientWidth) * 100;
-            layout.style.setProperty(
-              "--markdown-source-width",
-              `${this.markdownSourcePercent}%`,
-            );
-            this.scheduleEditorMeasure();
-          },
-          onReset: () => {
-            this.markdownSourcePercent = 50;
-            layout.style.setProperty("--markdown-source-width", "50%");
-            this.scheduleEditorMeasure();
-          },
-        },
-      );
-      this.queueMarkdownPreview(tab.id, tab.content, true);
-    } else {
-      body.classList.add("markdown-preview-surface");
-      this.mountedTextTabId = null;
-      body.innerHTML = `<section class="markdown-preview-pane full" id="markdown-preview" aria-label="Markdown preview">${this.markdownPreviewLoadingBlock()}</section>`;
-      this.queueMarkdownPreview(tab.id, tab.content, true);
-    }
-    this.mountedEditorKey = key;
-  }
-
-  private mountTextEditorSurface(parent: HTMLElement, tab: TextTabState): void {
-    this.textEditor.mount(
-      parent,
-      tab.id,
-      tab.loadEpoch,
-      tab.content,
-      tab.document.path,
+    this.editorSurface.mountMarkdown(
+      key,
+      tab,
       this.settingsState.preferences,
-      (content) => {
-        if (this.mountedTextTabId !== tab.id) return;
-        const previous = textTab(this.editorState.session, tab.id);
-        const wasDirty = previous ? isTextTabDirty(previous) : false;
-        this.editorController.markEdited(tab.id, content);
-        const current = textTab(this.editorState.session, tab.id);
-        if (current?.markdownMode === "split") {
-          this.queueMarkdownPreview(tab.id, content);
-        }
-        if (
-          previous &&
-          current &&
-          (wasDirty !== isTextTabDirty(current) || previous.conflict)
-        ) {
-          this.renderEditor();
-        }
-      },
+      () => this.captureMountedTextEditor(),
+      (tabId, content) => this.handleEditorContentChange(tabId, content),
     );
   }
 
-  private queueMarkdownPreview(
-    tabId: string,
-    content: string,
-    immediate = false,
-  ): void {
-    const request = ++this.markdownPreviewSequence;
-    this.markdownPreviewPending = { tabId, content, request };
-    if (immediate) {
-      if (this.markdownPreviewTimer !== null) {
-        window.clearTimeout(this.markdownPreviewTimer);
-        this.markdownPreviewTimer = null;
-      }
-      this.markdownPreviewPending = null;
-      void this.updateMarkdownPreview({ tabId, content, request });
-      return;
-    }
-    if (this.markdownPreviewTimer !== null) return;
-    this.markdownPreviewTimer = window.setTimeout(() => {
-      this.markdownPreviewTimer = null;
-      const pending = this.markdownPreviewPending;
-      this.markdownPreviewPending = null;
-      if (pending) void this.updateMarkdownPreview(pending);
-    }, 40);
-  }
-
-  private async updateMarkdownPreview(request: {
-    tabId: string;
-    content: string;
-    request: number;
-  }): Promise<void> {
-    try {
-      const { renderMarkdownPreview } = await import("./workbench/markdown-preview");
-      const result = await renderMarkdownPreview(request.content);
-      if (request.request !== this.markdownPreviewSequence) return;
-      const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
-      const active = activeTextTab(this.editorState.session);
-      if (
-        !preview ||
-        active?.id !== request.tabId ||
-        active.markdownMode === "source"
-      ) {
-        return;
-      }
-      preview.innerHTML =
-        result.status === "ready"
-          ? `<article class="markdown-rendered">${result.html}</article>`
-          : `<div class="markdown-preview-message" role="status"><strong>Preview paused for this large file</strong><span>The document is ${(result.byteLength / (1024 * 1024)).toFixed(1)} MiB. Live preview is limited to ${MARKDOWN_PREVIEW_MAX_BYTES / (1024 * 1024)} MiB; source editing and saving remain available.</span></div>`;
-      this.attachMarkdownScrollSync();
-    } catch (error) {
-      if (request.request !== this.markdownPreviewSequence) return;
-      const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
-      const active = activeTextTab(this.editorState.session);
-      if (!preview || active?.id !== request.tabId) return;
-      preview.innerHTML = `<div class="markdown-preview-message error" role="alert"><strong>Markdown preview failed</strong><span>${escapeHtml(errorMessage(error))}</span></div>`;
+  private handleEditorContentChange(tabId: string, content: string): void {
+    const previous = textTab(this.editorState.session, tabId);
+    const wasDirty = previous ? isTextTabDirty(previous) : false;
+    this.editorController.markEdited(tabId, content);
+    const current = textTab(this.editorState.session, tabId);
+    if (
+      previous &&
+      current &&
+      (wasDirty !== isTextTabDirty(current) || previous.conflict)
+    ) {
+      this.renderEditor();
     }
   }
-
-  private markdownPreviewLoadingBlock(): string {
-    return '<div class="markdown-preview-message" role="status"><strong>Rendering Markdown…</strong><span>The editor remains available while the preview engine loads.</span></div>';
-  }
-
-  private attachMarkdownScrollSync(): void {
-    this.markdownScrollDisposer?.();
-    this.markdownScrollDisposer = null;
-    const active = activeTextTab(this.editorState.session);
-    const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
-    if (!preview || active?.markdownMode !== "split") return;
-    preview.dataset.scrollSync = "proportional";
-    this.markdownScrollDisposer = this.textEditor.linkVerticalScroll(preview);
-  }
-
-  private disposeMarkdownSurface(): void {
-    this.markdownScrollDisposer?.();
-    this.markdownScrollDisposer = null;
-    this.markdownSplitterDisposer?.();
-    this.markdownSplitterDisposer = null;
-    if (this.markdownPreviewTimer !== null) {
-      window.clearTimeout(this.markdownPreviewTimer);
-      this.markdownPreviewTimer = null;
-    }
-    this.markdownPreviewPending = null;
-    this.markdownPreviewSequence += 1;
-  }
-
-  private resetEditorBodyClasses(body: HTMLElement): void {
-    body.classList.remove(
-      "diff-surface",
-      "text-surface",
-      "markdown-surface",
-      "markdown-source-surface",
-      "markdown-split-surface",
-      "markdown-preview-surface",
-      "image-surface",
-    );
-  }
-
   private renderEditorContextActions(document: EditorDocument): void {
     const host = this.query("#editor-context-actions");
     const tab = document.kind === "project-file" ? activeTextTab(this.editorState.session) : null;
@@ -4975,17 +4495,7 @@ export class AsterlynApp {
       host.innerHTML = "";
       return;
     }
-    const modes: Array<[MarkdownEditorMode, string, string]> = [
-      ["source", "Source", "Edit Markdown source"],
-      ["split", "Split", "Edit source with live preview"],
-      ["preview", "Preview", "Rendered preview (read-only)"],
-    ];
-    host.innerHTML = `<div class="markdown-mode-controls" role="group" aria-label="Markdown editor mode">${modes
-      .map(
-        ([mode, label, title]) =>
-          `<button type="button" data-markdown-mode="${mode}" aria-pressed="${tab.markdownMode === mode}" title="${title}">${label}</button>`,
-      )
-      .join("")}</div>`;
+    host.innerHTML = renderMarkdownModeControls(tab);
     host
       .querySelectorAll<HTMLButtonElement>("[data-markdown-mode]")
       .forEach((button) => {
@@ -5009,45 +4519,6 @@ export class AsterlynApp {
       });
   }
 
-  private renderEditorTabs(document: EditorDocument): string {
-    const textTabs = this.editorState.session.textTabs
-      .map((tab, index) => {
-        const active = document.kind === "project-file" && editorDocumentKey(document) === tab.id;
-        const dirty = isTextTabDirty(tab);
-        const state = tab.conflict
-          ? "Conflict"
-          : tab.saveRequest
-            ? "Saving"
-            : dirty
-              ? "Unsaved"
-              : "Saved";
-        return `
-          <div class="editor-tab ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""} ${dirty ? "dirty" : ""}" role="tab" aria-selected="${active}" data-editor-tab="${index}" title="${escapeAttribute(`${tab.document.workspacePath} · ${state}`)}">
-            <button class="editor-tab-target" type="button" data-editor-tab-index="${index}">
-              <span class="editor-tab-file-icon">${fileTypeIcon(tab.document.workspacePath)}</span>
-              <span class="editor-tab-label">${escapeHtml(basename(tab.document.workspacePath))}</span>
-              ${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}
-            </button>
-            <button class="editor-tab-close" type="button" data-close-editor-tab-index="${index}" aria-label="Close ${escapeAttribute(basename(tab.document.workspacePath))}" title="Close">${icon("close", 12)}</button>
-          </div>`;
-      })
-      .join("");
-    const preview = this.editorState.session.preview;
-    const previewPath =
-      preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
-    const previewLabel = preview?.kind === "project-image" ? "Preview" : "Diff";
-    const previewTab = preview
-      ? `<div class="editor-tab preview ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : preview.kind === "project-image" ? this.editorTabFileStatusClass(preview.workspacePath) : ""} ${this.editorState.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${this.editorState.session.active.kind === "preview"}">
-          <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
-          <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="Close ${previewLabel} preview" title="Close">${icon("close", 12)}</button>
-        </div>`
-      : "";
-    if (!textTabs && !previewTab) {
-      return '<span class="editor-tab active">Welcome</span>';
-    }
-    return `${textTabs}${previewTab}`;
-  }
-
   private renderEditorTabMenu(): void {
     const toggle = this.query<HTMLButtonElement>("#editor-tab-menu-toggle");
     const menu = this.query("#editor-tab-menu");
@@ -5057,27 +4528,11 @@ export class AsterlynApp {
     toggle.disabled = !hasDocuments;
     toggle.setAttribute("aria-expanded", String(this.shellState.editorTabMenuOpen));
     menu.classList.toggle("hidden", !this.shellState.editorTabMenuOpen);
-    if (!this.shellState.editorTabMenuOpen) {
-      menu.innerHTML = "";
-      return;
-    }
-    const textItems = this.editorState.session.textTabs
-      .map((tab, index) => {
-        const active =
-          this.editorState.session.active.kind === "text" &&
-          this.editorState.session.active.id === tab.id;
-        const dirty = isTextTabDirty(tab);
-        return `<button class="editor-tab-menu-item ${this.editorTabFileStatusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}${active ? icon("check", 14) : ""}</button>`;
-      })
-      .join("");
-    const preview = this.editorState.session.preview;
-    const previewPath =
-      preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
-    const previewLabel = preview?.kind === "project-image" ? "Image preview" : "Diff preview";
-    const previewItem = preview
-      ? `<button class="editor-tab-menu-item ${preview.kind === "working-diff" ? this.editorTabFileStatusClass(preview.selection.path) : preview.kind === "project-image" ? this.editorTabFileStatusClass(preview.workspacePath) : ""} ${this.editorState.session.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${this.editorState.session.active.kind === "preview" ? icon("check", 14) : ""}</button>`
-      : "";
-    menu.innerHTML = `${textItems}${previewItem}`;
+    menu.innerHTML = renderEditorTabMenuView({
+      session: this.editorState.session,
+      open: this.shellState.editorTabMenuOpen,
+      statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
+    });
   }
 
   private bindEditorTabMenuEvents(): void {
@@ -5183,14 +4638,18 @@ export class AsterlynApp {
   }
 
   private captureMountedTextEditor(): void {
-    const tabId = this.mountedTextTabId;
-    if (!tabId || !textTab(this.editorState.session, tabId)) return;
-    this.textEditor.flushChanges();
-    this.editorController.captureText(tabId, this.textEditor.content());
+    this.editorSurface.capture(
+      this.editorState.session,
+      (tabId, content) => this.editorController.captureText(tabId, content),
+    );
   }
 
   private async saveTextTab(tabId: string): Promise<boolean> {
-    if (this.mountedTextTabId === tabId) this.captureMountedTextEditor();
+    this.editorSurface.capture(
+      this.editorState.session,
+      (mountedTabId, content) => this.editorController.captureText(mountedTabId, content),
+      tabId,
+    );
     const tab = textTab(this.editorState.session, tabId);
     if (!tab) return true;
     const result = await this.editorController.saveText(tabId, tab.content);
@@ -5287,7 +4746,7 @@ export class AsterlynApp {
       if (!save || !(await this.saveTextTab(tabId))) return;
     }
     if (this.editorController.closeText(tabId)) {
-      this.textEditor.dispose(tabId);
+      this.editorSurface.disposeTextTab(tabId);
       this.renderLeftTool();
       this.renderEditor();
     }
@@ -5318,10 +4777,6 @@ export class AsterlynApp {
     this.editorController.activatePreview(document);
   }
 
-  private contentHeading(title: string, subtitle: string): string {
-    return `<div class="content-title-group"><span class="content-kicker">${escapeHtml(subtitle)}</span><h2>${escapeHtml(title)}</h2></div>`;
-  }
-
   private diffControls(
     document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
     imageDiff: boolean,
@@ -5329,27 +4784,15 @@ export class AsterlynApp {
     const textReady = !imageDiff && (document.kind === "working-diff"
       ? this.changesState.workingPatch !== null
       : this.state.commitPatch !== null);
-    const previousFile = this.adjacentDiffPath(document, -1);
-    const nextFile = this.adjacentDiffPath(document, 1);
-    const canOpenSource = this.diffProjectFile(document) !== null;
-    const expanded = this.isDiffExpanded(document);
-    return `
-      <div class="diff-toolbar" aria-label="Diff navigation and presentation">
-        <div class="diff-navigation-controls" role="group" aria-label="Diff navigation">
-          <button class="compact-icon-button" type="button" data-diff-action="previous-change" aria-label="Previous change in file" title="Previous change in file" ${textReady ? "" : "disabled"}>${icon("up", 15)}</button>
-          <button class="compact-icon-button" type="button" data-diff-action="next-change" aria-label="Next change in file" title="Next change in file" ${textReady ? "" : "disabled"}>${icon("down", 15)}</button>
-          <span class="diff-control-separator" aria-hidden="true"></span>
-          <button class="compact-icon-button" type="button" data-diff-action="previous-file" aria-label="Previous changed file" title="Previous changed file" ${previousFile ? "" : "disabled"}>${icon("back", 15)}</button>
-          <button class="compact-icon-button" type="button" data-diff-action="next-file" aria-label="Next changed file" title="Next changed file" ${nextFile ? "" : "disabled"}>${icon("forward", 15)}</button>
-          <button class="compact-icon-button" type="button" data-diff-action="open-source" aria-label="Open file and reveal in Project" title="Open file and reveal in Project" ${canOpenSource ? "" : "disabled"}>${icon("locate", 15)}</button>
-          <button class="compact-icon-button ${expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${expanded ? "Collapse" : "Expand"} unchanged lines" title="${expanded ? "Collapse" : "Expand"} unchanged lines" aria-pressed="${expanded}" ${textReady ? "" : "disabled"}>${icon(expanded ? "collapse" : "expand", 15)}</button>
-        </div>
-        ${imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation">
-          <button type="button" data-diff-layout="unified" aria-pressed="${this.settingsState.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
-          <button type="button" data-diff-layout="split" aria-pressed="${this.settingsState.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
-          <button type="button" data-diff-whitespace aria-pressed="${this.settingsState.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
-        </div>`}
-      </div>`;
+    return renderEditorDiffControls({
+      imageDiff,
+      textReady,
+      previousFile: this.adjacentDiffPath(document, -1),
+      nextFile: this.adjacentDiffPath(document, 1),
+      canOpenSource: this.diffProjectFile(document) !== null,
+      expanded: this.isDiffExpanded(document),
+      preferences: this.settingsState.preferences,
+    });
   }
 
   private bindDiffControls(): void {
@@ -5357,7 +4800,7 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const action = button.dataset.diffAction;
         if (action === "previous-change" || action === "next-change") {
-          const moved = this.diffEditor.navigateChange(action === "next-change" ? 1 : -1);
+          const moved = this.editorSurface.navigateDiffChange(action === "next-change" ? 1 : -1);
           if (!moved) {
             this.setStatus(
               `No ${action === "next-change" ? "next" : "previous"} change in this file`,
@@ -6470,7 +5913,7 @@ export class AsterlynApp {
 
   private setLoading(loading: boolean, message: string): void {
     this.state.loading = loading;
-    this.textEditor.setReadOnly(loading);
+    this.editorSurface.setReadOnly(loading);
     this.root.classList.toggle("is-busy", loading);
     this.query<HTMLButtonElement>("#refresh-button").disabled =
       loading || !this.state.workspaceRoot;
@@ -6633,28 +6076,6 @@ export class AsterlynApp {
     );
   }
 
-  private emptyState(
-    title: string,
-    detail: string,
-    iconName: "folder" | "changes" | "history" | "branch" | "check",
-    compact = false,
-  ): string {
-    return `<div class="empty-state ${compact ? "compact" : ""}"><span class="empty-icon">${icon(iconName, compact ? 18 : 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div>`;
-  }
-
-  private loadingBlock(label: string): string {
-    return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(label)}</span></div>`;
-  }
-
-  private retryState(
-    title: string,
-    detail: string,
-    buttonId: string,
-    iconName: "changes" | "history" | "folder",
-  ): string {
-    return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><button class="secondary-button retry-button" id="${buttonId}" type="button">Try again</button></div>`;
-  }
-
   private query<T extends Element = HTMLElement>(selector: string): T {
     const element = this.root.querySelector<T>(selector);
     if (!element) throw new Error(`Missing application element: ${selector}`);
@@ -6730,42 +6151,6 @@ function historyReference(
   return { repositoryId: branch.repositoryId, fullName: branch.fullName };
 }
 
-function commandSurfaceTitle(mode: NavigationMode): string {
-  const titles: Record<NavigationMode, string> = {
-    files: "Search project files",
-    recent: "Filter recent files",
-    workspace: "Search text in current project",
-    commands: "Search available commands",
-  };
-  return titles[mode];
-}
-
-function commandSurfaceHint(mode: NavigationMode): string {
-  const hints: Record<NavigationMode, string> = {
-    files: "Go to File · authorized project catalog",
-    recent: "Recent Files · successful opens in this project",
-    workspace: "Find in Files · bounded search · reviewed recoverable replacement",
-    commands: "Command Palette · only currently safe commands are enabled",
-  };
-  return hints[mode];
-}
-
-function replacementRecoveryLabel(recovery: ReplacementRecoverySummary): string {
-  return recovery.status === "applied" ? "Ready to verify" : "Needs recovery";
-}
-
-function replacementFileStateLabel(
-  state: ReplacementRecoverySummary["files"][number]["state"],
-): string {
-  const labels: Record<ReplacementRecoverySummary["files"][number]["state"], string> = {
-    original: "Original",
-    replaced: "Replaced",
-    conflict: "Changed externally",
-    unavailable: "Unavailable",
-  };
-  return labels[state];
-}
-
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/").replace(/\/$/, "");
   return normalized.split("/").pop() || normalized;
@@ -6774,27 +6159,6 @@ function basename(path: string): string {
 function projectMonogram(path: string): string {
   const name = basename(path).trim();
   return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
-}
-
-function markdownSplitRange(width: number): { minimum: number; maximum: number } {
-  const usableWidth = Math.max(0, width - 5);
-  const minimum = Math.min(220, usableWidth / 2);
-  return {
-    minimum,
-    maximum: Math.max(minimum, usableWidth - minimum),
-  };
-}
-
-function dirname(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  const offset = normalized.lastIndexOf("/");
-  return offset < 0 ? "" : normalized.slice(0, offset);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
 function capitalize(value: string): string {
