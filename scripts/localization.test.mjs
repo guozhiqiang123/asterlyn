@@ -7,9 +7,14 @@ import { renderProjectToolbar } from "../src/features/files-editor/project-files
 import { renderDiffControls } from "../src/features/files-editor/editor-view.ts";
 import { renderChangeNavigation } from "../src/features/changes-commit/changes-view.ts";
 import { renderGitOperationBanner } from "../src/features/git-operations/git-operation-banner.ts";
+import { renderBranchNavigation } from "../src/features/git-history/branch-navigation-view.ts";
+import { inspectorPlaceholder } from "../src/features/git-history/git-detail-view.ts";
+import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
+import { renderHistoryList } from "../src/features/git-history/history-list-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { loadLocale } from "../src/localization/locale-loader.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
+import { createLocalization } from "../src/localization/localization.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/workbench/preferences.ts";
@@ -92,6 +97,24 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   }, catalog.gitOperations);
   assert.match(operation, /变基/);
   assert.match(operation, />继续</);
+
+  const localization = createLocalization(catalog);
+  const branches = renderBranchNavigation({
+    snapshot: { branches: [] }, query: "", selectedRepositoryIds: new Set(), selectedRefs: new Map(), collapsedGroups: new Set(), localization,
+  });
+  assert.match(branches, /没有引用/);
+  const history = renderHistoryList({
+    status: "ready", error: null, loadedCommits: [], commits: [], textError: null, selectedCommit: null,
+    collapseLinear: false, bridgeOmittedParents: false, repositoryRoots: [], branches: [], loadingMore: false,
+    pagingError: null, hasMore: false, localization,
+  });
+  assert.match(history, /没有符合这些筛选条件的提交/);
+  assert.match(inspectorPlaceholder(localization), /未选择任何项目/);
+  const historyDialog = renderHistoryDialogView({
+    kind: "branches", snapshot: { branches: [], repositoryRoots: [] }, files: [], query: "", error: null,
+    refDraft: new Map(), favoriteRefs: new Map(), pathDraft: new Map(), pathText: "", collapsedTreePaths: new Set(), localization,
+  });
+  assert.match(historyDialog, /选择分支或标签/);
 });
 
 function catalogShape(value) {

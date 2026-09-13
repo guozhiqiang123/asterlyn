@@ -870,8 +870,10 @@ export class AsterlynApp {
     this.renderStatus(this.windowSession.repository.state.snapshot);
     if (this.windowSession.workspace.state.root) this.renderEditor();
     if (this.shellState.layout.leftTool) this.renderLeftTool();
+    this.relocalizeBottomTool();
     if (this.state.commandSurface.mode) this.renderCommandSurface();
     if (this.state.replacementDialog) this.renderWorkspaceReplacementDialog();
+    if (this.state.historyDialog) this.renderHistoryDialog();
     this.localizeShellChrome(previousCatalog);
     this.windowChromeBinding.refreshLabels();
   }
@@ -900,6 +902,14 @@ export class AsterlynApp {
       "data-include-path",
       "data-include-directory",
       "data-include-group",
+      "data-branch-key",
+      "data-branch-group-toggle",
+      "data-commit-key",
+      "data-history-menu",
+      "data-history-text-mode",
+      "data-history-dialog-ref",
+      "data-history-dialog-path",
+      "data-history-tree-toggle",
     ];
     const attribute = attributes.find((name) => active.hasAttribute(name));
     if (!attribute) return () => {};
@@ -2987,6 +2997,27 @@ export class AsterlynApp {
     this.renderGitDetailPane(snapshot);
   }
 
+  private relocalizeBottomTool(): void {
+    const branch = this.root.querySelector<HTMLElement>("#branch-navigation-body");
+    const history = this.root.querySelector<HTMLElement>("#history-results");
+    const detail = this.root.querySelector<HTMLElement>("#git-detail-body");
+    const scroll = {
+      branchTop: branch?.scrollTop ?? 0,
+      branchLeft: branch?.scrollLeft ?? 0,
+      historyTop: history?.scrollTop ?? 0,
+      historyLeft: history?.scrollLeft ?? 0,
+      detailTop: detail?.scrollTop ?? 0,
+      detailLeft: detail?.scrollLeft ?? 0,
+    };
+    this.renderBottomTool();
+    const nextBranch = this.root.querySelector<HTMLElement>("#branch-navigation-body");
+    const nextHistory = this.root.querySelector<HTMLElement>("#history-results");
+    const nextDetail = this.root.querySelector<HTMLElement>("#git-detail-body");
+    if (nextBranch) { nextBranch.scrollTop = scroll.branchTop; nextBranch.scrollLeft = scroll.branchLeft; }
+    if (nextHistory) { nextHistory.scrollTop = scroll.historyTop; nextHistory.scrollLeft = scroll.historyLeft; }
+    if (nextDetail) { nextDetail.scrollTop = scroll.detailTop; nextDetail.scrollLeft = scroll.detailLeft; }
+  }
+
   private renderBranchPane(snapshot: RepositorySnapshot): void {
     if (this.shellState.layout.bottomTool !== "branches") return;
     this.query("#branch-navigation-body").innerHTML =
@@ -3390,6 +3421,7 @@ export class AsterlynApp {
       branchSubmenu: this.state.historyBranchSubmenu,
       favoriteRefs: this.state.historyFavoriteRefs,
       recentRefs: this.state.historyRecentRefs,
+      localization: this.localization,
     };
   }
 
@@ -3461,6 +3493,7 @@ export class AsterlynApp {
       pathDraft: this.state.historyPathDraft,
       pathText: this.state.historyPathText,
       collapsedTreePaths: this.state.historyTreeCollapsed,
+      localization: this.localization,
     });
     this.bindHistoryDialogEvents();
   }
@@ -3482,6 +3515,7 @@ export class AsterlynApp {
       loadingMore: this.historyState.loadingMore,
       pagingError: this.historyState.pagingError,
       hasMore: this.historyState.hasMore,
+      localization: this.localization,
     };
   }
 
@@ -3541,6 +3575,7 @@ export class AsterlynApp {
       selectedRepositoryIds: this.state.historyRepositoryIds,
       selectedRefs: this.state.historyRefs,
       collapsedGroups: this.state.collapsedBranchGroups,
+      localization: this.localization,
     };
   }
 
@@ -4081,7 +4116,7 @@ export class AsterlynApp {
 
   private updateHistoryDialogApplyCount(count: number | string): void {
     const button = this.root.querySelector<HTMLButtonElement>("[data-history-dialog-apply]");
-    if (button && this.state.historyDialog === "branches") button.textContent = `Apply ${count}`;
+    if (button && this.state.historyDialog === "branches") button.textContent = this.localization.catalog.history.applyCount(String(count));
   }
 
   private renderHistoryResults(): void {
@@ -4099,9 +4134,13 @@ export class AsterlynApp {
         : this.historyState.history.status === "error"
           ? "!"
           : filteredCount.toString();
-    count.title = `${filteredCount} of ${this.historyState.history.commits.length} commits in ${historyScope(this.historyNavigationViewModel()).label}`;
+    count.title = this.localization.catalog.history.countOfCommits(
+      this.localization.number.format(filteredCount),
+      this.localization.number.format(this.historyState.history.commits.length),
+      historyScope(this.historyNavigationViewModel()).label,
+    );
     const refresh = this.root.querySelector<HTMLElement>("#history-refresh-status");
-    if (refresh) refresh.textContent = this.historyState.refreshing ? "Refreshing…" : "";
+    if (refresh) refresh.textContent = this.historyState.refreshing ? this.localization.catalog.history.refreshing : "";
   }
 
   private handleHistoryScroll(results: HTMLElement): void {
@@ -4117,7 +4156,10 @@ export class AsterlynApp {
     const total = this.logicalBranches(snapshot).length;
     const count = this.query("#branch-count");
     count.textContent = String(visible);
-    count.title = `${visible} of ${total} logical refs`;
+    count.title = this.localization.catalog.history.logicalRefsCount(
+      this.localization.number.format(visible),
+      this.localization.number.format(total),
+    );
   }
 
   private focusHistoryFilter(): void {
@@ -5464,14 +5506,15 @@ export class AsterlynApp {
             safety: this.branchSafety(snapshot),
             loading: this.state.loading,
             newBranchName: this.state.newBranchName,
+            localization: this.localization,
           })
-        : inspectorPlaceholder();
+        : inspectorPlaceholder(this.localization);
     }
     const commit = selectedCommit(
       this.historyState.history.commits,
       this.historyState.selectedCommit,
     );
-    if (!commit) return inspectorPlaceholder();
+    if (!commit) return inspectorPlaceholder(this.localization);
     const details =
       this.historyState.details?.oid === commit.oid &&
       this.historyState.details.repositoryId === commit.repositoryId
@@ -5486,6 +5529,7 @@ export class AsterlynApp {
       selectedFile: this.historyState.selectedFile,
       fileView: this.state.commitFileView,
       collapsedDirectories: this.state.collapsedCommitFileDirectories,
+      localization: this.localization,
     });
   }
 
@@ -6044,27 +6088,27 @@ export class AsterlynApp {
     if (blockers.length > 0) {
       return {
         ready: false,
-        message: `${blockers.length} changed ${blockers.length === 1 ? "path blocks" : "paths block"} branch mutation. Commit, stash, or remove the changes first.`,
+        message: this.localization.catalog.history.changedPathsBlock(blockers.length),
         blockers,
       };
     }
     if (snapshot.untrackedState === "pending") {
       return {
         ready: false,
-        message: "Checking for untracked files before branch mutation…",
+        message: this.localization.catalog.history.checkingUntrackedForBranch,
         blockers: [],
       };
     }
     if (snapshot.untrackedState === "failed") {
       return {
         ready: false,
-        message: "The untracked-file check failed. Refresh before changing branches.",
+        message: this.localization.catalog.history.untrackedCheckFailedForBranch,
         blockers: [],
       };
     }
     return {
       ready: true,
-      message: "The index and working tree are clean. Asterlyn will verify again immediately before switching.",
+      message: this.localization.catalog.history.cleanWorktreeVerified,
       blockers: [],
     };
   }

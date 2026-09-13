@@ -1,4 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts";
+import { EN_US } from "./en-US.ts";
 
 export interface Localization {
   readonly catalog: LocaleCatalog;
@@ -19,3 +20,5 @@ export function createLocalization(catalog: LocaleCatalog): Localization {
     pluralRules: new Intl.PluralRules(catalog.locale),
   };
 }
+
+export const DEFAULT_LOCALIZATION = createLocalization(EN_US);
