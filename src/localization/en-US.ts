@@ -260,7 +260,7 @@ export const EN_US: LocaleCatalog = {
     localChanges: "Local changes", loadingPatch: "Loading patch…", patchLoadFailed: "Could not load patch",
     noTextualDiff: "No textual diff is available for this selection.", loadingCommitPatch: "Loading commit patch…",
     currentEncoding: (label) => label ? `Current file encoding: ${label}` : "Current file encoding",
-    ignoredNotOpened: "Ignored entries are shown for context and are not opened",
+    ignoredReadOnly: "Git-ignored files open as read-only previews",
     outsideProjectTree: "The current file is outside the bounded project tree",
     searchUnsaved: "Search location was not applied because this file has unsaved edits",
     waitForLoad: "Wait for the current file load, then run the search again",

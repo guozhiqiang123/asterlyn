@@ -143,7 +143,7 @@ export const ZH_CN = {
     localChanges: "本地更改", loadingPatch: "正在加载补丁…", patchLoadFailed: "无法加载补丁",
     noTextualDiff: "此选择没有可用的文本差异。", loadingCommitPatch: "正在加载提交补丁…",
     currentEncoding: (label) => label ? `当前文件编码：${label}` : "当前文件编码",
-    ignoredNotOpened: "已忽略的条目仅用于说明上下文，无法打开", outsideProjectTree: "当前文件不在有限范围的项目树中",
+    ignoredReadOnly: "Git 忽略的文件以只读方式预览", outsideProjectTree: "当前文件不在有限范围的项目树中",
     searchUnsaved: "此文件有未保存的编辑，因此未跳转到搜索位置", waitForLoad: "请等待当前文件加载完成，然后重新搜索",
     openFileLimit: "20 个已打开文件均有未保存的更改；请先保存或关闭一个文件", searchRefreshFailed: "无法安全刷新搜索位置",
     wrongWorkspace: "搜索结果属于另一个工作区", invalidSearchLocation: "搜索位置已失效，请重新搜索", staleSearchResult: "搜索结果已过期，请重新搜索",

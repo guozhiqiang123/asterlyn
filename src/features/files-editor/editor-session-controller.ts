@@ -256,6 +256,7 @@ export class EditorSessionController {
       repositoryId: file.repositoryId,
       path: file.path,
       workspacePath: file.workspacePath,
+      readOnly: file.readOnly === true,
     };
     const id = editorDocumentKey(document);
     const existing = textTab(this.state.session, id);

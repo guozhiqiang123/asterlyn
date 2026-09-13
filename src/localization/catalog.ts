@@ -319,7 +319,7 @@ export interface EditorCopy {
   noTextualDiff: string;
   loadingCommitPatch: string;
   currentEncoding(label?: string): string;
-  ignoredNotOpened: string;
+  ignoredReadOnly: string;
   outsideProjectTree: string;
   searchUnsaved: string;
   waitForLoad: string;

@@ -3081,9 +3081,13 @@ export class AsterlynApp {
     title.textContent = basename(workspaceRoot);
     hide.setAttribute("aria-label", copy.hideFiles);
     hide.title = copy.hideFiles;
-    const visibleEntries = this.filesState.files.length + this.filesState.ignoredEntries.length;
+    const regularFiles = this.filesState.files.filter((file) => file.readOnly !== true).length;
+    const visibleEntries = this.filesState.files.length;
     count.textContent = visibleEntries.toString();
-    count.title = this.localization.catalog.projectFiles.fileCount(this.filesState.files.length, this.filesState.ignoredEntries.length);
+    count.title = this.localization.catalog.projectFiles.fileCount(
+      regularFiles,
+      this.filesState.ignoredEntries.length,
+    );
     const preserveScroll = body.dataset.navigatorView === "files";
     const scrollTop = body.scrollTop;
     const scrollLeft = body.scrollLeft;
@@ -3219,26 +3223,23 @@ export class AsterlynApp {
           event.stopPropagation();
           const path = button.dataset.projectDirectoryToggle;
           if (!path) return;
-          const expanded = this.filesState.expandedDirectories.has(path);
-          if (!this.filesController.setDirectoryExpanded(path, !expanded)) return;
-          this.renderLeftTool();
-          queueMicrotask(() => {
-            Array.from(
-              this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
-            )
-              .find((row) => row.dataset.projectDirectory === path)
-              ?.focus();
-          });
+          this.toggleProjectDirectory(path);
         });
       });
     this.root
       .querySelectorAll<HTMLElement>("[data-project-directory]")
       .forEach((row) => {
-        row.addEventListener("click", () => {
+        const toggle = (): void => {
           const path = row.dataset.projectDirectory;
           if (!path) return;
           this.filesController.select(path, "directory");
-          this.markProjectTreeSelection(path);
+          this.toggleProjectDirectory(path);
+        };
+        row.addEventListener("click", toggle);
+        row.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          toggle();
         });
       });
     this.root.querySelectorAll<HTMLButtonElement>("[data-project-file]").forEach((row) => {
@@ -3248,15 +3249,24 @@ export class AsterlynApp {
         if (!path || !currentRoot) return;
         this.filesController.select(path, "file");
         this.markProjectTreeSelection(path);
-        if (row.dataset.projectStatus === "ignored") {
-          this.setStatus(this.localization.catalog.editor.ignoredNotOpened, "normal");
-          return;
-        }
         const file = this.filesState.files.find(
           (candidate) => candidate.workspacePath === path,
-        ) ?? { repositoryId: ".", path, workspacePath: path };
+        ) ?? { repositoryId: ".", path, workspacePath: path, readOnly: false };
         void this.openProjectFile(currentRoot, file);
       });
+    });
+  }
+
+  private toggleProjectDirectory(path: string): void {
+    const expanded = this.filesState.expandedDirectories.has(path);
+    if (!this.filesController.setDirectoryExpanded(path, !expanded)) return;
+    this.renderLeftTool();
+    queueMicrotask(() => {
+      Array.from(
+        this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
+      )
+        .find((row) => row.dataset.projectDirectory === path)
+        ?.focus();
     });
   }
 
@@ -3351,6 +3361,9 @@ export class AsterlynApp {
     file: ProjectFile,
     searchMatch?: WorkspaceTextSearchMatch,
   ): Promise<void> {
+    if (file.readOnly === true) {
+      this.setStatus(this.localization.catalog.editor.ignoredReadOnly, "normal");
+    }
     if (!searchMatch && isImagePreviewPath(file.path)) {
       await this.openProjectImage(repositoryRoot, file);
       return;
@@ -3362,6 +3375,7 @@ export class AsterlynApp {
       repositoryId: file.repositoryId,
       path: file.path,
       workspacePath: file.workspacePath,
+      readOnly: file.readOnly === true,
     };
     const documentKey = editorDocumentKey(document);
     const existing = textTab(this.editorState.session, documentKey);
@@ -4427,6 +4441,12 @@ export class AsterlynApp {
     if (!workspaceRoot) return;
     this.editorSurface.retain(this.editorState.session.textTabs.map((tab) => tab.id));
     const document = this.activeDocument();
+    const activeTab = document.kind === "project-file"
+      ? activeTextTab(this.editorState.session)
+      : null;
+    this.editorSurface.setReadOnly(
+      this.state.loading || activeTab?.document.readOnly === true,
+    );
     const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
     const tabbar = this.query("#editor-tabbar");
@@ -4500,6 +4520,7 @@ export class AsterlynApp {
             repositoryId: document.repositoryId,
             path: document.path,
             workspacePath: document.workspacePath,
+            readOnly: document.readOnly === true,
           });
         });
       } else {
@@ -6099,7 +6120,9 @@ export class AsterlynApp {
 
   private setLoading(loading: boolean, message: string): void {
     this.state.loading = loading;
-    this.editorSurface.setReadOnly(loading);
+    this.editorSurface.setReadOnly(
+      loading || activeTextTab(this.editorState.session)?.document.readOnly === true,
+    );
     this.root.classList.toggle("is-busy", loading);
     this.query<HTMLButtonElement>("#refresh-button").disabled =
       loading || !this.windowSession.workspace.state.root;

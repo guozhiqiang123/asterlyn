@@ -320,20 +320,40 @@ const demoBridge: DesktopBridge = {
           });
         }
       }
+      const uniquePaths = Array.from(new Set(paths)).sort();
+      const ignoredPaths = browserGitEnabled
+        ? [".cache/session.json", "local.settings"]
+        : [];
+      for (const path of ignoredPaths) {
+        if (!demoTextFiles.has(path)) {
+          demoTextFiles.set(path, {
+            content: `Read-only ignored content for ${path}\n`,
+            utf8Bom: false,
+            revision: 1,
+          });
+        }
+      }
       return {
         root: repositoryRoot,
-        paths: Array.from(new Set(paths)).sort(),
-        files: Array.from(new Set(paths)).sort().map((path) => ({
-          repositoryId: browserGitEnabled ? "." : "workspace",
-          path,
-          workspacePath: path,
+        paths: uniquePaths,
+        files: [
+          ...uniquePaths.map((path) => ({
+            repositoryId: browserGitEnabled ? "." : "workspace",
+            path,
+            workspacePath: path,
+            readOnly: false,
+          })),
+          ...ignoredPaths.map((path) => ({
+            repositoryId: ".",
+            path,
+            workspacePath: path,
+            readOnly: true,
+          })),
+        ],
+        ignoredEntries: ignoredPaths.map((workspacePath) => ({
+          workspacePath,
+          kind: "file" as const,
         })),
-        ignoredEntries: browserGitEnabled
-          ? [
-              { workspacePath: ".cache", kind: "directory" },
-              { workspacePath: "local.settings", kind: "file" },
-            ]
-          : [],
         repositoryRoots: browserGitEnabled
           ? structuredClone(browserSnapshot.repositoryRoots)
           : [],

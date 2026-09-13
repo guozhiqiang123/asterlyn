@@ -726,6 +726,7 @@ impl GitRepository {
         let roots = self.discovered_roots()?;
         let maximum = limit.clamp(1, 100_000);
         let mut files = Vec::new();
+        let mut ignored_files = Vec::new();
         let mut ignored_entries = Vec::new();
         let mut files_truncated = false;
         let mut ignored_truncated = false;
@@ -744,6 +745,7 @@ impl GitRepository {
                     repository_id: root.descriptor.id.clone(),
                     path,
                     workspace_path,
+                    read_only: false,
                 });
             }
             if include_ignored {
@@ -752,11 +754,20 @@ impl GitRepository {
                     .project_ignored_entries(maximum.saturating_sub(ignored_entries.len()))?;
                 ignored_truncated |= truncated;
                 for entry in root_entries {
+                    let path = entry.workspace_path;
                     let workspace_path = if root.descriptor.relative_path == "." {
-                        entry.workspace_path
+                        path.clone()
                     } else {
-                        format!("{}/{}", root.descriptor.relative_path, entry.workspace_path)
+                        format!("{}/{}", root.descriptor.relative_path, path)
                     };
+                    if entry.kind == ProjectEntryKind::File {
+                        ignored_files.push(ProjectFile {
+                            repository_id: root.descriptor.id.clone(),
+                            path,
+                            workspace_path: workspace_path.clone(),
+                            read_only: true,
+                        });
+                    }
                     ignored_entries.push(ProjectIgnoredEntry {
                         workspace_path,
                         kind: entry.kind,
@@ -775,6 +786,17 @@ impl GitRepository {
         });
         files_truncated |= files.len() > maximum;
         files.truncate(maximum);
+        ignored_files.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        ignored_files.dedup_by(|left, right| {
+            left.repository_id == right.repository_id && left.path == right.path
+        });
+        ignored_truncated |= ignored_files.len() > maximum;
+        ignored_files.truncate(maximum);
         ignored_entries.sort_by(|left, right| {
             left.workspace_path
                 .cmp(&right.workspace_path)
@@ -792,11 +814,18 @@ impl GitRepository {
             .collect();
         let mut paths: Vec<String> = files
             .iter()
-            .filter(|file| !nested_roots.contains(file.workspace_path.as_str()))
+            .filter(|file| !file.read_only && !nested_roots.contains(file.workspace_path.as_str()))
             .map(|file| file.workspace_path.clone())
             .collect();
         paths.sort();
         paths.dedup();
+        files.extend(ignored_files);
+        files.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.path.cmp(&right.path))
+        });
         Ok(ProjectFileList {
             root: self.root.to_string_lossy().into_owned(),
             paths,
@@ -831,6 +860,21 @@ impl GitRepository {
     /// method rechecks the exact repository root and current ignore policy, while the workspace
     /// boundary remains responsible for component-by-component non-link traversal and file type.
     pub fn reauthorize_project_file(&self, file: &ProjectFile) -> Result<ProjectFile, GitError> {
+        if file.read_only {
+            return Err(GitError::InvalidInput {
+                field: "project file".to_string(),
+                message: "the selected project file is read-only".to_string(),
+            });
+        }
+        self.reauthorize_project_file_for_read(file)
+    }
+
+    /// Revalidates a catalogued file for a bounded read. Ignored catalog entries are admitted only
+    /// while they remain ignored, and retain their read-only identity.
+    pub fn reauthorize_project_file_for_read(
+        &self,
+        file: &ProjectFile,
+    ) -> Result<ProjectFile, GitError> {
         validate_relative_path(&file.path)?;
         let repository = if file.repository_id == "." {
             self.clone()
@@ -889,6 +933,12 @@ impl GitRepository {
             .stdout
             .split(|byte| *byte == 0)
             .any(|candidate| candidate == file.path.as_bytes());
+        if file.read_only && is_tracked {
+            return Err(GitError::InvalidInput {
+                field: "project file".to_string(),
+                message: "the selected ignored-file identity is stale".to_string(),
+            });
+        }
         if !is_tracked {
             let ignored = run_git_output(
                 repository.root(),
@@ -905,12 +955,21 @@ impl GitRepository {
             })?;
             match ignored.status.code() {
                 Some(0) => {
-                    return Err(GitError::InvalidInput {
-                        field: "project file".to_string(),
-                        message: "the selected project file is now ignored".to_string(),
-                    });
+                    if !file.read_only {
+                        return Err(GitError::InvalidInput {
+                            field: "project file".to_string(),
+                            message: "the selected project file is now ignored".to_string(),
+                        });
+                    }
                 }
-                Some(1) => {}
+                Some(1) => {
+                    if file.read_only {
+                        return Err(GitError::InvalidInput {
+                            field: "project file".to_string(),
+                            message: "the selected ignored-file identity is stale".to_string(),
+                        });
+                    }
+                }
                 status => {
                     return Err(GitError::CommandFailed {
                         operation: "reauthorize untracked project file".to_string(),
@@ -943,7 +1002,17 @@ impl GitRepository {
         &self,
         limit: usize,
     ) -> Result<(Vec<ProjectIgnoredEntry>, bool), GitError> {
-        let (records, truncated) = self.read_catalog_records(
+        let (mut records, files_truncated) = self.read_catalog_records(
+            &[
+                "ls-files",
+                "--others",
+                "--ignored",
+                "--exclude-standard",
+                "-z",
+            ],
+            limit,
+        )?;
+        let (collapsed, directories_truncated) = self.read_catalog_records(
             &[
                 "ls-files",
                 "--others",
@@ -955,6 +1024,7 @@ impl GitRepository {
             ],
             limit,
         )?;
+        records.extend(collapsed);
         let mut entries = Vec::new();
         for raw_path in records.iter().map(|record| record.as_bytes()) {
             if raw_path.is_empty() {
@@ -984,7 +1054,7 @@ impl GitRepository {
                 })
         });
         entries.dedup();
-        Ok((entries, truncated))
+        Ok((entries, files_truncated || directories_truncated))
     }
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
@@ -5210,6 +5280,10 @@ mod tests {
                     kind: ProjectEntryKind::Directory,
                 },
                 ProjectIgnoredEntry {
+                    workspace_path: "ignored-dir/cache.bin".to_string(),
+                    kind: ProjectEntryKind::File,
+                },
+                ProjectIgnoredEntry {
                     workspace_path: "ignored.txt".to_string(),
                     kind: ProjectEntryKind::File,
                 },
@@ -5233,6 +5307,24 @@ mod tests {
         ));
         assert!(matches!(
             repository.authorize_project_file(".", "../outside", 10),
+            Err(GitError::InvalidInput { .. })
+        ));
+
+        let ignored = complete
+            .files
+            .iter()
+            .find(|file| file.path == "ignored-dir/cache.bin")
+            .expect("ignored directory descendant is catalogued")
+            .clone();
+        assert!(ignored.read_only);
+        assert_eq!(
+            repository
+                .reauthorize_project_file_for_read(&ignored)
+                .expect("catalogued ignored file passes read authorization"),
+            ignored
+        );
+        assert!(matches!(
+            repository.reauthorize_project_file(&ignored),
             Err(GitError::InvalidInput { .. })
         ));
 

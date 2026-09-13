@@ -6,6 +6,7 @@ export interface ProjectFileDocument {
   repositoryId: string;
   path: string;
   workspacePath: string;
+  readOnly?: boolean;
 }
 
 export interface ProjectImageDocument {

@@ -75,6 +75,24 @@ test("project tree keeps explicit ignored directories and truthful file states",
   assert.equal(findProjectTreeNode(tree, "src/new.ts")?.status, "added");
 });
 
+test("ignored file descendants materialize their parent directories", () => {
+  const entries = projectTreeEntries(
+    [{
+      repositoryId: ".",
+      path: "generated/cache/result.json",
+      workspacePath: "generated/cache/result.json",
+      readOnly: true,
+    }],
+    [],
+    [{ workspacePath: "generated/cache/result.json", kind: "file" }],
+  );
+  const tree = buildProjectTree(entries);
+
+  assert.equal(findProjectTreeNode(tree, "generated")?.kind, "directory");
+  assert.equal(findProjectTreeNode(tree, "generated/cache")?.kind, "directory");
+  assert.equal(findProjectTreeNode(tree, "generated/cache/result.json")?.status, "ignored");
+});
+
 test("project tree helpers reveal ancestors and expand or collapse a selected subtree", () => {
   const tree = buildProjectTree([
     "src/app/main.ts",

@@ -318,6 +318,9 @@ fn stale_activation() -> WorkspaceError {
 fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<PathBuf> {
     let mut directories = BTreeSet::from([root.to_path_buf()]);
     for file in &catalog.files {
+        if file.read_only {
+            continue;
+        }
         let Some(parent) = Path::new(&file.workspace_path).parent() else {
             continue;
         };

@@ -149,6 +149,8 @@ pub struct ProjectFile {
     pub repository_id: String,
     pub path: String,
     pub workspace_path: String,
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
