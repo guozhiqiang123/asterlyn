@@ -209,6 +209,9 @@ export class RepositoryIntegrationCoordinator {
     this.actions.renderWorkspace();
     if (slices.includes("history")) this.actions.loadVisibleCommitDetails();
     this.actions.reloadWorkingDiff();
+    if (snapshot.untrackedState === "pending") {
+      void this.session.scanUntracked(snapshot.root, this.session.generation, false, cause);
+    }
   }
 
   acceptRemoteOutcome(
@@ -355,7 +358,12 @@ export class RepositoryIntegrationCoordinator {
       return;
     }
     if (change.reason === "untracked-scan-error") {
-      if (change.snapshot) this.actions.renderWorkspace();
+      if (change.snapshot) {
+        this.targets.changes.installSnapshot(change.snapshot);
+        this.targets.files.updateChanges(change.snapshot.changes);
+        this.targets.operations.installSnapshot(change.snapshot);
+        this.actions.renderWorkspace();
+      }
       this.actions.reportError(change.error);
     }
   }

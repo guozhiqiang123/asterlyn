@@ -185,6 +185,54 @@ test("session scans reuse the same integration route and stop after disposal", a
   fixture.session.dispose();
 });
 
+test("watch reconciliation completes a pending untracked scan", async () => {
+  const scans = [];
+  const fixture = integrationFixture({
+    async scanUntracked(root) {
+      scans.push(root);
+      return { root, changes: [{ ...change("new.txt"), worktreeStatus: "untracked" }] };
+    },
+  });
+  const pending = { ...snapshot("/repo", [{ path: "tracked.txt", conflicted: false }]), untrackedState: "pending" };
+
+  fixture.coordinator.reconcileWatchedRepository(
+    pending,
+    ["workspaceCatalog", "openDocuments", "workingTree", "head", "refs", "history", "operation"],
+    "focusRecovery",
+  );
+  await settle();
+
+  assert.deepEqual(scans, ["/repo"]);
+  assert.equal(fixture.session.repository.state.snapshot.untrackedState, "complete");
+  assert.deepEqual(
+    fixture.session.repository.state.snapshot.changes.map((item) => item.path),
+    ["new.txt", "tracked.txt"],
+  );
+  assert.deepEqual(fixture.records.files.at(-1), ["new.txt", "tracked.txt"]);
+  fixture.dispose();
+});
+
+test("failed untracked scans replace the pending presentation", async () => {
+  const fixture = integrationFixture({
+    async scanUntracked() {
+      throw new Error("scan unavailable");
+    },
+  });
+  const pending = { ...snapshot("/repo", [{ path: "tracked.txt", conflicted: false }]), untrackedState: "pending" };
+
+  fixture.coordinator.reconcileWatchedRepository(
+    pending,
+    ["workingTree"],
+    "watcher",
+  );
+  await settle();
+
+  assert.equal(fixture.session.repository.state.snapshot.untrackedState, "failed");
+  assert.equal(fixture.records.changes.at(-1).snapshot.untrackedState, "failed");
+  assert.match(String(fixture.records.errors.at(-1)), /scan unavailable/);
+  fixture.dispose();
+});
+
 function integrationFixture(gatewayOverrides = {}) {
   const initial = snapshot("/repo");
   const session = new WindowSession({
@@ -315,4 +363,8 @@ function change(path) {
     conflicted: false,
     submodule: false,
   };
+}
+
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

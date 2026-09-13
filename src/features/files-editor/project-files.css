@@ -17,12 +17,16 @@
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: var(--text-soft);
+  color: inherit;
   cursor: default;
   font-size: 10px;
   list-style: none;
   text-align: left;
   white-space: nowrap;
+}
+
+:where(.project-directory, .project-file-row) {
+  color: var(--text-soft);
 }
 
 .project-node-row.selected {
