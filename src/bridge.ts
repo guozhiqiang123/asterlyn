@@ -45,6 +45,7 @@ import type {
   PushPreview,
   PushMode,
   PushTagMode,
+  RemoteAuthenticationStatus,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
@@ -824,6 +825,72 @@ const demoBridge: DesktopBridge = {
       repositoryRoot,
       remote,
       operationId,
+    });
+  },
+
+  async readRemoteAuthentication(
+    repositoryRoot: string,
+    remote: string,
+  ): Promise<RemoteAuthenticationStatus> {
+    if (!isTauri) {
+      return {
+        remote,
+        transport: "https",
+        host: "example.invalid",
+        credentialAvailable: true,
+        credentialHelperConfigured: true,
+        suggestedSshUrl: "git@example.invalid:team/repository.git",
+      };
+    }
+    return invoke<RemoteAuthenticationStatus>("read_remote_authentication", {
+      repositoryRoot,
+      remote,
+    });
+  },
+
+  async storeRemoteHttpsCredential(
+    repositoryRoot: string,
+    remote: string,
+    username: string,
+    token: string,
+  ): Promise<RemoteAuthenticationStatus> {
+    if (!isTauri) {
+      return {
+        remote,
+        transport: "https",
+        host: "example.invalid",
+        credentialAvailable: Boolean(username && token),
+        credentialHelperConfigured: true,
+        suggestedSshUrl: "git@example.invalid:team/repository.git",
+      };
+    }
+    return invoke<RemoteAuthenticationStatus>("store_remote_https_credential", {
+      repositoryRoot,
+      remote,
+      username,
+      token,
+    });
+  },
+
+  async configureRemoteSsh(
+    repositoryRoot: string,
+    remote: string,
+    sshUrl: string,
+  ): Promise<RemoteAuthenticationStatus> {
+    if (!isTauri) {
+      return {
+        remote,
+        transport: "ssh",
+        host: sshUrl.includes("@") ? sshUrl.split("@").at(-1)?.split(/[/:]/)[0] ?? null : null,
+        credentialAvailable: true,
+        credentialHelperConfigured: false,
+        suggestedSshUrl: null,
+      };
+    }
+    return invoke<RemoteAuthenticationStatus>("configure_remote_ssh", {
+      repositoryRoot,
+      remote,
+      sshUrl,
     });
   },
 

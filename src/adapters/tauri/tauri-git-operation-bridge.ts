@@ -6,6 +6,7 @@ import type {
   GitOperationMutationOutcome,
   GitOperationPlan,
   GitOperationSnapshot,
+  RemoteAuthenticationStatus,
   RepositoryMutationOutcome,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
@@ -41,6 +42,24 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     }),
   createBranch: (repositoryRoot, name) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("create_branch", { repositoryRoot, name }),
+  readRemoteAuthentication: (repositoryRoot, remote) =>
+    invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {
+      repositoryRoot,
+      remote,
+    }),
+  storeRemoteHttpsCredential: (repositoryRoot, remote, username, token) =>
+    invokeDesktopCommand<RemoteAuthenticationStatus>("store_remote_https_credential", {
+      repositoryRoot,
+      remote,
+      username,
+      token,
+    }),
+  configureRemoteSsh: (repositoryRoot, remote, sshUrl) =>
+    invokeDesktopCommand<RemoteAuthenticationStatus>("configure_remote_ssh", {
+      repositoryRoot,
+      remote,
+      sshUrl,
+    }),
   fetchRemote: (repositoryRoot, remote, operationId) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("fetch_remote", {
       repositoryRoot,

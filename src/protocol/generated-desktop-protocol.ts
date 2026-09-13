@@ -43,6 +43,9 @@ export interface DesktopCommandMap {
   revert_changes: { args: { repositoryRoot: string; plan: Model.RestoreChangesPlan; }; result: Model.WorkingTreeMutationOutcome };
   switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositoryMutationOutcome };
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
+  read_remote_authentication: { args: { repositoryRoot: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
+  store_remote_https_credential: { args: { repositoryRoot: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
+  configure_remote_ssh: { args: { repositoryRoot: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
   fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
   read_push_preview: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; offset: number; pageSize: number; }; result: Model.PushPreview };
   read_push_file_commit: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; previewToken: string; path: string; }; result: Model.CommitDetails | null };
@@ -100,6 +103,9 @@ export const DESKTOP_RESULT_VALIDATORS: {
   revert_changes: "workingTreeMutationOutcome",
   switch_branch: "repositoryMutationOutcome",
   create_branch: "repositoryMutationOutcome",
+  read_remote_authentication: "remoteAuthenticationStatus",
+  store_remote_https_credential: "remoteAuthenticationStatus",
+  configure_remote_ssh: "remoteAuthenticationStatus",
   fetch_remote: "repositoryMutationOutcome",
   read_push_preview: "pushPreview",
   read_push_file_commit: "nullableCommitDetails",

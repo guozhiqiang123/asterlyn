@@ -19,6 +19,7 @@ import {
   filesForPushReview,
   pushConfirmationAvailability,
 } from "../../workbench/push-review.ts";
+import type { RemoteAuthenticationState } from "./remote-authentication-controller.ts";
 import type { RemotePushState } from "./remote-push-state.ts";
 
 export interface RemotePushDialogViewModel {
@@ -27,6 +28,7 @@ export interface RemotePushDialogViewModel {
   readonly workspaceRoot: string | null;
   readonly preferences: AppPreferences;
   readonly selectedProjectFileAvailable: boolean;
+  readonly authentication?: RemoteAuthenticationState;
   readonly localization?: Localization;
 }
 
@@ -104,7 +106,7 @@ export function renderRemoteDialogContent(model: RemotePushDialogViewModel): str
   const body = model.state.dialog === "update"
     ? renderUpdateDialog(model)
     : `${renderPushDialog(model)}${renderPushDiffDialog(model)}`;
-  return body;
+  return `${body}${renderRemoteAuthenticationDialog(model)}`;
 }
 
 export function pushReviewFiles(
@@ -217,7 +219,11 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const copy = localization.catalog.remote;
   const preview = state.pushPreview;
   const operation = state.operation?.kind === "push" ? state.operation : null;
-  const error = state.dialogError ? renderRemoteError(state.dialogError, localization) : "";
+  const authentication = model.authentication;
+  const authenticationDialogOpen = Boolean(authentication?.dialog);
+  const authenticationChecking = Boolean(authentication?.checking);
+  const dialogError = state.dialogError ?? (!authenticationDialogOpen ? authentication?.error : null);
+  const error = dialogError ? renderRemoteError(dialogError, localization) : "";
   const body = preview
     ? renderPushPreviewBody(model, preview)
     : state.pushPreviewLoading
@@ -230,13 +236,13 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const modeBlocker = preview ? forceSelected ? preview.forceWithLeaseBlockReason : preview.ordinaryBlockReason : null;
   const actionLabel = forceSelected ? copy.forcePushWithLease : preview?.publish ? copy.publish : copy.push;
   const tagsLabel = preview?.tags.length ? copy.tags(preview.tags.length) : copy.noMatchingTags;
-  const confirmation = pushConfirmationAvailability({ operationActive: Boolean(operation), previewLoading: state.pushPreviewLoading, previewRefreshing: state.pushPreviewRefreshing, actionable, modeAllowed });
-  return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="${state.pushDiff ? "false" : "true"}" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description" ${state.pushDiff ? 'aria-hidden="true" inert' : ""}>
+  const confirmation = pushConfirmationAvailability({ operationActive: Boolean(operation) || authenticationChecking, previewLoading: state.pushPreviewLoading, previewRefreshing: state.pushPreviewRefreshing, actionable, modeAllowed });
+  return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="${state.pushDiff || authenticationDialogOpen ? "false" : "true"}" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description" ${state.pushDiff || authenticationDialogOpen ? 'aria-hidden="true" inert' : ""}>
     <div class="dialog-heading"><div><h2 id="remote-dialog-title">${escapeHtml(copy.pushCommitsTo(snapshot.branch.head ?? copy.currentBranchFallback))}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelPushConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
     <p id="remote-dialog-description" class="visually-hidden">${escapeHtml(copy.pushReviewDescription)}</p>${error}${renderPushRoute(model, preview)}${body}${modeBlocker ? `<div class="remote-dialog-warning" role="status">${escapeHtml(localization.catalog.errors.translate(modeBlocker))}</div>` : ""}
     <p class="remote-dialog-note">${escapeHtml(forceSelected ? copy.forcePushNote : copy.ordinaryPushNote)} ${escapeHtml(copy.tagsAndRetryNote)}</p>
     <div class="push-dialog-footer"><div class="push-tags-control"><label><input id="push-tags-enabled" type="checkbox" ${state.pushTagsEnabled ? "checked" : ""} ${operation ? "disabled" : ""}/><span>${escapeHtml(copy.pushTags)}</span></label><select id="push-tag-mode" aria-label="${escapeAttribute(copy.tagScope)}" ${!state.pushTagsEnabled || operation ? "disabled" : ""}><option value="all" ${state.pushTagMode === "all" ? "selected" : ""}>${escapeHtml(copy.all)}</option><option value="currentBranch" ${state.pushTagMode === "currentBranch" ? "selected" : ""}>${escapeHtml(copy.currentBranch)}</option></select><span class="push-tag-count" aria-live="polite">${state.pushPreviewRefreshing ? `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(copy.refreshingReview)}` : state.pushTagsEnabled && preview ? escapeHtml(tagsLabel) : ""}</span></div>
-      <div class="push-dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelPush)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<div class="push-split-action"><button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(copy.pushConfirmationAria(actionLabel, preview?.totalCommits ?? 0, preview?.tags.length ?? 0, route))}" aria-disabled="${confirmation.ariaDisabled}" data-refreshing="${state.pushPreviewRefreshing}" ${confirmation.nativeDisabled ? "disabled" : ""}>${escapeHtml(operation?.cancelling ? copy.cancelling : operation ? copy.pushing : actionLabel)}</button><button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="${escapeAttribute(copy.choosePushMode)}" aria-haspopup="menu" aria-expanded="${state.pushModeMenuOpen}" ${operation || !preview ? "disabled" : ""}>${icon("chevron-down", 13)}</button><div class="push-mode-menu ${state.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="${escapeAttribute(copy.pushMode)}"><button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.push)}</strong><small>${escapeHtml(copy.ordinaryNonForce)}</small></span>${!forceSelected ? icon("check", 13) : ""}</button><button type="button" role="menuitemradio" data-push-mode="forceWithLease" aria-checked="${forceSelected}" ${preview?.forceWithLeaseAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.forcePushWithLease)}</strong><small>${escapeHtml(copy.forceLeaseDetail)}</small></span>${forceSelected ? icon("check", 13) : ""}</button></div></div></div>
+      <div class="push-dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelPush)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<div class="push-split-action"><button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(copy.pushConfirmationAria(actionLabel, preview?.totalCommits ?? 0, preview?.tags.length ?? 0, route))}" aria-disabled="${confirmation.ariaDisabled}" data-refreshing="${state.pushPreviewRefreshing}" ${confirmation.nativeDisabled ? "disabled" : ""}>${escapeHtml(operation?.cancelling ? copy.cancelling : operation ? copy.pushing : authenticationChecking ? copy.checkingAuthentication : actionLabel)}</button><button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="${escapeAttribute(copy.choosePushMode)}" aria-haspopup="menu" aria-expanded="${state.pushModeMenuOpen}" ${operation || authenticationChecking || !preview ? "disabled" : ""}>${icon("chevron-down", 13)}</button><div class="push-mode-menu ${state.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="${escapeAttribute(copy.pushMode)}"><button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.push)}</strong><small>${escapeHtml(copy.ordinaryNonForce)}</small></span>${!forceSelected ? icon("check", 13) : ""}</button><button type="button" role="menuitemradio" data-push-mode="forceWithLease" aria-checked="${forceSelected}" ${preview?.forceWithLeaseAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.forcePushWithLease)}</strong><small>${escapeHtml(copy.forceLeaseDetail)}</small></span>${forceSelected ? icon("check", 13) : ""}</button></div></div></div>
     </div>
   </section>`;
 }
@@ -299,6 +305,49 @@ function renderPushFileTreeNode(node: CommitFileTreeNode, depth: number, model: 
 
 function pushFileRow(file: CommitFileChange, selected: boolean, depth: number | null, localization: Localization): string {
   return `<button class="push-file-row file-status-${file.status} ${selected ? "selected" : ""}" type="button" role="treeitem" ${depth === null ? "" : `style="--tree-depth:${depth}"`} data-push-file="${escapeAttribute(file.path)}" aria-selected="${selected}" title="${escapeAttribute(file.path)}"><span class="change-status status-${file.status}" title="${escapeAttribute(localization.catalog.changes.changeLabels[file.status])}">${changeCode(file.status)}</span><span class="commit-file-glyph">${fileTypeIcon(file.path)}</span><span>${escapeHtml(basename(file.path))}</span>${depth === null ? `<small>${escapeHtml(dirname(file.path))}</small>` : ""}</button>`;
+}
+
+function renderRemoteAuthenticationDialog(model: RemotePushDialogViewModel): string {
+  const authentication = model.authentication;
+  const entry = authentication?.dialog;
+  if (!entry || model.state.dialog !== "push") return "";
+  const localization = model.localization ?? DEFAULT_LOCALIZATION;
+  const copy = localization.catalog.remote;
+  const { status } = entry;
+  const host = status.host ?? status.remote;
+  const busy = authentication.checking || authentication.saving !== null;
+  const error = authentication.error
+    ? renderRemoteError(authentication.error, localization, "remote-authentication-error")
+    : "";
+  const helperWarning = status.transport === "https" && !status.credentialHelperConfigured
+    ? `<div class="remote-dialog-warning" role="status">${escapeHtml(copy.credentialHelperMissing)}</div>`
+    : "";
+  const https = status.transport === "https"
+    ? `<form id="remote-https-auth-form" class="remote-authentication-method">
+        <div><h3>${escapeHtml(copy.httpsCredentialTitle)}</h3><p>${escapeHtml(copy.passwordUnsupported)}</p></div>
+        ${helperWarning}
+        <label><span>${escapeHtml(copy.username)}</span><input id="remote-auth-username" type="text" autocomplete="username" placeholder="${escapeAttribute(copy.usernamePlaceholder)}" ${busy ? "disabled" : ""}/></label>
+        <label><span>${escapeHtml(copy.personalAccessToken)}</span><input id="remote-auth-token" type="password" autocomplete="off" spellcheck="false" placeholder="${escapeAttribute(copy.tokenPlaceholder)}" ${busy ? "disabled" : ""}/></label>
+        <p class="remote-authentication-notice">${escapeHtml(copy.credentialStorageNotice)}</p>
+        <button class="primary-button" type="submit" ${busy ? "disabled" : ""}>${escapeHtml(authentication.saving === "https" ? copy.savingCredential : copy.saveCredentialAndPush)}</button>
+      </form>`
+    : "";
+  const sshUrl = status.suggestedSshUrl ?? "";
+  const sshWarning = status.transport === "ssh" && !status.credentialAvailable
+    ? `<div class="remote-dialog-warning" role="status">${escapeHtml(copy.sshIdentityMissing)}</div>`
+    : "";
+  const ssh = `<form id="remote-ssh-auth-form" class="remote-authentication-method">
+      <div><h3>${escapeHtml(copy.sshCredentialTitle)}</h3><p>${escapeHtml(copy.sshCredentialDescription)}</p></div>
+      ${sshWarning}
+      <label><span>${escapeHtml(copy.sshUrl)}</span><input id="remote-auth-ssh-url" type="text" autocomplete="off" spellcheck="false" value="${escapeAttribute(sshUrl)}" placeholder="${escapeAttribute(copy.sshUrlPlaceholder)}" ${busy ? "disabled" : ""}/></label>
+      <button class="secondary-button" type="submit" ${busy ? "disabled" : ""}>${escapeHtml(authentication.saving === "ssh" ? copy.configuringSsh : copy.configureSshAndPush)}</button>
+    </form>`;
+  return `<div class="remote-authentication-backdrop" role="presentation"><section class="dialog remote-authentication-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-authentication-title" aria-describedby="remote-authentication-description">
+    <div class="dialog-heading"><div><h2 id="remote-authentication-title">${escapeHtml(copy.authenticationTitle(host))}</h2></div><button class="icon-button" id="remote-authentication-close" type="button" aria-label="${escapeAttribute(localization.catalog.common.cancel)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${busy ? "disabled" : ""}>${icon("close", 18)}</button></div>
+    <p id="remote-authentication-description">${escapeHtml(copy.authenticationDescription(status.remote))}</p>
+    ${error}<div class="remote-authentication-methods">${https}${ssh}</div>
+    <div class="dialog-actions"><button class="secondary-button" id="remote-authentication-recheck" type="button" ${busy ? "disabled" : ""}>${escapeHtml(authentication.checking ? copy.checkingAuthentication : copy.recheckAuthentication)}</button><button class="secondary-button" id="remote-authentication-cancel" type="button" ${busy ? "disabled" : ""}>${escapeHtml(localization.catalog.common.cancel)}</button></div>
+  </section></div>`;
 }
 
 function renderPushDiffDialog(model: RemotePushDialogViewModel): string {

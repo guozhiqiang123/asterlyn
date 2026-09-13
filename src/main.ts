@@ -18,6 +18,7 @@ import "./features/git-history/branches.css";
 import "./features/git-history/details.css";
 import "./features/git-operations/git-operation-controls.css";
 import "./features/remote-push/remote-push.css";
+import "./features/remote-push/remote-authentication.css";
 import "./shared/responsive.css";
 import { AsterlynApp } from "./app";
 import { BRAND } from "./brand";

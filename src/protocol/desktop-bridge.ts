@@ -21,6 +21,7 @@ import type {
   PushMode,
   PushPreview,
   PushTagMode,
+  RemoteAuthenticationStatus,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
@@ -174,6 +175,21 @@ export interface GitOperationBridge {
   undoGitWorktreeRecovery(repositoryRoot: string, recoveryId: string): Promise<RepositoryMutationOutcome>;
   switchBranch(repositoryRoot: string, targetFullName: string): Promise<RepositoryMutationOutcome>;
   createBranch(repositoryRoot: string, name: string): Promise<RepositoryMutationOutcome>;
+  readRemoteAuthentication(
+    repositoryRoot: string,
+    remote: string,
+  ): Promise<RemoteAuthenticationStatus>;
+  storeRemoteHttpsCredential(
+    repositoryRoot: string,
+    remote: string,
+    username: string,
+    token: string,
+  ): Promise<RemoteAuthenticationStatus>;
+  configureRemoteSsh(
+    repositoryRoot: string,
+    remote: string,
+    sshUrl: string,
+  ): Promise<RemoteAuthenticationStatus>;
   fetchRemote(
     repositoryRoot: string,
     remote: string,

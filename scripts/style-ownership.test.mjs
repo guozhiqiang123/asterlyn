@@ -21,6 +21,7 @@ const ownedStyles = [
   ["features/git-history/branches.css", "main.ts"],
   ["features/git-history/details.css", "main.ts"],
   ["features/remote-push/remote-push.css", "main.ts"],
+  ["features/remote-push/remote-authentication.css", "main.ts"],
   ["features/git-operations/git-operation-controls.css", "main.ts"],
   [
     "features/git-operations/git-operations.css",

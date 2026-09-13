@@ -17,8 +17,9 @@ use crate::model::{
     BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
     DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteSummary, RepositorySnapshot,
-    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
+    RemoteTransport, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
+    UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -78,6 +79,15 @@ struct PushTargetContext {
     comparison_base_oid: Option<String>,
     publish: bool,
     set_upstream_after_push: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RemoteEndpoint {
+    transport: RemoteTransport,
+    host: Option<String>,
+    path: Option<String>,
+    username: Option<String>,
+    suggested_ssh_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1967,6 +1977,105 @@ impl GitRepository {
         Ok(())
     }
 
+    pub fn remote_authentication_status(
+        &self,
+        remote: &str,
+    ) -> Result<RemoteAuthenticationStatus, GitError> {
+        let remote = self.validated_remote(remote, true)?;
+        let url = self.remote_push_url(&remote.name)?;
+        let endpoint = parse_remote_endpoint(&url);
+        let credential_helper_configured = match endpoint.transport {
+            RemoteTransport::Https => self.credential_helper_configured(&endpoint)?,
+            _ => false,
+        };
+        let credential_available = match endpoint.transport {
+            RemoteTransport::Https => self.https_credential_available(&endpoint)?,
+            RemoteTransport::Ssh => ssh_identity_configured(),
+            RemoteTransport::Local => true,
+            RemoteTransport::Other => true,
+        };
+        Ok(RemoteAuthenticationStatus {
+            remote: remote.name,
+            transport: endpoint.transport,
+            host: endpoint.host,
+            credential_available,
+            credential_helper_configured,
+            suggested_ssh_url: endpoint.suggested_ssh_url,
+        })
+    }
+
+    pub fn store_remote_https_credential(
+        &self,
+        remote: &str,
+        username: &str,
+        token: &str,
+    ) -> Result<RemoteAuthenticationStatus, GitError> {
+        validate_credential_field("username", username, 256)?;
+        validate_credential_field("personal access token", token, 4096)?;
+        let remote = self.validated_remote(remote, true)?;
+        let endpoint = parse_remote_endpoint(&self.remote_push_url(&remote.name)?);
+        if endpoint.transport != RemoteTransport::Https {
+            return Err(GitError::InvalidInput {
+                field: "remote authentication".to_string(),
+                message: "personal access tokens can be stored only for HTTPS remotes".to_string(),
+            });
+        }
+        self.ensure_secure_credential_helper(&endpoint)?;
+
+        let mut input = credential_input(&endpoint, Some(username), Some(token));
+        let output = self.run_credential_command("store remote credential", "approve", &input);
+        input.fill(0);
+        let output = output?;
+        if !output.status.success() {
+            return Err(GitError::CommandFailed {
+                operation: "store remote credential".to_string(),
+                status: output.status.code(),
+                message: sanitize_stderr(
+                    &output.stderr,
+                    "the configured Git credential helper rejected the credential",
+                ),
+            });
+        }
+
+        let status = self.remote_authentication_status(&remote.name)?;
+        if !status.credential_available {
+            return Err(GitError::CommandFailed {
+                operation: "store remote credential".to_string(),
+                status: None,
+                message: "the configured Git credential helper did not retain the credential"
+                    .to_string(),
+            });
+        }
+        Ok(status)
+    }
+
+    pub fn configure_remote_ssh(
+        &self,
+        remote: &str,
+        ssh_url: &str,
+    ) -> Result<RemoteAuthenticationStatus, GitError> {
+        validate_credential_field("SSH remote URL", ssh_url, 4096)?;
+        let remote = self.validated_remote(remote, true)?;
+        if parse_remote_endpoint(ssh_url).transport != RemoteTransport::Ssh {
+            return Err(GitError::InvalidInput {
+                field: "SSH remote URL".to_string(),
+                message: "enter an ssh:// URL or an SSH scp-style address such as git@host:owner/repository.git"
+                    .to_string(),
+            });
+        }
+        self.run_mutation(
+            "configure SSH push URL",
+            vec![
+                OsString::from("remote"),
+                OsString::from("set-url"),
+                OsString::from("--push"),
+                OsString::from(&remote.name),
+                OsString::from(ssh_url),
+            ],
+        )?;
+        self.remote_authentication_status(&remote.name)
+    }
+
     pub fn pull_ff_only(&self, cancellation: &CancellationToken) -> Result<(), GitError> {
         self.ensure_no_repository_operation("pull")?;
         self.ensure_clean_worktree("pull")?;
@@ -2558,6 +2667,110 @@ impl GitRepository {
                 })
             })
             .collect()
+    }
+
+    fn remote_push_url(&self, remote: &str) -> Result<String, GitError> {
+        let output = self.run_read(
+            "read remote push URL",
+            ["remote", "get-url", "--push", remote],
+        )?;
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if url.is_empty() {
+            return Err(GitError::Parse {
+                context: "remote push URL".to_string(),
+                message: "Git returned an empty remote URL".to_string(),
+            });
+        }
+        Ok(url)
+    }
+
+    fn credential_helper_configured(&self, endpoint: &RemoteEndpoint) -> Result<bool, GitError> {
+        let Some(url) = credential_lookup_url(endpoint) else {
+            return Ok(false);
+        };
+        let output = run_git_output(
+            &self.root,
+            ["config", "--get-urlmatch", "credential.helper", &url],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "read credential helper".to_string(),
+            message: error.to_string(),
+        })?;
+        match output.status.code() {
+            Some(0) => Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|value| !value.trim().is_empty())),
+            Some(1) => Ok(false),
+            _ => Err(GitError::CommandFailed {
+                operation: "read credential helper".to_string(),
+                status: output.status.code(),
+                message: sanitize_stderr(&output.stderr, "Git could not read credential helpers"),
+            }),
+        }
+    }
+
+    fn ensure_secure_credential_helper(&self, endpoint: &RemoteEndpoint) -> Result<(), GitError> {
+        if self.credential_helper_configured(endpoint)? {
+            return Ok(());
+        }
+        let helper = discover_platform_credential_helper(&self.root)?.ok_or_else(|| {
+            GitError::InvalidInput {
+                field: "credential helper".to_string(),
+                message: "no supported secure Git credential manager is installed; configure one or use SSH"
+                    .to_string(),
+            }
+        })?;
+        self.run_mutation(
+            "configure credential helper",
+            vec![
+                OsString::from("config"),
+                OsString::from("--local"),
+                OsString::from("credential.helper"),
+                OsString::from(helper),
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn https_credential_available(&self, endpoint: &RemoteEndpoint) -> Result<bool, GitError> {
+        let input = credential_input(endpoint, endpoint.username.as_deref(), None);
+        let output = self.run_credential_command("read remote credential", "fill", &input)?;
+        if !output.status.success() {
+            return Ok(false);
+        }
+        Ok(credential_output_has_secret(&output.stdout))
+    }
+
+    fn run_credential_command(
+        &self,
+        operation: &str,
+        action: &str,
+        input: &[u8],
+    ) -> Result<Output, GitError> {
+        let mut child = remote_command(&self.root)
+            .arg("credential")
+            .arg(action)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            })?;
+        let mut stdin = child.stdin.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git credential stdin was unavailable".to_string(),
+        })?;
+        stdin.write_all(input).map_err(|error| GitError::Io {
+            operation: operation.to_string(),
+            message: format!("could not send credential metadata to Git: {error}"),
+        })?;
+        drop(stdin);
+        wait_with_remote_output(child).map_err(|error| GitError::Io {
+            operation: operation.to_string(),
+            message: error.to_string(),
+        })
     }
 
     fn validated_remote(&self, name: &str, require_push: bool) -> Result<RemoteSummary, GitError> {
@@ -3621,6 +3834,31 @@ fn remote_command(path: &Path) -> Command {
     command
 }
 
+fn wait_with_remote_output(mut child: Child) -> std::io::Result<Output> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
+    let stdout_reader = thread::spawn(move || read_stream_bounded(stdout));
+    let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+    let status = child.wait();
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stdout reader failed"))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stderr reader failed"))?;
+    Ok(Output {
+        status: status?,
+        stdout: stdout?,
+        stderr: stderr?,
+    })
+}
+
 fn terminate_process_tree(child: &mut Child) {
     #[cfg(unix)]
     {
@@ -3667,6 +3905,226 @@ fn ensure_success(operation: &str, output: Output) -> Result<Output, GitError> {
             message: sanitize_stderr(&output.stderr, operation),
         })
     }
+}
+
+fn parse_remote_endpoint(url: &str) -> RemoteEndpoint {
+    let value = url.trim();
+    if value.is_empty() || value.contains(['\0', '\r', '\n']) {
+        return remote_endpoint(RemoteTransport::Other, None, None, None, None);
+    }
+    if let Some(rest) = value.strip_prefix("https://") {
+        let (authority, path) = split_remote_authority(rest);
+        let (username, host) = split_remote_user(authority);
+        let path = clean_remote_path(path);
+        let suggested_ssh_url = suggested_ssh_url(host, path.as_deref());
+        return remote_endpoint(
+            RemoteTransport::Https,
+            nonempty(host),
+            path,
+            username,
+            suggested_ssh_url,
+        );
+    }
+    if let Some(rest) = value.strip_prefix("ssh://") {
+        let (authority, path) = split_remote_authority(rest);
+        let (username, host) = split_remote_user(authority);
+        return remote_endpoint(
+            RemoteTransport::Ssh,
+            nonempty(host),
+            clean_remote_path(path),
+            username,
+            None,
+        );
+    }
+    if value.starts_with("file://")
+        || value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+    {
+        return remote_endpoint(RemoteTransport::Local, None, None, None, None);
+    }
+    if let Some((authority, path)) = value.split_once(':')
+        && authority.len() > 1
+        && !authority.contains(['/', '\\'])
+        && !path.is_empty()
+    {
+        let (username, host) = split_remote_user(authority);
+        return remote_endpoint(
+            RemoteTransport::Ssh,
+            nonempty(host),
+            clean_remote_path(path),
+            username,
+            None,
+        );
+    }
+    if Path::new(value).is_absolute() || value.contains(['/', '\\']) {
+        return remote_endpoint(RemoteTransport::Local, None, None, None, None);
+    }
+    remote_endpoint(RemoteTransport::Other, None, None, None, None)
+}
+
+fn remote_endpoint(
+    transport: RemoteTransport,
+    host: Option<String>,
+    path: Option<String>,
+    username: Option<String>,
+    suggested_ssh_url: Option<String>,
+) -> RemoteEndpoint {
+    RemoteEndpoint {
+        transport,
+        host,
+        path,
+        username,
+        suggested_ssh_url,
+    }
+}
+
+fn split_remote_authority(value: &str) -> (&str, &str) {
+    value
+        .find('/')
+        .map_or((value, ""), |index| (&value[..index], &value[index + 1..]))
+}
+
+fn split_remote_user(authority: &str) -> (Option<String>, &str) {
+    let Some((userinfo, host)) = authority.rsplit_once('@') else {
+        return (None, authority);
+    };
+    let username = userinfo.split_once(':').map_or(userinfo, |(name, _)| name);
+    (nonempty(username), host)
+}
+
+fn clean_remote_path(path: &str) -> Option<String> {
+    let path = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches('/');
+    nonempty(path)
+}
+
+fn nonempty(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn suggested_ssh_url(host: &str, path: Option<&str>) -> Option<String> {
+    let path = path?;
+    if host.is_empty() {
+        return None;
+    }
+    if host.contains(':') {
+        Some(format!("ssh://git@{host}/{path}"))
+    } else {
+        Some(format!("git@{host}:{path}"))
+    }
+}
+
+fn credential_lookup_url(endpoint: &RemoteEndpoint) -> Option<String> {
+    if endpoint.transport != RemoteTransport::Https {
+        return None;
+    }
+    let host = endpoint.host.as_deref()?;
+    Some(match endpoint.path.as_deref() {
+        Some(path) => format!("https://{host}/{path}"),
+        None => format!("https://{host}"),
+    })
+}
+
+fn credential_input(
+    endpoint: &RemoteEndpoint,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Vec<u8> {
+    let mut input = Vec::new();
+    input.extend_from_slice(b"protocol=https\n");
+    if let Some(host) = endpoint.host.as_deref() {
+        input.extend_from_slice(b"host=");
+        input.extend_from_slice(host.as_bytes());
+        input.push(b'\n');
+    }
+    if let Some(path) = endpoint.path.as_deref() {
+        input.extend_from_slice(b"path=");
+        input.extend_from_slice(path.as_bytes());
+        input.push(b'\n');
+    }
+    if let Some(username) = username {
+        input.extend_from_slice(b"username=");
+        input.extend_from_slice(username.as_bytes());
+        input.push(b'\n');
+    }
+    if let Some(password) = password {
+        input.extend_from_slice(b"password=");
+        input.extend_from_slice(password.as_bytes());
+        input.push(b'\n');
+    }
+    input.push(b'\n');
+    input
+}
+
+fn credential_output_has_secret(output: &[u8]) -> bool {
+    output.split(|byte| *byte == b'\n').any(|line| {
+        line.strip_prefix(b"password=")
+            .is_some_and(|password| !password.is_empty())
+    })
+}
+
+fn validate_credential_field(field: &str, value: &str, limit: usize) -> Result<(), GitError> {
+    if value.is_empty()
+        || value.len() > limit
+        || value != value.trim()
+        || value.contains(['\0', '\r', '\n'])
+    {
+        return Err(GitError::InvalidInput {
+            field: field.to_string(),
+            message: format!("enter a non-empty {field} without surrounding whitespace"),
+        });
+    }
+    Ok(())
+}
+
+fn discover_platform_credential_helper(root: &Path) -> Result<Option<&'static str>, GitError> {
+    #[cfg(target_os = "macos")]
+    const CANDIDATES: &[&str] = &["osxkeychain"];
+    #[cfg(target_os = "windows")]
+    const CANDIDATES: &[&str] = &["manager", "manager-core"];
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    const CANDIDATES: &[&str] = &["libsecret"];
+
+    let output = run_git_output(root, ["--exec-path"]).map_err(|error| GitError::Io {
+        operation: "locate Git credential helpers".to_string(),
+        message: error.to_string(),
+    })?;
+    let output = ensure_success("locate Git credential helpers", output)?;
+    let exec_path = output_path(&output, "Git executable path")?;
+    let path_entries = std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
+        .unwrap_or_default();
+    Ok(CANDIDATES.iter().copied().find(|candidate| {
+        credential_helper_file_exists(&exec_path, candidate)
+            || path_entries
+                .iter()
+                .any(|entry| credential_helper_file_exists(entry, candidate))
+    }))
+}
+
+fn credential_helper_file_exists(directory: &Path, helper: &str) -> bool {
+    let executable = directory.join(format!("git-credential-{helper}"));
+    executable.is_file()
+        || cfg!(target_os = "windows") && executable.with_extension("exe").is_file()
+}
+
+fn ssh_identity_configured() -> bool {
+    if std::env::var_os("SSH_AUTH_SOCK")
+        .filter(|value| !value.is_empty())
+        .is_some_and(|value| Path::new(&value).exists())
+    {
+        return true;
+    }
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return false;
+    };
+    ["id_ed25519", "id_ecdsa", "id_rsa"]
+        .iter()
+        .any(|name| Path::new(&home).join(".ssh").join(name).is_file())
 }
 
 fn sanitize_stderr(stderr: &[u8], fallback: &str) -> String {
@@ -6276,6 +6734,79 @@ mod tests {
         let first = common("one|refs", "heads/main");
         let second = common("one", "refs|heads/main");
         assert_ne!(push_preview_token(&first), push_preview_token(&second));
+    }
+
+    #[test]
+    fn remote_authentication_preflight_detects_missing_and_stored_https_credentials() {
+        let fixture = remote_fixture();
+        let credential_file = fixture._directory.path().join("credentials");
+        let helper = format!("store --file={}", credential_file.to_string_lossy());
+        git(
+            &fixture.local,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "https://example.invalid/owner/repository.git",
+            ],
+        );
+        git(&fixture.local, &["config", "credential.helper", ""]);
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+
+        let missing = repository
+            .remote_authentication_status("origin")
+            .expect("credential preflight completes without prompting");
+        assert_eq!(missing.transport, RemoteTransport::Https);
+        assert_eq!(missing.host.as_deref(), Some("example.invalid"));
+        assert!(!missing.credential_available);
+        assert!(!missing.credential_helper_configured);
+        assert_eq!(
+            missing.suggested_ssh_url.as_deref(),
+            Some("git@example.invalid:owner/repository.git")
+        );
+
+        git(&fixture.local, &["config", "credential.helper", &helper]);
+        let stored = repository
+            .store_remote_https_credential("origin", "developer", "test-token")
+            .expect("configured helper stores the token");
+        assert!(stored.credential_available);
+        assert!(stored.credential_helper_configured);
+    }
+
+    #[test]
+    fn remote_authentication_configures_only_an_explicit_ssh_push_url() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let invalid = repository
+            .configure_remote_ssh("origin", "https://example.invalid/owner/repository.git")
+            .expect_err("HTTPS is not accepted as an SSH route");
+        assert!(matches!(invalid, GitError::InvalidInput { .. }));
+
+        let status = repository
+            .configure_remote_ssh("origin", "git@example.invalid:owner/repository.git")
+            .expect("explicit SSH push URL is configured");
+        assert_eq!(status.transport, RemoteTransport::Ssh);
+        assert_eq!(status.host.as_deref(), Some("example.invalid"));
+        assert_eq!(
+            git_stdout(&fixture.local, &["remote", "get-url", "--push", "origin"]),
+            "git@example.invalid:owner/repository.git"
+        );
+    }
+
+    #[test]
+    fn remote_endpoint_parsing_never_exposes_https_secrets() {
+        let endpoint = parse_remote_endpoint(
+            "https://developer:secret@example.invalid:8443/owner/repository.git?query=ignored",
+        );
+        assert_eq!(endpoint.transport, RemoteTransport::Https);
+        assert_eq!(endpoint.username.as_deref(), Some("developer"));
+        assert_eq!(endpoint.host.as_deref(), Some("example.invalid:8443"));
+        assert_eq!(endpoint.path.as_deref(), Some("owner/repository.git"));
+        assert_eq!(
+            endpoint.suggested_ssh_url.as_deref(),
+            Some("ssh://git@example.invalid:8443/owner/repository.git")
+        );
+        assert!(!format!("{endpoint:?}").contains("secret"));
     }
 
     #[test]

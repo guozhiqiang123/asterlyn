@@ -29,6 +29,17 @@ export interface RemoteSummary {
   pushSupported: boolean;
 }
 
+export type RemoteTransport = "https" | "ssh" | "local" | "other";
+
+export interface RemoteAuthenticationStatus {
+  remote: string;
+  transport: RemoteTransport;
+  host: string | null;
+  credentialAvailable: boolean;
+  credentialHelperConfigured: boolean;
+  suggestedSshUrl: string | null;
+}
+
 export interface FileChange {
   path: string;
   originalPath: string | null;

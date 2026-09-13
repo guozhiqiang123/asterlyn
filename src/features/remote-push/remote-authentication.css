@@ -1,0 +1,91 @@
+/* Remote credential preflight and explicit credential setup. */
+.remote-authentication-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  padding: 22px;
+  place-items: center;
+  background: var(--surface-scrim-strong);
+}
+
+.remote-authentication-dialog {
+  display: grid;
+  overflow: auto;
+  width: min(680px, calc(100vw - 44px));
+  max-height: min(760px, calc(100vh - 44px));
+  gap: 12px;
+}
+
+.remote-authentication-dialog > p,
+.remote-authentication-method p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.remote-authentication-methods {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 10px;
+}
+
+.remote-authentication-method {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-deep);
+}
+
+.remote-authentication-method h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.remote-authentication-method label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.remote-authentication-method input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface-control);
+  color: var(--text);
+  font: inherit;
+  font-weight: 450;
+}
+
+.remote-authentication-method .remote-authentication-notice {
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.remote-authentication-error {
+  padding: 9px 11px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 10px;
+}
+
+.remote-authentication-error strong,
+.remote-authentication-error span {
+  display: block;
+}
+
+.remote-authentication-error span {
+  margin-top: 3px;
+}

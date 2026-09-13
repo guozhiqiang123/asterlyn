@@ -82,6 +82,32 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.match(push, /Push Commits to main/);
   assert.match(push, /Reading outgoing commits, tags, and files/);
   assert.match(push, /Force Push with Lease/);
+
+  const authentication = renderRemoteDialogContent({
+    ...viewModel(state),
+    authentication: {
+      checking: false,
+      saving: null,
+      error: null,
+      dialog: {
+        repositoryRoot: "/workspace/repository",
+        status: {
+          remote: "origin",
+          transport: "https",
+          host: "github.com",
+          credentialAvailable: false,
+          credentialHelperConfigured: true,
+          suggestedSshUrl: "git@github.com:owner/repository.git",
+        },
+      },
+    },
+  });
+  assert.match(authentication, /Authenticate with github.com/);
+  assert.match(authentication, /Personal access token/);
+  assert.match(authentication, /git@github.com:owner\/repository.git/);
+  assert.doesNotMatch(authentication, /account password[^<]*<input/iu);
+  assert.doesNotMatch(authentication, /remote-https-auth-form[\s\S]*type="submit" disabled/);
+  assert.match(authentication, /push-dialog[^>]*aria-hidden="true" inert/);
 });
 
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {

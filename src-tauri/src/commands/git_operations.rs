@@ -209,6 +209,65 @@ pub(crate) async fn fetch_remote(
 }
 
 #[tauri::command]
+pub(crate) async fn read_remote_authentication(
+    repository_root: String,
+    remote: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RemoteAuthenticationStatus, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read remote authentication", move || {
+        GitRepository::open(root)?.remote_authentication_status(&remote)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn store_remote_https_credential(
+    repository_root: String,
+    remote: String,
+    username: String,
+    token: String,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RemoteAuthenticationStatus, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "store remote credential",
+            move |repository| repository.store_remote_https_credential(&remote, &username, &token),
+        )
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn configure_remote_ssh(
+    repository_root: String,
+    remote: String,
+    ssh_url: String,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RemoteAuthenticationStatus, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "configure SSH push URL",
+            move |repository| repository.configure_remote_ssh(&remote, &ssh_url),
+        )
+        .await
+}
+
+#[tauri::command]
 pub(crate) async fn read_push_preview(
     repository_root: String,
     remote: String,

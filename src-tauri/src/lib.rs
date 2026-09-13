@@ -5,7 +5,7 @@ use asterlyn_git::{
     CommitDetails, CommitDiffResult, DiffResult, FileChange, GitConflictContent, GitError,
     GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot, GitRepository,
     HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
-    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    RemoteAuthenticationStatus, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
@@ -693,6 +693,9 @@ pub fn run() {
             switch_branch,
             create_branch,
             fetch_remote,
+            read_remote_authentication,
+            store_remote_https_credential,
+            configure_remote_ssh,
             read_push_preview,
             read_push_file_commit,
             pull_current,

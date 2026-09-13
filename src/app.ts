@@ -42,6 +42,10 @@ import {
   type RemoteUpdateStrategy,
 } from "./features/remote-push/remote-push-controller";
 import {
+  RemoteAuthenticationController,
+  type RemoteAuthenticationResult,
+} from "./features/remote-push/remote-authentication-controller";
+import {
   pushReviewFiles,
   renderRemoteDialogContent,
   renderRemoteToolbarView,
@@ -336,6 +340,8 @@ export class AsterlynApp {
   private readonly releaseHistoryController: () => void;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
+  private readonly remoteAuthenticationController: RemoteAuthenticationController;
+  private readonly releaseRemoteAuthenticationController: () => void;
   private readonly changesController: ChangesCommitController;
   private readonly releaseChangesController: () => void;
   private readonly filesController: ProjectFilesController;
@@ -432,6 +438,20 @@ export class AsterlynApp {
     }, { messages: initialCatalog.remote, errorMessages: initialCatalog.errors });
     this.releaseRemoteController = this.remoteController.subscribe((change) =>
       this.handleRemoteControllerChange(change),
+    );
+    this.remoteAuthenticationController = new RemoteAuthenticationController(
+      {
+        readRemoteAuthentication: (...args) => bridge.readRemoteAuthentication(...args),
+        storeRemoteHttpsCredential: (...args) => bridge.storeRemoteHttpsCredential(...args),
+        configureRemoteSsh: (...args) => bridge.configureRemoteSsh(...args),
+      },
+      initialCatalog.remote,
+      initialCatalog.errors,
+    );
+    this.releaseRemoteAuthenticationController = this.remoteAuthenticationController.subscribe(
+      () => {
+        if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog();
+      },
     );
     this.changesController = new ChangesCommitController(
       {
@@ -856,6 +876,7 @@ export class AsterlynApp {
       this.changesController.setMessages(catalog.changes);
       this.historyController.setMessages(catalog.history);
       this.remoteController.setMessages(catalog.remote, catalog.errors);
+      this.remoteAuthenticationController.setMessages(catalog.remote, catalog.errors);
       this.gitOperationController.setMessages(catalog.gitOperations);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
@@ -1020,6 +1041,8 @@ export class AsterlynApp {
     this.historyController.dispose();
     this.releaseRemoteController();
     this.remoteController.dispose();
+    this.releaseRemoteAuthenticationController();
+    this.remoteAuthenticationController.dispose();
     this.releaseChangesController();
     this.changesController.dispose();
     this.releaseFilesController();
@@ -2245,6 +2268,7 @@ export class AsterlynApp {
   }
 
   private closeRemoteDialog(restoreFocus = true): void {
+    this.remoteAuthenticationController.close();
     if (!this.remoteController.closeDialog()) return;
     const target = this.remoteDialogReturnFocus;
     this.remoteDialogReturnFocus = null;
@@ -2271,13 +2295,24 @@ export class AsterlynApp {
       workspaceRoot: this.windowSession.workspace.state.root,
       preferences: this.settingsState.preferences,
       selectedProjectFileAvailable: this.pushSelectedProjectFile() !== null,
+      authentication: this.remoteAuthenticationController.state,
       localization: this.localization,
     });
     this.bindRemoteDialogEvents();
+    if (this.remoteAuthenticationController.state.dialog) {
+      queueMicrotask(() => {
+        const status = this.remoteAuthenticationController.state.dialog?.status;
+        const target = status?.transport === "https" && status.credentialHelperConfigured
+          ? this.root.querySelector<HTMLInputElement>("#remote-auth-username")
+          : this.root.querySelector<HTMLInputElement>("#remote-auth-ssh-url") ??
+            this.root.querySelector<HTMLButtonElement>("#remote-authentication-recheck");
+        target?.focus();
+      });
+    }
     if (dialog === "push" && this.remoteState.pushDiff) {
       queueMicrotask(() => this.mountPushDiffSurface());
     }
-    if (focusedId) {
+    if (focusedId && !this.remoteAuthenticationController.state.dialog) {
       queueMicrotask(() =>
         this.root.querySelector<HTMLElement>(`#${focusedId}`)?.focus(),
       );
@@ -2317,6 +2352,51 @@ export class AsterlynApp {
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
       ?.addEventListener("click", () => {
         if (!this.remoteState.pushPreviewRefreshing) void this.confirmRemoteDialog("push");
+      });
+    const closeAuthentication = () => {
+      this.remoteAuthenticationController.close();
+      queueMicrotask(() =>
+        this.root.querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")?.focus(),
+      );
+    };
+    this.root
+      .querySelector<HTMLButtonElement>("#remote-authentication-close")
+      ?.addEventListener("click", closeAuthentication);
+    this.root
+      .querySelector<HTMLButtonElement>("#remote-authentication-cancel")
+      ?.addEventListener("click", closeAuthentication);
+    this.root
+      .querySelector<HTMLButtonElement>("#remote-authentication-recheck")
+      ?.addEventListener("click", () => {
+        const entry = this.remoteAuthenticationController.state.dialog;
+        if (!entry) return;
+        void this.resumePushAfterAuthentication(
+          this.remoteAuthenticationController.check(
+            entry.repositoryRoot,
+            entry.status.remote,
+          ),
+        );
+      });
+    this.root
+      .querySelector<HTMLFormElement>("#remote-https-auth-form")
+      ?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const username = this.root.querySelector<HTMLInputElement>("#remote-auth-username")?.value ?? "";
+        const tokenInput = this.root.querySelector<HTMLInputElement>("#remote-auth-token");
+        const token = tokenInput?.value ?? "";
+        if (tokenInput) tokenInput.value = "";
+        void this.resumePushAfterAuthentication(
+          this.remoteAuthenticationController.storeHttpsCredential(username, token),
+        );
+      });
+    this.root
+      .querySelector<HTMLFormElement>("#remote-ssh-auth-form")
+      ?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const sshUrl = this.root.querySelector<HTMLInputElement>("#remote-auth-ssh-url")?.value ?? "";
+        void this.resumePushAfterAuthentication(
+          this.remoteAuthenticationController.configureSsh(sshUrl),
+        );
       });
     this.root.querySelector<HTMLInputElement>("#push-tags-enabled")?.addEventListener("change", (event) => {
       this.remoteController.setPushTagsEnabled((event.currentTarget as HTMLInputElement).checked);
@@ -2541,8 +2621,27 @@ export class AsterlynApp {
   }
 
   private async confirmRemoteDialog(kind: "pull" | "push"): Promise<void> {
+    if (kind === "push") {
+      const snapshot = this.windowSession.repository.state.snapshot;
+      const preview = this.remoteState.pushPreview;
+      if (!snapshot || !preview) return;
+      const authentication = await this.remoteAuthenticationController.check(
+        snapshot.root,
+        preview.remote,
+      );
+      if (authentication !== "ready") return;
+    }
     const succeeded = await this.runRemoteOperation(kind);
     if (succeeded) this.closeRemoteDialog();
+  }
+
+  private async resumePushAfterAuthentication(
+    result: Promise<RemoteAuthenticationResult>,
+  ): Promise<void> {
+    if (await result === "ready" && this.remoteState.dialog === "push") {
+      const succeeded = await this.runRemoteOperation("push");
+      if (succeeded) this.closeRemoteDialog();
+    }
   }
 
   private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<boolean> {
@@ -2580,6 +2679,13 @@ export class AsterlynApp {
       } else if (result.status === "failure") {
         failed = true;
         this.showError(result.error);
+        if (kind === "push" && policy.selectedRemote && isRemoteAuthenticationError(result.error)) {
+          await this.remoteAuthenticationController.check(
+            snapshot.root,
+            policy.selectedRemote.name,
+            true,
+          );
+        }
         try {
           const identity = this.windowSession.workspace.identity();
           if (!identity || identity.root !== snapshot.root) return false;
@@ -6239,6 +6345,12 @@ function basename(path: string): string {
 function projectMonogram(path: string): string {
   const name = basename(path).trim();
   return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
+}
+
+function isRemoteAuthenticationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as Record<string, unknown>;
+  return value.kind === "remoteFailed" && value.reason === "authentication";
 }
 
 function escapeHtml(value: string): string {

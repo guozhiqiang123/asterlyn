@@ -203,6 +203,26 @@ pub struct RemoteSummary {
     pub push_supported: bool,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteTransport {
+    Https,
+    Ssh,
+    Local,
+    Other,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteAuthenticationStatus {
+    pub remote: String,
+    pub transport: RemoteTransport,
+    pub host: Option<String>,
+    pub credential_available: bool,
+    pub credential_helper_configured: bool,
+    pub suggested_ssh_url: Option<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FileChange {
