@@ -16,8 +16,21 @@ import type {
 } from "./session-invalidation.ts";
 import type { WindowSession, WindowSessionChange } from "./window-session.ts";
 
-const CONFLICT_MESSAGE =
-  "Git paused with conflicts. Resolve the listed files from Changes, then Continue, Skip, or Abort the operation.";
+export interface RepositoryIntegrationMessages {
+  readonly conflictPaused: string;
+  readonly scanningUntracked: string;
+  readonly ready: string;
+  readonly fileSavedRefreshFailed: string;
+  recoveryCount(count: number): string;
+}
+
+const DEFAULT_MESSAGES: RepositoryIntegrationMessages = {
+  conflictPaused: "Git paused with conflicts. Resolve the listed files from Changes, then Continue, Skip, or Abort the operation.",
+  scanningUntracked: "Scanning untracked files…",
+  ready: "Ready",
+  fileSavedRefreshFailed: "File saved; Git status refresh failed",
+  recoveryCount: (count) => `${count} replacement recovery ${count === 1 ? "record needs" : "records need"} review`,
+};
 
 interface RemoteSnapshotTarget {
   installSnapshot(snapshot: RepositorySnapshot | null): void;
@@ -78,6 +91,7 @@ export interface RepositoryIntegrationActions {
     kind: "normal" | "busy" | "warning" | "success",
   ): void;
   reportError(error: unknown): void;
+  messages?(): RepositoryIntegrationMessages;
 }
 
 export interface RepositoryMutationOptions extends RepositoryChangeInstallOptions {
@@ -305,14 +319,14 @@ export class RepositoryIntegrationCoordinator {
     this.actions.showChangesTool();
     this.targets.changes.selectConflict(conflict.path);
     this.actions.openWorkingDiff(snapshot.root, conflict.path);
-    this.targets.remote.setDialogError(CONFLICT_MESSAGE);
+    this.targets.remote.setDialogError(this.messages().conflictPaused);
     return true;
   }
 
   private handleSessionChange(change: WindowSessionChange): void {
     if (this.disposed) return;
     if (change.reason === "untracked-scan-start") {
-      if (change.announce) this.actions.setStatus("Scanning untracked files…", "busy");
+      if (change.announce) this.actions.setStatus(this.messages().scanningUntracked, "busy");
       return;
     }
     if (
@@ -329,16 +343,14 @@ export class RepositoryIntegrationCoordinator {
       if (change.reason === "untracked-scan-complete" && change.announce) {
         const recoveries = this.actions.replacementRecoveryCount();
         this.actions.setStatus(
-          recoveries > 0
-            ? `${recoveries} replacement recovery ${recoveries === 1 ? "record needs" : "records need"} review`
-            : "Ready",
+          recoveries > 0 ? this.messages().recoveryCount(recoveries) : this.messages().ready,
           recoveries > 0 ? "warning" : "normal",
         );
       }
       return;
     }
     if (change.reason === "tracked-refresh-error") {
-      this.actions.setStatus("File saved; Git status refresh failed", "warning");
+      this.actions.setStatus(this.messages().fileSavedRefreshFailed, "warning");
       this.actions.reportError(change.error);
       return;
     }
@@ -350,5 +362,9 @@ export class RepositoryIntegrationCoordinator {
 
   private ensureActive(): void {
     if (this.disposed) throw new Error("Repository integration coordinator is disposed.");
+  }
+
+  private messages(): RepositoryIntegrationMessages {
+    return this.actions.messages?.() ?? DEFAULT_MESSAGES;
   }
 }

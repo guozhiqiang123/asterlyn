@@ -24,7 +24,20 @@ export interface WorkspaceWatchCoordinatorActions {
     cause: SessionInvalidationCause,
   ): void;
   reportWarning(message: string): void;
+  messages?(): WorkspaceWatchMessages;
 }
+
+export interface WorkspaceWatchMessages {
+  watchUnavailable(detail?: string): string;
+  watchStartFailed(detail: string): string;
+  externalReconcileFailed(detail: string): string;
+}
+
+const DEFAULT_MESSAGES: WorkspaceWatchMessages = {
+  watchUnavailable: (detail) => detail ?? "Native file watching is unavailable; focus and manual refresh remain active.",
+  watchStartFailed: (detail) => `Native file watching could not start: ${detail}`,
+  externalReconcileFailed: (detail) => `External changes could not be reconciled: ${detail}`,
+};
 
 export class WorkspaceWatchCoordinator {
   private readonly bridge: WorkspaceWatchBridge;
@@ -80,13 +93,11 @@ export class WorkspaceWatchCoordinator {
           return;
         }
         if (this.bridge.native && !status.available) {
-          this.actions.reportWarning(
-            status.message ?? "Native file watching is unavailable; focus and manual refresh remain active.",
-          );
+          this.actions.reportWarning(this.messages().watchUnavailable(status.message ?? undefined));
         }
       } catch (error) {
         if (this.current(sequence, identity) && this.bridge.native) {
-          this.actions.reportWarning(`Native file watching could not start: ${errorMessage(error)}`);
+          this.actions.reportWarning(this.messages().watchStartFailed(errorMessage(error)));
         }
       }
     });
@@ -158,9 +169,7 @@ export class WorkspaceWatchCoordinator {
             root: invalidation.root,
             generation: invalidation.generation,
           })) {
-            this.actions.reportWarning(
-              `External changes could not be reconciled: ${errorMessage(error)}`,
-            );
+            this.actions.reportWarning(this.messages().externalReconcileFailed(errorMessage(error)));
           }
         }
       }
@@ -229,6 +238,10 @@ export class WorkspaceWatchCoordinator {
   private current(sequence: number, identity: { root: string; generation: number }): boolean {
     return !this.disposed && sequence === this.activationSequence &&
       this.identity?.root === identity.root && this.identity.generation === identity.generation;
+  }
+
+  private messages(): WorkspaceWatchMessages {
+    return this.actions.messages?.() ?? DEFAULT_MESSAGES;
   }
 }
 

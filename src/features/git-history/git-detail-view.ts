@@ -76,7 +76,7 @@ function commitFileRows(model: CommitDetailViewModel): string {
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.history;
   if (model.loading) return loadingBlock(copy.loadingChangedFiles);
-  if (model.error) return retryState(copy.couldNotLoadCommit, model.error, localization);
+  if (model.error) return retryState(copy.couldNotLoadCommit, localization.catalog.errors.translate(model.error), localization);
   if (!model.details) return loadingBlock(copy.loadingChangedFiles);
   if (model.details.files.length === 0) return `<div class="group-empty">${escapeHtml(copy.noFirstParentChanges)}</div>`;
   if (model.fileView === "flat") {

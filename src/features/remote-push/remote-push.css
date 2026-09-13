@@ -121,6 +121,18 @@
   line-height: 1.45;
 }
 
+.remote-dialog-error strong,
+.remote-dialog-error span,
+.remote-dialog-empty.error strong,
+.remote-dialog-empty.error span {
+  display: block;
+}
+
+.remote-dialog-error span,
+.remote-dialog-empty.error span {
+  margin-top: 3px;
+}
+
 .remote-dialog-warning {
   padding: 7px 10px;
   border: 1px solid var(--warning-border);

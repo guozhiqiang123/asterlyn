@@ -100,6 +100,7 @@ export interface ShellCopy {
   openingProject: string;
   refreshingRepository: string;
   refreshingProjectFiles: string;
+  projectOpenedInNewWindow: string;
 }
 
 export interface SettingsCopy {
@@ -444,6 +445,7 @@ export interface ChangesCopy {
   commitCreated: string;
   patchTruncated: string;
   unexpectedError: string;
+  fileSavedRefreshFailed: string;
 }
 
 export interface GitOperationCopy {
@@ -508,6 +510,9 @@ export interface GitOperationCopy {
   resolvingPath(path: string): string;
   resolvedAndStaged(path: string): string;
   paused(name: string): string;
+  conflictPaused: string;
+  conflictChangedExternally: string;
+  operationFailed: string;
 }
 
 export interface RecoveryCopy {
@@ -632,6 +637,10 @@ export interface RemoteCopy {
   operationCompleted(name: string): string;
   operationNeedsReview: string;
   cancellingOperation(name: string): string;
+  branchOrRemoteChanged: string;
+  noOutgoingCommitForFile(path: string): string;
+  selectedOutgoingFileMissing: string;
+  unexpectedError: string;
   policy: {
     finishActive(name: string): string;
     selectConfigured: string;
@@ -668,6 +677,10 @@ export interface ErrorCopy {
   remoteRejected: string;
   fileConflictPreserved: string;
   unexpectedOperation: string;
+  watchUnavailable(detail?: string): string;
+  watchStartFailed(detail: string): string;
+  externalReconcileFailed(detail: string): string;
+  translate(message: string): string;
 }
 
 export interface HistoryCopy {
@@ -744,6 +757,10 @@ export interface HistoryCopy {
   scrollForOlder: string;
   allHistoryLoaded(count: string, singular: boolean): string;
   noOlderCommits: string;
+  olderCommitsFailed(detail: string): string;
+  historyRefreshFailed(detail: string): string;
+  historyRefreshWarning: string;
+  filteredHistoryWarning: string;
   rootCommit: string;
   oneParent: string;
   mergeParents(count: number): string;
@@ -821,6 +838,8 @@ export interface HistoryCopy {
   pathTextHelp: string;
   trackedRepositoryPaths: string;
   noTrackedPaths: string;
+  unknownTrackedPath(path: string): string;
+  ambiguousTrackedPath(path: string): string;
   expandPath(path: string): string;
   collapsePath(path: string): string;
   checkingOut(name: string): string;

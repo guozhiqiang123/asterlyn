@@ -106,6 +106,12 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   }, catalog.gitOperations);
   assert.match(operationDialog, /准备合并/);
   assert.match(operationDialog, /目标分支、标签或提交/);
+  const failedOperationDialog = renderGitOperationDialog({
+    repositoryRoot: "/repo", dialog: "setup", kind: "merge", targetText: "feature", message: "", plan: null,
+    conflict: null, conflictResult: "", operation: null, loading: null, error: "git diagnostic",
+  }, catalog.gitOperations);
+  assert.match(failedOperationDialog, /无法完成 Git 操作/);
+  assert.match(failedOperationDialog, /git diagnostic/);
 
   const localization = createLocalization(catalog);
   const branches = renderBranchNavigation({
@@ -137,6 +143,21 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   });
   assert.match(remoteDialog, /更新 main/);
   assert.match(remoteDialog, /仅快进/);
+  remoteState.dialogError = "network diagnostic";
+  const failedRemoteDialog = renderRemoteDialogContent({
+    snapshot: {
+      root: "/repo", branch: { head: "main", oid: "a".repeat(40), upstream: "origin/main", upstreamRemote: "origin", upstreamRef: "refs/heads/main", ahead: 0, behind: 1, detached: false, unborn: false },
+      operation: null, changes: [], commits: [], branches: [], remotes: [{ name: "origin", fetchSupported: true, pushSupported: true }], untrackedState: "complete",
+    },
+    state: remoteState, workspaceRoot: "/repo", preferences: DEFAULT_APP_PREFERENCES,
+    selectedProjectFileAvailable: false, localization,
+  });
+  assert.match(failedRemoteDialog, /无法完成远程操作/);
+  assert.match(failedRemoteDialog, /network diagnostic/);
+  assert.equal(
+    catalog.errors.translate("The selected outgoing file is no longer present. Refresh the Push review."),
+    "所选传出文件已不存在。请刷新推送审查。",
+  );
 });
 
 function catalogShape(value) {

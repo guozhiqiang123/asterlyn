@@ -53,6 +53,16 @@
   margin: 0;
 }
 
+.git-operation-error strong,
+.git-operation-error span {
+  display: block;
+}
+
+.git-operation-error span {
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
 .git-operation-route {
   display: grid;
   grid-template-columns: minmax(160px, 0.7fr) 24px minmax(220px, 1.3fr);

@@ -8,6 +8,8 @@ import type {
   RepositoryMutationOutcome,
   RepositorySnapshot,
 } from "../../models.ts";
+import type { GitOperationCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export type GitOperationDialog = "setup" | "review" | "conflict" | null;
 
@@ -89,18 +91,24 @@ export class GitOperationController {
 
   private readonly gateway: GitOperationGateway;
   private readonly listeners = new Set<Listener>();
+  private messages: GitOperationCopy;
   private generation = 0;
   private requestSequence = 0;
   private disposed = false;
 
-  constructor(gateway: GitOperationGateway) {
+  constructor(gateway: GitOperationGateway, messages: GitOperationCopy = EN_US.gitOperations) {
     this.gateway = gateway;
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
     if (this.disposed) return () => undefined;
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  setMessages(messages: GitOperationCopy): void {
+    this.messages = messages;
   }
 
   installSnapshot(snapshot: RepositorySnapshot | null): void {
@@ -128,7 +136,7 @@ export class GitOperationController {
       }
     }
     if (!rootChanged && keepConflictDraft && !this.state.operation?.conflicts.some((item) => item.path === this.state.conflict?.path)) {
-      this.state.error = "This conflict changed outside Asterlyn. Your unsaved result is preserved; copy it before closing or reopening the conflict.";
+      this.state.error = this.messages.conflictChangedExternally;
     }
     this.emit({
       reason: "snapshot",
@@ -202,7 +210,7 @@ export class GitOperationController {
     } catch (error) {
       if (!this.matches(generation, request, root)) return false;
       this.state.loading = null;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.operationFailed);
       this.emit({ reason: "request-error", dialogChanged: true, error });
       return false;
     }
@@ -248,7 +256,7 @@ export class GitOperationController {
     } catch (error) {
       if (!this.matches(generation, request, root)) return false;
       this.state.loading = null;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.operationFailed);
       this.emit({ reason: "request-error", dialogChanged: true, error });
       return false;
     }
@@ -308,7 +316,7 @@ export class GitOperationController {
     } catch (error) {
       if (!this.matches(generation, request, root)) return { status: "stale" };
       this.state.loading = null;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.operationFailed);
       this.emit({ reason: "request-error", dialogChanged: true, error });
       return { status: "failure", error };
     }
@@ -350,12 +358,12 @@ export function canReviewGitOperation(state: GitOperationState): boolean {
     (state.kind !== "squash" || state.message.trim().length > 0);
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
     const value = error as Record<string, unknown>;
     if (typeof value.message === "string") return value.message;
   }
-  return "The Git operation could not complete.";
+  return fallback;
 }

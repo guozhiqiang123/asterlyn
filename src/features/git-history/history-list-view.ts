@@ -192,7 +192,7 @@ export function renderHistoryList(
     return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(copy.loadingFilteredHistory)}</span></div>`;
   }
   if (presentation.status === "error") {
-    return `<div class="empty-state"><span class="empty-icon">${icon("history", 24)}</span><strong>${escapeHtml(copy.couldNotLoadHistory)}</strong><p>${escapeHtml(presentation.error ?? copy.queryCouldNotBeRead)}</p><button class="secondary-button retry-button" data-retry-history-page type="button">${escapeHtml(localization.catalog.common.retry)}</button></div>`;
+    return `<div class="empty-state"><span class="empty-icon">${icon("history", 24)}</span><strong>${escapeHtml(copy.couldNotLoadHistory)}</strong><p>${escapeHtml(localization.catalog.errors.translate(presentation.error ?? copy.queryCouldNotBeRead))}</p><button class="secondary-button retry-button" data-retry-history-page type="button">${escapeHtml(localization.catalog.common.retry)}</button></div>`;
   }
   if (presentation.loadedCommits.length === 0) {
     return `<div class="history-no-results"><strong>${escapeHtml(copy.noCommitsForFilters)}</strong><span>${escapeHtml(copy.clearFilters)}</span></div>`;
@@ -294,7 +294,7 @@ function renderPagingStatus(presentation: HistoryListPresentation): string {
     return `<div class="history-page-status" role="status">${escapeHtml(copy.loadingOlderCommits)}</div>`;
   }
   if (presentation.pagingError) {
-    return `<div class="history-page-status error" role="status"><span>${escapeHtml(presentation.pagingError)}</span><button type="button" data-retry-history-page>${escapeHtml(localization.catalog.common.retry)}</button></div>`;
+    return `<div class="history-page-status error" role="status"><span>${escapeHtml(localization.catalog.errors.translate(presentation.pagingError))}</span><button type="button" data-retry-history-page>${escapeHtml(localization.catalog.common.retry)}</button></div>`;
   }
   if (presentation.loadedCommits.length >= HISTORY_ROW_LIMIT) {
     return `<div class="history-page-status">${escapeHtml(copy.showingNewestLimit(localization.number.format(HISTORY_ROW_LIMIT)))}</div>`;

@@ -29,7 +29,7 @@ function renderSetup(state: GitOperationState, copy: GitOperationCopy): string {
       <textarea id="git-operation-targets" rows="${state.kind === "cherryPick" ? 5 : 2}" spellcheck="false" placeholder="${escapeAttribute(state.kind === "cherryPick" ? copy.targetLinesPlaceholder : "refs/heads/feature")}" ${busy ? "disabled" : ""}>${escapeHtml(state.targetText)}</textarea>
       ${state.kind === "squash" ? `<label for="git-operation-message">${escapeHtml(copy.newCommitMessage)}</label><textarea id="git-operation-message" rows="5" placeholder="${escapeAttribute(copy.squashMessagePlaceholder)}" ${busy ? "disabled" : ""}>${escapeHtml(state.message)}</textarea>` : ""}
       <p class="git-operation-note">${escapeHtml(copy.exactReviewNote)}</p>
-      ${renderError(state.error)}
+      ${renderError(state.error, copy)}
       <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="submit" ${canReviewGitOperation(state) ? "" : "disabled"}>${escapeHtml(busy ? copy.preparing : copy.review)}</button></div>
     </form>`,
     busy,
@@ -55,7 +55,7 @@ function renderReview(state: GitOperationState, copy: GitOperationCopy): string 
       <section><h3>${escapeHtml(copy.exactTargets)}</h3><ul>${targets}</ul></section>
       ${plan.message ? `<section><h3>${escapeHtml(copy.commitMessage)}</h3><pre>${escapeHtml(plan.message)}</pre></section>` : ""}
       <p class="git-operation-warning">${icon("warning", 15)}<span>${escapeHtml(warning)}</span></p>
-      ${renderError(state.error)}
+      ${renderError(state.error, copy)}
       <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-back ${busy ? "disabled" : ""}>${escapeHtml(copy.back)}</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" id="git-operation-execute" type="button" ${busy ? "disabled" : ""}>${escapeHtml(busy ? copy.running : copy.names[plan.kind])}</button></div>
     </div>`,
     busy,
@@ -89,7 +89,7 @@ function renderConflict(state: GitOperationState, copy: GitOperationCopy): strin
       <label for="conflict-result">${escapeHtml(copy.resolvedResult)}</label>
       ${binary ? `<div class="git-operation-warning">${escapeHtml(copy.binaryConflict)}</div>` : `<textarea id="conflict-result" spellcheck="false" aria-label="${escapeAttribute(copy.resolvedFileContent)}" ${resolving ? "disabled" : ""}>${escapeHtml(state.conflictResult)}</textarea>`}
       <p class="git-operation-note">${escapeHtml(copy.resolveSafetyNote)}</p>
-      ${renderError(state.error)}
+      ${renderError(state.error, copy)}
       <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${resolving ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><span class="dialog-spacer"></span><button class="danger-button" id="git-conflict-delete" type="button" ${resolving ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button><button class="primary-button" id="git-conflict-resolve" type="button" ${resolving || binary ? "disabled" : ""}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button></div>
     </div>`,
     resolving,
@@ -110,8 +110,10 @@ function conflictSide(label: string, value: string | null, copy: GitOperationCop
   return `<section><h3>${escapeHtml(label)}</h3><pre>${value === null ? `<span class="conflict-side-missing">${escapeHtml(copy.notPresent)}</span>` : escapeHtml(value)}</pre></section>`;
 }
 
-function renderError(error: string | null): string {
-  return error ? `<div class="git-operation-error" role="alert">${escapeHtml(error)}</div>` : "";
+function renderError(error: string | null, copy: GitOperationCopy): string {
+  if (!error) return "";
+  const detail = error === copy.operationFailed ? "" : `<span>${escapeHtml(error)}</span>`;
+  return `<div class="git-operation-error" role="alert"><strong>${escapeHtml(copy.operationFailed)}</strong>${detail}</div>`;
 }
 
 function shortRef(reference: string): string {

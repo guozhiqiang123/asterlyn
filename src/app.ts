@@ -413,7 +413,7 @@ export class AsterlynApp {
         readCommitDetails: (repositoryRoot, repositoryId, oid) =>
           bridge.readCommitDetails(repositoryRoot, repositoryId, oid),
       },
-      { rowLimit: HISTORY_ROW_LIMIT },
+      { rowLimit: HISTORY_ROW_LIMIT, messages: initialCatalog.history },
     );
     this.releaseHistoryController = this.historyController.subscribe((change) =>
       this.handleHistoryControllerChange(change),
@@ -428,7 +428,7 @@ export class AsterlynApp {
       pullCurrent: (...args) => bridge.pullCurrent(...args),
       pushCurrent: (...args) => bridge.pushCurrent(...args),
       cancelRemoteOperation: (...args) => bridge.cancelRemoteOperation(...args),
-    });
+    }, { messages: initialCatalog.remote });
     this.releaseRemoteController = this.remoteController.subscribe((change) =>
       this.handleRemoteControllerChange(change),
     );
@@ -466,7 +466,7 @@ export class AsterlynApp {
       runGitOperationAction: (...args) => bridge.runGitOperationAction(...args),
       readConflictContent: (...args) => bridge.readConflictContent(...args),
       resolveConflict: (...args) => bridge.resolveConflict(...args),
-    });
+    }, initialCatalog.gitOperations);
     this.gitOperationDialogBinding = new GitOperationDialogBinding(
       root,
       this.gitOperationController,
@@ -536,11 +536,15 @@ export class AsterlynApp {
           void this.loadSelectedDiff();
         },
         replacementRecoveryCount: () => this.state.workspaceReplacement.recoveries.length,
-        setStatus: (message, kind) => this.setStatus(
-          message === "Ready" ? this.localization.catalog.common.ready : message,
-          kind,
-        ),
+        setStatus: (message, kind) => this.setStatus(message, kind),
         reportError: (error) => this.showError(error),
+        messages: () => ({
+          conflictPaused: this.localization.catalog.gitOperations.conflictPaused,
+          scanningUntracked: this.localization.catalog.changes.scanningUntracked,
+          ready: this.localization.catalog.common.ready,
+          fileSavedRefreshFailed: this.localization.catalog.changes.fileSavedRefreshFailed,
+          recoveryCount: this.localization.catalog.replacement.recoveryCount,
+        }),
       },
     );
     this.workspaceWatch = new WorkspaceWatchCoordinator(
@@ -552,6 +556,7 @@ export class AsterlynApp {
         reconcileRepository: (snapshot, slices, cause) =>
           this.repositoryIntegration.reconcileWatchedRepository(snapshot, slices, cause),
         reportWarning: (message) => this.setStatus(message, "warning"),
+        messages: () => this.localization.catalog.errors,
       },
     );
     this.shellEventBinding = new ShellEventBinding(root, {
@@ -848,6 +853,9 @@ export class AsterlynApp {
       this.filesController.setMessages(catalog.editor);
       this.editorController.setMessages(catalog.editor);
       this.changesController.setMessages(catalog.changes);
+      this.historyController.setMessages(catalog.history);
+      this.remoteController.setMessages(catalog.remote);
+      this.gitOperationController.setMessages(catalog.gitOperations);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
       document
@@ -3767,8 +3775,8 @@ export class AsterlynApp {
         selected.indexStatus === "copied";
       revert.disabled = unsupported;
       revert.title = unsupported
-        ? "Select an ordinary tracked file to revert"
-        : "Revert selected file to HEAD";
+        ? this.localization.catalog.changes.selectTrackedToRestore
+        : this.localization.catalog.changes.restoreToHead;
     }
     this.renderEditor();
     if (this.changesState.selectedChange) void this.loadSelectedDiff();
@@ -4100,6 +4108,7 @@ export class AsterlynApp {
       const result = resolveHistoryPathText(
         this.state.historyPathText,
         historyPathCandidates(this.filesState.files),
+        this.localization.catalog.history,
       );
       if (result.error) {
         this.state.historyDialogError = result.error;
@@ -6053,7 +6062,7 @@ export class AsterlynApp {
   private async openRepositoryInNewWindow(path: string): Promise<void> {
     try {
       await bridge.openRepositoryWindow(path);
-      this.setStatus("Project opened in a new window", "success");
+      this.setStatus(this.localization.catalog.shell.projectOpenedInNewWindow, "success");
     } catch (error) {
       this.showError(error);
     }
@@ -6232,8 +6241,8 @@ function projectMonogram(path: string): string {
 }
 
 function errorMessage(error: unknown, copy: ErrorCopy): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
+  if (error instanceof Error) return copy.translate(error.message);
+  if (typeof error === "string") return copy.translate(error);
   if (error && typeof error === "object") {
     const value = error as Record<string, unknown>;
     if (value.kind === "remoteCancelled") {
@@ -6260,8 +6269,8 @@ function errorMessage(error: unknown, copy: ErrorCopy): string {
     }
     const message = typeof value.message === "string" ? value.message : null;
     const operation = typeof value.operation === "string" ? value.operation : null;
-    if (message && operation) return `${operation}: ${message}`;
-    if (message) return message;
+    if (message && operation) return `${operation}: ${copy.translate(message)}`;
+    if (message) return copy.translate(message);
   }
   return copy.unexpectedOperation;
 }

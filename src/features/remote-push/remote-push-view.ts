@@ -199,7 +199,7 @@ function renderUpdateDialog(model: RemotePushDialogViewModel): string {
       : strategy === "ffOnly"
         ? copy.update
         : copy.fetchAndReview(strategyLabel);
-  const error = state.dialogError ? `<div class="remote-dialog-error" role="alert">${escapeHtml(state.dialogError)}</div>` : "";
+  const error = state.dialogError ? renderRemoteError(state.dialogError, localization) : "";
   return `<section class="dialog remote-action-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
     <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.currentBranch)}</span><h2 id="remote-dialog-title">${escapeHtml(copy.updateBranch(branch))}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelUpdateConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
     <p id="remote-dialog-description">${escapeHtml(copy.updateDescriptionText)}</p>
@@ -217,7 +217,7 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const copy = localization.catalog.remote;
   const preview = state.pushPreview;
   const operation = state.operation?.kind === "push" ? state.operation : null;
-  const error = state.dialogError ? `<div class="remote-dialog-error" role="alert">${escapeHtml(state.dialogError)}</div>` : "";
+  const error = state.dialogError ? renderRemoteError(state.dialogError, localization) : "";
   const body = preview
     ? renderPushPreviewBody(model, preview)
     : state.pushPreviewLoading
@@ -233,7 +233,7 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const confirmation = pushConfirmationAvailability({ operationActive: Boolean(operation), previewLoading: state.pushPreviewLoading, previewRefreshing: state.pushPreviewRefreshing, actionable, modeAllowed });
   return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="${state.pushDiff ? "false" : "true"}" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description" ${state.pushDiff ? 'aria-hidden="true" inert' : ""}>
     <div class="dialog-heading"><div><h2 id="remote-dialog-title">${escapeHtml(copy.pushCommitsTo(snapshot.branch.head ?? copy.currentBranchFallback))}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelPushConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
-    <p id="remote-dialog-description" class="visually-hidden">${escapeHtml(copy.pushReviewDescription)}</p>${error}${renderPushRoute(model, preview)}${body}${modeBlocker ? `<div class="remote-dialog-warning" role="status">${escapeHtml(modeBlocker)}</div>` : ""}
+    <p id="remote-dialog-description" class="visually-hidden">${escapeHtml(copy.pushReviewDescription)}</p>${error}${renderPushRoute(model, preview)}${body}${modeBlocker ? `<div class="remote-dialog-warning" role="status">${escapeHtml(localization.catalog.errors.translate(modeBlocker))}</div>` : ""}
     <p class="remote-dialog-note">${escapeHtml(forceSelected ? copy.forcePushNote : copy.ordinaryPushNote)} ${escapeHtml(copy.tagsAndRetryNote)}</p>
     <div class="push-dialog-footer"><div class="push-tags-control"><label><input id="push-tags-enabled" type="checkbox" ${state.pushTagsEnabled ? "checked" : ""} ${operation ? "disabled" : ""}/><span>${escapeHtml(copy.pushTags)}</span></label><select id="push-tag-mode" aria-label="${escapeAttribute(copy.tagScope)}" ${!state.pushTagsEnabled || operation ? "disabled" : ""}><option value="all" ${state.pushTagMode === "all" ? "selected" : ""}>${escapeHtml(copy.all)}</option><option value="currentBranch" ${state.pushTagMode === "currentBranch" ? "selected" : ""}>${escapeHtml(copy.currentBranch)}</option></select><span class="push-tag-count" aria-live="polite">${state.pushPreviewRefreshing ? `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(copy.refreshingReview)}` : state.pushTagsEnabled && preview ? escapeHtml(tagsLabel) : ""}</span></div>
       <div class="push-dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelPush)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<div class="push-split-action"><button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(copy.pushConfirmationAria(actionLabel, preview?.totalCommits ?? 0, preview?.tags.length ?? 0, route))}" aria-disabled="${confirmation.ariaDisabled}" data-refreshing="${state.pushPreviewRefreshing}" ${confirmation.nativeDisabled ? "disabled" : ""}>${escapeHtml(operation?.cancelling ? copy.cancelling : operation ? copy.pushing : actionLabel)}</button><button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="${escapeAttribute(copy.choosePushMode)}" aria-haspopup="menu" aria-expanded="${state.pushModeMenuOpen}" ${operation || !preview ? "disabled" : ""}>${icon("chevron-down", 13)}</button><div class="push-mode-menu ${state.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="${escapeAttribute(copy.pushMode)}"><button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.push)}</strong><small>${escapeHtml(copy.ordinaryNonForce)}</small></span>${!forceSelected ? icon("check", 13) : ""}</button><button type="button" role="menuitemradio" data-push-mode="forceWithLease" aria-checked="${forceSelected}" ${preview?.forceWithLeaseAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.forcePushWithLease)}</strong><small>${escapeHtml(copy.forceLeaseDetail)}</small></span>${forceSelected ? icon("check", 13) : ""}</button></div></div></div>
@@ -272,7 +272,7 @@ function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview,
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.remote;
   if (state.pushCommitDetailsLoading) return `<div class="remote-dialog-loading compact" role="status"><span class="spinner"></span><span>${escapeHtml(copy.readingSelectedFiles)}</span></div>`;
-  if (state.pushCommitDetailsError) return `<div class="remote-dialog-empty error">${escapeHtml(state.pushCommitDetailsError)}</div>`;
+  if (state.pushCommitDetailsError) return renderRemoteError(state.pushCommitDetailsError, localization, "remote-dialog-empty error");
   if (!reviewFiles.length) return `<div class="remote-dialog-empty">${escapeHtml(preview.filesTruncated && !state.pushSelectedCommit ? copy.pushedRangeExceeded : state.pushSelectedCommit ? copy.noSelectedCommitFiles : copy.noNetFileChanges)}</div>`;
   if (state.pushFileView === "flat") return reviewFiles.map((file) => pushFileRow(file, file.path === state.pushSelectedFile, null, localization)).join("");
   const rootExpanded = !state.pushCollapsedFileDirectories.has(".");
@@ -318,7 +318,7 @@ function renderPushDiffDialog(model: RemotePushDialogViewModel): string {
   const body = diff.loading
     ? loadingBlock(copy.loadingPushedDiff)
     : diff.error
-      ? `<div class="remote-dialog-empty error" role="alert">${escapeHtml(diff.error)}</div>`
+      ? renderRemoteError(diff.error, localization, "remote-dialog-empty error")
       : diff.image
         ? `<section class="image-diff-surface" aria-label="${escapeAttribute(editor.imageDiff)}">${diff.image.before ? imagePreviewCard(diff.image.before, editor.before, localization) : emptyImageSide(editor.before, editor.fileDidNotExist)}${diff.image.after ? imagePreviewCard(diff.image.after, editor.after, localization) : emptyImageSide(editor.after, editor.fileRemoved)}</section>`
         : '<div class="push-diff-editor-host" id="push-diff-editor-host"></div>';
@@ -328,6 +328,16 @@ function renderPushDiffDialog(model: RemotePushDialogViewModel): string {
 
 function imagePreviewCard(image: ImagePreview, label: string, localization: Localization): string {
   return `<figure class="image-preview-card"><figcaption><strong>${escapeHtml(label)}</strong><span>${escapeHtml(image.mediaType)} · ${formatBytes(image.byteLength, localization)}${image.width && image.height ? ` · ${localization.number.format(image.width)}×${localization.number.format(image.height)}` : ""}</span></figcaption><div class="image-preview-stage"><img src="${escapeAttribute(image.dataUrl)}" alt="${escapeAttribute(localization.catalog.remote.imagePreviewAlt(label))}" /></div></figure>`;
+}
+
+function renderRemoteError(
+  message: string,
+  localization: Localization,
+  className = "remote-dialog-error",
+): string {
+  const detail = localization.catalog.errors.translate(message);
+  const summary = localization.catalog.remote.unexpectedError;
+  return `<div class="${className}" role="alert"><strong>${escapeHtml(summary)}</strong>${detail === summary ? "" : `<span>${escapeHtml(detail)}</span>`}</div>`;
 }
 
 function emptyImageSide(label: string, message: string): string {

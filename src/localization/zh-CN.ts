@@ -36,6 +36,7 @@ export const ZH_CN = {
     cancelOpeningProject: "取消打开项目", currentWindow: "当前窗口", newWindow: "新窗口", folder: "文件夹",
     gitUnavailable: "Git 不可用", detachedAt: (oid) => `分离于 ${oid}`, noBranch: "无分支",
     openingProject: "正在打开项目…", refreshingRepository: "正在刷新仓库…", refreshingProjectFiles: "正在刷新项目文件…",
+    projectOpenedInNewWindow: "项目已在新窗口中打开",
   },
   settings: {
     planned: "计划中", available: "可用",
@@ -201,6 +202,7 @@ export const ZH_CN = {
     filesSavedReview: "文件已保存；提交前请检查刷新后的选择", creatingCommit: "正在创建提交…",
     commitConcurrent: "提交已完成，但 Git 同时发生变化；再次提交前请检查刷新的历史记录", commitRefreshing: "提交已创建，正在刷新仓库状态…",
     commitCreated: "提交已创建", patchTruncated: "补丁已在 4 MiB 处截断", unexpectedError: "出现意外的更改操作错误",
+    fileSavedRefreshFailed: "文件已保存，但 Git 状态刷新失败",
   },
   gitOperations: {
     activeOperation: "活动 Git 操作", unresolvedFiles: (count) => `${count} 个未解决文件`, readyToContinue: "可以继续",
@@ -229,6 +231,9 @@ export const ZH_CN = {
     aborted: "Git 操作已中止", skippedCommit: "Git 操作已跳过当前提交", continued: "Git 操作已继续",
     resolvingPath: (path) => `正在解决 ${path}…`, resolvedAndStaged: (path) => `已解决并暂存 ${path}`,
     paused: (name) => `${name}已暂停；请在“更改”中检查操作控件`,
+    conflictPaused: "Git 因冲突暂停。请在“更改”中解决列出的文件，然后继续、跳过或中止操作。",
+    conflictChangedExternally: "此冲突已在 Asterlyn 外部变化。未保存的结果仍会保留；关闭或重新打开冲突前请先复制所需内容。",
+    operationFailed: "无法完成 Git 操作。",
   },
   history: {
     noRefs: "没有引用", refsAppearHere: "分支和标签会显示在这里。", branchOrTag: "分支或标签",
@@ -257,7 +262,11 @@ export const ZH_CN = {
     expand: "展开", gitRoot: (path) => `Git 根目录：${path}`, commitHistory: "提交历史",
     loadingOlderCommits: "正在加载更早的提交…", showingNewestLimit: (count) => `显示最新的 ${count} 个提交（会话上限）`,
     scrollForOlder: "滚动以加载更早的提交", allHistoryLoaded: (count) => `已加载全部历史 · ${count} 个提交`,
-    noOlderCommits: "当前筛选条件下没有更早的提交。", rootCommit: "根提交", oneParent: "一个父提交",
+    noOlderCommits: "当前筛选条件下没有更早的提交。",
+    olderCommitsFailed: (detail) => `无法加载更早的提交：${detail}`,
+    historyRefreshFailed: (detail) => `无法刷新提交历史：${detail}`,
+    historyRefreshWarning: "无法完成提交历史刷新", filteredHistoryWarning: "无法加载筛选后的提交历史",
+    rootCommit: "根提交", oneParent: "一个父提交",
     mergeParents: (count) => `有 ${count} 个父提交的合并提交`,
     collapsedGraphLane: (lane, total) => `提交图第 ${lane}/${total} 轨中的折叠线性延续`,
     graphLane: (lane, total, parent) => `提交图第 ${lane}/${total} 轨，${parent}`,
@@ -291,6 +300,8 @@ export const ZH_CN = {
     clear: "清除", apply: "应用", all: "全部", selectPathsToFilter: "选择要筛选的路径",
     pathTextHelp: "每行输入一个准确的已跟踪文件或目录。按 Ctrl/Cmd+Enter 应用选择。",
     trackedRepositoryPaths: "仓库中已跟踪的路径", noTrackedPaths: "没有已跟踪路径。",
+    unknownTrackedPath: (path) => `未知的已跟踪路径：${path}`,
+    ambiguousTrackedPath: (path) => `路径属于多个 Git 根目录：${path}`,
     expandPath: (path) => `展开 ${path}`, collapsePath: (path) => `折叠 ${path}`,
     checkingOut: (name) => `正在检出 ${name}…`, checkedOutBranch: (name) => `已检出 ${name}`,
     creatingBranch: (name) => `正在创建 ${name}…`, createdBranch: (name) => `已创建并检出 ${name}`,
@@ -355,6 +366,10 @@ export const ZH_CN = {
     activeProjectNotGit: "当前项目已不再是 Git 仓库。", endedRefreshRequired: "远程操作已结束；需要刷新",
     operationInProgress: (name) => `正在${name}…`, operationCompleted: (name) => `${name}已完成`, operationNeedsReview: "远程操作需要检查",
     cancellingOperation: (name) => `正在取消${name}…`,
+    branchOrRemoteChanged: "分支或远程跟踪状态已变化。请关闭窗口并重新审查推送。",
+    noOutgoingCommitForFile: (path) => `传出提交中不再包含 ${path}。`,
+    selectedOutgoingFileMissing: "所选传出文件已不存在。请刷新推送审查。",
+    unexpectedError: "无法完成远程操作。",
     policy: {
       finishActive: (name) => `请先完成正在进行的${name}操作。`, selectConfigured: "请选择已配置的远程仓库。",
       unsupportedFetch: "此远程仓库使用不支持的获取映射。", refreshRefs: (remote) => `刷新 ${remote} 的所有标准分支跟踪引用。`,
@@ -380,6 +395,10 @@ export const ZH_CN = {
     remoteRejected: "远程仓库拒绝了更新。请获取并检查分支状态后重试。",
     fileConflictPreserved: "此文件在 Asterlyn 外部发生变化。本地缓冲区仍保持打开，且未被覆盖。",
     unexpectedOperation: "发生意外的操作错误。",
+    watchUnavailable: (detail) => detail ? `原生文件监听不可用：${detail}` : "原生文件监听不可用；窗口聚焦刷新和手动刷新仍然有效。",
+    watchStartFailed: (detail) => `原生文件监听无法启动：${detail}`,
+    externalReconcileFailed: (detail) => `无法同步外部更改：${detail}`,
+    translate: translateKnownError,
   },
   editorPhrases: {
     "Control character": "控制字符",
@@ -411,3 +430,17 @@ export const ZH_CN = {
   },
   documentDescription: "Asterlyn — 以 Git 为中心的轻量开发工作区。",
 } satisfies LocaleCatalog;
+
+function translateKnownError(message: string): string {
+  const exact: Readonly<Record<string, string>> = {
+    "The Git operation could not complete.": "无法完成 Git 操作。",
+    "This conflict changed outside Asterlyn. Your unsaved result is preserved; copy it before closing or reopening the conflict.": "此冲突已在 Asterlyn 外部变化。未保存的结果仍会保留；关闭或重新打开冲突前请先复制所需内容。",
+    "The branch or remote-tracking state changed. Close and review Push again.": "分支或远程跟踪状态已变化。请关闭窗口并重新审查推送。",
+    "The selected outgoing file is no longer present. Refresh the Push review.": "所选传出文件已不存在。请刷新推送审查。",
+    "Invalid regular expression": "无效的正则表达式",
+  };
+  const known = exact[message];
+  if (known) return known;
+  const missingOutgoing = message.match(/^No outgoing commit contains (.+)\.$/u);
+  return missingOutgoing ? `传出提交中不再包含 ${missingOutgoing[1]}。` : message;
+}

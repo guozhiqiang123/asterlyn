@@ -11,6 +11,16 @@ export interface HistoryPathResolution {
   error: string | null;
 }
 
+export interface HistoryPathMessages {
+  unknownTrackedPath(path: string): string;
+  ambiguousTrackedPath(path: string): string;
+}
+
+const DEFAULT_MESSAGES: HistoryPathMessages = {
+  unknownTrackedPath: (path) => `Unknown tracked path: ${path}`,
+  ambiguousTrackedPath: (path) => `Path belongs to more than one Git root: ${path}`,
+};
+
 export function historyPathCandidates(files: ProjectFile[]): HistoryPathCandidate[] {
   const candidates = new Map<string, HistoryPathCandidate>();
   for (const file of files) {
@@ -41,6 +51,7 @@ export function historyPathCandidates(files: ProjectFile[]): HistoryPathCandidat
 export function resolveHistoryPathText(
   text: string,
   candidates: HistoryPathCandidate[],
+  messages: HistoryPathMessages = DEFAULT_MESSAGES,
 ): HistoryPathResolution {
   const lines = Array.from(
     new Set(text.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean)),
@@ -55,10 +66,10 @@ export function resolveHistoryPathText(
   for (const line of lines) {
     const matches = byWorkspacePath.get(line) ?? [];
     if (matches.length === 0) {
-      return { paths: [], error: `Unknown tracked path: ${line}` };
+      return { paths: [], error: messages.unknownTrackedPath(line) };
     }
     if (matches.length > 1) {
-      return { paths: [], error: `Path belongs to more than one Git root: ${line}` };
+      return { paths: [], error: messages.ambiguousTrackedPath(line) };
     }
     const match = matches[0]!;
     paths.push({ repositoryId: match.repositoryId, path: match.path });

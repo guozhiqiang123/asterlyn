@@ -31,6 +31,20 @@ export const COMMIT_DETAILS_CACHE_LIMIT = 48;
 
 export type HistoryPagingRetry = "append" | "refresh" | null;
 
+export interface HistoryControllerMessages {
+  olderCommitsFailed(detail: string): string;
+  historyRefreshFailed(detail: string): string;
+  readonly historyRefreshWarning: string;
+  readonly filteredHistoryWarning: string;
+}
+
+const DEFAULT_MESSAGES: HistoryControllerMessages = {
+  olderCommitsFailed: (detail) => `Older commits could not be loaded: ${detail}`,
+  historyRefreshFailed: (detail) => `History could not be refreshed: ${detail}`,
+  historyRefreshWarning: "History refresh could not be completed",
+  filteredHistoryWarning: "Filtered history could not be loaded",
+};
+
 export interface GitHistoryDetailsState {
   readonly history: RefHistoryState;
   readonly query: HistoryQuery;
@@ -98,6 +112,7 @@ interface GitHistoryDetailsControllerOptions {
   readonly scrollThreshold?: number;
   readonly detailsCacheLimit?: number;
   readonly now?: () => number;
+  readonly messages?: HistoryControllerMessages;
 }
 
 type HistoryDetailsListener = (change: HistoryDetailsChange) => void;
@@ -111,6 +126,7 @@ export class GitHistoryDetailsController {
   private readonly scrollThreshold: number;
   private readonly now: () => number;
   private readonly detailsCache: RecentValueCache<CommitDetails>;
+  private messages: HistoryControllerMessages;
   private pageSequence = 0;
   private detailsSequence = 0;
   private topRefreshArmed = false;
@@ -123,6 +139,7 @@ export class GitHistoryDetailsController {
     this.rowLimit = options.rowLimit;
     this.scrollThreshold = options.scrollThreshold ?? HISTORY_SCROLL_THRESHOLD;
     this.now = options.now ?? Date.now;
+    this.messages = options.messages ?? DEFAULT_MESSAGES;
     this.detailsCache = new RecentValueCache(
       options.detailsCacheLimit ?? COMMIT_DETAILS_CACHE_LIMIT,
     );
@@ -146,6 +163,10 @@ export class GitHistoryDetailsController {
 
   get state(): GitHistoryDetailsState {
     return this.value;
+  }
+
+  setMessages(messages: HistoryControllerMessages): void {
+    this.messages = messages;
   }
 
   subscribe(listener: HistoryDetailsListener): () => void {
@@ -372,7 +393,7 @@ export class GitHistoryDetailsController {
       this.value = {
         ...this.value,
         loadingMore: false,
-        pagingError: `Older commits could not be loaded: ${errorMessage(error)}`,
+        pagingError: this.messages.olderCommitsFailed(errorMessage(error)),
         pagingRetry: "append",
       };
       this.emit({ reason: "append-error", historyChanged: true });
@@ -443,13 +464,13 @@ export class GitHistoryDetailsController {
       this.value = {
         ...this.value,
         refreshing: false,
-        pagingError: `History could not be refreshed: ${errorMessage(error)}`,
+        pagingError: this.messages.historyRefreshFailed(errorMessage(error)),
         pagingRetry: "refresh",
       };
       this.emit({
         reason: "refresh-error",
         historyChanged: true,
-        warning: "History refresh could not be completed",
+        warning: this.messages.historyRefreshWarning,
       });
     }
   }
@@ -508,7 +529,7 @@ export class GitHistoryDetailsController {
         reason: "query-error",
         historyChanged: true,
         detailsChanged: true,
-        warning: "Filtered history could not be loaded",
+        warning: this.messages.filteredHistoryWarning,
       });
     }
   }
