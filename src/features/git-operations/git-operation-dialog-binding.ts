@@ -1,6 +1,7 @@
 import type { GitOperationKind } from "../../models.ts";
 import {
   GitOperationController,
+  canReviewGitOperation,
 } from "./git-operation-controller.ts";
 
 export interface GitOperationDialogActions {
@@ -35,8 +36,10 @@ export class GitOperationDialogBinding {
     void this.controller.openConflict(path);
   }
 
-  close(): void {
-    this.controller.closeDialog();
+  close(): boolean {
+    const dirty = this.controller.hasUnsavedConflict();
+    if (dirty && !window.confirm("Discard the unsaved conflict result? Copy any text you need first. Cancel keeps the result open.")) return false;
+    return this.controller.closeDialog(dirty);
   }
 
   render(): void {
@@ -97,6 +100,9 @@ export class GitOperationDialogBinding {
     const updateDraft = () => {
       if (!kind || !targets) return;
       this.controller.updateDraft(kind.value as GitOperationKind, targets.value, message?.value ?? "");
+      const review = host.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (review) review.disabled = !canReviewGitOperation(this.controller.state);
+      host.querySelector(".git-operation-error")?.remove();
     };
     kind?.addEventListener("change", () => {
       updateDraft();

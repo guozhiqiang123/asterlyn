@@ -106,28 +106,34 @@ export class GitOperationController {
   installSnapshot(snapshot: RepositorySnapshot | null): void {
     const rootChanged = this.state.repositoryRoot !== snapshot?.root;
     const previous = this.state.operation;
+    const previousDialog = this.state.dialog;
+    const previousError = this.state.error;
+    const keepConflictDraft = this.hasUnsavedConflict();
     this.state.repositoryRoot = snapshot?.root ?? null;
     this.state.operation = snapshot?.operation ?? null;
     if (rootChanged) {
       this.generation += 1;
       this.requestSequence += 1;
       this.resetDialog();
-    } else if (!this.state.operation && previous && this.state.dialog === "conflict") {
+    } else if (!keepConflictDraft && !this.state.operation && previous && this.state.dialog === "conflict") {
       this.resetDialog();
     } else if (this.state.operation && this.state.conflict) {
       const remains = this.state.operation.conflicts.some(
         (conflict) => conflict.path === this.state.conflict?.path,
       );
-      if (!remains) {
+      if (!remains && !keepConflictDraft) {
         this.state.conflict = null;
         this.state.conflictResult = "";
         if (this.state.dialog === "conflict") this.state.dialog = null;
       }
     }
+    if (!rootChanged && keepConflictDraft && !this.state.operation?.conflicts.some((item) => item.path === this.state.conflict?.path)) {
+      this.state.error = "This conflict changed outside Asterlyn. Your unsaved result is preserved; copy it before closing or reopening the conflict.";
+    }
     this.emit({
       reason: "snapshot",
       operationChanged: previous !== this.state.operation,
-      dialogChanged: rootChanged,
+      dialogChanged: rootChanged || previousDialog !== this.state.dialog || previousError !== this.state.error,
     });
   }
 
@@ -136,7 +142,7 @@ export class GitOperationController {
     targetRefs: string[] = [],
     message = "",
   ): void {
-    if (!this.state.repositoryRoot || this.state.loading) return;
+    if (!this.state.repositoryRoot || this.state.loading || this.hasUnsavedConflict()) return;
     this.state.kind = kind;
     this.state.targetText = targetRefs.join("\n");
     this.state.message = message;
@@ -146,10 +152,17 @@ export class GitOperationController {
     this.emit({ reason: "dialog", dialogChanged: true });
   }
 
-  closeDialog(): boolean {
+  hasUnsavedConflict(): boolean {
+    const conflict = this.state.conflict;
+    return !!conflict && this.state.conflictResult !== (conflict.worktree ?? conflict.ours ?? conflict.theirs ?? "");
+  }
+
+  closeDialog(discardConflict = false): boolean {
     if (this.state.loading === "execute" || this.state.loading === "action" || this.state.loading === "resolve") {
       return false;
     }
+    if (this.hasUnsavedConflict() && !discardConflict) return false;
+    this.requestSequence += 1;
     this.resetDialog();
     this.emit({ reason: "dialog", dialogChanged: true });
     return true;
@@ -166,7 +179,7 @@ export class GitOperationController {
 
   async prepare(): Promise<boolean> {
     const root = this.state.repositoryRoot;
-    if (!root || this.state.loading) return false;
+    if (!root || !canReviewGitOperation(this.state)) return false;
     const targets = operationTargets(this.state.targetText);
     const generation = this.generation;
     const request = ++this.requestSequence;
@@ -215,6 +228,7 @@ export class GitOperationController {
   async openConflict(path: string): Promise<boolean> {
     const root = this.state.repositoryRoot;
     if (!root || this.state.loading) return false;
+    if (this.hasUnsavedConflict()) return this.state.conflict?.path === path;
     if (!this.state.operation?.conflicts.some((conflict) => conflict.path === path)) return false;
     const generation = this.generation;
     const request = ++this.requestSequence;
@@ -327,6 +341,13 @@ export function operationTargets(value: string): string[] {
     .split(/\r?\n/)
     .map((target) => target.trim())
     .filter(Boolean);
+}
+
+export function canReviewGitOperation(state: GitOperationState): boolean {
+  const count = operationTargets(state.targetText).length;
+  return !state.loading && count > 0 &&
+    (state.kind === "cherryPick" || count === 1) &&
+    (state.kind !== "squash" || state.message.trim().length > 0);
 }
 
 function errorMessage(error: unknown): string {

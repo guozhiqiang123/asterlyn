@@ -1,4 +1,8 @@
 mod git_operations;
+mod git_recovery;
+pub(crate) use git_recovery::{
+    list_git_worktree_recoveries, prepare_restore_changes, undo_git_worktree_recovery,
+};
 mod git_reads;
 mod image;
 mod shell;
@@ -17,7 +21,8 @@ pub(crate) use git_reads::{
 };
 pub(crate) use image::{read_commit_image_diff, read_image_file, read_local_image_diff};
 pub(crate) use shell::{
-    initial_repository, open_project, open_repository_window, window_chrome_mode,
+    initial_repository, open_project, open_repository_window, read_project_snapshot,
+    window_chrome_mode,
 };
 pub(crate) use workspace::{
     apply_workspace_replacement, cancel_workspace_replacement, cancel_workspace_text_search,

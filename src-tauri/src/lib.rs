@@ -213,6 +213,10 @@ fn build_project_window(
 }
 
 fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceError> {
+    let canonical = std::fs::canonicalize(root).map_err(|error| WorkspaceError::Io {
+        operation: "resolve selected workspace".to_string(),
+        message: error.to_string(),
+    })?;
     match GitRepository::open(root) {
         Ok(repository) => {
             let discovered =
@@ -220,7 +224,7 @@ fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceE
                     operation: "resolve discovered Git root".to_string(),
                     message: error.to_string(),
                 })?;
-            Ok((discovered == root).then_some(repository))
+            Ok((discovered == canonical).then_some(repository))
         }
         Err(error) if root.join(".git").exists() => Err(WorkspaceError::Io {
             operation: "open Git project".to_string(),
@@ -410,7 +414,7 @@ fn prepare_authorized_replacement(
     };
     Ok((
         StoredReplacementPlan {
-            root: root.to_path_buf(),
+            root: Workspace::open(root)?.root().to_path_buf(),
             plan,
             files: authorized_files,
         },
@@ -616,13 +620,14 @@ where
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let writes = WorkspaceWriteRegistry::default();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
-        .manage(GitOperationCoordinator::default())
+        .manage(GitOperationCoordinator::new(writes.clone()))
         .manage(ActiveWorkspaces::default())
         .manage(PendingRepositoryWindows::default())
-        .manage(WorkspaceWriteRegistry::default())
+        .manage(writes)
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
         .manage(WorkspaceWatchService::default())
@@ -652,6 +657,7 @@ pub fn run() {
             initial_repository,
             window_chrome_mode,
             open_project,
+            read_project_snapshot,
             open_repository_window,
             start_workspace_watch,
             stop_workspace_watch,
@@ -681,6 +687,9 @@ pub fn run() {
             unstage_paths,
             commit_changes,
             revert_changes,
+            prepare_restore_changes,
+            list_git_worktree_recoveries,
+            undo_git_worktree_recovery,
             switch_branch,
             create_branch,
             fetch_remote,
@@ -1141,7 +1150,12 @@ mod tests {
         let root = std::fs::canonicalize(directory.path()).expect("canonical workspace");
         let first_catalog = load_project_catalog(&root).expect("initial catalog");
         active
-            .install_catalog("main", &root, &first_catalog)
+            .install_catalog(
+                "main",
+                active.activation_token("main").unwrap(),
+                &root,
+                &first_catalog,
+            )
             .expect("catalog installs");
         active
             .activate("main", &root, None)
@@ -1165,7 +1179,12 @@ mod tests {
         ));
         let refreshed = load_project_catalog(&root).expect("refreshed catalog");
         active
-            .install_catalog("main", &root, &refreshed)
+            .install_catalog(
+                "main",
+                active.activation_token("main").unwrap(),
+                &root,
+                &refreshed,
+            )
             .expect("refreshed catalog installs");
         assert!(
             active

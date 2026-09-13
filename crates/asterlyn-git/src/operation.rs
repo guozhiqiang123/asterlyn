@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -227,11 +227,12 @@ impl GitRepository {
         })
     }
 
-    pub fn resolve_conflict(
+    pub fn resolve_conflict_with_write(
         &self,
         path: &str,
         expected_revision_token: &str,
         content: Option<&str>,
+        write: impl FnOnce() -> Result<(), GitError>,
     ) -> Result<Option<GitOperationSnapshot>, GitError> {
         if content.is_some_and(|value| value.len() > MAX_CONFLICT_TEXT_BYTES) {
             return Err(GitError::InvalidInput {
@@ -259,14 +260,18 @@ impl GitRepository {
         }
         let relative = validate_operation_path(path)?;
         let worktree = self.safe_worktree_path(&relative)?;
+        let expected_conflicts = self.operation_conflicts()?;
+        let expected_oid = content
+            .map(|value| hash_filtered_bytes(self.root(), path, value.as_bytes()))
+            .transpose()?;
+        write()?;
+        if self.operation_conflicts()? != expected_conflicts
+            || read_bounded_optional(&worktree)?.as_deref() != content.map(str::as_bytes)
+        {
+            return Err(GitError::UnsafeOperation { operation: "stage conflict resolution".into(), message: "the index or worktree changed during the resolution write; recovery material was retained".into(), blockers: vec![path.into()] });
+        }
         match content {
-            Some(value) => {
-                if let Some(parent) = worktree.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|error| io_error("resolve conflict", error))?;
-                }
-                fs::write(&worktree, value.as_bytes())
-                    .map_err(|error| io_error("resolve conflict", error))?;
+            Some(_) => {
                 run_checked(
                     self.root(),
                     "stage conflict resolution",
@@ -278,9 +283,8 @@ impl GitRepository {
                     ],
                     None,
                 )?;
-                let expected_oid = hash_bytes(self.root(), value.as_bytes())?;
                 let staged_oid = self.stage_zero_oid(path)?;
-                if staged_oid.as_deref() != Some(expected_oid.as_str()) {
+                if staged_oid.as_deref() != expected_oid.as_deref() {
                     return Err(GitError::UnsafeOperation {
                         operation: "verify conflict resolution".to_string(),
                         message: "the file changed while its resolution was being staged"
@@ -290,10 +294,6 @@ impl GitRepository {
                 }
             }
             None => {
-                if worktree.exists() {
-                    fs::remove_file(&worktree)
-                        .map_err(|error| io_error("delete conflict", error))?;
-                }
                 run_checked(
                     self.root(),
                     "stage conflict deletion",
@@ -316,6 +316,31 @@ impl GitRepository {
             }
         }
         self.operation_snapshot()
+    }
+
+    #[cfg(test)]
+    fn resolve_conflict(
+        &self,
+        path: &str,
+        token: &str,
+        content: Option<&str>,
+    ) -> Result<Option<GitOperationSnapshot>, GitError> {
+        self.resolve_conflict_with_write(path, token, content, || {
+            let path = self.safe_worktree_path(&validate_operation_path(path)?)?;
+            match content {
+                Some(content) => {
+                    fs::write(path, content).map_err(|error| io_error("test conflict write", error))
+                }
+                None => {
+                    if path.exists() {
+                        fs::remove_file(path)
+                            .map_err(|error| io_error("test conflict delete", error))
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+        })
     }
 
     fn prepare_operation(
@@ -719,11 +744,12 @@ impl GitRepository {
     ) -> Result<String, GitError> {
         let worktree_oid = hash_bytes(self.root(), worktree.unwrap_or_default())?;
         let value = format!(
-            "conflict\0{}\0{}\0{}\0{}\0{}",
+            "conflict\0{}\0{}\0{}\0{}\0{}\0{}",
             conflict.path,
             conflict.base_oid.as_deref().unwrap_or("-"),
             conflict.ours_oid.as_deref().unwrap_or("-"),
             conflict.theirs_oid.as_deref().unwrap_or("-"),
+            worktree.is_some(),
             worktree_oid,
         );
         hash_bytes(self.root(), value.as_bytes())
@@ -734,6 +760,7 @@ impl GitRepository {
             self.root(),
             "verify staged conflict resolution",
             &[
+                OsString::from("--literal-pathspecs"),
                 OsString::from("ls-files"),
                 OsString::from("--stage"),
                 OsString::from("-z"),
@@ -977,6 +1004,22 @@ fn operation_plan_token(identity: &OperationPlanIdentity<'_>) -> Result<String, 
     hash_bytes(identity.root, canonical.as_bytes())
 }
 
+fn hash_filtered_bytes(root: &Path, path: &str, bytes: &[u8]) -> Result<String, GitError> {
+    let output = run_checked(
+        root,
+        "hash normalized resolution",
+        &[
+            OsString::from("hash-object"),
+            OsString::from(format!("--path={path}")),
+            OsString::from("--stdin"),
+        ],
+        Some(bytes),
+    )?;
+    let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    validate_oid(&oid)?;
+    Ok(oid)
+}
+
 fn hash_bytes(root: &Path, bytes: &[u8]) -> Result<String, GitError> {
     let output = run_checked(
         root,
@@ -1016,6 +1059,7 @@ fn run_operation_command(
         .args(arguments)
         .env("LC_ALL", "C")
         .env("LANG", "C")
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_EDITOR", "true")
         .env("GIT_SEQUENCE_EDITOR", "true")
@@ -1040,22 +1084,28 @@ fn run_operation_command(
             .write_all(bytes)
             .map_err(|error| io_error("write Git operation input", error))?;
     }
-    child
-        .wait_with_output()
+    crate::repository::wait_with_bounded_output(child)
         .map_err(|error| io_error("wait for Git operation", error))
 }
 
 fn read_bounded_optional(path: &Path) -> Result<Option<Vec<u8>>, GitError> {
-    match fs::read(path) {
-        Ok(bytes) if bytes.len() <= MAX_CONFLICT_TEXT_BYTES => Ok(Some(bytes)),
-        Ok(_) => Err(GitError::UnsafeOperation {
-            operation: "read conflict".to_string(),
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error("read conflict worktree file", error)),
+    };
+    let mut bytes = Vec::new();
+    file.take((MAX_CONFLICT_TEXT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| io_error("read conflict worktree file", error))?;
+    if bytes.len() > MAX_CONFLICT_TEXT_BYTES {
+        return Err(GitError::UnsafeOperation {
+            operation: "read conflict".into(),
             message: format!("the worktree file exceeds the {MAX_CONFLICT_TEXT_BYTES} byte limit"),
             blockers: vec![path.to_string_lossy().into_owned()],
-        }),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(io_error("read conflict worktree file", error)),
+        });
     }
+    Ok(Some(bytes))
 }
 
 fn text_side(bytes: Option<&[u8]>, binary: bool) -> Option<String> {

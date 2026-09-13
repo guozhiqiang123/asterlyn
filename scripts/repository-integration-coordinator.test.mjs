@@ -188,6 +188,7 @@ test("session scans reuse the same integration route and stop after disposal", a
 function integrationFixture(gatewayOverrides = {}) {
   const initial = snapshot("/repo");
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     async openProject(root) { return { root, repository: initial }; },
     async readTrackedChanges(root) { return { root, changes: [] }; },
     async scanUntracked(root) { return { root, changes: [] }; },

@@ -1,3 +1,4 @@
+import type { GitWorktreeRecoveryDialog } from "./features/git-operations/git-worktree-recovery-dialog.ts";
 import { bridge } from "./bridge";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
@@ -330,6 +331,8 @@ export class AsterlynApp {
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
   private readonly gitOperationController: GitOperationController;
+  private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
+  private editorTabsMarkup = "";
   private readonly gitOperationDialogBinding: GitOperationDialogBinding;
   private readonly releaseGitOperationController: () => void;
   private readonly settingsController: SettingsController;
@@ -340,6 +343,7 @@ export class AsterlynApp {
   private changeTreeWindowStart = 0;
   private readonly windowSession = new WindowSession({
     openProject: (path) => bridge.openProject(path),
+    readProject: (path) => bridge.readProject(path),
     readTrackedChanges: (root) => bridge.readTrackedChanges(root),
     scanUntracked: (root, scanId) => bridge.scanUntracked(root, scanId),
     cancelUntrackedScan: (scanId) => bridge.cancelUntrackedScan(scanId),
@@ -395,6 +399,7 @@ export class AsterlynApp {
         readLocalDiff: (...args) => bridge.readLocalDiff(...args),
         readLocalImageDiff: (...args) => bridge.readLocalImageDiff(...args),
         revertChanges: (...args) => bridge.revertChanges(...args),
+        prepareRestoreChanges: (...args) => bridge.prepareRestoreChanges(...args),
         commitChanges: (...args) => bridge.commitChanges(...args),
       },
       loadChangeFileView(window.localStorage),
@@ -527,7 +532,7 @@ export class AsterlynApp {
         const tab = activeTextTab(this.editorState.session);
         return tab?.status === "ready" ? tab.id : null;
       },
-      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length,
+      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationController.hasUnsavedConflict()),
       toggleRepositoryMenu: () => {
         this.shellController.toggleRepositoryMenu();
         this.renderRepositoryMenu();
@@ -572,6 +577,7 @@ export class AsterlynApp {
       applyLayout: () => this.applyWorkbenchLayout(false),
       closePushDiff: () => this.closePushDiff(),
       openGitOperation: () => this.openGitOperation(),
+      openGitRecoveries: () => void this.openGitRecoveries(),
       closeGitOperation: () => this.gitOperationDialogBinding.close(),
       closeRepositoryMenu: (restoreFocus) => {
         this.shellController.closeRepositoryMenu();
@@ -594,7 +600,7 @@ export class AsterlynApp {
     });
     this.windowChromeBinding = new WindowChromeBinding(root, {
       captureEditor: () => this.captureMountedTextEditor(),
-      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length,
+      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationController.hasUnsavedConflict()),
       confirmClose: () => this.saveDirtyTabsBefore("closing Asterlyn"),
       reportError: (error) => this.showError(error),
     });
@@ -634,6 +640,7 @@ export class AsterlynApp {
 
   private handleEditorSessionChange(change: EditorSessionChange): void {
     if (
+      change.reason === "activation" ||
       change.reason === "load-start" ||
       change.reason === "load-complete" ||
       change.reason === "load-error" ||
@@ -648,6 +655,8 @@ export class AsterlynApp {
   }
 
   private handleProjectFilesChange(change: ProjectFilesChange): void {
+    if (change.reason === "refresh-start" && this.filesState.files.length > 0) return;
+    if (change.reason === "refresh-complete" && !change.catalogChanged) return;
     if (
       change.reason !== "selection" &&
       change.reason !== "disclosure" &&
@@ -790,6 +799,7 @@ export class AsterlynApp {
     if (this.changeTreeScrollFrame !== null) cancelAnimationFrame(this.changeTreeScrollFrame);
     this.projectTreeScrollFrame = null;
     this.changeTreeScrollFrame = null;
+    this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.repositoryIntegration.dispose();
     this.releaseHistoryController();
@@ -1887,7 +1897,9 @@ export class AsterlynApp {
     const current = this.windowSession.repository.state.snapshot;
     if (this.windowSession.workspace.state.root !== repositoryRoot || generation !== this.windowSession.generation) return;
     this.windowSession.cancelUntrackedScan();
-    const opened = await this.windowSession.refreshProject(repositoryRoot, generation);
+    const identity = this.windowSession.workspace.identity();
+    if (!identity || identity.root !== repositoryRoot) return;
+    const opened = await this.windowSession.refreshProject(identity);
     if (!opened) return;
     const refreshed = opened.repository;
     const next = refreshed && current
@@ -2265,9 +2277,8 @@ export class AsterlynApp {
         const next = this.repositoryIntegration.acceptRemoteOutcome(result.outcome);
         if (kind === "pull") {
           this.captureMountedTextEditor();
-          if (dirtyTextTabs(this.editorState.session).length === 0) {
-            this.editorController.resetSession();
-          }
+          await this.editorController.reconcileExternalPaths([]);
+          if (!this.windowSession.matches(generation, snapshot.root)) return false;
           this.renderLeftTool();
           this.renderEditor();
         }
@@ -2277,7 +2288,9 @@ export class AsterlynApp {
         failed = true;
         this.showError(result.error);
         try {
-          const opened = await this.windowSession.refreshProject(snapshot.root, generation);
+          const identity = this.windowSession.workspace.identity();
+          if (!identity || identity.root !== snapshot.root) return false;
+          const opened = await this.windowSession.refreshProject(identity);
           if (!opened) return false;
           const reconciled = opened.repository;
           if (!reconciled) throw new Error("The active project is no longer a Git repository.");
@@ -3980,14 +3993,18 @@ export class AsterlynApp {
     const activeKey = editorDocumentKey(document);
     const revealActiveTab = activeKey !== this.lastRenderedEditorDocumentKey;
     this.lastRenderedEditorDocumentKey = activeKey;
-    tabbar.innerHTML = renderEditorTabsView({
+    const tabsMarkup = renderEditorTabsView({
       session: this.editorState.session,
       document,
       statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
     });
+    if (tabsMarkup !== this.editorTabsMarkup || !tabbar.childElementCount) {
+      tabbar.innerHTML = tabsMarkup;
+      this.editorTabsMarkup = tabsMarkup;
+      this.bindEditorTabEvents();
+    }
     this.renderEditorContextActions(document);
     this.renderEditorTabMenu();
-    this.bindEditorTabEvents();
     this.renderDocumentStatus();
     const showContextHeader =
       document.kind === "working-diff" || document.kind === "commit-diff";
@@ -4232,22 +4249,23 @@ export class AsterlynApp {
     const host = this.query("#editor-context-actions");
     const tab = document.kind === "project-file" ? activeTextTab(this.editorState.session) : null;
     if (!tab || tab.status !== "ready" || !isMarkdownPath(tab.document.path)) {
-      host.innerHTML = "";
+      if (host.childElementCount) host.replaceChildren();
       return;
     }
-    host.innerHTML = renderMarkdownModeControls(tab);
+    if (host.childElementCount === 0) host.innerHTML = renderMarkdownModeControls(tab);
     host
       .querySelectorAll<HTMLButtonElement>("[data-markdown-mode]")
       .forEach((button) => {
-        button.addEventListener("click", () => {
+        button.setAttribute("aria-pressed", String(button.dataset.markdownMode === tab.markdownMode));
+        button.onclick = () => {
           const active = activeTextTab(this.editorState.session);
           const mode = button.dataset.markdownMode as MarkdownEditorMode;
-          if (!active || active.id !== tab.id || active.markdownMode === mode) return;
+          if (!active || active.markdownMode === mode) return;
           this.captureMountedTextEditor();
-          this.editorController.setMarkdownMode(tab.id, mode);
+          this.editorController.setMarkdownMode(active.id, mode);
           this.markdownModePreferences = rememberMarkdownMode(
             this.markdownModePreferences,
-            tab.id,
+            active.id,
             mode,
           );
           saveMarkdownModePreferences(
@@ -4255,7 +4273,7 @@ export class AsterlynApp {
             this.markdownModePreferences,
           );
           this.renderEditor();
-        });
+        };
       });
   }
 
@@ -4438,6 +4456,7 @@ export class AsterlynApp {
   }
 
   private async saveDirtyTabsBefore(action: string): Promise<boolean> {
+    if (this.gitOperationController.hasUnsavedConflict() && !this.gitOperationDialogBinding.close()) return false;
     this.captureMountedTextEditor();
     const dirty = dirtyTextTabs(this.editorState.session);
     if (dirty.length === 0) return true;
@@ -4993,6 +5012,7 @@ export class AsterlynApp {
   }
 
   private async revertSelectedChange(): Promise<void> {
+    this.captureMountedTextEditor();
     const snapshot = this.windowSession.repository.state.snapshot;
     const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
     if (!snapshot || !selected || this.state.loading) return;
@@ -5006,21 +5026,31 @@ export class AsterlynApp {
     const label = selected.originalPath
       ? `${selected.originalPath} → ${selected.path}`
       : selected.path;
+    const plan = await this.changesController.prepareRestoreSelected().catch((error) => {
+      this.showError(error);
+      return null;
+    });
+    if (!plan) return;
     if (
       !window.confirm(
-        `Revert 1 tracked file to HEAD?\n\n${label}\n\nThis overwrites its staged and working-tree changes.`,
+        `Restore 1 tracked file to HEAD?\n\n${label}\n\nThis replaces the reviewed staged and working-tree content. A recovery copy will be saved; Undo is available from Git → Recover local changes.`,
       )
     ) {
       return;
     }
 
+    this.captureMountedTextEditor();
+    if (dirtyTextTabs(this.editorState.session).some((tab) => plan.paths.includes(tab.document.workspacePath))) {
+      this.setStatus("Save or undo unsaved editor changes before restoring these files", "warning");
+      return;
+    }
     const generation = this.windowSession.beginTransition();
     let pendingRoot: string | null = null;
     let refreshAfterFailure = false;
     let revertFailure: unknown = null;
     this.setLoading(true, "Reverting selected file…");
     try {
-      const result = await this.changesController.revertSelected();
+      const result = await this.changesController.revertSelected(plan);
       if (generation !== this.windowSession.generation || result.status === "stale") return;
       if (result.status === "success") {
         const next = this.repositoryIntegration.applyWorkingTreeMutation(result.value);
@@ -5260,6 +5290,34 @@ export class AsterlynApp {
           if (kind && target) this.openGitOperation(kind, [target]);
         });
       });
+  }
+
+  private async openGitRecoveries(): Promise<void> {
+    const root = this.windowSession.repository.state.snapshot?.root;
+    if (!root || this.state.loading) return;
+    const { GitWorktreeRecoveryDialog } = await import("./features/git-operations/git-worktree-recovery-dialog.ts");
+    this.recoveryDialog ??= new GitWorktreeRecoveryDialog({
+      activeRoot: () => this.windowSession.workspace.state.root,
+      list: (root) => bridge.listGitWorktreeRecoveries(root),
+      undo: async (root, recovery) => {
+        if (this.state.loading || this.windowSession.workspace.state.root !== root) throw new Error("Wait for the current operation to finish.");
+        this.captureMountedTextEditor();
+        if (dirtyTextTabs(this.editorState.session).some((tab) => recovery.paths.includes(tab.document.workspacePath))) throw new Error("Save or undo unsaved editor changes before restoring these files.");
+        const generation = this.windowSession.beginTransition();
+        this.setLoading(true, "Restoring local changes…");
+        try {
+          const outcome = await bridge.undoGitWorktreeRecovery(root, recovery.id);
+          if (!this.windowSession.matches(generation, root)) return;
+          this.repositoryIntegration.applyMutation(outcome, "gitMutation");
+          await this.editorController.reconcileExternalPaths(recovery.paths);
+          this.renderWorkspace();
+          this.setStatus("Local changes restored", "success");
+        } finally {
+          if (this.windowSession.matches(generation, root)) this.setLoading(false, "Ready");
+        }
+      },
+    });
+    if (this.windowSession.workspace.state.root === root) await this.recoveryDialog.open(root);
   }
 
   private openGitOperation(
@@ -5515,9 +5573,8 @@ export class AsterlynApp {
         clearSelection: true,
       });
       this.captureMountedTextEditor();
-      if (dirtyTextTabs(this.editorState.session).length === 0) {
-        this.editorController.resetSession();
-      }
+      await this.editorController.reconcileExternalPaths([]);
+      if (!this.windowSession.matches(generation, snapshot.root)) return;
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
       void this.loadProjectFiles(next.root, generation);

@@ -77,6 +77,8 @@ test("catalog and repository metadata are reconciled without accepting stale roo
   coordinator.activate();
   await settle();
 
+  session.beginTransition();
+  session.beginTransition();
   watch.emit(event(session, ["workspaceCatalog", "refs", "history"], ["new.ts"]));
   await settle();
   assert.equal(catalogReads, 1);
@@ -157,6 +159,7 @@ test("a disposed coordinator releases a watch that completes activation late", a
 
 function activeSession(overrides = {}) {
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     async openProject(root) { return { root, repository: snapshot(root) }; },
     async readTrackedChanges(root) { return { root, changes: [] }; },
     async scanUntracked(root) { return { root, changes: [] }; },

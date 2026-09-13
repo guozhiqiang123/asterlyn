@@ -2,7 +2,7 @@ import { icon } from "../../icons.ts";
 import type {
   GitOperationKind,
 } from "../../models.ts";
-import type { GitOperationState } from "./git-operation-controller.ts";
+import { canReviewGitOperation, type GitOperationState } from "./git-operation-controller.ts";
 import { operationDisplayName } from "./git-operation-banner.ts";
 
 export function renderGitOperationDialog(state: GitOperationState): string {
@@ -14,8 +14,6 @@ export function renderGitOperationDialog(state: GitOperationState): string {
 
 function renderSetup(state: GitOperationState): string {
   const busy = state.loading === "prepare";
-  const targetCount = state.targetText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).length;
-  const invalid = targetCount === 0 || (state.kind !== "cherryPick" && targetCount !== 1);
   return dialogFrame(
     `Prepare ${operationDisplayName(state.kind)}`,
     `<form id="git-operation-setup-form" class="git-operation-form">
@@ -31,7 +29,7 @@ function renderSetup(state: GitOperationState): string {
       ${state.kind === "squash" ? `<label for="git-operation-message">New commit message</label><textarea id="git-operation-message" rows="5" placeholder="Describe the squashed change" ${busy ? "disabled" : ""}>${escapeHtml(state.message)}</textarea>` : ""}
       <p class="git-operation-note">Asterlyn resolves every target to an exact object and binds the review to the current branch, HEAD, clean index, and worktree. Changes after review make the plan stale.</p>
       ${renderError(state.error)}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>Cancel</button><button class="primary-button" type="submit" ${busy || invalid || (state.kind === "squash" && !state.message.trim()) ? "disabled" : ""}>${busy ? "Preparing…" : "Review"}</button></div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>Cancel</button><button class="primary-button" type="submit" ${canReviewGitOperation(state) ? "" : "disabled"}>${busy ? "Preparing…" : "Review"}</button></div>
     </form>`,
     busy,
   );

@@ -26,6 +26,7 @@ export class EditorSurface {
   private readonly textEditor = new LazyTextEditor();
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
+  private mountedTextLoadEpoch: number | null = null;
   private markdownSourcePercent = 50;
   private markdownSplitterDisposer: (() => void) | null = null;
   private markdownScrollDisposer: (() => void) | null = null;
@@ -35,7 +36,8 @@ export class EditorSurface {
   private activeMarkdownMode: TextTabState["markdownMode"] | null = null;
   private measureFrame: number | null = null;
 
-  constructor(private readonly root: HTMLElement) {}
+  private readonly root: HTMLElement;
+  constructor(root: HTMLElement) { this.root = root; }
 
   retain(tabIds: readonly string[]): void {
     this.textEditor.retain(tabIds);
@@ -47,9 +49,11 @@ export class EditorSurface {
     onlyTabId?: string,
   ): void {
     const tabId = this.mountedTextTabId;
-    if (!tabId || (onlyTabId && onlyTabId !== tabId) || !textTab(session, tabId)) return;
+    const tab = tabId ? textTab(session, tabId) : null;
+    if (!tabId || (onlyTabId && onlyTabId !== tabId) || !tab ||
+      tab.status !== "ready" || tab.loadEpoch !== this.mountedTextLoadEpoch) return;
     this.textEditor.flushChanges();
-    accept(tabId, this.textEditor.content());
+    accept(tabId, this.textEditor.content(tabId));
   }
 
   disposeTextTab(tabId: string): void {
@@ -299,8 +303,9 @@ export class EditorSurface {
     preferences: AppPreferences,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
+    this.mountedTextLoadEpoch = tab.loadEpoch;
     this.textEditor.mount(parent, tab.id, tab.loadEpoch, tab.content, tab.document.path, preferences, (content) => {
-      if (this.mountedTextTabId !== tab.id) return;
+      if (this.mountedTextTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
       if (tab.markdownMode === "split") this.queueMarkdownPreview(tab.id, content);
       onContentChange(tab.id, content);
     });

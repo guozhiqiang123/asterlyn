@@ -309,7 +309,7 @@ export function markTextEdited(
   content: string,
 ): EditorSession {
   return updateMatchingTab(session, tabId, (tab) =>
-    tab.status !== "ready"
+    tab.status !== "ready" || tab.content === content
       ? tab
       : {
           ...tab,
@@ -335,7 +335,9 @@ export function captureTextContent(
   tabId: string,
   content: string,
 ): EditorSession {
-  return updateMatchingTab(session, tabId, (tab) => ({ ...tab, content }));
+  return updateMatchingTab(session, tabId, (tab) =>
+    tab.status !== "ready" || tab.content === content ? tab : { ...tab, content },
+  );
 }
 
 export function beginTextSave(

@@ -90,3 +90,9 @@
   border: 0;
   cursor: pointer;
 }
+
+.worktree-recovery-dialog { color: var(--text); padding: 0 18px 18px; }
+.worktree-recovery-dialog::backdrop { background: #0d0e10b8; }
+.worktree-recovery-list { max-height: 55vh; overflow: auto; overflow-wrap: anywhere; }
+.worktree-recovery-list section { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.worktree-recovery-list pre { white-space: pre-wrap; }

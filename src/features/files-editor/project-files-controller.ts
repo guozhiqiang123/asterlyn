@@ -79,6 +79,7 @@ export class ProjectFilesController {
 
   installWorkspace(root: string | null, changes: FileChange[] = []): void {
     const rootChanged = this.state.root !== root;
+    if (!rootChanged) { this.updateChanges(changes); return; }
     this.state.root = root;
     this.changes = changes;
     this.treeCache = null;
@@ -105,7 +106,8 @@ export class ProjectFilesController {
   }
 
   updateChanges(changes: FileChange[]): void {
-    if (this.changes === changes) return;
+    if (this.changes === changes || (this.changes.length === changes.length &&
+      this.changes.every((previous, index) => sameChange(previous, changes[index]!)))) return;
     this.changes = changes;
     this.treeCache = null;
     this.reconcileTreeState();
@@ -116,12 +118,19 @@ export class ProjectFilesController {
     const root = this.state.root;
     if (!root || this.disposed) return false;
     const generation = ++this.generation;
+    const hadError = this.state.error !== null;
     this.state.loading = true;
     this.state.error = null;
     this.emit({ reason: "refresh-start" });
     try {
       const result = await this.gateway.listProjectFiles(root);
       if (!this.requestMatches(generation, root) || result.root !== root) return false;
+      if (this.catalogRoot === result.root && !hadError && this.state.truncated === result.truncated &&
+        sameRecords(this.state.files, result.files) && sameRecords(this.state.ignoredEntries, result.ignoredEntries)) {
+        this.state.loading = false;
+        this.emit({ reason: "refresh-complete", catalogChanged: false });
+        return true;
+      }
       this.state.paths = result.paths;
       this.state.files = result.files;
       this.state.ignoredEntries = result.ignoredEntries;
@@ -260,6 +269,20 @@ export class ProjectFilesController {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
   }
+}
+
+function sameChange(a: FileChange, b: FileChange): boolean {
+  return a.path === b.path && a.originalPath === b.originalPath &&
+    a.indexStatus === b.indexStatus && a.worktreeStatus === b.worktreeStatus &&
+    a.conflicted === b.conflicted && a.submodule === b.submodule;
+}
+
+function sameRecords<T extends object>(a: T[], b: T[]): boolean {
+  return a.length === b.length && a.every((item, index) => {
+    const next = b[index]!;
+    return Object.keys(item).length === Object.keys(next).length &&
+      (Object.keys(item) as Array<keyof T>).every((key) => item[key] === next[key]);
+  });
 }
 
 export function createProjectFilesState(): ProjectFilesState {

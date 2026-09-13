@@ -127,7 +127,7 @@ function renderChangeToolbar(
   const nextView = state.fileView === "tree" ? "flat list" : "directory tree";
   return `<div class="change-toolbar" role="toolbar" aria-label="Commit file actions">
     <button class="compact-icon-button" type="button" data-change-action="refresh" title="Refresh changes" aria-label="Refresh changes">${icon("refresh", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="revert" title="${revertUnsupported ? "Select an ordinary tracked file to revert" : "Revert selected file to HEAD"}" aria-label="Revert selected file" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
+    <button class="compact-icon-button" type="button" data-change-action="revert" title="${revertUnsupported ? "Select an ordinary tracked file to restore" : "Restore uncommitted changes to HEAD"}" aria-label="Restore uncommitted changes" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
     <button class="compact-icon-button" type="button" data-change-action="diff" title="Open selected file Diff" aria-label="Open selected file Diff" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
     <span class="toolbar-separator" aria-hidden="true"></span>
     <button class="compact-icon-button ${state.fileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="Show changes as ${nextView}" aria-label="Show changes as ${nextView}" aria-pressed="${state.fileView === "tree"}">${icon("eye", 15)}</button>

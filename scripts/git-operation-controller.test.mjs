@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   GitOperationController,
   operationTargets,
+  canReviewGitOperation,
 } from "../src/features/git-operations/git-operation-controller.ts";
 import {
   renderGitOperationDialog,
@@ -195,3 +196,44 @@ function snapshot(root, operation) {
     untrackedState: "complete",
   };
 }
+
+
+test("Review validity follows targets, operation kind, message and loading", () => {
+  const controller = new GitOperationController(gateway());
+  controller.installSnapshot(snapshot("/repo", null));
+  controller.openSetup();
+  assert.equal(canReviewGitOperation(controller.state), false);
+  controller.updateDraft("merge", "refs/heads/main", "");
+  assert.equal(canReviewGitOperation(controller.state), true);
+  controller.updateDraft("merge", "one\ntwo", "");
+  assert.equal(canReviewGitOperation(controller.state), false);
+  controller.updateDraft("cherryPick", "one\ntwo", "");
+  assert.equal(canReviewGitOperation(controller.state), true);
+  controller.updateDraft("squash", "one", " ");
+  assert.equal(canReviewGitOperation(controller.state), false);
+  controller.updateDraft("squash", "one", "message");
+  assert.equal(canReviewGitOperation(controller.state), true);
+  controller.updateDraft("squash", "", "message");
+  assert.equal(canReviewGitOperation(controller.state), false);
+});
+
+test("unsaved conflict results survive close attempts and external operation completion", async () => {
+  const controller = new GitOperationController(gateway({
+    async readConflictContent() {
+      return { path: "shared.txt", base: "base", ours: "ours", theirs: "theirs", worktree: "markers", binary: false, revisionToken: "opened" };
+    },
+  }));
+  controller.installSnapshot(snapshot("/repo", activeOperation()));
+  await controller.openConflict("shared.txt");
+  controller.setConflictResult("my merged text");
+  assert.equal(controller.closeDialog(), false);
+  assert.equal(controller.state.conflictResult, "my merged text");
+  controller.installSnapshot(snapshot("/repo", null));
+  assert.equal(controller.state.dialog, "conflict");
+  assert.equal(controller.state.conflictResult, "my merged text");
+  assert.match(controller.state.error, /preserved/);
+  controller.openSetup();
+  assert.equal(controller.state.dialog, "conflict");
+  assert.equal(controller.closeDialog(true), true);
+  assert.equal(controller.state.conflict, null);
+});

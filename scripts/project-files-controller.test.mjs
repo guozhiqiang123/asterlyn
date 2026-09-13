@@ -3,6 +3,25 @@ import test from "node:test";
 
 import { ProjectFilesController } from "../src/features/files-editor/project-files-controller.ts";
 
+test("identical watch snapshots preserve tree identity and a collapsed folder", async () => {
+  const controller = new ProjectFilesController({ async listProjectFiles() { return catalog("/repo", ["docs/one.md", "docs/two.md"]); } });
+  const change = { path: "docs/one.md", originalPath: null, indexStatus: "unmodified", worktreeStatus: "modified", conflicted: false, submodule: false };
+  controller.installWorkspace("/repo", [change]);
+  await controller.refresh();
+  controller.setDirectoryExpanded("docs", false);
+  const tree = controller.tree();
+  const events = [];
+  controller.subscribe((event) => events.push(event));
+  for (let index = 0; index < 3; index++) {
+    controller.installWorkspace("/repo", [{ ...change }]);
+    controller.updateChanges([{ ...change }]);
+    await controller.refresh();
+  }
+  assert.equal(controller.tree(), tree);
+  assert.equal(controller.state.expandedDirectories.has("docs"), false);
+  assert.equal(events.some((event) => event.catalogChanged), false);
+});
+
 test("latest workspace owns project catalog completion", async () => {
   const first = deferred();
   const second = deferred();

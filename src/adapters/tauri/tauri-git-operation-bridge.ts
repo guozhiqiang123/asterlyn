@@ -1,5 +1,7 @@
 import type {
   CommitSelectedResult,
+  RestoreChangesPlan,
+  GitWorktreeRecovery,
   GitConflictContent,
   GitOperationMutationOutcome,
   GitOperationPlan,
@@ -21,10 +23,16 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       message,
       selected,
     }),
-  revertChanges: (repositoryRoot, selected) =>
+  prepareRestoreChanges: (repositoryRoot, selected) =>
+    invokeDesktopCommand<RestoreChangesPlan>("prepare_restore_changes", { repositoryRoot, selected }),
+  listGitWorktreeRecoveries: (repositoryRoot) =>
+    invokeDesktopCommand<GitWorktreeRecovery[]>("list_git_worktree_recoveries", { repositoryRoot }),
+  undoGitWorktreeRecovery: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("undo_git_worktree_recovery", { repositoryRoot, recoveryId }),
+  revertChanges: (repositoryRoot, plan) =>
     invokeDesktopCommand<WorkingTreeMutationOutcome>("revert_changes", {
       repositoryRoot,
-      selected,
+      plan,
     }),
   switchBranch: (repositoryRoot, targetFullName) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("switch_branch", {

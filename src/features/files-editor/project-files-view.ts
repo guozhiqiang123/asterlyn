@@ -11,6 +11,8 @@ const PROJECT_TREE_OVERSCAN = 32;
 export interface ProjectTreeRow {
   node: ProjectTreeNode;
   depth: number;
+  positionInSet: number;
+  setSize: number;
 }
 
 export interface ProjectTreeRenderWindow {
@@ -64,7 +66,7 @@ export function renderProjectNavigation(
       ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(state.error)}</span></div>`
       : "",
   ].join("");
-  return `<div class="project-tree virtual-tree" role="tree" aria-label="Project files" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => renderProjectRow(state, row, (window?.start ?? 0) + offset, rows.length)).join("")}${bottomSpacer}</div>${notices}`;
+  return `<div class="project-tree virtual-tree" role="tree" aria-label="Project files" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRow(state, row)).join("")}${bottomSpacer}</div>${notices}`;
 }
 
 export function projectTreeRows(
@@ -72,13 +74,13 @@ export function projectTreeRows(
   expandedDirectories: ReadonlySet<string>,
 ): ProjectTreeRow[] {
   const rows: ProjectTreeRow[] = [];
-  const visit = (node: ProjectTreeNode, depth: number): void => {
-    rows.push({ node, depth });
+  const visit = (node: ProjectTreeNode, depth: number, positionInSet: number, setSize: number): void => {
+    rows.push({ node, depth, positionInSet, setSize });
     if (node.kind === "directory" && expandedDirectories.has(node.path)) {
-      for (const child of node.children) visit(child, depth + 1);
+      node.children.forEach((child, index) => visit(child, depth + 1, index + 1, node.children.length));
     }
   };
-  for (const node of nodes) visit(node, 0);
+  nodes.forEach((node, index) => visit(node, 0, index + 1, nodes.length));
   return rows;
 }
 
@@ -101,13 +103,11 @@ export function projectTreeRenderWindow(
 function renderProjectRow(
   state: ProjectFilesState,
   row: ProjectTreeRow,
-  index: number,
-  rowCount: number,
 ): string {
   const { node, depth } = row;
   const selected = state.selection?.path === node.path && state.selection.kind === node.kind;
   const statusClass = `file-status-${node.status}`;
-  const common = `role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${rowCount}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"`;
+  const common = `role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-level="${depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"`;
   if (node.kind === "directory") {
     const expanded = state.expandedDirectories.has(node.path);
     return `<div class="project-directory virtual ${statusClass}"><div class="project-directory-row project-node-row ${selected ? "selected" : ""}" tabindex="0" ${common} data-project-directory="${escapeAttribute(node.path)}" aria-expanded="${expanded}"><button class="project-tree-toggle" type="button" data-project-directory-toggle="${escapeAttribute(node.path)}" aria-label="${expanded ? "Collapse" : "Expand"} ${escapeAttribute(node.path)}"><span class="tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 12)}</span></button>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></div></div>`;

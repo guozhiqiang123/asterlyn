@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::Arc;
@@ -145,7 +145,7 @@ impl GitRepository {
         &self.root
     }
 
-    pub(crate) fn git_directory(&self) -> &Path {
+    pub fn git_directory(&self) -> &Path {
         &self.git_dir
     }
 
@@ -178,6 +178,12 @@ impl GitRepository {
 
         while let Some(parent) = pending.pop() {
             for path in parent.repository.gitlink_paths()? {
+                if roots.len() >= 1_024 {
+                    return Err(GitError::InvalidInput {
+                        field: "Git roots".into(),
+                        message: "repository discovery exceeds the 1,024-root limit".into(),
+                    });
+                }
                 let candidate = parent.repository.root.join(path);
                 let Ok(canonical_candidate) = fs::canonicalize(candidate) else {
                     continue;
@@ -711,8 +717,14 @@ impl GitRepository {
         let maximum = limit.clamp(1, 100_000);
         let mut files = Vec::new();
         let mut ignored_entries = Vec::new();
+        let mut files_truncated = false;
+        let mut ignored_truncated = false;
         for root in &roots {
-            for path in root.repository.project_file_paths()? {
+            let (root_paths, truncated) = root
+                .repository
+                .project_file_paths(maximum.saturating_sub(files.len()))?;
+            files_truncated |= truncated;
+            for path in root_paths {
                 let workspace_path = if root.descriptor.relative_path == "." {
                     path.clone()
                 } else {
@@ -725,7 +737,11 @@ impl GitRepository {
                 });
             }
             if include_ignored {
-                for entry in root.repository.project_ignored_entries()? {
+                let (root_entries, truncated) = root
+                    .repository
+                    .project_ignored_entries(maximum.saturating_sub(ignored_entries.len()))?;
+                ignored_truncated |= truncated;
+                for entry in root_entries {
                     let workspace_path = if root.descriptor.relative_path == "." {
                         entry.workspace_path
                     } else {
@@ -747,7 +763,7 @@ impl GitRepository {
         files.dedup_by(|left, right| {
             left.repository_id == right.repository_id && left.path == right.path
         });
-        let files_truncated = files.len() > maximum;
+        files_truncated |= files.len() > maximum;
         files.truncate(maximum);
         ignored_entries.sort_by(|left, right| {
             left.workspace_path
@@ -757,7 +773,7 @@ impl GitRepository {
                 })
         });
         ignored_entries.dedup();
-        let ignored_truncated = ignored_entries.len() > maximum;
+        ignored_truncated |= ignored_entries.len() > maximum;
         ignored_entries.truncate(maximum);
         let nested_roots: HashSet<&str> = roots
             .iter()
@@ -900,32 +916,25 @@ impl GitRepository {
         Ok(file.clone())
     }
 
-    fn project_file_paths(&self) -> Result<Vec<String>, GitError> {
-        let output = self.run_read(
-            "list project files",
-            [
+    fn project_file_paths(&self, limit: usize) -> Result<(Vec<String>, bool), GitError> {
+        self.read_catalog_records(
+            &[
                 "ls-files",
                 "--cached",
                 "--others",
                 "--exclude-standard",
                 "-z",
             ],
-        )?;
-        let mut paths: Vec<_> = output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|path| !path.is_empty())
-            .map(|path| String::from_utf8_lossy(path).into_owned())
-            .collect();
-        paths.sort();
-        paths.dedup();
-        Ok(paths)
+            limit,
+        )
     }
 
-    fn project_ignored_entries(&self) -> Result<Vec<ProjectIgnoredEntry>, GitError> {
-        let output = self.run_read(
-            "list ignored project entries",
-            [
+    fn project_ignored_entries(
+        &self,
+        limit: usize,
+    ) -> Result<(Vec<ProjectIgnoredEntry>, bool), GitError> {
+        let (records, truncated) = self.read_catalog_records(
+            &[
                 "ls-files",
                 "--others",
                 "--ignored",
@@ -934,9 +943,10 @@ impl GitRepository {
                 "--no-empty-directory",
                 "-z",
             ],
+            limit,
         )?;
         let mut entries = Vec::new();
-        for raw_path in output.stdout.split(|byte| *byte == 0) {
+        for raw_path in records.iter().map(|record| record.as_bytes()) {
             if raw_path.is_empty() {
                 continue;
             }
@@ -964,7 +974,7 @@ impl GitRepository {
                 })
         });
         entries.dedup();
-        Ok(entries)
+        Ok((entries, truncated))
     }
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
@@ -1468,7 +1478,11 @@ impl GitRepository {
 
     pub fn stage(&self, paths: &[String]) -> Result<(), GitError> {
         let paths = validate_paths(paths)?;
-        let mut args = vec![OsString::from("add"), OsString::from("--")];
+        let mut args = vec![
+            OsString::from("--literal-pathspecs"),
+            OsString::from("add"),
+            OsString::from("--"),
+        ];
         args.extend(paths);
         self.run_mutation("stage paths", args)?;
         Ok(())
@@ -1481,12 +1495,14 @@ impl GitRepository {
             .unwrap_or(false);
         let mut args = if has_head {
             vec![
+                OsString::from("--literal-pathspecs"),
                 OsString::from("restore"),
                 OsString::from("--staged"),
                 OsString::from("--"),
             ]
         } else {
             vec![
+                OsString::from("--literal-pathspecs"),
                 OsString::from("rm"),
                 OsString::from("--cached"),
                 OsString::from("--quiet"),
@@ -1530,7 +1546,7 @@ impl GitRepository {
                 message: error.to_string(),
             })?;
 
-        let output = child.wait_with_output().map_err(|error| GitError::Io {
+        let output = wait_with_bounded_output(child).map_err(|error| GitError::Io {
             operation: "create commit".to_string(),
             message: error.to_string(),
         })?;
@@ -1605,7 +1621,7 @@ impl GitRepository {
                     operation: "create selected commit".to_string(),
                     message: error.to_string(),
                 })?;
-            child.wait_with_output().map_err(|error| GitError::Io {
+            wait_with_bounded_output(child).map_err(|error| GitError::Io {
                 operation: "create selected commit".to_string(),
                 message: error.to_string(),
             })
@@ -1687,7 +1703,10 @@ impl GitRepository {
         })
     }
 
-    pub fn revert_selected(&self, selected: &[FileChange]) -> Result<(), GitError> {
+    pub fn review_revert_selected(
+        &self,
+        selected: &[FileChange],
+    ) -> Result<(String, Vec<String>), GitError> {
         self.ensure_no_repository_operation("revert selected changes")?;
         if self.head_oid()?.is_none() {
             return Err(GitError::UnsafeOperation {
@@ -1715,18 +1734,51 @@ impl GitRepository {
                 blockers: unsupported,
             });
         }
-        let pathspecs = expanded_change_paths(&selected)?;
+        let paths = expanded_change_paths(&selected)?
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+        Ok((
+            self.head_oid()?.ok_or_else(|| GitError::InvalidInput {
+                field: "HEAD".into(),
+                message: "HEAD disappeared during review".into(),
+            })?,
+            paths,
+        ))
+    }
+
+    pub fn revert_selected_reviewed(
+        &self,
+        selected: &[FileChange],
+        expected_head: &str,
+        preflight: impl FnOnce() -> Result<(), GitError>,
+    ) -> Result<(), GitError> {
+        let (head, paths) = self.review_revert_selected(selected)?;
+        if head != expected_head {
+            return Err(GitError::UnsafeOperation {
+                operation: "restore changes".into(),
+                message: "HEAD changed after review".into(),
+                blockers: paths,
+            });
+        }
+        preflight()?;
         let mut args = vec![
             OsString::from("--literal-pathspecs"),
             OsString::from("restore"),
-            OsString::from("--source=HEAD"),
+            OsString::from(format!("--source={expected_head}")),
             OsString::from("--staged"),
             OsString::from("--worktree"),
             OsString::from("--"),
         ];
-        args.extend(pathspecs);
-        self.run_mutation("revert selected changes", args)?;
+        args.extend(paths.into_iter().map(OsString::from));
+        self.run_mutation("restore reviewed changes", args)?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn revert_selected(&self, selected: &[FileChange]) -> Result<(), GitError> {
+        let (head, _) = self.review_revert_selected(selected)?;
+        self.revert_selected_reviewed(selected, &head, || Ok(()))
     }
 
     fn status_changes_with_untracked(&self) -> Result<Vec<FileChange>, GitError> {
@@ -1738,7 +1790,7 @@ impl GitRepository {
         Ok(changes)
     }
 
-    fn head_oid(&self) -> Result<Option<String>, GitError> {
+    pub fn head_oid(&self) -> Result<Option<String>, GitError> {
         let output =
             run_git_output(&self.root, ["rev-parse", "--verify", "HEAD"]).map_err(|error| {
                 GitError::Io {
@@ -2915,6 +2967,47 @@ impl GitRepository {
         ensure_success(operation, output)
     }
 
+    // Stop the producer at the entry/byte budget; never allocate the complete catalog first.
+    fn read_catalog_records(
+        &self,
+        args: &[&str],
+        limit: usize,
+    ) -> Result<(Vec<String>, bool), GitError> {
+        let mut child = base_command(&self.root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: "list bounded catalog".into(),
+                message: error.to_string(),
+            })?;
+        let stdout = child.stdout.take().expect("piped stdout");
+        let stderr = child.stderr.take().expect("piped stderr");
+        let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+        let result = read_catalog_stream(stdout, limit);
+        if !matches!(&result, Ok((_, false))) {
+            let _ = child.kill();
+        }
+        let status = child.wait().map_err(|error| GitError::Io {
+            operation: "wait for catalog".into(),
+            message: error.to_string(),
+        })?;
+        let stderr = join_stream(stderr_reader, "list bounded catalog", "stderr")?;
+        let (records, truncated) = result?;
+        if !truncated {
+            ensure_success(
+                "list bounded catalog",
+                Output {
+                    status,
+                    stdout: Vec::new(),
+                    stderr,
+                },
+            )?;
+        }
+        Ok((records, truncated))
+    }
+
     fn run_read_owned_bounded(
         &self,
         operation: &str,
@@ -3305,9 +3398,13 @@ fn validate_query_roots(query: &HistoryQuery, roots: &[DiscoveredGitRoot]) -> Re
     Ok(())
 }
 
-fn read_stream(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    stream.read_to_end(&mut bytes)?;
+fn read_stream(stream: impl Read) -> std::io::Result<Vec<u8>> {
+    let (bytes, truncated) = read_stream_limited(stream, 64 * 1024 * 1024)?;
+    if truncated {
+        return Err(std::io::Error::other(
+            "Git output exceeded the 64 MiB limit; verify repository state before retrying a mutation",
+        ));
+    }
     Ok(bytes)
 }
 
@@ -3397,12 +3494,83 @@ fn run_from<const N: usize>(
     }
 }
 
+fn read_catalog_stream(input: impl Read, limit: usize) -> Result<(Vec<String>, bool), GitError> {
+    const BYTE_LIMIT: usize = 16 * 1024 * 1024;
+    const PATH_LIMIT: usize = 32 * 1024;
+    let mut reader = BufReader::new(input);
+    let mut records = std::collections::BTreeSet::new();
+    let mut bytes = 0;
+    loop {
+        let mut record = Vec::new();
+        let read = reader
+            .by_ref()
+            .take((PATH_LIMIT + 1) as u64)
+            .read_until(0, &mut record)
+            .map_err(|error| GitError::Io {
+                operation: "read catalog stream".into(),
+                message: error.to_string(),
+            })?;
+        if read == 0 {
+            return Ok((records.into_iter().collect(), false));
+        }
+        bytes += read;
+        if bytes > BYTE_LIMIT || read > PATH_LIMIT || record.last() != Some(&0) {
+            return Ok((records.into_iter().collect(), true));
+        }
+        record.pop();
+        if record.is_empty() {
+            continue;
+        }
+        let path = String::from_utf8(record).map_err(|_| GitError::InvalidInput {
+            field: "project path".into(),
+            message: "non-UTF-8 file paths are unsupported".into(),
+        })?;
+        if records.contains(&path) {
+            continue;
+        }
+        if records.len() == limit {
+            return Ok((records.into_iter().collect(), true));
+        }
+        records.insert(path);
+    }
+}
+
 fn run_git_output<I, S>(path: &Path, args: I) -> std::io::Result<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    base_command(path).args(args).output()
+    let child = base_command(path)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    wait_with_bounded_output(child)
+}
+
+pub(crate) fn wait_with_bounded_output(mut child: Child) -> std::io::Result<Output> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
+    let stdout_reader = thread::spawn(move || read_stream(stdout));
+    let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+    let status = child.wait();
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stdout reader failed"))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stderr reader failed"))?;
+    Ok(Output {
+        status: status?,
+        stdout: stdout?,
+        stderr: stderr?,
+    })
 }
 
 fn base_command(path: &Path) -> Command {
@@ -3413,6 +3581,9 @@ fn base_command(path: &Path) -> Command {
         .arg("--no-pager")
         .env("LC_ALL", "C")
         .env("LANG", "C")
+        // Background reads must not refresh the index and trigger our own watcher.
+        // Git still takes all locks required by explicit mutations.
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0");
     command
 }
@@ -3918,6 +4089,68 @@ mod tests {
     use std::process::Command;
     use tempfile::TempDir;
 
+    #[test]
+    fn background_status_does_not_write_the_index() {
+        let directory = fixture();
+        let path = directory.path().join("readme.md");
+        fs::write(&path, "same content\n").unwrap();
+        git(directory.path(), &["add", "."]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        // A changed inode with identical bytes needs a stat refresh in ordinary `git status`.
+        let temporary = directory.path().join("replacement");
+        fs::write(&temporary, "same content\n").unwrap();
+        fs::rename(temporary, &path).unwrap();
+        let index = directory.path().join(".git/index");
+        let before = fs::read(&index).unwrap();
+        let modified = fs::metadata(&index).unwrap().modified().unwrap();
+        let repository = GitRepository::open(directory.path()).unwrap();
+        for _ in 0..3 {
+            assert!(repository.tracked_changes().unwrap().changes.is_empty());
+        }
+        assert_eq!(fs::read(&index).unwrap(), before);
+        assert_eq!(fs::metadata(&index).unwrap().modified().unwrap(), modified);
+    }
+
+    #[test]
+    fn stage_and_unstage_treat_pathspec_magic_literally() {
+        let directory = fixture();
+        let path = ":(glob)a*.txt";
+        if cfg!(windows) {
+            return;
+        } // Windows does not allow this filename.
+        fs::write(directory.path().join(path), "selected").unwrap();
+        fs::write(directory.path().join("another.txt"), "unselected").unwrap();
+        let repository = GitRepository::open(directory.path()).unwrap();
+        repository.stage(&[path.into()]).unwrap();
+        assert_eq!(git_stdout(directory.path(), &["ls-files"]), path);
+        repository.unstage(&[path.into()]).unwrap();
+        assert!(git_stdout(directory.path(), &["ls-files"]).is_empty());
+        git(directory.path(), &["add", "."]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        fs::write(directory.path().join(path), "new selected").unwrap();
+        fs::write(directory.path().join("another.txt"), "new unselected").unwrap();
+        repository.stage(&[path.into()]).unwrap();
+        repository.unstage(&[path.into()]).unwrap();
+        assert!(git_stdout(directory.path(), &["diff", "--cached", "--name-only"]).is_empty());
+    }
+
+    #[test]
+    fn catalog_stream_stops_at_record_and_path_budgets() {
+        assert_eq!(
+            read_catalog_stream(&b"b\0a\0c\0"[..], 2).unwrap(),
+            (vec!["a".into(), "b".into()], true)
+        );
+        assert_eq!(
+            read_catalog_stream(&b"a\0a\0"[..], 1).unwrap(),
+            (vec!["a".into()], false)
+        );
+        assert!(
+            read_catalog_stream(&vec![b'x'; 1_000_000][..], 100)
+                .unwrap()
+                .1
+        );
+    }
+
     fn git(path: &Path, args: &[&str]) {
         let output = Command::new("git")
             .arg("-C")
@@ -4071,7 +4304,12 @@ mod tests {
 
         let scan = repository.tracked_changes().expect("tracked changes load");
 
-        assert_eq!(scan.root, directory.path().to_string_lossy());
+        assert_eq!(
+            scan.root,
+            fs::canonicalize(directory.path())
+                .unwrap()
+                .to_string_lossy()
+        );
         assert_eq!(scan.changes.len(), 1);
         assert_eq!(scan.changes[0].path, "tracked.txt");
         assert_eq!(scan.changes[0].worktree_status, ChangeKind::Modified);

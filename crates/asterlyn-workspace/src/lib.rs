@@ -5,8 +5,10 @@ use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+mod durable_file;
 mod replacement;
 mod search;
+pub use durable_file::{FileSnapshot, FileVersion};
 
 pub use replacement::{
     PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
@@ -331,57 +333,85 @@ fn collect_workspace_files(
     paths: &mut Vec<String>,
     truncated: &mut bool,
 ) -> Result<(), WorkspaceError> {
-    if *truncated {
+    let mut budget = CatalogBudget {
+        candidates: limit.saturating_mul(4).clamp(1_024, 400_000),
+        name_bytes: 16 * 1024 * 1024,
+    };
+    collect_directory(
+        root,
+        relative_directory,
+        limit,
+        paths,
+        truncated,
+        &mut budget,
+        0,
+    )?;
+    paths.sort();
+    Ok(())
+}
+
+struct CatalogBudget {
+    candidates: usize,
+    name_bytes: usize,
+}
+
+fn collect_directory(
+    root: &Path,
+    relative: &Path,
+    limit: usize,
+    paths: &mut Vec<String>,
+    truncated: &mut bool,
+    budget: &mut CatalogBudget,
+    depth: usize,
+) -> Result<(), WorkspaceError> {
+    if depth > 64 || budget.candidates == 0 {
+        *truncated = true;
         return Ok(());
     }
-    let directory = root.join(relative_directory);
-    let mut entries = fs::read_dir(&directory)
-        .map_err(|error| WorkspaceError::Io {
-            operation: "list workspace directory".to_string(),
-            message: error.to_string(),
-        })?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| WorkspaceError::Io {
-            operation: "list workspace directory".to_string(),
-            message: error.to_string(),
-        })?;
-    entries.sort_by_key(|entry| entry.file_name());
-
-    for entry in entries {
+    let input = fs::read_dir(root.join(relative)).map_err(catalog_io)?;
+    let mut entries = Vec::new();
+    for entry in input {
+        let entry = entry.map_err(catalog_io)?;
         let name = entry.file_name();
         let Some(name) = name.to_str() else {
             continue;
         };
-        let relative = relative_directory.join(name);
-        let file_type = entry.file_type().map_err(|error| WorkspaceError::Io {
-            operation: "inspect workspace entry".to_string(),
-            message: error.to_string(),
-        })?;
-        if file_type.is_symlink() {
+        if budget.candidates == 0 || name.len() > budget.name_bytes {
+            *truncated = true;
+            break;
+        }
+        budget.candidates -= 1;
+        budget.name_bytes -= name.len();
+        entries.push((name.to_string(), entry.file_type().map_err(catalog_io)?));
+    }
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    for (name, kind) in entries {
+        let path = relative.join(&name);
+        if kind.is_symlink() {
             continue;
         }
-        if file_type.is_dir() {
+        if kind.is_dir() {
             if name != ".git" {
-                collect_workspace_files(root, &relative, limit, paths, truncated)?;
+                collect_directory(root, &path, limit, paths, truncated, budget, depth + 1)?;
             }
-            if *truncated {
+        } else if kind.is_file() {
+            if paths.len() == limit {
+                *truncated = true;
                 return Ok(());
             }
-            continue;
+            if let Some(path) = workspace_path_string(&path) {
+                paths.push(path);
+            }
         }
-        if !file_type.is_file() {
-            continue;
-        }
-        if paths.len() == limit {
-            *truncated = true;
-            return Ok(());
-        }
-        let Some(path) = workspace_path_string(&relative) else {
-            continue;
-        };
-        paths.push(path);
     }
     Ok(())
+}
+
+fn catalog_io(error: std::io::Error) -> WorkspaceError {
+    WorkspaceError::Io {
+        operation: "bounded workspace catalog".into(),
+        message: error.to_string(),
+    }
 }
 
 fn workspace_path_string(path: &Path) -> Option<String> {

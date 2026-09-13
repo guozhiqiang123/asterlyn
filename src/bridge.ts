@@ -28,6 +28,8 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  RestoreChangesPlan,
+  GitWorktreeRecovery,
   GitConflictContent,
   GitOperationAction,
   GitOperationKind,
@@ -157,6 +159,14 @@ const demoBridge: DesktopBridge = {
       };
     }
     return invoke<OpenedProject>("open_project", { path });
+  },
+
+  async readProject(path: string): Promise<OpenedProject> {
+    if (!isTauri) {
+      await demoDelay();
+      return { root: path, repository: browserGitEnabled ? demoTrackedSnapshot(browserSnapshot) : null };
+    }
+    return invoke<OpenedProject>("read_project_snapshot", { path });
   },
 
   async readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan> {
@@ -705,10 +715,26 @@ const demoBridge: DesktopBridge = {
     });
   },
 
+  async prepareRestoreChanges(repositoryRoot: string, selected: FileChange[]): Promise<RestoreChangesPlan> {
+    if (!isTauri) return { root: repositoryRoot, selected, paths: selected.map((file) => file.path), headOid: browserSnapshot.branch.oid ?? "demo", token: "demo-review" };
+    return invoke<RestoreChangesPlan>("prepare_restore_changes", { repositoryRoot, selected });
+  },
+
+  async listGitWorktreeRecoveries(repositoryRoot: string): Promise<GitWorktreeRecovery[]> {
+    if (!isTauri) return [];
+    return invoke<GitWorktreeRecovery[]>("list_git_worktree_recoveries", { repositoryRoot });
+  },
+
+  async undoGitWorktreeRecovery(repositoryRoot: string, recoveryId: string): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) throw new Error("Durable recovery requires the desktop application.");
+    return invoke<RepositoryMutationOutcome>("undo_git_worktree_recovery", { repositoryRoot, recoveryId });
+  },
+
   async revertChanges(
     repositoryRoot: string,
-    selected: FileChange[],
+    plan: RestoreChangesPlan,
   ): Promise<WorkingTreeMutationOutcome> {
+    const selected = plan.selected;
     if (!isTauri) {
       await demoDelay(220);
       if (
@@ -738,7 +764,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<WorkingTreeMutationOutcome>("revert_changes", {
       repositoryRoot,
-      selected,
+      plan,
     });
   },
 

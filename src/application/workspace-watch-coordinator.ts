@@ -187,13 +187,12 @@ export class WorkspaceWatchCoordinator {
       slice === "head" || slice === "refs" || slice === "history" || slice === "operation"
     );
     if (repositorySlices.length > 0) {
-      const generation = this.session.generation;
-      const project = await this.session.refreshProject(invalidation.root, generation);
+      const project = await this.session.refreshProject(identity);
       if (!project || !this.session.workspace.matches(identity)) return;
       this.actions.reconcileRepository(project.repository, [...invalidation.slices], cause);
       this.activate();
     }
-    if (invalidates(invalidation, "workingTree")) {
+    if (repositorySlices.length === 0 && invalidates(invalidation, "workingTree")) {
       this.session.scheduleTrackedRefresh(
         invalidation.root,
         cause,

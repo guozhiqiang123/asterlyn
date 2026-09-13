@@ -1,4 +1,6 @@
 use super::super::*;
+use super::git_recovery::git_recovery_root;
+use crate::application::git_worktree_transactions::{self, RestoreChangesPlan};
 
 #[tauri::command]
 pub(crate) async fn stage_paths(
@@ -97,11 +99,13 @@ pub(crate) async fn commit_changes(
 #[tauri::command]
 pub(crate) async fn revert_changes(
     repository_root: String,
-    selected: Vec<FileChange>,
+    plan: RestoreChangesPlan,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
+    app: tauri::AppHandle,
 ) -> Result<WorkingTreeMutationOutcome, GitError> {
+    let recovery_root = git_recovery_root(&app)?;
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
@@ -111,7 +115,7 @@ pub(crate) async fn revert_changes(
             repository_root,
             "revert selected changes",
             move |repository| {
-                repository.revert_selected(&selected)?;
+                git_worktree_transactions::restore_changes(repository, &recovery_root, &plan)?;
                 repository.tracked_changes().map(|tracked| {
                     working_tree_outcome(
                         tracked,
@@ -432,6 +436,8 @@ pub(crate) async fn read_conflict_content(
     .await
 }
 
+// Tauri injects four host handles alongside the four protocol arguments.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn resolve_conflict(
     repository_root: String,
@@ -441,15 +447,22 @@ pub(crate) async fn resolve_conflict(
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
+    app: tauri::AppHandle,
 ) -> Result<GitOperationMutationOutcome, GitError> {
+    let recovery_root = git_recovery_root(&app)?;
     let repository_root = active_workspaces
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
         .into_owned();
     git_operations
         .run_local(repository_root, "resolve Git conflict", move |repository| {
-            let operation =
-                repository.resolve_conflict(&path, &expected_revision_token, content.as_deref())?;
+            let operation = git_worktree_transactions::resolve_conflict(
+                repository,
+                &recovery_root,
+                &path,
+                &expected_revision_token,
+                content.as_deref(),
+            )?;
             let tracked = repository.tracked_changes()?;
             Ok(GitOperationMutationOutcome {
                 tracked,
@@ -475,7 +488,7 @@ fn single_target(targets: &[String]) -> Result<&str, GitError> {
     }
 }
 
-fn mutation_outcome(
+pub(super) fn mutation_outcome(
     snapshot: RepositorySnapshot,
     invalidated_slices: &[RepositoryStateSlice],
 ) -> RepositoryMutationOutcome {
@@ -495,7 +508,7 @@ fn working_tree_outcome(
     }
 }
 
-fn complete_repository_slices() -> Vec<RepositoryStateSlice> {
+pub(super) fn complete_repository_slices() -> Vec<RepositoryStateSlice> {
     vec![
         RepositoryStateSlice::WorkspaceCatalog,
         RepositoryStateSlice::OpenDocuments,

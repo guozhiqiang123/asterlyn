@@ -11,10 +11,11 @@ import {
   type SessionInvalidationSlice,
 } from "./session-invalidation.ts";
 import { RepositorySession } from "./repository-session.ts";
-import { WorkspaceSession, type WorkspaceActivation } from "./workspace-session.ts";
+import { WorkspaceSession, type WorkspaceActivation, type WorkspaceSessionIdentity } from "./workspace-session.ts";
 
 export interface WindowSessionGateway {
   openProject(path: string): Promise<OpenedProject>;
+  readProject(path: string): Promise<OpenedProject>;
   readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan>;
   scanUntracked(repositoryRoot: string, scanId: string): Promise<UntrackedScan>;
   cancelUntrackedScan(scanId: string): Promise<void>;
@@ -111,11 +112,11 @@ export class WindowSession {
     return { generation, project, activation };
   }
 
-  async refreshProject(path: string, workspaceGeneration: number): Promise<OpenedProject | null> {
-    const identity = { root: path, generation: workspaceGeneration };
+  async refreshProject(identity: WorkspaceSessionIdentity): Promise<OpenedProject | null> {
+    const path = identity.root;
     if (this.disposed || !this.workspace.matches(identity)) return null;
     const operationGeneration = this.operationGeneration;
-    const project = await this.gateway.openProject(path);
+    const project = await this.gateway.readProject(path);
     if (
       !this.matches(operationGeneration, path) ||
       !this.workspace.matches(identity) ||

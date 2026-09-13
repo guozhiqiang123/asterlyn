@@ -263,6 +263,23 @@ export interface WorkingTreeMutationOutcome {
   invalidatedSlices: RepositoryStateSlice[];
 }
 
+export interface RestoreChangesPlan {
+  root: string;
+  selected: FileChange[];
+  paths: string[];
+  headOid: string;
+  token: string;
+}
+
+export interface GitWorktreeRecovery {
+  id: string;
+  operation: string;
+  paths: string[];
+  status: string;
+  canUndo: boolean;
+  backupPath: string;
+}
+
 export interface GitOperationMutationOutcome {
   tracked: TrackedChangeScan;
   operation: GitOperationSnapshot | null;

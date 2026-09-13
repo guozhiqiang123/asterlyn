@@ -6,13 +6,14 @@ pub(crate) async fn list_project_files(
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<ProjectFileList, WorkspaceError> {
+    let token = active_workspaces.activation_token(window.label())?;
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let task_root = root.clone();
     let catalog = run_workspace_blocking("list project files", move || {
         load_project_catalog(&task_root)
     })
     .await?;
-    active_workspaces.install_catalog(window.label(), &root, &catalog)?;
+    active_workspaces.install_catalog(window.label(), token, &root, &catalog)?;
     Ok(catalog)
 }
 
