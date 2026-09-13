@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  PresentationEnvironment,
   resolveEffectiveLocale,
   resolveEffectiveTheme,
   resolvePresentationSnapshot,
@@ -61,6 +62,35 @@ test("preference store applies external storage once without echoing it", () => 
   store.dispose();
 });
 
+test("presentation changes update document and native theme exactly once", async () => {
+  const system = mutableSystem(["en-US"], false);
+  const document = fakeDocument();
+  const nativeThemes = [];
+  const environment = new PresentationEnvironment(
+    { locale: "system", theme: "system" },
+    system.port,
+    document,
+    { async setTheme(theme) { nativeThemes.push(theme); } },
+  );
+  const changes = [];
+  environment.subscribe((next, previous) => changes.push([previous, next]));
+
+  assert.equal(document.documentElement.lang, "en-US");
+  assert.equal(document.documentElement.dataset.theme, "light");
+  system.update(["zh-CN"], true);
+  assert.equal(document.documentElement.lang, "zh-CN");
+  assert.equal(document.documentElement.dataset.theme, "dark");
+  assert.equal(changes.length, 1);
+
+  assert.equal(environment.updatePreferences({ locale: "zh-CN", theme: "dark" }), true);
+  assert.equal(environment.updatePreferences({ locale: "zh-CN", theme: "dark" }), false);
+  system.update(["en-US"], false);
+  assert.equal(changes.length, 2, "explicit choices ignore later system changes");
+  await settle();
+  assert.deepEqual(nativeThemes, ["system", "dark"]);
+  environment.dispose();
+});
+
 function memoryStorage() {
   const values = new Map();
   return {
@@ -87,4 +117,34 @@ function memorySync(sourceId) {
       for (const listener of listeners) listener(signal);
     },
   };
+}
+
+function mutableSystem(locales, dark) {
+  const listeners = new Set();
+  let currentLocales = locales;
+  let currentDark = dark;
+  return {
+    port: {
+      locales: () => currentLocales,
+      prefersDark: () => currentDark,
+      subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    },
+    update(nextLocales, nextDark) {
+      currentLocales = nextLocales;
+      currentDark = nextDark;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
+function fakeDocument() {
+  const themeColor = { content: "", setAttribute(_name, value) { this.content = value; } };
+  return {
+    documentElement: { lang: "", dir: "", dataset: {}, style: {} },
+    querySelector(selector) { return selector === 'meta[name="theme-color"]' ? themeColor : null; },
+  };
+}
+
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

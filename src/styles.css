@@ -427,6 +427,41 @@ textarea:focus-visible {
   font-size: calc(var(--ui-font-size, 13px) + 2px);
 }
 
+@media (forced-colors: active) {
+  button,
+  input,
+  select,
+  textarea {
+    forced-color-adjust: auto;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [role="option"]:focus-visible,
+  [role="treeitem"]:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .selected,
+  [aria-selected="true"],
+  [aria-pressed="true"] {
+    outline: 1px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .status-indicator,
+  .change-badge,
+  .history-reference,
+  .spinner {
+    forced-color-adjust: none;
+    border-color: currentColor;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

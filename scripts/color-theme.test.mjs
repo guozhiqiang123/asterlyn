@@ -33,6 +33,15 @@ test("light theme overrides every color token declared by the dark registry", as
   assert.deepEqual(colorTokens.filter((token) => !lightTokens.has(token)), []);
 });
 
+test("forced-colors preserves native controls, focus, and selected state", async () => {
+  const source = await readFile(path.join(sourceRoot, "styles.css"), "utf8");
+  const block = source.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/u)?.[1] ?? "";
+  assert.match(block, /button:focus-visible/u);
+  assert.match(block, /\[aria-selected="true"\]/u);
+  assert.match(block, /forced-color-adjust: auto/u);
+  assert.doesNotMatch(block, /outline:\s*(?:0|none)/u);
+});
+
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(entries.map((entry) => {
