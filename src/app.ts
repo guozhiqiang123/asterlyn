@@ -64,10 +64,7 @@ import {
   type GitOperationResult,
   type GitOperationState,
 } from "./features/git-operations/git-operation-controller";
-import {
-  operationDisplayName,
-  renderGitOperationBanner,
-} from "./features/git-operations/git-operation-banner";
+import { renderGitOperationBanner } from "./features/git-operations/git-operation-banner";
 import { GitOperationDialogBinding } from "./features/git-operations/git-operation-dialog-binding";
 import {
   ProjectFilesController,
@@ -191,7 +188,7 @@ import {
   createBrowserSystemPresentationPort,
 } from "./presentation/presentation-environment";
 import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter";
-import type { LocaleCatalog, NavigationCommandId } from "./localization/catalog";
+import type { ErrorCopy, LocaleCatalog, NavigationCommandId } from "./localization/catalog";
 import { loadLocale } from "./localization/locale-loader";
 import { createLocalization, type Localization } from "./localization/localization";
 import {
@@ -479,6 +476,7 @@ export class AsterlynApp {
         resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
         reportError: (error) => this.showError(error),
       },
+      () => this.localization.catalog.gitOperations,
     );
     this.releaseGitOperationController = this.gitOperationController.subscribe((change) =>
       this.handleGitOperationControllerChange(change),
@@ -646,7 +644,7 @@ export class AsterlynApp {
     this.windowChromeBinding = new WindowChromeBinding(root, {
       captureEditor: () => this.captureMountedTextEditor(),
       dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationController.hasUnsavedConflict()),
-      confirmClose: () => this.saveDirtyTabsBefore("closing Asterlyn"),
+      confirmClose: () => this.saveDirtyTabsBefore(this.localization.catalog.common.actions.closeApp),
       reportError: (error) => this.showError(error),
       labels: () => this.localShellCopy(),
     });
@@ -874,7 +872,11 @@ export class AsterlynApp {
     if (this.state.commandSurface.mode) this.renderCommandSurface();
     if (this.state.replacementDialog) this.renderWorkspaceReplacementDialog();
     if (this.state.historyDialog) this.renderHistoryDialog();
+    if (this.gitOperationState.dialog) this.gitOperationDialogBinding.render();
+    this.recoveryDialog?.refreshCopy();
     this.localizeShellChrome(previousCatalog);
+    this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
+    if (this.remoteState.dialog) this.renderRemoteDialog();
     this.windowChromeBinding.refreshLabels();
   }
 
@@ -1293,7 +1295,7 @@ export class AsterlynApp {
     if (
       previousRoot !== null &&
       previousRoot !== path &&
-      !(await this.saveDirtyTabsBefore("switching repositories"))
+      !(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.switchRepositories))
     ) {
       return false;
     }
@@ -1821,7 +1823,7 @@ export class AsterlynApp {
       this.state.workspaceSearch = failWorkspaceSearch(
         this.state.workspaceSearch,
         started.request,
-        errorMessage(completion.error),
+        errorMessage(completion.error, this.localization.catalog.errors),
       );
       if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface(true);
     }
@@ -1899,7 +1901,7 @@ export class AsterlynApp {
       this.state.workspaceReplacement = failReplacement(
         this.state.workspaceReplacement,
         started.request,
-        errorMessage(completion.error),
+        errorMessage(completion.error, this.localization.catalog.errors),
       );
       this.renderWorkspaceReplacementDialog();
     }
@@ -2046,7 +2048,7 @@ export class AsterlynApp {
       this.state.workspaceReplacement = failReplacement(
         this.state.workspaceReplacement,
         request,
-        errorMessage(error),
+        errorMessage(error, this.localization.catalog.errors),
       );
       await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       if (this.state.workspaceReplacement.recoveries.length > 0) {
@@ -2216,6 +2218,7 @@ export class AsterlynApp {
       snapshot,
       this.remoteState,
       this.state.loading,
+      this.localization,
     );
   }
 
@@ -2259,6 +2262,7 @@ export class AsterlynApp {
       workspaceRoot: this.windowSession.workspace.state.root,
       preferences: this.settingsState.preferences,
       selectedProjectFileAvailable: this.pushSelectedProjectFile() !== null,
+      localization: this.localization,
     });
     this.bindRemoteDialogEvents();
     if (dialog === "push" && this.remoteState.pushDiff) {
@@ -2405,7 +2409,7 @@ export class AsterlynApp {
     if (remote) remote.disabled = true;
     const count = this.root.querySelector<HTMLElement>(".push-tag-count");
     if (count) {
-      count.innerHTML = '<span class="spinner" aria-hidden="true"></span> Refreshing review…';
+      count.innerHTML = `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(this.localization.catalog.remote.refreshingReview)}`;
     }
   }
 
@@ -2447,7 +2451,7 @@ export class AsterlynApp {
     if (!state?.patch || !host) return;
     this.pushDiffEditor.mount(
       host,
-      state.patch.patch || "No textual diff is available for this file.",
+      state.patch.patch || this.localization.catalog.editor.noTextualDiff,
       state.file.path,
       this.settingsState.preferences,
       this.diffPresentation(),
@@ -2507,7 +2511,7 @@ export class AsterlynApp {
       await this.confirmRemoteDialog("pull");
       return;
     }
-    if (!(await this.saveDirtyTabsBefore(`preparing ${strategy}`))) return;
+    if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.prepareStrategy(this.localization.catalog.remote.strategies[strategy])))) return;
     this.closeRemoteDialog(false);
     if (!(await this.runRemoteOperation("fetch"))) return;
 
@@ -2515,11 +2519,11 @@ export class AsterlynApp {
     const remote = this.remoteState.selectedRemote;
     const upstream = snapshot?.branch.upstreamRef;
     if (!snapshot || !remote || !upstream?.startsWith("refs/heads/")) {
-      this.setStatus("The current upstream changed during Fetch; open Update again", "warning");
+      this.setStatus(this.localization.catalog.remote.upstreamChanged, "warning");
       return;
     }
     if (snapshot.branch.behind === 0) {
-      this.setStatus("The current branch is already up to date", "success");
+      this.setStatus(this.localization.catalog.remote.alreadyUpToDate, "success");
       return;
     }
     const target = `refs/remotes/${remote}/${upstream.slice("refs/heads/".length)}`;
@@ -2535,16 +2539,17 @@ export class AsterlynApp {
   private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.state.loading || this.remoteState.operation) return false;
-    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote);
+    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
     if (!policy[kind].enabled || (kind !== "pull" && !policy.selectedRemote)) return false;
-    if (kind === "pull" && !(await this.saveDirtyTabsBefore("pulling changes"))) {
+    if (kind === "pull" && !(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.pullChanges))) {
       return false;
     }
     if (kind === "push" && !this.remoteState.pushPreview) return false;
 
     const generation = this.windowSession.beginTransition();
     this.clearError();
-    this.setLoading(true, `${remoteActionLabel(kind)} in progress…`);
+    const actionName = this.localization.catalog.remote.actionNames[kind];
+    this.setLoading(true, this.localization.catalog.remote.operationInProgress(actionName));
     let pendingRoot: string | null = null;
     let succeeded = false;
     let failed = false;
@@ -2572,21 +2577,21 @@ export class AsterlynApp {
           const opened = await this.windowSession.refreshProject(identity);
           if (!opened) return false;
           const reconciled = opened.repository;
-          if (!reconciled) throw new Error("The active project is no longer a Git repository.");
+          if (!reconciled) throw new Error(this.localization.catalog.remote.activeProjectNotGit);
           this.repositoryIntegration.acceptRemoteOutcome(
             { snapshot: reconciled, invalidatedSlices: [...COMPLETE_REPOSITORY_SLICES] },
             true,
           );
           pendingRoot = reconciled.root;
         } catch {
-          this.setStatus("Remote operation ended; refresh required", "warning");
+          this.setStatus(this.localization.catalog.remote.endedRefreshRequired, "warning");
         }
       }
     } finally {
       if (generation === this.windowSession.generation) {
         this.setLoading(false, this.localization.catalog.common.ready);
-        if (succeeded) this.setStatus(`${remoteActionLabel(kind)} completed`, "success");
-        else if (failed) this.setStatus("Remote operation needs review", "warning");
+        if (succeeded) this.setStatus(this.localization.catalog.remote.operationCompleted(actionName), "success");
+        else if (failed) this.setStatus(this.localization.catalog.remote.operationNeedsReview, "warning");
       }
     }
     if (pendingRoot && generation === this.windowSession.generation) {
@@ -2599,7 +2604,7 @@ export class AsterlynApp {
     const operation = this.remoteState.operation;
     if (!operation || operation.cancelling) return;
     if (this.windowSession.repository.state.snapshot?.root === operation.root) {
-      this.setStatus(`Cancelling ${operation.kind}…`, "busy");
+      this.setStatus(this.localization.catalog.remote.cancellingOperation(this.localization.catalog.remote.actionNames[operation.kind]), "busy");
     }
     await this.remoteController.cancelActiveOperation();
   }
@@ -3342,7 +3347,7 @@ export class AsterlynApp {
         key,
         version: request.version,
         status: "error",
-        error: errorMessage(result.error),
+        error: errorMessage(result.error, this.localization.catalog.errors),
         image: null,
         diff: null,
       };
@@ -4790,7 +4795,7 @@ export class AsterlynApp {
     const dirty = dirtyTextTabs(this.editorState.session);
     if (dirty.length === 0) return true;
     const save = window.confirm(
-      `Save ${dirty.length} unsaved file${dirty.length === 1 ? "" : "s"} before ${action}?\n\nCancel keeps the current workspace open.`,
+      `${this.localization.catalog.common.confirmSaveBefore(dirty.length, action)}\n\n${this.localization.catalog.common.cancelKeepsWorkspace}`,
     );
     if (!save) return false;
     for (const tab of dirty) {
@@ -5146,13 +5151,13 @@ export class AsterlynApp {
         return;
       }
       this.state.commitPatchLoading = false;
-      this.state.commitPatchError = errorMessage(error);
+      this.state.commitPatchError = errorMessage(error, this.localization.catalog.errors);
       if (imageDiff) {
         this.imageSurface = {
           key: imageKey,
           version: generation,
           status: "error",
-          error: errorMessage(error),
+          error: errorMessage(error, this.localization.catalog.errors),
           image: null,
           diff: null,
         };
@@ -5633,23 +5638,23 @@ export class AsterlynApp {
       activeRoot: () => this.windowSession.workspace.state.root,
       list: (root) => bridge.listGitWorktreeRecoveries(root),
       undo: async (root, recovery) => {
-        if (this.state.loading || this.windowSession.workspace.state.root !== root) throw new Error("Wait for the current operation to finish.");
+        if (this.state.loading || this.windowSession.workspace.state.root !== root) throw new Error(this.localization.catalog.recovery.waitForOperation);
         this.captureMountedTextEditor();
-        if (dirtyTextTabs(this.editorState.session).some((tab) => recovery.paths.includes(tab.document.workspacePath))) throw new Error("Save or undo unsaved editor changes before restoring these files.");
+        if (dirtyTextTabs(this.editorState.session).some((tab) => recovery.paths.includes(tab.document.workspacePath))) throw new Error(this.localization.catalog.recovery.saveBeforeRestore);
         const generation = this.windowSession.beginTransition();
-        this.setLoading(true, "Restoring local changes…");
+        this.setLoading(true, this.localization.catalog.recovery.restoring);
         try {
           const outcome = await bridge.undoGitWorktreeRecovery(root, recovery.id);
           if (!this.windowSession.matches(generation, root)) return;
           this.repositoryIntegration.applyMutation(outcome, "gitMutation");
           await this.editorController.reconcileExternalPaths(recovery.paths);
           this.renderWorkspace();
-          this.setStatus("Local changes restored", "success");
+          this.setStatus(this.localization.catalog.recovery.restored, "success");
         } finally {
           if (this.windowSession.matches(generation, root)) this.setLoading(false, this.localization.catalog.common.ready);
         }
       },
-    });
+    }, () => this.localization.catalog.recovery);
     if (this.windowSession.workspace.state.root === root) await this.recoveryDialog.open(root);
   }
 
@@ -5659,7 +5664,7 @@ export class AsterlynApp {
   ): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) {
-      this.setStatus("Git operations are unavailable for this folder", "warning");
+      this.setStatus(this.localization.catalog.gitOperations.unavailableForFolder, "warning");
       return;
     }
     if (snapshot.operation) {
@@ -5669,7 +5674,7 @@ export class AsterlynApp {
       }, true);
       this.renderWorkspace();
       this.setStatus(
-        `${operationDisplayName(snapshot.operation.kind)} is already in progress`,
+        this.localization.catalog.gitOperations.alreadyInProgress(this.localization.catalog.gitOperations.names[snapshot.operation.kind]),
         "warning",
       );
       return;
@@ -5678,38 +5683,38 @@ export class AsterlynApp {
   }
 
   private async prepareGitOperation(): Promise<void> {
-    if (!(await this.saveDirtyTabsBefore("reviewing a Git operation"))) return;
+    if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.reviewGitOperation))) return;
     await this.refresh();
     await this.gitOperationController.prepare();
   }
 
   private async executeGitOperation(): Promise<void> {
     if (dirtyTextTabs(this.editorState.session).length > 0) {
-      this.setStatus("Save or undo editor changes, then review the Git operation again", "warning");
+      this.setStatus(this.localization.catalog.gitOperations.saveBeforeReview, "warning");
       return;
     }
     const kind = this.gitOperationState.plan?.kind;
     if (!kind) return;
     await this.runGitOperationMutation(
-      `${operationDisplayName(kind)} in progress…`,
-      `${operationDisplayName(kind)} completed`,
+      this.localization.catalog.gitOperations.inProgress(this.localization.catalog.gitOperations.names[kind]),
+      this.localization.catalog.gitOperations.completed(this.localization.catalog.gitOperations.names[kind]),
       () => this.gitOperationController.execute(),
     );
   }
 
   private async runGitOperationAction(action: GitOperationAction): Promise<void> {
     if (dirtyTextTabs(this.editorState.session).length > 0) {
-      this.setStatus("Save or undo editor changes before changing the active Git operation", "warning");
+      this.setStatus(this.localization.catalog.gitOperations.saveBeforeChangingActive, "warning");
       return;
     }
-    const label = action === "continue" ? "Continue" : action === "skip" ? "Skip" : "Abort";
+    const label = this.localization.catalog.gitOperations.actions[action];
     await this.runGitOperationMutation(
-      `${label} Git operation…`,
+      this.localization.catalog.gitOperations.actionInProgress(label),
       action === "abort"
-        ? "Git operation aborted"
+        ? this.localization.catalog.gitOperations.aborted
         : action === "skip"
-          ? "Git operation skipped the current commit"
-          : "Git operation continued",
+          ? this.localization.catalog.gitOperations.skippedCommit
+          : this.localization.catalog.gitOperations.continued,
       () => this.gitOperationController.runAction(action),
     );
   }
@@ -5718,8 +5723,8 @@ export class AsterlynApp {
     const path = this.gitOperationState.conflict?.path;
     if (!path) return;
     await this.runGitOperationMutation(
-      `Resolving ${path}…`,
-      `Resolved and staged ${path}`,
+      this.localization.catalog.gitOperations.resolvingPath(path),
+      this.localization.catalog.gitOperations.resolvedAndStaged(path),
       () => this.gitOperationController.resolveConflict(deleteFile),
     );
   }
@@ -5762,7 +5767,7 @@ export class AsterlynApp {
         nextRoot = snapshot.root;
         completedStatus = snapshot.operation
           ? {
-              message: `${operationDisplayName(snapshot.operation.kind)} paused; review the operation controls in Changes`,
+              message: this.localization.catalog.gitOperations.paused(this.localization.catalog.gitOperations.names[snapshot.operation.kind]),
               kind: "warning",
             }
           : { message: successMessage, kind: "success" };
@@ -5787,7 +5792,7 @@ export class AsterlynApp {
   private async commit(): Promise<void> {
     this.captureMountedTextEditor();
     if (dirtyTextTabs(this.editorState.session).length > 0) {
-      if (await this.saveDirtyTabsBefore("creating the commit")) {
+      if (await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.createCommit)) {
         await this.refresh();
         this.setStatus(this.localization.catalog.changes.filesSavedReview, "warning");
       }
@@ -5854,8 +5859,8 @@ export class AsterlynApp {
       return;
     }
     await this.runBranchMutation(
-      `Checking out ${branch.name}…`,
-      `Checked out ${branch.name}`,
+      this.localization.catalog.history.checkingOut(branch.name),
+      this.localization.catalog.history.checkedOutBranch(branch.name),
       (root) => bridge.switchBranch(root, branch.fullName),
     );
   }
@@ -5872,8 +5877,8 @@ export class AsterlynApp {
       return;
     }
     await this.runBranchMutation(
-      `Creating ${name}…`,
-      `Created and checked out ${name}`,
+      this.localization.catalog.history.creatingBranch(name),
+      this.localization.catalog.history.createdBranch(name),
       (root) => bridge.createBranch(root, name),
     );
     if (this.windowSession.repository.state.snapshot?.branch.head === name) {
@@ -5889,7 +5894,7 @@ export class AsterlynApp {
   ): Promise<void> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
-    if (!(await this.saveDirtyTabsBefore("changing branches"))) return;
+    if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.changeBranches))) return;
     const operation = this.repositoryOperations.start(snapshot.root, () => mutation(snapshot.root));
     const generation = operation.generation;
     this.clearError();
@@ -5973,7 +5978,7 @@ export class AsterlynApp {
     ]
       .filter(Boolean)
       .join(" ");
-    this.query("#branch-status").innerHTML = `${icon("branch", 14)}<span>${escapeHtml(label)}</span>${sync ? `<span class="sync-status">${sync}</span>` : ""}${snapshot.operation ? `<span class="operation-status">${escapeHtml(operationLabel(snapshot.operation.kind))}</span>` : ""}`;
+    this.query("#branch-status").innerHTML = `${icon("branch", 14)}<span>${escapeHtml(label)}</span>${sync ? `<span class="sync-status">${sync}</span>` : ""}${snapshot.operation ? `<span class="operation-status">${escapeHtml(this.localization.catalog.gitOperations.names[snapshot.operation.kind])}</span>` : ""}`;
   }
 
   private setLoading(loading: boolean, message: string): void {
@@ -5995,7 +6000,7 @@ export class AsterlynApp {
   }
 
   private showError(error: unknown): void {
-    const message = errorMessage(error);
+    const message = errorMessage(error, this.localization.catalog.errors);
     this.state.error = message;
     this.query("#toast-message").textContent = message;
     this.query("#toast").classList.remove("hidden");
@@ -6226,61 +6231,39 @@ function projectMonogram(path: string): string {
   return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
 }
 
-function capitalize(value: string): string {
-  return value.charAt(0).toLocaleUpperCase() + value.slice(1);
-}
-
-function remoteActionLabel(kind: "fetch" | "pull" | "push"): string {
-  return kind === "pull" ? "Update" : capitalize(kind);
-}
-
-function operationLabel(kind: GitOperationKind): string {
-  const labels: Record<GitOperationKind, string> = {
-    merge: "Merge",
-    cherryPick: "Cherry-pick",
-    rebase: "Rebase",
-    squash: "Squash",
-    revert: "Revert",
-    bisect: "Bisect",
-  };
-  return labels[kind];
-}
-
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, copy: ErrorCopy): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
     const value = error as Record<string, unknown>;
     if (value.kind === "remoteCancelled") {
       if (value.remoteStateMayHaveChanged === true) {
-        return "Push cancellation was requested. The remote outcome is unknown; fetch before retrying.";
+        return copy.remoteCancelledUnknown;
       }
       return value.repositoryStateMayHaveChanged === true
-        ? "Remote operation was cancelled. Repository refs or files may have changed; the view was refreshed."
-        : "Remote operation was cancelled.";
+        ? copy.remoteCancelledChanged
+        : copy.remoteCancelled;
     }
     if (value.kind === "remoteFailed") {
       const reason = typeof value.reason === "string" ? value.reason : "unknown";
-      const fallback =
-        "The remote operation failed without exposing child-process output. Check Git configuration and retry.";
+      const fallback = copy.remoteFailedFallback;
       const messages: Record<string, string> = {
-        authentication:
-          "Authentication was unavailable. Configure a non-interactive Git credential helper or SSH agent, then retry.",
-        network: "The remote could not be reached. Check the network and remote configuration.",
-        rejected: "The remote rejected the update. Fetch and review the branch state before retrying.",
+        authentication: copy.authenticationFailed,
+        network: copy.networkFailed,
+        rejected: copy.remoteRejected,
         unknown: fallback,
       };
       return messages[reason] ?? fallback;
     }
     if (value.kind === "conflict") {
-      return "This file changed outside Asterlyn. Your local buffer is still open and was not overwritten.";
+      return copy.fileConflictPreserved;
     }
     const message = typeof value.message === "string" ? value.message : null;
     const operation = typeof value.operation === "string" ? value.operation : null;
     if (message && operation) return `${operation}: ${message}`;
     if (message) return message;
   }
-  return "An unexpected operation error occurred.";
+  return copy.unexpectedOperation;
 }
 
 function escapeHtml(value: string): string {

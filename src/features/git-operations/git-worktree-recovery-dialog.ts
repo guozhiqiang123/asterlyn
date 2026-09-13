@@ -1,4 +1,6 @@
 import type { GitWorktreeRecovery } from "../../models.ts";
+import type { RecoveryCopy } from "../../localization/catalog.ts";
+import { DEFAULT_LOCALIZATION } from "../../localization/localization.ts";
 
 interface RecoveryActions {
   activeRoot(): string | null;
@@ -12,15 +14,19 @@ export class GitWorktreeRecoveryDialog {
   private generation = 0;
   private busy = false;
 
-  constructor(private readonly actions: RecoveryActions) {}
+  constructor(
+    private readonly actions: RecoveryActions,
+    private readonly copy: () => RecoveryCopy = () => DEFAULT_LOCALIZATION.catalog.recovery,
+  ) {}
 
   async open(root: string): Promise<void> {
     this.dispose();
     const generation = ++this.generation;
     const dialog = document.createElement("dialog");
+    const copy = this.copy();
     dialog.className = "dialog worktree-recovery-dialog";
     dialog.setAttribute("aria-labelledby", "worktree-recovery-title");
-    dialog.innerHTML = '<div class="dialog-heading"><h2 id="worktree-recovery-title">Recover local changes</h2></div><p role="status">Loading recovery copies…</p><div class="dialog-actions"><button type="button" class="secondary-button" data-recovery-close>Close</button></div>';
+    dialog.innerHTML = `<div class="dialog-heading"><h2 id="worktree-recovery-title">${escapeHtml(copy.title)}</h2></div><p role="status">${escapeHtml(copy.loading)}</p><div class="dialog-actions"><button type="button" class="secondary-button" data-recovery-close>${escapeHtml(copy.close)}</button></div>`;
     document.body.append(dialog);
     this.dialog = dialog;
     dialog.addEventListener("cancel", (event) => { if (this.busy) event.preventDefault(); });
@@ -33,7 +39,8 @@ export class GitWorktreeRecoveryDialog {
       const content = document.createElement("div");
       content.className = "worktree-recovery-list";
       if (recoveries.length === 0) {
-        content.textContent = "No recovery copies are available for this project. New Restore and conflict-resolution operations create a copy automatically.";
+        content.dataset.recoveryEmpty = "true";
+        content.textContent = this.copy().noneAvailable;
       }
       for (const recovery of recoveries) {
         const item = document.createElement("section");
@@ -44,11 +51,12 @@ export class GitWorktreeRecoveryDialog {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "secondary-button";
-        button.textContent = "Undo this operation";
+        button.textContent = this.copy().undoOperation;
+        button.dataset.recoveryUndo = "true";
         button.disabled = !recovery.canUndo;
         button.addEventListener("click", async () => {
           if (this.busy || this.actions.activeRoot() !== root) return;
-          if (!window.confirm(`Undo ${recovery.operation}?\n\n${recovery.paths.join("\n")}\n\nRestores the previous file and staging state. If the files, index, or HEAD have changed since, Undo stops and preserves the recovery copy.`)) return;
+          if (!window.confirm(this.copy().confirmUndo(recovery.operation, recovery.paths.join("\n")))) return;
           this.busy = true;
           for (const control of dialog.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
           try {
@@ -64,7 +72,8 @@ export class GitWorktreeRecoveryDialog {
         item.append(heading, paths, button);
         if (!recovery.canUndo) {
           const note = document.createElement("p");
-          note.textContent = `This operation did not reach a verified completion. Inspect its retained original files and proposed result before restoring: ${recovery.backupPath}`;
+          note.dataset.recoveryIncomplete = recovery.backupPath;
+          note.textContent = this.copy().incomplete(recovery.backupPath);
           item.append(note);
         }
         content.append(item);
@@ -82,6 +91,26 @@ export class GitWorktreeRecoveryDialog {
     dialog?.remove();
     this.busy = false;
   }
+
+  refreshCopy(): void {
+    const dialog = this.dialog;
+    if (!dialog) return;
+    const copy = this.copy();
+    const title = dialog.querySelector<HTMLElement>("#worktree-recovery-title");
+    if (title) title.textContent = copy.title;
+    const loading = dialog.querySelector<HTMLElement>('[role="status"]');
+    if (loading) loading.textContent = copy.loading;
+    const close = dialog.querySelector<HTMLButtonElement>("[data-recovery-close]");
+    if (close) close.textContent = copy.close;
+    const empty = dialog.querySelector<HTMLElement>("[data-recovery-empty]");
+    if (empty) empty.textContent = copy.noneAvailable;
+    dialog.querySelectorAll<HTMLButtonElement>("[data-recovery-undo]").forEach((button) => { button.textContent = copy.undoOperation; });
+    dialog.querySelectorAll<HTMLElement>("[data-recovery-incomplete]").forEach((note) => { note.textContent = copy.incomplete(note.dataset.recoveryIncomplete ?? ""); });
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }
 
 function showError(host: HTMLElement, error: unknown): void {

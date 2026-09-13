@@ -1,4 +1,5 @@
-import type { GitOperationKind, RemoteSummary, RepositorySnapshot } from "./models";
+import type { RemoteSummary, RepositorySnapshot } from "./models";
+import { DEFAULT_LOCALIZATION, type Localization } from "./localization/localization.ts";
 
 export interface RemoteActionState {
   enabled: boolean;
@@ -29,110 +30,119 @@ export function preferredRemote(
 export function remotePolicy(
   snapshot: RepositorySnapshot,
   selectedName: string | null,
+  localization: Localization = DEFAULT_LOCALIZATION,
 ): RemotePolicy {
   const selectedRemote =
     snapshot.remotes.find((remote) => remote.name === selectedName) ?? null;
 
   return {
     selectedRemote,
-    fetch: fetchState(snapshot, selectedRemote),
-    pull: pullState(snapshot, selectedRemote),
-    push: pushState(snapshot, selectedRemote),
+    fetch: fetchState(snapshot, selectedRemote, localization),
+    pull: pullState(snapshot, selectedRemote, localization),
+    push: pushState(snapshot, selectedRemote, localization),
   };
 }
 
 function fetchState(
   snapshot: RepositorySnapshot,
   remote: RemoteSummary | null,
+  localization: Localization,
 ): RemoteActionState {
+  const copy = localization.catalog.remote.policy;
   if (snapshot.operation) {
-    return blocked("Fetch", `Finish the active ${operationLabel(snapshot.operation.kind)} operation first.`);
+    return blocked(localization.catalog.remote.actionNames.fetch, copy.finishActive(localization.catalog.gitOperations.names[snapshot.operation.kind]));
   }
-  if (!remote) return blocked("Fetch", "Select a configured remote.");
+  if (!remote) return blocked(localization.catalog.remote.actionNames.fetch, copy.selectConfigured);
   if (!remote.fetchSupported) {
-    return blocked("Fetch blocked", "This remote uses an unsupported fetch mapping.");
+    return blocked(localization.catalog.remote.actionNames.fetch, copy.unsupportedFetch);
   }
-  return ready("Fetch", `Refresh all standard branch-tracking refs from ${remote.name}.`);
+  return ready(localization.catalog.remote.actionNames.fetch, copy.refreshRefs(remote.name));
 }
 
 function pullState(
   snapshot: RepositorySnapshot,
   remote: RemoteSummary | null,
+  localization: Localization,
 ): RemoteActionState {
+  const copy = localization.catalog.remote.policy;
+  const label = localization.catalog.remote.actionNames.pull;
   const branch = snapshot.branch;
   if (!branch.head || branch.detached || branch.unborn) {
-    return blocked("Update", "A checked-out branch with a commit is required.");
+    return blocked(label, copy.requireBranch);
   }
   if (snapshot.operation) {
-    return blocked("Update", `Finish the active ${operationLabel(snapshot.operation.kind)} operation first.`);
+    return blocked(label, copy.finishActive(localization.catalog.gitOperations.names[snapshot.operation.kind]));
   }
   if (!branch.upstreamRemote || !branch.upstreamRef) {
-    return blocked("Update", "Publish the branch or configure a supported upstream first.");
+    return blocked(label, copy.publishOrConfigure);
   }
-  if (!remote) return blocked("Update", "Select the current branch's upstream remote.");
+  if (!remote) return blocked(label, copy.selectUpstream);
   if (remote.name !== branch.upstreamRemote) {
     return blocked(
-      "Update blocked",
-      `Select ${branch.upstreamRemote}, the configured upstream for this branch.`,
+      label,
+      copy.selectNamedUpstream(branch.upstreamRemote),
     );
   }
   if (!remote.fetchSupported) {
-    return blocked("Update blocked", "The upstream uses an unsupported fetch mapping.");
+    return blocked(label, copy.unsupportedUpstream);
   }
   if (snapshot.untrackedState === "pending") {
-    return blocked("Update blocked", "Wait for the complete worktree scan.");
+    return blocked(label, copy.waitForScan);
   }
   if (snapshot.untrackedState === "failed") {
-    return blocked("Update blocked", "Refresh after the worktree scan failure.");
+    return blocked(label, copy.refreshAfterScanFailure);
   }
   if (snapshot.changes.length > 0) {
-    return blocked("Update blocked", "Commit, stash, or remove local changes first.");
+    return blocked(label, copy.clearLocalChanges);
   }
   if (branch.behind > 0) {
     return ready(
-      "Update",
+      label,
       branch.ahead > 0
-        ? `Review Merge or Rebase for ${branch.ahead} local and ${branch.behind} incoming commits.`
-        : `Fast-forward by ${branch.behind} upstream commit${branch.behind === 1 ? "" : "s"}.`,
+        ? copy.reviewDivergence(branch.ahead, branch.behind)
+        : copy.fastForward(branch.behind),
     );
   }
-  return blocked("Up to date", "No upstream commits need to be pulled.");
+  return blocked(label, copy.upToDate);
 }
 
 function pushState(
   snapshot: RepositorySnapshot,
   remote: RemoteSummary | null,
+  localization: Localization,
 ): RemoteActionState {
+  const copy = localization.catalog.remote.policy;
+  const label = localization.catalog.remote.actionNames.push;
   const branch = snapshot.branch;
   if (!branch.head || branch.detached || branch.unborn) {
-    return blocked("Push", "A checked-out branch with a commit is required.");
+    return blocked(label, copy.requireBranch);
   }
   if (snapshot.operation) {
-    return blocked("Push", `Finish the active ${operationLabel(snapshot.operation.kind)} operation first.`);
+    return blocked(label, copy.finishActive(localization.catalog.gitOperations.names[snapshot.operation.kind]));
   }
-  if (!remote) return blocked("Push", "Select a configured remote.");
+  if (!remote) return blocked(label, copy.selectConfigured);
   if (!remote.pushSupported) {
-    return blocked("Push blocked", "This remote is mirrored or uses an unsupported mapping.");
+    return blocked(label, copy.unsupportedPush);
   }
   if (branch.upstreamRemote && remote.name !== branch.upstreamRemote) {
     return ready(
-      "Review Push",
-      `Review the same-named branch on ${remote.name}. A successful Push keeps ${branch.upstreamRemote} as the configured upstream.`,
+      label,
+      copy.reviewOtherRemote(remote.name, branch.upstreamRemote),
     );
   }
   if (!branch.upstreamRemote) {
-    return ready("Publish branch", `Create the same-named branch on ${remote.name}.`);
+    return ready(copy.publishBranch, copy.createRemoteBranch(remote.name));
   }
   if (branch.behind > 0) {
     return ready(
-      "Review Push",
-      "The branch is behind or diverged. Ordinary Push will remain blocked in review; Force Push with Lease is available only as an explicit choice.",
+      label,
+      copy.behindOrDiverged,
     );
   }
   if (branch.ahead > 0) {
-    return ready("Push", `Send ${branch.ahead} commit${branch.ahead === 1 ? "" : "s"} to ${remote.name}.`);
+    return ready(label, copy.sendCommits(branch.ahead, remote.name));
   }
-  return ready("Review Push", "No branch commits are pending; open review to inspect optional tags.");
+  return ready(label, copy.noPendingCommits);
 }
 
 function ready(label: string, detail: string): RemoteActionState {
@@ -141,8 +151,4 @@ function ready(label: string, detail: string): RemoteActionState {
 
 function blocked(label: string, detail: string): RemoteActionState {
   return { enabled: false, label, detail };
-}
-
-function operationLabel(kind: GitOperationKind): string {
-  return kind === "cherryPick" ? "Cherry-pick" : kind.charAt(0).toLocaleUpperCase() + kind.slice(1);
 }

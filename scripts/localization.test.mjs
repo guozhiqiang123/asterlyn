@@ -7,6 +7,9 @@ import { renderProjectToolbar } from "../src/features/files-editor/project-files
 import { renderDiffControls } from "../src/features/files-editor/editor-view.ts";
 import { renderChangeNavigation } from "../src/features/changes-commit/changes-view.ts";
 import { renderGitOperationBanner } from "../src/features/git-operations/git-operation-banner.ts";
+import { renderGitOperationDialog } from "../src/features/git-operations/git-operation-view.ts";
+import { renderRemoteDialogContent } from "../src/features/remote-push/remote-push-view.ts";
+import { createRemotePushState } from "../src/features/remote-push/remote-push-state.ts";
 import { renderBranchNavigation } from "../src/features/git-history/branch-navigation-view.ts";
 import { inspectorPlaceholder } from "../src/features/git-history/git-detail-view.ts";
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
@@ -97,6 +100,12 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   }, catalog.gitOperations);
   assert.match(operation, /变基/);
   assert.match(operation, />继续</);
+  const operationDialog = renderGitOperationDialog({
+    repositoryRoot: "/repo", dialog: "setup", kind: "merge", targetText: "feature", message: "", plan: null,
+    conflict: null, conflictResult: "", operation: null, loading: null, error: null,
+  }, catalog.gitOperations);
+  assert.match(operationDialog, /准备合并/);
+  assert.match(operationDialog, /目标分支、标签或提交/);
 
   const localization = createLocalization(catalog);
   const branches = renderBranchNavigation({
@@ -115,6 +124,19 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
     refDraft: new Map(), favoriteRefs: new Map(), pathDraft: new Map(), pathText: "", collapsedTreePaths: new Set(), localization,
   });
   assert.match(historyDialog, /选择分支或标签/);
+
+  const remoteState = createRemotePushState();
+  remoteState.dialog = "update";
+  const remoteDialog = renderRemoteDialogContent({
+    snapshot: {
+      root: "/repo", branch: { head: "main", oid: "a".repeat(40), upstream: "origin/main", upstreamRemote: "origin", upstreamRef: "refs/heads/main", ahead: 0, behind: 1, detached: false, unborn: false },
+      operation: null, changes: [], commits: [], branches: [], remotes: [{ name: "origin", fetchSupported: true, pushSupported: true }], untrackedState: "complete",
+    },
+    state: remoteState, workspaceRoot: "/repo", preferences: DEFAULT_APP_PREFERENCES,
+    selectedProjectFileAvailable: false, localization,
+  });
+  assert.match(remoteDialog, /更新 main/);
+  assert.match(remoteDialog, /仅快进/);
 });
 
 function catalogShape(value) {
