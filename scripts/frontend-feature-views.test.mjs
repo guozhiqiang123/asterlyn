@@ -40,6 +40,9 @@ test("shell view follows persisted activity order and exposes stable feature hos
   for (const host of ["navigator-body", "content-body", "history-navigation-body", "git-detail-body"]) {
     assert.match(html, new RegExp(`id="${host}"`));
   }
+  assert.ok(html.indexOf('id="repository-switcher-anchor"') < html.indexOf('id="command-center-button"'));
+  assert.ok(html.indexOf('id="command-center-button"') < html.indexOf('class="topbar-actions"'));
+  assert.doesNotMatch(html, /id="refresh-button"/);
 });
 
 test("settings view keeps one selected section and bounded preference controls", () => {

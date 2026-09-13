@@ -989,7 +989,6 @@ export class AsterlynApp {
     label("#remote-update", copy.updateBranch);
     label("#remote-push", copy.pushBranch);
     label("#cancel-remote-operation", copy.cancelRemote);
-    label("#refresh-button", copy.refreshProject, copy.refreshShortcut);
     label("#settings-button", copy.openSettings, copy.settings);
     this.root.querySelector(".window-controls")?.setAttribute("aria-label", copy.windowControls);
     label("#window-minimize", copy.minimizeWindow, copy.minimize);
@@ -6124,8 +6123,6 @@ export class AsterlynApp {
       loading || activeTextTab(this.editorState.session)?.document.readOnly === true,
     );
     this.root.classList.toggle("is-busy", loading);
-    this.query<HTMLButtonElement>("#refresh-button").disabled =
-      loading || !this.windowSession.workspace.state.root;
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     this.setStatus(message, loading ? "busy" : "normal");
   }

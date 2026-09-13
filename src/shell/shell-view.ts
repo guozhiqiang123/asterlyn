@@ -25,9 +25,9 @@ export function renderShellView(model: ShellViewModel): string {
         <button class="repository-switcher" id="repository-switcher" type="button" aria-label="${escapeHtml(copy.projectMenu)}" aria-haspopup="menu" aria-controls="repository-menu" aria-expanded="false" title="${escapeHtml(copy.openProject)}"><span class="repository-name" id="repository-name">${escapeHtml(copy.noProject)}</span>${icon("chevron-down", 13)}</button>
         <div class="repository-menu hidden" id="repository-menu" role="menu" aria-label="${escapeHtml(copy.projectMenu)}"></div>
       </div>
+      <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)} (Ctrl/Cmd+P)">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd>Ctrl P</kbd></button>
       <div class="topbar-actions" data-tauri-drag-region>
         <span class="demo-badge ${model.demo ? "" : "hidden"}">${escapeHtml(copy.browserDemo)}</span>
-        <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)} (Ctrl/Cmd+P)">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd>Ctrl P</kbd></button>
         <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="${escapeHtml(copy.remoteActions)}">
           <label class="topbar-remote-select" for="topbar-remote-select" title="${escapeHtml(copy.remoteForActions)}">${renderSelectControl(`<select id="topbar-remote-select" aria-label="${escapeHtml(copy.remoteForActions)}" disabled><option>${escapeHtml(copy.noRemote)}</option></select>`)}</label>
           <span class="topbar-remote-action" id="remote-fetch-hint" tabindex="-1"><button class="icon-button remote-action-button" id="remote-fetch" type="button" data-remote-action="fetch" aria-label="${escapeHtml(copy.fetchBranch)}" title="${escapeHtml(copy.fetchBranch)}" disabled>${icon("download", 18)}</button></span>
@@ -35,7 +35,6 @@ export function renderShellView(model: ShellViewModel): string {
           <span class="topbar-remote-action" id="remote-push-hint" tabindex="-1"><button class="icon-button remote-action-button" id="remote-push" type="button" data-remote-action="push" aria-label="${escapeHtml(copy.pushBranch)}" title="${escapeHtml(copy.pushBranch)}" disabled>${icon("upload", 18)}</button></span>
           <button class="icon-button remote-cancel-button hidden" id="cancel-remote-operation" type="button" aria-label="${escapeHtml(copy.cancelRemote)}" title="${escapeHtml(copy.cancelRemote)}">${icon("close", 16)}</button>
         </div>
-        <button class="icon-button" id="refresh-button" type="button" aria-label="${escapeHtml(copy.refreshProject)}" title="${escapeHtml(copy.refreshShortcut)}" disabled>${icon("refresh", 20)}</button>
         <button class="icon-button" id="settings-button" type="button" aria-label="${escapeHtml(copy.openSettings)}" title="${escapeHtml(copy.settings)}" aria-pressed="false">${icon("settings", 20)}</button>
         <div class="window-controls ${showCustomWindowControls(model.shell.windowChromeMode, model.windowControlsAvailable) ? "" : "hidden"}" role="group" aria-label="${escapeHtml(copy.windowControls)}">
           <button class="window-control-button" id="window-minimize" type="button" aria-label="${escapeHtml(copy.minimizeWindow)}" title="${escapeHtml(copy.minimize)}">${icon("minimize", 16)}</button>

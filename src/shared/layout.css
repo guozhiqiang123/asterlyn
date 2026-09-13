@@ -42,10 +42,6 @@
   opacity: 0.5;
 }
 
-.is-busy #refresh-button .icon {
-  animation: spin 0.85s linear infinite;
-}
-
 .workspace {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);

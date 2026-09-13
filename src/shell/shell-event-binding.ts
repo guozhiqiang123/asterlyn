@@ -86,7 +86,6 @@ export class ShellEventBinding {
       });
     });
     listen(this.query("#cancel-remote-operation"), "click", () => this.actions.cancelRemoteOperation());
-    listen(this.query("#refresh-button"), "click", () => this.actions.refresh());
     listen(this.query("#settings-button"), "click", () => this.actions.openSettings());
     listen(this.query("#settings-back"), "click", () => this.actions.closeSettings());
     listen(this.query("#command-center-button"), "click", () => this.actions.openCommandSurface("files"));

@@ -1,7 +1,6 @@
 /* shell capability-owned presentation. */
 .topbar {
-  display: grid;
-  grid-template-columns: minmax(180px, 420px) minmax(0, 1fr);
+  display: flex;
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--surface-chrome);
@@ -13,6 +12,8 @@
 }
 
 .topbar-actions {
+  min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   height: 100%;
@@ -21,6 +22,7 @@
 
 .repository-switcher-anchor {
   position: relative;
+  flex: 0 1 auto;
   min-width: 0;
   margin-left: 8px;
   justify-self: start;
@@ -166,13 +168,15 @@
 }
 
 .topbar-actions {
-  grid-column: 2;
   justify-content: flex-end;
   padding-left: 12px;
 }
 
 .command-center-button {
   display: grid;
+  width: clamp(240px, 28vw, 420px);
+  min-width: 180px;
+  flex: 0 1 auto;
   height: 32px;
   grid-template-columns: 20px auto auto;
   align-items: center;
@@ -184,6 +188,7 @@
   color: var(--text-muted);
   cursor: pointer;
   font-size: var(--ui-font-size, 13px);
+  margin-left: 8px;
 }
 
 .command-center-button:hover {
