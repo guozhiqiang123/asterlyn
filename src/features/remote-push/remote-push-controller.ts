@@ -13,8 +13,9 @@ import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
 import { filesForPushReview } from "../../workbench/push-review.ts";
 import { isImagePreviewPath } from "../../workbench/image-preview.ts";
 import { RecentValueCache } from "../../workbench/recent-value-cache.ts";
-import type { RemoteCopy } from "../../localization/catalog.ts";
+import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import { localizedOperationError } from "../../localization/error-message.ts";
 import {
   createRemotePushState,
   type RemoteUpdateStrategy,
@@ -128,6 +129,7 @@ export interface RemotePushControllerOptions {
   previewPageSize?: number;
   detailCacheLimit?: number;
   messages?: RemoteCopy;
+  errorMessages?: ErrorCopy;
 }
 
 type Listener = (change: RemotePushChange) => void;
@@ -140,6 +142,7 @@ export class RemotePushController {
   private readonly commitDetailsCache: RecentValueCache<CommitDetails>;
   private readonly listeners = new Set<Listener>();
   private messages: RemoteCopy;
+  private errorMessages: ErrorCopy;
   private snapshot: RepositorySnapshot | null = null;
   private repositoryGeneration = 0;
   private dialogSequence = 0;
@@ -151,6 +154,7 @@ export class RemotePushController {
   constructor(gateway: RemotePushGateway, options: RemotePushControllerOptions = {}) {
     this.gateway = gateway;
     this.messages = options.messages ?? EN_US.remote;
+    this.errorMessages = options.errorMessages ?? EN_US.errors;
     this.previewPageSize = options.previewPageSize ?? PUSH_PREVIEW_PAGE_SIZE;
     this.commitDetailsCache = new RecentValueCache(
       options.detailCacheLimit ?? PUSH_COMMIT_DETAILS_CACHE_LIMIT,
@@ -163,8 +167,9 @@ export class RemotePushController {
     return () => this.listeners.delete(listener);
   }
 
-  setMessages(messages: RemoteCopy): void {
+  setMessages(messages: RemoteCopy, errorMessages: ErrorCopy = this.errorMessages): void {
     this.messages = messages;
+    this.errorMessages = errorMessages;
   }
 
   installSnapshot(snapshot: RepositorySnapshot | null): void {
@@ -777,7 +782,7 @@ export class RemotePushController {
   }
 
   private errorMessage(error: unknown): string {
-    return toErrorMessage(error, this.messages.unexpectedError);
+    return localizedOperationError(error, this.errorMessages);
   }
 
   private emit(change: RemotePushChange): void {
@@ -788,13 +793,4 @@ export class RemotePushController {
 
 function detailsCacheKey(repositoryRoot: string, repositoryId: string, oid: string): string {
   return `${repositoryRoot}\u0000${repositoryId}\u0000${oid}`;
-}
-
-function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return fallback;
 }

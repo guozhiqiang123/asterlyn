@@ -71,6 +71,7 @@ import {
   type ProjectFilesChange,
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
+import { localizedOperationError } from "./localization/error-message";
 import {
   commandSurfaceResultCount as commandSurfaceViewResultCount,
   renderCommandSurface as renderCommandSurfaceView,
@@ -188,7 +189,7 @@ import {
   createBrowserSystemPresentationPort,
 } from "./presentation/presentation-environment";
 import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter";
-import type { ErrorCopy, LocaleCatalog, NavigationCommandId } from "./localization/catalog";
+import type { LocaleCatalog, NavigationCommandId } from "./localization/catalog";
 import { loadLocale } from "./localization/locale-loader";
 import { createLocalization, type Localization } from "./localization/localization";
 import {
@@ -428,7 +429,7 @@ export class AsterlynApp {
       pullCurrent: (...args) => bridge.pullCurrent(...args),
       pushCurrent: (...args) => bridge.pushCurrent(...args),
       cancelRemoteOperation: (...args) => bridge.cancelRemoteOperation(...args),
-    }, { messages: initialCatalog.remote });
+    }, { messages: initialCatalog.remote, errorMessages: initialCatalog.errors });
     this.releaseRemoteController = this.remoteController.subscribe((change) =>
       this.handleRemoteControllerChange(change),
     );
@@ -854,7 +855,7 @@ export class AsterlynApp {
       this.editorController.setMessages(catalog.editor);
       this.changesController.setMessages(catalog.changes);
       this.historyController.setMessages(catalog.history);
-      this.remoteController.setMessages(catalog.remote);
+      this.remoteController.setMessages(catalog.remote, catalog.errors);
       this.gitOperationController.setMessages(catalog.gitOperations);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
@@ -1831,7 +1832,7 @@ export class AsterlynApp {
       this.state.workspaceSearch = failWorkspaceSearch(
         this.state.workspaceSearch,
         started.request,
-        errorMessage(completion.error, this.localization.catalog.errors),
+        localizedOperationError(completion.error, this.localization.catalog.errors),
       );
       if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface(true);
     }
@@ -1909,7 +1910,7 @@ export class AsterlynApp {
       this.state.workspaceReplacement = failReplacement(
         this.state.workspaceReplacement,
         started.request,
-        errorMessage(completion.error, this.localization.catalog.errors),
+        localizedOperationError(completion.error, this.localization.catalog.errors),
       );
       this.renderWorkspaceReplacementDialog();
     }
@@ -2056,7 +2057,7 @@ export class AsterlynApp {
       this.state.workspaceReplacement = failReplacement(
         this.state.workspaceReplacement,
         request,
-        errorMessage(error, this.localization.catalog.errors),
+        localizedOperationError(error, this.localization.catalog.errors),
       );
       await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       if (this.state.workspaceReplacement.recoveries.length > 0) {
@@ -3355,7 +3356,7 @@ export class AsterlynApp {
         key,
         version: request.version,
         status: "error",
-        error: errorMessage(result.error, this.localization.catalog.errors),
+        error: localizedOperationError(result.error, this.localization.catalog.errors),
         image: null,
         diff: null,
       };
@@ -5160,13 +5161,13 @@ export class AsterlynApp {
         return;
       }
       this.state.commitPatchLoading = false;
-      this.state.commitPatchError = errorMessage(error, this.localization.catalog.errors);
+      this.state.commitPatchError = localizedOperationError(error, this.localization.catalog.errors);
       if (imageDiff) {
         this.imageSurface = {
           key: imageKey,
           version: generation,
           status: "error",
-          error: errorMessage(error, this.localization.catalog.errors),
+          error: localizedOperationError(error, this.localization.catalog.errors),
           image: null,
           diff: null,
         };
@@ -6009,7 +6010,7 @@ export class AsterlynApp {
   }
 
   private showError(error: unknown): void {
-    const message = errorMessage(error, this.localization.catalog.errors);
+    const message = localizedOperationError(error, this.localization.catalog.errors);
     this.state.error = message;
     this.query("#toast-message").textContent = message;
     this.query("#toast").classList.remove("hidden");
@@ -6238,41 +6239,6 @@ function basename(path: string): string {
 function projectMonogram(path: string): string {
   const name = basename(path).trim();
   return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
-}
-
-function errorMessage(error: unknown, copy: ErrorCopy): string {
-  if (error instanceof Error) return copy.translate(error.message);
-  if (typeof error === "string") return copy.translate(error);
-  if (error && typeof error === "object") {
-    const value = error as Record<string, unknown>;
-    if (value.kind === "remoteCancelled") {
-      if (value.remoteStateMayHaveChanged === true) {
-        return copy.remoteCancelledUnknown;
-      }
-      return value.repositoryStateMayHaveChanged === true
-        ? copy.remoteCancelledChanged
-        : copy.remoteCancelled;
-    }
-    if (value.kind === "remoteFailed") {
-      const reason = typeof value.reason === "string" ? value.reason : "unknown";
-      const fallback = copy.remoteFailedFallback;
-      const messages: Record<string, string> = {
-        authentication: copy.authenticationFailed,
-        network: copy.networkFailed,
-        rejected: copy.remoteRejected,
-        unknown: fallback,
-      };
-      return messages[reason] ?? fallback;
-    }
-    if (value.kind === "conflict") {
-      return copy.fileConflictPreserved;
-    }
-    const message = typeof value.message === "string" ? value.message : null;
-    const operation = typeof value.operation === "string" ? value.operation : null;
-    if (message && operation) return `${operation}: ${copy.translate(message)}`;
-    if (message) return copy.translate(message);
-  }
-  return copy.unexpectedOperation;
 }
 
 function escapeHtml(value: string): string {
