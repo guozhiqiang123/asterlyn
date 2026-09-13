@@ -2,6 +2,7 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffEditor } from "../../diff-editor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 
 type TextMount = {
   parent: HTMLElement;
@@ -29,6 +30,7 @@ export class LazyTextEditor {
   private mountGeneration = 0;
   private readOnly = false;
   private preferences: AppPreferences | null = null;
+  private theme: EffectiveTheme = "dark";
 
   mount(
     parent: HTMLElement,
@@ -52,6 +54,7 @@ export class LazyTextEditor {
     if (this.implementation) {
       this.implementation.setReadOnly(this.readOnly);
       this.implementation.setPreferences(this.preferences ?? preferences);
+      this.implementation.setTheme(this.theme);
       this.implementation.mount(
         parent,
         tabId,
@@ -72,6 +75,7 @@ export class LazyTextEditor {
       mount.parent.removeAttribute("aria-busy");
       editor.setReadOnly(this.readOnly);
       editor.setPreferences(this.preferences ?? mount.preferences);
+      editor.setTheme(this.theme);
       editor.mount(
         mount.parent,
         mount.tabId,
@@ -152,6 +156,11 @@ export class LazyTextEditor {
     this.implementation?.setPreferences(preferences);
   }
 
+  setTheme(theme: EffectiveTheme): void {
+    this.theme = theme;
+    this.implementation?.setTheme(theme);
+  }
+
   detach(): void {
     this.mountGeneration += 1;
     this.pendingMount?.parent.removeAttribute("aria-busy");
@@ -195,6 +204,7 @@ export class LazyDiffEditor {
   private pendingMount: DiffMount | null = null;
   private mountGeneration = 0;
   private preferences: AppPreferences | null = null;
+  private theme: EffectiveTheme = "dark";
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
 
   mount(
@@ -208,6 +218,7 @@ export class LazyDiffEditor {
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
+      this.implementation.setTheme(this.theme);
       this.implementation.mount(
         parent,
         document,
@@ -224,6 +235,7 @@ export class LazyDiffEditor {
       const mount = this.pendingMount;
       if (!mount.parent.isConnected) return;
       mount.parent.removeAttribute("aria-busy");
+      editor.setTheme(this.theme);
       editor.mount(
         mount.parent,
         mount.document,
@@ -250,6 +262,11 @@ export class LazyDiffEditor {
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
     this.implementation?.setPreferences(preferences);
+  }
+
+  setTheme(theme: EffectiveTheme): void {
+    this.theme = theme;
+    this.implementation?.setTheme(theme);
   }
 
   destroy(): void {

@@ -4,6 +4,7 @@ import { attachSplitter } from "../../workbench/splitter.ts";
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../workbench/editor-document.ts";
 import { textTab, type EditorSession, type TextTabState } from "../../workbench/editor-session.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "../../workbench/markdown-format.ts";
 import { LazyDiffEditor, LazyTextEditor } from "./lazy-editor-runtime.ts";
 import {
@@ -79,6 +80,11 @@ export class EditorSurface {
   setPreferences(preferences: AppPreferences): void {
     this.textEditor.setPreferences(preferences);
     this.diffEditor.setPreferences(preferences);
+  }
+
+  setTheme(theme: EffectiveTheme): void {
+    this.textEditor.setTheme(theme);
+    this.diffEditor.setTheme(theme);
   }
 
   setDiffPresentation(presentation: DiffPresentation): void {

@@ -11,7 +11,7 @@
 }
 
 .remote-action-button.running {
-  color: #8fb5ff;
+  color: var(--info-text);
 }
 
 .remote-action-button {
@@ -25,10 +25,10 @@
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border: 1px solid #202226;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #315d9f;
-  color: #f2f6ff;
+  background: var(--accent);
+  color: var(--text-on-accent);
   font-size: 8px;
   font-weight: 700;
   line-height: 12px;
@@ -41,7 +41,7 @@
 }
 
 .remote-cancel-button {
-  color: #e8a7a7;
+  color: var(--danger-text);
 }
 
 .remote-ref-group {
@@ -113,20 +113,20 @@
 
 .remote-dialog-error {
   padding: 9px 11px;
-  border: 1px solid #82474d;
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
-  background: #472b2e;
-  color: #f4c2c5;
+  background: var(--danger-bg);
+  color: var(--danger-text);
   font-size: 11px;
   line-height: 1.45;
 }
 
 .remote-dialog-warning {
   padding: 7px 10px;
-  border: 1px solid #6f5934;
+  border: 1px solid var(--warning-border);
   border-radius: 5px;
-  background: #3d3426;
-  color: #e6c689;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-size: 10px;
   line-height: 1.4;
 }
@@ -159,8 +159,8 @@
 }
 
 .remote-strategy-card.selected {
-  border-color: #42679f;
-  background: #263852;
+  border-color: var(--info-border);
+  background: var(--info-bg);
 }
 
 .remote-strategy-card.unavailable {
@@ -263,7 +263,7 @@
   justify-content: space-between;
   padding: 0 10px;
   border-bottom: 1px solid var(--border);
-  background: #25272b;
+  background: var(--surface-chrome);
 }
 
 .push-files-heading {
@@ -318,14 +318,14 @@
 }
 
 .push-commit-row.selected {
-  border-color: #4f7dc9;
-  background: #294f91;
-  box-shadow: inset 3px 0 0 #83adf5;
+  border-color: var(--accent-hover);
+  background: var(--accent);
+  box-shadow: inset 3px 0 0 var(--focus-ring-bright);
   color: white;
 }
 
 .push-commit-row.selected:hover {
-  background: #315a9f;
+  background: var(--accent-hover);
 }
 
 .push-commit-row span {
@@ -344,7 +344,7 @@
 }
 
 .push-commit-row.selected small {
-  color: #c7d8f6;
+  color: var(--info-text);
 }
 
 .push-file-row {
@@ -453,9 +453,9 @@
   gap: 2px;
   padding: 3px 8px;
   border: 1px solid var(--border);
-  border-left: 3px solid #5f8fdc;
+  border-left: 3px solid var(--accent);
   border-radius: 5px;
-  background: #24272c;
+  background: var(--surface-chrome);
   color: var(--text-soft);
   text-align: left;
 }
@@ -466,13 +466,13 @@
 
 .push-route-scope:hover,
 .push-route-scope.selected {
-  border-color: #456dacf0;
-  border-left-color: #78a8f2;
-  background: #293a55;
+  border-color: var(--info-border);
+  border-left-color: var(--focus-ring-bright);
+  background: var(--info-bg-strong);
 }
 
 .push-route-kind {
-  color: #81aaf0;
+  color: var(--info-text);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -508,7 +508,7 @@
 .push-route-arrow {
   display: grid;
   justify-items: center;
-  color: #8391a8;
+  color: var(--text-muted);
   line-height: 1;
 }
 
@@ -520,17 +520,17 @@
 }
 
 .push-route-arrow strong {
-  color: #9fb6d9;
+  color: var(--info-text);
   font-size: 19px;
   font-weight: 500;
 }
 
 .push-remote-target {
-  border-left-color: #56a77d;
+  border-left-color: var(--green);
 }
 
 .push-remote-target .push-route-kind {
-  color: #79c69d;
+  color: var(--success-text);
 }
 
 .push-route-destination {
@@ -564,7 +564,7 @@
 }
 
 .remote-dialog-empty.error {
-  color: #ef9a9a;
+  color: var(--danger-text);
 }
 
 .push-dialog-footer,
@@ -625,7 +625,7 @@
   display: grid;
   padding: 22px;
   place-items: center;
-  background: #0b0c0ed6;
+  background: var(--surface-scrim-strong);
 }
 
 .push-diff-dialog {
@@ -694,7 +694,7 @@
 .push-mode-toggle {
   width: 29px;
   padding: 0;
-  border-left-color: #7da4ef;
+  border-left-color: var(--focus-ring);
   border-radius: 0 5px 5px 0;
 }
 
@@ -708,8 +708,8 @@
   padding: 4px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #2b2d31;
-  box-shadow: 0 8px 22px #0008;
+  background: var(--surface-control);
+  box-shadow: 0 8px 22px var(--shadow-elevated);
 }
 
 .push-mode-menu button {

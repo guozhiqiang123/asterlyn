@@ -13,8 +13,8 @@
 
 .workspace-search-mode:hover,
 .workspace-search-mode[aria-pressed="true"] {
-  border-color: #5877ad;
-  background: #36598f;
+  border-color: var(--info-border);
+  background: var(--accent);
   color: white;
 }
 
@@ -25,7 +25,7 @@
   gap: 6px;
   padding: 4px 7px 5px;
   border-top: 1px solid var(--border);
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .workspace-search-controls label {
@@ -57,8 +57,8 @@
 
 .workspace-search-controls input:focus,
 .workspace-search-controls select:focus {
-  border-color: #658bd1;
-  box-shadow: 0 0 0 1px #658bd155;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus-ring) 33%, transparent);
 }
 
 .workspace-search-context {
@@ -95,7 +95,7 @@
 
 .workspace-search-result mark {
   border-radius: 2px;
-  background: #8a681f;
+  background: var(--yellow);
   color: white;
 }
 
@@ -104,7 +104,7 @@
   width: 2px;
   margin: 0 1px;
   overflow: hidden;
-  background: #e4a853;
+  background: var(--yellow);
   color: transparent;
   vertical-align: text-bottom;
 }
@@ -142,7 +142,7 @@
   padding: 7px 8px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .replacement-dialog input[type="checkbox"] {
@@ -166,7 +166,7 @@
 .replacement-file {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #232428;
+  background: var(--surface-chrome);
 }
 
 .replacement-file-heading {
@@ -220,11 +220,11 @@
 }
 
 .replacement-comparison code.before {
-  background: #382427;
+  background: var(--danger-bg);
 }
 
 .replacement-comparison code.after {
-  background: #21352b;
+  background: var(--success-bg);
 }
 
 .replacement-comparison code span {
@@ -238,26 +238,26 @@
 .replacement-error {
   margin-bottom: 8px;
   padding: 7px 9px;
-  border: 1px solid #735d32;
+  border: 1px solid var(--warning-border);
   border-radius: 5px;
-  background: #3b311f;
-  color: #edcb87;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-size: 9px;
   line-height: 1.45;
 }
 
 .replacement-error {
   margin-top: 14px;
-  border-color: #71454a;
-  background: #3c2528;
-  color: #efb3b7;
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
 .recovery-card {
   padding: 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .recovery-card-heading,
@@ -309,12 +309,12 @@
 }
 
 .recovery-state.replaced {
-  color: #72d49a;
+  color: var(--success-text);
 }
 
 .recovery-state.conflict,
 .recovery-state.unavailable {
-  color: #efb3b7;
+  color: var(--danger-text);
 }
 
 .recovery-actions {

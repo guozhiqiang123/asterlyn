@@ -71,7 +71,7 @@
   border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
   border-radius: 5px;
   background: color-mix(in srgb, var(--red) 12%, var(--bg-panel));
-  color: #f2c3c3;
+  color: var(--danger-text);
   cursor: pointer;
 }
 
@@ -92,7 +92,7 @@
 }
 
 .worktree-recovery-dialog { color: var(--text); padding: 0 18px 18px; }
-.worktree-recovery-dialog::backdrop { background: #0d0e10b8; }
+.worktree-recovery-dialog::backdrop { background: var(--surface-scrim); }
 .worktree-recovery-list { max-height: 55vh; overflow: auto; overflow-wrap: anywhere; }
 .worktree-recovery-list section { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .worktree-recovery-list pre { white-space: pre-wrap; }

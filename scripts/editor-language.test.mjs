@@ -5,7 +5,10 @@ import {
   EditorLanguageLoader,
   editorLanguageName,
 } from "../src/editor-language.ts";
-import { ASTERLYN_SYNTAX_COLORS } from "../src/editor-theme.ts";
+import {
+  ASTERLYN_LIGHT_SYNTAX_COLORS,
+  ASTERLYN_SYNTAX_COLORS,
+} from "../src/editor-theme.ts";
 
 function relativeLuminance(hex) {
   const channels = [1, 3, 5]
@@ -80,11 +83,16 @@ test("parser failures fall back without failing the file open", async () => {
   });
 });
 
-test("syntax token colors meet normal-text contrast on the editor background", () => {
-  for (const [name, color] of Object.entries(ASTERLYN_SYNTAX_COLORS)) {
-    assert.ok(
-      contrastRatio(color, "#1e1f22") >= 4.5,
-      `${name} does not meet 4.5:1 contrast`,
-    );
+test("syntax token colors meet normal-text contrast in both editor themes", () => {
+  for (const [theme, colors, background] of [
+    ["dark", ASTERLYN_SYNTAX_COLORS, "#1e1f22"],
+    ["light", ASTERLYN_LIGHT_SYNTAX_COLORS, "#f4f5f7"],
+  ]) {
+    for (const [name, color] of Object.entries(colors)) {
+      assert.ok(
+        contrastRatio(color, background) >= 4.5,
+        `${theme} ${name} does not meet 4.5:1 contrast`,
+      );
+    }
   }
 });

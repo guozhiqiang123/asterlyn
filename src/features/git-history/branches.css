@@ -28,8 +28,8 @@
 }
 
 .branch-filter:focus-within {
-  border-color: #6b9bfa;
-  box-shadow: 0 0 0 1px #6b9bfa;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 .branch-filter input {
@@ -46,7 +46,7 @@
 }
 
 .branch-filter input::placeholder {
-  color: #6f737b;
+  color: var(--text-faint);
 }
 
 .branch-group-chevron {
@@ -79,11 +79,11 @@
 }
 
 .branch-glyph.current {
-  color: #e7c461;
+  color: var(--yellow);
 }
 
 .branch-row.kind-tag .branch-glyph {
-  color: #a986cf;
+  color: var(--graph-4);
 }
 
 .branch-row.nested {
@@ -100,7 +100,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #88d09a;
+  color: var(--success-text);
   font-size: 8px;
   white-space: nowrap;
 }
@@ -139,11 +139,11 @@
 }
 
 .branch-action-card.ready {
-  border-color: #3a4c3f;
+  border-color: var(--success-border);
 }
 
 .branch-action-card.blocked {
-  border-color: #5d4548;
+  border-color: var(--danger-border);
 }
 
 .branch-action-heading {
@@ -178,7 +178,7 @@
   gap: 4px;
   margin: 0 0 10px;
   padding: 0;
-  color: #d99a9a;
+  color: var(--danger-text);
   font-family: ui-monospace, monospace;
   font-size: 9px;
   list-style: none;
@@ -198,8 +198,8 @@
 }
 
 .branch-hero {
-  background: #263652;
-  color: #8fb5ff;
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 .branch-status {

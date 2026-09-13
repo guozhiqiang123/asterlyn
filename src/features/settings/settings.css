@@ -18,7 +18,7 @@
   gap: 9px;
   padding: 0 18px;
   border-bottom: 1px solid var(--border);
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .settings-page-header h1 {
@@ -63,8 +63,8 @@
 }
 
 .settings-navigation-item.selected {
-  background: #214283;
-  color: #f0f5ff;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .settings-content {
@@ -98,7 +98,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .settings-row {
@@ -168,15 +168,15 @@
 }
 
 .editor-font-status.loading {
-  color: #a8c7fa;
+  color: var(--info-text);
 }
 
 .editor-font-status.success {
-  color: #9bd7a8;
+  color: var(--success-text);
 }
 
 .editor-font-status.error {
   max-width: 320px;
-  color: #f0a5a5;
+  color: var(--danger-text);
   text-align: right;
 }

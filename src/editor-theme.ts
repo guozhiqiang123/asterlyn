@@ -1,6 +1,7 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 
 export const ASTERLYN_SYNTAX_COLORS = {
   comment: "#8c919b",
@@ -16,10 +17,38 @@ export const ASTERLYN_SYNTAX_COLORS = {
   invalid: "#ff6666",
 } as const;
 
+export const ASTERLYN_LIGHT_SYNTAX_COLORS = {
+  comment: "#69717d",
+  keyword: "#a14218",
+  string: "#26733a",
+  literal: "#087987",
+  type: "#1769a8",
+  property: "#8a3f82",
+  tag: "#8a5d00",
+  punctuation: "#444950",
+  link: "#006f7e",
+  meta: "#746d00",
+  invalid: "#b71c1c",
+} as const;
+
+const syntaxColor = {
+  comment: "var(--syntax-comment)",
+  keyword: "var(--syntax-keyword)",
+  string: "var(--syntax-string)",
+  literal: "var(--syntax-literal)",
+  type: "var(--syntax-type)",
+  property: "var(--syntax-property)",
+  tag: "var(--syntax-tag)",
+  punctuation: "var(--syntax-punctuation)",
+  link: "var(--syntax-link)",
+  meta: "var(--syntax-meta)",
+  invalid: "var(--syntax-invalid)",
+} as const;
+
 const asterlynHighlightStyle = HighlightStyle.define([
   {
     tag: tags.comment,
-    color: ASTERLYN_SYNTAX_COLORS.comment,
+    color: syntaxColor.comment,
     fontStyle: "italic",
   },
   {
@@ -31,19 +60,19 @@ const asterlynHighlightStyle = HighlightStyle.define([
       tags.moduleKeyword,
       tags.operatorKeyword,
     ],
-    color: ASTERLYN_SYNTAX_COLORS.keyword,
+    color: syntaxColor.keyword,
   },
   {
     tag: [tags.string, tags.character, tags.attributeValue],
-    color: ASTERLYN_SYNTAX_COLORS.string,
+    color: syntaxColor.string,
   },
   {
     tag: [tags.number, tags.bool, tags.null, tags.atom],
-    color: ASTERLYN_SYNTAX_COLORS.literal,
+    color: syntaxColor.literal,
   },
   {
     tag: [tags.typeName, tags.className, tags.namespace],
-    color: ASTERLYN_SYNTAX_COLORS.type,
+    color: syntaxColor.type,
   },
   {
     tag: [
@@ -51,31 +80,31 @@ const asterlynHighlightStyle = HighlightStyle.define([
       tags.function(tags.propertyName),
       tags.definition(tags.variableName),
     ],
-    color: ASTERLYN_SYNTAX_COLORS.type,
+    color: syntaxColor.type,
   },
   {
     tag: [tags.propertyName, tags.attributeName],
-    color: ASTERLYN_SYNTAX_COLORS.property,
+    color: syntaxColor.property,
   },
   {
     tag: [tags.tagName, tags.labelName],
-    color: ASTERLYN_SYNTAX_COLORS.tag,
+    color: syntaxColor.tag,
   },
   {
     tag: [tags.operator, tags.punctuation],
-    color: ASTERLYN_SYNTAX_COLORS.punctuation,
+    color: syntaxColor.punctuation,
   },
   {
     tag: [tags.regexp, tags.escape, tags.url, tags.link],
-    color: ASTERLYN_SYNTAX_COLORS.link,
+    color: syntaxColor.link,
   },
   {
     tag: [tags.meta, tags.processingInstruction, tags.annotation],
-    color: ASTERLYN_SYNTAX_COLORS.meta,
+    color: syntaxColor.meta,
   },
   {
     tag: tags.heading,
-    color: ASTERLYN_SYNTAX_COLORS.type,
+    color: syntaxColor.type,
     fontWeight: "700",
   },
   { tag: tags.emphasis, fontStyle: "italic" },
@@ -83,7 +112,7 @@ const asterlynHighlightStyle = HighlightStyle.define([
   { tag: tags.strikethrough, textDecoration: "line-through" },
   {
     tag: tags.invalid,
-    color: ASTERLYN_SYNTAX_COLORS.invalid,
+    color: syntaxColor.invalid,
     textDecoration: "underline wavy",
   },
 ]);
@@ -92,12 +121,12 @@ export const asterlynSyntaxHighlighting = syntaxHighlighting(
   asterlynHighlightStyle,
 );
 
-export const asterlynEditorTheme = EditorView.theme(
+const editorThemeRules =
   {
     "&": {
       height: "100%",
-      color: "#dfe1e5",
-      backgroundColor: "#1e1f22",
+      color: "var(--text)",
+      backgroundColor: "var(--bg-deep)",
       fontFamily: "var(--editor-font-family)",
       fontSize: "var(--editor-font-size, 14px)",
       fontWeight: "400",
@@ -110,7 +139,7 @@ export const asterlynEditorTheme = EditorView.theme(
       fontFamily: "var(--editor-font-family)",
       letterSpacing: "var(--editor-letter-spacing, 0px)",
       padding: "10px 0 40px",
-      caretColor: "#a8c7fa",
+      caretColor: "var(--editor-caret)",
     },
     ".cm-gutter": {
       fontFamily: "var(--editor-font-family)",
@@ -121,11 +150,11 @@ export const asterlynEditorTheme = EditorView.theme(
       lineHeight: "var(--editor-line-height, 1.35)",
     },
     ".cm-gutters": {
-      color: "#6f737b",
-      backgroundColor: "#1e1f22",
-      borderRight: "1px solid #2b2d30",
+      color: "var(--editor-gutter-text)",
+      backgroundColor: "var(--bg-deep)",
+      borderRight: "1px solid var(--bg-panel)",
     },
-    ".cm-activeLineGutter": { backgroundColor: "#26282c" },
+    ".cm-activeLineGutter": { backgroundColor: "var(--bg-hover)" },
     ".cm-foldGutter": { width: "19px" },
     ".cm-foldGutter .cm-gutterElement": {
       boxSizing: "border-box",
@@ -139,7 +168,7 @@ export const asterlynEditorTheme = EditorView.theme(
       height: "18px",
       placeItems: "center",
       borderRadius: "3px",
-      color: "#a5a9b2",
+      color: "var(--text-muted)",
       cursor: "pointer",
       verticalAlign: "top",
     },
@@ -154,67 +183,74 @@ export const asterlynEditorTheme = EditorView.theme(
       pointerEvents: "none",
     },
     ".cm-foldGutter .cm-gutterElement:hover .asterlyn-fold-marker": {
-      backgroundColor: "#34363b",
-      color: "#d7e3ff",
+      backgroundColor: "var(--bg-hover)",
+      color: "var(--info-text)",
     },
     ".cm-foldPlaceholder": {
-      border: "1px solid #4e5157",
-      backgroundColor: "#2b2d30",
-      color: "#a8c7fa",
+      border: "1px solid var(--border-strong)",
+      backgroundColor: "var(--bg-panel)",
+      color: "var(--info-text)",
     },
-    ".cm-activeLine": { backgroundColor: "#26282c80" },
+    ".cm-activeLine": { backgroundColor: "var(--editor-active-line)" },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#214283 !important",
+      backgroundColor: "var(--editor-selection) !important",
     },
-    ".cm-searchMatch": { backgroundColor: "#725b19", outline: "none" },
-    ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "#9c7320" },
-    ".cm-panels": { backgroundColor: "#2b2d30", color: "#dfe1e5" },
-    ".cm-panels.cm-panels-top": { borderBottom: "1px solid #393b40" },
+    ".cm-searchMatch": { backgroundColor: "var(--editor-search)", outline: "none" },
+    ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--editor-search-selected)" },
+    ".cm-panels": { backgroundColor: "var(--bg-panel)", color: "var(--text)" },
+    ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--border)" },
     ".cm-panel.cm-search": { padding: "6px 10px" },
     ".cm-textfield": {
-      backgroundColor: "#1e1f22",
-      color: "#dfe1e5",
-      border: "1px solid #4e5157",
+      backgroundColor: "var(--bg-deep)",
+      color: "var(--text)",
+      border: "1px solid var(--border-strong)",
       borderRadius: "4px",
     },
     ".cm-button": {
       backgroundImage: "none",
-      backgroundColor: "#393b40",
-      color: "#dfe1e5",
-      border: "1px solid #4e5157",
+      backgroundColor: "var(--bg-elevated)",
+      color: "var(--text)",
+      border: "1px solid var(--border-strong)",
       borderRadius: "4px",
     },
-    ".cm-diff-added": { backgroundColor: "#29443666", color: "#b8e2c4" },
-    ".cm-diff-removed": { backgroundColor: "#5b2d3266", color: "#f0b8bd" },
-    ".cm-diff-hunk": { backgroundColor: "#233d6166", color: "#a8c7fa" },
-    ".cm-diff-meta": { color: "#858a94", fontStyle: "italic" },
+    ".cm-diff-added": { backgroundColor: "var(--editor-diff-added-bg)", color: "var(--editor-diff-added-text)" },
+    ".cm-diff-removed": { backgroundColor: "var(--editor-diff-removed-bg)", color: "var(--editor-diff-removed-text)" },
+    ".cm-diff-hunk": { backgroundColor: "var(--editor-diff-hunk-bg)", color: "var(--editor-diff-hunk-text)" },
+    ".cm-diff-meta": { color: "var(--editor-diff-meta)", fontStyle: "italic" },
     ".cm-diff-meta span, .cm-diff-hunk span": {
       color: "inherit !important",
       fontStyle: "inherit",
     },
-    ".cm-source-added": { backgroundColor: "#29443670" },
-    ".cm-source-removed": { backgroundColor: "#5b2d3270" },
+    ".cm-source-added": { backgroundColor: "var(--editor-diff-added-bg)" },
+    ".cm-source-removed": { backgroundColor: "var(--editor-diff-removed-bg)" },
     ".cm-source-spacer": {
-      backgroundColor: "#191a1d",
+      backgroundColor: "var(--surface-editor-secondary)",
       color: "transparent",
     },
     ".cm-source-omitted": {
-      backgroundColor: "#233d6152",
-      color: "#8eb4ef",
+      backgroundColor: "var(--info-bg)",
+      color: "var(--info-text)",
       fontStyle: "italic",
     },
     ".cm-source-notice": {
-      color: "#a4a7ae",
+      color: "var(--text-muted)",
       fontStyle: "italic",
     },
     ".cm-source-word-added": {
       borderRadius: "2px",
-      backgroundColor: "#397b4eaa",
+      backgroundColor: "var(--editor-intraline-added)",
     },
     ".cm-source-word-removed": {
       borderRadius: "2px",
-      backgroundColor: "#94424aaa",
+      backgroundColor: "var(--editor-intraline-removed)",
     },
-  },
-  { dark: true },
-);
+  };
+
+const editorThemes = {
+  dark: EditorView.theme(editorThemeRules, { dark: true }),
+  light: EditorView.theme(editorThemeRules, { dark: false }),
+} as const;
+
+export function asterlynEditorTheme(theme: EffectiveTheme) {
+  return editorThemes[theme];
+}

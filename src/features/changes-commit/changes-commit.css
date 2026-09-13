@@ -124,7 +124,7 @@
 }
 
 .change-row.primary {
-  background: #214283;
+  background: var(--selection-bg);
 }
 
 .change-checkbox {
@@ -148,18 +148,18 @@
   gap: 8px;
   margin: 7px 9px 10px;
   padding: 7px 8px;
-  border: 1px solid #3d4657;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: #292e38;
+  background: var(--surface-menu);
   color: var(--text-faint);
   font-size: 10px;
   line-height: 1.4;
 }
 
 .untracked-scan.failed {
-  border-color: #624345;
-  background: #382a2d;
-  color: #d99a9a;
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
 .change-row:hover .row-action,
@@ -170,9 +170,9 @@
 
 .conflict-pill {
   margin-right: 4px;
-  border-color: #874248;
-  background: #542e32;
-  color: #f0a1a7;
+  border-color: var(--danger-border);
+  background: var(--danger-bg-strong);
+  color: var(--danger-text);
   font-size: 8px;
 }
 

@@ -17,7 +17,7 @@
 
 .commit-form textarea::placeholder,
 .dialog input::placeholder {
-  color: #62666d;
+  color: var(--text-faint);
 }
 
 .document-encoding {
@@ -28,13 +28,13 @@
 }
 
 .sync-status {
-  color: #8fb5ff;
+  color: var(--info-text);
 }
 
 .operation-status {
   border-radius: 8px;
-  background: #5b4527;
-  color: #e4c27e;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   padding: 1px 5px;
 }
 
@@ -49,11 +49,11 @@
   align-items: start;
   gap: 7px;
   padding: 10px;
-  border: 1px solid #874248;
+  border: 1px solid var(--danger-border);
   border-radius: 7px;
-  background: #4a292d;
-  box-shadow: 0 8px 28px #0008;
-  color: #f0c3c6;
+  background: var(--danger-bg);
+  box-shadow: 0 8px 28px var(--shadow-elevated);
+  color: var(--danger-text);
   font-size: 10px;
   line-height: 1.5;
 }
@@ -78,12 +78,12 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #dcaeb1;
+  color: var(--danger-text);
   cursor: pointer;
 }
 
 .toast-close:hover {
-  background: #ffffff14;
+  background: var(--surface-translucent);
 }
 
 .dialog-backdrop {
@@ -92,7 +92,7 @@
   display: grid;
   z-index: 30;
   place-items: center;
-  background: #0d0e10b8;
+  background: var(--surface-scrim);
   backdrop-filter: blur(2px);
 }
 
@@ -103,7 +103,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   background: var(--bg-panel);
-  box-shadow: 0 18px 60px #000c;
+  box-shadow: 0 18px 60px var(--shadow-dialog);
 }
 
 .dialog-heading {
@@ -174,8 +174,8 @@
 }
 
 .dialog #history-path-text:focus {
-  border-color: #6b9bfa;
-  box-shadow: 0 0 0 1px #6b9bfa;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 ::-webkit-scrollbar {
@@ -186,12 +186,12 @@
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 7px;
-  background: #55585e;
+  background: var(--border-strong);
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #686b72;
+  background: var(--text-muted);
   background-clip: padding-box;
 }
 

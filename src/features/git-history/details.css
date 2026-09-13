@@ -23,7 +23,7 @@
   gap: 3px;
   padding: 0 6px 0 8px;
   border-bottom: 1px solid var(--border);
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .commit-files-label {
@@ -58,7 +58,7 @@
   min-height: 0;
   grid-template-rows: 37px minmax(0, 1fr);
   border-right: 1px solid var(--border);
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .commit-files-header,
@@ -170,7 +170,7 @@
 }
 
 .commit-file-row.selected {
-  background: #214283;
+  background: var(--selection-bg);
 }
 
 .commit-file-origin {
@@ -183,7 +183,7 @@
 }
 
 .commit-file-row.selected .commit-file-origin {
-  color: #a9bee7;
+  color: var(--info-text);
 }
 
 .commit-detail-layout {

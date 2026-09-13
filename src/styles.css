@@ -1,6 +1,5 @@
 /* Shared tokens, resets, and element defaults. */
 :root {
-  color-scheme: dark;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -30,10 +29,247 @@
   --file-conflict: #ed7777;
   --file-ignored: #b78a70;
   --file-unknown: #d69a62;
+  --surface-chrome: #242529;
+  --surface-menu: #292a2e;
+  --surface-control: #2b2d31;
+  --surface-inset: #18191c;
+  --surface-inset-strong: #17181b;
+  --surface-editor-secondary: #191a1d;
+  --surface-checker: #292b30;
+  --surface-scrim: #0d0e10b8;
+  --surface-scrim-soft: #0d0e10a6;
+  --surface-scrim-strong: #0b0c0ed6;
+  --surface-translucent: #ffffff14;
+  --surface-translucent-strong: #ffffff18;
+  --shadow-menu: rgb(0 0 0 / 32%);
+  --shadow-elevated: #0008;
+  --shadow-dialog: #000c;
+  --shadow-window: #000d;
+  --selection-bg: #214283;
+  --selection-bg-strong: #24477a;
+  --selection-text: #f0f5ff;
+  --text-on-accent: #f2f6ff;
+  --text-bright: #d8dee9;
+  --focus-ring: #6b9bfa;
+  --focus-ring-bright: #8ab4ff;
+  --control-border: #72767e;
+  --control-border-hover: #a8acb4;
+  --control-checked-border: #4f8cff;
+  --control-checked-bg: #3574e6;
+  --info-border: #455d87;
+  --info-bg: #263652;
+  --info-bg-strong: #263957;
+  --info-text: #a8c7fa;
+  --success-border: #3a4c3f;
+  --success-bg: #294436;
+  --success-text: #9bd7a8;
+  --warning-border: #735d32;
+  --warning-bg: #49391f;
+  --warning-bg-hover: #594729;
+  --warning-text: #efc77c;
+  --danger-border: #874248;
+  --danger-bg: #4a292d;
+  --danger-bg-strong: #542e32;
+  --danger-text: #f0a5a5;
+  --danger-solid: #c42b1c;
+  --danger-solid-hover: #a82418;
+  --editor-caret: #a8c7fa;
+  --editor-gutter-text: #6f737b;
+  --editor-active-line: #26282c80;
+  --editor-selection: #214283;
+  --editor-search: #725b19;
+  --editor-search-selected: #9c7320;
+  --editor-diff-added-bg: #29443666;
+  --editor-diff-added-text: #b8e2c4;
+  --editor-diff-removed-bg: #5b2d3266;
+  --editor-diff-removed-text: #f0b8bd;
+  --editor-diff-hunk-bg: #233d6166;
+  --editor-diff-hunk-text: #a8c7fa;
+  --editor-diff-meta: #858a94;
+  --editor-intraline-added: #397b4eaa;
+  --editor-intraline-removed: #94424aaa;
+  --syntax-comment: #8c919b;
+  --syntax-keyword: #cf8e6d;
+  --syntax-string: #6aab73;
+  --syntax-literal: #2aacb8;
+  --syntax-type: #56a8f5;
+  --syntax-property: #c77dbb;
+  --syntax-tag: #e8bf6a;
+  --syntax-punctuation: #bcbec4;
+  --syntax-link: #42c3d4;
+  --syntax-meta: #bbb529;
+  --syntax-invalid: #ff6666;
+  --graph-1: #6796ed;
+  --graph-2: #50b986;
+  --graph-3: #d08a45;
+  --graph-4: #ad83d7;
+  --graph-5: #52adc4;
+  --graph-6: #d86f89;
+  --graph-7: #c4a85c;
+  --graph-8: #8293b6;
+  --file-icon-typescript: #68a9e8;
+  --file-icon-javascript: #d8c35a;
+  --file-icon-kotlin: #b28ae8;
+  --file-icon-java: #e39768;
+  --file-icon-groovy: #75b6c7;
+  --file-icon-rust: #d69872;
+  --file-icon-python: #6fa8d8;
+  --file-icon-go: #55b7c9;
+  --file-icon-dart: #62b7dc;
+  --file-icon-swift: #e88368;
+  --file-icon-native: #7ea5d8;
+  --file-icon-markup: #dfa265;
+  --file-icon-styles: #8f91dc;
+  --file-icon-markdown: #71a7dc;
+  --file-icon-config: #b2a36f;
+  --file-icon-build: #8eb784;
+  --file-icon-git: #d47d66;
+  --file-icon-docker: #62a8dd;
+  --file-icon-shell: #79b879;
+  --file-icon-data: #b58acb;
+  --file-icon-image: #79b786;
+  --file-icon-archive: #c39c68;
+  --file-icon-text: #969da8;
+  --file-icon-generic: #858b95;
   --editor-font-family:
     "JetBrains Mono Variable", "Noto Sans Mono CJK SC", "Noto Sans Mono",
     monospace;
   --radius: 7px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-deep: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-elevated: #e3e6ea;
+  --bg-hover: #eceef2;
+  --border: #d5d8dd;
+  --border-strong: #b8bdc6;
+  --text: #24262b;
+  --text-soft: #484c54;
+  --text-muted: #626771;
+  --text-faint: #858b95;
+  --accent: #2864dc;
+  --accent-hover: #1f55bf;
+  --accent-soft: #dbe7fb;
+  --green: #26753b;
+  --green-soft: #e1f1e5;
+  --red: #bd3038;
+  --red-soft: #f8e3e5;
+  --yellow: #8a6500;
+  --file-added: #26753b;
+  --file-modified: #245fae;
+  --file-deleted: #676d76;
+  --file-renamed: #167081;
+  --file-conflict: #b82f37;
+  --file-ignored: #855632;
+  --file-unknown: #9a570f;
+  --surface-chrome: #f0f1f3;
+  --surface-menu: #ffffff;
+  --surface-control: #f8f9fa;
+  --surface-inset: #f7f8fa;
+  --surface-inset-strong: #eef0f3;
+  --surface-editor-secondary: #f1f3f5;
+  --surface-checker: #dfe2e7;
+  --surface-scrim: #20242b66;
+  --surface-scrim-soft: #20242b52;
+  --surface-scrim-strong: #20242b80;
+  --surface-translucent: #0000000a;
+  --surface-translucent-strong: #00000010;
+  --shadow-menu: rgb(31 35 41 / 18%);
+  --shadow-elevated: #1f232933;
+  --shadow-dialog: #1f232947;
+  --shadow-window: #1f232952;
+  --selection-bg: #d9e6fb;
+  --selection-bg-strong: #c6daf8;
+  --selection-text: #173e76;
+  --text-on-accent: #ffffff;
+  --text-bright: #30343a;
+  --focus-ring: #2864dc;
+  --focus-ring-bright: #174ea6;
+  --control-border: #969ca6;
+  --control-border-hover: #626872;
+  --control-checked-border: #2864dc;
+  --control-checked-bg: #2864dc;
+  --info-border: #8caddc;
+  --info-bg: #e1ebfa;
+  --info-bg-strong: #d6e5fa;
+  --info-text: #174f9b;
+  --success-border: #8fbea0;
+  --success-bg: #e1f1e5;
+  --success-text: #1f6734;
+  --warning-border: #c4a45b;
+  --warning-bg: #f7edd2;
+  --warning-bg-hover: #efdfb6;
+  --warning-text: #725200;
+  --danger-border: #d79a9f;
+  --danger-bg: #f8e3e5;
+  --danger-bg-strong: #f2cfd2;
+  --danger-text: #9f252d;
+  --danger-solid: #c43d45;
+  --danger-solid-hover: #a72b33;
+  --editor-caret: #174f9b;
+  --editor-gutter-text: #747a84;
+  --editor-active-line: #dce7f580;
+  --editor-selection: #b7d2f5;
+  --editor-search: #f3da85;
+  --editor-search-selected: #e8bf4e;
+  --editor-diff-added-bg: #cdebd580;
+  --editor-diff-added-text: #195c2b;
+  --editor-diff-removed-bg: #f2ccd080;
+  --editor-diff-removed-text: #8f232c;
+  --editor-diff-hunk-bg: #cfdef580;
+  --editor-diff-hunk-text: #174f9b;
+  --editor-diff-meta: #666d77;
+  --editor-intraline-added: #83c99599;
+  --editor-intraline-removed: #e58d9499;
+  --syntax-comment: #69717d;
+  --syntax-keyword: #a14218;
+  --syntax-string: #26733a;
+  --syntax-literal: #087987;
+  --syntax-type: #1769a8;
+  --syntax-property: #8a3f82;
+  --syntax-tag: #8a5d00;
+  --syntax-punctuation: #444950;
+  --syntax-link: #006f7e;
+  --syntax-meta: #746d00;
+  --syntax-invalid: #b71c1c;
+  --graph-1: #245fb8;
+  --graph-2: #24733d;
+  --graph-3: #985217;
+  --graph-4: #7644a5;
+  --graph-5: #146c79;
+  --graph-6: #a93652;
+  --graph-7: #766000;
+  --graph-8: #52627d;
+  --file-icon-typescript: #1769a8;
+  --file-icon-javascript: #766400;
+  --file-icon-kotlin: #7043a0;
+  --file-icon-java: #a04e1d;
+  --file-icon-groovy: #217080;
+  --file-icon-rust: #965226;
+  --file-icon-python: #28638f;
+  --file-icon-go: #087687;
+  --file-icon-dart: #147391;
+  --file-icon-swift: #b24428;
+  --file-icon-native: #3e6494;
+  --file-icon-markup: #9b5d19;
+  --file-icon-styles: #5d5fa8;
+  --file-icon-markdown: #2e6498;
+  --file-icon-config: #6f632d;
+  --file-icon-build: #47713e;
+  --file-icon-git: #a34631;
+  --file-icon-docker: #266b9e;
+  --file-icon-shell: #3f743f;
+  --file-icon-data: #704b85;
+  --file-icon-image: #397345;
+  --file-icon-archive: #80602e;
+  --file-icon-text: #606873;
+  --file-icon-generic: #69717b;
 }
 
 * {
@@ -66,7 +302,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #6b9bfa;
+  outline: 2px solid var(--focus-ring);
   outline-offset: -1px;
 }
 
@@ -93,10 +329,10 @@ textarea:focus-visible {
   place-content: center;
   margin: 0;
   padding: 0;
-  border: 1px solid #72767e;
+  border: 1px solid var(--control-border);
   border-radius: 3px;
-  background: #2b2d31;
-  color: white;
+  background: var(--surface-control);
+  color: var(--text-on-accent);
   cursor: pointer;
   transition: border-color 80ms ease, background-color 80ms ease;
 }
@@ -112,13 +348,13 @@ textarea:focus-visible {
 }
 
 .app-shell input[type="checkbox"]:hover:not(:disabled) {
-  border-color: #a8acb4;
+  border-color: var(--control-border-hover);
 }
 
 .app-shell input[type="checkbox"]:checked,
 .app-shell input[type="checkbox"]:indeterminate {
-  border-color: #4f8cff;
-  background: #3574e6;
+  border-color: var(--control-checked-border);
+  background: var(--control-checked-bg);
 }
 
 .app-shell input[type="checkbox"]:checked::before {
@@ -135,7 +371,7 @@ textarea:focus-visible {
 }
 
 .app-shell input[type="checkbox"]:focus-visible {
-  outline: 2px solid #8ab4ff;
+  outline: 2px solid var(--focus-ring-bright);
   outline-offset: 2px;
 }
 

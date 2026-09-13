@@ -44,7 +44,7 @@
 .commit-tool {
   overflow: hidden;
   min-height: 0;
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .commit-tool .inspector-header {
@@ -81,7 +81,7 @@
 
 .commit-blocker {
   overflow: hidden;
-  color: #dca0a0;
+  color: var(--danger-text);
   font-size: 9px;
   line-height: 13px;
   text-overflow: ellipsis;
@@ -123,19 +123,19 @@
 }
 
 .commit-reference.head {
-  color: #e3c25f;
+  color: var(--yellow);
 }
 
 .commit-reference.local {
-  color: #75c58a;
+  color: var(--success-text);
 }
 
 .commit-reference.remote {
-  color: #a789d2;
+  color: var(--graph-4);
 }
 
 .commit-reference.tag {
-  color: #9da7ba;
+  color: var(--text-muted);
 }
 
 .commit-reference.other {
@@ -226,11 +226,11 @@
 }
 
 .text-save-state.dirty {
-  color: #a8c7fa;
+  color: var(--info-text);
 }
 
 .text-save-state.conflict {
-  color: #ef9a9a;
+  color: var(--danger-text);
 }
 
 .commit-explorer {
@@ -259,7 +259,7 @@
   min-width: 0;
   gap: 10px;
   padding: 6px 11px 6px 14px;
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .commit-patch-title {
@@ -377,10 +377,10 @@
   gap: 7px;
   margin: 2px 14px 14px;
   padding: 9px;
-  border: 1px solid #3a4c3f;
+  border: 1px solid var(--success-border);
   border-radius: 5px;
-  background: #27352c;
-  color: #91c39c;
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .safety-note p {
@@ -406,14 +406,14 @@
   padding: 0 8px;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: #242529;
+  background: var(--surface-chrome);
   color: var(--text);
   font-family: ui-monospace, monospace;
   font-size: 10px;
 }
 
 .create-branch-card input::placeholder {
-  color: #62666d;
+  color: var(--text-faint);
 }
 
 .metadata-list {
@@ -430,7 +430,7 @@
   min-height: 0;
   padding: 12px 14px;
   border-top: 1px solid var(--border);
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .commit-information h2 {
@@ -454,12 +454,12 @@
 }
 
 .commit-authorship code {
-  color: #b8c8e6;
+  color: var(--info-text);
   font-size: 9px;
 }
 
 .commit-email {
-  color: #78a9de;
+  color: var(--info-text);
 }
 
 .commit-reference-list {
@@ -502,7 +502,7 @@
 
 .commit-reference-overflow > summary b {
   flex: 0 0 auto;
-  color: #78a9de;
+  color: var(--info-text);
   font-weight: 500;
 }
 
@@ -618,8 +618,8 @@
 
 .decoration-list span {
   border-radius: 10px;
-  background: #263652;
-  color: #a8c7fa;
+  background: var(--info-bg);
+  color: var(--info-text);
   font-size: 9px;
   padding: 4px 7px;
 }
@@ -632,7 +632,7 @@
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #242529;
+  background: var(--surface-chrome);
   color: var(--text-muted);
 }
 
