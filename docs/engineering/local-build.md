@@ -15,6 +15,40 @@ npm run build
 cargo test -p asterlyn-git
 ```
 
+## Repository publication policy
+
+Remote publication from this checkout must use Asterlyn's own reviewed Push boundary. Do not use a
+direct shell `git push` as the normal automation or maintainer path: the current host environment
+has produced credential or permission mismatches through that route, and it also bypasses the
+product behavior that this repository is intended to exercise.
+
+The required sequence is:
+
+1. Perform a read-only preflight and record the clean worktree, exact `HEAD`, current branch,
+   selected remote, destination ref, and outgoing commit count.
+2. Open [`GitRepository`](../../crates/asterlyn-git/src/repository.rs) and call
+   `push_preview_with_tags`. Verify the expected source/destination route, exact `HEAD`, commit
+   range, ordinary-push eligibility, and explicit tag mode.
+3. Pass that preview's opaque token to `push_current_with_options` on the same repository identity.
+   Ordinary mode with `PushTagMode::None` is the default. Tags or `ForceWithLease` require separate,
+   explicit user authorization and a newly reviewed preview; raw force is never permitted.
+4. After success, independently read the remote branch and verify that the local ahead/behind range
+   is zero. A stale preview, rejected push, authentication/network failure, cancellation, or unknown
+   outcome must stop the workflow. Reconcile before another review and never retry blindly.
+
+For terminal-driven automation, a disposable, uncommitted Rust caller may link to the local
+`asterlyn-git` crate and invoke those public methods. It must bind the expected `HEAD`, branch,
+remote, destination, commit count, mode, and tag scope before the network write, print no remote URL
+or credentials, and be removed after verification. Do not add or rewrite credential configuration
+to make publication succeed; Asterlyn inherits the user's existing non-interactive Git/SSH
+credential facilities.
+
+The core ultimately invokes system Git without a shell. This policy therefore prohibits bypassing
+the reviewed Asterlyn boundary, not the Git executable behind that boundary. On 2026-09-13, the R4
+range of four commits was published from `main` to `origin/main` in ordinary/no-tags mode through
+`push_preview_with_tags` followed by `push_current_with_options`; an independent remote read
+confirmed `7a68bad17794f87d67580bcecbb9ab5ff2737434`, and the resulting range was 0 ahead / 0 behind.
+
 ## Linux desktop prerequisites
 
 Tauri 2 uses WebKitGTK 4.1 on Linux. A normal development machine should install the distribution packages recommended by Tauri, including WebKitGTK 4.1, JavaScriptCoreGTK 4.1, libsoup 3, GTK 3, librsvg 2, and their development metadata.

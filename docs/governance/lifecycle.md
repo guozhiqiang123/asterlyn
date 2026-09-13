@@ -32,7 +32,12 @@ A 3–5 year product will outlive individual library versions and many early ass
 - Reserve 20–30% of delivery capacity for defects, platform changes, performance, accessibility, and dependency upkeep after Stage 2.
 - Remove experiments that fail their decision deadline; do not leave dormant frameworks in the baseline.
 
+## Publication lifecycle
+
+- Remote publication follows the reviewed [`asterlyn-git` Push workflow](../engineering/local-build.md#repository-publication-policy), including an exact preview token and post-push remote verification.
+- A direct shell `git push` is not the standard publication path for this repository. Force-with-lease and tags remain separately authorized choices, and uncertain outcomes are reconciled rather than retried.
+- Local rollback commits may remain unpublished until the owning phase or task gate passes; publication authority does not waive tests, package evidence, or manual acceptance requirements.
+
 ## Brand lifecycle
 
 `Asterlyn` is the working formal brand selected after a preliminary collision search. It is not a legal trademark clearance. Product-visible naming is centralized so legal or market validation can change the brand without renaming domain protocols, repository schemas, or every internal symbol.
-

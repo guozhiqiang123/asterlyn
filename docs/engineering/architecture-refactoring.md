@@ -240,8 +240,8 @@ revalidates index stages and worktree content, writes, stages, and verifies the 
 Binary, over-limit, and symbolic-link conflicts fail closed and remain resolvable with an external
 Git tool or explicit deletion.
 
-Status: **R4 accepted locally on 2026-09-12**. Complete functional, fault, accessibility, build,
-resource, limitation, and Debian-package evidence is recorded in
+Status: **R4 accepted locally on 2026-09-12 and published on 2026-09-13**. Complete functional,
+fault, accessibility, build, resource, limitation, Debian-package, and publication evidence is recorded in
 [`R4 recoverable Git operations acceptance`](../benchmarks/2026-09-12-r4-recoverable-git-operations.md).
 
 Exit gate: every interrupted operation can be reconstructed from Git, every action is explicitly

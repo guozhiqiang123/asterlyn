@@ -106,7 +106,12 @@ automatic stashing, arbitrary reset, automatic force push, or retry after an unc
 Binary and over-limit conflicts remain visible and can be resolved with an external Git tool or the
 explicit deletion action. These limits fail closed rather than weakening the reviewed lifecycle.
 
-R4 is **accepted locally**. The next architecture slice is R5: workspace create, rename/move, copy,
-paste, and recoverable trash foundations using the same reviewed-plan, stale-identity, and narrow
-reconciliation principles. Remote publication of the R4 commits is intentionally deferred until
-the user approves the local Debian build.
+R4 is **accepted and published**. After local package approval, the four-commit range ending at
+`7a68bad17794f87d67580bcecbb9ab5ff2737434` was published on 2026-09-13 from `main` to
+`origin/main` through Asterlyn's own `push_preview_with_tags` and `push_current_with_options`
+boundary in ordinary/no-tags mode. The preview bound the expected branch, destination, `HEAD`, and
+four-commit range; an independent remote read confirmed the exact object and the final local range
+was 0 ahead / 0 behind. No direct shell `git push`, force mode, or tag publication was used.
+
+The next architecture slice is R5: workspace create, rename/move, copy, paste, and recoverable trash
+foundations using the same reviewed-plan, stale-identity, and narrow reconciliation principles.
