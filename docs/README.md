@@ -34,6 +34,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
 - [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
 - [`design/editor-core-interactions.md`](design/editor-core-interactions.md) — Stage 3 editor slices, invariants, and acceptance evidence.
+- [`design/localization-color-themes.md`](design/localization-color-themes.md) — implementation plan for English/Chinese localization and System/Dark/Light appearance.
 
 ## Benchmarks
 

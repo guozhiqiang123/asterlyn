@@ -6,6 +6,16 @@ Seven stages are appropriate for a 3–5 year effort, but only if they are treat
 
 The roadmap therefore has seven product stages and eight continuous engineering tracks. Dates are planning ranges, not promises. Evidence at each gate decides whether to expand, revise, or stop.
 
+## Current next slice — interface languages and color themes
+
+The next user-prioritized Stage 3 slice implements English and Simplified Chinese plus System,
+Dark, and Light appearance before the previously sequenced multi-editor-group work. It turns the
+planned Settings rows into real application preferences, migrates colors to semantic tokens,
+localizes complete feature boundaries and expected errors, synchronizes preferences across project
+windows, and keeps Git/workspace/editor state unchanged during live switching. The detailed
+delivery sequence and acceptance gates are in
+[`Interface localization and color-theme plan`](../design/localization-color-themes.md).
+
 ## Stage 1 — Git GUI First and enduring foundation (months 0–4)
 
 Deliver one complete vertical slice: repository discovery, branch/status model, changes, patch viewing, history, stage/unstage, and commit. Establish the Rust domain boundary, Tauri adapter, UI state flow, design tokens, test fixtures, performance harness, and release packaging shape.
