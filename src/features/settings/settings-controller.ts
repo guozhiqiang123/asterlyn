@@ -1,9 +1,11 @@
 import {
-  loadAppPreferences,
-  saveAppPreferences,
-  updateAppPreferences,
   type AppPreferences,
 } from "../../workbench/preferences.ts";
+import {
+  PreferenceStore,
+  createSilentPreferenceSync,
+  type PreferenceSyncPort,
+} from "../../workbench/preference-store.ts";
 
 export type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "code";
 
@@ -17,6 +19,7 @@ export interface SettingsChange {
   sectionChanged?: boolean;
   preferencesChanged?: boolean;
   previousPreferences?: AppPreferences;
+  source?: "local" | "external";
 }
 
 type Listener = (change: SettingsChange) => void;
@@ -25,15 +28,25 @@ export class SettingsController {
   readonly state: SettingsState;
 
   private readonly listeners = new Set<Listener>();
-  private readonly storage: Storage;
+  private readonly preferencesStore: PreferenceStore;
+  private readonly releasePreferences: () => void;
   private disposed = false;
 
-  constructor(storage: Storage) {
-    this.storage = storage;
+  constructor(storage: Storage, sync: PreferenceSyncPort = createSilentPreferenceSync()) {
+    this.preferencesStore = new PreferenceStore(storage, sync);
     this.state = {
       section: "general",
-      preferences: loadAppPreferences(storage),
+      preferences: this.preferencesStore.preferences,
     };
+    this.releasePreferences = this.preferencesStore.subscribe((change) => {
+      this.state.preferences = change.preferences;
+      this.emit({
+        reason: "preferences",
+        preferencesChanged: true,
+        previousPreferences: change.previous,
+        source: change.source,
+      });
+    });
   }
 
   subscribe(listener: Listener): () => void {
@@ -49,22 +62,14 @@ export class SettingsController {
   }
 
   update(update: Partial<AppPreferences>): boolean {
-    const previous = this.state.preferences;
-    const next = updateAppPreferences(previous, update);
-    if (samePreferences(previous, next)) return false;
-    this.state.preferences = next;
-    saveAppPreferences(this.storage, next);
-    this.emit({
-      reason: "preferences",
-      preferencesChanged: true,
-      previousPreferences: previous,
-    });
-    return true;
+    return this.preferencesStore.update(update);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.releasePreferences();
+    this.preferencesStore.dispose();
     this.listeners.clear();
   }
 
@@ -72,10 +77,4 @@ export class SettingsController {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
   }
-}
-
-function samePreferences(left: AppPreferences, right: AppPreferences): boolean {
-  return (Object.keys(left) as Array<keyof AppPreferences>).every(
-    (key) => left[key] === right[key],
-  );
 }

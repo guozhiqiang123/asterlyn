@@ -13,7 +13,12 @@ export const EDITOR_LETTER_SPACINGS = [-0.5, -0.25, 0, 0.25, 0.5, 1] as const;
 export const EDITOR_INDENT_SIZES = [2, 4, 8] as const;
 export const EDITOR_TAB_SIZES = [2, 4, 8] as const;
 
+export type LocalePreference = "system" | "en-US" | "zh-CN";
+export type ThemePreference = "system" | "dark" | "light";
+
 export interface AppPreferences {
+  locale: LocalePreference;
+  theme: ThemePreference;
   uiFontSize: number;
   editorFontFamily: EditorFontId;
   editorFontSize: number;
@@ -26,6 +31,8 @@ export interface AppPreferences {
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
+  locale: "system",
+  theme: "system",
   uiFontSize: 13,
   editorFontFamily: DEFAULT_EDITOR_FONT_ID,
   editorFontSize: 14,
@@ -36,6 +43,11 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   diffLayout: "split",
   showWhitespace: false,
 };
+
+const LEGACY_PRESENTATION_PREFERENCES = {
+  locale: "en-US",
+  theme: "dark",
+} as const;
 
 interface StorageReader {
   getItem(key: string): string | null;
@@ -55,10 +67,11 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         value.version !== 2 &&
         value.version !== 3 &&
         value.version !== 4 &&
-        value.version !== 5) ||
+        value.version !== 5 &&
+        value.version !== 6) ||
       !isRecord(value.preferences)
     ) {
-      return { ...DEFAULT_APP_PREFERENCES };
+      return migrationSafeDefaults();
     }
     const preferences = value.preferences;
     const uiFontDefault = value.version === 1 ? 11 : null;
@@ -66,6 +79,18 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
     const editorLineHeightDefault =
       value.version === 1 ? 1.62 : value.version < 4 ? 1.2 : null;
     return {
+      locale:
+        value.version < 6
+          ? LEGACY_PRESENTATION_PREFERENCES.locale
+          : isLocalePreference(preferences.locale)
+            ? preferences.locale
+            : LEGACY_PRESENTATION_PREFERENCES.locale,
+      theme:
+        value.version < 6
+          ? LEGACY_PRESENTATION_PREFERENCES.theme
+          : isThemePreference(preferences.theme)
+            ? preferences.theme
+            : LEGACY_PRESENTATION_PREFERENCES.theme,
       uiFontSize: allowedNumber(
         migrateVersionedDefault(
           preferences.uiFontSize,
@@ -121,7 +146,7 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
           : false,
     };
   } catch {
-    return { ...DEFAULT_APP_PREFERENCES };
+    return migrationSafeDefaults();
   }
 }
 
@@ -131,7 +156,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 5, preferences }),
+    JSON.stringify({ version: 6, preferences }),
   );
 }
 
@@ -141,6 +166,8 @@ export function updateAppPreferences(
 ): AppPreferences {
   const candidate = { ...current, ...patch };
   return {
+    locale: isLocalePreference(candidate.locale) ? candidate.locale : current.locale,
+    theme: isThemePreference(candidate.theme) ? candidate.theme : current.theme,
     uiFontSize: allowedNumber(candidate.uiFontSize, UI_FONT_SIZES, current.uiFontSize),
     editorFontFamily: isEditorFontId(candidate.editorFontFamily)
       ? candidate.editorFontFamily
@@ -178,6 +205,21 @@ export function updateAppPreferences(
       typeof candidate.showWhitespace === "boolean"
         ? candidate.showWhitespace
         : current.showWhitespace,
+  };
+}
+
+export function isLocalePreference(value: unknown): value is LocalePreference {
+  return value === "system" || value === "en-US" || value === "zh-CN";
+}
+
+export function isThemePreference(value: unknown): value is ThemePreference {
+  return value === "system" || value === "dark" || value === "light";
+}
+
+function migrationSafeDefaults(): AppPreferences {
+  return {
+    ...DEFAULT_APP_PREFERENCES,
+    ...LEGACY_PRESENTATION_PREFERENCES,
   };
 }
 

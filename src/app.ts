@@ -109,6 +109,7 @@ import {
 } from "./features/files-editor/editor-session-controller";
 import {
   SettingsController,
+  type SettingsChange,
   type SettingsSection,
   type SettingsState,
 } from "./features/settings/settings-controller";
@@ -182,6 +183,12 @@ import {
 import {
   type AppPreferences,
 } from "./workbench/preferences";
+import { createBrowserPreferenceSync } from "./workbench/preference-store";
+import {
+  PresentationEnvironment,
+  createBrowserSystemPresentationPort,
+} from "./presentation/presentation-environment";
+import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter";
 import {
   loadRecentRepositories,
   restoreRecentRepository,
@@ -336,6 +343,8 @@ export class AsterlynApp {
   private readonly gitOperationDialogBinding: GitOperationDialogBinding;
   private readonly releaseGitOperationController: () => void;
   private readonly settingsController: SettingsController;
+  private readonly releaseSettingsController: () => void;
+  private readonly presentationEnvironment: PresentationEnvironment;
   private readonly shellController: ShellController;
   private projectTreeScrollFrame: number | null = null;
   private projectTreeWindowStart = 0;
@@ -366,7 +375,19 @@ export class AsterlynApp {
       activate: (tool) => this.toggleTool(tool),
       commitOrder: (order, focusTool) => this.commitActivityOrder(order, focusTool),
     });
-    this.settingsController = new SettingsController(window.localStorage);
+    this.settingsController = new SettingsController(
+      window.localStorage,
+      createBrowserPreferenceSync(window),
+    );
+    this.presentationEnvironment = new PresentationEnvironment(
+      this.settingsController.state.preferences,
+      createBrowserSystemPresentationPort(window),
+      document,
+      nativeAppearance,
+    );
+    this.releaseSettingsController = this.settingsController.subscribe((change) =>
+      this.handleSettingsControllerChange(change),
+    );
     this.shellController = new ShellController(window.localStorage);
     this.historyController = new GitHistoryDetailsController(
       {
@@ -816,7 +837,9 @@ export class AsterlynApp {
     this.gitOperationDialogBinding.dispose();
     this.gitOperationController.dispose();
     this.windowSession.dispose();
+    this.releaseSettingsController();
     this.settingsController.dispose();
+    this.presentationEnvironment.dispose();
     this.shellController.dispose();
     this.windowChromeBinding.dispose();
     this.activityRailBinding.dispose();
@@ -938,16 +961,7 @@ export class AsterlynApp {
       return;
     }
     const next = this.settingsState.preferences;
-    this.applyAppPreferences();
-    if (
-      previous.diffLayout !== next.diffLayout ||
-      previous.showWhitespace !== next.showWhitespace
-    ) {
-      this.editorSurface.setDiffPresentation(this.diffPresentation());
-      this.pushDiffEditor.setPresentation(this.diffPresentation());
-      this.syncDiffControls();
-      this.syncPushDiffControls();
-    }
+    this.applyPreferenceEffects(previous, next);
     if (this.shellState.page === "settings") {
       this.renderSettingsPage();
       if (restoreFocusId) {
@@ -962,6 +976,36 @@ export class AsterlynApp {
           }
         });
       }
+    }
+  }
+
+  private handleSettingsControllerChange(change: SettingsChange): void {
+    if (
+      change.reason !== "preferences" ||
+      change.source !== "external" ||
+      !change.previousPreferences
+    ) return;
+    this.applyPreferenceEffects(change.previousPreferences, this.settingsState.preferences);
+    if (this.shellState.page === "settings" && this.root.querySelector("#settings-content")) {
+      this.renderSettingsPage();
+    }
+  }
+
+  private applyPreferenceEffects(
+    previous: AppPreferences,
+    next: AppPreferences,
+  ): void {
+    this.presentationEnvironment.updatePreferences(next);
+    if (!this.root.querySelector(".app-shell")) return;
+    this.applyAppPreferences();
+    if (
+      previous.diffLayout !== next.diffLayout ||
+      previous.showWhitespace !== next.showWhitespace
+    ) {
+      this.editorSurface.setDiffPresentation(this.diffPresentation());
+      this.pushDiffEditor.setPresentation(this.diffPresentation());
+      this.syncDiffControls();
+      this.syncPushDiffControls();
     }
   }
 
