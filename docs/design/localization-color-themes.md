@@ -170,7 +170,7 @@ its surface affects.
 Implementation progress:
 
 - [x] Preference and presentation foundation
-- [ ] Semantic theme foundation
+- [x] Semantic theme foundation
 - [ ] Localization foundation and shell
 - [ ] Feature localization by ownership boundary
 - [ ] Coverage, accessibility, and platform acceptance

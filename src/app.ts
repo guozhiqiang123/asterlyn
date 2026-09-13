@@ -181,6 +181,7 @@ import {
   type EditorFontLoadSource,
 } from "./workbench/editor-fonts";
 import {
+  isThemePreference,
   type AppPreferences,
 } from "./workbench/preferences";
 import { createBrowserPreferenceSync } from "./workbench/preference-store";
@@ -345,6 +346,7 @@ export class AsterlynApp {
   private readonly settingsController: SettingsController;
   private readonly releaseSettingsController: () => void;
   private readonly presentationEnvironment: PresentationEnvironment;
+  private readonly releasePresentationEnvironment: () => void;
   private readonly shellController: ShellController;
   private projectTreeScrollFrame: number | null = null;
   private projectTreeWindowStart = 0;
@@ -384,6 +386,15 @@ export class AsterlynApp {
       createBrowserSystemPresentationPort(window),
       document,
       nativeAppearance,
+    );
+    this.releasePresentationEnvironment = this.presentationEnvironment.subscribe(
+      (snapshot, previous) => {
+        if (snapshot.theme === previous.theme) return;
+        this.editorSurface.setTheme(snapshot.theme);
+        this.pushDiffEditor.setTheme(snapshot.theme);
+        this.editorSurface.requestMeasure();
+        this.pushDiffEditor.requestMeasure();
+      },
     );
     this.releaseSettingsController = this.settingsController.subscribe((change) =>
       this.handleSettingsControllerChange(change),
@@ -839,6 +850,7 @@ export class AsterlynApp {
     this.windowSession.dispose();
     this.releaseSettingsController();
     this.settingsController.dispose();
+    this.releasePresentationEnvironment();
     this.presentationEnvironment.dispose();
     this.shellController.dispose();
     this.windowChromeBinding.dispose();
@@ -934,6 +946,16 @@ export class AsterlynApp {
       });
     });
     this.root
+      .querySelectorAll<HTMLButtonElement>("[data-setting-theme]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const theme = button.dataset.settingTheme;
+          if (isThemePreference(theme)) {
+            this.updatePreferences({ theme }, `setting-theme-${theme}`);
+          }
+        });
+      });
+    this.root
       .querySelectorAll<HTMLButtonElement>("[data-setting-diff-layout]")
       .forEach((button) => {
         button.addEventListener("click", () => {
@@ -970,6 +992,11 @@ export class AsterlynApp {
             const layout = restoreFocusId.slice("setting-diff-".length);
             this.root
               .querySelector<HTMLButtonElement>(`[data-setting-diff-layout="${layout}"]`)
+              ?.focus();
+          } else if (restoreFocusId.startsWith("setting-theme-")) {
+            const theme = restoreFocusId.slice("setting-theme-".length);
+            this.root
+              .querySelector<HTMLButtonElement>(`[data-setting-theme="${theme}"]`)
               ?.focus();
           } else {
             this.root.querySelector<HTMLElement>(`#${restoreFocusId}`)?.focus();
@@ -1023,6 +1050,9 @@ export class AsterlynApp {
       `${this.settingsState.preferences.uiFontSize}px`,
     );
     this.editorSurface.setPreferences(this.settingsState.preferences);
+    const theme = this.presentationEnvironment.snapshot.theme;
+    this.editorSurface.setTheme(theme);
+    this.pushDiffEditor.setTheme(theme);
   }
 
   private async activateConfiguredEditorFont(): Promise<void> {

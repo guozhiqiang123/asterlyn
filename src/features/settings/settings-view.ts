@@ -54,7 +54,7 @@ export function renderSettingsSection(
       return settingsGroup(
         "Appearance",
         "Interface color and application-menu typography.",
-        `${settingsRow("Theme", "Dark is implemented. Light and system-following themes remain explicit future work.", '<span class="setting-value-pill">Dark · Current</span><span class="setting-planned">Light/System planned</span>')}${settingsRow("Application menu font", "Changes navigation, toolbar, tabs, settings, and status text without scaling the editor.", settingsSelect("setting-ui-font", "Application menu font size", "uiFontSize", UI_FONT_SIZES, preferences.uiFontSize, (value) => `${value} px`))}`,
+        `${settingsRow("Theme", "Choose a fixed palette or follow the operating-system appearance.", `<div class="setting-segmented" role="group" aria-label="Application theme"><button type="button" data-setting-theme="system" aria-pressed="${preferences.theme === "system"}">System</button><button type="button" data-setting-theme="dark" aria-pressed="${preferences.theme === "dark"}">Dark</button><button type="button" data-setting-theme="light" aria-pressed="${preferences.theme === "light"}">Light</button></div>`)}${settingsRow("Application menu font", "Changes navigation, toolbar, tabs, settings, and status text without scaling the editor.", settingsSelect("setting-ui-font", "Application menu font size", "uiFontSize", UI_FONT_SIZES, preferences.uiFontSize, (value) => `${value} px`))}`,
       );
     case "editor":
       return settingsGroup(

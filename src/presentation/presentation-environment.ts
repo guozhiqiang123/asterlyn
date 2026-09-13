@@ -150,7 +150,7 @@ export function applyPresentationToDocument(
   root.dataset.theme = snapshot.theme;
   root.style.colorScheme = snapshot.theme;
   const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  themeColor?.setAttribute("content", snapshot.theme === "dark" ? "#1e1f22" : "#f5f5f5");
+  themeColor?.setAttribute("content", snapshot.theme === "dark" ? "#1e1f22" : "#f4f5f7");
 }
 
 export function createBrowserSystemPresentationPort(host: Window): SystemPresentationPort {

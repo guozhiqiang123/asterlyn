@@ -55,6 +55,16 @@ test("settings view keeps one selected section and bounded preference controls",
   assert.equal((navigation.match(/settings-navigation-item selected/g) ?? []).length, 1);
   assert.match(content, /Editor font size/);
   assert.match(content, /Editor line spacing/);
+
+  const appearance = renderSettingsSection({
+    section: "appearance",
+    preferences: { ...DEFAULT_APP_PREFERENCES, theme: "light" },
+  }, {
+    id: null,
+    kind: "idle",
+  });
+  assert.match(appearance, /data-setting-theme="system"/);
+  assert.match(appearance, /data-setting-theme="light" aria-pressed="true"/);
 });
 
 test("remote view renders explicit update and reviewed push boundaries", () => {
