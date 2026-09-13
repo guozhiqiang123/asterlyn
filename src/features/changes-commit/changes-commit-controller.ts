@@ -14,6 +14,8 @@ import {
   type ChangeFileView,
 } from "../../workbench/change-presentation.ts";
 import { isImagePreviewPath } from "../../workbench/image-preview.ts";
+import type { ChangesCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface ChangesCommitState {
   selectedChange: ChangeSelection | null;
@@ -99,10 +101,20 @@ export class ChangesCommitController {
   private diffSequence = 0;
   private mutationSequence = 0;
   private disposed = false;
+  private messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">;
 
-  constructor(gateway: ChangesCommitGateway, initialFileView: ChangeFileView = "tree") {
+  constructor(
+    gateway: ChangesCommitGateway,
+    initialFileView: ChangeFileView = "tree",
+    messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError"> = EN_US.changes,
+  ) {
     this.gateway = gateway;
     this.state = createChangesCommitState(initialFileView);
+    this.messages = messages;
+  }
+
+  setMessages(messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">): void {
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
@@ -276,13 +288,13 @@ export class ChangesCommitController {
         reason: "diff-complete",
         diffChanged: true,
         warning: !image && (result as DiffResult).truncated
-          ? "Patch truncated at 4 MiB"
+          ? this.messages.patchTruncated
           : undefined,
       });
     } catch (error) {
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       this.state.workingPatchLoading = false;
-      this.state.workingPatchError = toErrorMessage(error);
+      this.state.workingPatchError = toErrorMessage(error, this.messages.unexpectedError);
       this.emit({
         reason: "diff-error",
         diffChanged: true,
@@ -431,11 +443,11 @@ export function createChangesCommitState(fileView: ChangeFileView): ChangesCommi
   };
 }
 
-function toErrorMessage(error: unknown): string {
+function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message: unknown }).message);
   }
-  return "Unexpected Changes operation error";
+  return fallback;
 }

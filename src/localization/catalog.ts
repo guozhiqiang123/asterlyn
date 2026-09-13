@@ -1,5 +1,5 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
-import type { ChangeKind } from "../models.ts";
+import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 
 export interface CommonCopy {
   ready: string;
@@ -388,6 +388,68 @@ export interface ReplacementCopy {
   originalsRestored: string;
 }
 
+export interface ChangesCopy {
+  groups: Record<"changes" | "unversioned", string>;
+  commitFileActions: string;
+  refreshChanges: string;
+  selectTrackedToRestore: string;
+  restoreToHead: string;
+  restoreChanges: string;
+  openSelectedDiff: string;
+  flatList: string;
+  directoryTree: string;
+  showAs(view: string): string;
+  expandAll: string;
+  collapseAll: string;
+  checkingUntracked: string;
+  trackedReady: string;
+  untrackedFailed: string;
+  refreshToRetry: string;
+  workingTreeClean: string;
+  noLocalChanges: string;
+  changedFiles: string;
+  includeAll(group: string): string;
+  expand(label: string): string;
+  collapse(label: string): string;
+  fileCount(count: number): string;
+  include(path: string): string;
+  selectedDiff(path: string, selected: boolean): string;
+  includeInCommit(path: string): string;
+  resolveConflict(path: string): string;
+  resolve: string;
+  untrackedScanFailed: string;
+  scanningUntracked: string;
+  changeLabels: Record<ChangeKind, string>;
+  changedFileCount(count: number): string;
+  resizeCommit: string;
+  createCommit: string;
+  commitMessage: string;
+  commitButton(count: number): string;
+  resolveBeforeCommit: string;
+  excludeSubmodules: string;
+  selectFileToCommit: string;
+  saveBeforeRevert: string;
+  restoreConfirm(label: string): string;
+  saveBeforeRestore: string;
+  reverting: string;
+  reverted: string;
+  filesSavedReview: string;
+  creatingCommit: string;
+  commitConcurrent: string;
+  commitRefreshing: string;
+  commitCreated: string;
+  patchTruncated: string;
+  unexpectedError: string;
+}
+
+export interface GitOperationCopy {
+  activeOperation: string;
+  unresolvedFiles(count: number): string;
+  readyToContinue: string;
+  names: Record<GitOperationKind, string>;
+  actions: Record<GitOperationAction, string>;
+}
+
 export interface LocaleCatalog {
   readonly locale: EffectiveLocale;
   readonly common: CommonCopy;
@@ -397,6 +459,8 @@ export interface LocaleCatalog {
   readonly projectFiles: ProjectFilesCopy;
   readonly editor: EditorCopy;
   readonly replacement: ReplacementCopy;
+  readonly changes: ChangesCopy;
+  readonly gitOperations: GitOperationCopy;
   readonly editorPhrases: Readonly<Record<string, string>>;
   readonly documentDescription: string;
 }

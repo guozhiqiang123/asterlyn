@@ -5,6 +5,8 @@ import { renderSettingsNavigation, renderSettingsSection } from "../src/features
 import { renderCommandSurface, renderWorkspaceReplacementDialog } from "../src/features/files-editor/workspace-navigation-view.ts";
 import { renderProjectToolbar } from "../src/features/files-editor/project-files-view.ts";
 import { renderDiffControls } from "../src/features/files-editor/editor-view.ts";
+import { renderChangeNavigation } from "../src/features/changes-commit/changes-view.ts";
+import { renderGitOperationBanner } from "../src/features/git-operations/git-operation-banner.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { loadLocale } from "../src/localization/locale-loader.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
@@ -76,6 +78,20 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
     copy: catalog.replacement,
   });
   assert.match(replacement, /正在准备替换预览/);
+
+  const changes = renderChangeNavigation(
+    { changes: [], untrackedState: "complete", branch: { unborn: false } },
+    { selectedChange: null, fileView: "tree", excludedPaths: new Set(), collapsedDirectories: new Set() },
+    0,
+    400,
+    catalog.changes,
+  );
+  assert.match(changes, /工作树干净/);
+  const operation = renderGitOperationBanner({
+    kind: "rebase", phase: "conflicts", progress: { current: 1, total: 2 }, conflicts: [{ path: "a.ts" }], allowedActions: ["continue", "abort"],
+  }, catalog.gitOperations);
+  assert.match(operation, /变基/);
+  assert.match(operation, />继续</);
 });
 
 function catalogShape(value) {

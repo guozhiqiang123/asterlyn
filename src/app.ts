@@ -444,6 +444,7 @@ export class AsterlynApp {
         commitChanges: (...args) => bridge.commitChanges(...args),
       },
       loadChangeFileView(window.localStorage),
+      initialCatalog.changes,
     );
     this.releaseChangesController = this.changesController.subscribe((change) =>
       this.handleChangesControllerChange(change),
@@ -848,6 +849,7 @@ export class AsterlynApp {
       this.editorSurface.setCopy(catalog.editor);
       this.filesController.setMessages(catalog.editor);
       this.editorController.setMessages(catalog.editor);
+      this.changesController.setMessages(catalog.changes);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
       document
@@ -867,7 +869,7 @@ export class AsterlynApp {
     this.renderRepositoryMenu();
     this.renderStatus(this.windowSession.repository.state.snapshot);
     if (this.windowSession.workspace.state.root) this.renderEditor();
-    if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+    if (this.shellState.layout.leftTool) this.renderLeftTool();
     if (this.state.commandSurface.mode) this.renderCommandSurface();
     if (this.state.replacementDialog) this.renderWorkspaceReplacementDialog();
     this.localizeShellChrome(previousCatalog);
@@ -892,6 +894,12 @@ export class AsterlynApp {
       "data-project-directory-toggle",
       "data-project-directory",
       "data-project-file",
+      "data-change-path",
+      "data-change-action",
+      "data-change-disclosure",
+      "data-include-path",
+      "data-include-directory",
+      "data-include-group",
     ];
     const attribute = attributes.find((name) => active.hasAttribute(name));
     if (!attribute) return () => {};
@@ -2918,7 +2926,7 @@ export class AsterlynApp {
       hide.setAttribute("aria-label", copy.hideChanges);
       hide.title = copy.hideChanges;
       count.textContent = snapshot.changes.length.toString();
-      count.title = `${snapshot.changes.length} changed files`;
+      count.title = this.localization.catalog.changes.changedFileCount(snapshot.changes.length);
       actions.innerHTML = "";
       const changeRows = changeViewRows(snapshot, this.changesState);
       const changeWindow = changeTreeRenderWindow(
@@ -2927,7 +2935,7 @@ export class AsterlynApp {
         body.clientHeight,
       );
       this.changeTreeWindowStart = changeWindow?.start ?? 0;
-      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${renderGitOperationBanner(snapshot.operation)}${renderChangeNavigation(snapshot, this.changesState, scrollTop, body.clientHeight)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="Resize commit message area"></div>${this.renderCommitComposer(snapshot)}</div>`;
+      body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${renderGitOperationBanner(snapshot.operation, this.localization.catalog.gitOperations)}${renderChangeNavigation(snapshot, this.changesState, scrollTop, body.clientHeight, this.localization.catalog.changes)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="${escapeAttribute(this.localization.catalog.changes.resizeCommit)}"></div>${this.renderCommitComposer(snapshot)}</div>`;
       this.bindChangeEvents();
       this.bindCommitComposer(snapshot);
       this.bindChangeCommitSplitter();
@@ -5300,7 +5308,7 @@ export class AsterlynApp {
       (tab) => tab.document.repositoryId === "." && tab.document.path === selected.path,
     );
     if (dirty) {
-      this.setStatus("Save or undo the unsaved editor changes before reverting this file", "warning");
+      this.setStatus(this.localization.catalog.changes.saveBeforeRevert, "warning");
       return;
     }
     const label = selected.originalPath
@@ -5313,7 +5321,7 @@ export class AsterlynApp {
     if (!plan) return;
     if (
       !window.confirm(
-        `Restore 1 tracked file to HEAD?\n\n${label}\n\nThis replaces the reviewed staged and working-tree content. A recovery copy will be saved; Undo is available from Git → Recover local changes.`,
+        this.localization.catalog.changes.restoreConfirm(label),
       )
     ) {
       return;
@@ -5321,14 +5329,14 @@ export class AsterlynApp {
 
     this.captureMountedTextEditor();
     if (dirtyTextTabs(this.editorState.session).some((tab) => plan.paths.includes(tab.document.workspacePath))) {
-      this.setStatus("Save or undo unsaved editor changes before restoring these files", "warning");
+      this.setStatus(this.localization.catalog.changes.saveBeforeRestore, "warning");
       return;
     }
     const generation = this.windowSession.beginTransition();
     let pendingRoot: string | null = null;
     let refreshAfterFailure = false;
     let revertFailure: unknown = null;
-    this.setLoading(true, "Reverting selected file…");
+    this.setLoading(true, this.localization.catalog.changes.reverting);
     try {
       const result = await this.changesController.revertSelected(plan);
       if (generation !== this.windowSession.generation || result.status === "stale") return;
@@ -5337,7 +5345,7 @@ export class AsterlynApp {
         this.renderWorkspace();
         if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
         pendingRoot = next.root;
-        this.setStatus("Selected file reverted", "success");
+        this.setStatus(this.localization.catalog.changes.reverted, "success");
       } else if (result.status === "failure") {
         refreshAfterFailure = true;
         revertFailure = result.error;
@@ -5354,15 +5362,16 @@ export class AsterlynApp {
   }
 
   private renderCommitComposer(snapshot: RepositorySnapshot): string {
+    const copy = this.localization.catalog.changes;
     const included = includedChanges(snapshot.changes, this.changesState.excludedPaths);
     const conflict = snapshot.changes.some((change) => change.conflicted);
     const submodule = included.some((change) => change.submodule);
     const blockedMessage = conflict
-      ? "Resolve conflicts before committing."
+      ? copy.resolveBeforeCommit
       : submodule
-        ? "Exclude submodule changes; commit them from their own Git root."
+        ? copy.excludeSubmodules
         : included.length === 0
-          ? "Select at least one file to commit."
+          ? copy.selectFileToCommit
           : "";
     const disabled =
       included.length === 0 ||
@@ -5371,13 +5380,13 @@ export class AsterlynApp {
       this.changesState.commitMessage.trim().length === 0 ||
       this.state.loading;
     return `
-      <section class="commit-tool" id="commit-tool" aria-label="Create commit">
+      <section class="commit-tool" id="commit-tool" aria-label="${escapeAttribute(copy.createCommit)}">
         <div class="commit-form">
-          <label for="commit-message">Commit Message</label>
-          <textarea id="commit-message" placeholder="Commit Message">${escapeHtml(this.changesState.commitMessage)}</textarea>
+          <label for="commit-message">${escapeHtml(copy.commitMessage)}</label>
+          <textarea id="commit-message" placeholder="${escapeAttribute(copy.commitMessage)}">${escapeHtml(this.changesState.commitMessage)}</textarea>
           <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.changesState.commitMessage.trim().length}/72</span></div>
           ${blockedMessage ? `<div class="commit-blocker" role="status">${escapeHtml(blockedMessage)}</div>` : ""}
-          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>Commit ${included.length || ""}</button></div>
+          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitButton(included.length))}</button></div>
         </div>
       </section>`;
   }
@@ -5736,7 +5745,7 @@ export class AsterlynApp {
     if (dirtyTextTabs(this.editorState.session).length > 0) {
       if (await this.saveDirtyTabsBefore("creating the commit")) {
         await this.refresh();
-        this.setStatus("Files saved; review the refreshed selection before committing", "warning");
+        this.setStatus(this.localization.catalog.changes.filesSavedReview, "warning");
       }
       return;
     }
@@ -5746,7 +5755,7 @@ export class AsterlynApp {
     let pendingRoot: string | null = null;
     let refreshAfter = false;
     let commitFailure: unknown = null;
-    this.setLoading(true, "Creating commit…");
+    this.setLoading(true, this.localization.catalog.changes.creatingCommit);
     try {
       const outcome = await this.changesController.commit();
       if (generation !== this.windowSession.generation || outcome.status === "stale") return;
@@ -5771,10 +5780,10 @@ export class AsterlynApp {
         }
         this.setStatus(
           result.verificationWarning
-            ? "Commit finished, but Git changed concurrently; inspect refreshed history before committing again"
+            ? this.localization.catalog.changes.commitConcurrent
             : result.refreshError
-              ? "Commit created; refreshing repository status…"
-              : "Commit created",
+              ? this.localization.catalog.changes.commitRefreshing
+              : this.localization.catalog.changes.commitCreated,
           result.verificationWarning || result.refreshError ? "warning" : "success",
         );
       }

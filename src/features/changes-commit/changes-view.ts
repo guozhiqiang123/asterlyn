@@ -10,6 +10,8 @@ import {
   type ChangeGroupId,
 } from "../../workbench/change-presentation.ts";
 import type { ChangesCommitState } from "./changes-commit-controller.ts";
+import type { ChangesCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export const CHANGE_TREE_MOUNT_LIMIT = 200;
 export const CHANGE_TREE_ROW_HEIGHT = 28;
@@ -49,11 +51,12 @@ export function renderChangeNavigation(
   state: ChangesCommitState,
   scrollTop = 0,
   clientHeight = 0,
+  copy: ChangesCopy = EN_US.changes,
 ): string {
   return `<div class="changes-navigation">
-    ${renderChangeToolbar(snapshot, state)}
+    ${renderChangeToolbar(snapshot, state, copy)}
     <div class="change-results" id="change-results">
-      ${renderChangeResults(snapshot, state, scrollTop, clientHeight)}
+      ${renderChangeResults(snapshot, state, scrollTop, clientHeight, copy)}
     </div>
   </div>`;
 }
@@ -61,10 +64,11 @@ export function renderChangeNavigation(
 export function changeViewRows(
   snapshot: RepositorySnapshot,
   state: ChangesCommitState,
+  copy: ChangesCopy = EN_US.changes,
 ): ChangeViewRow[] {
   const rows: ChangeViewRow[] = [];
-  appendGroupRows(rows, "Changes", "changes", snapshot.changes, state);
-  appendGroupRows(rows, "Unversioned Files", "unversioned", snapshot.changes, state);
+  appendGroupRows(rows, copy.groups.changes, "changes", snapshot.changes, state);
+  appendGroupRows(rows, copy.groups.unversioned, "unversioned", snapshot.changes, state);
   return rows;
 }
 
@@ -112,6 +116,7 @@ export function changeTreeRenderWindow(
 function renderChangeToolbar(
   snapshot: RepositorySnapshot,
   state: ChangesCommitState,
+  copy: ChangesCopy,
 ): string {
   const selected = state.selectedChange
     ? snapshot.changes.find((change) => change.path === state.selectedChange?.path) ?? null
@@ -124,15 +129,15 @@ function renderChangeToolbar(
     selected.worktreeStatus === "untracked" ||
     selected.indexStatus === "added" ||
     selected.indexStatus === "copied";
-  const nextView = state.fileView === "tree" ? "flat list" : "directory tree";
-  return `<div class="change-toolbar" role="toolbar" aria-label="Commit file actions">
-    <button class="compact-icon-button" type="button" data-change-action="refresh" title="Refresh changes" aria-label="Refresh changes">${icon("refresh", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="revert" title="${revertUnsupported ? "Select an ordinary tracked file to restore" : "Restore uncommitted changes to HEAD"}" aria-label="Restore uncommitted changes" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="diff" title="Open selected file Diff" aria-label="Open selected file Diff" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
+  const nextView = state.fileView === "tree" ? copy.flatList : copy.directoryTree;
+  return `<div class="change-toolbar" role="toolbar" aria-label="${escapeAttribute(copy.commitFileActions)}">
+    <button class="compact-icon-button" type="button" data-change-action="refresh" title="${escapeAttribute(copy.refreshChanges)}" aria-label="${escapeAttribute(copy.refreshChanges)}">${icon("refresh", 15)}</button>
+    <button class="compact-icon-button" type="button" data-change-action="revert" title="${escapeAttribute(revertUnsupported ? copy.selectTrackedToRestore : copy.restoreToHead)}" aria-label="${escapeAttribute(copy.restoreChanges)}" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
+    <button class="compact-icon-button" type="button" data-change-action="diff" title="${escapeAttribute(copy.openSelectedDiff)}" aria-label="${escapeAttribute(copy.openSelectedDiff)}" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
     <span class="toolbar-separator" aria-hidden="true"></span>
-    <button class="compact-icon-button ${state.fileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="Show changes as ${nextView}" aria-label="Show changes as ${nextView}" aria-pressed="${state.fileView === "tree"}">${icon("eye", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="expand" title="Expand all folders" aria-label="Expand all folders" ${state.fileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="collapse" title="Collapse all folders" aria-label="Collapse all folders" ${state.fileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
+    <button class="compact-icon-button ${state.fileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="${escapeAttribute(copy.showAs(nextView))}" aria-label="${escapeAttribute(copy.showAs(nextView))}" aria-pressed="${state.fileView === "tree"}">${icon("eye", 15)}</button>
+    <button class="compact-icon-button" type="button" data-change-action="expand" title="${escapeAttribute(copy.expandAll)}" aria-label="${escapeAttribute(copy.expandAll)}" ${state.fileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
+    <button class="compact-icon-button" type="button" data-change-action="collapse" title="${escapeAttribute(copy.collapseAll)}" aria-label="${escapeAttribute(copy.collapseAll)}" ${state.fileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
   </div>`;
 }
 
@@ -141,17 +146,18 @@ function renderChangeResults(
   state: ChangesCommitState,
   scrollTop: number,
   clientHeight: number,
+  copy: ChangesCopy,
 ): string {
   if (snapshot.changes.length === 0) {
     if (snapshot.untrackedState === "pending") {
-      return '<div class="change-no-results"><span class="spinner"></span><strong>Checking for untracked files</strong><span>Tracked changes are ready.</span></div>';
+      return `<div class="change-no-results"><span class="spinner"></span><strong>${escapeHtml(copy.checkingUntracked)}</strong><span>${escapeHtml(copy.trackedReady)}</span></div>`;
     }
     if (snapshot.untrackedState === "failed") {
-      return '<div class="change-no-results"><strong>Untracked scan failed</strong><span>Refresh to try again.</span></div>';
+      return `<div class="change-no-results"><strong>${escapeHtml(copy.untrackedFailed)}</strong><span>${escapeHtml(copy.refreshToRetry)}</span></div>`;
     }
-    return `<div class="change-no-results"><span class="empty-icon">${icon("check", 22)}</span><strong>Working tree clean</strong><span>There are no local changes to commit.</span></div>`;
+    return `<div class="change-no-results"><span class="empty-icon">${icon("check", 22)}</span><strong>${escapeHtml(copy.workingTreeClean)}</strong><span>${escapeHtml(copy.noLocalChanges)}</span></div>`;
   }
-  const rows = changeViewRows(snapshot, state);
+  const rows = changeViewRows(snapshot, state, copy);
   const window = changeTreeRenderWindow(rows.length, scrollTop, clientHeight);
   const visible = window ? rows.slice(window.start, window.end) : rows;
   const topSpacer = window && window.start > 0
@@ -161,7 +167,7 @@ function renderChangeResults(
   const bottomSpacer = bottomCount > 0
     ? `<div class="change-virtual-spacer" aria-hidden="true" style="height:${bottomCount * CHANGE_TREE_ROW_HEIGHT}px"></div>`
     : "";
-  return `<div class="change-list virtual-tree" role="tree" aria-label="Changed files" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => renderChangeRow(state, row, (window?.start ?? 0) + offset, rows.length)).join("")}${bottomSpacer}</div>${untrackedScanNotice(snapshot)}`;
+  return `<div class="change-list virtual-tree" role="tree" aria-label="${escapeAttribute(copy.changedFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => renderChangeRow(state, row, (window?.start ?? 0) + offset, rows.length, copy)).join("")}${bottomSpacer}</div>${untrackedScanNotice(snapshot, copy)}`;
 }
 
 function appendGroupRows(
@@ -208,22 +214,23 @@ function renderChangeRow(
   row: ChangeViewRow,
   index: number,
   rowCount: number,
+  copy: ChangesCopy,
 ): string {
   const position = `aria-posinset="${index + 1}" aria-setsize="${rowCount}"`;
   if (row.kind === "group") {
     return `<div class="change-group virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
       <div class="group-header">
-        <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="Include all ${escapeAttribute(row.title)}" />
-        <button class="change-tree-toggle" type="button" data-change-disclosure="group:${row.group}" aria-label="${row.collapsed ? "Expand" : "Collapse"} ${escapeAttribute(row.title)}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
-        <span class="group-title">${escapeHtml(row.title)}<b>${row.changes.length} ${row.changes.length === 1 ? "file" : "files"}</b></span>
+        <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" />
+        <button class="change-tree-toggle" type="button" data-change-disclosure="group:${row.group}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
+        <span class="group-title">${escapeHtml(row.title)}<b>${escapeHtml(copy.fileCount(row.changes.length))}</b></span>
       </div>
     </div>`;
   }
   if (row.kind === "directory") {
     return `<div class="change-directory virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
       <div class="change-directory-row" style="--tree-depth:${row.depth}">
-        <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" aria-label="Include ${escapeAttribute(row.node.path)}" />
-        <button class="change-tree-toggle" type="button" data-change-disclosure="${escapeAttribute(row.key)}" aria-label="${row.collapsed ? "Expand" : "Collapse"} ${escapeAttribute(row.node.path)}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
+        <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" aria-label="${escapeAttribute(copy.include(row.node.path))}" />
+        <button class="change-tree-toggle" type="button" data-change-disclosure="${escapeAttribute(row.key)}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
         ${icon("folder", 14)}<span>${escapeHtml(row.node.name)}</span><small>${row.paths.length}</small>
       </div>
     </div>`;
@@ -231,40 +238,23 @@ function renderChangeRow(
   const kind = effectiveChangeKind(row.change);
   const primary = state.selectedChange?.path === row.change.path;
   const included = !state.excludedPaths.has(row.change.path);
-  return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} ${row.depth === null ? "" : `style="--tree-depth:${row.depth}"`} data-change-path="${escapeAttribute(row.change.path)}" aria-selected="${primary}" aria-label="${primary ? "Selected, " : ""}open complete local diff for ${escapeAttribute(row.change.path)}">
-    <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(row.change.path)}" aria-label="Include ${escapeAttribute(row.change.path)} in commit" ${included ? "checked" : ""} />
-    <span class="change-status status-${kind}" title="${changeLabel(kind)}">${changeCode(kind)}</span>
+  return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} ${row.depth === null ? "" : `style="--tree-depth:${row.depth}"`} data-change-path="${escapeAttribute(row.change.path)}" aria-selected="${primary}" aria-label="${escapeAttribute(copy.selectedDiff(row.change.path, primary))}">
+    <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(row.change.path)}" aria-label="${escapeAttribute(copy.includeInCommit(row.change.path))}" ${included ? "checked" : ""} />
+    <span class="change-status status-${kind}" title="${escapeAttribute(copy.changeLabels[kind])}">${changeCode(kind)}</span>
     <span class="commit-file-glyph">${fileTypeIcon(row.change.path)}</span>
     <span class="change-path">
       ${row.change.originalPath ? `<span class="commit-file-origin">${escapeHtml(row.change.originalPath)} →</span>` : ""}
       <span class="file-name">${escapeHtml(baseName(row.change.path))}</span>
       ${row.depth === null ? `<span class="file-directory">${escapeHtml(directoryName(row.change.path))}</span>` : ""}
     </span>
-    ${row.change.conflicted ? `<button class="conflict-pill conflict-resolve-button" type="button" data-resolve-conflict="${escapeAttribute(row.change.path)}" aria-label="Resolve conflict in ${escapeAttribute(row.change.path)}">Resolve</button>` : ""}
+    ${row.change.conflicted ? `<button class="conflict-pill conflict-resolve-button" type="button" data-resolve-conflict="${escapeAttribute(row.change.path)}" aria-label="${escapeAttribute(copy.resolveConflict(row.change.path))}">${escapeHtml(copy.resolve)}</button>` : ""}
   </div>`;
 }
 
-function untrackedScanNotice(snapshot: RepositorySnapshot): string {
+function untrackedScanNotice(snapshot: RepositorySnapshot, copy: ChangesCopy): string {
   if (snapshot.untrackedState === "complete") return "";
   const failed = snapshot.untrackedState === "failed";
-  return `<div class="untracked-scan ${failed ? "failed" : ""}">${failed ? '<span class="scan-alert">!</span>' : '<span class="spinner"></span>'}<span>${failed ? "Untracked files could not be scanned. Refresh to retry." : "Scanning untracked files… counts are provisional."}</span></div>`;
-}
-
-function changeLabel(kind: ReturnType<typeof effectiveChangeKind>): string {
-  const labels = {
-    unmodified: "Unmodified",
-    added: "Added",
-    modified: "Modified",
-    deleted: "Deleted",
-    renamed: "Renamed",
-    copied: "Copied",
-    typeChanged: "Type changed",
-    unmerged: "Unmerged",
-    untracked: "Untracked",
-    ignored: "Ignored",
-    unknown: "Unknown",
-  } as const;
-  return labels[kind];
+  return `<div class="untracked-scan ${failed ? "failed" : ""}">${failed ? '<span class="scan-alert">!</span>' : '<span class="spinner"></span>'}<span>${escapeHtml(failed ? copy.untrackedScanFailed : copy.scanningUntracked)}</span></div>`;
 }
 
 function changeCode(kind: ReturnType<typeof effectiveChangeKind>): string {
