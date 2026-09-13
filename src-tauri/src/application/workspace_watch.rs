@@ -90,20 +90,20 @@ impl WorkspaceWatchService {
         {
             detach_owner(&mut registry, window_label);
         }
-        if let Some(watch) = registry.roots.get_mut(&root) {
-            if watch.metadata_roots == metadata_roots {
-                if let Err(message) = add_workspace_watches(watch, &root, &directories) {
-                    return unavailable(message);
-                }
-                let owners = Arc::clone(&watch.owners);
-                if let Ok(mut owners) = owners.lock() {
-                    owners.insert(window_label.to_string(), generation);
-                    drop(owners);
-                    registry.owner_roots.insert(window_label.to_string(), root);
-                    return available();
-                }
-                return unavailable("workspace-watch owner lock was poisoned");
+        if let Some(watch) = registry.roots.get_mut(&root)
+            && watch.metadata_roots == metadata_roots
+        {
+            if let Err(message) = add_workspace_watches(watch, &root, &directories) {
+                return unavailable(message);
             }
+            let owners = Arc::clone(&watch.owners);
+            if let Ok(mut owners) = owners.lock() {
+                owners.insert(window_label.to_string(), generation);
+                drop(owners);
+                registry.owner_roots.insert(window_label.to_string(), root);
+                return available();
+            }
+            return unavailable("workspace-watch owner lock was poisoned");
         }
 
         let (owners, watch_directories) = registry

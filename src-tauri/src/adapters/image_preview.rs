@@ -133,7 +133,7 @@ pub(crate) fn inspect_image(bytes: &[u8]) -> Result<(&'static str, u32, u32), St
         }
         let mut width = 0_u32;
         let mut height = 0_u32;
-        for entry in bytes[6..6 + count * 16].chunks_exact(16) {
+        for entry in bytes[6..6 + count * 16].as_chunks::<16>().0 {
             width = width.max(if entry[0] == 0 {
                 256
             } else {
