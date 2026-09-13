@@ -48,12 +48,17 @@
 }
 
 .spinner {
-  width: 17px;
-  height: 17px;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
   border: 2px solid var(--border-strong);
   border-top-color: var(--info-text);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  line-height: 0;
+  transform-origin: 50% 50%;
 }
 
 .search-result-location {

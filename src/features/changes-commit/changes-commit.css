@@ -49,7 +49,7 @@
   grid-template-columns: 18px 15px minmax(0, 1fr);
   justify-content: initial;
   gap: 4px;
-  padding: 0 7px 0 12px;
+  padding: 0 7px;
   cursor: default;
   text-transform: none;
 }
