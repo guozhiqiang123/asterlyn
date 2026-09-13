@@ -15,6 +15,8 @@ import {
   type ProjectTreeNode,
   type ProjectTreeSelection,
 } from "../../workbench/project-tree.ts";
+import type { EditorCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface ProjectFilesState {
   root: string | null;
@@ -60,6 +62,7 @@ export class ProjectFilesController {
   private catalogRoot: string | null = null;
   private generation = 0;
   private disposed = false;
+  private messages: Pick<EditorCopy, "unexpectedProjectFilesError">;
   private treeCache: {
     files: ProjectFile[];
     changes: FileChange[];
@@ -67,8 +70,16 @@ export class ProjectFilesController {
     nodes: ProjectTreeNode[];
   } | null = null;
 
-  constructor(gateway: ProjectFilesGateway) {
+  constructor(
+    gateway: ProjectFilesGateway,
+    messages: Pick<EditorCopy, "unexpectedProjectFilesError"> = EN_US.editor,
+  ) {
     this.gateway = gateway;
+    this.messages = messages;
+  }
+
+  setMessages(messages: Pick<EditorCopy, "unexpectedProjectFilesError">): void {
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
@@ -155,7 +166,7 @@ export class ProjectFilesController {
     } catch (error) {
       if (!this.requestMatches(generation, root)) return false;
       this.state.loading = false;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.unexpectedProjectFilesError);
       this.emit({ reason: "refresh-error", error: this.state.error });
       return false;
     }
@@ -299,11 +310,11 @@ export function createProjectFilesState(): ProjectFilesState {
   };
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message: unknown }).message);
   }
-  return "Unexpected project-files error";
+  return fallback;
 }

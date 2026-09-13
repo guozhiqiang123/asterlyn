@@ -13,6 +13,18 @@ export interface MarkdownPreviewResult {
   byteLength: number;
 }
 
+export interface MarkdownPreviewLabels {
+  readonly blockedImage: string;
+  imagePlaceholder(label: string): string;
+  readonly linkUnavailable: string;
+}
+
+const DEFAULT_MARKDOWN_LABELS: MarkdownPreviewLabels = {
+  blockedImage: "Image preview blocked",
+  imagePlaceholder: (label) => `[Image: ${label}]`,
+  linkUnavailable: "Link opening is not available in preview",
+};
+
 interface MarkdownToken {
   content: string;
   attrGet(name: string): string | null;
@@ -138,16 +150,17 @@ const markdownCodeHighlighter = tagHighlighter([
 
 export async function renderMarkdownPreview(
   source: string,
+  labels: MarkdownPreviewLabels = DEFAULT_MARKDOWN_LABELS,
 ): Promise<MarkdownPreviewResult> {
   const byteLength = new TextEncoder().encode(source).byteLength;
   if (byteLength > MARKDOWN_PREVIEW_MAX_BYTES) {
     return { status: "too-large", html: "", byteLength };
   }
-  const parser = await markdownParser(source);
+  const parser = await markdownParser(source, labels);
   return { status: "ready", html: parser.render(source), byteLength };
 }
 
-async function markdownParser(source: string): Promise<MarkdownParser> {
+async function markdownParser(source: string, labels: MarkdownPreviewLabels): Promise<MarkdownParser> {
   parserConstructorPromise ??= import("markdown-it").then(
     (module) => module.default as unknown as MarkdownParserConstructor,
   );
@@ -168,11 +181,11 @@ async function markdownParser(source: string): Promise<MarkdownParser> {
   });
   parser.renderer.rules.image = (tokens, index) => {
     const label = tokens[index]?.content.trim() || "image";
-    return `<span class="markdown-image-placeholder" role="img" aria-label="Image preview blocked">[Image: ${escapeHtml(label)}]</span>`;
+    return `<span class="markdown-image-placeholder" role="img" data-markdown-image-label="${escapeAttribute(label)}" aria-label="${escapeAttribute(labels.blockedImage)}">${escapeHtml(labels.imagePlaceholder(label))}</span>`;
   };
   parser.renderer.rules.link_open = (tokens, index) => {
     const href = tokens[index]?.attrGet("href") ?? "";
-    return `<span class="markdown-link" title="Link opening is not available in preview" data-markdown-href="${escapeAttribute(href)}">`;
+    return `<span class="markdown-link" title="${escapeAttribute(labels.linkUnavailable)}" data-markdown-href="${escapeAttribute(href)}">`;
   };
   parser.renderer.rules.link_close = () => "</span>";
   return parser;

@@ -37,6 +37,8 @@ import {
   type MarkdownEditorMode,
   type TextTabState,
 } from "../../workbench/editor-session.ts";
+import type { EditorCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 type PreviewDocument = Exclude<EditorDocument, { kind: "welcome" | "project-file" }>;
 
@@ -127,9 +129,18 @@ export class EditorSessionController {
   private saveSequence = 0;
   private imageSequence = 0;
   private disposed = false;
+  private messages: Pick<EditorCopy, "externalDirtyConflict" | "externalUnavailable" | "unexpectedEditorError">;
 
-  constructor(gateway: EditorSessionGateway) {
+  constructor(
+    gateway: EditorSessionGateway,
+    messages: Pick<EditorCopy, "externalDirtyConflict" | "externalUnavailable" | "unexpectedEditorError"> = EN_US.editor,
+  ) {
     this.gateway = gateway;
+    this.messages = messages;
+  }
+
+  setMessages(messages: Pick<EditorCopy, "externalDirtyConflict" | "externalUnavailable" | "unexpectedEditorError">): void {
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
@@ -296,9 +307,9 @@ export class EditorSessionController {
         this.state.session,
         opened.tabId,
         opened.loadEpoch,
-        errorMessage(error),
+        errorMessage(error, this.messages.unexpectedEditorError),
       );
-      this.emit({ reason: "load-error", tabId: opened.tabId, error: errorMessage(error) });
+      this.emit({ reason: "load-error", tabId: opened.tabId, error: errorMessage(error, this.messages.unexpectedEditorError) });
       return { status: "failure", error, tabId: opened.tabId };
     }
   }
@@ -329,9 +340,9 @@ export class EditorSessionController {
           this.state.session,
           tab.id,
           reload.loadEpoch,
-          errorMessage(error),
+          errorMessage(error, this.messages.unexpectedEditorError),
         );
-        this.emit({ reason: "load-error", tabId: tab.id, error: errorMessage(error) });
+        this.emit({ reason: "load-error", tabId: tab.id, error: errorMessage(error, this.messages.unexpectedEditorError) });
       }
     }
   }
@@ -371,13 +382,13 @@ export class EditorSessionController {
             tabId: candidate.id,
             contentChanged: true,
             error: reconciled.status === "conflict"
-              ? "A file with unsaved edits changed outside Asterlyn. The local buffer was preserved."
+              ? this.messages.externalDirtyConflict
               : undefined,
           });
         }
       } catch {
         if (!this.workspaceMatches(generation, candidate.document.repositoryRoot)) return;
-        const message = "The file changed or became unavailable outside Asterlyn; its open buffer was preserved.";
+        const message = this.messages.externalUnavailable;
         const next = markTextExternalConflict(
           this.state.session,
           candidate.id,
@@ -434,10 +445,10 @@ export class EditorSessionController {
         this.state.session,
         tabId,
         request.requestId,
-        errorMessage(error),
+        errorMessage(error, this.messages.unexpectedEditorError),
         conflict,
       );
-      this.emit({ reason: "save-error", tabId, error: errorMessage(error) });
+      this.emit({ reason: "save-error", tabId, error: errorMessage(error, this.messages.unexpectedEditorError) });
       return { status: "failure", error, conflict };
     }
   }
@@ -497,13 +508,13 @@ export class EditorSessionController {
   }
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message: unknown }).message);
   }
-  return "Unexpected editor-session error";
+  return fallback;
 }
 
 function isWorkspaceConflict(error: unknown): boolean {

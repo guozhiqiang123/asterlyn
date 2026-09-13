@@ -14,6 +14,8 @@ import {
   markdownPreviewLoadingBlock,
   retryState,
 } from "./editor-view.ts";
+import type { EditorCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -38,7 +40,17 @@ export class EditorSurface {
   private measureFrame: number | null = null;
 
   private readonly root: HTMLElement;
-  constructor(root: HTMLElement) { this.root = root; }
+  private copy: EditorCopy;
+  constructor(root: HTMLElement, copy: EditorCopy = EN_US.editor) {
+    this.root = root;
+    this.copy = copy;
+  }
+
+  setCopy(copy: EditorCopy): void {
+    const previous = this.copy;
+    this.copy = copy;
+    this.localizeMountedSurface(previous);
+  }
 
   retain(tabIds: readonly string[]): void {
     this.textEditor.retain(tabIds);
@@ -127,13 +139,13 @@ export class EditorSurface {
     const key = editorDocumentKey(document);
     const surface = imageState?.key === key ? imageState : null;
     if (!surface || surface.status === "loading") {
-      this.showHtml(editorDocumentContentKey(document, "image-loading"), loadingBlock("Loading image preview…"), beforeTransition);
+      this.showHtml(editorDocumentContentKey(document, "image-loading"), loadingBlock(this.copy.loadingImage), beforeTransition);
       return;
     }
     if (surface.status === "error") {
       this.showHtml(
         editorDocumentContentKey(document, `image-error:${surface.error}`),
-        retryState("Could not preview image", surface.error, "retry-project-image", "folder"),
+        retryState(this.copy.imageFailed, surface.error, "retry-project-image", "folder", this.copy),
         beforeTransition,
       );
       this.query("#retry-project-image").addEventListener("click", retry);
@@ -142,7 +154,7 @@ export class EditorSurface {
     if (!surface.image) return;
     this.showHtml(
       editorDocumentContentKey(document, `image:${surface.version}`),
-      `<section class="image-preview-surface" aria-label="Image preview">${imagePreviewCard(surface.image, "Preview")}</section>`,
+      `<section class="image-preview-surface" aria-label="${escapeHtml(this.copy.imageSurface)}">${imagePreviewCard(surface.image, this.copy.preview, this.copy)}</section>`,
       beforeTransition,
     );
     this.query("#content-body").classList.add("image-surface");
@@ -157,13 +169,13 @@ export class EditorSurface {
     const key = editorDocumentKey(document);
     const surface = imageState?.key === key ? imageState : null;
     if (!surface || surface.status === "loading") {
-      this.showHtml(editorDocumentContentKey(document, "image-diff-loading"), loadingBlock("Loading image Diff…"), beforeTransition);
+      this.showHtml(editorDocumentContentKey(document, "image-diff-loading"), loadingBlock(this.copy.loadingImageDiff), beforeTransition);
       return;
     }
     if (surface.status === "error") {
       this.showHtml(
         editorDocumentContentKey(document, `image-diff-error:${surface.error}`),
-        retryState("Could not preview image Diff", surface.error, "retry-image-diff", "changes"),
+        retryState(this.copy.imageDiffFailed, surface.error, "retry-image-diff", "changes", this.copy),
         beforeTransition,
       );
       this.query("#retry-image-diff").addEventListener("click", retry);
@@ -171,14 +183,14 @@ export class EditorSurface {
     }
     if (!surface.diff) return;
     const before = surface.diff.before
-      ? imagePreviewCard(surface.diff.before, "Before")
-      : emptyImageSide("Before", "File did not exist");
+      ? imagePreviewCard(surface.diff.before, this.copy.before, this.copy)
+      : emptyImageSide(this.copy.before, this.copy.fileDidNotExist);
     const after = surface.diff.after
-      ? imagePreviewCard(surface.diff.after, "After")
-      : emptyImageSide("After", "File was removed");
+      ? imagePreviewCard(surface.diff.after, this.copy.after, this.copy)
+      : emptyImageSide(this.copy.after, this.copy.fileRemoved);
     this.showHtml(
       editorDocumentContentKey(document, `image-diff:${surface.version}`),
-      `<section class="image-diff-surface" aria-label="Image Diff">${before}${after}</section>`,
+      `<section class="image-diff-surface" aria-label="${escapeHtml(this.copy.imageDiff)}">${before}${after}</section>`,
       beforeTransition,
     );
     this.query("#content-body").classList.add("image-surface");
@@ -265,9 +277,9 @@ export class EditorSurface {
     } else if (tab.markdownMode === "split") {
       body.classList.add("markdown-split-surface");
       body.innerHTML = `<div class="markdown-split-layout" id="markdown-split-layout" style="--markdown-source-width: ${this.markdownSourcePercent}%">
-        <div class="markdown-source-pane" id="markdown-source-pane" aria-label="Markdown source editor"></div>
-        <div class="workbench-splitter vertical markdown-splitter" id="markdown-splitter" aria-label="Resize Markdown source and preview"></div>
-        <section class="markdown-preview-pane" id="markdown-preview" aria-label="Markdown preview">${markdownPreviewLoadingBlock()}</section>
+        <div class="markdown-source-pane" id="markdown-source-pane" aria-label="${escapeHtml(this.copy.markdownSource)}"></div>
+        <div class="workbench-splitter vertical markdown-splitter" id="markdown-splitter" aria-label="${escapeHtml(this.copy.resizeMarkdown)}"></div>
+        <section class="markdown-preview-pane" id="markdown-preview" aria-label="${escapeHtml(this.copy.markdownPreview)}">${markdownPreviewLoadingBlock(this.copy)}</section>
       </div>`;
       this.mountedTextTabId = tab.id;
       this.mountTextEditorSurface(this.query("#markdown-source-pane"), tab, preferences, onContentChange);
@@ -292,7 +304,7 @@ export class EditorSurface {
     } else {
       body.classList.add("markdown-preview-surface");
       this.mountedTextTabId = null;
-      body.innerHTML = `<section class="markdown-preview-pane full" id="markdown-preview" aria-label="Markdown preview">${markdownPreviewLoadingBlock()}</section>`;
+      body.innerHTML = `<section class="markdown-preview-pane full" id="markdown-preview" aria-label="${escapeHtml(this.copy.markdownPreview)}">${markdownPreviewLoadingBlock(this.copy)}</section>`;
       this.queueMarkdownPreview(tab.id, tab.content, true);
     }
     this.mountedEditorKey = key;
@@ -344,19 +356,19 @@ export class EditorSurface {
   private async updateMarkdownPreview(request: { tabId: string; content: string; request: number }): Promise<void> {
     try {
       const { renderMarkdownPreview } = await import("../../workbench/markdown-preview.ts");
-      const result = await renderMarkdownPreview(request.content);
+      const result = await renderMarkdownPreview(request.content, this.copy);
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
       if (!preview || this.activeMarkdownMode === "source") return;
       preview.innerHTML = result.status === "ready"
         ? `<article class="markdown-rendered">${result.html}</article>`
-        : `<div class="markdown-preview-message" role="status"><strong>Preview paused for this large file</strong><span>The document is ${(result.byteLength / (1024 * 1024)).toFixed(1)} MiB. Live preview is limited to ${MARKDOWN_PREVIEW_MAX_BYTES / (1024 * 1024)} MiB; source editing and saving remain available.</span></div>`;
+        : `<div class="markdown-preview-message" role="status" data-markdown-size="${(result.byteLength / (1024 * 1024)).toFixed(1)}" data-markdown-limit="${MARKDOWN_PREVIEW_MAX_BYTES / (1024 * 1024)}"><strong>${escapeHtml(this.copy.largePreviewPaused)}</strong><span>${escapeHtml(this.copy.largePreviewDetail((result.byteLength / (1024 * 1024)).toFixed(1), MARKDOWN_PREVIEW_MAX_BYTES / (1024 * 1024)))}</span></div>`;
       this.attachMarkdownScrollSync();
     } catch (error) {
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");
       if (!preview) return;
-      preview.innerHTML = `<div class="markdown-preview-message error" role="alert"><strong>Markdown preview failed</strong><span>${escapeHtml(errorMessage(error))}</span></div>`;
+      preview.innerHTML = `<div class="markdown-preview-message error" role="alert"><strong>${escapeHtml(this.copy.markdownFailed)}</strong><span>${escapeHtml(errorMessage(error))}</span></div>`;
     }
   }
 
@@ -383,6 +395,62 @@ export class EditorSurface {
 
   private resetBodyClasses(body: HTMLElement): void {
     body.classList.remove("diff-surface", "text-surface", "markdown-surface", "markdown-source-surface", "markdown-split-surface", "markdown-preview-surface", "image-surface");
+  }
+
+  private localizeMountedSurface(previous: EditorCopy): void {
+    const label = (selector: string, value: string) =>
+      this.root.querySelector<HTMLElement>(selector)?.setAttribute("aria-label", value);
+    label(".image-preview-surface", this.copy.imageSurface);
+    label(".image-diff-surface", this.copy.imageDiff);
+    label("#markdown-source-pane", this.copy.markdownSource);
+    label("#markdown-splitter", this.copy.resizeMarkdown);
+    label("#markdown-preview", this.copy.markdownPreview);
+    const replacements = new Map([
+      [previous.preview, this.copy.preview], [previous.before, this.copy.before], [previous.after, this.copy.after],
+      [previous.renderingMarkdown, this.copy.renderingMarkdown], [previous.renderingMarkdownDetail, this.copy.renderingMarkdownDetail],
+      [previous.largePreviewPaused, this.copy.largePreviewPaused], [previous.markdownFailed, this.copy.markdownFailed],
+      [previous.loadingImage, this.copy.loadingImage], [previous.imageFailed, this.copy.imageFailed],
+      [previous.loadingImageDiff, this.copy.loadingImageDiff], [previous.imageDiffFailed, this.copy.imageDiffFailed],
+      [previous.fileDidNotExist, this.copy.fileDidNotExist], [previous.fileRemoved, this.copy.fileRemoved],
+      [previous.workspaceReady, this.copy.workspaceReady], [previous.workspaceReadyDetail, this.copy.workspaceReadyDetail],
+      [previous.loadingText, this.copy.loadingText], [previous.openTextFailed, this.copy.openTextFailed],
+      [previous.fileLoadFailed, this.copy.fileLoadFailed], [previous.loadingPatch, this.copy.loadingPatch],
+      [previous.patchLoadFailed, this.copy.patchLoadFailed], [previous.loadingCommitPatch, this.copy.loadingCommitPatch],
+      [previous.tryAgain, this.copy.tryAgain],
+    ]);
+    this.root.querySelectorAll<HTMLElement>(".image-preview-card strong, .image-preview-empty, .markdown-preview-message strong, .markdown-preview-message span, .loading-block span:last-child, .empty-state strong, .empty-state p, .retry-button").forEach((element) => {
+      const replacement = replacements.get(element.textContent ?? "");
+      if (replacement) element.textContent = replacement;
+    });
+    const largePreview = this.root.querySelector<HTMLElement>("[data-markdown-size][data-markdown-limit]");
+    if (largePreview) {
+      const size = largePreview.dataset.markdownSize;
+      const limit = Number(largePreview.dataset.markdownLimit);
+      if (size && Number.isFinite(limit)) {
+        const detail = largePreview.querySelector("span");
+        if (detail) detail.textContent = this.copy.largePreviewDetail(size, limit);
+      }
+    }
+    this.root.querySelectorAll<HTMLElement>(".image-preview-card[data-image-label][data-image-path]").forEach((card) => {
+      const previousLabel = card.dataset.imageLabel;
+      const path = card.dataset.imagePath;
+      if (!previousLabel || !path) return;
+      const nextLabel = previousLabel === previous.preview ? this.copy.preview
+        : previousLabel === previous.before ? this.copy.before
+          : previousLabel === previous.after ? this.copy.after : previousLabel;
+      card.dataset.imageLabel = nextLabel;
+      const image = card.querySelector<HTMLImageElement>("img");
+      if (image) image.alt = this.copy.imageAlt(nextLabel, path);
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-markdown-image-label]").forEach((placeholder) => {
+      const label = placeholder.dataset.markdownImageLabel;
+      if (!label) return;
+      placeholder.setAttribute("aria-label", this.copy.blockedImage);
+      placeholder.textContent = this.copy.imagePlaceholder(label);
+    });
+    this.root.querySelectorAll<HTMLElement>(".markdown-link").forEach((link) => {
+      link.title = this.copy.linkUnavailable;
+    });
   }
 
   private query<T extends Element = HTMLElement>(selector: string): T {

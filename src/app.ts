@@ -378,7 +378,7 @@ export class AsterlynApp {
 
   constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
     this.localization = createLocalization(initialCatalog);
-    this.editorSurface = new EditorSurface(root);
+    this.editorSurface = new EditorSurface(root, initialCatalog.editor);
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
       activate: (tool) => this.toggleTool(tool),
@@ -450,7 +450,7 @@ export class AsterlynApp {
     );
     this.filesController = new ProjectFilesController({
       listProjectFiles: (root) => bridge.listProjectFiles(root),
-    });
+    }, initialCatalog.editor);
     this.releaseFilesController = this.filesController.subscribe((change) =>
       this.handleProjectFilesChange(change),
     );
@@ -458,7 +458,7 @@ export class AsterlynApp {
       readTextFile: (...args) => bridge.readTextFile(...args),
       saveTextFile: (...args) => bridge.saveTextFile(...args),
       readImageFile: (...args) => bridge.readImageFile(...args),
-    });
+    }, initialCatalog.editor);
     this.releaseEditorController = this.editorController.subscribe((change) =>
       this.handleEditorSessionChange(change),
     );
@@ -845,6 +845,9 @@ export class AsterlynApp {
       ) return;
       const previousCatalog = this.localization.catalog;
       this.localization = createLocalization(catalog);
+      this.editorSurface.setCopy(catalog.editor);
+      this.filesController.setMessages(catalog.editor);
+      this.editorController.setMessages(catalog.editor);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
       document
@@ -863,7 +866,10 @@ export class AsterlynApp {
     this.renderActivityRail();
     this.renderRepositoryMenu();
     this.renderStatus(this.windowSession.repository.state.snapshot);
+    if (this.windowSession.workspace.state.root) this.renderEditor();
+    if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
     if (this.state.commandSurface.mode) this.renderCommandSurface();
+    if (this.state.replacementDialog) this.renderWorkspaceReplacementDialog();
     this.localizeShellChrome(previousCatalog);
     this.windowChromeBinding.refreshLabels();
   }
@@ -883,6 +889,9 @@ export class AsterlynApp {
       "data-command-surface-close",
       "data-command-result",
       "data-tool",
+      "data-project-directory-toggle",
+      "data-project-directory",
+      "data-project-file",
     ];
     const attribute = attributes.find((name) => active.hasAttribute(name));
     if (!attribute) return () => {};
@@ -1892,6 +1901,7 @@ export class AsterlynApp {
       replacement: this.state.workspaceReplacement,
       recoveryBusy: this.state.replacementRecoveryBusy,
       blockedOpenPaths,
+      copy: this.localization.catalog.replacement,
     });
     if (mode) this.bindWorkspaceReplacementDialogEvents();
   }
@@ -1955,7 +1965,7 @@ export class AsterlynApp {
     this.cancelActiveWorkspaceReplacement();
     this.state.workspaceReplacement = {
       ...this.state.workspaceReplacement,
-      error: "Cancellation requested. Restoring any files already changed…",
+      error: this.localization.catalog.replacement.cancellationRequested,
     };
     this.renderWorkspaceReplacementDialog();
   }
@@ -1975,9 +1985,9 @@ export class AsterlynApp {
     if (blocked.length > 0) {
       this.state.workspaceReplacement = {
         ...this.state.workspaceReplacement,
-        error: `Save, close, or unselect ${blocked.map((tab) => tab.document.workspacePath).join(", ")} before replacing.`,
+        error: this.localization.catalog.replacement.blockedPaths(blocked.map((tab) => tab.document.workspacePath).join(", ")),
       };
-      this.setStatus("Replacement blocked by an open edited file", "warning");
+      this.setStatus(this.localization.catalog.replacement.blockedStatus, "warning");
       this.renderWorkspaceReplacementDialog();
       return;
     }
@@ -2003,13 +2013,13 @@ export class AsterlynApp {
       await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       if (result.status === "rolledBack") {
         this.state.replacementDialog = null;
-        this.setStatus("Replacement stopped; every changed file was restored", "success");
+        this.setStatus(this.localization.catalog.replacement.stoppedAndRestored, "success");
       } else {
         this.state.replacementDialog = "recovery";
         this.setStatus(
           result.status === "applied"
-            ? "Replacement applied; recovery retained until you keep or roll back"
-            : "Replacement needs recovery review",
+            ? this.localization.catalog.replacement.appliedWithRecovery
+            : this.localization.catalog.replacement.needsReview,
           result.status === "applied" ? "success" : "warning",
         );
       }
@@ -2046,7 +2056,7 @@ export class AsterlynApp {
       );
       if (recoveries.length > 0 && !this.state.loading) {
         this.setStatus(
-          `${recoveries.length} replacement recovery ${recoveries.length === 1 ? "record needs" : "records need"} review`,
+          this.localization.catalog.replacement.recoveryCount(recoveries.length),
           "warning",
         );
       }
@@ -2058,7 +2068,7 @@ export class AsterlynApp {
         ...this.state.workspaceReplacement,
         recoveriesLoading: false,
       };
-      this.setStatus("Replacement recovery could not be inspected", "warning");
+      this.setStatus(this.localization.catalog.replacement.inspectionFailed, "warning");
       this.showError(error);
     }
   }
@@ -2094,7 +2104,7 @@ export class AsterlynApp {
     );
     if (action === "rollback" && blocked.length > 0) {
       this.setStatus(
-        `Save or close edited recovery files before rollback: ${blocked.map((tab) => tab.document.workspacePath).join(", ")}`,
+        this.localization.catalog.replacement.rollbackBlocked(blocked.map((tab) => tab.document.workspacePath).join(", ")),
         "warning",
       );
       return;
@@ -2121,14 +2131,14 @@ export class AsterlynApp {
         this.state.replacementDialog = "recovery";
         this.setStatus(
           rollbackResult?.status === "needsRecovery"
-            ? "Some files changed outside Asterlyn and were preserved; recovery still needs review"
-            : `${unresolved} replacement recovery ${unresolved === 1 ? "record needs" : "records need"} review`,
+            ? this.localization.catalog.replacement.externalChangesPreserved
+            : this.localization.catalog.replacement.recoveryCount(unresolved),
           "warning",
         );
       } else {
         this.state.replacementDialog = null;
         this.setStatus(
-          action === "keep" ? "Replacement changes kept" : "Replacement originals restored",
+          action === "keep" ? this.localization.catalog.replacement.changesKept : this.localization.catalog.replacement.originalsRestored,
           "success",
         );
       }
@@ -2176,7 +2186,7 @@ export class AsterlynApp {
   private async openWorkspaceSearchMatch(match: WorkspaceTextSearchMatch): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot || workspaceRoot !== this.state.workspaceSearch.request?.repositoryRoot) {
-      this.setStatus("Search result belongs to another workspace", "warning");
+      this.setStatus(this.localization.catalog.editor.wrongWorkspace, "warning");
       return;
     }
     await this.openProjectFile(workspaceRoot, match, match);
@@ -2935,14 +2945,14 @@ export class AsterlynApp {
     hide.title = copy.hideFiles;
     const visibleEntries = this.filesState.files.length + this.filesState.ignoredEntries.length;
     count.textContent = visibleEntries.toString();
-    count.title = `${this.filesState.files.length} editable files and ${this.filesState.ignoredEntries.length} ignored entries`;
+    count.title = this.localization.catalog.projectFiles.fileCount(this.filesState.files.length, this.filesState.ignoredEntries.length);
     const preserveScroll = body.dataset.navigatorView === "files";
     const scrollTop = body.scrollTop;
     const scrollLeft = body.scrollLeft;
     const tree = this.projectTree();
     body.dataset.navigatorView = "files";
     const activePath = this.activeProjectWorkspacePath(workspaceRoot);
-    actions.innerHTML = renderProjectToolbar(this.filesState, tree, activePath);
+    actions.innerHTML = renderProjectToolbar(this.filesState, tree, activePath, this.localization.catalog.projectFiles);
     const projectRows = projectTreeRows(tree, this.filesState.expandedDirectories);
     const window = projectTreeRenderWindow(projectRows.length, scrollTop, body.clientHeight);
     this.projectTreeWindowStart = window?.start ?? 0;
@@ -2951,6 +2961,7 @@ export class AsterlynApp {
       tree,
       scrollTop,
       body.clientHeight,
+      this.localization.catalog.projectFiles,
     );
     body.onscroll = () => this.handleProjectTreeScroll(body);
     this.bindProjectEvents();
@@ -3079,7 +3090,7 @@ export class AsterlynApp {
         this.filesController.select(path, "file");
         this.markProjectTreeSelection(path);
         if (row.dataset.projectStatus === "ignored") {
-          this.setStatus("Ignored entries are shown for context and are not opened", "normal");
+          this.setStatus(this.localization.catalog.editor.ignoredNotOpened, "normal");
           return;
         }
         const file = this.filesState.files.find(
@@ -3129,7 +3140,7 @@ export class AsterlynApp {
     const activePath = this.activeProjectWorkspacePath(workspaceRoot);
     if (!activePath) return;
     if (!this.filesController.revealFile(activePath)) {
-      this.setStatus("The current file is outside the bounded project tree", "warning");
+      this.setStatus(this.localization.catalog.editor.outsideProjectTree, "warning");
       return;
     }
     const targetIndex = projectTreeRows(
@@ -3197,13 +3208,13 @@ export class AsterlynApp {
     const existing = textTab(this.editorState.session, documentKey);
     if (searchMatch && existing && (isTextTabDirty(existing) || existing.saveRequest)) {
       this.setStatus(
-        "Search location was not applied because this file has unsaved edits",
+        this.localization.catalog.editor.searchUnsaved,
         "warning",
       );
       return;
     }
     if (searchMatch && existing?.status === "loading") {
-      this.setStatus("Wait for the current file load, then run the search again", "warning");
+      this.setStatus(this.localization.catalog.editor.waitForLoad, "warning");
       return;
     }
     const markdownMode = isMarkdownPath(document.path)
@@ -3225,14 +3236,14 @@ export class AsterlynApp {
         this.markProjectTreeSelection(activePath);
       }
       this.setStatus(
-        "All 20 open files contain unsaved changes; save or close one before opening another",
+        this.localization.catalog.editor.openFileLimit,
         "warning",
       );
       return;
     }
     if (opened.status === "stale") {
       if (searchMatch && this.windowSession.workspace.state.root === repositoryRoot) {
-        this.setStatus("Search location could not be refreshed safely", "warning");
+        this.setStatus(this.localization.catalog.editor.searchRefreshFailed, "warning");
       }
       return;
     }
@@ -3322,12 +3333,12 @@ export class AsterlynApp {
     if (decision !== "ready") {
       const message =
         decision === "wrongWorkspace"
-          ? "Search result belongs to another workspace"
+          ? this.localization.catalog.editor.wrongWorkspace
           : decision === "dirty"
-            ? "Search location was not applied because this file has unsaved edits"
+            ? this.localization.catalog.editor.searchUnsaved
             : decision === "invalidRange"
-              ? "Search location is no longer valid; run the search again"
-              : "Search result is stale; run the search again";
+              ? this.localization.catalog.editor.invalidSearchLocation
+              : this.localization.catalog.editor.staleSearchResult;
       this.setStatus(message, "warning");
       return;
     }
@@ -3335,7 +3346,7 @@ export class AsterlynApp {
     this.renderEditor();
     queueMicrotask(() => {
       if (!this.editorSurface.selectRange(match.fromUtf16, match.toUtf16)) {
-        this.setStatus("Search location is no longer valid; run the search again", "warning");
+        this.setStatus(this.localization.catalog.editor.invalidSearchLocation, "warning");
       }
     });
   }
@@ -4255,6 +4266,7 @@ export class AsterlynApp {
       session: this.editorState.session,
       document,
       statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
+      copy: this.localization.catalog.editor,
     });
     if (tabsMarkup !== this.editorTabsMarkup || !tabbar.childElementCount) {
       tabbar.innerHTML = tabsMarkup;
@@ -4271,11 +4283,12 @@ export class AsterlynApp {
     if (revealActiveTab) this.revealActiveEditorTab();
 
     if (document.kind === "welcome") {
+      const copy = this.localization.catalog.editor;
       this.showEditorHtml(
         "welcome",
         renderEditorEmptyState(
-          "Editor workspace ready",
-          "Open a project file to edit it, or choose a changed or committed file to inspect its Diff.",
+          copy.workspaceReady,
+          copy.workspaceReadyDetail,
           "folder",
         ),
       );
@@ -4288,6 +4301,7 @@ export class AsterlynApp {
     }
 
     if (document.kind === "project-file") {
+      const copy = this.localization.catalog.editor;
       const tab = activeTextTab(this.editorState.session);
       if (!tab) {
         this.editorController.activateWelcome();
@@ -4297,16 +4311,17 @@ export class AsterlynApp {
       if (tab.status === "loading") {
         this.showEditorHtml(
           editorDocumentContentKey(document, `loading:${tab.loadEpoch}`),
-          renderEditorLoadingBlock("Loading text file…"),
+          renderEditorLoadingBlock(copy.loadingText),
         );
       } else if (tab.status === "error") {
         this.showEditorHtml(
           editorDocumentContentKey(document, `error:${tab.loadEpoch}:${tab.error ?? "unknown"}`),
           renderEditorRetryState(
-            "Could not open text file",
-            tab.error ?? "The file could not be loaded.",
+            copy.openTextFailed,
+            tab.error ?? copy.fileLoadFailed,
             "retry-text-file",
             "folder",
+            copy,
           ),
         );
         this.query("#retry-text-file").addEventListener("click", () => {
@@ -4332,11 +4347,12 @@ export class AsterlynApp {
     }
 
     if (document.kind === "working-diff") {
+      const copy = this.localization.catalog.editor;
       const selected = document.selection;
       const imageDiff = isImagePreviewPath(selected.path);
       header.innerHTML = `
         ${renderContentHeading(basename(selected.path), selected.path)}
-        <div class="header-actions">${this.diffControls(document, imageDiff)}<span class="scope-pill">Local changes</span></div>
+        <div class="header-actions">${this.diffControls(document, imageDiff)}<span class="scope-pill">${escapeHtml(copy.localChanges)}</span></div>
       `;
       this.bindDiffControls();
       if (imageDiff) {
@@ -4346,7 +4362,7 @@ export class AsterlynApp {
       if (this.changesState.workingPatchLoading) {
         this.showEditorHtml(
           editorDocumentContentKey(document, "loading"),
-          renderEditorLoadingBlock("Loading patch…"),
+          renderEditorLoadingBlock(copy.loadingPatch),
         );
       } else if (this.changesState.workingPatchError) {
         this.showEditorHtml(
@@ -4355,10 +4371,11 @@ export class AsterlynApp {
             `error:${this.changesState.workingPatchError}`,
           ),
           renderEditorRetryState(
-            "Could not load patch",
+            copy.patchLoadFailed,
             this.changesState.workingPatchError,
             "retry-working-diff",
             "changes",
+            copy,
           ),
         );
         this.query("#retry-working-diff").addEventListener("click", () => {
@@ -4371,7 +4388,7 @@ export class AsterlynApp {
             `patch:${this.changesState.workingPatchVersion}`,
           ),
           this.changesState.workingPatch.patch ||
-            "No textual diff is available for this selection.",
+            copy.noTextualDiff,
           selected.path,
         );
       }
@@ -4384,6 +4401,7 @@ export class AsterlynApp {
       return;
     }
     const commit = snapshot.commits.find((item) => item.oid === document.oid);
+    const copy = this.localization.catalog.editor;
     const shortOid = commit?.shortOid ?? document.oid.slice(0, 8);
     const imageDiff = isImagePreviewPath(document.path);
     header.innerHTML = `
@@ -4398,7 +4416,7 @@ export class AsterlynApp {
     if (this.state.commitPatchLoading) {
       this.showEditorHtml(
         editorDocumentContentKey(document, "loading"),
-        renderEditorLoadingBlock("Loading commit patch…"),
+        renderEditorLoadingBlock(copy.loadingCommitPatch),
       );
     } else if (this.state.commitPatchError) {
       this.showEditorHtml(
@@ -4407,10 +4425,11 @@ export class AsterlynApp {
           `error:${this.state.commitPatchError}`,
         ),
         renderEditorRetryState(
-          "Could not load patch",
+          copy.patchLoadFailed,
           this.state.commitPatchError,
           "retry-commit-patch",
           "changes",
+          copy,
         ),
       );
       this.query("#retry-commit-patch").addEventListener("click", () => {
@@ -4422,7 +4441,7 @@ export class AsterlynApp {
           document,
           `patch:${this.state.commitPatchVersion}`,
         ),
-        this.state.commitPatch.patch || "No textual diff is available for this file.",
+        this.state.commitPatch.patch || copy.noTextualDiff,
         document.path,
       );
     }
@@ -4510,7 +4529,8 @@ export class AsterlynApp {
       if (host.childElementCount) host.replaceChildren();
       return;
     }
-    if (host.childElementCount === 0) host.innerHTML = renderMarkdownModeControls(tab);
+    const markup = renderMarkdownModeControls(tab, this.localization.catalog.editor);
+    if (host.innerHTML !== markup) host.innerHTML = markup;
     host
       .querySelectorAll<HTMLButtonElement>("[data-markdown-mode]")
       .forEach((button) => {
@@ -4548,6 +4568,7 @@ export class AsterlynApp {
       session: this.editorState.session,
       open: this.shellState.editorTabMenuOpen,
       statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
+      copy: this.localization.catalog.editor,
     });
   }
 
@@ -4590,7 +4611,7 @@ export class AsterlynApp {
     encoding.textContent = label;
     encoding.setAttribute(
       "title",
-      visible ? `Current file encoding: ${label}` : "Current file encoding",
+      this.localization.catalog.editor.currentEncoding(visible ? label : undefined),
     );
     encoding.classList.toggle("hidden", !visible);
   }
@@ -4671,7 +4692,7 @@ export class AsterlynApp {
     const result = await this.editorController.saveText(tabId, tab.content);
     if (result.status === "clean") return true;
     if (result.status === "busy") {
-      this.setStatus("Wait for the current file operation before continuing", "warning");
+      this.setStatus(this.localization.catalog.editor.waitForFileOperation, "warning");
       return false;
     }
     if (result.status === "stale" || result.status === "failure") {
@@ -4685,10 +4706,10 @@ export class AsterlynApp {
       [result.tab.document.workspacePath],
     );
     if (result.status === "saved") {
-      this.setStatus(`Saved ${basename(result.tab.document.workspacePath)}`, "success");
+      this.setStatus(this.localization.catalog.editor.savedFile(basename(result.tab.document.workspacePath)), "success");
       return true;
     }
-    this.setStatus("Saved captured changes; newer edits remain unsaved", "warning");
+    this.setStatus(this.localization.catalog.editor.newerEditsUnsaved, "warning");
     return false;
   }
 
@@ -4698,11 +4719,11 @@ export class AsterlynApp {
     if (!tab) return;
     if (isTextTabDirty(tab) || tab.saveRequest) {
       if (tab.saveRequest) {
-        this.setStatus("Wait for the file to finish saving", "warning");
+        this.setStatus(this.localization.catalog.editor.waitForSave, "warning");
         return;
       }
       const save = window.confirm(
-        `Save changes to ${tab.document.workspacePath} before closing?\n\nCancel keeps the tab open.`,
+        `${this.localization.catalog.editor.confirmCloseFile(tab.document.workspacePath)}\n\n${this.localization.catalog.editor.cancelKeepsTab}`,
       );
       if (!save || !(await this.saveTextTab(tabId))) return;
     }
@@ -4754,6 +4775,7 @@ export class AsterlynApp {
       canOpenSource: this.diffProjectFile(document) !== null,
       expanded: this.isDiffExpanded(document),
       preferences: this.settingsState.preferences,
+      copy: this.localization.catalog.editor,
     });
   }
 
@@ -4765,7 +4787,7 @@ export class AsterlynApp {
           const moved = this.editorSurface.navigateDiffChange(action === "next-change" ? 1 : -1);
           if (!moved) {
             this.setStatus(
-              `No ${action === "next-change" ? "next" : "previous"} change in this file`,
+              this.localization.catalog.editor.noFileChange(action === "next-change" ? "next" : "previous"),
               "normal",
             );
           }
@@ -4811,7 +4833,7 @@ export class AsterlynApp {
     if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
     const path = this.adjacentDiffPath(document, direction);
     if (!path) {
-      this.setStatus(`No ${direction === 1 ? "next" : "previous"} changed file`, "normal");
+      this.setStatus(this.localization.catalog.editor.noChangedFile(direction === 1 ? "next" : "previous"), "normal");
       return;
     }
     if (document.kind === "commit-diff") {
@@ -4849,7 +4871,7 @@ export class AsterlynApp {
     if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
     const file = this.diffProjectFile(document);
     if (!file) {
-      this.setStatus("The current Diff file is not present in the project tree", "warning");
+      this.setStatus(this.localization.catalog.editor.diffFileMissing, "warning");
       return;
     }
     this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" });
@@ -5058,7 +5080,7 @@ export class AsterlynApp {
       this.state.commitPatchVersion = generation;
       this.renderEditor();
       if (restoreFocus) this.focusCommitFile(file.path);
-      if (diff.truncated) this.setStatus("Patch truncated at 4 MiB", "warning");
+      if (diff.truncated) this.setStatus(this.localization.catalog.editor.patchTruncated, "warning");
     } catch (error) {
       const activeDocument = this.activeDocument();
       if (

@@ -1,8 +1,9 @@
 import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
-import type { ChangeKind } from "../../models.ts";
 import type { ProjectFilesState } from "./project-files-controller.ts";
 import { findProjectTreeNode, type ProjectTreeNode } from "../../workbench/project-tree.ts";
+import type { ProjectFilesCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export const PROJECT_TREE_MOUNT_LIMIT = 200;
 export const PROJECT_TREE_ROW_HEIGHT = 27;
@@ -24,13 +25,14 @@ export function renderProjectToolbar(
   state: ProjectFilesState,
   tree: ProjectTreeNode[],
   activePath: string | null,
+  copy: ProjectFilesCopy = EN_US.projectFiles,
 ): string {
   const canLocate = Boolean(activePath && findProjectTreeNode(tree, activePath));
   const canChangeSubtree = state.selection?.kind === "directory";
   return `
-    <button class="compact-icon-button" id="locate-project-file" type="button" aria-label="Locate current file in project" title="Locate current file" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
-    <button class="compact-icon-button" id="expand-project-folder" type="button" aria-label="Expand selected folder" title="Expand selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("expand", 14)}</button>
-    <button class="compact-icon-button" id="collapse-project-folder" type="button" aria-label="Collapse selected folder" title="Collapse selected folder" ${canChangeSubtree ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
+    <button class="compact-icon-button" id="locate-project-file" type="button" aria-label="${escapeAttribute(copy.locateCurrentFile)}" title="${escapeAttribute(copy.locateCurrentFile)}" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
+    <button class="compact-icon-button" id="expand-project-folder" type="button" aria-label="${escapeAttribute(copy.expandSelectedFolder)}" title="${escapeAttribute(copy.expandSelectedFolder)}" ${canChangeSubtree ? "" : "disabled"}>${icon("expand", 14)}</button>
+    <button class="compact-icon-button" id="collapse-project-folder" type="button" aria-label="${escapeAttribute(copy.collapseSelectedFolder)}" title="${escapeAttribute(copy.collapseSelectedFolder)}" ${canChangeSubtree ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
 }
 
 export function renderProjectNavigation(
@@ -38,12 +40,13 @@ export function renderProjectNavigation(
   tree: ProjectTreeNode[],
   scrollTop: number,
   clientHeight: number,
+  copy: ProjectFilesCopy = EN_US.projectFiles,
 ): string {
   if (tree.length === 0 && state.loading) {
-    return '<div class="loading-block"><span class="spinner"></span><span>Loading project files…</span></div>';
+    return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(copy.loadingProjectFiles)}</span></div>`;
   }
   if (tree.length === 0 && state.error) {
-    return `<div class="empty-state"><span class="empty-icon">${icon("folder", 24)}</span><strong>Could not list project files</strong><p>${escapeHtml(state.error)}</p><button class="secondary-button retry-button" id="retry-project-files" type="button">Try again</button></div>`;
+    return `<div class="empty-state"><span class="empty-icon">${icon("folder", 24)}</span><strong>${escapeHtml(copy.listFailed)}</strong><p>${escapeHtml(state.error)}</p><button class="secondary-button retry-button" id="retry-project-files" type="button">${escapeHtml(copy.tryAgain)}</button></div>`;
   }
   const rows = projectTreeRows(tree, state.expandedDirectories);
   const window = projectTreeRenderWindow(rows.length, scrollTop, clientHeight);
@@ -57,16 +60,16 @@ export function renderProjectNavigation(
     : "";
   const notices = [
     state.loading
-      ? '<div class="project-tree-notice"><span class="spinner"></span><span>Refreshing files…</span></div>'
+      ? `<div class="project-tree-notice"><span class="spinner"></span><span>${escapeHtml(copy.refreshingFiles)}</span></div>`
       : "",
     state.truncated
-      ? '<div class="project-tree-notice warning"><span>!</span><span>Showing a bounded project catalog; some paths were omitted.</span></div>'
+      ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(copy.boundedCatalog)}</span></div>`
       : "",
     state.error
       ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(state.error)}</span></div>`
       : "",
   ].join("");
-  return `<div class="project-tree virtual-tree" role="tree" aria-label="Project files" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRow(state, row)).join("")}${bottomSpacer}</div>${notices}`;
+  return `<div class="project-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRow(state, row, copy)).join("")}${bottomSpacer}</div>${notices}`;
 }
 
 export function projectTreeRows(
@@ -103,33 +106,17 @@ export function projectTreeRenderWindow(
 function renderProjectRow(
   state: ProjectFilesState,
   row: ProjectTreeRow,
+  copy: ProjectFilesCopy,
 ): string {
   const { node, depth } = row;
   const selected = state.selection?.path === node.path && state.selection.kind === node.kind;
   const statusClass = `file-status-${node.status}`;
-  const common = `role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-level="${depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" title="${escapeAttribute(`${node.path} · ${changeLabel(node.status)}`)}"`;
+  const common = `role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-status="${node.status}" aria-selected="${selected}" aria-level="${depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" title="${escapeAttribute(`${node.path} · ${copy.changeLabels[node.status]}`)}"`;
   if (node.kind === "directory") {
     const expanded = state.expandedDirectories.has(node.path);
-    return `<div class="project-directory virtual ${statusClass}"><div class="project-directory-row project-node-row ${selected ? "selected" : ""}" tabindex="0" ${common} data-project-directory="${escapeAttribute(node.path)}" aria-expanded="${expanded}"><button class="project-tree-toggle" type="button" data-project-directory-toggle="${escapeAttribute(node.path)}" aria-label="${expanded ? "Collapse" : "Expand"} ${escapeAttribute(node.path)}"><span class="tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 12)}</span></button>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></div></div>`;
+    return `<div class="project-directory virtual ${statusClass}"><div class="project-directory-row project-node-row ${selected ? "selected" : ""}" tabindex="0" ${common} data-project-directory="${escapeAttribute(node.path)}" aria-expanded="${expanded}"><button class="project-tree-toggle" type="button" data-project-directory-toggle="${escapeAttribute(node.path)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}"><span class="tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 12)}</span></button>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></div></div>`;
   }
   return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" ${common} data-project-file="${escapeAttribute(node.path)}"><span class="project-file-glyph">${fileTypeIcon(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
-}
-
-function changeLabel(kind: ChangeKind): string {
-  const labels: Record<ChangeKind, string> = {
-    unmodified: "Unmodified",
-    added: "Added",
-    modified: "Modified",
-    deleted: "Deleted",
-    renamed: "Renamed",
-    copied: "Copied",
-    typeChanged: "Type changed",
-    unmerged: "Unmerged",
-    untracked: "Untracked",
-    ignored: "Ignored",
-    unknown: "Unknown",
-  };
-  return labels[kind];
 }
 
 function escapeHtml(value: string): string {

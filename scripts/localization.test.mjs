@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { renderSettingsNavigation, renderSettingsSection } from "../src/features/settings/settings-view.ts";
-import { renderCommandSurface } from "../src/features/files-editor/workspace-navigation-view.ts";
+import { renderCommandSurface, renderWorkspaceReplacementDialog } from "../src/features/files-editor/workspace-navigation-view.ts";
+import { renderProjectToolbar } from "../src/features/files-editor/project-files-view.ts";
+import { renderDiffControls } from "../src/features/files-editor/editor-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { loadLocale } from "../src/localization/locale-loader.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
@@ -56,6 +58,24 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   assert.match(commandSurface, /导航模式/);
   assert.match(commandSurface, /刷新项目/);
   assert.match(commandSurface, /命令面板/);
+
+  const projectToolbar = renderProjectToolbar({ selection: null }, [], null, catalog.projectFiles);
+  assert.match(projectToolbar, /在项目中定位当前文件/);
+  const diffControls = renderDiffControls({
+    imageDiff: false, textReady: true, previousFile: null, nextFile: null,
+    canOpenSource: true, expanded: false, preferences: { diffLayout: "split", showWhitespace: false },
+    copy: catalog.editor,
+  });
+  assert.match(diffControls, /差异导航/);
+  assert.match(diffControls, />并排</);
+  const replacement = renderWorkspaceReplacementDialog({
+    dialog: "preview",
+    replacement: { status: "previewing" },
+    recoveryBusy: null,
+    blockedOpenPaths: new Set(),
+    copy: catalog.replacement,
+  });
+  assert.match(replacement, /正在准备替换预览/);
 });
 
 function catalogShape(value) {

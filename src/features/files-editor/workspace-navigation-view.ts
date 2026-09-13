@@ -1,17 +1,16 @@
 import { icon } from "../../icons.ts";
-import type { ProjectFile, WorkspaceTextSearchMatch } from "../../models.ts";
+import type { ProjectFile, WorkspaceTextSearchMatch, WorkspaceTextSearchReport } from "../../models.ts";
 import type {
   CommandSurfaceState,
   NavigationCommand,
   NavigationMode,
 } from "../../workbench/navigation.ts";
 import {
-  formatWorkspaceSearchCoverage,
   type WorkspaceSearchControls,
   type WorkspaceSearchState,
 } from "../../workbench/workspace-search.ts";
 import type { WorkspaceReplacementState } from "../../workbench/workspace-replacement.ts";
-import type { NavigationCopy } from "../../localization/catalog.ts";
+import type { NavigationCopy, ReplacementCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 
 export interface CommandSurfaceViewModel {
@@ -33,6 +32,7 @@ export interface WorkspaceReplacementViewModel {
   readonly replacement: WorkspaceReplacementState;
   readonly recoveryBusy: { id: string; action: "keep" | "rollback" } | null;
   readonly blockedOpenPaths: ReadonlySet<string>;
+  readonly copy?: ReplacementCopy;
 }
 
 export function commandSurfaceResultCount(model: CommandSurfaceViewModel): number {
@@ -80,21 +80,22 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
 export function renderWorkspaceReplacementDialog(
   model: WorkspaceReplacementViewModel,
 ): string {
+  const copy = model.copy ?? EN_US.replacement;
   if (!model.dialog) return "";
-  if (model.dialog === "recovery") return renderReplacementRecoveries(model);
+  if (model.dialog === "recovery") return renderReplacementRecoveries(model, copy);
   const replacement = model.replacement;
   if (replacement.status === "previewing") {
     return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-      <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Preparing replacement preview</h2></div></div>
-      ${loadingBlock("Re-reading the Git-authorized files…")}
-      <div class="dialog-actions"><button class="secondary-button" id="replacement-cancel-operation" type="button">Cancel</button></div>
+      <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.safeWorkspaceEdit)}</span><h2 id="replacement-dialog-title">${escapeHtml(copy.preparingPreview)}</h2></div></div>
+      ${loadingBlock(copy.rereadingFiles)}
+      <div class="dialog-actions"><button class="secondary-button" id="replacement-cancel-operation" type="button">${escapeHtml(copy.cancel)}</button></div>
     </section>`;
   }
   if (replacement.status === "error" || !replacement.preview) {
     return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-      <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Replacement preview unavailable</h2></div><button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button></div>
-      <div class="replacement-error" role="alert">${escapeHtml(replacement.error ?? "Create a new search and preview.")}</div>
-      <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button">Close</button></div>
+      <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.safeWorkspaceEdit)}</span><h2 id="replacement-dialog-title">${escapeHtml(copy.previewUnavailable)}</h2></div><button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button></div>
+      <div class="replacement-error" role="alert">${escapeHtml(replacement.error ?? copy.createNewSearch)}</div>
+      <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button">${escapeHtml(copy.close)}</button></div>
     </section>`;
   }
 
@@ -107,30 +108,30 @@ export function renderWorkspaceReplacementDialog(
   const rows = preview.files.map((file) => {
     const checked = selected.has(file.workspacePath);
     const blocked = model.blockedOpenPaths.has(file.workspacePath);
-    const delta = file.byteDelta === 0 ? "same size" : `${file.byteDelta > 0 ? "+" : ""}${file.byteDelta} B`;
+    const delta = file.byteDelta === 0 ? copy.sameSize : copy.byteDelta(file.byteDelta);
     return `<article class="replacement-file ${checked ? "selected" : ""}">
       <label class="replacement-file-heading">
         <input type="checkbox" data-replacement-file="${escapeAttribute(file.workspacePath)}" ${checked ? "checked" : ""} ${applying ? "disabled" : ""} />
-        <span><strong>${escapeHtml(file.workspacePath)}</strong><small>${file.matchCount} ${file.matchCount === 1 ? "match" : "matches"} · ${escapeHtml(delta)}${blocked ? " · save or unselect the open edited file" : ""}</small></span>
+        <span><strong>${escapeHtml(file.workspacePath)}</strong><small>${escapeHtml(copy.matches(file.matchCount))} · ${escapeHtml(delta)}${blocked ? ` · ${escapeHtml(copy.blockedFile)}` : ""}</small></span>
       </label>
-      <div class="replacement-comparison" aria-label="Before and after preview for ${escapeAttribute(file.workspacePath)}">
-        <code class="before"><span>Before</span>${escapeHtml(file.beforePreview)}</code>
-        <code class="after"><span>After</span>${escapeHtml(file.afterPreview)}</code>
+      <div class="replacement-comparison" aria-label="${escapeAttribute(copy.comparisonFor(file.workspacePath))}">
+        <code class="before"><span>${escapeHtml(copy.before)}</span>${escapeHtml(file.beforePreview)}</code>
+        <code class="after"><span>${escapeHtml(copy.after)}</span>${escapeHtml(file.afterPreview)}</code>
       </div>
     </article>`;
   }).join("");
   const warning = preview.skippedCount > 0
-    ? `<div class="replacement-warning">${preview.skippedCount} unsupported or unreadable files remain outside this reviewed replacement.</div>`
+    ? `<div class="replacement-warning">${escapeHtml(copy.skippedFiles(preview.skippedCount))}</div>`
     : "";
   return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-    <div class="dialog-heading"><div><span class="panel-eyebrow">Safe workspace edit</span><h2 id="replacement-dialog-title">Review Replace in Files</h2></div>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button>`}</div>
-    <p>${preview.totalMatches} reviewed replacements across ${preview.files.length} files. Only checked files will change.</p>
+    <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.safeWorkspaceEdit)}</span><h2 id="replacement-dialog-title">${escapeHtml(copy.reviewTitle)}</h2></div>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
+    <p>${escapeHtml(copy.reviewedSummary(preview.totalMatches, preview.files.length))}</p>
     ${replacement.error ? `<div class="replacement-error" role="alert">${escapeHtml(replacement.error)}</div>` : ""}
     ${warning}
-    <label class="replacement-select-all"><input id="replacement-select-all" type="checkbox" ${allSelected ? "checked" : ""} ${applying ? "disabled" : ""} /> Select all files</label>
+    <label class="replacement-select-all"><input id="replacement-select-all" type="checkbox" ${allSelected ? "checked" : ""} ${applying ? "disabled" : ""} /> ${escapeHtml(copy.selectAll)}</label>
     <div class="replacement-file-list">${rows}</div>
     <div class="dialog-actions">
-      ${applying ? `<button class="secondary-button" id="replacement-cancel-operation" type="button">Cancel and restore</button><button class="primary-button" type="button" disabled><span class="spinner"></span> Applying safely…</button>` : `<button class="secondary-button" data-replacement-close type="button">Cancel</button><button class="primary-button" id="replacement-apply" type="button" ${selected.size > 0 ? "" : "disabled"}>Replace ${selectedMatches} in ${selected.size} ${selected.size === 1 ? "file" : "files"}</button>`}
+      ${applying ? `<button class="secondary-button" id="replacement-cancel-operation" type="button">${escapeHtml(copy.cancelAndRestore)}</button><button class="primary-button" type="button" disabled><span class="spinner"></span> ${escapeHtml(copy.applying)}</button>` : `<button class="secondary-button" data-replacement-close type="button">${escapeHtml(copy.cancel)}</button><button class="primary-button" id="replacement-apply" type="button" ${selected.size > 0 ? "" : "disabled"}>${escapeHtml(copy.applySelection(selectedMatches, selected.size))}</button>`}
     </div>
   </section>`;
 }
@@ -202,11 +203,28 @@ function renderWorkspaceSearchResults(selected: number, model: CommandSurfaceVie
   if (search.report.matches.length === 0) {
     return commandSurfaceEmpty(
       search.report.coverageReasons.length > 0 ? copy.noSubsetMatches : copy.noMatches,
-      formatWorkspaceSearchCoverage(search.report),
+      formatLocalizedWorkspaceSearchCoverage(search.report, copy),
     );
   }
   const rows = search.report.matches.map((match, index) => renderWorkspaceSearchResult(match, index, selected, copy)).join("");
-  return `${rows}<div class="workspace-search-summary">${escapeHtml(formatWorkspaceSearchCoverage(search.report))}</div>`;
+  return `${rows}<div class="workspace-search-summary">${escapeHtml(formatLocalizedWorkspaceSearchCoverage(search.report, copy))}</div>`;
+}
+
+function formatLocalizedWorkspaceSearchCoverage(report: WorkspaceTextSearchReport, copy: NavigationCopy): string {
+  const size = report.bytesRead < 1024
+    ? `${report.bytesRead} B`
+    : report.bytesRead < 1024 * 1024
+      ? `${Math.max(1, Math.round(report.bytesRead / 1024))} KiB`
+      : `${(report.bytesRead / (1024 * 1024)).toFixed(1)} MiB`;
+  const catalog = report.eligibleCandidates === report.catalogCandidates
+    ? copy.coverageFiles(report.filesSearched, report.catalogCandidates)
+    : copy.coverageEligible(report.filesSearched, report.eligibleCandidates, report.catalogCandidates);
+  const base = `${copy.coverageMatches(report.matches.length)} · ${catalog} · ${size}`;
+  if (report.coverageReasons.length === 0) return `${base} · ${copy.coverageComplete}`;
+  const reasons = report.coverageReasons.map((reason) =>
+    reason === "skippedFiles" ? copy.coverageSkipped(report.skippedCount) : copy.coverageReasons[reason]
+  ).join(", ");
+  return `${base} · ${copy.coveragePartial(reasons)}`;
 }
 
 function renderFileNavigationResult(file: ProjectFile, index: number, selected: number): string {
@@ -244,29 +262,29 @@ function renderWorkspaceSearchResult(
   </button>`;
 }
 
-function renderReplacementRecoveries(model: WorkspaceReplacementViewModel): string {
+function renderReplacementRecoveries(model: WorkspaceReplacementViewModel, copy: ReplacementCopy): string {
   const state = model.replacement;
   const cards = state.recoveries.length === 0
-    ? `<div class="command-surface-empty"><strong>No pending replacement recovery</strong><span>Reviewed backups have been resolved.</span></div>`
+    ? `<div class="command-surface-empty"><strong>${escapeHtml(copy.noPendingRecovery)}</strong><span>${escapeHtml(copy.backupsResolved)}</span></div>`
     : state.recoveries.map((recovery) => {
         const busy = model.recoveryBusy?.id === recovery.recoveryId;
         const conflicts = recovery.files.filter((file) => file.state === "conflict" || file.state === "unavailable").length;
         const replaced = recovery.files.filter((file) => file.state === "replaced").length;
-        const files = recovery.files.map((file) => `<li><span>${escapeHtml(file.workspacePath)}</span><span class="recovery-state ${file.state}">${escapeHtml(replacementFileStateLabel(file.state))}</span></li>`).join("");
+        const files = recovery.files.map((file) => `<li><span>${escapeHtml(file.workspacePath)}</span><span class="recovery-state ${file.state}">${escapeHtml(copy.fileStates[file.state])}</span></li>`).join("");
         return `<article class="recovery-card">
-          <div class="recovery-card-heading"><div><strong>${escapeHtml(recovery.recoveryId)}</strong><small>${replaced}/${recovery.files.length} files contain the reviewed replacement${conflicts ? ` · ${conflicts} need manual review` : ""}</small></div><span class="scope-pill">${escapeHtml(recovery.status === "applied" ? "Ready to verify" : "Needs recovery")}</span></div>
+          <div class="recovery-card-heading"><div><strong>${escapeHtml(recovery.recoveryId)}</strong><small>${escapeHtml(copy.recoveryFileSummary(replaced, recovery.files.length, conflicts))}</small></div><span class="scope-pill">${escapeHtml(recovery.status === "applied" ? copy.readyToVerify : copy.needsRecovery)}</span></div>
           <ul>${files}</ul>
           <div class="recovery-actions">
-            <button class="secondary-button" data-recovery-rollback="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy ? "disabled" : ""}>${busy && model.recoveryBusy?.action === "rollback" ? "Restoring…" : "Roll back"}</button>
-            <button class="primary-button" data-recovery-keep="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy || recovery.status !== "applied" ? "disabled" : ""}>${busy && model.recoveryBusy?.action === "keep" ? "Keeping…" : "Keep changes"}</button>
+            <button class="secondary-button" data-recovery-rollback="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy ? "disabled" : ""}>${escapeHtml(busy && model.recoveryBusy?.action === "rollback" ? copy.restoring : copy.rollBack)}</button>
+            <button class="primary-button" data-recovery-keep="${escapeAttribute(recovery.recoveryId)}" type="button" ${busy || recovery.status !== "applied" ? "disabled" : ""}>${escapeHtml(busy && model.recoveryBusy?.action === "keep" ? copy.keeping : copy.keepChanges)}</button>
           </div>
         </article>`;
       }).join("");
   return `<section class="dialog replacement-dialog recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-recovery-title">
-    <div class="dialog-heading"><div><span class="panel-eyebrow">Crash-safe history</span><h2 id="replacement-recovery-title">Replacement recovery</h2></div>${model.recoveryBusy ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="Close">${icon("close", 17)}</button>`}</div>
-    <p>Backups remain until you verify and keep the reviewed changes, or restore the exact originals.</p>
+    <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.crashSafeHistory)}</span><h2 id="replacement-recovery-title">${escapeHtml(copy.recoveryTitle)}</h2></div>${model.recoveryBusy ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
+    <p>${escapeHtml(copy.recoveryDetail)}</p>
     <div class="recovery-list">${cards}</div>
-    <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button" ${model.recoveryBusy ? "disabled" : ""}>Close</button></div>
+    <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button" ${model.recoveryBusy ? "disabled" : ""}>${escapeHtml(copy.close)}</button></div>
   </section>`;
 }
 
@@ -281,15 +299,6 @@ function loadingBlock(label: string): string {
 
 function commandSurfaceEmpty(title: string, detail: string, busy = false): string {
   return `<div class="command-surface-empty">${busy ? '<span class="spinner"></span>' : ""}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>`;
-}
-
-function replacementFileStateLabel(state: "original" | "replaced" | "conflict" | "unavailable"): string {
-  return {
-    original: "Original",
-    replaced: "Replaced",
-    conflict: "Changed externally",
-    unavailable: "Unavailable",
-  }[state];
 }
 
 function basename(path: string): string {
