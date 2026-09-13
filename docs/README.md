@@ -68,3 +68,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-12-r3-1-native-workspace-watch.md`](benchmarks/2026-09-12-r3-1-native-workspace-watch.md) — R3.1 native file hints, targeted workspace/Git reconciliation, external-buffer safety, watcher footprint, and Debian acceptance evidence.
 - [`benchmarks/2026-09-12-r4-0-repository-integration.md`](benchmarks/2026-09-12-r4-0-repository-integration.md) — R4.0 repository-result ownership, conflict routing, responsibility gates, resource results, and Debian acceptance evidence.
 - [`benchmarks/2026-09-12-r4-recoverable-git-operations.md`](benchmarks/2026-09-12-r4-recoverable-git-operations.md) — reviewed Merge/Cherry-pick/Rebase/Squash, restart recovery, conflict resolution, fault safety, resources, and Debian acceptance evidence.
+
+- [`benchmarks/2026-09-13-architecture-editor-reliability.md`](benchmarks/2026-09-13-architecture-editor-reliability.md) — watcher feedback-loop, retained editor activation, safe/recoverable Git worktree writes, bounded producers, CI, and macOS verification.

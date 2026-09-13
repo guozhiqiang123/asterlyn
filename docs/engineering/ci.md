@@ -12,6 +12,12 @@ The workflow uploads unsigned, short-lived workflow artifacts plus a SHA-256 man
 
 After bundling, each target launches its freshly built native executable against a disposable Git repository containing both tracked and untracked changes. The process must remain alive for a six-second observation window and is then terminated as a process tree. The launcher gives Linux a disposable XDG application profile so its temporary repository cannot enter an installed user's recent-project state. Linux runs under a temporary Xvfb display; Windows and macOS run directly on their hosted runners. An early exit fails the target and reports bounded stdout/stderr diagnostics.
 
+The quality job checks TypeScript, builds the frontend, runs all script tests, checks Rust formatting,
+installs the Linux desktop development libraries, and tests/lints the complete Cargo workspace.
+Native watcher tests are explicitly run with `--ignored`; being ignored in the default unit suite
+must not remove them from CI acceptance. Workspace and desktop application tests are required in
+addition to Git-core tests.
+
 ## Trust boundary
 
 - Workflow permissions are limited to repository-content read access.

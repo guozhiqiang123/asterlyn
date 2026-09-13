@@ -251,3 +251,23 @@ Complete behavior and limitation evidence is in
 ### E4 — Recovery and task surfaces
 
 Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.
+
+### Editor and reconciliation reliability — 2026-09-13
+
+Previously opened files activate their retained document again. Capturing an editor widget requires
+the same tab and load epoch, including during external reload. Identical watcher snapshots retain
+file-tree disclosure, hovered rows, editor tabs, and Markdown mode controls. Read-only Git queries
+no longer trigger a self-sustaining watcher loop.
+
+Restore uncommitted changes now reviews exact bytes/index before confirmation and saves durable
+recovery. Changes exposes Recover local changes for restart-safe inspection and guarded Undo.
+Conflict Save and Stage uses the same recovery/write boundary. Git-operation Review validity updates
+in place as targets or squash messages are typed, without losing input focus. Tree accessibility
+levels and sibling positions match the nested tree hierarchy. Acceptance evidence is in
+[`Architecture/editor reliability`](../benchmarks/2026-09-13-architecture-editor-reliability.md).
+
+Branch checkout and Update retain existing text tabs and Markdown choices, reconcile clean contents
+against the new worktree, and preserve missing-file buffers with an explicit unavailable/conflict
+state. An unsaved conflict result blocks implicit close, survives external completion of the Git
+operation, and requires an explicit discard confirmation before closing the dialog, switching
+projects, or closing the window. This in-memory guard does not provide unsaved-draft crash recovery.

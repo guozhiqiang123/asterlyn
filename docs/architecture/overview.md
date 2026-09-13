@@ -123,3 +123,25 @@ E2 navigation adds a separate transient command-surface state rather than overlo
 - Invalid UTF-8 is decoded lossily for display while raw paths remain an acknowledged M1 limitation.
 - Crashes in optional services must not bring down the editor host.
 - Any feature that can rewrite or discard work needs a preview and recovery story before release.
+
+## Architecture reliability corrections — 2026-09-13
+
+Explicit window opens reserve backend activation tokens before asynchronous work. Read-only
+project refresh and catalog installation verify that token and never recreate authorization.
+Single-file authorization reads only the canonical root/capability plus a targeted catalog lookup;
+it does not clone the complete authorization catalog.
+
+Producer limits apply while reading: Git catalog streams parse NUL-delimited paths with candidate,
+32 KiB path, and 16 MiB stream budgets, and terminate only the read-only catalog producer on
+truncation. General Git stdout/stderr retention is capped at 64 MiB/64 KiB; mutating processes are
+drained to completion and report an uncertain result if output exceeds the budget. Ordinary
+workspace traversal caps candidate enumeration, retained names, and recursion (64 levels) before
+collecting directory contents. Truncated huge directories do not promise a global lexical prefix.
+
+Recoverable worktree transactions are host application services, described in ADR-0008. Git and
+Workspace retain independent domain crates; the host supplies recovery storage and one shared
+workspace write registry. The frontend recovery surface loads on demand. Watcher reconciliation
+and tab activation follow the stable-view rules in ADR-0004 and ADR-0009.
+
+The accompanying functional evidence and residual limits are recorded in
+[`Architecture/editor reliability acceptance`](../benchmarks/2026-09-13-architecture-editor-reliability.md).

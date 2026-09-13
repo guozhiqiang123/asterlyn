@@ -143,3 +143,24 @@ separate capabilities.
   external Git races.
 - **Refreshing the complete repository for every event:** needlessly reloads History and refs and
   recreates the interaction and rendering problems addressed by the refactoring program.
+
+## Reliability correction — 2026-09-13
+
+Every Git subprocess disables optional locks with `GIT_OPTIONAL_LOCKS=0`. Read-only status queries
+must not refresh the index on disk: index lock creation/removal otherwise feeds back into another
+watcher reconciliation indefinitely. Required locks for actual Git mutations remain enabled.
+Access events and access-time-only metadata changes do not invalidate state. Genuine content,
+index, ref, and operation changes continue through authoritative reconciliation.
+
+Project refresh accepts an explicit WorkspaceSessionIdentity object, independently from the
+repository operation generation. Watcher, replacement, and failed remote-operation reconciliation
+all use that identity, so a numeric operation generation cannot compile as a refresh argument. A metadata snapshot that already reread tracked state does not enqueue the
+same tracked read again. `read_project_snapshot` is an authorized read-only command; it never
+reactivates a window. Explicit opens and catalog installation use a backend activation token so late
+A/B/A requests and results from closed windows cannot replace current authorization.
+
+Equivalent catalog/change snapshots preserve tree identity, disclosure, selection, scroll, and
+mounted rows. A background catalog read does not replace existing rows with loading UI, and an
+unchanged completion does not redraw the tree. Editor tab and Markdown mode controls similarly keep
+stable DOM. Native acceptance explicitly checks that repeated Git snapshots produce no subsequent
+invalidation while a real external write still produces one.
