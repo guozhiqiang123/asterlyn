@@ -238,8 +238,7 @@ impl GitRepository {
             return Err(GitError::InvalidInput {
                 field: "resolved content".to_string(),
                 message: format!(
-                    "resolved text exceeds the {} byte safety limit",
-                    MAX_CONFLICT_TEXT_BYTES
+                    "resolved text exceeds the {MAX_CONFLICT_TEXT_BYTES} byte safety limit"
                 ),
             });
         }
@@ -887,10 +886,9 @@ fn operation_original_head(git_dir: &Path, kind: GitOperationKind) -> Option<Str
     if matches!(
         kind,
         GitOperationKind::CherryPick | GitOperationKind::Revert
-    ) {
-        if let Some(oid) = read_oid_file(&git_dir.join("sequencer/head")) {
-            return Some(oid);
-        }
+    ) && let Some(oid) = read_oid_file(&git_dir.join("sequencer/head"))
+    {
+        return Some(oid);
     }
     read_oid_file(&git_dir.join("ORIG_HEAD"))
 }
