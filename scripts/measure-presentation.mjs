@@ -1,5 +1,6 @@
 const port = process.env.ASTERLYN_CDP_PORT ?? "9223";
 const rounds = Number.parseInt(process.env.ASTERLYN_PRESENTATION_ROUNDS ?? "30", 10);
+const idleSeconds = Number.parseInt(process.env.ASTERLYN_IDLE_SECONDS ?? "0", 10);
 const targets = await fetch(`http://127.0.0.1:${port}/json`).then((response) => response.json());
 const target = targets.find(
   (item) => item.type === "page" && item.url.includes("127.0.0.1:1420"),
@@ -126,5 +127,35 @@ for (const [width, height] of [[920, 640], [1280, 720]]) {
 }
 await send("Emulation.clearDeviceMetricsOverride");
 
-console.log(JSON.stringify({ ...measurement.result.value, viewports }, null, 2));
+let idle = null;
+if (idleSeconds > 0) {
+  const idleResult = await send("Runtime.evaluate", {
+    awaitPromise: true,
+    returnByValue: true,
+    expression: `(${async function measureIdle(seconds) {
+      document.querySelector('[data-setting-theme="system"]')?.click();
+      document.querySelector('#settings-back')?.click();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      let mutations = 0;
+      const observer = new MutationObserver((records) => mutations += records.length);
+      observer.observe(document.documentElement, {
+        attributes: true,
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+      const startedAt = performance.now();
+      await new Promise((resolve) => setTimeout(resolve, seconds * 1_000));
+      const elapsedMs = performance.now() - startedAt;
+      observer.disconnect();
+      return { seconds, elapsedMs: Number(elapsedMs.toFixed(1)), domMutations: mutations };
+    }})(${idleSeconds})`,
+  });
+  if (idleResult.exceptionDetails) {
+    throw new Error(idleResult.exceptionDetails.exception?.description ?? idleResult.exceptionDetails.text);
+  }
+  idle = idleResult.result.value;
+}
+
+console.log(JSON.stringify({ ...measurement.result.value, viewports, idle }, null, 2));
 socket.close();
