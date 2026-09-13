@@ -11,6 +11,8 @@ import {
   type WorkspaceSearchState,
 } from "../../workbench/workspace-search.ts";
 import type { WorkspaceReplacementState } from "../../workbench/workspace-replacement.ts";
+import type { NavigationCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface CommandSurfaceViewModel {
   readonly commandSurface: CommandSurfaceState;
@@ -23,6 +25,7 @@ export interface CommandSurfaceViewModel {
   readonly searchRequestIsCurrent: boolean;
   readonly replacementText: string;
   readonly replacementRecoveryCount: number;
+  readonly copy?: NavigationCopy;
 }
 
 export interface WorkspaceReplacementViewModel {
@@ -47,28 +50,29 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
   if (!mode) return "";
   const resultCount = commandSurfaceResultCount(model);
   const selected = model.commandSurface.selectedIndex;
-  const title = commandSurfaceTitle(mode);
+  const copy = model.copy ?? EN_US.navigation;
+  const title = copy.titles[mode];
   return `<section class="command-surface ${mode === "workspace" ? "workspace-mode" : ""}" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
-    <div class="command-surface-tabs" role="tablist" aria-label="Navigation mode">
-      ${commandSurfaceTab("files", "Files", model)}
-      ${commandSurfaceTab("recent", "Recent", model)}
-      ${commandSurfaceTab("workspace", "Text", model)}
-      ${commandSurfaceTab("commands", "Commands", model)}
-      <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="Close">${icon("close", 15)}</button>
+    <div class="command-surface-tabs" role="tablist" aria-label="${escapeAttribute(copy.navigationMode)}">
+      ${commandSurfaceTab("files", copy.tabs.files, model)}
+      ${commandSurfaceTab("recent", copy.tabs.recent, model)}
+      ${commandSurfaceTab("workspace", copy.tabs.workspace, model)}
+      ${commandSurfaceTab("commands", copy.tabs.commands, model)}
+      <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="${escapeAttribute(copy.close)}">${icon("close", 15)}</button>
     </div>
     <div class="command-surface-input">
       ${icon("search", 17)}
       <input id="command-surface-input" type="text" value="${escapeAttribute(model.commandSurface.query)}" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}" />
-      ${mode === "workspace" ? `<button class="workspace-search-mode" id="workspace-search-mode" type="button" aria-label="Use regular expressions" aria-pressed="${model.workspaceSearchControls.mode === "regex"}" title="Regular expression">.*</button>` : ""}
-      ${mode === "workspace" && model.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${mode === "workspace" ? "Enter to search" : "Enter"}</kbd>`}
+      ${mode === "workspace" ? `<button class="workspace-search-mode" id="workspace-search-mode" type="button" aria-label="${escapeAttribute(copy.useRegularExpressions)}" aria-pressed="${model.workspaceSearchControls.mode === "regex"}" title="${escapeAttribute(copy.regularExpression)}">.*</button>` : ""}
+      ${mode === "workspace" && model.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${escapeHtml(mode === "workspace" ? copy.enterToSearch : copy.enter)}</kbd>`}
     </div>
     ${mode === "workspace" ? renderWorkspaceSearchControls(model) : ""}
     <div class="command-surface-results" id="command-surface-results" role="listbox" aria-label="${escapeAttribute(title)}">
       ${renderCommandSurfaceResults(mode, selected, model)}
     </div>
     <footer class="command-surface-footer">
-      <span id="command-surface-title">${escapeHtml(commandSurfaceHint(mode))}</span>
-      <span><kbd>↑↓</kbd> Navigate <kbd>Enter</kbd> Open <kbd>Esc</kbd> Close</span>
+      <span id="command-surface-title">${escapeHtml(copy.hints[mode])}</span>
+      <span><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>
     </footer>
   </section>`;
 }
@@ -141,16 +145,17 @@ function commandSurfaceTab(
 }
 
 function renderWorkspaceSearchControls(model: CommandSurfaceViewModel): string {
+  const copy = model.copy ?? EN_US.navigation;
   const controls = model.workspaceSearchControls;
   const hasResults = workspaceSearchHasCurrentResults(model) && Boolean(model.workspaceSearch.report?.matches.length);
   const recoveryCount = model.replacementRecoveryCount;
-  return `<div class="workspace-search-controls" role="group" aria-label="Workspace search options">
-    <label><span>Include</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="Files to include, comma-separated full-path globs" /></label>
-    <label><span>Exclude</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="Files to exclude, comma-separated full-path globs" /></label>
-    <label class="workspace-search-context"><span>Context</span><select id="workspace-search-context" aria-label="Context lines">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select></label>
-    <label class="workspace-replacement-input"><span>Replace</span><input id="workspace-replacement-text" type="text" value="${escapeAttribute(model.replacementText)}" placeholder="Replacement text" autocomplete="off" spellcheck="false" aria-label="Replacement text" /></label>
-    <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"}>Preview Replace</button>
-    ${recoveryCount > 0 ? `<button class="workspace-recovery-button" id="workspace-recovery-open" type="button" aria-label="Review ${recoveryCount} replacement recoveries">${recoveryCount} recovery ${recoveryCount === 1 ? "record" : "records"}</button>` : ""}
+  return `<div class="workspace-search-controls" role="group" aria-label="${escapeAttribute(copy.workspaceSearchOptions)}">
+    <label><span>${escapeHtml(copy.include)}</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.includeAria)}" /></label>
+    <label><span>${escapeHtml(copy.exclude)}</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.excludeAria)}" /></label>
+    <label class="workspace-search-context"><span>${escapeHtml(copy.context)}</span><select id="workspace-search-context" aria-label="${escapeAttribute(copy.contextLines)}">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select></label>
+    <label class="workspace-replacement-input"><span>${escapeHtml(copy.replace)}</span><input id="workspace-replacement-text" type="text" value="${escapeAttribute(model.replacementText)}" placeholder="${escapeAttribute(copy.replacementText)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.replacementText)}" /></label>
+    <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"}>${escapeHtml(copy.previewReplace)}</button>
+    ${recoveryCount > 0 ? `<button class="workspace-recovery-button" id="workspace-recovery-open" type="button" aria-label="${escapeAttribute(copy.reviewRecoveries(recoveryCount))}">${escapeHtml(copy.recoveryRecords(recoveryCount))}</button>` : ""}
   </div>`;
 }
 
@@ -159,46 +164,48 @@ function renderCommandSurfaceResults(
   selected: number,
   model: CommandSurfaceViewModel,
 ): string {
+  const copy = model.copy ?? EN_US.navigation;
   if (mode === "workspace") return renderWorkspaceSearchResults(selected, model);
   if (mode === "commands") {
     return model.commands.length
       ? model.commands.map((command, index) => renderCommandResult(command, index, selected)).join("")
-      : commandSurfaceEmpty("No matching commands", "Try a broader command name.");
+      : commandSurfaceEmpty(copy.noMatchingCommands, copy.broaderCommand);
   }
   if (model.files.length === 0) {
     return commandSurfaceEmpty(
-      mode === "recent" ? "No recent files" : "No matching files",
+      mode === "recent" ? copy.noRecentFiles : copy.noMatchingFiles,
       mode === "recent"
-        ? "Files appear here after they open successfully."
+        ? copy.recentFilesDetail
         : model.filesLoading
-          ? "The project catalog is still loading."
-          : "Try part of a filename or path.",
+          ? copy.catalogLoading
+          : copy.fileQueryDetail,
     );
   }
   return model.files.map((file, index) => renderFileNavigationResult(file, index, selected)).join("");
 }
 
 function renderWorkspaceSearchResults(selected: number, model: CommandSurfaceViewModel): string {
+  const copy = model.copy ?? EN_US.navigation;
   const search = model.workspaceSearch;
   if (search.status === "loading") {
-    return commandSurfaceEmpty("Searching current project…", "The scan is bounded and cancellable.", true);
+    return commandSurfaceEmpty(copy.searchingProject, copy.boundedSearchDetail, true);
   }
   if (search.status === "error" && model.searchRequestIsCurrent) {
-    return commandSurfaceEmpty("Search could not complete", search.error ?? "Try again.");
+    return commandSurfaceEmpty(copy.searchFailed, search.error ?? copy.tryAgain);
   }
   if (search.status !== "ready" || !model.searchRequestIsCurrent || !search.report) {
     return commandSurfaceEmpty(
-      "Search file contents",
-      "Enter a case-sensitive literal or regular expression, then press Enter. Replacement always requires a separate preview.",
+      copy.searchFileContents,
+      copy.searchInstructions,
     );
   }
   if (search.report.matches.length === 0) {
     return commandSurfaceEmpty(
-      search.report.coverageReasons.length > 0 ? "No matches in the searched subset" : "No matches",
+      search.report.coverageReasons.length > 0 ? copy.noSubsetMatches : copy.noMatches,
       formatWorkspaceSearchCoverage(search.report),
     );
   }
-  const rows = search.report.matches.map((match, index) => renderWorkspaceSearchResult(match, index, selected)).join("");
+  const rows = search.report.matches.map((match, index) => renderWorkspaceSearchResult(match, index, selected, copy)).join("");
   return `${rows}<div class="workspace-search-summary">${escapeHtml(formatWorkspaceSearchCoverage(search.report))}</div>`;
 }
 
@@ -223,13 +230,14 @@ function renderWorkspaceSearchResult(
   match: WorkspaceTextSearchMatch,
   index: number,
   selected: number,
+  copy: NavigationCopy,
 ): string {
   const before = match.preview.slice(0, match.previewFromUtf16);
   const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
   const after = match.preview.slice(match.previewToUtf16);
   const highlighted = found.length > 0
     ? `<mark>${escapeHtml(found)}</mark>`
-    : '<mark class="zero-width" aria-label="Zero-width match" title="Zero-width match">│</mark>';
+    : `<mark class="zero-width" aria-label="${escapeAttribute(copy.zeroWidthMatch)}" title="${escapeAttribute(copy.zeroWidthMatch)}">│</mark>`;
   return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
     <span class="search-result-location">${escapeHtml(`${match.workspacePath}:${match.line}:${match.columnUtf16}`)}</span>
     <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
@@ -273,24 +281,6 @@ function loadingBlock(label: string): string {
 
 function commandSurfaceEmpty(title: string, detail: string, busy = false): string {
   return `<div class="command-surface-empty">${busy ? '<span class="spinner"></span>' : ""}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>`;
-}
-
-function commandSurfaceTitle(mode: NavigationMode): string {
-  return {
-    files: "Search project files",
-    recent: "Filter recent files",
-    workspace: "Search text in current project",
-    commands: "Search available commands",
-  }[mode];
-}
-
-function commandSurfaceHint(mode: NavigationMode): string {
-  return {
-    files: "Go to File · authorized project catalog",
-    recent: "Recent Files · successful opens in this project",
-    workspace: "Find in Files · bounded search · reviewed recoverable replacement",
-    commands: "Command Palette · only currently safe commands are enabled",
-  }[mode];
 }
 
 function replacementFileStateLabel(state: "original" | "replaced" | "conflict" | "unavailable"): string {

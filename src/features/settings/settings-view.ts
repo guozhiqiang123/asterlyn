@@ -16,6 +16,8 @@ import {
   type AppPreferences,
 } from "../../workbench/preferences.ts";
 import type { SettingsSection, SettingsState } from "./settings-controller.ts";
+import type { SettingsCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface EditorFontPresentationStatus {
   id: EditorFontId | null;
@@ -24,14 +26,11 @@ export interface EditorFontPresentationStatus {
   message?: string;
 }
 
-export function renderSettingsNavigation(section: SettingsSection): string {
-  const sections: Array<[SettingsSection, string]> = [
-    ["general", "General"],
-    ["appearance", "Appearance"],
-    ["editor", "Editor"],
-    ["version-control", "Version Control"],
-    ["code", "Code"],
-  ];
+export function renderSettingsNavigation(
+  section: SettingsSection,
+  copy: SettingsCopy = EN_US.settings,
+): string {
+  const sections = Object.entries(copy.sections) as Array<[SettingsSection, string]>;
   return sections.map(([id, label]) => {
     const selected = section === id;
     return `<button class="settings-navigation-item ${selected ? "selected" : ""}" type="button" data-settings-section="${id}" aria-current="${selected ? "page" : "false"}">${label}</button>`;
@@ -41,38 +40,39 @@ export function renderSettingsNavigation(section: SettingsSection): string {
 export function renderSettingsSection(
   state: SettingsState,
   fontStatus: EditorFontPresentationStatus,
+  copy: SettingsCopy = EN_US.settings,
 ): string {
   const preferences = state.preferences;
   switch (state.section) {
     case "general":
       return settingsGroup(
-        "General",
-        "Application-wide behavior with explicit support status.",
-        `${settingsRow("Application language", "English is the only complete interface language in this build.", '<span class="setting-value-pill">English · Current</span>')}${settingsRow("简体中文", "Planned after every visible string moves into the localization catalog.", '<span class="setting-planned">Planned</span>')}`,
+        copy.generalTitle,
+        copy.generalDescription,
+        settingsRow(copy.languageLabel, copy.languageDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.languageLabel)}"><button type="button" data-setting-locale="system" aria-pressed="${preferences.locale === "system"}">${escapeHtml(copy.languageSystem)}</button><button type="button" data-setting-locale="en-US" aria-pressed="${preferences.locale === "en-US"}">${escapeHtml(copy.languageEnglish)}</button><button type="button" data-setting-locale="zh-CN" aria-pressed="${preferences.locale === "zh-CN"}">${escapeHtml(copy.languageChinese)}</button></div>`),
       );
     case "appearance":
       return settingsGroup(
-        "Appearance",
-        "Interface color and application-menu typography.",
-        `${settingsRow("Theme", "Choose a fixed palette or follow the operating-system appearance.", `<div class="setting-segmented" role="group" aria-label="Application theme"><button type="button" data-setting-theme="system" aria-pressed="${preferences.theme === "system"}">System</button><button type="button" data-setting-theme="dark" aria-pressed="${preferences.theme === "dark"}">Dark</button><button type="button" data-setting-theme="light" aria-pressed="${preferences.theme === "light"}">Light</button></div>`)}${settingsRow("Application menu font", "Changes navigation, toolbar, tabs, settings, and status text without scaling the editor.", settingsSelect("setting-ui-font", "Application menu font size", "uiFontSize", UI_FONT_SIZES, preferences.uiFontSize, (value) => `${value} px`))}`,
+        copy.appearanceTitle,
+        copy.appearanceDescription,
+        `${settingsRow(copy.themeLabel, copy.themeDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.themeLabel)}"><button type="button" data-setting-theme="system" aria-pressed="${preferences.theme === "system"}">${escapeHtml(copy.themeSystem)}</button><button type="button" data-setting-theme="dark" aria-pressed="${preferences.theme === "dark"}">${escapeHtml(copy.themeDark)}</button><button type="button" data-setting-theme="light" aria-pressed="${preferences.theme === "light"}">${escapeHtml(copy.themeLight)}</button></div>`)}${settingsRow(copy.applicationFontLabel, copy.applicationFontDescription, settingsSelect("setting-ui-font", copy.applicationFontAria, "uiFontSize", UI_FONT_SIZES, preferences.uiFontSize, (value) => `${value} px`))}`,
       );
     case "editor":
       return settingsGroup(
-        "Editor",
-        "Shared defaults for text editors and source-aware Diff panes.",
-        `${settingsRow("Editor font", "JetBrains Mono is included. Other fonts download only when selected, pass an integrity check, and remain cached in this profile.", editorFontControl(preferences, fontStatus))}${settingsRow("Editor font size", "Applies immediately to text files and Diff code.", settingsSelect("setting-editor-font", "Editor font size", "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}${settingsRow("Line spacing", "Controls vertical code density without changing file content.", settingsSelect("setting-editor-line-height", "Editor line spacing", "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}${settingsRow("Letter spacing", "Adjusts horizontal spacing between code glyphs. Android Studio's editor default is represented by 0 px.", settingsSelect("setting-editor-letter-spacing", "Editor letter spacing", "editorLetterSpacing", EDITOR_LETTER_SPACINGS, preferences.editorLetterSpacing, (value) => value === 0 ? "Default · 0 px" : `${value > 0 ? "+" : ""}${value} px`))}${settingsRow("Indent size", "Sets the spaces inserted for one editor indentation level.", settingsSelect("setting-editor-indent", "Editor indent size", "editorIndentSize", EDITOR_INDENT_SIZES, preferences.editorIndentSize, (value) => `${value} spaces`))}${settingsRow("Tab width", "Controls the visual width of an existing tab character without rewriting content.", settingsSelect("setting-editor-tab", "Editor tab width", "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, (value) => `${value} spaces`))}`,
+        copy.editorTitle,
+        copy.editorDescription,
+        `${settingsRow(copy.editorFontLabel, copy.editorFontDescription, editorFontControl(preferences, fontStatus, copy))}${settingsRow(copy.editorFontSizeLabel, copy.editorFontSizeDescription, settingsSelect("setting-editor-font", copy.editorFontSizeAria, "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}${settingsRow(copy.lineSpacingLabel, copy.lineSpacingDescription, settingsSelect("setting-editor-line-height", copy.lineSpacingAria, "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}${settingsRow(copy.letterSpacingLabel, copy.letterSpacingDescription, settingsSelect("setting-editor-letter-spacing", copy.letterSpacingAria, "editorLetterSpacing", EDITOR_LETTER_SPACINGS, preferences.editorLetterSpacing, (value) => value === 0 ? copy.defaultPixels(0) : `${value > 0 ? "+" : ""}${value} px`))}${settingsRow(copy.indentLabel, copy.indentDescription, settingsSelect("setting-editor-indent", copy.indentAria, "editorIndentSize", EDITOR_INDENT_SIZES, preferences.editorIndentSize, copy.spaces))}${settingsRow(copy.tabWidthLabel, copy.tabWidthDescription, settingsSelect("setting-editor-tab", copy.tabWidthAria, "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, copy.spaces))}`,
       );
     case "version-control":
       return settingsGroup(
-        "Version Control",
-        "Defaults shared by working-tree and commit Diff views.",
-        `${settingsRow("Diff layout", "Choose the default presentation used by every Diff preview.", `<div class="setting-segmented" role="group" aria-label="Default Diff layout"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">Side by side</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">Unified</button></div>`)}${settingsRow("Whitespace", "Show spaces and tabs in Diff panes.", `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>Show whitespace characters</span></label>`)}`,
+        copy.versionControlTitle,
+        copy.versionControlDescription,
+        `${settingsRow(copy.diffLayoutLabel, copy.diffLayoutDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.diffLayoutAria)}"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">${escapeHtml(copy.sideBySide)}</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">${escapeHtml(copy.unified)}</button></div>`)}${settingsRow(copy.whitespaceLabel, copy.whitespaceDescription, `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>${escapeHtml(copy.showWhitespace)}</span></label>`)}`,
       );
     case "code":
       return settingsGroup(
-        "Code",
-        "Syntax and language-specific services are introduced only when their boundaries are real.",
-        `${settingsRow("Syntax highlighting", "CodeMirror language packages load on demand for editors and Diff panes.", '<span class="setting-value-pill success">Available</span>')}${settingsRow("Per-language formatting", "Formatter choice, style profiles, and format-on-save need the future language-service boundary.", '<span class="setting-planned">Planned</span>')}`,
+        copy.codeTitle,
+        copy.codeDescription,
+        `${settingsRow(copy.syntaxHighlighting, copy.syntaxDescription, `<span class="setting-value-pill success">${escapeHtml(copy.available)}</span>`)}${settingsRow(copy.formatting, copy.formattingDescription, `<span class="setting-planned">${escapeHtml(copy.planned)}</span>`)}`,
       );
   }
 }
@@ -88,32 +88,33 @@ function settingsRow(label: string, description: string, control: string): strin
 function editorFontControl(
   preferences: AppPreferences,
   status: EditorFontPresentationStatus,
+  copy: SettingsCopy,
 ): string {
   const selected = status.kind === "loading" && status.id
     ? status.id
     : preferences.editorFontFamily;
-  let message = "Included with Asterlyn";
+  let message = copy.includedWithApp;
   let statusClass = "";
   if (status.kind === "loading" && status.id) {
-    message = `Downloading and verifying ${editorFont(status.id).label}…`;
+    message = copy.downloadingFont(editorFont(status.id).label);
     statusClass = "loading";
   } else if (status.kind === "error" && status.message) {
     message = status.message;
     statusClass = "error";
   } else if (status.kind === "ready" && status.id !== DEFAULT_EDITOR_FONT_ID) {
     message = status.source === "download"
-      ? "Downloaded, verified, and cached"
+      ? copy.downloadedFont
       : status.source === "download-uncached"
-        ? "Loaded for this window; local cache is unavailable"
+        ? copy.uncachedFont
         : status.source === "cache"
-          ? "Loaded from verified local cache"
-          : "Ready in this window";
+          ? copy.cachedFont
+          : copy.fontReady;
     statusClass = "success";
   }
   const retry = status.kind === "error" && status.id
-    ? `<button class="setting-retry-button" id="setting-editor-font-retry" type="button">Retry ${escapeHtml(editorFont(status.id).label)}</button>`
+    ? `<button class="setting-retry-button" id="setting-editor-font-retry" type="button">${escapeHtml(copy.retryFont(editorFont(status.id).label))}</button>`
     : "";
-  return `<div class="editor-font-setting"><select id="setting-editor-font-family" aria-label="Editor font family" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select><span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
+  return `<div class="editor-font-setting"><select id="setting-editor-font-family" aria-label="${escapeAttribute(copy.editorFontAria)}" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select><span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
 }
 
 function settingsSelect(

@@ -87,6 +87,11 @@ export class EditorSurface {
     this.diffEditor.setTheme(theme);
   }
 
+  setPhrases(phrases: Readonly<Record<string, string>>): void {
+    this.textEditor.setPhrases(phrases);
+    this.diffEditor.setPhrases(phrases);
+  }
+
   setDiffPresentation(presentation: DiffPresentation): void {
     this.diffEditor.setPresentation(presentation);
   }

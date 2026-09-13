@@ -21,11 +21,17 @@ import "./features/remote-push/remote-push.css";
 import "./shared/responsive.css";
 import { AsterlynApp } from "./app";
 import { BRAND } from "./brand";
+import type { LocaleCatalog } from "./localization/catalog.ts";
 
-document.title = BRAND.name;
+export function startApplication(catalog: LocaleCatalog): void {
+  document.title = BRAND.name;
+  document
+    .querySelector<HTMLMetaElement>('meta[name="description"]')
+    ?.setAttribute("content", catalog.documentDescription);
 
-const root = document.querySelector<HTMLElement>("#app");
-if (!root) throw new Error("Application root was not found.");
+  const root = document.querySelector<HTMLElement>("#app");
+  if (!root) throw new Error("Application root was not found.");
 
-const app = new AsterlynApp(root);
-void app.start();
+  const app = new AsterlynApp(root, catalog);
+  void app.start();
+}

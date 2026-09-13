@@ -31,6 +31,7 @@ export class LazyTextEditor {
   private readOnly = false;
   private preferences: AppPreferences | null = null;
   private theme: EffectiveTheme = "dark";
+  private phrases: Readonly<Record<string, string>> = {};
 
   mount(
     parent: HTMLElement,
@@ -55,6 +56,7 @@ export class LazyTextEditor {
       this.implementation.setReadOnly(this.readOnly);
       this.implementation.setPreferences(this.preferences ?? preferences);
       this.implementation.setTheme(this.theme);
+      this.implementation.setPhrases(this.phrases);
       this.implementation.mount(
         parent,
         tabId,
@@ -76,6 +78,7 @@ export class LazyTextEditor {
       editor.setReadOnly(this.readOnly);
       editor.setPreferences(this.preferences ?? mount.preferences);
       editor.setTheme(this.theme);
+      editor.setPhrases(this.phrases);
       editor.mount(
         mount.parent,
         mount.tabId,
@@ -161,6 +164,11 @@ export class LazyTextEditor {
     this.implementation?.setTheme(theme);
   }
 
+  setPhrases(phrases: Readonly<Record<string, string>>): void {
+    this.phrases = phrases;
+    this.implementation?.setPhrases(phrases);
+  }
+
   detach(): void {
     this.mountGeneration += 1;
     this.pendingMount?.parent.removeAttribute("aria-busy");
@@ -205,6 +213,7 @@ export class LazyDiffEditor {
   private mountGeneration = 0;
   private preferences: AppPreferences | null = null;
   private theme: EffectiveTheme = "dark";
+  private phrases: Readonly<Record<string, string>> = {};
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
 
   mount(
@@ -219,6 +228,7 @@ export class LazyDiffEditor {
     this.presentation = { ...presentation };
     if (this.implementation) {
       this.implementation.setTheme(this.theme);
+      this.implementation.setPhrases(this.phrases);
       this.implementation.mount(
         parent,
         document,
@@ -236,6 +246,7 @@ export class LazyDiffEditor {
       if (!mount.parent.isConnected) return;
       mount.parent.removeAttribute("aria-busy");
       editor.setTheme(this.theme);
+      editor.setPhrases(this.phrases);
       editor.mount(
         mount.parent,
         mount.document,
@@ -267,6 +278,11 @@ export class LazyDiffEditor {
   setTheme(theme: EffectiveTheme): void {
     this.theme = theme;
     this.implementation?.setTheme(theme);
+  }
+
+  setPhrases(phrases: Readonly<Record<string, string>>): void {
+    this.phrases = phrases;
+    this.implementation?.setPhrases(phrases);
   }
 
   destroy(): void {

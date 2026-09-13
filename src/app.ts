@@ -181,6 +181,7 @@ import {
   type EditorFontLoadSource,
 } from "./workbench/editor-fonts";
 import {
+  isLocalePreference,
   isThemePreference,
   type AppPreferences,
 } from "./workbench/preferences";
@@ -190,6 +191,9 @@ import {
   createBrowserSystemPresentationPort,
 } from "./presentation/presentation-environment";
 import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter";
+import type { LocaleCatalog, NavigationCommandId } from "./localization/catalog";
+import { loadLocale } from "./localization/locale-loader";
+import { createLocalization, type Localization } from "./localization/localization";
 import {
   loadRecentRepositories,
   restoreRecentRepository,
@@ -297,6 +301,8 @@ const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
 ];
 
 export class AsterlynApp {
+  private localization: Localization;
+  private localeRequestGeneration = 0;
   private readonly pushDiffEditor = new LazyDiffEditor();
   private readonly editorSurface: EditorSurface;
   private readonly historyListView = new GitHistoryListView();
@@ -370,7 +376,8 @@ export class AsterlynApp {
   private readonly repositoryIntegration: RepositoryIntegrationCoordinator;
   private readonly workspaceWatch: WorkspaceWatchCoordinator;
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
+    this.localization = createLocalization(initialCatalog);
     this.editorSurface = new EditorSurface(root);
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
@@ -389,11 +396,13 @@ export class AsterlynApp {
     );
     this.releasePresentationEnvironment = this.presentationEnvironment.subscribe(
       (snapshot, previous) => {
-        if (snapshot.theme === previous.theme) return;
-        this.editorSurface.setTheme(snapshot.theme);
-        this.pushDiffEditor.setTheme(snapshot.theme);
-        this.editorSurface.requestMeasure();
-        this.pushDiffEditor.requestMeasure();
+        if (snapshot.theme !== previous.theme) {
+          this.editorSurface.setTheme(snapshot.theme);
+          this.pushDiffEditor.setTheme(snapshot.theme);
+          this.editorSurface.requestMeasure();
+          this.pushDiffEditor.requestMeasure();
+        }
+        if (snapshot.locale !== previous.locale) void this.activateLocale(snapshot.locale);
       },
     );
     this.releaseSettingsController = this.settingsController.subscribe((change) =>
@@ -528,7 +537,10 @@ export class AsterlynApp {
           void this.loadSelectedDiff();
         },
         replacementRecoveryCount: () => this.state.workspaceReplacement.recoveries.length,
-        setStatus: (message, kind) => this.setStatus(message, kind),
+        setStatus: (message, kind) => this.setStatus(
+          message === "Ready" ? this.localization.catalog.common.ready : message,
+          kind,
+        ),
         reportError: (error) => this.showError(error),
       },
     );
@@ -635,6 +647,7 @@ export class AsterlynApp {
       dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationController.hasUnsavedConflict()),
       confirmClose: () => this.saveDirtyTabsBefore("closing Asterlyn"),
       reportError: (error) => this.showError(error),
+      labels: () => this.localShellCopy(),
     });
   }
 
@@ -817,7 +830,138 @@ export class AsterlynApp {
       gitAvailable: Boolean(this.windowSession.repository.state.snapshot),
       demo: bridge.isDemo,
       windowControlsAvailable: this.windowChromeBinding.available,
+      localization: this.localization.catalog,
     });
+  }
+
+  private async activateLocale(locale: "en-US" | "zh-CN"): Promise<void> {
+    const request = ++this.localeRequestGeneration;
+    const restoreFocus = this.captureLocaleChangeFocus();
+    try {
+      const catalog = await loadLocale(locale);
+      if (
+        request !== this.localeRequestGeneration ||
+        this.presentationEnvironment.snapshot.locale !== locale
+      ) return;
+      const previousCatalog = this.localization.catalog;
+      this.localization = createLocalization(catalog);
+      this.editorSurface.setPhrases(catalog.editorPhrases);
+      this.pushDiffEditor.setPhrases(catalog.editorPhrases);
+      document
+        .querySelector<HTMLMetaElement>('meta[name="description"]')
+        ?.setAttribute("content", catalog.documentDescription);
+      this.reconcileLocalizedPresentation(previousCatalog);
+      queueMicrotask(restoreFocus);
+    } catch (error) {
+      if (request === this.localeRequestGeneration) this.showError(error);
+    }
+  }
+
+  private reconcileLocalizedPresentation(previousCatalog: LocaleCatalog): void {
+    if (!this.root.querySelector(".app-shell")) return;
+    if (this.shellState.page === "settings") this.renderSettingsPage();
+    this.renderActivityRail();
+    this.renderRepositoryMenu();
+    this.renderStatus(this.windowSession.repository.state.snapshot);
+    if (this.state.commandSurface.mode) this.renderCommandSurface();
+    this.localizeShellChrome(previousCatalog);
+    this.windowChromeBinding.refreshLabels();
+  }
+
+  private captureLocaleChangeFocus(): () => void {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !this.root.contains(active)) return () => {};
+    const selection = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+      ? [active.selectionStart, active.selectionEnd] as const
+      : null;
+    const attributes = [
+      "id",
+      "data-setting-locale",
+      "data-setting-theme",
+      "data-settings-section",
+      "data-command-mode",
+      "data-command-surface-close",
+      "data-command-result",
+      "data-tool",
+    ];
+    const attribute = attributes.find((name) => active.hasAttribute(name));
+    if (!attribute) return () => {};
+    const value = active.getAttribute(attribute);
+    const selector = attribute === "id"
+      ? `#${CSS.escape(value ?? "")}`
+      : `[${attribute}${value ? `="${CSS.escape(value)}"` : ""}]`;
+    return () => {
+      const target = this.root.querySelector<HTMLElement>(selector);
+      target?.focus();
+      if (
+        selection &&
+        (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+        selection[0] !== null && selection[1] !== null
+      ) target.setSelectionRange(selection[0], selection[1]);
+    };
+  }
+
+  private localShellCopy() {
+    return this.localization.catalog.shell;
+  }
+
+  private localizeShellChrome(previousCatalog?: LocaleCatalog): void {
+    const copy = this.localization.catalog.shell;
+    const common = this.localization.catalog.common;
+    const text = (selector: string, value: string) => {
+      const element = this.root.querySelector<HTMLElement>(selector);
+      if (element) element.textContent = value;
+    };
+    const label = (selector: string, aria: string, title = aria) => {
+      const element = this.root.querySelector<HTMLElement>(selector);
+      if (!element) return;
+      element.setAttribute("aria-label", aria);
+      element.title = title;
+    };
+    text(".demo-badge", copy.browserDemo);
+    const status = this.root.querySelector<HTMLElement>("#status-message");
+    if (status && status.textContent === previousCatalog?.common.ready) status.textContent = common.ready;
+    text("#command-center-button span", copy.search);
+    label("#command-center-button", copy.searchFilesAndCommands, `${copy.searchFilesAndCommands} (Ctrl/Cmd+P)`);
+    this.root.querySelector("#remote-toolbar")?.setAttribute("aria-label", copy.remoteActions);
+    label(".topbar-remote-select", copy.remoteForActions);
+    label("#topbar-remote-select", copy.remoteForActions);
+    label("#remote-fetch", copy.fetchBranch);
+    label("#remote-update", copy.updateBranch);
+    label("#remote-push", copy.pushBranch);
+    label("#cancel-remote-operation", copy.cancelRemote);
+    label("#refresh-button", copy.refreshProject, copy.refreshShortcut);
+    label("#settings-button", copy.openSettings, copy.settings);
+    this.root.querySelector(".window-controls")?.setAttribute("aria-label", copy.windowControls);
+    label("#window-minimize", copy.minimizeWindow, copy.minimize);
+    label("#window-close", copy.closeWindow, common.close);
+    this.root.querySelector(".activity-rail")?.setAttribute("aria-label", copy.toolWindows);
+    text("#settings-page-title", copy.settings);
+    label("#settings-back", copy.returnToWorkbench, copy.backToWorkbench);
+    this.root.querySelector("#settings-navigation")?.setAttribute("aria-label", copy.settingsGroups);
+    label("#toast-close", copy.dismissError);
+    this.root.querySelector("#document-encoding")?.setAttribute("aria-label", copy.currentEncoding);
+    for (const tool of this.shellState.activityOrder) {
+      const button = this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
+      if (!button) continue;
+      const toolLabel = { files: copy.files, branches: copy.branches, changes: copy.changes }[tool];
+      button.setAttribute("aria-label", toolLabel);
+      text(`[data-tool="${tool}"] span`, toolLabel);
+    }
+    text("#dialog-title", copy.simulateOpenFolder);
+    text("#repository-dialog .panel-eyebrow", copy.browserDemo);
+    text("#repository-dialog .dialog > p", copy.demoFolderDetail);
+    text('label[for="repository-input"]', copy.projectFolderPath);
+    text("#dialog-cancel", common.cancel);
+    text('#repository-form button[type="submit"]', copy.openProjectAction);
+    label("#dialog-close", common.close);
+    text("#repository-target-dialog .panel-eyebrow", copy.openProjectAction);
+    text("#repository-target-title", copy.whereOpenProject);
+    text("#repository-target-dialog .dialog > p", copy.targetWindowDetail);
+    text("#repository-target-cancel", common.cancel);
+    text("#repository-target-current", copy.currentWindow);
+    text("#repository-target-new", copy.newWindow);
+    label("#repository-target-close", copy.cancelOpeningProject);
   }
 
   private commitActivityOrder(order: ActivityTool[], focusTool: ActivityTool): void {
@@ -894,10 +1038,12 @@ export class AsterlynApp {
   private renderSettingsPage(): void {
     this.query("#settings-navigation").innerHTML = renderSettingsNavigation(
       this.settingsState.section,
+      this.localization.catalog.settings,
     );
     this.query("#settings-content").innerHTML = renderSettingsSection(
       this.settingsState,
       this.editorFontStatus,
+      this.localization.catalog.settings,
     );
     this.bindSettingsEvents();
   }
@@ -946,6 +1092,16 @@ export class AsterlynApp {
       });
     });
     this.root
+      .querySelectorAll<HTMLButtonElement>("[data-setting-locale]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const locale = button.dataset.settingLocale;
+          if (isLocalePreference(locale)) {
+            this.updatePreferences({ locale }, `setting-locale-${locale}`);
+          }
+        });
+      });
+    this.root
       .querySelectorAll<HTMLButtonElement>("[data-setting-theme]")
       .forEach((button) => {
         button.addEventListener("click", () => {
@@ -988,7 +1144,12 @@ export class AsterlynApp {
       this.renderSettingsPage();
       if (restoreFocusId) {
         queueMicrotask(() => {
-          if (restoreFocusId.startsWith("setting-diff-")) {
+          if (restoreFocusId.startsWith("setting-locale-")) {
+            const locale = restoreFocusId.slice("setting-locale-".length);
+            this.root
+              .querySelector<HTMLButtonElement>(`[data-setting-locale="${locale}"]`)
+              ?.focus();
+          } else if (restoreFocusId.startsWith("setting-diff-")) {
             const layout = restoreFocusId.slice("setting-diff-".length);
             this.root
               .querySelector<HTMLButtonElement>(`[data-setting-diff-layout="${layout}"]`)
@@ -1053,6 +1214,8 @@ export class AsterlynApp {
     const theme = this.presentationEnvironment.snapshot.theme;
     this.editorSurface.setTheme(theme);
     this.pushDiffEditor.setTheme(theme);
+    this.editorSurface.setPhrases(this.localization.catalog.editorPhrases);
+    this.pushDiffEditor.setPhrases(this.localization.catalog.editorPhrases);
   }
 
   private async activateConfiguredEditorFont(): Promise<void> {
@@ -1127,7 +1290,7 @@ export class AsterlynApp {
     const generation = this.windowSession.generation;
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
-    this.setLoading(true, "Opening project…");
+    this.setLoading(true, this.localShellCopy().openingProject);
     try {
       const result = await transition;
       if (!result) return false;
@@ -1180,7 +1343,7 @@ export class AsterlynApp {
       if (!this.windowSession.workspace.state.root && bridge.isDemo) this.openRepositoryDialog(path);
       return false;
     } finally {
-      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (pendingRoot && generation === this.windowSession.generation) {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "activation");
@@ -1210,7 +1373,7 @@ export class AsterlynApp {
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.clearError();
-    this.setLoading(true, snapshot ? "Refreshing repository…" : "Refreshing project files…");
+    this.setLoading(true, snapshot ? this.localShellCopy().refreshingRepository : this.localShellCopy().refreshingProjectFiles);
     try {
       const result = await transition;
       if (!result) return;
@@ -1226,7 +1389,7 @@ export class AsterlynApp {
       if (generation !== this.windowSession.generation) return;
       this.showError(error);
     } finally {
-      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (pendingRoot && generation === this.windowSession.generation) {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "manualRefresh");
@@ -1316,6 +1479,7 @@ export class AsterlynApp {
       searchRequestIsCurrent: this.workspaceSearchRequestIsCurrent(),
       replacementText: this.state.replacementText,
       replacementRecoveryCount: this.state.workspaceReplacement.recoveries.length,
+      copy: this.localization.catalog.navigation,
     };
   }
 
@@ -1534,17 +1698,30 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     const hasWorkspace = this.windowSession.workspace.state.root !== null;
     const tab = activeTextTab(this.editorState.session);
+    const copy = this.localization.catalog.navigation.commands;
+    const command = (
+      id: NavigationCommandId,
+      enabled: boolean,
+      shortcut?: string,
+    ): NavigationCommand => ({
+      id,
+      label: copy[id].label,
+      detail: copy[id].detail,
+      keywords: copy[id].aliases,
+      ...(shortcut ? { shortcut } : {}),
+      enabled,
+    });
     return [
-      { id: "open-repository", label: "Open Project", detail: "Choose a local folder", shortcut: "Ctrl+O", enabled: true },
-      { id: "go-file", label: "Go to File", detail: "Open a project file by name", shortcut: "Ctrl+P", enabled: hasWorkspace },
-      { id: "recent-files", label: "Recent Files", detail: "Reopen a successful file", shortcut: "Ctrl+E", enabled: hasWorkspace },
-      { id: "find-workspace", label: "Find in Files", detail: "Bounded search with reviewed replacement", shortcut: "Ctrl+Shift+F", enabled: hasWorkspace },
-      { id: "find-current", label: "Find and Replace in Current File", detail: "Undoable changes stay in the active buffer", shortcut: "Ctrl+F", enabled: Boolean(tab?.status === "ready") },
-      { id: "save-current", label: "Save Current File", detail: "Use the conflict-safe E1 save path", shortcut: "Ctrl+S", enabled: Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest) },
-      { id: "refresh", label: "Refresh Project", detail: "Reload project files and available Git state", shortcut: "Ctrl+R", enabled: Boolean(hasWorkspace && !this.state.loading) },
-      { id: "toggle-files", label: "Toggle Files", detail: "Show or hide the Files tool window", enabled: hasWorkspace },
-      { id: "toggle-changes", label: "Toggle Changes", detail: "Show or hide the Changes tool window", enabled: Boolean(snapshot) },
-      { id: "toggle-git", label: "Toggle Git", detail: "Show or hide Branches and Log", enabled: Boolean(snapshot) },
+      command("open-repository", true, "Ctrl+O"),
+      command("go-file", hasWorkspace, "Ctrl+P"),
+      command("recent-files", hasWorkspace, "Ctrl+E"),
+      command("find-workspace", hasWorkspace, "Ctrl+Shift+F"),
+      command("find-current", Boolean(tab?.status === "ready"), "Ctrl+F"),
+      command("save-current", Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest), "Ctrl+S"),
+      command("refresh", Boolean(hasWorkspace && !this.state.loading), "Ctrl+R"),
+      command("toggle-files", hasWorkspace),
+      command("toggle-changes", Boolean(snapshot)),
+      command("toggle-git", Boolean(snapshot)),
     ];
   }
 
@@ -2379,7 +2556,7 @@ export class AsterlynApp {
       }
     } finally {
       if (generation === this.windowSession.generation) {
-        this.setLoading(false, "Ready");
+        this.setLoading(false, this.localization.catalog.common.ready);
         if (succeeded) this.setStatus(`${remoteActionLabel(kind)} completed`, "success");
         else if (failed) this.setStatus("Remote operation needs review", "warning");
       }
@@ -2417,6 +2594,7 @@ export class AsterlynApp {
   }
 
   private renderActivityRail(): void {
+    const copy = this.localShellCopy();
     const rail = this.query<HTMLElement>(".activity-rail");
     const spacer = this.query<HTMLElement>(".rail-spacer");
     for (const tool of this.shellState.activityOrder) {
@@ -2436,11 +2614,15 @@ export class AsterlynApp {
       button.classList.toggle("unavailable", !enabled);
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
+      const label = { files: copy.files, branches: copy.branches, changes: copy.changes }[tool];
+      button.setAttribute("aria-label", label);
+      const labelNode = button.querySelector("span");
+      if (labelNode) labelNode.textContent = label;
       button.title = enabled
-        ? `${button.getAttribute("aria-label") ?? "Tool window"} — drag to reorder`
+        ? copy.toolReorder(label || copy.genericTool)
         : tool === "files"
-          ? "Open a project folder first — drag to reorder"
-          : "Git is unavailable for this folder — drag to reorder";
+          ? copy.openFolderFirst
+          : copy.gitUnavailableReorder;
     });
   }
 
@@ -2646,14 +2828,15 @@ export class AsterlynApp {
   }
 
   private renderRepositoryMenu(currentRoot = this.windowSession.workspace.state.root): void {
+    const copy = this.localShellCopy();
     const button = this.query<HTMLButtonElement>("#repository-switcher");
     const menu = this.query("#repository-menu");
-    const currentName = currentRoot ? basename(currentRoot) : "No project";
+    const currentName = currentRoot ? basename(currentRoot) : copy.noProject;
     this.query("#repository-name").textContent = currentName;
-    button.title = currentRoot ?? "Open a project";
+    button.title = currentRoot ?? copy.openProject;
     button.setAttribute(
       "aria-label",
-      currentRoot ? `Project menu for ${currentName}` : "Open project menu",
+      currentRoot ? copy.projectMenuFor(currentName) : copy.openProjectMenu,
     );
     button.setAttribute("aria-expanded", String(this.shellState.repositoryMenuOpen));
     menu.classList.toggle("hidden", !this.shellState.repositoryMenuOpen);
@@ -2667,10 +2850,10 @@ export class AsterlynApp {
     );
     menu.innerHTML = `
       <button class="repository-menu-action" id="choose-repository-from-menu" type="button" role="menuitem">
-        ${icon("folder", 16)}<span>Open…</span>
+        ${icon("folder", 16)}<span>${escapeHtml(copy.open)}</span>
       </button>
       <div class="repository-menu-separator" role="separator"></div>
-      <div class="repository-menu-heading">Recent Projects</div>
+      <div class="repository-menu-heading">${escapeHtml(copy.recentProjects)}</div>
       ${
         recent.length > 0
           ? recent
@@ -2678,7 +2861,7 @@ export class AsterlynApp {
                 (path) => `<button class="repository-menu-project" type="button" role="menuitem" data-recent-repository="${escapeAttribute(path)}" title="${escapeAttribute(path)}"><span class="repository-menu-project-mark">${escapeHtml(projectMonogram(path))}</span><span class="repository-menu-project-copy"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></span></button>`,
               )
               .join("")
-          : '<div class="repository-menu-empty">No other recent projects</div>'
+          : `<div class="repository-menu-empty">${escapeHtml(copy.noOtherRecentProjects)}</div>`
       }`;
     this.root
       .querySelector<HTMLButtonElement>("#choose-repository-from-menu")
@@ -2701,6 +2884,7 @@ export class AsterlynApp {
   }
 
   private renderLeftTool(): void {
+    const copy = this.localShellCopy();
     const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot || !this.shellState.layout.leftTool) return;
@@ -2720,9 +2904,9 @@ export class AsterlynApp {
         : 0;
       body.dataset.navigatorView = "changes";
       body.onscroll = null;
-      title.textContent = "Changes";
-      hide.setAttribute("aria-label", "Hide Changes tool window");
-      hide.title = "Hide Changes tool window";
+      title.textContent = copy.changes;
+      hide.setAttribute("aria-label", copy.hideChanges);
+      hide.title = copy.hideChanges;
       count.textContent = snapshot.changes.length.toString();
       count.title = `${snapshot.changes.length} changed files`;
       actions.innerHTML = "";
@@ -2747,8 +2931,8 @@ export class AsterlynApp {
     }
 
     title.textContent = basename(workspaceRoot);
-    hide.setAttribute("aria-label", "Hide Files tool window");
-    hide.title = "Hide Files tool window";
+    hide.setAttribute("aria-label", copy.hideFiles);
+    hide.title = copy.hideFiles;
     const visibleEntries = this.filesState.files.length + this.filesState.ignoredEntries.length;
     count.textContent = visibleEntries.toString();
     count.title = `${this.filesState.files.length} editable files and ${this.filesState.ignoredEntries.length} ignored entries`;
@@ -5137,7 +5321,7 @@ export class AsterlynApp {
         revertFailure = result.error;
       }
     } finally {
-      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (refreshAfterFailure && generation === this.windowSession.generation) {
       await this.refresh();
@@ -5387,7 +5571,7 @@ export class AsterlynApp {
           this.renderWorkspace();
           this.setStatus("Local changes restored", "success");
         } finally {
-          if (this.windowSession.matches(generation, root)) this.setLoading(false, "Ready");
+          if (this.windowSession.matches(generation, root)) this.setLoading(false, this.localization.catalog.common.ready);
         }
       },
     });
@@ -5509,7 +5693,7 @@ export class AsterlynApp {
           : { message: successMessage, kind: "success" };
       }
     } finally {
-      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (failed && generation === this.windowSession.generation) {
       await this.refresh();
@@ -5573,7 +5757,7 @@ export class AsterlynApp {
         );
       }
     } finally {
-      if (generation === this.windowSession.generation) this.setLoading(false, "Ready");
+      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (refreshAfter && generation === this.windowSession.generation) {
       await this.refresh();
@@ -5659,7 +5843,7 @@ export class AsterlynApp {
       this.showError(error);
     } finally {
       if (generation === this.windowSession.generation) {
-        this.setLoading(false, "Ready");
+        this.setLoading(false, this.localization.catalog.common.ready);
         this.renderBottomTool();
         if (succeeded) this.setStatus(successMessage, "success");
       }
@@ -5699,14 +5883,15 @@ export class AsterlynApp {
   }
 
   private renderStatus(snapshot: RepositorySnapshot | null): void {
+    const copy = this.localShellCopy();
     if (!snapshot) {
-      this.query("#branch-status").innerHTML = `${icon("folder", 14)}<span>Folder</span><span class="sync-status">Git unavailable</span>`;
+      this.query("#branch-status").innerHTML = `${icon("folder", 14)}<span>${escapeHtml(copy.folder)}</span><span class="sync-status">${escapeHtml(copy.gitUnavailable)}</span>`;
       return;
     }
     const branch = snapshot.branch;
     const label = branch.detached
-      ? `Detached at ${branch.oid?.slice(0, 8) ?? "unknown"}`
-      : branch.head ?? "No branch";
+      ? copy.detachedAt(branch.oid?.slice(0, 8) ?? "unknown")
+      : branch.head ?? copy.noBranch;
     const sync = [
       branch.ahead ? `↑${branch.ahead}` : "",
       branch.behind ? `↓${branch.behind}` : "",
@@ -5739,7 +5924,7 @@ export class AsterlynApp {
     this.state.error = message;
     this.query("#toast-message").textContent = message;
     this.query("#toast").classList.remove("hidden");
-    this.setStatus("Operation failed", "warning");
+    this.setStatus(this.localization.catalog.common.operationFailed, "warning");
   }
 
   private clearError(): void {

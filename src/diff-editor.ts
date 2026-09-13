@@ -82,6 +82,7 @@ export class DiffEditor {
     compartment: Compartment;
     tabSize: Compartment;
     theme: Compartment;
+    phrases: Compartment;
   }> = [];
   private readonly languageLoader = new EditorLanguageLoader();
   private parent: HTMLElement | null = null;
@@ -92,6 +93,7 @@ export class DiffEditor {
   private languageStatus = "loading";
   private editorPreferences: AppPreferences = { ...DEFAULT_APP_PREFERENCES };
   private themeValue: EffectiveTheme = "dark";
+  private phrasesValue: Readonly<Record<string, string>> = {};
   private presentation: DiffPresentation = {
     layout: "split",
     showWhitespace: false,
@@ -182,6 +184,15 @@ export class DiffEditor {
     }
   }
 
+  setPhrases(phrases: Readonly<Record<string, string>>): void {
+    this.phrasesValue = phrases;
+    for (const binding of this.languageBindings) {
+      binding.view.dispatch({
+        effects: binding.phrases.reconfigure(EditorState.phrases.of(phrases)),
+      });
+    }
+  }
+
   private render(): void {
     const parent = this.parent;
     if (!parent) return;
@@ -267,6 +278,7 @@ export class DiffEditor {
     const language = new Compartment();
     const tabSize = new Compartment();
     const theme = new Compartment();
+    const phrases = new Compartment();
     const extensions: Extension[] = [
       EditorState.readOnly.of(true),
       tabSize.of(EditorState.tabSize.of(this.editorPreferences.editorTabSize)),
@@ -276,6 +288,7 @@ export class DiffEditor {
       highlightActiveLineGutter(),
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
+      phrases.of(EditorState.phrases.of(this.phrasesValue)),
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
       keymap.of([
@@ -311,7 +324,7 @@ export class DiffEditor {
         extensions,
       }),
     });
-    this.languageBindings.push({ view, compartment: language, tabSize, theme });
+    this.languageBindings.push({ view, compartment: language, tabSize, theme, phrases });
     applyEditorPreferences(view, this.editorPreferences);
     this.describeLanguage(view);
     return view;

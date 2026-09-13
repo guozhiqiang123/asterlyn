@@ -1,11 +1,13 @@
 import { icon } from "../icons";
 import { windowControls } from "../window-controls";
+import type { ShellCopy } from "../localization/catalog.ts";
 
 export interface WindowChromeActions {
   readonly captureEditor: () => void;
   readonly dirtyTextTabs: () => number;
   readonly confirmClose: () => Promise<boolean>;
   readonly reportError: (error: unknown) => void;
+  readonly labels: () => Pick<ShellCopy, "restoreWindow" | "maximizeWindow" | "restore" | "maximize">;
 }
 
 export class WindowChromeBinding {
@@ -41,6 +43,10 @@ export class WindowChromeBinding {
     listen("#window-close", () => void this.requestClose());
     this.refreshMaximizeControl();
     void this.installNativeListeners(generation);
+  }
+
+  refreshLabels(): void {
+    if (this.available) this.refreshMaximizeControl();
   }
 
   dispose(): void {
@@ -88,9 +94,10 @@ export class WindowChromeBinding {
   private async syncMaximizeControl(): Promise<void> {
     const maximized = await windowControls.isMaximized();
     const button = this.query<HTMLButtonElement>("#window-maximize");
-    const label = maximized ? "Restore window" : "Maximize window";
+    const copy = this.actions.labels();
+    const label = maximized ? copy.restoreWindow : copy.maximizeWindow;
     button.setAttribute("aria-label", label);
-    button.title = maximized ? "Restore" : "Maximize";
+    button.title = maximized ? copy.restore : copy.maximize;
     button.innerHTML = icon(maximized ? "restore" : "maximize", 16);
   }
 

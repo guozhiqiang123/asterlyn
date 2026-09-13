@@ -1,6 +1,6 @@
 # Interface localization and color-theme plan
 
-- **Status:** In progress; presentation foundation implemented
+- **Status:** In progress; presentation, color theme, and shell localization foundations implemented
 - **Date:** 2026-09-13
 - **Initial locales:** English (`en-US`) and Simplified Chinese (`zh-CN`)
 - **Theme choices:** Follow system, Dark, and Light
@@ -171,7 +171,7 @@ Implementation progress:
 
 - [x] Preference and presentation foundation
 - [x] Semantic theme foundation
-- [ ] Localization foundation and shell
+- [x] Localization foundation and shell
 - [ ] Feature localization by ownership boundary
 - [ ] Coverage, accessibility, and platform acceptance
 

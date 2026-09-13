@@ -9,6 +9,7 @@ export interface NavigationCommand {
   id: string;
   label: string;
   detail: string;
+  keywords?: string;
   shortcut?: string;
   enabled: boolean;
 }
@@ -125,7 +126,7 @@ export function rankCommands(
   return commands
     .flatMap((command) => {
       const score = fuzzyTextScore(
-        `${command.label} ${command.detail} ${command.id}`,
+        `${command.label} ${command.detail} ${command.keywords ?? ""} ${command.id}`,
         normalized,
       );
       return score === null ? [] : [{ command, score }];
