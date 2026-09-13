@@ -28,18 +28,18 @@ package acceptance awaits the repository CI matrix.
 
 ## Automated checks
 
-The complete script suite passed: 293 tests, zero failures. This includes catalog-shape parity,
+The complete script suite passed: 294 tests, zero failures. This includes catalog-shape parity,
 preference migration, cross-window no-echo behavior, system-versus-explicit theme resolution,
 CodeMirror syntax contrast in both palettes, semantic token completeness, raw component-color
 rejection, forced-colors coverage, visible-copy coverage, controller stale-result safety, editor
-buffer preservation, and watcher reconciliation stability.
+buffer preservation, watcher reconciliation stability, and structured Remote failure presentation.
 
 Frontend checks also passed:
 
 ```text
 tsc --noEmit
 vite build
-309 modules transformed
+310 modules transformed
 ```
 
 The Rust checks and current native bundle could not run on this host because neither `cargo` nor
@@ -47,6 +47,23 @@ The Rust checks and current native bundle could not run on this host because nei
 No such file or directory`. The pinned `package-preview.yml` matrix remains the required gate for
 Linux x86_64, Windows x86_64, macOS Apple Silicon, and macOS Intel packages and native smoke tests.
 No older local bundle is counted as evidence for this revision.
+
+## Push authentication error follow-up
+
+The reported Push dialog could load and display all outgoing commits, then replaced a structured
+`remoteFailed/authentication` result with its generic Remote fallback. The application-level error
+mapper and Remote controller now share one localized operation-error boundary. Authentication,
+network, rejection, cancellation, conflict, and ordinary diagnostic errors therefore keep the same
+meaning in the dialog and global notification. A focused controller fixture rejects Push with the
+serialized Rust authentication shape and verifies that the Chinese actionable authentication text,
+rather than the generic Remote summary, remains in dialog state.
+
+On the reporting macOS host, a non-interactive dry run reproduced the underlying Git diagnostic:
+the HTTPS remote could not read a GitHub username. GitHub CLI already held an active account, but
+the repository did not expose that credential provider to Git. A repository-local helper entry was
+connected to the existing GitHub CLI login; the next non-interactive dry run completed successfully
+and reported the expected `main` update. This host-only `.git/config` correction is not committed and
+no remote ref was written during validation.
 
 ## Browser interaction and layout
 
@@ -88,7 +105,7 @@ below the 500 kB uncompressed architecture gate.
 
 | Asset | Raw | Gzip | Change from `e6ba1ee` |
 | --- | ---: | ---: | ---: |
-| Main JavaScript | 457.88 kB | 106.04 kB | +2.01 / +0.41 kB |
+| Main JavaScript | 457.89 kB | 106.08 kB | +2.02 / +0.45 kB |
 | Main CSS | 114.56 kB | 25.29 kB | +0.72 / +0.15 kB |
 | Git-operation CSS | 2.91 kB | 0.90 kB | +0.13 / +0.04 kB |
 | English catalog | 43.19 kB | 14.10 kB | +1.41 / +0.38 kB |
@@ -106,3 +123,4 @@ The implementation is reviewable and revertible by boundary:
 3. `f7dd9f0`, `c3a5d25`, `de3d4e1`, `3baec16`, `e6ba1ee` localization from shell through feature workflows.
 4. `0f83872` localized operational errors and technical-detail boundaries.
 5. `7e17035` visible-copy, forced-colors, presentation-state, and measurement gates.
+6. `6ff139b` preserved structured Remote failures in the feature-owned dialog.
