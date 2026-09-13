@@ -212,10 +212,9 @@
   font-size: 10px;
 }
 
-.topbar-remote-select select {
+.topbar-remote-select .select-control {
   width: 92px;
   height: 28px;
-  padding: 0 22px 0 7px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
@@ -224,8 +223,8 @@
   cursor: pointer;
 }
 
-.topbar-remote-select select:hover:not(:disabled),
-.topbar-remote-select select:focus-visible {
+.topbar-remote-select .select-control:hover:not(:has(select:disabled)),
+.topbar-remote-select .select-control:focus-within {
   border-color: var(--border-strong);
   background: var(--bg-elevated);
 }

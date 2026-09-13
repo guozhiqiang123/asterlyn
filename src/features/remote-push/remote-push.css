@@ -550,15 +550,17 @@
   grid-template-columns: 14px minmax(90px, 150px) auto minmax(0, 1fr);
 }
 
-.push-remote-target select {
+.push-remote-target .select-control {
   width: 100%;
   height: 22px;
-  padding: 0 24px 0 8px;
-  border: 1px solid var(--border-strong);
   border-radius: 4px;
   background: var(--bg-elevated);
   color: var(--text-soft);
   font-size: 10px;
+}
+
+.push-remote-target .select-control select {
+  padding-left: 8px;
 }
 
 .push-route-separator {
@@ -605,11 +607,9 @@
   white-space: nowrap;
 }
 
-.push-tags-control select {
+.push-tags-control .select-control {
   width: 126px;
   height: 29px;
-  padding: 0 24px 0 8px;
-  border: 1px solid var(--border-strong);
   border-radius: 5px;
   background: var(--bg-elevated);
   color: var(--text-soft);

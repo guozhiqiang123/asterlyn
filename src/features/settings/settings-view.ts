@@ -18,6 +18,7 @@ import {
 import type { SettingsSection, SettingsState } from "./settings-controller.ts";
 import type { SettingsCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import { renderSelectControl } from "../../shared/select-control.ts";
 
 export interface EditorFontPresentationStatus {
   id: EditorFontId | null;
@@ -114,7 +115,7 @@ function editorFontControl(
   const retry = status.kind === "error" && status.id
     ? `<button class="setting-retry-button" id="setting-editor-font-retry" type="button">${escapeHtml(copy.retryFont(editorFont(status.id).label))}</button>`
     : "";
-  return `<div class="editor-font-setting"><select id="setting-editor-font-family" aria-label="${escapeAttribute(copy.editorFontAria)}" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select><span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
+  return `<div class="editor-font-setting">${renderSelectControl(`<select id="setting-editor-font-family" aria-label="${escapeAttribute(copy.editorFontAria)}" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select>`)}<span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
 }
 
 function settingsSelect(
@@ -125,7 +126,7 @@ function settingsSelect(
   selected: number,
   label: (value: number) => string,
 ): string {
-  return `<select id="${id}" data-setting-number="${field}" aria-label="${escapeAttribute(ariaLabel)}">${values.map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${escapeHtml(label(value))}</option>`).join("")}</select>`;
+  return renderSelectControl(`<select id="${id}" data-setting-number="${field}" aria-label="${escapeAttribute(ariaLabel)}">${values.map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${escapeHtml(label(value))}</option>`).join("")}</select>`);
 }
 
 function escapeHtml(value: string): string {

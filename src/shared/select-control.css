@@ -1,0 +1,82 @@
+/* One visual treatment for native select behavior across the application. */
+.select-control {
+  position: relative;
+  display: inline-flex;
+  min-width: 88px;
+  height: 30px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+  color: var(--text-soft);
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.select-control:hover:not(:has(select:disabled)) {
+  border-color: color-mix(in srgb, var(--focus-ring) 52%, var(--border-strong));
+  background: var(--bg-hover);
+}
+
+.select-control:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 24%, transparent);
+}
+
+.select-control:has(select:disabled) {
+  opacity: 0.5;
+}
+
+.select-control select {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 28px 0 9px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.select-control select:focus-visible {
+  outline: 0;
+}
+
+.select-control select:disabled {
+  cursor: default;
+}
+
+.select-control option {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.select-control-chevron {
+  position: absolute;
+  right: 7px;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.select-control-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (forced-colors: active) {
+  .select-control {
+    border-color: ButtonText;
+    forced-color-adjust: auto;
+  }
+}

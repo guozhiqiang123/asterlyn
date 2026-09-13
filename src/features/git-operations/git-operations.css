@@ -17,10 +17,14 @@
   font-weight: 600;
 }
 
-.git-operation-form select,
+.git-operation-form .select-control,
 .git-operation-form textarea,
 .conflict-editor textarea {
   width: 100%;
+}
+
+.git-operation-form .select-control {
+  background: var(--bg-deep);
 }
 
 .git-operation-form textarea,

@@ -1,5 +1,6 @@
 import { BRAND } from "../brand.ts";
 import { icon } from "../icons.ts";
+import { renderSelectControl } from "../shared/select-control.ts";
 import type { ActivityTool } from "../workbench/activity-order.ts";
 import { showCustomWindowControls, windowChromeClass } from "../workbench/window-chrome.ts";
 import type { ShellState } from "./shell-controller.ts";
@@ -28,7 +29,7 @@ export function renderShellView(model: ShellViewModel): string {
         <span class="demo-badge ${model.demo ? "" : "hidden"}">${escapeHtml(copy.browserDemo)}</span>
         <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)} (Ctrl/Cmd+P)">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd>Ctrl P</kbd></button>
         <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="${escapeHtml(copy.remoteActions)}">
-          <label class="topbar-remote-select" for="topbar-remote-select" title="${escapeHtml(copy.remoteForActions)}"><select id="topbar-remote-select" aria-label="${escapeHtml(copy.remoteForActions)}" disabled><option>${escapeHtml(copy.noRemote)}</option></select></label>
+          <label class="topbar-remote-select" for="topbar-remote-select" title="${escapeHtml(copy.remoteForActions)}">${renderSelectControl(`<select id="topbar-remote-select" aria-label="${escapeHtml(copy.remoteForActions)}" disabled><option>${escapeHtml(copy.noRemote)}</option></select>`)}</label>
           <span class="topbar-remote-action" id="remote-fetch-hint" tabindex="-1"><button class="icon-button remote-action-button" id="remote-fetch" type="button" data-remote-action="fetch" aria-label="${escapeHtml(copy.fetchBranch)}" title="${escapeHtml(copy.fetchBranch)}" disabled>${icon("download", 18)}</button></span>
           <span class="topbar-remote-action" id="remote-update-hint" tabindex="-1"><button class="icon-button remote-action-button" id="remote-update" type="button" data-remote-action="pull" aria-label="${escapeHtml(copy.updateBranch)}" title="${escapeHtml(copy.updateBranch)}" disabled>${icon("sync", 18)}</button></span>
           <span class="topbar-remote-action" id="remote-push-hint" tabindex="-1"><button class="icon-button remote-action-button" id="remote-push" type="button" data-remote-action="push" aria-label="${escapeHtml(copy.pushBranch)}" title="${escapeHtml(copy.pushBranch)}" disabled>${icon("upload", 18)}</button></span>

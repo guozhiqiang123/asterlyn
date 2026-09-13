@@ -1,4 +1,5 @@
 import { icon } from "../../icons.ts";
+import { renderSelectControl } from "../../shared/select-control.ts";
 import type { ProjectFile, WorkspaceTextSearchMatch, WorkspaceTextSearchReport } from "../../models.ts";
 import type {
   CommandSurfaceState,
@@ -153,7 +154,7 @@ function renderWorkspaceSearchControls(model: CommandSurfaceViewModel): string {
   return `<div class="workspace-search-controls" role="group" aria-label="${escapeAttribute(copy.workspaceSearchOptions)}">
     <label><span>${escapeHtml(copy.include)}</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.includeAria)}" /></label>
     <label><span>${escapeHtml(copy.exclude)}</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.excludeAria)}" /></label>
-    <label class="workspace-search-context"><span>${escapeHtml(copy.context)}</span><select id="workspace-search-context" aria-label="${escapeAttribute(copy.contextLines)}">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select></label>
+    <label class="workspace-search-context"><span>${escapeHtml(copy.context)}</span>${renderSelectControl(`<select id="workspace-search-context" aria-label="${escapeAttribute(copy.contextLines)}">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select>`)}</label>
     <label class="workspace-replacement-input"><span>${escapeHtml(copy.replace)}</span><input id="workspace-replacement-text" type="text" value="${escapeAttribute(model.replacementText)}" placeholder="${escapeAttribute(copy.replacementText)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.replacementText)}" /></label>
     <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"}>${escapeHtml(copy.previewReplace)}</button>
     ${recoveryCount > 0 ? `<button class="workspace-recovery-button" id="workspace-recovery-open" type="button" aria-label="${escapeAttribute(copy.reviewRecoveries(recoveryCount))}">${escapeHtml(copy.recoveryRecords(recoveryCount))}</button>` : ""}

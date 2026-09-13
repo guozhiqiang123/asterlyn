@@ -39,7 +39,7 @@
 }
 
 .workspace-search-controls input,
-.workspace-search-controls select {
+.workspace-search-controls .select-control {
   min-width: 0;
   height: 27px;
   border: 1px solid var(--border-strong);
@@ -56,13 +56,22 @@
 }
 
 .workspace-search-controls input:focus,
-.workspace-search-controls select:focus {
+.workspace-search-controls .select-control:focus-within {
   border-color: var(--focus-ring);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus-ring) 33%, transparent);
 }
 
 .workspace-search-context {
   grid-template-columns: auto 42px !important;
+}
+
+.workspace-search-context .select-control {
+  width: 42px;
+  min-width: 42px;
+}
+
+.workspace-search-context .select-control select {
+  padding-left: 7px;
 }
 
 .workspace-replacement-input {

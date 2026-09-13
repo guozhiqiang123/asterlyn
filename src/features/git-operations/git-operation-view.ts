@@ -1,4 +1,5 @@
 import { icon } from "../../icons.ts";
+import { renderSelectControl } from "../../shared/select-control.ts";
 import type { GitOperationCopy } from "../../localization/catalog.ts";
 import { DEFAULT_LOCALIZATION } from "../../localization/localization.ts";
 import type {
@@ -19,12 +20,12 @@ function renderSetup(state: GitOperationState, copy: GitOperationCopy): string {
     copy.prepare(copy.names[state.kind]),
     `<form id="git-operation-setup-form" class="git-operation-form">
       <label for="git-operation-kind">${escapeHtml(copy.operation)}</label>
-      <select id="git-operation-kind" ${busy ? "disabled" : ""}>
+      ${renderSelectControl(`<select id="git-operation-kind" ${busy ? "disabled" : ""}>
         ${operationOption("merge", state.kind, copy.setupOptions.merge)}
         ${operationOption("cherryPick", state.kind, copy.setupOptions.cherryPick)}
         ${operationOption("rebase", state.kind, copy.setupOptions.rebase)}
         ${operationOption("squash", state.kind, copy.setupOptions.squash)}
-      </select>
+      </select>`)}
       <label for="git-operation-targets">${escapeHtml(state.kind === "cherryPick" ? copy.targetsForCherryPick : state.kind === "squash" ? copy.targetBeforeSquash : copy.targetRef)}</label>
       <textarea id="git-operation-targets" rows="${state.kind === "cherryPick" ? 5 : 2}" spellcheck="false" placeholder="${escapeAttribute(state.kind === "cherryPick" ? copy.targetLinesPlaceholder : "refs/heads/feature")}" ${busy ? "disabled" : ""}>${escapeHtml(state.targetText)}</textarea>
       ${state.kind === "squash" ? `<label for="git-operation-message">${escapeHtml(copy.newCommitMessage)}</label><textarea id="git-operation-message" rows="5" placeholder="${escapeAttribute(copy.squashMessagePlaceholder)}" ${busy ? "disabled" : ""}>${escapeHtml(state.message)}</textarea>` : ""}

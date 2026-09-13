@@ -51,7 +51,7 @@
     padding-left: 0;
   }
 
-  .topbar-remote-select select {
+  .topbar-remote-select .select-control {
     width: 74px;
   }
 }
