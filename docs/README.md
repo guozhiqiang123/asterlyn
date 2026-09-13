@@ -71,3 +71,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-12-r4-recoverable-git-operations.md`](benchmarks/2026-09-12-r4-recoverable-git-operations.md) — reviewed Merge/Cherry-pick/Rebase/Squash, restart recovery, conflict resolution, fault safety, resources, and Debian acceptance evidence.
 
 - [`benchmarks/2026-09-13-architecture-editor-reliability.md`](benchmarks/2026-09-13-architecture-editor-reliability.md) — watcher feedback-loop, retained editor activation, safe/recoverable Git worktree writes, bounded producers, CI, and macOS verification.
+- [`benchmarks/2026-09-13-localization-color-themes.md`](benchmarks/2026-09-13-localization-color-themes.md) — English/Chinese and System/Dark/Light implementation, visible-copy and contrast gates, browser timing, idle stability, build size, and remaining native packaging gate.

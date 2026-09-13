@@ -172,8 +172,13 @@ Implementation progress:
 - [x] Preference and presentation foundation
 - [x] Semantic theme foundation
 - [x] Localization foundation and shell
-- [ ] Feature localization by ownership boundary
+- [x] Feature localization by ownership boundary
 - [ ] Coverage, accessibility, and platform acceptance
+
+Browser, source, accessibility, performance, and frontend packaging gates are recorded in
+[`../benchmarks/2026-09-13-localization-color-themes.md`](../benchmarks/2026-09-13-localization-color-themes.md).
+The final item remains open until the current revision completes the native Linux, Windows, and
+macOS packaging matrix; the present macOS host does not have `cargo` installed.
 
 ### 1. Preference and presentation foundation
 
