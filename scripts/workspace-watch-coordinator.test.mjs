@@ -31,6 +31,7 @@ test("watch hints reconcile only their typed slices", async () => {
       reconcileRepository(snapshot, slices, cause) {
         outcomes.push({ snapshot, slices, cause });
       },
+      refreshRemoteAfterFocus() {},
       reportWarning() {},
     },
     null,
@@ -70,6 +71,7 @@ test("catalog and repository metadata are reconciled without accepting stale roo
       reconcileRepository(snapshot, slices, cause) {
         outcomes.push({ snapshot, slices, cause });
       },
+      refreshRemoteAfterFocus() {},
       reportWarning() {},
     },
     null,
@@ -111,6 +113,7 @@ test("repository reread failures are reported and a later hint can still reconci
     { async reconcileExternalPaths() {} },
     {
       reconcileRepository(snapshot) { outcomes.push(snapshot); },
+      refreshRemoteAfterFocus() {},
       reportWarning(message) { warnings.push(message); },
     },
     null,
@@ -144,7 +147,7 @@ test("a disposed coordinator releases a watch that completes activation late", a
     session,
     { async refresh() { return true; } },
     { async reconcileExternalPaths() {} },
-    { reconcileRepository() {}, reportWarning() {} },
+    { reconcileRepository() {}, refreshRemoteAfterFocus() {}, reportWarning() {} },
     null,
   );
 
@@ -155,6 +158,58 @@ test("a disposed coordinator releases a watch that completes activation late", a
   await settle();
 
   assert.equal(stops, 2);
+});
+
+test("returning from the background reconciles local state before one remote refresh", async () => {
+  let now = 10_000;
+  const reads = { project: 0, catalog: 0, documents: 0, remote: 0 };
+  const session = activeSession({
+    async openProject(root) {
+      reads.project += 1;
+      return { root, repository: snapshot(root) };
+    },
+  });
+  const focusTarget = new EventTarget();
+  const coordinator = new WorkspaceWatchCoordinator(
+    fakeWatchBridge(),
+    session,
+    { async refresh() { reads.catalog += 1; return true; } },
+    { async reconcileExternalPaths() { reads.documents += 1; } },
+    {
+      reconcileRepository() {},
+      async refreshRemoteAfterFocus() {
+        assert.equal(reads.project, 1);
+        assert.equal(reads.catalog, 1);
+        assert.equal(reads.documents, 1);
+        reads.remote += 1;
+      },
+      reportWarning() {},
+    },
+    focusTarget,
+    () => now,
+  );
+  coordinator.activate();
+  await settle();
+
+  focusTarget.dispatchEvent(new Event("blur"));
+  now += 5_001;
+  focusTarget.dispatchEvent(new Event("focus"));
+  await settle(10);
+  await settle(10);
+
+  assert.equal(reads.remote, 1);
+  focusTarget.dispatchEvent(new Event("blur"));
+  now += 1;
+  focusTarget.dispatchEvent(new Event("focus"));
+  await settle(10);
+  assert.equal(reads.project, 1);
+  assert.equal(reads.catalog, 1);
+  assert.equal(reads.documents, 1);
+  assert.equal(reads.remote, 2);
+  focusTarget.dispatchEvent(new Event("focus"));
+  await settle();
+  assert.equal(reads.remote, 2);
+  coordinator.dispose();
 });
 
 function activeSession(overrides = {}) {

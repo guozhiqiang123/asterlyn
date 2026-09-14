@@ -61,7 +61,14 @@ test("blocked remote actions remain interactive so their exact reason can be ann
 
   assert.equal(clean.elements.get("#remote-update").disabled, false);
   assert.equal(clean.elements.get("#remote-update").getAttribute("aria-disabled"), "false");
+  assert.match(clean.elements.get("#remote-update").innerHTML, /M12 4v11/);
 
+  repository.branch.behind = 3;
+  const behind = remoteToolbarRoot();
+  renderRemoteToolbarView(behind.root, repository, state, false);
+  assert.match(behind.elements.get("#remote-update").innerHTML, /remote-count-badge[^>]*>3</);
+
+  repository.branch.behind = 0;
   repository.changes = [{ path: "dirty.txt" }];
   const blocked = remoteToolbarRoot();
   renderRemoteToolbarView(blocked.root, repository, state, false);

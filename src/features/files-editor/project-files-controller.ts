@@ -7,7 +7,6 @@ import type {
 import {
   ancestorProjectDirectories,
   buildProjectTree,
-  defaultExpandedProjectDirectories,
   descendantProjectDirectories,
   findProjectTreeNode,
   projectTreeEntries,
@@ -152,7 +151,7 @@ export class ProjectFilesController {
       if (this.catalogRoot !== result.root) {
         this.catalogRoot = result.root;
         this.state.selection = null;
-        this.state.expandedDirectories = defaultExpandedProjectDirectories(this.tree());
+        this.state.expandedDirectories.clear();
       } else {
         this.reconcileTreeState();
       }

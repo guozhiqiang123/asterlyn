@@ -41,6 +41,19 @@ test("latest workspace owns project catalog completion", async () => {
   assert.deepEqual(controller.state.paths, ["new.txt"]);
 });
 
+test("a newly imported workspace starts with every directory collapsed", async () => {
+  const controller = new ProjectFilesController({
+    async listProjectFiles() {
+      return catalog("/repo", ["src/main/app.ts", "docs/guide.md"]);
+    },
+  });
+  controller.installWorkspace("/repo");
+  await controller.refresh();
+
+  assert.deepEqual([...controller.state.expandedDirectories], []);
+  assert.deepEqual(controller.tree().map((node) => node.path), ["docs", "src"]);
+});
+
 test("same-workspace refresh retains valid selection and disclosure", async () => {
   const catalogs = [
     catalog("/repo", ["src/a.ts", "src/b.ts"]),

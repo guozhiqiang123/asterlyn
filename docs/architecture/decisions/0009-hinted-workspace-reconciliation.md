@@ -119,6 +119,24 @@ but independent monitoring of each submodule's external Git metadata is deferred
 polling fallback for unavailable or unreliable native backends is also deferred; the implemented
 recovery paths are overflow broadening, focus-regain reconciliation, and explicit Refresh.
 
+### Foreground remote reconciliation
+
+Each valid native window blur-to-focus transition schedules at most one Fetch for the selected
+remote. This is a remote-state reconciliation hint, not Update: it may refresh remote-tracking refs
+and ahead/behind evidence, but it never merges, rebases, fast-forwards, checks out, or changes the
+worktree. After an absence of at least five seconds, the existing broad local focus recovery drains
+first so remote integration receives the current workspace session; shorter focus cycles skip that
+heavy local read and perform only Fetch. A focus event without a preceding blur does not repeat the
+request.
+
+Foreground Fetch reuses the feature-owned cancellable remote controller and canonical repository-
+result integration. It runs without a global editor lock or modal toast. It is skipped in demo or
+ordinary-workspace mode, without an enabled selected remote, and while a Remote/Push dialog, reviewed
+Git-operation dialog, remote operation, or global workbench task is active. This avoids invalidating
+an exact-object review or competing with a user-authorized mutation. Failure is reported in the
+shared status surface; the next blur-to-focus pair or explicit Fetch may retry. No interval timer or
+background polling loop is introduced.
+
 ## Consequences
 
 External AI/editor changes can become visible without a manual refresh while preserving Git and

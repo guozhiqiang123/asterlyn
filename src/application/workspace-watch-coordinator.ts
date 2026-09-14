@@ -23,6 +23,7 @@ export interface WorkspaceWatchCoordinatorActions {
     slices: RepositoryStateSlice[],
     cause: SessionInvalidationCause,
   ): void;
+  refreshRemoteAfterFocus(): Promise<void> | void;
   reportWarning(message: string): void;
   messages?(): WorkspaceWatchMessages;
 }
@@ -47,7 +48,7 @@ export class WorkspaceWatchCoordinator {
   private readonly actions: WorkspaceWatchCoordinatorActions;
   private identity: { root: string; generation: number } | null = null;
   private pending: SessionInvalidation | null = null;
-  private running = false;
+  private drainPromise: Promise<void> | null = null;
   private disposed = false;
   private activationSequence = 0;
   private activationQueue: Promise<void> = Promise.resolve();
@@ -55,6 +56,7 @@ export class WorkspaceWatchCoordinator {
   private subscription: Promise<void> | null = null;
   private blurredAt: number | null = null;
   private readonly focusController = new AbortController();
+  private readonly now: () => number;
 
   constructor(
     bridge: WorkspaceWatchBridge,
@@ -63,14 +65,16 @@ export class WorkspaceWatchCoordinator {
     editor: EditorSessionController,
     actions: WorkspaceWatchCoordinatorActions,
     focusTarget: EventTarget | null = typeof window === "undefined" ? null : window,
+    now: () => number = () => Date.now(),
   ) {
     this.bridge = bridge;
     this.session = session;
     this.files = files;
     this.editor = editor;
     this.actions = actions;
+    this.now = now;
     focusTarget?.addEventListener("blur", () => {
-      this.blurredAt = Date.now();
+      this.blurredAt = this.now();
     }, { signal: this.focusController.signal });
     focusTarget?.addEventListener("focus", () => this.recoverAfterFocus(), {
       signal: this.focusController.signal,
@@ -155,26 +159,31 @@ export class WorkspaceWatchCoordinator {
     void this.drain();
   }
 
-  private async drain(): Promise<void> {
-    if (this.running || this.disposed) return;
-    this.running = true;
-    try {
-      while (this.pending && !this.disposed) {
-        const invalidation = this.pending;
-        this.pending = null;
-        try {
-          await this.reconcile(invalidation);
-        } catch (error) {
-          if (this.session.workspace.matches({
-            root: invalidation.root,
-            generation: invalidation.generation,
-          })) {
-            this.actions.reportWarning(this.messages().externalReconcileFailed(errorMessage(error)));
-          }
+  private drain(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.drainPromise) return this.drainPromise;
+    const task = this.drainPending().finally(() => {
+      if (this.drainPromise === task) this.drainPromise = null;
+      if (this.pending && !this.disposed) void this.drain();
+    });
+    this.drainPromise = task;
+    return task;
+  }
+
+  private async drainPending(): Promise<void> {
+    while (this.pending && !this.disposed) {
+      const invalidation = this.pending;
+      this.pending = null;
+      try {
+        await this.reconcile(invalidation);
+      } catch (error) {
+        if (this.session.workspace.matches({
+          root: invalidation.root,
+          generation: invalidation.generation,
+        })) {
+          this.actions.reportWarning(this.messages().externalReconcileFailed(errorMessage(error)));
         }
       }
-    } finally {
-      this.running = false;
     }
   }
 
@@ -217,22 +226,37 @@ export class WorkspaceWatchCoordinator {
     const identity = this.identity;
     if (
       blurredAt === null ||
-      Date.now() - blurredAt < FOCUS_RECOVERY_AFTER_MS ||
       !identity ||
       !this.session.workspace.matches(identity)
     ) return;
-    const slices = ["workspaceCatalog", "openDocuments"] as const;
-    const repositorySlices = this.session.repository.state.snapshot
-      ? ["workingTree", "head", "refs", "history", "operation"] as const
-      : [];
-    const invalidation = createSessionInvalidation(
-      identity.root,
-      identity.generation,
-      [...slices, ...repositorySlices],
-      "focusRecovery",
-    );
-    this.pending = mergeSessionInvalidations(this.pending, invalidation);
-    void this.drain();
+    const longAbsence = this.now() - blurredAt >= FOCUS_RECOVERY_AFTER_MS;
+    if (longAbsence) {
+      const slices = ["workspaceCatalog", "openDocuments"] as const;
+      const repositorySlices = this.session.repository.state.snapshot
+        ? ["workingTree", "head", "refs", "history", "operation"] as const
+        : [];
+      const invalidation = createSessionInvalidation(
+        identity.root,
+        identity.generation,
+        [...slices, ...repositorySlices],
+        "focusRecovery",
+      );
+      this.pending = mergeSessionInvalidations(this.pending, invalidation);
+    }
+    const localRecovery = longAbsence ? this.drain() : Promise.resolve();
+    void localRecovery.then(async () => {
+      if (
+        this.disposed ||
+        this.identity?.root !== identity.root ||
+        this.identity.generation !== identity.generation ||
+        !this.session.workspace.matches(identity)
+      ) return;
+      try {
+        await this.actions.refreshRemoteAfterFocus();
+      } catch (error) {
+        this.actions.reportWarning(this.messages().externalReconcileFailed(errorMessage(error)));
+      }
+    });
   }
 
   private current(sequence: number, identity: { root: string; generation: number }): boolean {

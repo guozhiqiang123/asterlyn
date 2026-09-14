@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   ancestorProjectDirectories,
   buildProjectTree,
-  defaultExpandedProjectDirectories,
   descendantProjectDirectories,
   findProjectTreeNode,
   projectTreeEntries,
@@ -93,7 +92,7 @@ test("ignored file descendants materialize their parent directories", () => {
   assert.equal(findProjectTreeNode(tree, "generated/cache/result.json")?.status, "ignored");
 });
 
-test("project tree helpers reveal ancestors and expand or collapse a selected subtree", () => {
+test("project tree helpers reveal ancestors and enumerate a selected subtree", () => {
   const tree = buildProjectTree([
     "src/app/main.ts",
     "src/app/view.ts",
@@ -101,7 +100,6 @@ test("project tree helpers reveal ancestors and expand or collapse a selected su
     "README.md",
   ]);
   assert.deepEqual(ancestorProjectDirectories("src/app/main.ts"), ["src", "src/app"]);
-  assert.deepEqual([...defaultExpandedProjectDirectories(tree)], ["src", "src/app", "src/shared"]);
   const source = findProjectTreeNode(tree, "src");
   assert.ok(source);
   assert.deepEqual(descendantProjectDirectories(source), ["src", "src/app", "src/shared"]);

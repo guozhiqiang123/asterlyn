@@ -72,7 +72,7 @@ export function renderRemoteToolbarView(
   const tracksSelected = snapshot.branch.upstreamRemote === policy.selectedRemote?.name;
   const actions = [
     { kind: "fetch", button: "#remote-fetch", hint: null, policy: policy.fetch, iconName: "download", menuItem: true },
-    { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", policy: policy.pull, iconName: "sync", menuItem: false },
+    { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", policy: policy.pull, iconName: "download", menuItem: false },
     { kind: "push", button: "#remote-push", hint: "#remote-push-hint", policy: policy.push, iconName: "upload", menuItem: false },
   ] as const;
   for (const action of actions) {

@@ -84,6 +84,21 @@
   color: var(--warning-text);
 }
 
+.toast.success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.toast.success .toast-icon {
+  background: var(--green);
+  color: white;
+}
+
+.toast.success .toast-close {
+  color: var(--success-text);
+}
+
 .toast-close {
   display: grid;
   width: 24px;

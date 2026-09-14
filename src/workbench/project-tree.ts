@@ -135,17 +135,6 @@ export function buildProjectTree(
   return root;
 }
 
-export function defaultExpandedProjectDirectories(
-  nodes: ProjectTreeNode[],
-  visibleDepth = 2,
-): Set<string> {
-  const expanded = new Set<string>();
-  visitProjectTree(nodes, (node, depth) => {
-    if (node.kind === "directory" && depth < visibleDepth) expanded.add(node.path);
-  });
-  return expanded;
-}
-
 export function ancestorProjectDirectories(path: string): string[] {
   const segments = path.split("/").filter(Boolean);
   return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));

@@ -45,6 +45,7 @@ import {
   RemoteAuthenticationController,
   type RemoteAuthenticationResult,
 } from "./features/remote-push/remote-authentication-controller";
+import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import {
   pushReviewFiles,
   renderRemoteDialogContent,
@@ -362,6 +363,7 @@ export class AsterlynApp {
   private projectTreeWindowStart = 0;
   private changeTreeScrollFrame: number | null = null;
   private changeTreeWindowStart = 0;
+  private toastDismissTimer: number | null = null;
   private readonly windowSession = new WindowSession({
     openProject: (path) => bridge.openProject(path),
     readProject: (path) => bridge.readProject(path),
@@ -576,6 +578,7 @@ export class AsterlynApp {
       {
         reconcileRepository: (snapshot, slices, cause) =>
           this.repositoryIntegration.reconcileWatchedRepository(snapshot, slices, cause),
+        refreshRemoteAfterFocus: () => this.refreshRemoteAfterFocus(),
         reportWarning: (message) => this.setStatus(message, "warning"),
         messages: () => this.localization.catalog.errors,
       },
@@ -1046,6 +1049,7 @@ export class AsterlynApp {
     if (this.changeTreeScrollFrame !== null) cancelAnimationFrame(this.changeTreeScrollFrame);
     this.projectTreeScrollFrame = null;
     this.changeTreeScrollFrame = null;
+    this.clearToastDismissTimer();
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.repositoryIntegration.dispose();
@@ -2666,7 +2670,7 @@ export class AsterlynApp {
       return;
     }
     if (snapshot.branch.behind === 0) {
-      this.setStatus(this.localization.catalog.remote.alreadyUpToDate, "success");
+      this.showSuccess(this.localization.catalog.remote.alreadyUpToDate);
       return;
     }
     const target = `refs/remotes/${remote}/${upstream.slice("refs/heads/".length)}`;
@@ -2698,7 +2702,25 @@ export class AsterlynApp {
     }
   }
 
-  private async runRemoteOperation(kind: "fetch" | "pull" | "push"): Promise<boolean> {
+  private async refreshRemoteAfterFocus(): Promise<void> {
+    if (
+      bridge.isDemo ||
+      this.remoteState.dialog ||
+      this.gitOperationState.dialog ||
+      this.remoteState.operation ||
+      this.state.loading
+    ) return;
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot) return;
+    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
+    if (!policy.fetch.enabled || !policy.selectedRemote) return;
+    await this.runRemoteOperation("fetch", "background");
+  }
+
+  private async runRemoteOperation(
+    kind: "fetch" | "pull" | "push",
+    presentation: "interactive" | "background" = "interactive",
+  ): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.state.loading || this.remoteState.operation) return false;
     const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
@@ -2709,17 +2731,31 @@ export class AsterlynApp {
     if (kind === "push" && !this.remoteState.pushPreview) return false;
 
     const generation = this.windowSession.beginTransition();
-    this.clearError();
+    const background = presentation === "background";
+    if (!background) this.clearError();
     const actionName = this.localization.catalog.remote.actionNames[kind];
-    this.setLoading(true, this.localization.catalog.remote.operationInProgress(actionName));
+    const progressMessage = this.localization.catalog.remote.operationInProgress(actionName);
+    if (background) this.setStatus(progressMessage, "busy");
+    else this.setLoading(true, progressMessage);
     let pendingRoot: string | null = null;
     let succeeded = false;
     let failed = false;
+    let completionMessage = this.localization.catalog.remote.operationCompleted(actionName);
+    let announceCompletion = false;
+    let failureMessage: string | null = null;
 
     try {
       const result = await this.remoteController.runOperation(kind);
       if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
+        const feedback = remoteOperationCompletionFeedback(
+          kind,
+          snapshot,
+          result.outcome,
+          this.localization.catalog.remote,
+        );
+        completionMessage = feedback.message;
+        announceCompletion = feedback.prominent;
         const next = this.repositoryIntegration.acceptRemoteOutcome(result.outcome);
         if (kind === "pull") {
           this.captureMountedTextEditor();
@@ -2728,11 +2764,14 @@ export class AsterlynApp {
           this.renderLeftTool();
           this.renderEditor();
         }
-        pendingRoot = next.root;
+        if (result.outcome.invalidatedSlices.includes("workingTree")) {
+          pendingRoot = next.root;
+        }
         succeeded = true;
       } else if (result.status === "failure") {
         failed = true;
-        this.showError(result.error);
+        failureMessage = localizedOperationError(result.error, this.localization.catalog.errors);
+        if (!background) this.showError(result.error);
         if (kind === "push" && policy.selectedRemote && isRemoteAuthenticationError(result.error)) {
           await this.remoteAuthenticationController.check(
             snapshot.root,
@@ -2766,9 +2805,18 @@ export class AsterlynApp {
       }
     } finally {
       if (generation === this.windowSession.generation) {
-        this.setLoading(false, this.localization.catalog.common.ready);
-        if (succeeded) this.setStatus(this.localization.catalog.remote.operationCompleted(actionName), "success");
-        else if (failed) this.setStatus(this.localization.catalog.remote.operationNeedsReview, "warning");
+        if (!background) this.setLoading(false, this.localization.catalog.common.ready);
+        if (succeeded) {
+          if (announceCompletion) this.showSuccess(completionMessage);
+          else this.setStatus(completionMessage, "success");
+        } else if (failed) {
+          this.setStatus(
+            background && failureMessage
+              ? failureMessage
+              : this.localization.catalog.remote.operationNeedsReview,
+            "warning",
+          );
+        }
       }
     }
     if (pendingRoot && generation === this.windowSession.generation) {
@@ -6199,28 +6247,56 @@ export class AsterlynApp {
   }
 
   private showError(error: unknown): void {
+    this.clearToastDismissTimer();
     const message = localizedOperationError(error, this.localization.catalog.errors);
     this.state.error = message;
     this.query("#toast-message").textContent = message;
+    this.query(".toast-icon").textContent = "!";
     const toast = this.query("#toast");
-    toast.classList.remove("hidden", "warning");
+    toast.classList.remove("hidden", "warning", "success");
     this.setStatus(this.localization.catalog.common.operationFailed, "warning");
   }
 
   private showWarning(message: string): void {
+    this.clearToastDismissTimer();
     this.state.error = message;
     this.query("#toast-message").textContent = message;
+    this.query(".toast-icon").textContent = "!";
     const toast = this.query("#toast");
     toast.classList.add("warning");
-    toast.classList.remove("hidden");
+    toast.classList.remove("hidden", "success");
     this.setStatus(message, "warning");
   }
 
+  private showSuccess(message: string): void {
+    this.clearToastDismissTimer();
+    this.state.error = null;
+    this.query("#toast-message").textContent = message;
+    this.query(".toast-icon").textContent = "✓";
+    const toast = this.query("#toast");
+    toast.classList.add("success");
+    toast.classList.remove("hidden", "warning");
+    this.setStatus(message, "success");
+    this.toastDismissTimer = window.setTimeout(() => {
+      this.toastDismissTimer = null;
+      if (this.query("#toast-message").textContent !== message) return;
+      toast.classList.add("hidden");
+      toast.classList.remove("success");
+    }, 4_000);
+  }
+
   private clearError(): void {
+    this.clearToastDismissTimer();
     this.state.error = null;
     const toast = this.query("#toast");
     toast.classList.add("hidden");
-    toast.classList.remove("warning");
+    toast.classList.remove("warning", "success");
+  }
+
+  private clearToastDismissTimer(): void {
+    if (this.toastDismissTimer === null) return;
+    window.clearTimeout(this.toastDismissTimer);
+    this.toastDismissTimer = null;
   }
 
   private async chooseRepository(): Promise<void> {
