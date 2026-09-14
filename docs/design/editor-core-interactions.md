@@ -269,7 +269,7 @@ Complete behavior and limitation evidence is in
 
 ### E4 — Recovery and task surfaces
 
-Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate.
+Add atomic draft recovery, restart/session restoration, safe discard, autosave policy, terminal/task surfaces, cancellation, trust prompts, and data-loss fault testing required by the Stage 3 exit gate. E4.1 pulls one explicitly opened, window-scoped terminal forward without implying task execution or repository trust; its bounded delivery plan is in [`Integrated terminal interactions`](terminal-interactions.md).
 
 ### Editor and reconciliation reliability — 2026-09-13
 

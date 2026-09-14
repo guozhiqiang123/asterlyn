@@ -19,6 +19,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0007-workbench-feature-ownership.md`](architecture/decisions/0007-workbench-feature-ownership.md) — feature-owned workbench state, stable DOM hosts, and scoped rendering.
 - [`architecture/decisions/0008-recoverable-git-operations.md`](architecture/decisions/0008-recoverable-git-operations.md) — reviewed, resumable, and conflict-aware Git operation lifecycle.
 - [`architecture/decisions/0009-hinted-workspace-reconciliation.md`](architecture/decisions/0009-hinted-workspace-reconciliation.md) — native watcher hints, typed slice invalidation, authoritative reconciliation, and fallback policy.
+- [`architecture/decisions/0010-read-only-ignored-previews.md`](architecture/decisions/0010-read-only-ignored-previews.md) — bounded, individually authorized read-only previews for Git-ignored files.
+- [`architecture/decisions/0011-supervised-terminal-sessions.md`](architecture/decisions/0011-supervised-terminal-sessions.md) — lazy, window-scoped PTY sessions with explicit lifecycle and resource bounds.
 
 ## Delivery
 
@@ -35,6 +37,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`design/interaction-feedback.md`](design/interaction-feedback.md) — mandatory visible feedback and stable event-lifecycle rules for every user-invoked action.
 - [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
 - [`design/editor-core-interactions.md`](design/editor-core-interactions.md) — Stage 3 editor slices, invariants, and acceptance evidence.
+- [`design/terminal-interactions.md`](design/terminal-interactions.md) — integrated-terminal phases, interaction contract, dependency review, and T1 acceptance gates.
 - [`design/localization-color-themes.md`](design/localization-color-themes.md) — implementation plan for English/Chinese localization and System/Dark/Light appearance.
 
 ## Benchmarks
