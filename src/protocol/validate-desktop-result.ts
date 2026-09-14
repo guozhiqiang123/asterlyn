@@ -21,6 +21,9 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "nullableString":
       assert(value === null || typeof value === "string", command, "expected a string or null");
       break;
+    case "stringArray":
+      assert(isStringArray(value), command, "expected an array of strings");
+      break;
     case "windowChromeMode":
       assert(
         value === "macos-native" || value === "custom-right",

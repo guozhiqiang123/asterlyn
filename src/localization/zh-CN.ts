@@ -12,6 +12,7 @@ export const ZH_CN = {
     projectMenu: "项目菜单", openProject: "打开项目", noProject: "未打开项目",
     projectMenuFor: (name) => `${name} 的项目菜单`, openProjectMenu: "打开项目菜单",
     open: "打开…", recentProjects: "最近项目", noOtherRecentProjects: "没有其他最近项目",
+    removeRecentProject: (name) => `从最近项目中移除 ${name}`,
     browserDemo: "浏览器演示", search: "搜索", searchFilesAndCommands: "搜索文件和命令",
     remoteActions: "当前分支远程操作", remoteForActions: "当前分支操作使用的远程仓库", noRemote: "无远程仓库", moreRemoteActions: "更多远程操作",
     fetchBranch: "获取当前分支", updateBranch: "更新当前分支", pushBranch: "推送当前分支", cancelRemote: "取消远程操作",

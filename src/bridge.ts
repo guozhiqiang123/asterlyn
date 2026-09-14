@@ -132,6 +132,11 @@ const demoBridge: DesktopBridge = {
     return invoke<string | null>("initial_repository");
   },
 
+  async existingProjectDirectories(paths: string[]): Promise<string[]> {
+    if (!isTauri) return paths;
+    return invoke<string[]>("existing_project_directories", { paths });
+  },
+
   async chooseRepositoryDirectory(
     defaultPath: string | null,
   ): Promise<DirectoryChoice> {

@@ -205,6 +205,8 @@ import type { LocaleCatalog, NavigationCommandId } from "./localization/catalog"
 import { loadLocale } from "./localization/locale-loader";
 import { createLocalization, type Localization } from "./localization/localization";
 import {
+  forgetMissingRecentRepositories,
+  forgetRecentRepository,
   loadRecentRepositories,
   restoreRecentRepository,
   touchRecentRepository,
@@ -338,6 +340,8 @@ export class AsterlynApp {
   private commandSurfaceReturnFocus: HTMLElement | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
+  private recentRepositoryValidationGeneration = 0;
+  private recentRepositoryValidationKey: string | null = null;
   private readonly activityRailBinding: ActivityRailBinding;
   private readonly shellEventBinding: ShellEventBinding;
   private readonly windowChromeBinding: WindowChromeBinding;
@@ -3191,6 +3195,10 @@ export class AsterlynApp {
     button.setAttribute("aria-expanded", String(this.shellState.repositoryMenuOpen));
     menu.classList.toggle("hidden", !this.shellState.repositoryMenuOpen);
     if (!this.shellState.repositoryMenuOpen) {
+      if (this.recentRepositoryValidationKey !== null) {
+        this.recentRepositoryValidationKey = null;
+        this.recentRepositoryValidationGeneration += 1;
+      }
       menu.innerHTML = "";
       return;
     }
@@ -3208,7 +3216,10 @@ export class AsterlynApp {
         recent.length > 0
           ? recent
               .map(
-                (path) => `<button class="repository-menu-project" type="button" role="menuitem" data-recent-repository="${escapeAttribute(path)}" title="${escapeAttribute(path)}"><span class="repository-menu-project-mark">${escapeHtml(projectMonogram(path))}</span><span class="repository-menu-project-copy"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></span></button>`,
+                (path) => {
+                  const name = basename(path);
+                  return `<div class="repository-menu-project" role="none"><button class="repository-menu-project-open" type="button" role="menuitem" data-recent-repository="${escapeAttribute(path)}" title="${escapeAttribute(path)}"><span class="repository-menu-project-mark">${escapeHtml(projectMonogram(path))}</span><span class="repository-menu-project-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(path)}</small></span></button><button class="repository-menu-project-remove" type="button" role="menuitem" data-forget-repository="${escapeAttribute(path)}" title="${escapeAttribute(copy.removeRecentProject(name))}" aria-label="${escapeAttribute(copy.removeRecentProject(name))}">${icon("close", 13)}</button></div>`;
+                },
               )
               .join("")
           : `<div class="repository-menu-empty">${escapeHtml(copy.noOtherRecentProjects)}</div>`
@@ -3231,6 +3242,54 @@ export class AsterlynApp {
           void this.requestRepositoryTarget(path);
         });
       });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-forget-repository]")
+      .forEach((item) => {
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const path = item.dataset.forgetRepository;
+          if (!path) return;
+          forgetRecentRepository(window.localStorage, path);
+          this.recentRepositoryValidationKey = null;
+          this.recentRepositoryValidationGeneration += 1;
+          this.renderRepositoryMenu(currentRoot);
+        });
+      });
+    this.validateRecentRepositoryPaths(currentRoot, recent);
+  }
+
+  private validateRecentRepositoryPaths(
+    currentRoot: string | null,
+    recent: readonly string[],
+  ): void {
+    const key = JSON.stringify([currentRoot, ...recent]);
+    if (this.recentRepositoryValidationKey === key) return;
+    this.recentRepositoryValidationKey = key;
+    const generation = ++this.recentRepositoryValidationGeneration;
+    if (recent.length === 0) return;
+
+    void bridge.existingProjectDirectories([...recent]).then(
+      (existing) => {
+        if (
+          generation !== this.recentRepositoryValidationGeneration ||
+          this.recentRepositoryValidationKey !== key ||
+          !this.shellState.repositoryMenuOpen
+        ) {
+          return;
+        }
+        const retained = forgetMissingRecentRepositories(
+          window.localStorage,
+          recent,
+          existing,
+        ).filter((path) => path !== currentRoot);
+        if (retained.length === recent.length) return;
+        this.recentRepositoryValidationKey = JSON.stringify([currentRoot, ...retained]);
+        this.renderRepositoryMenu(currentRoot);
+      },
+      () => {
+        // An inconclusive host check keeps history intact and retries on the next menu opening.
+      },
+    );
   }
 
   private renderLeftTool(): void {

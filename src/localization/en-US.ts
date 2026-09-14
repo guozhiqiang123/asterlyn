@@ -24,6 +24,7 @@ export const EN_US: LocaleCatalog = {
     open: "Open…",
     recentProjects: "Recent Projects",
     noOtherRecentProjects: "No other recent projects",
+    removeRecentProject: (name) => `Remove ${name} from Recent Projects`,
     browserDemo: "Browser demo",
     search: "Search",
     searchFilesAndCommands: "Search files and commands",

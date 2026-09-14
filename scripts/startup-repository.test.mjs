@@ -5,6 +5,7 @@ import {
   RECENT_REPOSITORIES_KEY,
   RECENT_REPOSITORY_KEY,
   RECENT_REPOSITORY_LIMIT,
+  forgetMissingRecentRepositories,
   forgetRecentRepository,
   loadRecentRepositories,
   restoreRecentRepository,
@@ -102,6 +103,23 @@ test("forgetting a stale repository removes both startup and menu references", (
   assert.deepEqual(forgetRecentRepository(storage, "/stale"), ["/one"]);
   assert.equal(storage.getItem(RECENT_REPOSITORY_KEY), null);
   assert.deepEqual(loadRecentRepositories(storage), ["/one"]);
+});
+
+test("confirmed missing recent projects are removed without pruning unchecked history", () => {
+  const storage = memoryStorage();
+  touchRecentRepository(storage, "/present");
+  touchRecentRepository(storage, "/unchecked");
+  touchRecentRepository(storage, "/missing");
+
+  assert.deepEqual(
+    forgetMissingRecentRepositories(
+      storage,
+      ["/missing", "/present"],
+      ["/present"],
+    ),
+    ["/unchecked", "/present"],
+  );
+  assert.equal(storage.getItem(RECENT_REPOSITORY_KEY), null);
 });
 
 test("malformed recent-project storage fails closed", () => {

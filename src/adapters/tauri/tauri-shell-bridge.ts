@@ -9,6 +9,8 @@ export const tauriShellBridge: DesktopShellBridge = {
     return parseWindowChromeMode(await invokeDesktopCommand<unknown>("window_chrome_mode"));
   },
   initialRepository: () => invokeDesktopCommand<string | null>("initial_repository"),
+  existingProjectDirectories: (paths) =>
+    invokeDesktopCommand<string[]>("existing_project_directories", { paths }),
   async chooseRepositoryDirectory(defaultPath): Promise<DirectoryChoice> {
     const selected = await openDialog({
       directory: true,

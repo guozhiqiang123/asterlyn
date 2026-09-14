@@ -7,6 +7,7 @@ export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 export interface DesktopCommandMap {
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   initial_repository: { args: Record<string, never>; result: string | null };
+  existing_project_directories: { args: { paths: Array<string>; }; result: Array<string> };
   open_project: { args: { path: string; }; result: Model.OpenedProject };
   read_project_snapshot: { args: { path: string; }; result: Model.OpenedProject };
   start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
@@ -67,6 +68,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
 } = {
   window_chrome_mode: "windowChromeMode",
   initial_repository: "nullableString",
+  existing_project_directories: "stringArray",
   open_project: "openedProject",
   read_project_snapshot: "openedProject",
   start_workspace_watch: "workspaceWatchStatus",

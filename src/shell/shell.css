@@ -83,20 +83,25 @@
 }
 
 .repository-menu-action,
-.repository-menu-project {
-  width: 100%;
+.repository-menu-project-open,
+.repository-menu-project-remove {
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
+}
+
+.repository-menu-action,
+.repository-menu-project-open {
+  width: 100%;
   text-align: left;
 }
 
 .repository-menu-action:hover,
 .repository-menu-action:focus-visible,
 .repository-menu-project:hover,
-.repository-menu-project:focus-visible {
+.repository-menu-project:focus-within {
   background: var(--accent-soft);
   color: var(--text);
 }
@@ -125,10 +130,36 @@
 .repository-menu-project {
   display: grid;
   min-height: 48px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.repository-menu-project-open {
+  display: grid;
+  min-width: 0;
+  min-height: 48px;
   grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
-  padding: 5px 9px;
+  padding: 5px 5px 5px 9px;
+}
+
+.repository-menu-project-remove {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  color: var(--text-faint);
+}
+
+.repository-menu-project-remove:hover,
+.repository-menu-project-remove:focus-visible {
+  background: var(--bg-elevated);
+  color: var(--text);
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
 }
 
 .repository-menu-project-mark {

@@ -91,6 +91,26 @@ export function forgetRecentRepository(
   return paths;
 }
 
+export function forgetMissingRecentRepositories(
+  storage: RecentRepositoryStorage,
+  checkedPaths: readonly string[],
+  existingPaths: readonly string[],
+): string[] {
+  const existing = new Set(
+    existingPaths
+      .map((path) => normalizedPath(path))
+      .filter((path): path is string => path !== null),
+  );
+  let paths = loadRecentRepositories(storage);
+  for (const candidate of checkedPaths) {
+    const path = normalizedPath(candidate);
+    if (path && !existing.has(path)) {
+      paths = forgetRecentRepository(storage, path);
+    }
+  }
+  return paths;
+}
+
 function saveRecentRepositories(
   storage: Pick<RecentRepositoryStorage, "setItem">,
   paths: string[],

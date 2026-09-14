@@ -691,6 +691,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             initial_repository,
             window_chrome_mode,
+            existing_project_directories,
             open_project,
             read_project_snapshot,
             open_repository_window,

@@ -3,6 +3,7 @@
   "commands": [
     { "name": "window_chrome_mode", "args": {}, "result": "WindowChromeMode", "validator": "windowChromeMode" },
     { "name": "initial_repository", "args": {}, "result": "nullable:string", "validator": "nullableString" },
+    { "name": "existing_project_directories", "args": { "paths": "array:string" }, "result": "array:string", "validator": "stringArray" },
     { "name": "open_project", "args": { "path": "string" }, "result": "OpenedProject", "validator": "openedProject" },
     { "name": "read_project_snapshot", "args": { "path": "string" }, "result": "OpenedProject", "validator": "openedProject" },
     { "name": "start_workspace_watch", "args": { "workspaceRoot": "string", "generation": "number" }, "result": "WorkspaceWatchStatus", "validator": "workspaceWatchStatus" },

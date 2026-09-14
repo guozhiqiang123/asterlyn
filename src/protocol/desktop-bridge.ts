@@ -45,6 +45,7 @@ export interface DesktopShellBridge {
   readonly isDemo: boolean;
   windowChromeMode(): Promise<WindowChromeMode>;
   initialRepository(): Promise<string | null>;
+  existingProjectDirectories(paths: string[]): Promise<string[]>;
   chooseRepositoryDirectory(defaultPath: string | null): Promise<DirectoryChoice>;
   openProject(path: string): Promise<OpenedProject>;
   readProject(path: string): Promise<OpenedProject>;

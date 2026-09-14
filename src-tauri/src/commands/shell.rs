@@ -1,5 +1,8 @@
 use super::super::*;
 
+const MAX_RECENT_PROJECT_DIRECTORIES: usize = 8;
+const MAX_PROJECT_DIRECTORY_PATH_BYTES: usize = 4_096;
+
 #[tauri::command]
 pub(crate) fn initial_repository(
     window: tauri::WebviewWindow,
@@ -17,6 +20,46 @@ pub(crate) fn initial_repository(
 #[tauri::command]
 pub(crate) fn window_chrome_mode() -> &'static str {
     window_chrome_mode_for(cfg!(target_os = "macos"))
+}
+
+#[tauri::command]
+pub(crate) async fn existing_project_directories(
+    paths: Vec<String>,
+) -> Result<Vec<String>, WorkspaceError> {
+    run_workspace_blocking("check recent project directories", move || {
+        filter_existing_project_directories(paths)
+    })
+    .await
+}
+
+fn filter_existing_project_directories(paths: Vec<String>) -> Result<Vec<String>, WorkspaceError> {
+    if paths.len() > MAX_RECENT_PROJECT_DIRECTORIES {
+        return Err(WorkspaceError::InvalidPath {
+            message: format!(
+                "recent-project validation accepts at most {MAX_RECENT_PROJECT_DIRECTORIES} paths"
+            ),
+        });
+    }
+
+    let mut seen = HashSet::new();
+    let mut existing = Vec::with_capacity(paths.len());
+    for path in paths {
+        if path.is_empty() || path.len() > MAX_PROJECT_DIRECTORY_PATH_BYTES {
+            return Err(WorkspaceError::InvalidPath {
+                message: "recent-project path is empty or exceeds the supported length".to_string(),
+            });
+        }
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        match std::fs::metadata(&path) {
+            Ok(metadata) if metadata.is_dir() => existing.push(path),
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => existing.push(path),
+        }
+    }
+    Ok(existing)
 }
 
 #[tauri::command]
@@ -109,4 +152,40 @@ pub(crate) fn open_repository_window(
         });
     }
     Ok(label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recent_project_check_keeps_directories_and_drops_missing_or_file_paths() {
+        let temporary = tempfile::tempdir().expect("temporary root");
+        let directory = temporary.path().join("project");
+        let file = temporary.path().join("not-a-project");
+        let missing = temporary.path().join("missing");
+        std::fs::create_dir(&directory).expect("project directory");
+        std::fs::write(&file, "file").expect("ordinary file");
+
+        let existing = filter_existing_project_directories(vec![
+            directory.to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+            missing.to_string_lossy().into_owned(),
+        ])
+        .expect("bounded validation");
+
+        assert_eq!(existing, vec![directory.to_string_lossy().into_owned()]);
+    }
+
+    #[test]
+    fn recent_project_check_rejects_unbounded_input() {
+        let error = filter_existing_project_directories(
+            (0..=MAX_RECENT_PROJECT_DIRECTORIES)
+                .map(|index| format!("/project-{index}"))
+                .collect(),
+        )
+        .expect_err("unbounded validation must fail");
+
+        assert!(matches!(error, WorkspaceError::InvalidPath { .. }));
+    }
 }

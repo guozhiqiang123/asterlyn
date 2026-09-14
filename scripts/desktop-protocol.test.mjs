@@ -31,6 +31,10 @@ test("desktop response validation accepts representative valid payloads", () => 
   );
   assert.equal(validateDesktopResult("window_chrome_mode", "macos-native"), "macos-native");
   assert.deepEqual(
+    validateDesktopResult("existing_project_directories", ["/repo", "/workspace"]),
+    ["/repo", "/workspace"],
+  );
+  assert.deepEqual(
     validateDesktopResult("start_workspace_watch", { available: true, message: null }),
     { available: true, message: null },
   );
@@ -71,6 +75,13 @@ test("desktop response validation rejects malformed watch status", () => {
   assert.throws(
     () => validateDesktopResult("start_workspace_watch", { available: "yes", message: null }),
     /available must be a boolean/,
+  );
+});
+
+test("desktop response validation rejects malformed project-directory results", () => {
+  assert.throws(
+    () => validateDesktopResult("existing_project_directories", ["/repo", 7]),
+    /array of strings/,
   );
 });
 

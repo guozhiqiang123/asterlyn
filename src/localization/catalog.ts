@@ -24,6 +24,7 @@ export interface ShellCopy {
   open: string;
   recentProjects: string;
   noOtherRecentProjects: string;
+  removeRecentProject(name: string): string;
   browserDemo: string;
   search: string;
   searchFilesAndCommands: string;
