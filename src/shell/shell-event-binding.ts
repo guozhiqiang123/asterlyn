@@ -1,6 +1,37 @@
 import type { NavigationMode } from "../workbench/navigation.ts";
 import { scrollTabStrip } from "../workbench/tab-strip.ts";
 
+export type RemoteActionKind = "fetch" | "pull" | "push";
+
+export interface DelegatedRemoteAction {
+  readonly kind: RemoteActionKind;
+  readonly anchor: HTMLButtonElement;
+}
+
+export function resolveDelegatedRemoteAction(
+  root: ParentNode,
+  target: EventTarget | null,
+): DelegatedRemoteAction | null {
+  if (!(target instanceof Element)) return null;
+  const anchor = target.closest<HTMLButtonElement>("[data-remote-action]");
+  if (!(anchor instanceof HTMLButtonElement) || !root.contains(anchor)) return null;
+  const kind = anchor.dataset.remoteAction;
+  return kind === "fetch" || kind === "pull" || kind === "push"
+    ? { kind, anchor }
+    : null;
+}
+
+export function bindDelegatedRemoteActions(
+  root: HTMLElement,
+  signal: AbortSignal,
+  action: (kind: RemoteActionKind, anchor: HTMLButtonElement) => void,
+): void {
+  root.addEventListener("click", (event) => {
+    const request = resolveDelegatedRemoteAction(root, event.target);
+    if (request) action(request.kind, request.anchor);
+  }, { signal });
+}
+
 export interface ShellEventActions {
   readonly workspaceOpen: () => boolean;
   readonly remoteDialogOpen: () => boolean;
@@ -20,7 +51,7 @@ export interface ShellEventActions {
   readonly toggleRepositoryMenu: () => void;
   readonly toggleRemoteActionsMenu: () => void;
   readonly selectRemote: (remote: string) => void;
-  readonly remoteAction: (kind: "fetch" | "pull" | "push", anchor: HTMLButtonElement) => void;
+  readonly remoteAction: (kind: RemoteActionKind, anchor: HTMLButtonElement) => void;
   readonly cancelRemoteOperation: () => void;
   readonly refresh: () => void;
   readonly openSettings: () => void;
@@ -57,11 +88,16 @@ export interface ShellEventActions {
 export class ShellEventBinding {
   private abortController: AbortController | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private readonly root: HTMLElement;
+  private readonly actions: ShellEventActions;
 
   constructor(
-    private readonly root: HTMLElement,
-    private readonly actions: ShellEventActions,
-  ) {}
+    root: HTMLElement,
+    actions: ShellEventActions,
+  ) {
+    this.root = root;
+    this.actions = actions;
+  }
 
   bind(): void {
     this.dispose();
@@ -86,11 +122,9 @@ export class ShellEventBinding {
       event.stopPropagation();
       this.actions.toggleRemoteActionsMenu();
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-remote-action]").forEach((button) => {
-      listen(button, "click", () => {
-        const kind = button.dataset.remoteAction as "fetch" | "pull" | "push";
-        this.actions.remoteAction(kind, button);
-      });
+    // Repository reconciliation can replace action nodes; the stable shell root owns delegation.
+    bindDelegatedRemoteActions(this.root, signal, (kind, anchor) => {
+      this.actions.remoteAction(kind, anchor);
     });
     listen(this.query("#cancel-remote-operation"), "click", () => this.actions.cancelRemoteOperation());
     listen(this.query("#settings-button"), "click", () => this.actions.openSettings());

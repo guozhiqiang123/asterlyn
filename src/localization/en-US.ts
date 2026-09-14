@@ -527,7 +527,7 @@ export const EN_US: LocaleCatalog = {
     expandPushedFolders: "Expand all pushed file folders", collapsePushedFolders: "Collapse all pushed file folders",
     loadingPushedDiff: "Loading pushed file Diff…", closePushedDiff: "Close pushed file Diff", pushedDiffToolbar: "Pushed file Diff navigation and presentation",
     previousPushedFile: "Previous pushed file", nextPushedFile: "Next pushed file", imagePreviewAlt: (label) => `${label} image preview`,
-    upstreamChanged: "The current upstream changed during Fetch; open Update again", alreadyUpToDate: "The current branch is already up to date",
+    upstreamChanged: "The current upstream changed during Fetch; open Update again", alreadyUpToDate: "All files are up to date",
     activeProjectNotGit: "The active project is no longer a Git repository.", endedRefreshRequired: "Remote operation ended; refresh required",
     operationInProgress: (name) => `${name} in progress…`, operationCompleted: (name) => `${name} completed`,
     operationNeedsReview: "Remote operation needs review", cancellingOperation: (name) => `Cancelling ${name}…`,

@@ -84,19 +84,19 @@
   color: var(--warning-text);
 }
 
-.toast.success {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success-text);
+.toast.information {
+  border-color: var(--info-border);
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
-.toast.success .toast-icon {
-  background: var(--green);
+.toast.information .toast-icon {
+  background: var(--accent);
   color: white;
 }
 
-.toast.success .toast-close {
-  color: var(--success-text);
+.toast.information .toast-close {
+  color: var(--text-soft);
 }
 
 .toast-close {

@@ -383,7 +383,7 @@ export const ZH_CN = {
     expandPushedFolders: "展开所有推送文件夹", collapsePushedFolders: "折叠所有推送文件夹",
     loadingPushedDiff: "正在加载推送文件差异…", closePushedDiff: "关闭推送文件差异", pushedDiffToolbar: "推送文件差异的导航和显示",
     previousPushedFile: "上一个推送文件", nextPushedFile: "下一个推送文件", imagePreviewAlt: (label) => `${label}图片预览`,
-    upstreamChanged: "获取期间当前上游发生变化；请重新打开“更新”", alreadyUpToDate: "当前分支已是最新",
+    upstreamChanged: "获取期间当前上游发生变化；请重新打开“更新”", alreadyUpToDate: "所有文件均为最新",
     activeProjectNotGit: "当前项目已不再是 Git 仓库。", endedRefreshRequired: "远程操作已结束；需要刷新",
     operationInProgress: (name) => `正在${name}…`, operationCompleted: (name) => `${name}已完成`, operationNeedsReview: "远程操作需要检查",
     cancellingOperation: (name) => `正在取消${name}…`,

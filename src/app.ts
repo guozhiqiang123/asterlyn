@@ -2287,7 +2287,13 @@ export class AsterlynApp {
       await this.runRemoteOperation(kind);
       return;
     }
-    this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor);
+    if (!this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor)) {
+      const reason = this.remoteActionBlockedReason(kind) ??
+        (kind === "pull"
+          ? this.localization.catalog.remote.updateUnavailable
+          : this.localization.catalog.remote.pushUnavailable);
+      this.showWarning(reason);
+    }
   }
 
   private remoteActionBlockedReason(kind: "fetch" | "pull" | "push"): string | null {
@@ -2315,14 +2321,15 @@ export class AsterlynApp {
   private openRemoteDialog(
     dialog: "update" | "push",
     returnFocus: HTMLElement,
-  ): void {
-    if (this.state.loading || !this.remoteController.openDialog(dialog)) return;
+  ): boolean {
+    if (this.state.loading || !this.remoteController.openDialog(dialog)) return false;
     this.remoteDialogReturnFocus = returnFocus;
     queueMicrotask(() => {
       this.root
         .querySelector<HTMLButtonElement>("#remote-dialog-close")
         ?.focus();
     });
+    return true;
   }
 
   private closeRemoteDialog(restoreFocus = true): void {
@@ -2670,7 +2677,7 @@ export class AsterlynApp {
       return;
     }
     if (snapshot.branch.behind === 0) {
-      this.showSuccess(this.localization.catalog.remote.alreadyUpToDate);
+      this.showInformation(this.localization.catalog.remote.alreadyUpToDate);
       return;
     }
     const target = `refs/remotes/${remote}/${upstream.slice("refs/heads/".length)}`;
@@ -2807,7 +2814,7 @@ export class AsterlynApp {
       if (generation === this.windowSession.generation) {
         if (!background) this.setLoading(false, this.localization.catalog.common.ready);
         if (succeeded) {
-          if (announceCompletion) this.showSuccess(completionMessage);
+          if (announceCompletion) this.showInformation(completionMessage);
           else this.setStatus(completionMessage, "success");
         } else if (failed) {
           this.setStatus(
@@ -6253,7 +6260,7 @@ export class AsterlynApp {
     this.query("#toast-message").textContent = message;
     this.query(".toast-icon").textContent = "!";
     const toast = this.query("#toast");
-    toast.classList.remove("hidden", "warning", "success");
+    toast.classList.remove("hidden", "warning", "information");
     this.setStatus(this.localization.catalog.common.operationFailed, "warning");
   }
 
@@ -6264,24 +6271,24 @@ export class AsterlynApp {
     this.query(".toast-icon").textContent = "!";
     const toast = this.query("#toast");
     toast.classList.add("warning");
-    toast.classList.remove("hidden", "success");
+    toast.classList.remove("hidden", "information");
     this.setStatus(message, "warning");
   }
 
-  private showSuccess(message: string): void {
+  private showInformation(message: string): void {
     this.clearToastDismissTimer();
     this.state.error = null;
     this.query("#toast-message").textContent = message;
-    this.query(".toast-icon").textContent = "✓";
+    this.query(".toast-icon").textContent = "i";
     const toast = this.query("#toast");
-    toast.classList.add("success");
+    toast.classList.add("information");
     toast.classList.remove("hidden", "warning");
     this.setStatus(message, "success");
     this.toastDismissTimer = window.setTimeout(() => {
       this.toastDismissTimer = null;
       if (this.query("#toast-message").textContent !== message) return;
       toast.classList.add("hidden");
-      toast.classList.remove("success");
+      toast.classList.remove("information");
     }, 4_000);
   }
 
@@ -6290,7 +6297,7 @@ export class AsterlynApp {
     this.state.error = null;
     const toast = this.query("#toast");
     toast.classList.add("hidden");
-    toast.classList.remove("warning", "success");
+    toast.classList.remove("warning", "information");
   }
 
   private clearToastDismissTimer(): void {

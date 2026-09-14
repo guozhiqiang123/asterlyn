@@ -11,7 +11,7 @@ implicit Update operation.
 
 - Update uses a downward-arrow icon and retains its complete accessible action description.
 - An interactive Update whose post-Fetch branch object is unchanged reports a localized prominent
-  success message and shared status instead of appearing inert.
+  informational message and shared status instead of appearing inert.
 - Each native blur-to-focus transition performs at most one Fetch for the selected remote. Its
   canonical result updates the incoming count on Update; it never merges, rebases, fast-forwards,
   checks out, modifies the worktree, or starts an unrelated untracked-file scan.
@@ -68,9 +68,9 @@ The Linux Tauri wrapper produced `Asterlyn_0.1.0_amd64.deb` successfully.
 
 The icon remains supplemental to the Update button's named route/strategy description. The incoming
 badge is hidden from visual duplication but represented in the complete action label. The current-
-state confirmation uses the existing polite status toast and dismisses after four seconds, while the
-same text remains in the status bar. These changes are **improved** for understandable action
-feedback; no new keyboard-only control was introduced.
+state confirmation uses the existing polite informational toast and dismisses after four seconds,
+while the same text remains in the status bar. These changes are **improved** for understandable
+action feedback; no new keyboard-only control was introduced.
 
 Manual acceptance should return a native window from the background with a reachable selected
 remote and verify that the Update count changes after a server-side commit, that an already-current

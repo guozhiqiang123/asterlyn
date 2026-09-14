@@ -32,6 +32,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Design and references
 
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
+- [`design/interaction-feedback.md`](design/interaction-feedback.md) — mandatory visible feedback and stable event-lifecycle rules for every user-invoked action.
 - [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
 - [`design/editor-core-interactions.md`](design/editor-core-interactions.md) — Stage 3 editor slices, invariants, and acceptance evidence.
 - [`design/localization-color-themes.md`](design/localization-color-themes.md) — implementation plan for English/Chinese localization and System/Dark/Light appearance.
@@ -75,3 +76,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-13-localization-color-themes.md`](benchmarks/2026-09-13-localization-color-themes.md) — English/Chinese and System/Dark/Light implementation, visible-copy and contrast gates, browser timing, idle stability, build size, and remaining native packaging gate.
 - [`benchmarks/2026-09-14-update-project-interaction.md`](benchmarks/2026-09-14-update-project-interaction.md) — actionable Update Project strategy choice, secondary Fetch placement, blocked-action feedback, validation, bundle movement, and Debian evidence.
 - [`benchmarks/2026-09-14-foreground-fetch-collapsed-tree.md`](benchmarks/2026-09-14-foreground-fetch-collapsed-tree.md) — foreground remote reconciliation, explicit current-state feedback, collapsed first-open tree, bundle movement, and Debian evidence.
+- [`benchmarks/2026-09-14-action-feedback-lifecycle.md`](benchmarks/2026-09-14-action-feedback-lifecycle.md) — Update event-lifecycle repair, mandatory action feedback contract, interactive regression coverage, and Debian evidence.

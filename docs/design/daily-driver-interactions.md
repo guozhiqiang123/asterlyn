@@ -6,6 +6,11 @@ Asterlyn should become useful through complete developer workflows before spendi
 
 The interaction study uses locally installed Android Studio and the documented Rebased study only as behavioral references. Asterlyn does not extract source, assets, icons, fonts, or branded composition from either installed product; standalone open-source dependencies follow their own reviewed upstream license and provenance.
 
+All slices are governed by the mandatory
+[`action-feedback contract`](interaction-feedback.md): every user-invoked command must either produce
+an immediate visible state transition or show progress followed by a terminal result. Silent no-op
+and silently dropped event paths are defects, not acceptable compactness.
+
 ## 2026-09-08 usability audit
 
 The current Git workbench already supports repository open, tracked-first status, patch inspection, stage/unstage, commit, recent history, and branch presentation. The highest-value gaps observed in the running application are:
