@@ -79,9 +79,9 @@
   --editor-selection: #214283;
   --editor-search: #725b19;
   --editor-search-selected: #9c7320;
-  --editor-diff-added-bg: #29443666;
+  --editor-diff-added-bg: #294436;
   --editor-diff-added-text: #b8e2c4;
-  --editor-diff-removed-bg: #5b2d3266;
+  --editor-diff-removed-bg: #5b2d32;
   --editor-diff-removed-text: #f0b8bd;
   --editor-diff-hunk-bg: #233d6166;
   --editor-diff-hunk-text: #a8c7fa;
@@ -218,9 +218,9 @@
   --editor-selection: #b7d2f5;
   --editor-search: #f3da85;
   --editor-search-selected: #e8bf4e;
-  --editor-diff-added-bg: #cdebd580;
+  --editor-diff-added-bg: #cdebd5;
   --editor-diff-added-text: #195c2b;
-  --editor-diff-removed-bg: #f2ccd080;
+  --editor-diff-removed-bg: #f2ccd0;
   --editor-diff-removed-text: #8f232c;
   --editor-diff-hunk-bg: #cfdef580;
   --editor-diff-hunk-text: #174f9b;

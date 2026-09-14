@@ -33,6 +33,27 @@ test("light theme overrides every color token declared by the dark registry", as
   assert.deepEqual(colorTokens.filter((token) => !lightTokens.has(token)), []);
 });
 
+test("Diff line fills remain opaque and visibly distinct in both themes", async () => {
+  const source = await readFile(path.join(sourceRoot, "styles.css"), "utf8");
+  const rootBlock = source.match(/:root \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const lightBlock = source.match(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  for (const [theme, block, minimumContrast] of [
+    ["dark", rootBlock, 1.4],
+    ["light", lightBlock, 1.15],
+  ]) {
+    const background = colorToken(block, "--bg-deep");
+    for (const token of ["--editor-diff-added-bg", "--editor-diff-removed-bg"]) {
+      const value = colorToken(block, token);
+      assert.match(value, /^#[\da-f]{6}$/i, `${theme} ${token} must not be alpha-blended`);
+      assert.ok(
+        contrastRatio(value, background) >= minimumContrast,
+        `${theme} ${token} is not distinct enough from the editor background`,
+      );
+    }
+  }
+});
+
 test("forced-colors preserves native controls, focus, and selected state", async () => {
   const source = await readFile(path.join(sourceRoot, "styles.css"), "utf8");
   const block = source.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/u)?.[1] ?? "";
@@ -53,4 +74,26 @@ async function sourceFiles(directory) {
 
 function lineAt(source, index) {
   return source.slice(0, index).split("\n").length;
+}
+
+function colorToken(block, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const value = block.match(new RegExp(`^\\s*${escaped}:\\s*(#[\\da-f]+)`, "im"))?.[1];
+  assert.ok(value, `${name} is missing from the color registry`);
+  return value;
+}
+
+function contrastRatio(left, right) {
+  const luminance = [relativeLuminance(left), relativeLuminance(right)]
+    .sort((a, b) => b - a);
+  return (luminance[0] + 0.05) / (luminance[1] + 0.05);
+}
+
+function relativeLuminance(hex) {
+  const channels = [1, 3, 5]
+    .map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255)
+    .map((value) =>
+      value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+    );
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }

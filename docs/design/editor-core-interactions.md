@@ -208,6 +208,9 @@ centering its first row. Insertions and deletions include the aligned empty rows
 side, so the two panes retain one shared block geometry. The marker does not occupy the split
 connector or future per-hunk action gutter. Editable Diff may therefore add reviewed accept/reject
 controls later without redefining current-position state or making selection color the only cue.
+Added and removed rows use opaque semantic fills in both themes rather than alpha-blending their
+meaning into the editor canvas. The dark fills keep at least 1.4:1 separation from the canvas while
+the existing syntax colors, intraline emphasis, and current-change perimeter remain independent.
 
 ### E3.1 Markdown-mode memory and conflict destination — 2026-09-12
 
