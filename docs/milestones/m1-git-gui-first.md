@@ -22,7 +22,7 @@ It is not the final product identity and does not authorize shortcuts that would
 
 ## Explicitly deferred
 
-- Deleting untracked files, general reset/clean, force push, interactive rebase, merge conflict editing, submodule mutation, credential prompts, amend, commit-and-push composition, commit signing UI, and worktree management.
+- Deleting untracked files, general reset/clean, raw force push, interactive rebase, merge conflict editing, submodule mutation, account-password authentication, amend, commit-and-push composition, commit signing UI, and worktree management.
 - File-system watchers; M1 uses explicit/event-triggered refresh.
 - Graph lane rendering and provider-specific pull-request workflows.
 - Binary-safe path transport for non-UTF-8 filenames.
@@ -68,7 +68,7 @@ Feature development now follows the [`daily-driver interaction backlog`](../desi
 
 U1–U3 are published as the first usability phase. Asterlyn now has compact desktop chrome; searchable, keyboard-navigable commit file/patch inspection; filtered scope-aware working-tree multi-selection and batch stage/unstage; and shared unified/split/whitespace patch presentation. U4 safe local branch work is published: existing local checkout and new local-branch creation are available only behind a complete clean-worktree gate, with the Git core repeating validation immediately before mutation.
 
-U5 is locally accepted for its phase checkpoint. The top-bar Sync workflow provides canonical branch-only Fetch, clean fast-forward Pull, explicit non-force Push, and first Publish through configured non-interactive Git credentials, with repository-scoped cancellation and fresh-state reconciliation. Remote URLs and child output never enter application state. The native bare-remote journey, safety evidence, and intentionally unsupported remote configurations are recorded in the interaction backlog.
+U5 is locally accepted for its phase checkpoint. The top-bar Sync workflow provides canonical branch-only Fetch, clean fast-forward Pull, explicit non-force Push, and first Publish through configured non-interactive Git credentials, with repository-scoped cancellation and fresh-state reconciliation. Push now preflights HTTPS credentials or a local SSH identity before starting the remote process. The application may present a sanitized host and generated SSH Push URL, but never represents an embedded URL secret, token, or child output in application state. The native bare-remote journey, safety evidence, and intentionally unsupported remote configurations are recorded in the interaction backlog.
 
 U6 is locally accepted as the durable workbench boundary. Files and Changes now share an independently resizable left dock, Branches uses an independently resizable bottom three-column tool, and typed working or commit Diff documents open in a permanent center editor. The source-like split Diff uses hunk-derived line numbers, explicit omitted context, aligned sides, and conservative intraline highlights while remaining honest about its 4 MiB bounded-patch source. The complete comparison, Linux package and native-interaction evidence, limitations, and Stage 3 handoff are recorded in the interaction backlog.
 

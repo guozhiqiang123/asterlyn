@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::Arc;
@@ -17,8 +17,9 @@ use crate::model::{
     BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
     DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteSummary, RepositorySnapshot,
-    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
+    RemoteTransport, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
+    UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -78,6 +79,15 @@ struct PushTargetContext {
     comparison_base_oid: Option<String>,
     publish: bool,
     set_upstream_after_push: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RemoteEndpoint {
+    transport: RemoteTransport,
+    host: Option<String>,
+    path: Option<String>,
+    username: Option<String>,
+    suggested_ssh_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -145,7 +155,7 @@ impl GitRepository {
         &self.root
     }
 
-    pub(crate) fn git_directory(&self) -> &Path {
+    pub fn git_directory(&self) -> &Path {
         &self.git_dir
     }
 
@@ -178,6 +188,12 @@ impl GitRepository {
 
         while let Some(parent) = pending.pop() {
             for path in parent.repository.gitlink_paths()? {
+                if roots.len() >= 1_024 {
+                    return Err(GitError::InvalidInput {
+                        field: "Git roots".into(),
+                        message: "repository discovery exceeds the 1,024-root limit".into(),
+                    });
+                }
                 let candidate = parent.repository.root.join(path);
                 let Ok(canonical_candidate) = fs::canonicalize(candidate) else {
                     continue;
@@ -710,9 +726,16 @@ impl GitRepository {
         let roots = self.discovered_roots()?;
         let maximum = limit.clamp(1, 100_000);
         let mut files = Vec::new();
+        let mut ignored_files = Vec::new();
         let mut ignored_entries = Vec::new();
+        let mut files_truncated = false;
+        let mut ignored_truncated = false;
         for root in &roots {
-            for path in root.repository.project_file_paths()? {
+            let (root_paths, truncated) = root
+                .repository
+                .project_file_paths(maximum.saturating_sub(files.len()))?;
+            files_truncated |= truncated;
+            for path in root_paths {
                 let workspace_path = if root.descriptor.relative_path == "." {
                     path.clone()
                 } else {
@@ -722,15 +745,29 @@ impl GitRepository {
                     repository_id: root.descriptor.id.clone(),
                     path,
                     workspace_path,
+                    read_only: false,
                 });
             }
             if include_ignored {
-                for entry in root.repository.project_ignored_entries()? {
+                let (root_entries, truncated) = root
+                    .repository
+                    .project_ignored_entries(maximum.saturating_sub(ignored_entries.len()))?;
+                ignored_truncated |= truncated;
+                for entry in root_entries {
+                    let path = entry.workspace_path;
                     let workspace_path = if root.descriptor.relative_path == "." {
-                        entry.workspace_path
+                        path.clone()
                     } else {
-                        format!("{}/{}", root.descriptor.relative_path, entry.workspace_path)
+                        format!("{}/{}", root.descriptor.relative_path, path)
                     };
+                    if entry.kind == ProjectEntryKind::File {
+                        ignored_files.push(ProjectFile {
+                            repository_id: root.descriptor.id.clone(),
+                            path,
+                            workspace_path: workspace_path.clone(),
+                            read_only: true,
+                        });
+                    }
                     ignored_entries.push(ProjectIgnoredEntry {
                         workspace_path,
                         kind: entry.kind,
@@ -747,8 +784,19 @@ impl GitRepository {
         files.dedup_by(|left, right| {
             left.repository_id == right.repository_id && left.path == right.path
         });
-        let files_truncated = files.len() > maximum;
+        files_truncated |= files.len() > maximum;
         files.truncate(maximum);
+        ignored_files.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        ignored_files.dedup_by(|left, right| {
+            left.repository_id == right.repository_id && left.path == right.path
+        });
+        ignored_truncated |= ignored_files.len() > maximum;
+        ignored_files.truncate(maximum);
         ignored_entries.sort_by(|left, right| {
             left.workspace_path
                 .cmp(&right.workspace_path)
@@ -757,7 +805,7 @@ impl GitRepository {
                 })
         });
         ignored_entries.dedup();
-        let ignored_truncated = ignored_entries.len() > maximum;
+        ignored_truncated |= ignored_entries.len() > maximum;
         ignored_entries.truncate(maximum);
         let nested_roots: HashSet<&str> = roots
             .iter()
@@ -766,11 +814,18 @@ impl GitRepository {
             .collect();
         let mut paths: Vec<String> = files
             .iter()
-            .filter(|file| !nested_roots.contains(file.workspace_path.as_str()))
+            .filter(|file| !file.read_only && !nested_roots.contains(file.workspace_path.as_str()))
             .map(|file| file.workspace_path.clone())
             .collect();
         paths.sort();
         paths.dedup();
+        files.extend(ignored_files);
+        files.sort_by(|left, right| {
+            left.workspace_path
+                .cmp(&right.workspace_path)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.path.cmp(&right.path))
+        });
         Ok(ProjectFileList {
             root: self.root.to_string_lossy().into_owned(),
             paths,
@@ -805,6 +860,21 @@ impl GitRepository {
     /// method rechecks the exact repository root and current ignore policy, while the workspace
     /// boundary remains responsible for component-by-component non-link traversal and file type.
     pub fn reauthorize_project_file(&self, file: &ProjectFile) -> Result<ProjectFile, GitError> {
+        if file.read_only {
+            return Err(GitError::InvalidInput {
+                field: "project file".to_string(),
+                message: "the selected project file is read-only".to_string(),
+            });
+        }
+        self.reauthorize_project_file_for_read(file)
+    }
+
+    /// Revalidates a catalogued file for a bounded read. Ignored catalog entries are admitted only
+    /// while they remain ignored, and retain their read-only identity.
+    pub fn reauthorize_project_file_for_read(
+        &self,
+        file: &ProjectFile,
+    ) -> Result<ProjectFile, GitError> {
         validate_relative_path(&file.path)?;
         let repository = if file.repository_id == "." {
             self.clone()
@@ -863,6 +933,12 @@ impl GitRepository {
             .stdout
             .split(|byte| *byte == 0)
             .any(|candidate| candidate == file.path.as_bytes());
+        if file.read_only && is_tracked {
+            return Err(GitError::InvalidInput {
+                field: "project file".to_string(),
+                message: "the selected ignored-file identity is stale".to_string(),
+            });
+        }
         if !is_tracked {
             let ignored = run_git_output(
                 repository.root(),
@@ -879,12 +955,21 @@ impl GitRepository {
             })?;
             match ignored.status.code() {
                 Some(0) => {
-                    return Err(GitError::InvalidInput {
-                        field: "project file".to_string(),
-                        message: "the selected project file is now ignored".to_string(),
-                    });
+                    if !file.read_only {
+                        return Err(GitError::InvalidInput {
+                            field: "project file".to_string(),
+                            message: "the selected project file is now ignored".to_string(),
+                        });
+                    }
                 }
-                Some(1) => {}
+                Some(1) => {
+                    if file.read_only {
+                        return Err(GitError::InvalidInput {
+                            field: "project file".to_string(),
+                            message: "the selected ignored-file identity is stale".to_string(),
+                        });
+                    }
+                }
                 status => {
                     return Err(GitError::CommandFailed {
                         operation: "reauthorize untracked project file".to_string(),
@@ -900,32 +985,35 @@ impl GitRepository {
         Ok(file.clone())
     }
 
-    fn project_file_paths(&self) -> Result<Vec<String>, GitError> {
-        let output = self.run_read(
-            "list project files",
-            [
+    fn project_file_paths(&self, limit: usize) -> Result<(Vec<String>, bool), GitError> {
+        self.read_catalog_records(
+            &[
                 "ls-files",
                 "--cached",
                 "--others",
                 "--exclude-standard",
                 "-z",
             ],
-        )?;
-        let mut paths: Vec<_> = output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|path| !path.is_empty())
-            .map(|path| String::from_utf8_lossy(path).into_owned())
-            .collect();
-        paths.sort();
-        paths.dedup();
-        Ok(paths)
+            limit,
+        )
     }
 
-    fn project_ignored_entries(&self) -> Result<Vec<ProjectIgnoredEntry>, GitError> {
-        let output = self.run_read(
-            "list ignored project entries",
-            [
+    fn project_ignored_entries(
+        &self,
+        limit: usize,
+    ) -> Result<(Vec<ProjectIgnoredEntry>, bool), GitError> {
+        let (mut records, files_truncated) = self.read_catalog_records(
+            &[
+                "ls-files",
+                "--others",
+                "--ignored",
+                "--exclude-standard",
+                "-z",
+            ],
+            limit,
+        )?;
+        let (collapsed, directories_truncated) = self.read_catalog_records(
+            &[
                 "ls-files",
                 "--others",
                 "--ignored",
@@ -934,9 +1022,11 @@ impl GitRepository {
                 "--no-empty-directory",
                 "-z",
             ],
+            limit,
         )?;
+        records.extend(collapsed);
         let mut entries = Vec::new();
-        for raw_path in output.stdout.split(|byte| *byte == 0) {
+        for raw_path in records.iter().map(|record| record.as_bytes()) {
             if raw_path.is_empty() {
                 continue;
             }
@@ -964,7 +1054,7 @@ impl GitRepository {
                 })
         });
         entries.dedup();
-        Ok(entries)
+        Ok((entries, files_truncated || directories_truncated))
     }
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
@@ -1468,7 +1558,11 @@ impl GitRepository {
 
     pub fn stage(&self, paths: &[String]) -> Result<(), GitError> {
         let paths = validate_paths(paths)?;
-        let mut args = vec![OsString::from("add"), OsString::from("--")];
+        let mut args = vec![
+            OsString::from("--literal-pathspecs"),
+            OsString::from("add"),
+            OsString::from("--"),
+        ];
         args.extend(paths);
         self.run_mutation("stage paths", args)?;
         Ok(())
@@ -1481,12 +1575,14 @@ impl GitRepository {
             .unwrap_or(false);
         let mut args = if has_head {
             vec![
+                OsString::from("--literal-pathspecs"),
                 OsString::from("restore"),
                 OsString::from("--staged"),
                 OsString::from("--"),
             ]
         } else {
             vec![
+                OsString::from("--literal-pathspecs"),
                 OsString::from("rm"),
                 OsString::from("--cached"),
                 OsString::from("--quiet"),
@@ -1530,7 +1626,7 @@ impl GitRepository {
                 message: error.to_string(),
             })?;
 
-        let output = child.wait_with_output().map_err(|error| GitError::Io {
+        let output = wait_with_bounded_output(child).map_err(|error| GitError::Io {
             operation: "create commit".to_string(),
             message: error.to_string(),
         })?;
@@ -1605,7 +1701,7 @@ impl GitRepository {
                     operation: "create selected commit".to_string(),
                     message: error.to_string(),
                 })?;
-            child.wait_with_output().map_err(|error| GitError::Io {
+            wait_with_bounded_output(child).map_err(|error| GitError::Io {
                 operation: "create selected commit".to_string(),
                 message: error.to_string(),
             })
@@ -1687,7 +1783,10 @@ impl GitRepository {
         })
     }
 
-    pub fn revert_selected(&self, selected: &[FileChange]) -> Result<(), GitError> {
+    pub fn review_revert_selected(
+        &self,
+        selected: &[FileChange],
+    ) -> Result<(String, Vec<String>), GitError> {
         self.ensure_no_repository_operation("revert selected changes")?;
         if self.head_oid()?.is_none() {
             return Err(GitError::UnsafeOperation {
@@ -1715,18 +1814,51 @@ impl GitRepository {
                 blockers: unsupported,
             });
         }
-        let pathspecs = expanded_change_paths(&selected)?;
+        let paths = expanded_change_paths(&selected)?
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+        Ok((
+            self.head_oid()?.ok_or_else(|| GitError::InvalidInput {
+                field: "HEAD".into(),
+                message: "HEAD disappeared during review".into(),
+            })?,
+            paths,
+        ))
+    }
+
+    pub fn revert_selected_reviewed(
+        &self,
+        selected: &[FileChange],
+        expected_head: &str,
+        preflight: impl FnOnce() -> Result<(), GitError>,
+    ) -> Result<(), GitError> {
+        let (head, paths) = self.review_revert_selected(selected)?;
+        if head != expected_head {
+            return Err(GitError::UnsafeOperation {
+                operation: "restore changes".into(),
+                message: "HEAD changed after review".into(),
+                blockers: paths,
+            });
+        }
+        preflight()?;
         let mut args = vec![
             OsString::from("--literal-pathspecs"),
             OsString::from("restore"),
-            OsString::from("--source=HEAD"),
+            OsString::from(format!("--source={expected_head}")),
             OsString::from("--staged"),
             OsString::from("--worktree"),
             OsString::from("--"),
         ];
-        args.extend(pathspecs);
-        self.run_mutation("revert selected changes", args)?;
+        args.extend(paths.into_iter().map(OsString::from));
+        self.run_mutation("restore reviewed changes", args)?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn revert_selected(&self, selected: &[FileChange]) -> Result<(), GitError> {
+        let (head, _) = self.review_revert_selected(selected)?;
+        self.revert_selected_reviewed(selected, &head, || Ok(()))
     }
 
     fn status_changes_with_untracked(&self) -> Result<Vec<FileChange>, GitError> {
@@ -1738,7 +1870,7 @@ impl GitRepository {
         Ok(changes)
     }
 
-    fn head_oid(&self) -> Result<Option<String>, GitError> {
+    pub fn head_oid(&self) -> Result<Option<String>, GitError> {
         let output =
             run_git_output(&self.root, ["rev-parse", "--verify", "HEAD"]).map_err(|error| {
                 GitError::Io {
@@ -1913,6 +2045,105 @@ impl GitRepository {
             false,
         )?;
         Ok(())
+    }
+
+    pub fn remote_authentication_status(
+        &self,
+        remote: &str,
+    ) -> Result<RemoteAuthenticationStatus, GitError> {
+        let remote = self.validated_remote(remote, true)?;
+        let url = self.remote_push_url(&remote.name)?;
+        let endpoint = parse_remote_endpoint(&url);
+        let credential_helper_configured = match endpoint.transport {
+            RemoteTransport::Https => self.credential_helper_configured(&endpoint)?,
+            _ => false,
+        };
+        let credential_available = match endpoint.transport {
+            RemoteTransport::Https => self.https_credential_available(&endpoint)?,
+            RemoteTransport::Ssh => ssh_identity_configured(),
+            RemoteTransport::Local => true,
+            RemoteTransport::Other => true,
+        };
+        Ok(RemoteAuthenticationStatus {
+            remote: remote.name,
+            transport: endpoint.transport,
+            host: endpoint.host,
+            credential_available,
+            credential_helper_configured,
+            suggested_ssh_url: endpoint.suggested_ssh_url,
+        })
+    }
+
+    pub fn store_remote_https_credential(
+        &self,
+        remote: &str,
+        username: &str,
+        token: &str,
+    ) -> Result<RemoteAuthenticationStatus, GitError> {
+        validate_credential_field("username", username, 256)?;
+        validate_credential_field("personal access token", token, 4096)?;
+        let remote = self.validated_remote(remote, true)?;
+        let endpoint = parse_remote_endpoint(&self.remote_push_url(&remote.name)?);
+        if endpoint.transport != RemoteTransport::Https {
+            return Err(GitError::InvalidInput {
+                field: "remote authentication".to_string(),
+                message: "personal access tokens can be stored only for HTTPS remotes".to_string(),
+            });
+        }
+        self.ensure_secure_credential_helper(&endpoint)?;
+
+        let mut input = credential_input(&endpoint, Some(username), Some(token));
+        let output = self.run_credential_command("store remote credential", "approve", &input);
+        input.fill(0);
+        let output = output?;
+        if !output.status.success() {
+            return Err(GitError::CommandFailed {
+                operation: "store remote credential".to_string(),
+                status: output.status.code(),
+                message: sanitize_stderr(
+                    &output.stderr,
+                    "the configured Git credential helper rejected the credential",
+                ),
+            });
+        }
+
+        let status = self.remote_authentication_status(&remote.name)?;
+        if !status.credential_available {
+            return Err(GitError::CommandFailed {
+                operation: "store remote credential".to_string(),
+                status: None,
+                message: "the configured Git credential helper did not retain the credential"
+                    .to_string(),
+            });
+        }
+        Ok(status)
+    }
+
+    pub fn configure_remote_ssh(
+        &self,
+        remote: &str,
+        ssh_url: &str,
+    ) -> Result<RemoteAuthenticationStatus, GitError> {
+        validate_credential_field("SSH remote URL", ssh_url, 4096)?;
+        let remote = self.validated_remote(remote, true)?;
+        if parse_remote_endpoint(ssh_url).transport != RemoteTransport::Ssh {
+            return Err(GitError::InvalidInput {
+                field: "SSH remote URL".to_string(),
+                message: "enter an ssh:// URL or an SSH scp-style address such as git@host:owner/repository.git"
+                    .to_string(),
+            });
+        }
+        self.run_mutation(
+            "configure SSH push URL",
+            vec![
+                OsString::from("remote"),
+                OsString::from("set-url"),
+                OsString::from("--push"),
+                OsString::from(&remote.name),
+                OsString::from(ssh_url),
+            ],
+        )?;
+        self.remote_authentication_status(&remote.name)
     }
 
     pub fn pull_ff_only(&self, cancellation: &CancellationToken) -> Result<(), GitError> {
@@ -2508,6 +2739,110 @@ impl GitRepository {
             .collect()
     }
 
+    fn remote_push_url(&self, remote: &str) -> Result<String, GitError> {
+        let output = self.run_read(
+            "read remote push URL",
+            ["remote", "get-url", "--push", remote],
+        )?;
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if url.is_empty() {
+            return Err(GitError::Parse {
+                context: "remote push URL".to_string(),
+                message: "Git returned an empty remote URL".to_string(),
+            });
+        }
+        Ok(url)
+    }
+
+    fn credential_helper_configured(&self, endpoint: &RemoteEndpoint) -> Result<bool, GitError> {
+        let Some(url) = credential_lookup_url(endpoint) else {
+            return Ok(false);
+        };
+        let output = run_git_output(
+            &self.root,
+            ["config", "--get-urlmatch", "credential.helper", &url],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "read credential helper".to_string(),
+            message: error.to_string(),
+        })?;
+        match output.status.code() {
+            Some(0) => Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|value| !value.trim().is_empty())),
+            Some(1) => Ok(false),
+            _ => Err(GitError::CommandFailed {
+                operation: "read credential helper".to_string(),
+                status: output.status.code(),
+                message: sanitize_stderr(&output.stderr, "Git could not read credential helpers"),
+            }),
+        }
+    }
+
+    fn ensure_secure_credential_helper(&self, endpoint: &RemoteEndpoint) -> Result<(), GitError> {
+        if self.credential_helper_configured(endpoint)? {
+            return Ok(());
+        }
+        let helper = discover_platform_credential_helper(&self.root)?.ok_or_else(|| {
+            GitError::InvalidInput {
+                field: "credential helper".to_string(),
+                message: "no supported secure Git credential manager is installed; configure one or use SSH"
+                    .to_string(),
+            }
+        })?;
+        self.run_mutation(
+            "configure credential helper",
+            vec![
+                OsString::from("config"),
+                OsString::from("--local"),
+                OsString::from("credential.helper"),
+                OsString::from(helper),
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn https_credential_available(&self, endpoint: &RemoteEndpoint) -> Result<bool, GitError> {
+        let input = credential_input(endpoint, endpoint.username.as_deref(), None);
+        let output = self.run_credential_command("read remote credential", "fill", &input)?;
+        if !output.status.success() {
+            return Ok(false);
+        }
+        Ok(credential_output_has_secret(&output.stdout))
+    }
+
+    fn run_credential_command(
+        &self,
+        operation: &str,
+        action: &str,
+        input: &[u8],
+    ) -> Result<Output, GitError> {
+        let mut child = remote_command(&self.root)
+            .arg("credential")
+            .arg(action)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            })?;
+        let mut stdin = child.stdin.take().ok_or_else(|| GitError::Io {
+            operation: operation.to_string(),
+            message: "Git credential stdin was unavailable".to_string(),
+        })?;
+        stdin.write_all(input).map_err(|error| GitError::Io {
+            operation: operation.to_string(),
+            message: format!("could not send credential metadata to Git: {error}"),
+        })?;
+        drop(stdin);
+        wait_with_remote_output(child).map_err(|error| GitError::Io {
+            operation: operation.to_string(),
+            message: error.to_string(),
+        })
+    }
+
     fn validated_remote(&self, name: &str, require_push: bool) -> Result<RemoteSummary, GitError> {
         if name.is_empty()
             || name != name.trim()
@@ -2915,6 +3250,47 @@ impl GitRepository {
         ensure_success(operation, output)
     }
 
+    // Stop the producer at the entry/byte budget; never allocate the complete catalog first.
+    fn read_catalog_records(
+        &self,
+        args: &[&str],
+        limit: usize,
+    ) -> Result<(Vec<String>, bool), GitError> {
+        let mut child = base_command(&self.root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| GitError::Io {
+                operation: "list bounded catalog".into(),
+                message: error.to_string(),
+            })?;
+        let stdout = child.stdout.take().expect("piped stdout");
+        let stderr = child.stderr.take().expect("piped stderr");
+        let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+        let result = read_catalog_stream(stdout, limit);
+        if !matches!(&result, Ok((_, false))) {
+            let _ = child.kill();
+        }
+        let status = child.wait().map_err(|error| GitError::Io {
+            operation: "wait for catalog".into(),
+            message: error.to_string(),
+        })?;
+        let stderr = join_stream(stderr_reader, "list bounded catalog", "stderr")?;
+        let (records, truncated) = result?;
+        if !truncated {
+            ensure_success(
+                "list bounded catalog",
+                Output {
+                    status,
+                    stdout: Vec::new(),
+                    stderr,
+                },
+            )?;
+        }
+        Ok((records, truncated))
+    }
+
     fn run_read_owned_bounded(
         &self,
         operation: &str,
@@ -3305,9 +3681,13 @@ fn validate_query_roots(query: &HistoryQuery, roots: &[DiscoveredGitRoot]) -> Re
     Ok(())
 }
 
-fn read_stream(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    stream.read_to_end(&mut bytes)?;
+fn read_stream(stream: impl Read) -> std::io::Result<Vec<u8>> {
+    let (bytes, truncated) = read_stream_limited(stream, 64 * 1024 * 1024)?;
+    if truncated {
+        return Err(std::io::Error::other(
+            "Git output exceeded the 64 MiB limit; verify repository state before retrying a mutation",
+        ));
+    }
     Ok(bytes)
 }
 
@@ -3397,12 +3777,83 @@ fn run_from<const N: usize>(
     }
 }
 
+fn read_catalog_stream(input: impl Read, limit: usize) -> Result<(Vec<String>, bool), GitError> {
+    const BYTE_LIMIT: usize = 16 * 1024 * 1024;
+    const PATH_LIMIT: usize = 32 * 1024;
+    let mut reader = BufReader::new(input);
+    let mut records = std::collections::BTreeSet::new();
+    let mut bytes = 0;
+    loop {
+        let mut record = Vec::new();
+        let read = reader
+            .by_ref()
+            .take((PATH_LIMIT + 1) as u64)
+            .read_until(0, &mut record)
+            .map_err(|error| GitError::Io {
+                operation: "read catalog stream".into(),
+                message: error.to_string(),
+            })?;
+        if read == 0 {
+            return Ok((records.into_iter().collect(), false));
+        }
+        bytes += read;
+        if bytes > BYTE_LIMIT || read > PATH_LIMIT || record.last() != Some(&0) {
+            return Ok((records.into_iter().collect(), true));
+        }
+        record.pop();
+        if record.is_empty() {
+            continue;
+        }
+        let path = String::from_utf8(record).map_err(|_| GitError::InvalidInput {
+            field: "project path".into(),
+            message: "non-UTF-8 file paths are unsupported".into(),
+        })?;
+        if records.contains(&path) {
+            continue;
+        }
+        if records.len() == limit {
+            return Ok((records.into_iter().collect(), true));
+        }
+        records.insert(path);
+    }
+}
+
 fn run_git_output<I, S>(path: &Path, args: I) -> std::io::Result<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    base_command(path).args(args).output()
+    let child = base_command(path)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    wait_with_bounded_output(child)
+}
+
+pub(crate) fn wait_with_bounded_output(mut child: Child) -> std::io::Result<Output> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
+    let stdout_reader = thread::spawn(move || read_stream(stdout));
+    let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+    let status = child.wait();
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stdout reader failed"))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stderr reader failed"))?;
+    Ok(Output {
+        status: status?,
+        stdout: stdout?,
+        stderr: stderr?,
+    })
 }
 
 fn base_command(path: &Path) -> Command {
@@ -3413,6 +3864,9 @@ fn base_command(path: &Path) -> Command {
         .arg("--no-pager")
         .env("LC_ALL", "C")
         .env("LANG", "C")
+        // Background reads must not refresh the index and trigger our own watcher.
+        // Git still takes all locks required by explicit mutations.
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0");
     command
 }
@@ -3448,6 +3902,31 @@ fn remote_command(path: &Path) -> Command {
     #[cfg(unix)]
     command.process_group(0);
     command
+}
+
+fn wait_with_remote_output(mut child: Child) -> std::io::Result<Output> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
+    let stdout_reader = thread::spawn(move || read_stream_bounded(stdout));
+    let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
+    let status = child.wait();
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stdout reader failed"))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| std::io::Error::other("Git stderr reader failed"))?;
+    Ok(Output {
+        status: status?,
+        stdout: stdout?,
+        stderr: stderr?,
+    })
 }
 
 fn terminate_process_tree(child: &mut Child) {
@@ -3496,6 +3975,226 @@ fn ensure_success(operation: &str, output: Output) -> Result<Output, GitError> {
             message: sanitize_stderr(&output.stderr, operation),
         })
     }
+}
+
+fn parse_remote_endpoint(url: &str) -> RemoteEndpoint {
+    let value = url.trim();
+    if value.is_empty() || value.contains(['\0', '\r', '\n']) {
+        return remote_endpoint(RemoteTransport::Other, None, None, None, None);
+    }
+    if let Some(rest) = value.strip_prefix("https://") {
+        let (authority, path) = split_remote_authority(rest);
+        let (username, host) = split_remote_user(authority);
+        let path = clean_remote_path(path);
+        let suggested_ssh_url = suggested_ssh_url(host, path.as_deref());
+        return remote_endpoint(
+            RemoteTransport::Https,
+            nonempty(host),
+            path,
+            username,
+            suggested_ssh_url,
+        );
+    }
+    if let Some(rest) = value.strip_prefix("ssh://") {
+        let (authority, path) = split_remote_authority(rest);
+        let (username, host) = split_remote_user(authority);
+        return remote_endpoint(
+            RemoteTransport::Ssh,
+            nonempty(host),
+            clean_remote_path(path),
+            username,
+            None,
+        );
+    }
+    if value.starts_with("file://")
+        || value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+    {
+        return remote_endpoint(RemoteTransport::Local, None, None, None, None);
+    }
+    if let Some((authority, path)) = value.split_once(':')
+        && authority.len() > 1
+        && !authority.contains(['/', '\\'])
+        && !path.is_empty()
+    {
+        let (username, host) = split_remote_user(authority);
+        return remote_endpoint(
+            RemoteTransport::Ssh,
+            nonempty(host),
+            clean_remote_path(path),
+            username,
+            None,
+        );
+    }
+    if Path::new(value).is_absolute() || value.contains(['/', '\\']) {
+        return remote_endpoint(RemoteTransport::Local, None, None, None, None);
+    }
+    remote_endpoint(RemoteTransport::Other, None, None, None, None)
+}
+
+fn remote_endpoint(
+    transport: RemoteTransport,
+    host: Option<String>,
+    path: Option<String>,
+    username: Option<String>,
+    suggested_ssh_url: Option<String>,
+) -> RemoteEndpoint {
+    RemoteEndpoint {
+        transport,
+        host,
+        path,
+        username,
+        suggested_ssh_url,
+    }
+}
+
+fn split_remote_authority(value: &str) -> (&str, &str) {
+    value
+        .find('/')
+        .map_or((value, ""), |index| (&value[..index], &value[index + 1..]))
+}
+
+fn split_remote_user(authority: &str) -> (Option<String>, &str) {
+    let Some((userinfo, host)) = authority.rsplit_once('@') else {
+        return (None, authority);
+    };
+    let username = userinfo.split_once(':').map_or(userinfo, |(name, _)| name);
+    (nonempty(username), host)
+}
+
+fn clean_remote_path(path: &str) -> Option<String> {
+    let path = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches('/');
+    nonempty(path)
+}
+
+fn nonempty(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn suggested_ssh_url(host: &str, path: Option<&str>) -> Option<String> {
+    let path = path?;
+    if host.is_empty() {
+        return None;
+    }
+    if host.contains(':') {
+        Some(format!("ssh://git@{host}/{path}"))
+    } else {
+        Some(format!("git@{host}:{path}"))
+    }
+}
+
+fn credential_lookup_url(endpoint: &RemoteEndpoint) -> Option<String> {
+    if endpoint.transport != RemoteTransport::Https {
+        return None;
+    }
+    let host = endpoint.host.as_deref()?;
+    Some(match endpoint.path.as_deref() {
+        Some(path) => format!("https://{host}/{path}"),
+        None => format!("https://{host}"),
+    })
+}
+
+fn credential_input(
+    endpoint: &RemoteEndpoint,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Vec<u8> {
+    let mut input = Vec::new();
+    input.extend_from_slice(b"protocol=https\n");
+    if let Some(host) = endpoint.host.as_deref() {
+        input.extend_from_slice(b"host=");
+        input.extend_from_slice(host.as_bytes());
+        input.push(b'\n');
+    }
+    if let Some(path) = endpoint.path.as_deref() {
+        input.extend_from_slice(b"path=");
+        input.extend_from_slice(path.as_bytes());
+        input.push(b'\n');
+    }
+    if let Some(username) = username {
+        input.extend_from_slice(b"username=");
+        input.extend_from_slice(username.as_bytes());
+        input.push(b'\n');
+    }
+    if let Some(password) = password {
+        input.extend_from_slice(b"password=");
+        input.extend_from_slice(password.as_bytes());
+        input.push(b'\n');
+    }
+    input.push(b'\n');
+    input
+}
+
+fn credential_output_has_secret(output: &[u8]) -> bool {
+    output.split(|byte| *byte == b'\n').any(|line| {
+        line.strip_prefix(b"password=")
+            .is_some_and(|password| !password.is_empty())
+    })
+}
+
+fn validate_credential_field(field: &str, value: &str, limit: usize) -> Result<(), GitError> {
+    if value.is_empty()
+        || value.len() > limit
+        || value != value.trim()
+        || value.contains(['\0', '\r', '\n'])
+    {
+        return Err(GitError::InvalidInput {
+            field: field.to_string(),
+            message: format!("enter a non-empty {field} without surrounding whitespace"),
+        });
+    }
+    Ok(())
+}
+
+fn discover_platform_credential_helper(root: &Path) -> Result<Option<&'static str>, GitError> {
+    #[cfg(target_os = "macos")]
+    const CANDIDATES: &[&str] = &["osxkeychain"];
+    #[cfg(target_os = "windows")]
+    const CANDIDATES: &[&str] = &["manager", "manager-core"];
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    const CANDIDATES: &[&str] = &["libsecret"];
+
+    let output = run_git_output(root, ["--exec-path"]).map_err(|error| GitError::Io {
+        operation: "locate Git credential helpers".to_string(),
+        message: error.to_string(),
+    })?;
+    let output = ensure_success("locate Git credential helpers", output)?;
+    let exec_path = output_path(&output, "Git executable path")?;
+    let path_entries = std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
+        .unwrap_or_default();
+    Ok(CANDIDATES.iter().copied().find(|candidate| {
+        credential_helper_file_exists(&exec_path, candidate)
+            || path_entries
+                .iter()
+                .any(|entry| credential_helper_file_exists(entry, candidate))
+    }))
+}
+
+fn credential_helper_file_exists(directory: &Path, helper: &str) -> bool {
+    let executable = directory.join(format!("git-credential-{helper}"));
+    executable.is_file()
+        || cfg!(target_os = "windows") && executable.with_extension("exe").is_file()
+}
+
+fn ssh_identity_configured() -> bool {
+    if std::env::var_os("SSH_AUTH_SOCK")
+        .filter(|value| !value.is_empty())
+        .is_some_and(|value| Path::new(&value).exists())
+    {
+        return true;
+    }
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return false;
+    };
+    ["id_ed25519", "id_ecdsa", "id_rsa"]
+        .iter()
+        .any(|name| Path::new(&home).join(".ssh").join(name).is_file())
 }
 
 fn sanitize_stderr(stderr: &[u8], fallback: &str) -> String {
@@ -3918,6 +4617,68 @@ mod tests {
     use std::process::Command;
     use tempfile::TempDir;
 
+    #[test]
+    fn background_status_does_not_write_the_index() {
+        let directory = fixture();
+        let path = directory.path().join("readme.md");
+        fs::write(&path, "same content\n").unwrap();
+        git(directory.path(), &["add", "."]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        // A changed inode with identical bytes needs a stat refresh in ordinary `git status`.
+        let temporary = directory.path().join("replacement");
+        fs::write(&temporary, "same content\n").unwrap();
+        fs::rename(temporary, &path).unwrap();
+        let index = directory.path().join(".git/index");
+        let before = fs::read(&index).unwrap();
+        let modified = fs::metadata(&index).unwrap().modified().unwrap();
+        let repository = GitRepository::open(directory.path()).unwrap();
+        for _ in 0..3 {
+            assert!(repository.tracked_changes().unwrap().changes.is_empty());
+        }
+        assert_eq!(fs::read(&index).unwrap(), before);
+        assert_eq!(fs::metadata(&index).unwrap().modified().unwrap(), modified);
+    }
+
+    #[test]
+    fn stage_and_unstage_treat_pathspec_magic_literally() {
+        let directory = fixture();
+        let path = ":(glob)a*.txt";
+        if cfg!(windows) {
+            return;
+        } // Windows does not allow this filename.
+        fs::write(directory.path().join(path), "selected").unwrap();
+        fs::write(directory.path().join("another.txt"), "unselected").unwrap();
+        let repository = GitRepository::open(directory.path()).unwrap();
+        repository.stage(&[path.into()]).unwrap();
+        assert_eq!(git_stdout(directory.path(), &["ls-files"]), path);
+        repository.unstage(&[path.into()]).unwrap();
+        assert!(git_stdout(directory.path(), &["ls-files"]).is_empty());
+        git(directory.path(), &["add", "."]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        fs::write(directory.path().join(path), "new selected").unwrap();
+        fs::write(directory.path().join("another.txt"), "new unselected").unwrap();
+        repository.stage(&[path.into()]).unwrap();
+        repository.unstage(&[path.into()]).unwrap();
+        assert!(git_stdout(directory.path(), &["diff", "--cached", "--name-only"]).is_empty());
+    }
+
+    #[test]
+    fn catalog_stream_stops_at_record_and_path_budgets() {
+        assert_eq!(
+            read_catalog_stream(&b"b\0a\0c\0"[..], 2).unwrap(),
+            (vec!["a".into(), "b".into()], true)
+        );
+        assert_eq!(
+            read_catalog_stream(&b"a\0a\0"[..], 1).unwrap(),
+            (vec!["a".into()], false)
+        );
+        assert!(
+            read_catalog_stream(&vec![b'x'; 1_000_000][..], 100)
+                .unwrap()
+                .1
+        );
+    }
+
     fn git(path: &Path, args: &[&str]) {
         let output = Command::new("git")
             .arg("-C")
@@ -4071,7 +4832,12 @@ mod tests {
 
         let scan = repository.tracked_changes().expect("tracked changes load");
 
-        assert_eq!(scan.root, directory.path().to_string_lossy());
+        assert_eq!(
+            scan.root,
+            fs::canonicalize(directory.path())
+                .unwrap()
+                .to_string_lossy()
+        );
         assert_eq!(scan.changes.len(), 1);
         assert_eq!(scan.changes[0].path, "tracked.txt");
         assert_eq!(scan.changes[0].worktree_status, ChangeKind::Modified);
@@ -4514,6 +5280,10 @@ mod tests {
                     kind: ProjectEntryKind::Directory,
                 },
                 ProjectIgnoredEntry {
+                    workspace_path: "ignored-dir/cache.bin".to_string(),
+                    kind: ProjectEntryKind::File,
+                },
+                ProjectIgnoredEntry {
                     workspace_path: "ignored.txt".to_string(),
                     kind: ProjectEntryKind::File,
                 },
@@ -4537,6 +5307,24 @@ mod tests {
         ));
         assert!(matches!(
             repository.authorize_project_file(".", "../outside", 10),
+            Err(GitError::InvalidInput { .. })
+        ));
+
+        let ignored = complete
+            .files
+            .iter()
+            .find(|file| file.path == "ignored-dir/cache.bin")
+            .expect("ignored directory descendant is catalogued")
+            .clone();
+        assert!(ignored.read_only);
+        assert_eq!(
+            repository
+                .reauthorize_project_file_for_read(&ignored)
+                .expect("catalogued ignored file passes read authorization"),
+            ignored
+        );
+        assert!(matches!(
+            repository.reauthorize_project_file(&ignored),
             Err(GitError::InvalidInput { .. })
         ));
 
@@ -6038,6 +6826,79 @@ mod tests {
         let first = common("one|refs", "heads/main");
         let second = common("one", "refs|heads/main");
         assert_ne!(push_preview_token(&first), push_preview_token(&second));
+    }
+
+    #[test]
+    fn remote_authentication_preflight_detects_missing_and_stored_https_credentials() {
+        let fixture = remote_fixture();
+        let credential_file = fixture._directory.path().join("credentials");
+        let helper = format!("store --file={}", credential_file.to_string_lossy());
+        git(
+            &fixture.local,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "https://example.invalid/owner/repository.git",
+            ],
+        );
+        git(&fixture.local, &["config", "credential.helper", ""]);
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+
+        let missing = repository
+            .remote_authentication_status("origin")
+            .expect("credential preflight completes without prompting");
+        assert_eq!(missing.transport, RemoteTransport::Https);
+        assert_eq!(missing.host.as_deref(), Some("example.invalid"));
+        assert!(!missing.credential_available);
+        assert!(!missing.credential_helper_configured);
+        assert_eq!(
+            missing.suggested_ssh_url.as_deref(),
+            Some("git@example.invalid:owner/repository.git")
+        );
+
+        git(&fixture.local, &["config", "credential.helper", &helper]);
+        let stored = repository
+            .store_remote_https_credential("origin", "developer", "test-token")
+            .expect("configured helper stores the token");
+        assert!(stored.credential_available);
+        assert!(stored.credential_helper_configured);
+    }
+
+    #[test]
+    fn remote_authentication_configures_only_an_explicit_ssh_push_url() {
+        let fixture = remote_fixture();
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+        let invalid = repository
+            .configure_remote_ssh("origin", "https://example.invalid/owner/repository.git")
+            .expect_err("HTTPS is not accepted as an SSH route");
+        assert!(matches!(invalid, GitError::InvalidInput { .. }));
+
+        let status = repository
+            .configure_remote_ssh("origin", "git@example.invalid:owner/repository.git")
+            .expect("explicit SSH push URL is configured");
+        assert_eq!(status.transport, RemoteTransport::Ssh);
+        assert_eq!(status.host.as_deref(), Some("example.invalid"));
+        assert_eq!(
+            git_stdout(&fixture.local, &["remote", "get-url", "--push", "origin"]),
+            "git@example.invalid:owner/repository.git"
+        );
+    }
+
+    #[test]
+    fn remote_endpoint_parsing_never_exposes_https_secrets() {
+        let endpoint = parse_remote_endpoint(
+            "https://developer:secret@example.invalid:8443/owner/repository.git?query=ignored",
+        );
+        assert_eq!(endpoint.transport, RemoteTransport::Https);
+        assert_eq!(endpoint.username.as_deref(), Some("developer"));
+        assert_eq!(endpoint.host.as_deref(), Some("example.invalid:8443"));
+        assert_eq!(endpoint.path.as_deref(), Some("owner/repository.git"));
+        assert_eq!(
+            endpoint.suggested_ssh_url.as_deref(),
+            Some("ssh://git@example.invalid:8443/owner/repository.git")
+        );
+        assert!(!format!("{endpoint:?}").contains("secret"));
     }
 
     #[test]

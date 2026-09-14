@@ -1,111 +1,120 @@
 import { icon } from "../../icons.ts";
+import { renderSelectControl } from "../../shared/select-control.ts";
+import type { GitOperationCopy } from "../../localization/catalog.ts";
+import { DEFAULT_LOCALIZATION } from "../../localization/localization.ts";
 import type {
   GitOperationKind,
 } from "../../models.ts";
-import type { GitOperationState } from "./git-operation-controller.ts";
-import { operationDisplayName } from "./git-operation-banner.ts";
+import { canReviewGitOperation, type GitOperationState } from "./git-operation-controller.ts";
 
-export function renderGitOperationDialog(state: GitOperationState): string {
+export function renderGitOperationDialog(state: GitOperationState, copy: GitOperationCopy = DEFAULT_LOCALIZATION.catalog.gitOperations): string {
   if (!state.dialog) return "";
-  if (state.dialog === "setup") return renderSetup(state);
-  if (state.dialog === "review") return renderReview(state);
-  return renderConflict(state);
+  if (state.dialog === "setup") return renderSetup(state, copy);
+  if (state.dialog === "review") return renderReview(state, copy);
+  return renderConflict(state, copy);
 }
 
-function renderSetup(state: GitOperationState): string {
+function renderSetup(state: GitOperationState, copy: GitOperationCopy): string {
   const busy = state.loading === "prepare";
-  const targetCount = state.targetText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).length;
-  const invalid = targetCount === 0 || (state.kind !== "cherryPick" && targetCount !== 1);
   return dialogFrame(
-    `Prepare ${operationDisplayName(state.kind)}`,
+    copy.prepare(copy.names[state.kind]),
     `<form id="git-operation-setup-form" class="git-operation-form">
-      <label for="git-operation-kind">Operation</label>
-      <select id="git-operation-kind" ${busy ? "disabled" : ""}>
-        ${operationOption("merge", state.kind, "Merge into current branch")}
-        ${operationOption("cherryPick", state.kind, "Cherry-pick commit(s)")}
-        ${operationOption("rebase", state.kind, "Rebase current branch")}
-        ${operationOption("squash", state.kind, "Squash current-branch commits")}
-      </select>
-      <label for="git-operation-targets">${state.kind === "cherryPick" ? "Commits, in application order" : state.kind === "squash" ? "Parent commit before the range" : "Target branch, tag, or commit"}</label>
-      <textarea id="git-operation-targets" rows="${state.kind === "cherryPick" ? 5 : 2}" spellcheck="false" placeholder="${state.kind === "cherryPick" ? "One full ref or commit per line" : "refs/heads/feature"}" ${busy ? "disabled" : ""}>${escapeHtml(state.targetText)}</textarea>
-      ${state.kind === "squash" ? `<label for="git-operation-message">New commit message</label><textarea id="git-operation-message" rows="5" placeholder="Describe the squashed change" ${busy ? "disabled" : ""}>${escapeHtml(state.message)}</textarea>` : ""}
-      <p class="git-operation-note">Asterlyn resolves every target to an exact object and binds the review to the current branch, HEAD, clean index, and worktree. Changes after review make the plan stale.</p>
-      ${renderError(state.error)}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>Cancel</button><button class="primary-button" type="submit" ${busy || invalid || (state.kind === "squash" && !state.message.trim()) ? "disabled" : ""}>${busy ? "Preparing…" : "Review"}</button></div>
+      <label for="git-operation-kind">${escapeHtml(copy.operation)}</label>
+      ${renderSelectControl(`<select id="git-operation-kind" ${busy ? "disabled" : ""}>
+        ${operationOption("merge", state.kind, copy.setupOptions.merge)}
+        ${operationOption("cherryPick", state.kind, copy.setupOptions.cherryPick)}
+        ${operationOption("rebase", state.kind, copy.setupOptions.rebase)}
+        ${operationOption("squash", state.kind, copy.setupOptions.squash)}
+      </select>`)}
+      <label for="git-operation-targets">${escapeHtml(state.kind === "cherryPick" ? copy.targetsForCherryPick : state.kind === "squash" ? copy.targetBeforeSquash : copy.targetRef)}</label>
+      <textarea id="git-operation-targets" rows="${state.kind === "cherryPick" ? 5 : 2}" spellcheck="false" placeholder="${escapeAttribute(state.kind === "cherryPick" ? copy.targetLinesPlaceholder : "refs/heads/feature")}" ${busy ? "disabled" : ""}>${escapeHtml(state.targetText)}</textarea>
+      ${state.kind === "squash" ? `<label for="git-operation-message">${escapeHtml(copy.newCommitMessage)}</label><textarea id="git-operation-message" rows="5" placeholder="${escapeAttribute(copy.squashMessagePlaceholder)}" ${busy ? "disabled" : ""}>${escapeHtml(state.message)}</textarea>` : ""}
+      <p class="git-operation-note">${escapeHtml(copy.exactReviewNote)}</p>
+      ${renderError(state.error, copy)}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="submit" ${canReviewGitOperation(state) ? "" : "disabled"}>${escapeHtml(busy ? copy.preparing : copy.review)}</button></div>
     </form>`,
     busy,
+    "",
+    copy,
   );
 }
 
-function renderReview(state: GitOperationState): string {
+function renderReview(state: GitOperationState, copy: GitOperationCopy): string {
   const plan = state.plan;
-  if (!plan) return dialogFrame("Git operation review", '<div class="git-operation-loading">The reviewed plan is unavailable.</div>', false);
+  if (!plan) return dialogFrame(copy.reviewTitle, `<div class="git-operation-loading">${escapeHtml(copy.planUnavailable)}</div>`, false, "", copy);
   const busy = state.loading === "execute";
   const targets = plan.targetRefs.map((target, index) =>
     `<li><span>${escapeHtml(target)}</span><code title="${escapeAttribute(plan.targetOids[index] ?? "")}">${escapeHtml((plan.targetOids[index] ?? "").slice(0, 12))}</code></li>`,
   ).join("");
   const warning = plan.kind === "squash"
-    ? "Squash rewrites the checked-out branch. Push it later only with an explicitly reviewed force-with-lease."
-    : "Conflicts pause successfully and remain recoverable after restarting Asterlyn.";
+    ? copy.squashWarning
+    : copy.conflictWarning;
   return dialogFrame(
-    `Confirm ${operationDisplayName(plan.kind)}`,
+    copy.confirm(copy.names[plan.kind]),
     `<div class="git-operation-review">
-      <div class="git-operation-route"><span><small>Current branch</small><code>${escapeHtml(shortRef(plan.startHeadRef))}</code><em>${escapeHtml(plan.startHeadOid.slice(0, 12))}</em></span><b>→</b><span><small>Reviewed operation</small><strong>${escapeHtml(plan.summary)}</strong></span></div>
-      <section><h3>Exact targets</h3><ul>${targets}</ul></section>
-      ${plan.message ? `<section><h3>Commit message</h3><pre>${escapeHtml(plan.message)}</pre></section>` : ""}
+      <div class="git-operation-route"><span><small>${escapeHtml(copy.currentBranch)}</small><code>${escapeHtml(shortRef(plan.startHeadRef))}</code><em>${escapeHtml(plan.startHeadOid.slice(0, 12))}</em></span><b>→</b><span><small>${escapeHtml(copy.reviewedOperation)}</small><strong>${escapeHtml(plan.summary)}</strong></span></div>
+      <section><h3>${escapeHtml(copy.exactTargets)}</h3><ul>${targets}</ul></section>
+      ${plan.message ? `<section><h3>${escapeHtml(copy.commitMessage)}</h3><pre>${escapeHtml(plan.message)}</pre></section>` : ""}
       <p class="git-operation-warning">${icon("warning", 15)}<span>${escapeHtml(warning)}</span></p>
-      ${renderError(state.error)}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-back ${busy ? "disabled" : ""}>Back</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>Cancel</button><button class="primary-button" id="git-operation-execute" type="button" ${busy ? "disabled" : ""}>${busy ? "Running…" : operationDisplayName(plan.kind)}</button></div>
+      ${renderError(state.error, copy)}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-back ${busy ? "disabled" : ""}>${escapeHtml(copy.back)}</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-git-operation-close ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" id="git-operation-execute" type="button" ${busy ? "disabled" : ""}>${escapeHtml(busy ? copy.running : copy.names[plan.kind])}</button></div>
     </div>`,
     busy,
+    "",
+    copy,
   );
 }
 
-function renderConflict(state: GitOperationState): string {
+function renderConflict(state: GitOperationState, copy: GitOperationCopy): string {
   const conflict = state.conflict;
   const loading = state.loading === "conflict";
   const resolving = state.loading === "resolve";
   if (loading || !conflict) {
     return dialogFrame(
-      "Open conflict",
-      `<div class="git-operation-loading"><span class="spinner"></span><span>${loading ? "Reading base, ours, theirs, and worktree content…" : escapeHtml(state.error ?? "The conflict is unavailable.")}</span></div>`,
+      copy.openConflict,
+      `<div class="git-operation-loading"><span class="spinner"></span><span>${loading ? escapeHtml(copy.readingConflict) : escapeHtml(state.error ?? copy.conflictUnavailable)}</span></div>`,
       loading,
+      "",
+      copy,
     );
   }
   const binary = conflict.binary;
   return dialogFrame(
-    `Resolve ${conflict.path}`,
+    copy.resolve(conflict.path),
     `<div class="conflict-editor">
-      <div class="conflict-sides" aria-label="Conflict inputs">
-        ${conflictSide("Base", conflict.base)}
-        ${conflictSide("Ours", conflict.ours)}
-        ${conflictSide("Theirs", conflict.theirs)}
+      <div class="conflict-sides" aria-label="${escapeAttribute(copy.conflictInputs)}">
+        ${conflictSide(copy.base, conflict.base, copy)}
+        ${conflictSide(copy.ours, conflict.ours, copy)}
+        ${conflictSide(copy.theirs, conflict.theirs, copy)}
       </div>
-      <label for="conflict-result">Resolved result</label>
-      ${binary ? '<div class="git-operation-warning">Binary conflicts cannot be edited as text. Resolve them in an external tool or choose deletion.</div>' : `<textarea id="conflict-result" spellcheck="false" aria-label="Resolved file content" ${resolving ? "disabled" : ""}>${escapeHtml(state.conflictResult)}</textarea>`}
-      <p class="git-operation-note">Saving verifies the exact index stages and worktree revision opened above, writes the result, stages it, and confirms the staged blob.</p>
-      ${renderError(state.error)}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${resolving ? "disabled" : ""}>Cancel</button><span class="dialog-spacer"></span><button class="danger-button" id="git-conflict-delete" type="button" ${resolving ? "disabled" : ""}>Resolve as Deleted</button><button class="primary-button" id="git-conflict-resolve" type="button" ${resolving || binary ? "disabled" : ""}>${resolving ? "Resolving…" : "Save and Stage"}</button></div>
+      <label for="conflict-result">${escapeHtml(copy.resolvedResult)}</label>
+      ${binary ? `<div class="git-operation-warning">${escapeHtml(copy.binaryConflict)}</div>` : `<textarea id="conflict-result" spellcheck="false" aria-label="${escapeAttribute(copy.resolvedFileContent)}" ${resolving ? "disabled" : ""}>${escapeHtml(state.conflictResult)}</textarea>`}
+      <p class="git-operation-note">${escapeHtml(copy.resolveSafetyNote)}</p>
+      ${renderError(state.error, copy)}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${resolving ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><span class="dialog-spacer"></span><button class="danger-button" id="git-conflict-delete" type="button" ${resolving ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button><button class="primary-button" id="git-conflict-resolve" type="button" ${resolving || binary ? "disabled" : ""}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button></div>
     </div>`,
     resolving,
     "git-conflict-dialog",
+    copy,
   );
 }
 
-function dialogFrame(title: string, body: string, busy: boolean, extraClass = ""): string {
-  return `<section class="dialog git-operation-dialog ${extraClass}" role="dialog" aria-modal="true" aria-labelledby="git-operation-title"><div class="dialog-heading"><h2 id="git-operation-title">${escapeHtml(title)}</h2><button class="icon-button" type="button" data-git-operation-close aria-label="Close Git operation dialog" ${busy ? "disabled" : ""}>${icon("close", 18)}</button></div>${body}</section>`;
+function dialogFrame(title: string, body: string, busy: boolean, extraClass = "", copy: GitOperationCopy = DEFAULT_LOCALIZATION.catalog.gitOperations): string {
+  return `<section class="dialog git-operation-dialog ${extraClass}" role="dialog" aria-modal="true" aria-labelledby="git-operation-title"><div class="dialog-heading"><h2 id="git-operation-title">${escapeHtml(title)}</h2><button class="icon-button" type="button" data-git-operation-close aria-label="${escapeAttribute(copy.closeDialog)}" ${busy ? "disabled" : ""}>${icon("close", 18)}</button></div>${body}</section>`;
 }
 
 function operationOption(kind: GitOperationKind, selected: GitOperationKind, label: string): string {
   return `<option value="${kind}" ${kind === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
-function conflictSide(label: string, value: string | null): string {
-  return `<section><h3>${escapeHtml(label)}</h3><pre>${value === null ? '<span class="conflict-side-missing">Not present</span>' : escapeHtml(value)}</pre></section>`;
+function conflictSide(label: string, value: string | null, copy: GitOperationCopy): string {
+  return `<section><h3>${escapeHtml(label)}</h3><pre>${value === null ? `<span class="conflict-side-missing">${escapeHtml(copy.notPresent)}</span>` : escapeHtml(value)}</pre></section>`;
 }
 
-function renderError(error: string | null): string {
-  return error ? `<div class="git-operation-error" role="alert">${escapeHtml(error)}</div>` : "";
+function renderError(error: string | null, copy: GitOperationCopy): string {
+  if (!error) return "";
+  const detail = error === copy.operationFailed ? "" : `<span>${escapeHtml(error)}</span>`;
+  return `<div class="git-operation-error" role="alert"><strong>${escapeHtml(copy.operationFailed)}</strong>${detail}</div>`;
 }
 
 function shortRef(reference: string): string {

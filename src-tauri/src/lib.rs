@@ -5,7 +5,7 @@ use asterlyn_git::{
     CommitDetails, CommitDiffResult, DiffResult, FileChange, GitConflictContent, GitError,
     GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot, GitRepository,
     HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
-    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    RemoteAuthenticationStatus, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
@@ -213,6 +213,10 @@ fn build_project_window(
 }
 
 fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceError> {
+    let canonical = std::fs::canonicalize(root).map_err(|error| WorkspaceError::Io {
+        operation: "resolve selected workspace".to_string(),
+        message: error.to_string(),
+    })?;
     match GitRepository::open(root) {
         Ok(repository) => {
             let discovered =
@@ -220,7 +224,7 @@ fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceE
                     operation: "resolve discovered Git root".to_string(),
                     message: error.to_string(),
                 })?;
-            Ok((discovered == root).then_some(repository))
+            Ok((discovered == canonical).then_some(repository))
         }
         Err(error) if root.join(".git").exists() => Err(WorkspaceError::Io {
             operation: "open Git project".to_string(),
@@ -231,13 +235,27 @@ fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>, WorkspaceE
 }
 
 fn load_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> {
+    load_project_catalog_with_ignored(root, true)
+}
+
+fn load_authorized_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> {
+    load_project_catalog_with_ignored(root, false)
+}
+
+fn load_project_catalog_with_ignored(
+    root: &Path,
+    include_ignored: bool,
+) -> Result<ProjectFileList, WorkspaceError> {
     if let Some(repository) = exact_git_repository(root)? {
-        return repository
-            .project_files(PROJECT_FILE_LIMIT)
-            .map_err(|error| WorkspaceError::Io {
-                operation: "list Git project files".to_string(),
-                message: error.to_string(),
-            });
+        return (if include_ignored {
+            repository.project_files(PROJECT_FILE_LIMIT)
+        } else {
+            repository.authorized_project_files(PROJECT_FILE_LIMIT)
+        })
+        .map_err(|error| WorkspaceError::Io {
+            operation: "list Git project files".to_string(),
+            message: error.to_string(),
+        });
     }
     let catalog = Workspace::open(root)?.list_files(PROJECT_FILE_LIMIT)?;
     let root = root.to_string_lossy().into_owned();
@@ -248,6 +266,7 @@ fn load_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> 
             repository_id: "workspace".to_string(),
             path: path.clone(),
             workspace_path: path.clone(),
+            read_only: false,
         })
         .collect();
     Ok(ProjectFileList {
@@ -267,7 +286,7 @@ fn search_authorized_workspace(
     options: &SearchOptions,
     cancellation: &SearchCancellationToken,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
-    let catalog = load_project_catalog(root)?;
+    let catalog = load_authorized_project_catalog(root)?;
     if cancellation.is_cancelled() {
         return Err(WorkspaceError::Cancelled {
             message: "workspace search was cancelled".to_string(),
@@ -360,7 +379,7 @@ fn prepare_authorized_replacement(
     options: &SearchOptions,
     cancellation: &SearchCancellationToken,
 ) -> Result<(StoredReplacementPlan, WorkspaceReplacementPreview), WorkspaceError> {
-    let catalog = load_project_catalog(root)?;
+    let catalog = load_authorized_project_catalog(root)?;
     if cancellation.is_cancelled() {
         return Err(WorkspaceError::Cancelled {
             message: "workspace replacement preview was cancelled".to_string(),
@@ -410,7 +429,7 @@ fn prepare_authorized_replacement(
     };
     Ok((
         StoredReplacementPlan {
-            root: root.to_path_buf(),
+            root: Workspace::open(root)?.root().to_path_buf(),
             plan,
             files: authorized_files,
         },
@@ -444,7 +463,7 @@ fn authorize_replacement_selection(
             message: "select one or more unique previewed files".to_string(),
         });
     }
-    let current = load_project_catalog(root)?;
+    let current = load_authorized_project_catalog(root)?;
     for selected_path in selected {
         let planned = stored
             .files
@@ -493,7 +512,7 @@ fn read_session_text_file(
     root: &Path,
     catalogued: &ProjectFile,
 ) -> Result<TextFileSnapshot, WorkspaceError> {
-    let authorized = reauthorize_session_file(root, catalogued)?;
+    let authorized = reauthorize_session_file_for_read(root, catalogued)?;
     Workspace::open(root)?.read_text_file(&authorized.workspace_path)
 }
 
@@ -528,6 +547,11 @@ fn save_session_text_file(
     utf8_bom: bool,
     request_id: String,
 ) -> Result<SaveTextFileResult, WorkspaceError> {
+    if catalogued.read_only {
+        return Err(WorkspaceError::NotAuthorized {
+            message: "the selected project file is read-only".to_string(),
+        });
+    }
     let authorized = reauthorize_session_file(root, catalogued)?;
     Workspace::open(root)?.save_text_file(&SaveTextFileRequest {
         workspace_path: authorized.workspace_path,
@@ -555,6 +579,20 @@ fn reauthorize_session_file(
         });
     }
     Ok(catalogued.clone())
+}
+
+fn reauthorize_session_file_for_read(
+    root: &Path,
+    catalogued: &ProjectFile,
+) -> Result<ProjectFile, WorkspaceError> {
+    if let Some(repository) = exact_git_repository(root)? {
+        return repository
+            .reauthorize_project_file_for_read(catalogued)
+            .map_err(|_| WorkspaceError::NotAuthorized {
+                message: "select a current project file".to_string(),
+            });
+    }
+    reauthorize_session_file(root, catalogued)
 }
 
 #[cfg(test)]
@@ -585,6 +623,7 @@ fn authorize_project_file(
         repository_id: repository_id.to_string(),
         path: path.to_string(),
         workspace_path: path.to_string(),
+        read_only: false,
     })
 }
 
@@ -616,13 +655,14 @@ where
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let writes = WorkspaceWriteRegistry::default();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
-        .manage(GitOperationCoordinator::default())
+        .manage(GitOperationCoordinator::new(writes.clone()))
         .manage(ActiveWorkspaces::default())
         .manage(PendingRepositoryWindows::default())
-        .manage(WorkspaceWriteRegistry::default())
+        .manage(writes)
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
         .manage(WorkspaceWatchService::default())
@@ -652,6 +692,7 @@ pub fn run() {
             initial_repository,
             window_chrome_mode,
             open_project,
+            read_project_snapshot,
             open_repository_window,
             start_workspace_watch,
             stop_workspace_watch,
@@ -681,9 +722,15 @@ pub fn run() {
             unstage_paths,
             commit_changes,
             revert_changes,
+            prepare_restore_changes,
+            list_git_worktree_recoveries,
+            undo_git_worktree_recovery,
             switch_branch,
             create_branch,
             fetch_remote,
+            read_remote_authentication,
+            store_remote_https_credential,
+            configure_remote_ssh,
             read_push_preview,
             read_push_file_commit,
             pull_current,
@@ -811,6 +858,30 @@ mod tests {
             fs::read_to_string(directory.path().join("source.txt")).expect("external text"),
             "external\n"
         );
+        let ignored = GitRepository::open(directory.path())
+            .and_then(|repository| repository.project_files(PROJECT_FILE_LIMIT))
+            .expect("project catalog includes ignored previews")
+            .files
+            .into_iter()
+            .find(|file| file.path == "ignored.txt")
+            .expect("ignored file identity");
+        assert_eq!(
+            read_session_text_file(directory.path(), &ignored)
+                .expect("ignored file is readable")
+                .content,
+            "ignored\n"
+        );
+        assert!(matches!(
+            save_session_text_file(
+                directory.path(),
+                &ignored,
+                "unused".to_string(),
+                "blocked\n".to_string(),
+                false,
+                "native-save-ignored".to_string(),
+            ),
+            Err(WorkspaceError::NotAuthorized { .. })
+        ));
         assert!(matches!(
             read_authorized_text_file(directory.path(), ".", "ignored.txt"),
             Err(WorkspaceError::NotAuthorized { .. })
@@ -1141,7 +1212,12 @@ mod tests {
         let root = std::fs::canonicalize(directory.path()).expect("canonical workspace");
         let first_catalog = load_project_catalog(&root).expect("initial catalog");
         active
-            .install_catalog("main", &root, &first_catalog)
+            .install_catalog(
+                "main",
+                active.activation_token("main").unwrap(),
+                &root,
+                &first_catalog,
+            )
             .expect("catalog installs");
         active
             .activate("main", &root, None)
@@ -1165,7 +1241,12 @@ mod tests {
         ));
         let refreshed = load_project_catalog(&root).expect("refreshed catalog");
         active
-            .install_catalog("main", &root, &refreshed)
+            .install_catalog(
+                "main",
+                active.activation_token("main").unwrap(),
+                &root,
+                &refreshed,
+            )
             .expect("refreshed catalog installs");
         assert!(
             active

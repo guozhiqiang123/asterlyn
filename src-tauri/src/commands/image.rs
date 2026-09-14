@@ -16,7 +16,7 @@ pub(crate) async fn read_image_file(
         &path,
     )?;
     run_workspace_blocking("read image file", move || {
-        let authorized = reauthorize_session_file(&root, &catalogued)?;
+        let authorized = reauthorize_session_file_for_read(&root, &catalogued)?;
         let snapshot = Workspace::open(&root)?
             .read_binary_file(&authorized.workspace_path, IMAGE_PREVIEW_LIMIT_BYTES)?;
         encode_image_preview(&snapshot.workspace_path, snapshot.bytes)

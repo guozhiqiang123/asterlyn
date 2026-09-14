@@ -1,6 +1,9 @@
 import type { GitOperationKind } from "../../models.ts";
+import type { GitOperationCopy } from "../../localization/catalog.ts";
+import { DEFAULT_LOCALIZATION } from "../../localization/localization.ts";
 import {
   GitOperationController,
+  canReviewGitOperation,
 } from "./git-operation-controller.ts";
 
 export interface GitOperationDialogActions {
@@ -23,6 +26,7 @@ export class GitOperationDialogBinding {
     private readonly root: HTMLElement,
     private readonly controller: GitOperationController,
     private readonly actions: GitOperationDialogActions,
+    private readonly copy: () => GitOperationCopy = () => DEFAULT_LOCALIZATION.catalog.gitOperations,
   ) {}
 
   openSetup(kind: GitOperationKind, targets: string[], message = ""): void {
@@ -35,8 +39,10 @@ export class GitOperationDialogBinding {
     void this.controller.openConflict(path);
   }
 
-  close(): void {
-    this.controller.closeDialog();
+  close(): boolean {
+    const dirty = this.controller.hasUnsavedConflict();
+    if (dirty && !window.confirm(this.copy().discardConflict)) return false;
+    return this.controller.closeDialog(dirty);
   }
 
   render(): void {
@@ -53,12 +59,12 @@ export class GitOperationDialogBinding {
       return;
     }
     if (!this.dialogModule) {
-      host.innerHTML = '<section class="dialog git-operation-dialog"><div class="git-operation-loading"><span class="spinner"></span><span>Loading Git operation review…</span></div></section>';
+      host.innerHTML = `<section class="dialog git-operation-dialog"><div class="git-operation-loading"><span class="spinner"></span><span>${escapeHtml(this.copy().loadingReview)}</span></div></section>`;
       this.dialogModule = import("./git-operation-dialog-entry.ts");
     }
     void this.dialogModule.then((view) => {
       if (!this.matches(generation) || !this.controller.state.dialog) return;
-      host.innerHTML = view.renderGitOperationDialog(this.controller.state);
+      host.innerHTML = view.renderGitOperationDialog(this.controller.state, this.copy());
       this.bindEvents(host);
     }).catch((error) => {
       if (!this.matches(generation)) return;
@@ -97,6 +103,9 @@ export class GitOperationDialogBinding {
     const updateDraft = () => {
       if (!kind || !targets) return;
       this.controller.updateDraft(kind.value as GitOperationKind, targets.value, message?.value ?? "");
+      const review = host.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (review) review.disabled = !canReviewGitOperation(this.controller.state);
+      host.querySelector(".git-operation-error")?.remove();
     };
     kind?.addEventListener("change", () => {
       updateDraft();
@@ -155,4 +164,8 @@ export class GitOperationDialogBinding {
   private matches(generation: number): boolean {
     return !this.disposed && generation === this.renderGeneration;
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }

@@ -75,7 +75,7 @@ test("repository replacement invalidates an in-flight revert", async () => {
   const reverted = deferred();
   const controller = new ChangesCommitController(gateway({ revertResponse: reverted.promise }));
   controller.installSnapshot(snapshot([change("a.txt")]));
-  const result = controller.revertSelected();
+  const result = controller.revertSelected({ root: "/repo", selected: [change("a.txt")], paths: ["a.txt"], headOid: "base", token: "review" });
   controller.installSnapshot(snapshot([change("b.txt")], "/other"));
   reverted.resolve(snapshot([]));
 

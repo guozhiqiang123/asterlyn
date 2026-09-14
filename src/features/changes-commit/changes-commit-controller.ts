@@ -3,6 +3,7 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  RestoreChangesPlan,
   ImageDiffPreview,
   RepositorySnapshot,
   WorkingTreeMutationOutcome,
@@ -13,6 +14,8 @@ import {
   type ChangeFileView,
 } from "../../workbench/change-presentation.ts";
 import { isImagePreviewPath } from "../../workbench/image-preview.ts";
+import type { ChangesCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface ChangesCommitState {
   selectedChange: ChangeSelection | null;
@@ -64,8 +67,9 @@ export interface ChangesCommitGateway {
   ): Promise<ImageDiffPreview>;
   revertChanges(
     repositoryRoot: string,
-    changes: FileChange[],
+    plan: RestoreChangesPlan,
   ): Promise<WorkingTreeMutationOutcome>;
+  prepareRestoreChanges(repositoryRoot: string, changes: FileChange[]): Promise<RestoreChangesPlan>;
   commitChanges(
     repositoryRoot: string,
     message: string,
@@ -97,10 +101,20 @@ export class ChangesCommitController {
   private diffSequence = 0;
   private mutationSequence = 0;
   private disposed = false;
+  private messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">;
 
-  constructor(gateway: ChangesCommitGateway, initialFileView: ChangeFileView = "tree") {
+  constructor(
+    gateway: ChangesCommitGateway,
+    initialFileView: ChangeFileView = "tree",
+    messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError"> = EN_US.changes,
+  ) {
     this.gateway = gateway;
     this.state = createChangesCommitState(initialFileView);
+    this.messages = messages;
+  }
+
+  setMessages(messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">): void {
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
@@ -274,13 +288,13 @@ export class ChangesCommitController {
         reason: "diff-complete",
         diffChanged: true,
         warning: !image && (result as DiffResult).truncated
-          ? "Patch truncated at 4 MiB"
+          ? this.messages.patchTruncated
           : undefined,
       });
     } catch (error) {
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       this.state.workingPatchLoading = false;
-      this.state.workingPatchError = toErrorMessage(error);
+      this.state.workingPatchError = toErrorMessage(error, this.messages.unexpectedError);
       this.emit({
         reason: "diff-error",
         diffChanged: true,
@@ -289,16 +303,27 @@ export class ChangesCommitController {
     }
   }
 
-  async revertSelected(): Promise<ChangesMutationResult<WorkingTreeMutationOutcome>> {
+  async prepareRestoreSelected(): Promise<RestoreChangesPlan | null> {
+    const root = this.snapshot?.root;
+    const selected = this.selectedChange();
+    const generation = this.repositoryGeneration;
+    if (!root || !selected || this.state.mutation) return null;
+    const plan = await this.gateway.prepareRestoreChanges(root, [selected]);
+    return !this.disposed && generation === this.repositoryGeneration &&
+      this.snapshot?.root === root && this.selectedChange()?.path === selected.path ? plan : null;
+  }
+
+  async revertSelected(plan: RestoreChangesPlan): Promise<ChangesMutationResult<WorkingTreeMutationOutcome>> {
     const snapshot = this.snapshot;
     const selected = this.selectedChange();
-    if (!snapshot || !selected || this.state.mutation) return { status: "unavailable" };
+    if (!snapshot || !selected || this.state.mutation || plan.root !== snapshot.root ||
+      plan.selected.length !== 1 || plan.selected[0]?.path !== selected.path) return { status: "unavailable" };
     const sequence = ++this.mutationSequence;
     const generation = this.repositoryGeneration;
     this.state.mutation = "revert";
     this.emit({ reason: "mutation-start", composerChanged: true });
     try {
-      const next = await this.gateway.revertChanges(snapshot.root, [selected]);
+      const next = await this.gateway.revertChanges(snapshot.root, plan);
       if (!this.mutationRequestMatches(sequence, generation, snapshot.root, "revert")) {
         return { status: "stale" };
       }
@@ -418,11 +443,11 @@ export function createChangesCommitState(fileView: ChangeFileView): ChangesCommi
   };
 }
 
-function toErrorMessage(error: unknown): string {
+function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message: unknown }).message);
   }
-  return "Unexpected Changes operation error";
+  return fallback;
 }

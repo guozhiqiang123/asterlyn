@@ -29,6 +29,17 @@ export interface RemoteSummary {
   pushSupported: boolean;
 }
 
+export type RemoteTransport = "https" | "ssh" | "local" | "other";
+
+export interface RemoteAuthenticationStatus {
+  remote: string;
+  transport: RemoteTransport;
+  host: string | null;
+  credentialAvailable: boolean;
+  credentialHelperConfigured: boolean;
+  suggestedSshUrl: string | null;
+}
+
 export interface FileChange {
   path: string;
   originalPath: string | null;
@@ -263,6 +274,23 @@ export interface WorkingTreeMutationOutcome {
   invalidatedSlices: RepositoryStateSlice[];
 }
 
+export interface RestoreChangesPlan {
+  root: string;
+  selected: FileChange[];
+  paths: string[];
+  headOid: string;
+  token: string;
+}
+
+export interface GitWorktreeRecovery {
+  id: string;
+  operation: string;
+  paths: string[];
+  status: string;
+  canUndo: boolean;
+  backupPath: string;
+}
+
 export interface GitOperationMutationOutcome {
   tracked: TrackedChangeScan;
   operation: GitOperationSnapshot | null;
@@ -307,6 +335,7 @@ export interface ProjectFile {
   repositoryId: string;
   path: string;
   workspacePath: string;
+  readOnly?: boolean;
 }
 
 export interface ProjectIgnoredEntry {

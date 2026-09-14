@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { RemotePushController } from "../src/features/remote-push/remote-push-controller.ts";
+import { ZH_CN } from "../src/localization/zh-CN.ts";
 
 test("diverged Update defaults to Merge and rejects unavailable fast-forward selection", () => {
   const controller = new RemotePushController(createGateway());
@@ -128,6 +129,34 @@ test("operation ownership rejects completions after repository replacement", asy
   fetch.resolve(snapshot({ branch: { ahead: 2 } }));
   assert.deepEqual(await operation, { status: "stale" });
   assert.equal(controller.state.operation, null);
+});
+
+test("structured remote failures retain their localized actionable reason in the dialog", async () => {
+  const remoteError = {
+    kind: "remoteFailed",
+    operation: "push",
+    remote: "origin",
+    reason: "authentication",
+  };
+  const gateway = createGateway({
+    previewResponses: [Promise.resolve(preview("origin", "token"))],
+    async pushCurrent() {
+      throw remoteError;
+    },
+  });
+  const controller = new RemotePushController(gateway, {
+    messages: ZH_CN.remote,
+    errorMessages: ZH_CN.errors,
+  });
+  controller.installSnapshot(snapshot());
+  controller.openDialog("push");
+  await settle();
+
+  const result = await controller.runOperation("push");
+
+  assert.deepEqual(result, { status: "failure", error: remoteError });
+  assert.equal(controller.state.dialogError, ZH_CN.errors.authenticationFailed);
+  assert.notEqual(controller.state.dialogError, ZH_CN.remote.unexpectedError);
 });
 
 function createGateway(overrides = {}) {

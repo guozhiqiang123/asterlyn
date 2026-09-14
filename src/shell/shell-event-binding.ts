@@ -39,6 +39,7 @@ export interface ShellEventActions {
   readonly applyLayout: () => void;
   readonly closePushDiff: () => void;
   readonly openGitOperation: () => void;
+  readonly openGitRecoveries: () => void;
   readonly closeGitOperation: () => void;
   readonly closeRepositoryMenu: (restoreFocus: boolean) => void;
   readonly closeEditorTabMenu: () => void;
@@ -85,7 +86,6 @@ export class ShellEventBinding {
       });
     });
     listen(this.query("#cancel-remote-operation"), "click", () => this.actions.cancelRemoteOperation());
-    listen(this.query("#refresh-button"), "click", () => this.actions.refresh());
     listen(this.query("#settings-button"), "click", () => this.actions.openSettings());
     listen(this.query("#settings-back"), "click", () => this.actions.closeSettings());
     listen(this.query("#command-center-button"), "click", () => this.actions.openCommandSurface("files"));
@@ -150,6 +150,7 @@ export class ShellEventBinding {
     });
     listen(this.query("#hide-git-tool"), "click", () => this.actions.hideGitTool());
     listen(this.query("#git-operation-open"), "click", () => this.actions.openGitOperation());
+    listen(this.query("#git-recoveries-open"), "click", () => this.actions.openGitRecoveries());
     listen(this.query("#hide-left-tool"), "click", () => this.actions.hideLeftTool());
 
     this.resizeObserver = new ResizeObserver(() => this.actions.applyLayout());

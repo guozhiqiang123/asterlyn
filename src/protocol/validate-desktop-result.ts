@@ -87,10 +87,47 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       assertRepositorySlices(result.invalidatedSlices, command);
       break;
     }
+    case "remoteAuthenticationStatus": {
+      const result = record(value, command);
+      strings(result, command, "remote", "transport");
+      nullableStrings(result, command, "host", "suggestedSshUrl");
+      booleans(
+        result,
+        command,
+        "credentialAvailable",
+        "credentialHelperConfigured",
+      );
+      assert(
+        result.transport === "https" ||
+          result.transport === "ssh" ||
+          result.transport === "local" ||
+          result.transport === "other",
+        command,
+        "transport must be a supported remote transport",
+      );
+      break;
+    }
     case "workingTreeMutationOutcome": {
       const result = record(value, command);
       assertTrackedChangeScan(result.tracked, command);
       assertRepositorySlices(result.invalidatedSlices, command);
+      break;
+    }
+    case "restoreChangesPlan": {
+      const result = record(value, command);
+      strings(result, command, "root", "headOid", "token");
+      assert(isStringArray(result.paths), command, "expected exact restore paths");
+      arrays(result, command, "selected");
+      break;
+    }
+    case "gitWorktreeRecoveries": {
+      assert(Array.isArray(value), command, "expected a worktree recovery list");
+      for (const entry of value as unknown[]) {
+        const result = record(entry, command);
+        strings(result, command, "id", "operation", "status", "backupPath");
+        booleans(result, command, "canUndo");
+        assert(isStringArray(result.paths), command, "expected recovery paths");
+      }
       break;
     }
     case "gitOperationMutationOutcome": {

@@ -21,6 +21,7 @@ export const tauriShellBridge: DesktopShellBridge = {
     return { kind: "selected", path: selected };
   },
   openProject: (path) => invokeDesktopCommand<OpenedProject>("open_project", { path }),
+  readProject: (path) => invokeDesktopCommand<OpenedProject>("read_project_snapshot", { path }),
   openRepositoryWindow: (path) =>
     invokeDesktopCommand<string>("open_repository_window", { path }),
 };

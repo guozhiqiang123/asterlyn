@@ -1,8 +1,8 @@
 /* Shared workbench frame and Git pane layout. */
 .demo-badge {
-  border-color: #455d87;
-  background: #263652;
-  color: #a8c7fa;
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 .icon-button {
@@ -42,10 +42,6 @@
   opacity: 0.5;
 }
 
-.is-busy #refresh-button .icon {
-  animation: spin 0.85s linear infinite;
-}
-
 .workspace {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -79,15 +75,15 @@
 }
 
 .setting-value-pill {
-  border: 1px solid #44638f;
-  background: #263957;
-  color: #a8c7fa;
+  border: 1px solid var(--info-border);
+  background: var(--info-bg-strong);
+  color: var(--info-text);
 }
 
 .setting-value-pill.success {
-  border-color: #3e704d;
-  background: #294436;
-  color: #9bd7a8;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .setting-planned {
@@ -118,8 +114,8 @@
 }
 
 .setting-segmented button[aria-pressed="true"] {
-  background: #214283;
-  color: #f0f5ff;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .setting-toggle {
@@ -145,7 +141,7 @@
 }
 
 .rail-version {
-  color: #64676e;
+  color: var(--text-faint);
   font-family: ui-monospace, monospace;
   font-size: 9px;
   writing-mode: vertical-rl;
@@ -165,7 +161,7 @@
 .panel-count {
   min-width: 24px;
   border-radius: 10px;
-  background: #393b40;
+  background: var(--bg-elevated);
   color: var(--text-muted);
   font-size: 10px;
   line-height: 19px;
@@ -202,7 +198,7 @@
   gap: 10px;
   padding: 0 10px;
   border-bottom: 1px solid var(--border);
-  background: #242529;
+  background: var(--surface-chrome);
 }
 
 .bottom-tool-header strong {
@@ -308,7 +304,7 @@
 }
 
 .compact-icon-button[aria-pressed="true"] {
-  color: #91b7fb;
+  color: var(--info-text);
 }
 
 .change-group,
@@ -357,7 +353,7 @@
 .history-row:focus-visible,
 .branch-row:focus-visible,
 .branch-group-toggle:focus-visible {
-  outline: 1px solid #8ab4ff;
+  outline: 1px solid var(--focus-ring-bright);
   outline-offset: -1px;
 }
 
@@ -368,7 +364,7 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
-  background: #8d444a;
+  background: var(--danger-bg-strong);
   color: white;
   font-size: 9px;
   font-weight: 700;
@@ -401,8 +397,8 @@
 
 .change-filter:focus-within,
 .history-filter:focus-within {
-  border-color: #6b9bfa;
-  box-shadow: 0 0 0 1px #6b9bfa;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 .change-filter input,
@@ -424,12 +420,12 @@
 
 .change-filter input::placeholder,
 .history-filter input::placeholder {
-  color: #6f737b;
+  color: var(--text-faint);
 }
 
 .change-filter > span,
 .history-filter > span {
-  color: #62666d;
+  color: var(--text-faint);
   font-size: 8px;
   white-space: nowrap;
 }
@@ -443,15 +439,15 @@
 
 .scope-pill {
   display: inline-block;
-  border-color: #455d87;
-  background: #263652;
-  color: #a8c7fa;
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 .scope-pill.success {
-  border-color: #3b6647;
-  background: #294436;
-  color: #92d29f;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .muted-copy {
@@ -476,7 +472,7 @@
 }
 
 .primary-button {
-  border: 1px solid #4e83ed;
+  border: 1px solid var(--accent);
   background: var(--accent);
   color: white;
 }
@@ -486,9 +482,9 @@
 }
 
 .primary-button:disabled {
-  border-color: #43506a;
-  background: #34425d;
-  color: #7f8ba2;
+  border-color: var(--info-border);
+  background: var(--info-bg-strong);
+  color: var(--text-muted);
   cursor: default;
 }
 
@@ -499,7 +495,7 @@
 }
 
 .secondary-button:hover:not(:disabled) {
-  background: #45484e;
+  background: var(--bg-elevated);
 }
 
 .push-diff-body.image-surface {
@@ -510,14 +506,14 @@
   grid-column: 1 / -1;
   justify-self: start;
   padding: 2px 7px;
-  border: 1px solid #8b6936;
+  border: 1px solid var(--warning-border);
   border-radius: 4px;
-  background: #49391f;
-  color: #efc77c;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   cursor: pointer;
   font-size: 8px;
 }
 
 .workspace-recovery-button:hover {
-  background: #594729;
+  background: var(--warning-bg-hover);
 }

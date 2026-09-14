@@ -1,9 +1,12 @@
 import type {
   CommitSelectedResult,
+  RestoreChangesPlan,
+  GitWorktreeRecovery,
   GitConflictContent,
   GitOperationMutationOutcome,
   GitOperationPlan,
   GitOperationSnapshot,
+  RemoteAuthenticationStatus,
   RepositoryMutationOutcome,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
@@ -21,10 +24,16 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       message,
       selected,
     }),
-  revertChanges: (repositoryRoot, selected) =>
+  prepareRestoreChanges: (repositoryRoot, selected) =>
+    invokeDesktopCommand<RestoreChangesPlan>("prepare_restore_changes", { repositoryRoot, selected }),
+  listGitWorktreeRecoveries: (repositoryRoot) =>
+    invokeDesktopCommand<GitWorktreeRecovery[]>("list_git_worktree_recoveries", { repositoryRoot }),
+  undoGitWorktreeRecovery: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("undo_git_worktree_recovery", { repositoryRoot, recoveryId }),
+  revertChanges: (repositoryRoot, plan) =>
     invokeDesktopCommand<WorkingTreeMutationOutcome>("revert_changes", {
       repositoryRoot,
-      selected,
+      plan,
     }),
   switchBranch: (repositoryRoot, targetFullName) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("switch_branch", {
@@ -33,6 +42,24 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     }),
   createBranch: (repositoryRoot, name) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("create_branch", { repositoryRoot, name }),
+  readRemoteAuthentication: (repositoryRoot, remote) =>
+    invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {
+      repositoryRoot,
+      remote,
+    }),
+  storeRemoteHttpsCredential: (repositoryRoot, remote, username, token) =>
+    invokeDesktopCommand<RemoteAuthenticationStatus>("store_remote_https_credential", {
+      repositoryRoot,
+      remote,
+      username,
+      token,
+    }),
+  configureRemoteSsh: (repositoryRoot, remote, sshUrl) =>
+    invokeDesktopCommand<RemoteAuthenticationStatus>("configure_remote_ssh", {
+      repositoryRoot,
+      remote,
+      sshUrl,
+    }),
   fetchRemote: (repositoryRoot, remote, operationId) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("fetch_remote", {
       repositoryRoot,

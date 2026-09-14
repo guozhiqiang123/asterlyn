@@ -21,6 +21,12 @@ function memoryStorage(value = null) {
   };
 }
 
+const LEGACY_DEFAULTS = {
+  ...DEFAULT_APP_PREFERENCES,
+  locale: "en-US",
+  theme: "dark",
+};
+
 test("preferences load safe defaults and reject malformed persisted values", () => {
   assert.deepEqual(loadAppPreferences(memoryStorage()), DEFAULT_APP_PREFERENCES);
   assert.deepEqual(
@@ -29,9 +35,9 @@ test("preferences load safe defaults and reject malformed persisted values", () 
         throw new Error("storage unavailable");
       },
     }),
-    DEFAULT_APP_PREFERENCES,
+    LEGACY_DEFAULTS,
   );
-  assert.deepEqual(loadAppPreferences(memoryStorage("not json")), DEFAULT_APP_PREFERENCES);
+  assert.deepEqual(loadAppPreferences(memoryStorage("not json")), LEGACY_DEFAULTS);
   assert.deepEqual(
     loadAppPreferences(
       memoryStorage(
@@ -48,13 +54,15 @@ test("preferences load safe defaults and reject malformed persisted values", () 
         }),
       ),
     ),
-    { ...DEFAULT_APP_PREFERENCES, editorFontSize: 18 },
+    { ...LEGACY_DEFAULTS, editorFontSize: 18 },
   );
 });
 
 test("preferences update only through bounded choices and round trip by version", () => {
   const storage = memoryStorage();
   const updated = updateAppPreferences(DEFAULT_APP_PREFERENCES, {
+    locale: "zh-CN",
+    theme: "light",
     uiFontSize: 13,
     editorFontFamily: "fira-code",
     editorFontSize: 16,
@@ -83,6 +91,8 @@ test("preferences update only through bounded choices and round trip by version"
     updateAppPreferences(updated, { editorFontFamily: "unknown-font" }).editorFontFamily,
     "fira-code",
   );
+  assert.equal(updateAppPreferences(updated, { locale: "fr-FR" }).locale, "zh-CN");
+  assert.equal(updateAppPreferences(updated, { theme: "sepia" }).theme, "light");
 });
 
 test("version one defaults migrate to the bundled editor typography baseline", () => {
@@ -97,7 +107,7 @@ test("version one defaults migrate to the bundled editor typography baseline", (
       showWhitespace: false,
     },
   });
-  assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), DEFAULT_APP_PREFERENCES);
+  assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), LEGACY_DEFAULTS);
 });
 
 test("version two preferences gain the current editor spacing defaults", () => {
@@ -113,7 +123,7 @@ test("version two preferences gain the current editor spacing defaults", () => {
     },
   });
   assert.deepEqual(loadAppPreferences(memoryStorage(persisted)), {
-    ...DEFAULT_APP_PREFERENCES,
+    ...LEGACY_DEFAULTS,
     uiFontSize: 14,
     editorFontSize: 18,
     editorLineHeight: 1.5,
@@ -137,7 +147,7 @@ test("version three untouched typography defaults migrate without replacing cust
       showWhitespace: false,
     },
   });
-  assert.deepEqual(loadAppPreferences(memoryStorage(oldDefaults)), DEFAULT_APP_PREFERENCES);
+  assert.deepEqual(loadAppPreferences(memoryStorage(oldDefaults)), LEGACY_DEFAULTS);
 
   const customized = JSON.stringify({
     version: 3,
@@ -153,6 +163,8 @@ test("version three untouched typography defaults migrate without replacing cust
     },
   });
   assert.deepEqual(loadAppPreferences(memoryStorage(customized)), {
+    locale: "en-US",
+    theme: "dark",
     uiFontSize: 14,
     editorFontFamily: "jetbrains-mono",
     editorFontSize: 18,
@@ -165,7 +177,7 @@ test("version three untouched typography defaults migrate without replacing cust
   });
 });
 
-test("version five persists a bounded editor font family", () => {
+test("version six persists bounded presentation and editor choices", () => {
   const selected = {
     ...DEFAULT_APP_PREFERENCES,
     editorFontFamily: "cascadia-code",
@@ -185,4 +197,6 @@ test("version five persists a bounded editor font family", () => {
     loadAppPreferences(memoryStorage(malformed)).editorFontFamily,
     "jetbrains-mono",
   );
+  assert.equal(loadAppPreferences(memoryStorage(malformed)).locale, "en-US");
+  assert.equal(loadAppPreferences(memoryStorage(malformed)).theme, "dark");
 });

@@ -34,6 +34,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
 - [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
 - [`design/editor-core-interactions.md`](design/editor-core-interactions.md) — Stage 3 editor slices, invariants, and acceptance evidence.
+- [`design/localization-color-themes.md`](design/localization-color-themes.md) — implementation plan for English/Chinese localization and System/Dark/Light appearance.
 
 ## Benchmarks
 
@@ -65,6 +66,10 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-12-r2k-files-editor-views.md`](benchmarks/2026-09-12-r2k-files-editor-views.md) — feature-owned Files/Search/Editor presentation and disposable CodeMirror/Markdown surfaces.
 - [`benchmarks/2026-09-12-r2-frontend-capability-ownership.md`](benchmarks/2026-09-12-r2-frontend-capability-ownership.md) — final R2 ownership, lifecycle, source-budget, native, resource, and Debian acceptance evidence.
 - [`benchmarks/2026-09-12-r3-application-services-protocol.md`](benchmarks/2026-09-12-r3-application-services-protocol.md) — R3 window sessions, typed reconciliation, versioned protocol, host coordinators, resource results, and Debian acceptance evidence.
+- [`benchmarks/2026-09-13-push-authentication-preflight.md`](benchmarks/2026-09-13-push-authentication-preflight.md) — HTTPS token and SSH preflight, secret-handling boundary, localized recovery, validation, and macOS package evidence.
 - [`benchmarks/2026-09-12-r3-1-native-workspace-watch.md`](benchmarks/2026-09-12-r3-1-native-workspace-watch.md) — R3.1 native file hints, targeted workspace/Git reconciliation, external-buffer safety, watcher footprint, and Debian acceptance evidence.
 - [`benchmarks/2026-09-12-r4-0-repository-integration.md`](benchmarks/2026-09-12-r4-0-repository-integration.md) — R4.0 repository-result ownership, conflict routing, responsibility gates, resource results, and Debian acceptance evidence.
 - [`benchmarks/2026-09-12-r4-recoverable-git-operations.md`](benchmarks/2026-09-12-r4-recoverable-git-operations.md) — reviewed Merge/Cherry-pick/Rebase/Squash, restart recovery, conflict resolution, fault safety, resources, and Debian acceptance evidence.
+
+- [`benchmarks/2026-09-13-architecture-editor-reliability.md`](benchmarks/2026-09-13-architecture-editor-reliability.md) — watcher feedback-loop, retained editor activation, safe/recoverable Git worktree writes, bounded producers, CI, and macOS verification.
+- [`benchmarks/2026-09-13-localization-color-themes.md`](benchmarks/2026-09-13-localization-color-themes.md) — English/Chinese and System/Dark/Light implementation, visible-copy and contrast gates, browser timing, idle stability, build size, and remaining native packaging gate.

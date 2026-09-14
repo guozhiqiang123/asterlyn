@@ -48,6 +48,8 @@ struct WatchRegistry {
 }
 
 struct SharedWorkspaceWatch {
+    // Owns the backend lifetime; only Linux adds registrations after construction.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     watcher: RecommendedWatcher,
     workspace_directories: BTreeSet<PathBuf>,
     metadata_roots: Vec<PathBuf>,
@@ -88,20 +90,20 @@ impl WorkspaceWatchService {
         {
             detach_owner(&mut registry, window_label);
         }
-        if let Some(watch) = registry.roots.get_mut(&root) {
-            if watch.metadata_roots == metadata_roots {
-                if let Err(message) = add_workspace_watches(watch, &root, &directories) {
-                    return unavailable(message);
-                }
-                let owners = Arc::clone(&watch.owners);
-                if let Ok(mut owners) = owners.lock() {
-                    owners.insert(window_label.to_string(), generation);
-                    drop(owners);
-                    registry.owner_roots.insert(window_label.to_string(), root);
-                    return available();
-                }
-                return unavailable("workspace-watch owner lock was poisoned");
+        if let Some(watch) = registry.roots.get_mut(&root)
+            && watch.metadata_roots == metadata_roots
+        {
+            if let Err(message) = add_workspace_watches(watch, &root, &directories) {
+                return unavailable(message);
             }
+            let owners = Arc::clone(&watch.owners);
+            if let Ok(mut owners) = owners.lock() {
+                owners.insert(window_label.to_string(), generation);
+                drop(owners);
+                registry.owner_roots.insert(window_label.to_string(), root);
+                return available();
+            }
+            return unavailable("workspace-watch owner lock was poisoned");
         }
 
         let (owners, watch_directories) = registry
@@ -362,7 +364,13 @@ impl PendingHint {
             self.mark_overflow();
             return;
         }
-        if matches!(event.kind, EventKind::Access(_)) {
+        if matches!(
+            event.kind,
+            EventKind::Access(_)
+                | EventKind::Modify(notify::event::ModifyKind::Metadata(
+                    notify::event::MetadataKind::AccessTime
+                ))
+        ) {
             return;
         }
         if event.paths.is_empty() {
@@ -607,6 +615,87 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn read_access_and_access_time_metadata_do_not_invalidate_the_workspace() {
+        let root = Path::new("/workspace");
+        let mut hint = PendingHint::default();
+        for kind in [
+            EventKind::Access(notify::event::AccessKind::Read),
+            EventKind::Modify(ModifyKind::Metadata(
+                notify::event::MetadataKind::AccessTime,
+            )),
+        ] {
+            hint.merge_event(
+                Ok(Event::new(kind).add_path(root.join("file.md"))),
+                root,
+                &[],
+            );
+        }
+        assert!(hint.take().is_none());
+    }
+
+    #[test]
+    #[ignore = "requires a real operating-system watcher backend; run during native acceptance"]
+    fn native_backend_git_refresh_reaches_idle_and_still_reports_external_edits() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(directory.path()).unwrap();
+        for args in [
+            &["init", "-b", "main"][..],
+            &["config", "user.name", "Test"],
+            &["config", "user.email", "test@example.invalid"],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&root)
+                    .args(args)
+                    .output()
+                    .unwrap()
+                    .status
+                    .success()
+            );
+        }
+        fs::write(root.join("file.md"), "content").unwrap();
+        for args in [&["add", "."][..], &["commit", "-m", "base"]] {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&root)
+                    .args(args)
+                    .output()
+                    .unwrap()
+                    .status
+                    .success()
+            );
+        }
+        let (sender, receiver) = mpsc::channel();
+        let mut watcher = notify::recommended_watcher(sender).unwrap();
+        watcher.watch(&root, RecursiveMode::Recursive).unwrap();
+        let repository = asterlyn_git::GitRepository::open(&root).unwrap();
+        for _ in 0..3 {
+            repository.tracked_snapshot(10).unwrap();
+        }
+        let mut hint = PendingHint::default();
+        let deadline = Instant::now() + Duration::from_millis(1_500);
+        while Instant::now() < deadline {
+            if let Ok(event) = receiver.recv_timeout(Duration::from_millis(50)) {
+                hint.merge_event(event, &root, &[root.join(".git")]);
+            }
+        }
+        assert!(
+            hint.take().is_none(),
+            "read-only refresh generated another invalidation"
+        );
+        fs::write(root.join("file.md"), "external edit").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && hint.slices.is_empty() {
+            if let Ok(event) = receiver.recv_timeout(Duration::from_millis(50)) {
+                hint.merge_event(event, &root, &[root.join(".git")]);
+            }
+        }
+        assert!(hint.slices.contains(&RepositoryStateSlice::OpenDocuments));
+    }
+
+    #[test]
     fn content_edits_invalidate_documents_and_working_tree_without_catalog() {
         let root = Path::new("/workspace");
         let mut hint = PendingHint::default();
@@ -698,7 +787,8 @@ mod tests {
     #[ignore = "requires a real operating-system watcher backend; run during native acceptance"]
     fn native_backend_reports_a_workspace_change() {
         let directory = tempfile::tempdir().expect("native watch workspace");
-        let root = directory.path();
+        let canonical = fs::canonicalize(directory.path()).unwrap();
+        let root = canonical.as_path();
         let changed = root.join("external.txt");
         let (sender, receiver) = mpsc::channel::<notify::Result<Event>>();
         let mut watcher = notify::recommended_watcher(sender).expect("native watcher starts");
@@ -708,7 +798,7 @@ mod tests {
         fs::write(&changed, "external change\n").expect("external write succeeds");
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut hint = PendingHint::default();
-        while Instant::now() < deadline && hint.paths.is_empty() {
+        while Instant::now() < deadline && hint.slices.is_empty() {
             let remaining = deadline.saturating_duration_since(Instant::now());
             let event = receiver
                 .recv_timeout(remaining)
@@ -716,7 +806,9 @@ mod tests {
             hint.merge_event(event, root, &[]);
         }
 
-        assert_eq!(hint.paths, BTreeSet::from(["external.txt".to_string()]));
+        // FSEvents may coalesce creation of the temporary root with the file event.
+        // A root-level hint legitimately requests complete reconciliation without exact paths.
+        assert!(hint.overflowed || hint.paths.contains("external.txt"));
         assert!(hint.slices.contains(&RepositoryStateSlice::OpenDocuments));
         assert!(hint.slices.contains(&RepositoryStateSlice::WorkingTree));
     }

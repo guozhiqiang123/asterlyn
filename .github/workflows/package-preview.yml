@@ -25,7 +25,7 @@ jobs:
   quality:
     name: Quality gates
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,11 +59,17 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
-      - name: Test Git core
-        run: cargo test --locked -p asterlyn-git
+      - name: Install desktop test dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Lint Git core
-        run: cargo clippy --locked -p asterlyn-git --all-targets -- -D warnings
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
+
+      - name: Test native workspace watcher
+        run: cargo test --locked -p asterlyn --lib native_backend -- --ignored
+
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
   package:
     name: Package ${{ matrix.label }}

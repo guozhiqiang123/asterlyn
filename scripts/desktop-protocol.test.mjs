@@ -36,6 +36,24 @@ test("desktop response validation accepts representative valid payloads", () => 
   );
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
   assert.deepEqual(
+    validateDesktopResult("read_remote_authentication", {
+      remote: "origin",
+      transport: "https",
+      host: "github.com",
+      credentialAvailable: false,
+      credentialHelperConfigured: true,
+      suggestedSshUrl: "git@github.com:owner/repository.git",
+    }),
+    {
+      remote: "origin",
+      transport: "https",
+      host: "github.com",
+      credentialAvailable: false,
+      credentialHelperConfigured: true,
+      suggestedSshUrl: "git@github.com:owner/repository.git",
+    },
+  );
+  assert.deepEqual(
     validateDesktopResult("resolve_conflict", {
       tracked: { root: "/repo", changes: [] },
       operation: null,
@@ -53,6 +71,20 @@ test("desktop response validation rejects malformed watch status", () => {
   assert.throws(
     () => validateDesktopResult("start_workspace_watch", { available: "yes", message: null }),
     /available must be a boolean/,
+  );
+});
+
+test("desktop response validation rejects unknown remote transports", () => {
+  assert.throws(
+    () => validateDesktopResult("read_remote_authentication", {
+      remote: "origin",
+      transport: "password",
+      host: "github.com",
+      credentialAvailable: false,
+      credentialHelperConfigured: true,
+      suggestedSshUrl: null,
+    }),
+    /supported remote transport/,
   );
 });
 

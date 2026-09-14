@@ -17,7 +17,7 @@
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: var(--text-soft);
+  color: inherit;
   cursor: default;
   font-size: 10px;
   list-style: none;
@@ -25,9 +25,13 @@
   white-space: nowrap;
 }
 
+:where(.project-directory, .project-file-row) {
+  color: var(--text-soft);
+}
+
 .project-node-row.selected {
-  background: #214283;
-  color: #f0f5ff;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .project-directory > summary::-webkit-details-marker {
@@ -42,8 +46,8 @@
 }
 
 .project-node-row.selected:hover {
-  background: #214283;
-  color: #f0f5ff;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .project-directory[open] > summary .tree-chevron {
@@ -103,5 +107,5 @@
 }
 
 .project-tree-notice.warning {
-  color: #d9b36c;
+  color: var(--yellow);
 }

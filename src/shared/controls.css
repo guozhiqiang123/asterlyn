@@ -3,7 +3,7 @@
 .change-row.selected,
 .change-row.primary,
 .commit-file-row.selected {
-  color: #f0f5ff;
+  color: var(--selection-text);
 }
 
 .selection-toolbar {
@@ -48,17 +48,22 @@
 }
 
 .spinner {
-  width: 17px;
-  height: 17px;
-  border: 2px solid #4b4e54;
-  border-top-color: #8fb5ff;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--info-text);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  line-height: 0;
+  transform-origin: 50% 50%;
 }
 
 .search-result-location {
   overflow: hidden;
-  color: #9ebcf4;
+  color: var(--info-text);
   font-size: 9px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -67,9 +72,9 @@
 
 .workspace-search-result.selected code,
 .workspace-search-result:hover code {
-  color: #dbe6fb;
+  color: var(--info-text);
 }
 
 .replacement-file.selected {
-  border-color: #4d6fa8;
+  border-color: var(--info-border);
 }

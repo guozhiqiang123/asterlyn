@@ -10,7 +10,7 @@
   display: block;
   overflow: visible;
   flex: 0 0 auto;
-  color: #9aa0aa;
+  color: var(--text-muted);
   shape-rendering: geometricPrecision;
 }
 
@@ -40,30 +40,30 @@
   text-anchor: middle;
 }
 
-.file-icon-typescript { color: #68a9e8; }
-.file-icon-javascript { color: #d8c35a; }
-.file-icon-kotlin { color: #b28ae8; }
-.file-icon-java { color: #e39768; }
-.file-icon-groovy { color: #75b6c7; }
-.file-icon-rust { color: #d69872; }
-.file-icon-python { color: #6fa8d8; }
-.file-icon-go { color: #55b7c9; }
-.file-icon-dart { color: #62b7dc; }
-.file-icon-swift { color: #e88368; }
-.file-icon-native { color: #7ea5d8; }
-.file-icon-markup { color: #dfa265; }
-.file-icon-styles { color: #8f91dc; }
-.file-icon-markdown { color: #71a7dc; }
-.file-icon-config { color: #b2a36f; }
-.file-icon-build { color: #8eb784; }
-.file-icon-git { color: #d47d66; }
-.file-icon-docker { color: #62a8dd; }
-.file-icon-shell { color: #79b879; }
-.file-icon-data { color: #b58acb; }
-.file-icon-image { color: #79b786; }
-.file-icon-archive { color: #c39c68; }
-.file-icon-text { color: #969da8; }
-.file-icon-generic { color: #858b95; }
+.file-icon-typescript { color: var(--file-icon-typescript); }
+.file-icon-javascript { color: var(--file-icon-javascript); }
+.file-icon-kotlin { color: var(--file-icon-kotlin); }
+.file-icon-java { color: var(--file-icon-java); }
+.file-icon-groovy { color: var(--file-icon-groovy); }
+.file-icon-rust { color: var(--file-icon-rust); }
+.file-icon-python { color: var(--file-icon-python); }
+.file-icon-go { color: var(--file-icon-go); }
+.file-icon-dart { color: var(--file-icon-dart); }
+.file-icon-swift { color: var(--file-icon-swift); }
+.file-icon-native { color: var(--file-icon-native); }
+.file-icon-markup { color: var(--file-icon-markup); }
+.file-icon-styles { color: var(--file-icon-styles); }
+.file-icon-markdown { color: var(--file-icon-markdown); }
+.file-icon-config { color: var(--file-icon-config); }
+.file-icon-build { color: var(--file-icon-build); }
+.file-icon-git { color: var(--file-icon-git); }
+.file-icon-docker { color: var(--file-icon-docker); }
+.file-icon-shell { color: var(--file-icon-shell); }
+.file-icon-data { color: var(--file-icon-data); }
+.file-icon-image { color: var(--file-icon-image); }
+.file-icon-archive { color: var(--file-icon-archive); }
+.file-icon-text { color: var(--file-icon-text); }
+.file-icon-generic { color: var(--file-icon-generic); }
 
 .file-status-ignored .file-type-icon {
   color: var(--file-ignored);
@@ -196,7 +196,7 @@
 }
 
 .row-action:hover {
-  background: #ffffff18;
+  background: var(--surface-translucent-strong);
   color: white;
 }
 
@@ -207,35 +207,35 @@
 }
 
 .graph-color-0 {
-  color: #6796ed;
+  color: var(--graph-1);
 }
 
 .graph-color-1 {
-  color: #50b986;
+  color: var(--graph-2);
 }
 
 .graph-color-2 {
-  color: #d08a45;
+  color: var(--graph-3);
 }
 
 .graph-color-3 {
-  color: #ad83d7;
+  color: var(--graph-4);
 }
 
 .graph-color-4 {
-  color: #52adc4;
+  color: var(--graph-5);
 }
 
 .graph-color-5 {
-  color: #d86f89;
+  color: var(--graph-6);
 }
 
 .graph-color-6 {
-  color: #c4a85c;
+  color: var(--graph-7);
 }
 
 .graph-color-7 {
-  color: #8293b6;
+  color: var(--graph-8);
 }
 
 .empty-state,
@@ -263,8 +263,8 @@
   margin-bottom: 13px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: #25262a;
-  color: #777b84;
+  background: var(--surface-chrome);
+  color: var(--text-muted);
 }
 
 .compact .empty-icon {
@@ -303,12 +303,12 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #6f737b;
+  background: var(--text-faint);
 }
 
 .status-indicator.busy {
   background: var(--accent);
-  box-shadow: 0 0 6px #3574f0;
+  box-shadow: 0 0 6px var(--accent);
 }
 
 .status-indicator.warning {

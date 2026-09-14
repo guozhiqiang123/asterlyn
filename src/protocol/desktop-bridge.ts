@@ -4,6 +4,8 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  RestoreChangesPlan,
+  GitWorktreeRecovery,
   GitConflictContent,
   GitOperationAction,
   GitOperationKind,
@@ -19,6 +21,7 @@ import type {
   PushMode,
   PushPreview,
   PushTagMode,
+  RemoteAuthenticationStatus,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
@@ -44,6 +47,7 @@ export interface DesktopShellBridge {
   initialRepository(): Promise<string | null>;
   chooseRepositoryDirectory(defaultPath: string | null): Promise<DirectoryChoice>;
   openProject(path: string): Promise<OpenedProject>;
+  readProject(path: string): Promise<OpenedProject>;
   openRepositoryWindow(path: string): Promise<string>;
 }
 
@@ -164,10 +168,28 @@ export interface GitOperationBridge {
   ): Promise<CommitSelectedResult>;
   revertChanges(
     repositoryRoot: string,
-    selected: FileChange[],
+    plan: RestoreChangesPlan,
   ): Promise<WorkingTreeMutationOutcome>;
+  prepareRestoreChanges(repositoryRoot: string, selected: FileChange[]): Promise<RestoreChangesPlan>;
+  listGitWorktreeRecoveries(repositoryRoot: string): Promise<GitWorktreeRecovery[]>;
+  undoGitWorktreeRecovery(repositoryRoot: string, recoveryId: string): Promise<RepositoryMutationOutcome>;
   switchBranch(repositoryRoot: string, targetFullName: string): Promise<RepositoryMutationOutcome>;
   createBranch(repositoryRoot: string, name: string): Promise<RepositoryMutationOutcome>;
+  readRemoteAuthentication(
+    repositoryRoot: string,
+    remote: string,
+  ): Promise<RemoteAuthenticationStatus>;
+  storeRemoteHttpsCredential(
+    repositoryRoot: string,
+    remote: string,
+    username: string,
+    token: string,
+  ): Promise<RemoteAuthenticationStatus>;
+  configureRemoteSsh(
+    repositoryRoot: string,
+    remote: string,
+    sshUrl: string,
+  ): Promise<RemoteAuthenticationStatus>;
   fetchRemote(
     repositoryRoot: string,
     remote: string,

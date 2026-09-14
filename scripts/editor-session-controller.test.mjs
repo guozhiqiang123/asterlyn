@@ -26,6 +26,22 @@ test("a reopened loaded tab activates without reading again", async () => {
   assert.equal(reads, 1);
 });
 
+test("reopening an inactive document emits activation and preserves its unsaved buffer", async () => {
+  const controller = new EditorSessionController(gateway({ async readTextFile(_root, _repository, path) { return snapshot(path, path); } }));
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("one.md"), "split");
+  const first = controller.state.session.textTabs[0];
+  controller.markEdited(first.id, "unsaved one");
+  await controller.openText("/repo", file("two.md"), "source");
+  const events = [];
+  controller.subscribe((change) => events.push(change));
+  await controller.openText("/repo", file("one.md"), "split");
+  assert.equal(controller.activeDocument().path, "one.md");
+  assert.equal(controller.tab(first.id).content, "unsaved one");
+  assert.equal(events.at(-1).reason, "activation");
+  assert.equal(events.at(-1).documentChanged, true);
+});
+
 test("save completion preserves edits made after the captured write", async () => {
   const pending = deferred();
   let requestId = "";
@@ -130,3 +146,25 @@ function deferred() {
   const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
   return { promise, resolve };
 }
+
+
+test("whole-worktree reconciliation retains tab identities and missing-file content", async () => {
+  let changedBranch = false;
+  const controller = new EditorSessionController(gateway({
+    async readTextFile(_root, _repo, path) {
+      if (changedBranch && path === "gone.md") throw new Error("not found");
+      return { ...snapshot(path, changedBranch ? "new branch" : "previous branch"), revision: changedBranch ? "2" : "1" };
+    },
+  }));
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("kept.md"), "split");
+  await controller.openText("/repo", file("gone.md"), "preview");
+  const ids = controller.state.session.textTabs.map(tab => tab.id);
+  changedBranch = true;
+  await controller.reconcileExternalPaths([]);
+  assert.deepEqual(controller.state.session.textTabs.map(tab => tab.id), ids);
+  assert.equal(controller.tab(ids[0]).content, "new branch");
+  assert.equal(controller.tab(ids[0]).markdownMode, "split");
+  assert.equal(controller.tab(ids[1]).content, "previous branch");
+  assert.equal(controller.tab(ids[1]).conflict, true);
+});

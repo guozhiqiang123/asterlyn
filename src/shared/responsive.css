@@ -22,8 +22,8 @@
 }
 
 @media (max-width: 1120px) {
-  .topbar {
-    grid-template-columns: minmax(180px, 320px) minmax(0, 1fr);
+  .command-center-button {
+    width: clamp(180px, 25vw, 300px);
   }
 
   .settings-page-layout {
@@ -51,7 +51,7 @@
     padding-left: 0;
   }
 
-  .topbar-remote-select select {
+  .topbar-remote-select .select-control {
     width: 74px;
   }
 }

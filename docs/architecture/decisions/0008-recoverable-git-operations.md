@@ -93,7 +93,7 @@ continue/abort, and exact-lease Squash.
 
 ## Invariants
 
-1. System Git remains the canonical write implementation.
+1. System Git owns refs, index semantics, and operation state; the workspace capability owns safe raw file replacement composed by the application service.
 2. All process invocation uses argument arrays with non-interactive, credential-safe policy.
 3. A prepared plan cannot execute after its exact refs, objects, index/worktree preconditions, or
    repository identity become stale.
@@ -119,3 +119,39 @@ continue/abort, and exact-lease Squash.
 - Cross-process coordination becomes necessary after measured external-tool races.
 - Interactive rebase requires a supervised sequence-editor protocol beyond the initial reviewed
   squash workflow.
+
+## Recoverable worktree writes — 2026-09-13
+
+The application `GitWorktreeTransactions` service composes the independent Git and Workspace
+capabilities. Git mutations and ordinary saves/replacements share the canonical workspace write
+lock. Selected Restore first prepares a plan bound to HEAD, exact worktree bytes and supported
+metadata, and the complete index version. Execution rejects a stale plan even if porcelain flags
+are unchanged, writes durable recovery, repeats the content check immediately before Git restore,
+and restores from the reviewed HEAD object. Legacy stage/unstage paths use literal pathspec mode.
+
+Conflict Save and Stage also publishes original file/index bytes and the proposed result before
+Workspace performs revision-checked atomic replacement. Git rechecks conflict stages before adding
+the literal path. Verification compares the staged object with `hash-object --path` output so
+`.gitattributes` clean/EOL/ident conversion is respected without changing the raw editor result.
+
+Recovery manifests live in application-local `git-worktree-recovery-v1`, outside the repository.
+They contain checksummed raw backups and before/after versions, not repository truth. The Changes
+recovery button lists retained operations after restart. Successful operations can be explicitly
+undone only while HEAD and all affected file/index versions still match the recorded operation.
+Undo acquires Git's index lock, validates backup integrity, restores exact before bytes and supported
+modes, and records progress so a partial undo can be retried. New external versions are rejected.
+Failed or uncertain operations retain backups and the proposed conflict result with a visible path;
+they require inspection and do not offer an automatic rollback. Recovery does not undo remote
+operations or refs.
+
+Bounds are 1,000 affected paths, 16 MiB per worktree file, 32 MiB for file-plus-index checkpoint
+material, 2 MiB per manifest, and a 512-directory recovery-list scan. There is no retention cleanup
+or paginated recovery browser yet; older safety files must be managed outside the app if this scan
+limit is reached. No multi-file atomicity, ACL/xattr preservation, general draft persistence, or
+linearizability against non-cooperating external writers is claimed. Failures preserve safety data
+instead of automatically retrying a Git mutation.
+
+The conflict controller retains an edited result when a refreshed operation no longer lists that
+conflict. Dialog/window/project closing requires an explicit discard decision for unsaved conflict
+text; ordinary clean dialog cancellation remains immediate. Disk recovery begins when Save and
+Stage is requested. Conflict drafts that have never been saved still have no crash-recovery journal.

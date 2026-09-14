@@ -25,11 +25,11 @@ file activation no longer regenerates the complete project catalog.
 
 Reads use a fixed two-mebibyte backend limit. Every path component must remain inside the canonical workspace and must not be a symbolic link or platform reparse point; the target must be a regular single-link file. NUL data, invalid UTF-8, and oversized files fail closed. A UTF-8 BOM is separated from editable text and reported explicitly. LF, CRLF, mixed line endings, bare CR, and final-newline state are preserved as exact content rather than normalized silently.
 
-The returned opaque revision covers the exact bytes and replacement-relevant supported metadata. Saving requires that revision, the complete text, the original BOM policy, and a unique request ID. The backend serializes in-process saves per file identity, reauthorizes the identity, rejects unsupported output, writes an exclusively created temporary file in the same directory, preserves ordinary mode/read-only metadata, flushes it, rechecks the target revision immediately before replacement, atomically replaces the target, and syncs the parent directory where supported. A revision mismatch leaves the target untouched. If the target already contains the requested exact bytes, retrying a lost successful response returns idempotent success.
+The returned opaque revision covers the exact bytes and replacement-relevant supported metadata. Saving requires that revision, the complete text, the original BOM policy, and a unique request ID. The backend serializes in-process writes per canonical workspace across saves, replacements, and Git mutations, reauthorizes the identity, rejects unsupported output, writes an exclusively created temporary file in the same directory, preserves ordinary mode/read-only metadata, flushes it, rechecks the target revision immediately before replacement, atomically replaces the target, and syncs the parent directory where supported. A revision mismatch leaves the target untouched. If the target already contains the requested exact bytes, retrying a lost successful response returns idempotent success.
 
 Portable compare-then-replace cannot be linearizable against a non-cooperating writer in the final instant before rename. This slice accepts that narrow race and records it rather than claiming a filesystem transaction. It also does not promise preservation of ownership, ACLs, extended attributes, security labels, or hard-link relationships; multiple-link targets are rejected.
 
-The frontend owns a pure editor-session model with persistent text tabs and one replaceable read-only Diff preview. A text tab records exact file identity, load epoch, content, BOM state, base revision, edit version, persisted version, one optional save request, and conflict/error state. Dirty state is derived from edit and persisted versions. A successful save advances the base revision but marks only the captured edit version persisted, so typing during a save remains dirty. Stale load or save responses cannot mutate a newer tab.
+The frontend owns a pure editor-session model with persistent text tabs and one replaceable read-only Diff preview. A text tab records exact file identity, load epoch, content, BOM state, base revision, edit version, persisted version, one optional save request, and conflict/error state. Dirty state compares exact content with the loaded-or-saved baseline; returning to that baseline becomes clean. A successful save advances the base revision but marks only the captured edit version persisted, so typing during a save remains dirty. Stale load or save responses cannot mutate a newer tab.
 
 A successful write also schedules one debounced repository-status refresh. The desktop boundary revalidates the invoking window's active root and asks Git only for tracked/index changes; it does not reload commit history, refs, remotes, the project catalog, or editor buffers. Presentation merges that result into the current matching-generation snapshot, redraws Changes, Files, tabs, and Diff selection from that single source, and silently refreshes untracked rows afterward. A stale root or generation is discarded, while several saves in one burst converge on another final refresh.
 
@@ -57,4 +57,20 @@ The UI can roll back by routing project files to the existing placeholder while 
 
 ## Deferred work
 
-Crash recovery, autosave, force-save, discard with recovery, file creation/deletion/rename, filesystem watching, external-change merge, large-file streaming, non-UTF-8 encodings, ACL/xattr preservation, multiple editor groups, and cross-window sessions remain later Stage 3 slices. Basic parser-backed syntax highlighting is an E2.2 presentation concern: the CodeMirror adapter selects by exact filename, loads parser chunks on demand, rejects stale asynchronous loads, and falls back to plain text. LSP services, semantic tokens, project models, completion, diagnostics, and other language intelligence remain Stage 4 work.
+General editor-draft crash recovery, autosave, force-save, discard with recovery, file creation/deletion/rename, external-change merge, large-file streaming, non-UTF-8 encodings, ACL/xattr preservation, multiple editor groups, and cross-window sessions remain later Stage 3 slices. Basic parser-backed syntax highlighting is an E2.2 presentation concern: the CodeMirror adapter selects by exact filename, loads parser chunks on demand, rejects stale asynchronous loads, and falls back to plain text. LSP services, semantic tokens, project models, completion, diagnostics, and other language intelligence remain Stage 4 work.
+
+## Reliability correction — 2026-09-13
+
+Reactivating an existing text tab emits an activation notification that mounts its retained buffer.
+The editor surface captures content only from the explicit tab and matching load epoch that it
+mounted. A late flush cannot copy another tab's content or overwrite a newly accepted external
+revision. Identical content notifications are no-ops. Markdown mode controls and unchanged editor
+tabs retain their DOM nodes and listeners across status reconciliation.
+
+The workspace crate additionally exposes bounded raw snapshots and revision-checked replacement or
+deletion for application-owned recoverable Git worktree transactions. They preserve the supported
+mode metadata, reject symbolic/hard links, flush temporary bytes, check the original version again
+before replacement, sync the containing directory, and verify the saved bytes. Git remains the
+index/ref authority. The application service publishes recovery material before invoking these
+primitives; ordinary unsaved editor drafts are still not crash-persisted. Watcher behavior is now
+implemented under ADR-0009.

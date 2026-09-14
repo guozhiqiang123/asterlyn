@@ -15,6 +15,8 @@ import {
   type ProjectTreeNode,
   type ProjectTreeSelection,
 } from "../../workbench/project-tree.ts";
+import type { EditorCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface ProjectFilesState {
   root: string | null;
@@ -60,6 +62,7 @@ export class ProjectFilesController {
   private catalogRoot: string | null = null;
   private generation = 0;
   private disposed = false;
+  private messages: Pick<EditorCopy, "unexpectedProjectFilesError">;
   private treeCache: {
     files: ProjectFile[];
     changes: FileChange[];
@@ -67,8 +70,16 @@ export class ProjectFilesController {
     nodes: ProjectTreeNode[];
   } | null = null;
 
-  constructor(gateway: ProjectFilesGateway) {
+  constructor(
+    gateway: ProjectFilesGateway,
+    messages: Pick<EditorCopy, "unexpectedProjectFilesError"> = EN_US.editor,
+  ) {
     this.gateway = gateway;
+    this.messages = messages;
+  }
+
+  setMessages(messages: Pick<EditorCopy, "unexpectedProjectFilesError">): void {
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
@@ -79,6 +90,7 @@ export class ProjectFilesController {
 
   installWorkspace(root: string | null, changes: FileChange[] = []): void {
     const rootChanged = this.state.root !== root;
+    if (!rootChanged) { this.updateChanges(changes); return; }
     this.state.root = root;
     this.changes = changes;
     this.treeCache = null;
@@ -105,7 +117,8 @@ export class ProjectFilesController {
   }
 
   updateChanges(changes: FileChange[]): void {
-    if (this.changes === changes) return;
+    if (this.changes === changes || (this.changes.length === changes.length &&
+      this.changes.every((previous, index) => sameChange(previous, changes[index]!)))) return;
     this.changes = changes;
     this.treeCache = null;
     this.reconcileTreeState();
@@ -116,12 +129,19 @@ export class ProjectFilesController {
     const root = this.state.root;
     if (!root || this.disposed) return false;
     const generation = ++this.generation;
+    const hadError = this.state.error !== null;
     this.state.loading = true;
     this.state.error = null;
     this.emit({ reason: "refresh-start" });
     try {
       const result = await this.gateway.listProjectFiles(root);
       if (!this.requestMatches(generation, root) || result.root !== root) return false;
+      if (this.catalogRoot === result.root && !hadError && this.state.truncated === result.truncated &&
+        sameRecords(this.state.files, result.files) && sameRecords(this.state.ignoredEntries, result.ignoredEntries)) {
+        this.state.loading = false;
+        this.emit({ reason: "refresh-complete", catalogChanged: false });
+        return true;
+      }
       this.state.paths = result.paths;
       this.state.files = result.files;
       this.state.ignoredEntries = result.ignoredEntries;
@@ -146,7 +166,7 @@ export class ProjectFilesController {
     } catch (error) {
       if (!this.requestMatches(generation, root)) return false;
       this.state.loading = false;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.unexpectedProjectFilesError);
       this.emit({ reason: "refresh-error", error: this.state.error });
       return false;
     }
@@ -262,6 +282,20 @@ export class ProjectFilesController {
   }
 }
 
+function sameChange(a: FileChange, b: FileChange): boolean {
+  return a.path === b.path && a.originalPath === b.originalPath &&
+    a.indexStatus === b.indexStatus && a.worktreeStatus === b.worktreeStatus &&
+    a.conflicted === b.conflicted && a.submodule === b.submodule;
+}
+
+function sameRecords<T extends object>(a: T[], b: T[]): boolean {
+  return a.length === b.length && a.every((item, index) => {
+    const next = b[index]!;
+    return Object.keys(item).length === Object.keys(next).length &&
+      (Object.keys(item) as Array<keyof T>).every((key) => item[key] === next[key]);
+  });
+}
+
 export function createProjectFilesState(): ProjectFilesState {
   return {
     root: null,
@@ -276,11 +310,11 @@ export function createProjectFilesState(): ProjectFilesState {
   };
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message: unknown }).message);
   }
-  return "Unexpected project-files error";
+  return fallback;
 }

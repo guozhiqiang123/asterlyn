@@ -40,6 +40,9 @@ test("shell view follows persisted activity order and exposes stable feature hos
   for (const host of ["navigator-body", "content-body", "history-navigation-body", "git-detail-body"]) {
     assert.match(html, new RegExp(`id="${host}"`));
   }
+  assert.ok(html.indexOf('id="repository-switcher-anchor"') < html.indexOf('id="command-center-button"'));
+  assert.ok(html.indexOf('id="command-center-button"') < html.indexOf('class="topbar-actions"'));
+  assert.doesNotMatch(html, /id="refresh-button"/);
 });
 
 test("settings view keeps one selected section and bounded preference controls", () => {
@@ -55,6 +58,16 @@ test("settings view keeps one selected section and bounded preference controls",
   assert.equal((navigation.match(/settings-navigation-item selected/g) ?? []).length, 1);
   assert.match(content, /Editor font size/);
   assert.match(content, /Editor line spacing/);
+
+  const appearance = renderSettingsSection({
+    section: "appearance",
+    preferences: { ...DEFAULT_APP_PREFERENCES, theme: "light" },
+  }, {
+    id: null,
+    kind: "idle",
+  });
+  assert.match(appearance, /data-setting-theme="system"/);
+  assert.match(appearance, /data-setting-theme="light" aria-pressed="true"/);
 });
 
 test("remote view renders explicit update and reviewed push boundaries", () => {
@@ -72,6 +85,32 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.match(push, /Push Commits to main/);
   assert.match(push, /Reading outgoing commits, tags, and files/);
   assert.match(push, /Force Push with Lease/);
+
+  const authentication = renderRemoteDialogContent({
+    ...viewModel(state),
+    authentication: {
+      checking: false,
+      saving: null,
+      error: null,
+      dialog: {
+        repositoryRoot: "/workspace/repository",
+        status: {
+          remote: "origin",
+          transport: "https",
+          host: "github.com",
+          credentialAvailable: false,
+          credentialHelperConfigured: true,
+          suggestedSshUrl: "git@github.com:owner/repository.git",
+        },
+      },
+    },
+  });
+  assert.match(authentication, /Authenticate with github.com/);
+  assert.match(authentication, /Personal access token/);
+  assert.match(authentication, /git@github.com:owner\/repository.git/);
+  assert.doesNotMatch(authentication, /account password[^<]*<input/iu);
+  assert.doesNotMatch(authentication, /remote-https-auth-form[\s\S]*type="submit" disabled/);
+  assert.match(authentication, /push-dialog[^>]*aria-hidden="true" inert/);
 });
 
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {

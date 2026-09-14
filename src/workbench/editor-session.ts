@@ -92,13 +92,15 @@ export function openTextDocument(
     return {
       session: {
         ...session,
-        textTabs: retry
-          ? session.textTabs.map((tab) =>
-              tab.id === id
-                ? { ...tab, status: "loading", loadEpoch, error: null }
-                : tab,
-            )
-          : session.textTabs,
+        textTabs: session.textTabs.map((tab) =>
+          tab.id === id
+            ? {
+                ...tab,
+                document,
+                ...(retry ? { status: "loading" as const, loadEpoch, error: null } : {}),
+              }
+            : tab,
+        ),
         active: { kind: "text", id },
       },
       tabId: id,
@@ -309,7 +311,7 @@ export function markTextEdited(
   content: string,
 ): EditorSession {
   return updateMatchingTab(session, tabId, (tab) =>
-    tab.status !== "ready"
+    tab.document.readOnly === true || tab.status !== "ready" || tab.content === content
       ? tab
       : {
           ...tab,
@@ -335,7 +337,11 @@ export function captureTextContent(
   tabId: string,
   content: string,
 ): EditorSession {
-  return updateMatchingTab(session, tabId, (tab) => ({ ...tab, content }));
+  return updateMatchingTab(session, tabId, (tab) =>
+    tab.document.readOnly === true || tab.status !== "ready" || tab.content === content
+      ? tab
+      : { ...tab, content },
+  );
 }
 
 export function beginTextSave(
@@ -347,6 +353,7 @@ export function beginTextSave(
   const tab = session.textTabs.find((candidate) => candidate.id === tabId);
   if (
     !tab ||
+    tab.document.readOnly === true ||
     tab.status !== "ready" ||
     tab.revision === null ||
     tab.saveRequest !== null ||
@@ -463,7 +470,7 @@ export function dirtyTextTabs(session: EditorSession): TextTabState[] {
 }
 
 export function isTextTabDirty(tab: TextTabState): boolean {
-  return tab.content !== tab.persistedContent;
+  return tab.document.readOnly !== true && tab.content !== tab.persistedContent;
 }
 
 function updateMatchingTab(

@@ -1,4 +1,5 @@
 mod git_operation_coordinator;
+pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
 mod search_session;
 mod workspace_session;

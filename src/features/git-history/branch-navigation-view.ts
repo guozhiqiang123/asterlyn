@@ -1,4 +1,5 @@
 import { icon } from "../../icons.ts";
+import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type { BranchSummary, RepositorySnapshot } from "../../models.ts";
 import {
   branchKey,
@@ -16,24 +17,27 @@ export interface BranchNavigationViewModel {
   readonly selectedRepositoryIds: ReadonlySet<string>;
   readonly selectedRefs: ReadonlyMap<string, unknown>;
   readonly collapsedGroups: ReadonlySet<BranchSummary["kind"]>;
+  readonly localization?: Localization;
 }
 
 export function renderBranchNavigation(model: BranchNavigationViewModel): string {
+  const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
   if (model.snapshot.branches.length === 0) {
-    return emptyState("No refs", "Branches and tags will appear here.");
+    return emptyState(copy.noRefs, copy.refsAppearHere);
   }
-  return `<div class="branch-navigation"><label class="branch-filter" for="branch-filter">${icon("search", 14)}<input id="branch-filter" type="search" value="${escapeAttribute(model.query)}" placeholder="Branch or tag" autocomplete="off" spellcheck="false" aria-label="Filter branches and tags" /><span class="compact-count" id="branch-count">0</span></label><div class="branch-results" id="branch-results">${renderBranchGroups(model)}</div></div>`;
+  return `<div class="branch-navigation"><label class="branch-filter" for="branch-filter">${icon("search", 14)}<input id="branch-filter" type="search" value="${escapeAttribute(model.query)}" placeholder="${escapeAttribute(copy.branchOrTag)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.filterBranchesAndTags)}" /><span class="compact-count" id="branch-count">0</span></label><div class="branch-results" id="branch-results">${renderBranchGroups(model)}</div></div>`;
 }
 
 export function renderBranchGroups(model: BranchNavigationViewModel): string {
+  const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
   const visible = filteredBranches(model);
   if (visible.length === 0) {
-    return '<div class="branch-no-results"><strong>No matching refs</strong><span>Try another branch, remote, or tag name.</span></div>';
+    return `<div class="branch-no-results"><strong>${escapeHtml(copy.noMatchingRefs)}</strong><span>${escapeHtml(copy.tryAnotherRef)}</span></div>`;
   }
   const groups: Array<[string, BranchSummary["kind"]]> = [
-    ["Local", "local"],
-    ["Remote", "remote"],
-    ["Tags", "tag"],
+    [copy.groups.local, "local"],
+    [copy.groups.remote, "remote"],
+    [copy.groups.tag, "tag"],
   ];
   return groups.map(([label, kind]) => {
     const branches = visible.filter((branch) => branch.kind === kind);
@@ -106,13 +110,13 @@ function branchRow(
     allMatches.every((candidate) => model.selectedRefs.has(branchKey(candidate)));
   const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
   const title = exclusive
-    ? `${branch.name} — ${branch.subject} — Activate again to show all refs`
+    ? `${branch.name} — ${branch.subject} — ${(model.localization ?? DEFAULT_LOCALIZATION).catalog.history.activateAgainForAllRefs}`
     : `${branch.name} — ${branch.subject}`;
   const root = model.snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
   const meta = [
     branch.current ? "HEAD" : "",
     activeMatches.length > 1
-      ? `${activeMatches.length} roots`
+      ? (model.localization ?? DEFAULT_LOCALIZATION).catalog.history.roots(activeMatches.length)
       : model.snapshot.repositoryRoots.length > 1
         ? (root?.displayName ?? branch.repositoryId)
         : "",

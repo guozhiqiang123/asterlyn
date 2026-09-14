@@ -8,6 +8,7 @@ export interface DesktopCommandMap {
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   initial_repository: { args: Record<string, never>; result: string | null };
   open_project: { args: { path: string; }; result: Model.OpenedProject };
+  read_project_snapshot: { args: { path: string; }; result: Model.OpenedProject };
   start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
   stop_workspace_watch: { args: Record<string, never>; result: void };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
@@ -36,9 +37,15 @@ export interface DesktopCommandMap {
   stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
-  revert_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.WorkingTreeMutationOutcome };
+  prepare_restore_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RestoreChangesPlan };
+  list_git_worktree_recoveries: { args: { repositoryRoot: string; }; result: Array<Model.GitWorktreeRecovery> };
+  undo_git_worktree_recovery: { args: { repositoryRoot: string; recoveryId: string; }; result: Model.RepositoryMutationOutcome };
+  revert_changes: { args: { repositoryRoot: string; plan: Model.RestoreChangesPlan; }; result: Model.WorkingTreeMutationOutcome };
   switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositoryMutationOutcome };
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
+  read_remote_authentication: { args: { repositoryRoot: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
+  store_remote_https_credential: { args: { repositoryRoot: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
+  configure_remote_ssh: { args: { repositoryRoot: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
   fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
   read_push_preview: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; offset: number; pageSize: number; }; result: Model.PushPreview };
   read_push_file_commit: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; previewToken: string; path: string; }; result: Model.CommitDetails | null };
@@ -61,6 +68,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   window_chrome_mode: "windowChromeMode",
   initial_repository: "nullableString",
   open_project: "openedProject",
+  read_project_snapshot: "openedProject",
   start_workspace_watch: "workspaceWatchStatus",
   stop_workspace_watch: "void",
   read_tracked_changes: "trackedChangeScan",
@@ -89,9 +97,15 @@ export const DESKTOP_RESULT_VALIDATORS: {
   stage_paths: "workingTreeMutationOutcome",
   unstage_paths: "workingTreeMutationOutcome",
   commit_changes: "commitSelectedResult",
+  prepare_restore_changes: "restoreChangesPlan",
+  list_git_worktree_recoveries: "gitWorktreeRecoveries",
+  undo_git_worktree_recovery: "repositoryMutationOutcome",
   revert_changes: "workingTreeMutationOutcome",
   switch_branch: "repositoryMutationOutcome",
   create_branch: "repositoryMutationOutcome",
+  read_remote_authentication: "remoteAuthenticationStatus",
+  store_remote_https_credential: "remoteAuthenticationStatus",
+  configure_remote_ssh: "remoteAuthenticationStatus",
   fetch_remote: "repositoryMutationOutcome",
   read_push_preview: "pushPreview",
   read_push_file_commit: "nullableCommitDetails",

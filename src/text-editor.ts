@@ -17,6 +17,7 @@ import {
 import { withEditorFolding } from "./editor-folding";
 import { EditorLanguageLoader, type EditorLanguageStatus } from "./editor-language";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme";
+import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { linkVerticalScrollProportionally } from "./workbench/linked-scroll";
 import type { AppPreferences } from "./workbench/preferences";
 import {
@@ -42,6 +43,8 @@ interface CachedTextEditor {
   language: Compartment;
   indent: Compartment;
   tabSize: Compartment;
+  theme: Compartment;
+  phrases: Compartment;
   languageLoader: EditorLanguageLoader;
   languageActivation: number;
   languageName: string;
@@ -61,6 +64,8 @@ export class TextEditor {
   private readonly entries = new Map<string, CachedTextEditor>();
   private activeId: string | null = null;
   private readOnlyValue = false;
+  private themeValue: EffectiveTheme = "dark";
+  private phrasesValue: Readonly<Record<string, string>> = {};
 
   mount(
     parent: HTMLElement,
@@ -206,6 +211,27 @@ export class TextEditor {
     }
   }
 
+  setTheme(theme: EffectiveTheme): void {
+    if (this.themeValue === theme) return;
+    this.themeValue = theme;
+    for (const entry of this.entries.values()) {
+      this.dispatchEffects(
+        entry,
+        entry.theme.reconfigure(asterlynEditorTheme(theme)),
+      );
+    }
+  }
+
+  setPhrases(phrases: Readonly<Record<string, string>>): void {
+    this.phrasesValue = phrases;
+    for (const entry of this.entries.values()) {
+      this.dispatchEffects(
+        entry,
+        entry.phrases.reconfigure(EditorState.phrases.of(phrases)),
+      );
+    }
+  }
+
   detach(): void {
     this.releaseActiveView(false);
   }
@@ -275,6 +301,8 @@ export class TextEditor {
     const language = new Compartment();
     const indent = new Compartment();
     const tabSize = new Compartment();
+    const theme = new Compartment();
+    const phrases = new Compartment();
     const entry: CachedTextEditor = {
       id,
       loadEpoch,
@@ -290,6 +318,8 @@ export class TextEditor {
       language,
       indent,
       tabSize,
+      theme,
+      phrases,
       languageLoader: new EditorLanguageLoader(),
       languageActivation: 0,
       languageName: "Plain Text",
@@ -313,7 +343,8 @@ export class TextEditor {
         highlightActiveLine(),
         highlightActiveLineGutter(),
         highlightSelectionMatches(),
-        asterlynEditorTheme,
+        theme.of(asterlynEditorTheme(this.themeValue)),
+        phrases.of(EditorState.phrases.of(this.phrasesValue)),
         asterlynSyntaxHighlighting,
         keymap.of([
           ...foldKeymap,

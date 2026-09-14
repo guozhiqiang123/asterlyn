@@ -8,6 +8,7 @@ globalThis.window ??= globalThis;
 test("tracked refresh updates only working state and follows with one untracked scan", async () => {
   const events = [];
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     async openProject(root) { return { root, repository: snapshot(root) }; },
     async readTrackedChanges(root) {
       return { root, changes: [change("src/a.ts", "modified")] };
@@ -54,6 +55,7 @@ test("a new transition cancels the active scan and rejects its late result", asy
   const cancelled = [];
   const events = [];
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     async openProject(root) { return { root, repository: snapshot(root) }; },
     async readTrackedChanges(root) { return { root, changes: [] }; },
     scanUntracked() { return pending.promise; },
@@ -80,6 +82,7 @@ test("a new transition cancels the active scan and rejects its late result", asy
 test("project transitions activate only the latest window request", async () => {
   const first = deferred();
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     openProject(path) {
       return path === "/first" ? first.promise : Promise.resolve({
         root: path,
@@ -102,6 +105,7 @@ test("project transitions activate only the latest window request", async () => 
 test("project refresh rejects a result after the window changes workspace", async () => {
   const pending = deferred();
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     openProject(path) {
       return path === "/first" ? pending.promise : Promise.resolve({
         root: path,
@@ -118,7 +122,7 @@ test("project refresh rejects a result after the window changes workspace", asyn
     "activation",
     ["workingTree"],
   );
-  const refresh = session.refreshProject("/first", generation);
+  const refresh = session.refreshProject(session.workspace.identity());
 
   await session.openProject("/second", "activation", ["workingTree"]);
   pending.resolve({ root: "/first", repository: snapshot("/first") });
@@ -130,6 +134,7 @@ test("project refresh rejects a result after the window changes workspace", asyn
 test("project refresh uses workspace identity after unrelated operation generations advance", async () => {
   let reads = 0;
   const session = new WindowSession({
+    readProject(path) { return this.openProject(path); },
     async openProject(root) {
       reads += 1;
       return { root, repository: snapshot(root) };
@@ -147,7 +152,7 @@ test("project refresh uses workspace identity after unrelated operation generati
   const identity = session.workspace.identity();
   session.beginTransition();
 
-  const refreshed = await session.refreshProject(identity.root, identity.generation);
+  const refreshed = await session.refreshProject(identity);
 
   assert.equal(reads, 1);
   assert.equal(refreshed.root, "/repo");

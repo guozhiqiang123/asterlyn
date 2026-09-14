@@ -1,4 +1,5 @@
 import { icon } from "../../icons.ts";
+import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type {
   BranchSummary,
   CommitSummary,
@@ -41,6 +42,7 @@ export interface HistoryListPresentation {
   loadingMore: boolean;
   pagingError: string | null;
   hasMore: boolean;
+  localization?: Localization;
 }
 
 export interface HistoryListActions {
@@ -184,21 +186,23 @@ export function renderHistoryList(
   presentation: HistoryListPresentation,
   renderWindow: HistoryRenderWindow | null = null,
 ): string {
+  const localization = presentation.localization ?? DEFAULT_LOCALIZATION;
+  const copy = localization.catalog.history;
   if (presentation.status === "loading") {
-    return '<div class="loading-block"><span class="spinner"></span><span>Loading filtered history…</span></div>';
+    return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(copy.loadingFilteredHistory)}</span></div>`;
   }
   if (presentation.status === "error") {
-    return `<div class="empty-state"><span class="empty-icon">${icon("history", 24)}</span><strong>Could not load history</strong><p>${escapeHtml(presentation.error ?? "The selected history query could not be read.")}</p><button class="secondary-button retry-button" data-retry-history-page type="button">Try again</button></div>`;
+    return `<div class="empty-state"><span class="empty-icon">${icon("history", 24)}</span><strong>${escapeHtml(copy.couldNotLoadHistory)}</strong><p>${escapeHtml(localization.catalog.errors.translate(presentation.error ?? copy.queryCouldNotBeRead))}</p><button class="secondary-button retry-button" data-retry-history-page type="button">${escapeHtml(localization.catalog.common.retry)}</button></div>`;
   }
   if (presentation.loadedCommits.length === 0) {
-    return '<div class="history-no-results"><strong>No commits match these filters</strong><span>Clear one or more history filters to widen the query.</span></div>';
+    return `<div class="history-no-results"><strong>${escapeHtml(copy.noCommitsForFilters)}</strong><span>${escapeHtml(copy.clearFilters)}</span></div>`;
   }
 
   const textError = presentation.textError
-    ? `<div class="history-text-error" role="status">Invalid expression: ${escapeHtml(presentation.textError)}${presentation.commits.length > 0 ? ". Showing the unfiltered result." : ""}</div>`
+    ? `<div class="history-text-error" role="status">${escapeHtml(copy.invalidExpression(presentation.textError, presentation.commits.length > 0))}</div>`
     : "";
   if (presentation.commits.length === 0) {
-    return `${textError}<div class="history-no-results"><strong>No matching commits</strong><span>Try a message, author, decoration, or full hash.</span></div>${renderPagingStatus(presentation)}`;
+    return `${textError}<div class="history-no-results"><strong>${escapeHtml(copy.noMatchingCommits)}</strong><span>${escapeHtml(copy.tryCommitSearch)}</span></div>${renderPagingStatus(presentation)}`;
   }
 
   const entries = historyDisplayEntries(presentation);
@@ -216,7 +220,7 @@ export function renderHistoryList(
     .map((entry, visibleIndex) => {
       const index = (boundedWindow?.start ?? 0) + visibleIndex;
       if (entry.kind === "collapsed") {
-        return `<button class="history-row history-collapsed-row" type="button" data-expand-linear-history data-first-collapsed="${escapeAttribute(entry.firstKey)}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="Expand ${entry.count} linear commits">${renderCommitGraph(graph.rows[index]!, graphWidth, true)}<span class="history-subject">${entry.count} linear commits collapsed</span><span class="history-references"></span><span class="history-author">Expand</span><span class="history-date"></span></button>`;
+        return `<button class="history-row history-collapsed-row" type="button" data-expand-linear-history data-first-collapsed="${escapeAttribute(entry.firstKey)}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(copy.expandLinearTitle(entry.count))}">${renderCommitGraph(graph.rows[index]!, graphWidth, true, localization)}<span class="history-subject">${escapeHtml(copy.linearCommitsCollapsed(entry.count))}</span><span class="history-references"></span><span class="history-author">${escapeHtml(copy.expand)}</span><span class="history-date"></span></button>`;
       }
       const commit = entry.commit;
       const key = commitKey(commit);
@@ -225,12 +229,14 @@ export function renderHistoryList(
         commit.decorations,
         presentation.branches.filter((branch) => branch.repositoryId === commit.repositoryId),
         2,
+        localization,
       );
       const root = roots.get(commit.repositoryId);
       const rootBadge = multipleRoots
-        ? `<span class="history-root-badge" title="Git root: ${escapeAttribute(root?.relativePath ?? commit.repositoryId)}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
+        ? `<span class="history-root-badge" title="${escapeAttribute(copy.gitRoot(root?.relativePath ?? commit.repositoryId))}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
         : "";
-      return `<button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(formatAbsolute(commit.authoredAt))}</time></button>`;
+      const authoredAt = commit.authoredAt ? localization.shortDateTime.format(new Date(commit.authoredAt * 1000)) : copy.unknownTime;
+      return `<button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
     })
     .join("");
   const topSpacer = boundedWindow && boundedWindow.start > 0
@@ -241,7 +247,7 @@ export function renderHistoryList(
     ? `<div class="history-virtual-spacer" aria-hidden="true" style="height:${bottomCount * HISTORY_ROW_HEIGHT}px"></div>`
     : "";
 
-  return `${textError}<div class="history-list" role="listbox" aria-label="Commit history" style="--history-graph-width:${graphWidth}px">${topSpacer}${rows}${bottomSpacer}</div>${renderPagingStatus(presentation)}`;
+  return `${textError}<div class="history-list" role="listbox" aria-label="${escapeAttribute(copy.commitHistory)}" style="--history-graph-width:${graphWidth}px">${topSpacer}${rows}${bottomSpacer}</div>${renderPagingStatus(presentation)}`;
 }
 
 export function historyRenderWindow(
@@ -282,33 +288,37 @@ function clampHistoryRenderWindow(
 }
 
 function renderPagingStatus(presentation: HistoryListPresentation): string {
+  const localization = presentation.localization ?? DEFAULT_LOCALIZATION;
+  const copy = localization.catalog.history;
   if (presentation.loadingMore) {
-    return '<div class="history-page-status" role="status">Loading older commits…</div>';
+    return `<div class="history-page-status" role="status">${escapeHtml(copy.loadingOlderCommits)}</div>`;
   }
   if (presentation.pagingError) {
-    return `<div class="history-page-status error" role="status"><span>${escapeHtml(presentation.pagingError)}</span><button type="button" data-retry-history-page>Retry</button></div>`;
+    return `<div class="history-page-status error" role="status"><span>${escapeHtml(localization.catalog.errors.translate(presentation.pagingError))}</span><button type="button" data-retry-history-page>${escapeHtml(localization.catalog.common.retry)}</button></div>`;
   }
   if (presentation.loadedCommits.length >= HISTORY_ROW_LIMIT) {
-    return `<div class="history-page-status">Showing the newest ${HISTORY_ROW_LIMIT.toLocaleString()} commits (session limit)</div>`;
+    return `<div class="history-page-status">${escapeHtml(copy.showingNewestLimit(localization.number.format(HISTORY_ROW_LIMIT)))}</div>`;
   }
   if (presentation.hasMore) {
-    return '<div class="history-page-status muted">Scroll to load older commits</div>';
+    return `<div class="history-page-status muted">${escapeHtml(copy.scrollForOlder)}</div>`;
   }
   const count = presentation.loadedCommits.length;
-  return `<div class="history-page-status muted" title="No older commits are available for the current filters.">All history loaded · ${count.toLocaleString()} ${count === 1 ? "commit" : "commits"}</div>`;
+  return `<div class="history-page-status muted" title="${escapeAttribute(copy.noOlderCommits)}">${escapeHtml(copy.allHistoryLoaded(localization.number.format(count), count === 1))}</div>`;
 }
 
 function renderCommitGraph(
   row: CommitGraphRow,
   width: number,
   collapsed = false,
+  localization: Localization = DEFAULT_LOCALIZATION,
 ): string {
+  const copy = localization.catalog.history;
   const parentSummary =
     row.parentCount === 0
-      ? "root commit"
+      ? copy.rootCommit
       : row.parentCount === 1
-        ? "one parent"
-        : `merge commit with ${row.parentCount} parents`;
+        ? copy.oneParent
+        : copy.mergeParents(row.parentCount);
   const lines = row.segments
     .map(
       (segment) =>
@@ -320,8 +330,8 @@ function renderCommitGraph(
     ? `<circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="8" r="1.2"/><circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="14" r="1.2"/><circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="20" r="1.2"/>`
     : `<circle class="commit-graph-node graph-color-${row.nodeColor} ${row.parentCount > 1 ? "merge" : ""}" cx="${nodeX}" cy="14" r="${row.parentCount > 1 ? 4 : 3.5}" />`;
   const label = collapsed
-    ? `Collapsed linear continuation in graph lane ${row.nodeLane + 1} of ${row.laneCount}`
-    : `Graph lane ${row.nodeLane + 1} of ${row.laneCount}, ${parentSummary}`;
+    ? copy.collapsedGraphLane(row.nodeLane + 1, row.laneCount)
+    : copy.graphLane(row.nodeLane + 1, row.laneCount, parentSummary);
   return `<span class="history-graph" role="img" aria-label="${label}"><svg viewBox="0 0 ${width} 28" width="${width}" height="28" aria-hidden="true" focusable="false">${lines}${node}</svg></span>`;
 }
 
@@ -339,32 +349,22 @@ function renderCommitReferenceBadges(
   decorations: string[],
   branches: BranchSummary[],
   limit: number,
+  localization: Localization,
 ): string {
   const references = commitReferences(decorations, branches);
   const visible = references.slice(0, limit);
   const remaining = references.length - visible.length;
-  return `${visible.map(renderCommitReferenceBadge).join("")}${remaining > 0 ? `<span class="commit-reference-more" title="${escapeAttribute(references.map((reference) => reference.label).join(", "))}">+${remaining}</span>` : ""}`;
+  return `${visible.map((reference) => renderCommitReferenceBadge(reference, localization)).join("")}${remaining > 0 ? `<span class="commit-reference-more" title="${escapeAttribute(references.map((reference) => reference.label).join(", "))}">+${remaining}</span>` : ""}`;
 }
 
-function renderCommitReferenceBadge(reference: CommitReference): string {
+function renderCommitReferenceBadge(reference: CommitReference, localization: Localization): string {
   const iconName = reference.kind === "head"
     ? "head"
     : reference.kind === "tag" || reference.kind === "other"
       ? "tag"
       : "branch";
-  return `<span class="commit-reference ${reference.kind}" title="${escapeAttribute(capitalize(reference.kind))}: ${escapeAttribute(reference.label)}">${icon(iconName, 12)}<span>${escapeHtml(reference.label)}</span></span>`;
-}
-
-function formatAbsolute(epochSeconds: number): string {
-  if (!epochSeconds) return "Unknown time";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(epochSeconds * 1000));
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toLocaleUpperCase() + value.slice(1);
+  const kind = localization.catalog.history.referenceKinds[reference.kind];
+  return `<span class="commit-reference ${reference.kind}" title="${escapeAttribute(kind)}: ${escapeAttribute(reference.label)}">${icon(iconName, 12)}<span>${escapeHtml(reference.label)}</span></span>`;
 }
 
 function escapeHtml(value: string): string {

@@ -124,12 +124,16 @@ The memory helper launches only the supplied local binary and repository, waits 
 
 ## Packaging policy
 
-- Every completed local project task ends with a fresh Debian acceptance package after its required checks pass:
+- Every completed local project task ends with a fresh native acceptance package for its build host after its required checks pass. On Linux, build Debian:
 
   ```bash
   scripts/with-linux-tauri-env.sh npm run tauri -- build --bundles deb
   sha256sum target/release/bundle/deb/*.deb
   ```
+
+  On macOS, use `npm run tauri -- build --bundles app`, then archive the `.app` with
+  `ditto -c -k --sequesterRsrc --keepParent` and hash that exact archive. This is macOS acceptance,
+  not a substitute for the Linux gate. Windows uses its native bundle target.
 
   Report the exact package path, byte size, and SHA-256 digest for manual acceptance. This local package does not imply a remote push, release publication, signing, or cross-platform acceptance.
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.

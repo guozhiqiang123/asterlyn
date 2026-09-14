@@ -3,6 +3,7 @@ import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 import "./styles.css";
 import "./shared/layout.css";
 import "./shared/controls.css";
+import "./shared/select-control.css";
 import "./shared/presentation.css";
 import "./shared/content.css";
 import "./shared/overlays.css";
@@ -18,14 +19,21 @@ import "./features/git-history/branches.css";
 import "./features/git-history/details.css";
 import "./features/git-operations/git-operation-controls.css";
 import "./features/remote-push/remote-push.css";
+import "./features/remote-push/remote-authentication.css";
 import "./shared/responsive.css";
 import { AsterlynApp } from "./app";
 import { BRAND } from "./brand";
+import type { LocaleCatalog } from "./localization/catalog.ts";
 
-document.title = BRAND.name;
+export function startApplication(catalog: LocaleCatalog): void {
+  document.title = BRAND.name;
+  document
+    .querySelector<HTMLMetaElement>('meta[name="description"]')
+    ?.setAttribute("content", catalog.documentDescription);
 
-const root = document.querySelector<HTMLElement>("#app");
-if (!root) throw new Error("Application root was not found.");
+  const root = document.querySelector<HTMLElement>("#app");
+  if (!root) throw new Error("Application root was not found.");
 
-const app = new AsterlynApp(root);
-void app.start();
+  const app = new AsterlynApp(root, catalog);
+  void app.start();
+}

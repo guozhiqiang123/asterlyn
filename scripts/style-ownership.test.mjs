@@ -6,6 +6,7 @@ const ownedStyles = [
   ["styles.css", "main.ts"],
   ["shared/layout.css", "main.ts"],
   ["shared/controls.css", "main.ts"],
+  ["shared/select-control.css", "main.ts"],
   ["shared/presentation.css", "main.ts"],
   ["shared/content.css", "main.ts"],
   ["shared/overlays.css", "main.ts"],
@@ -21,6 +22,7 @@ const ownedStyles = [
   ["features/git-history/branches.css", "main.ts"],
   ["features/git-history/details.css", "main.ts"],
   ["features/remote-push/remote-push.css", "main.ts"],
+  ["features/remote-push/remote-authentication.css", "main.ts"],
   ["features/git-operations/git-operation-controls.css", "main.ts"],
   [
     "features/git-operations/git-operations.css",

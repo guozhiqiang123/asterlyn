@@ -9,17 +9,21 @@ import {
   type TextTabState,
 } from "../../workbench/editor-session.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { EditorCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export interface EditorTabsViewModel {
   readonly session: EditorSession;
   readonly document: EditorDocument;
   readonly statusClass: (workspacePath: string) => string;
+  readonly copy?: EditorCopy;
 }
 
 export interface EditorTabMenuViewModel {
   readonly session: EditorSession;
   readonly open: boolean;
   readonly statusClass: (workspacePath: string) => string;
+  readonly copy?: EditorCopy;
 }
 
 export interface DiffControlsViewModel {
@@ -30,75 +34,79 @@ export interface DiffControlsViewModel {
   readonly canOpenSource: boolean;
   readonly expanded: boolean;
   readonly preferences: Pick<AppPreferences, "diffLayout" | "showWhitespace">;
+  readonly copy?: EditorCopy;
 }
 
 export function renderEditorTabs(model: EditorTabsViewModel): string {
+  const copy = model.copy ?? EN_US.editor;
   const textTabs = model.session.textTabs.map((tab, index) => {
     const active = model.document.kind === "project-file" && editorDocumentKey(model.document) === tab.id;
     const dirty = isTextTabDirty(tab);
-    const state = tab.conflict ? "Conflict" : tab.saveRequest ? "Saving" : dirty ? "Unsaved" : "Saved";
+    const state = tab.conflict ? copy.conflict : tab.saveRequest ? copy.saving : dirty ? copy.unsaved : copy.saved;
     return `<div class="editor-tab ${model.statusClass(tab.document.workspacePath)} ${active ? "active" : ""} ${dirty ? "dirty" : ""}" role="tab" aria-selected="${active}" data-editor-tab="${index}" title="${escapeAttribute(`${tab.document.workspacePath} · ${state}`)}">
       <button class="editor-tab-target" type="button" data-editor-tab-index="${index}">
         <span class="editor-tab-file-icon">${fileTypeIcon(tab.document.workspacePath)}</span>
         <span class="editor-tab-label">${escapeHtml(basename(tab.document.workspacePath))}</span>
-        ${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}
+        ${dirty ? `<span class="editor-dirty-dot" aria-label="${escapeAttribute(copy.unsaved)}"></span>` : ""}
       </button>
-      <button class="editor-tab-close" type="button" data-close-editor-tab-index="${index}" aria-label="Close ${escapeAttribute(basename(tab.document.workspacePath))}" title="Close">${icon("close", 12)}</button>
+      <button class="editor-tab-close" type="button" data-close-editor-tab-index="${index}" aria-label="${escapeAttribute(copy.closeFile(basename(tab.document.workspacePath)))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
     </div>`;
   }).join("");
   const preview = model.session.preview;
   const previewPath = preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
-  const previewLabel = preview?.kind === "project-image" ? "Preview" : "Diff";
+  const previewLabel = preview?.kind === "project-image" ? copy.preview : copy.diff;
   const previewTab = preview
     ? `<div class="editor-tab preview ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${model.session.active.kind === "preview"}">
         <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
-        <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="Close ${previewLabel} preview" title="Close">${icon("close", 12)}</button>
+        <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="${escapeAttribute(copy.closePreview(previewLabel))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
       </div>`
     : "";
-  return textTabs || previewTab ? `${textTabs}${previewTab}` : '<span class="editor-tab active">Welcome</span>';
+  return textTabs || previewTab ? `${textTabs}${previewTab}` : `<span class="editor-tab active">${escapeHtml(copy.welcome)}</span>`;
 }
 
 export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
   if (!model.open) return "";
+  const copy = model.copy ?? EN_US.editor;
   const textItems = model.session.textTabs.map((tab, index) => {
     const active = model.session.active.kind === "text" && model.session.active.id === tab.id;
     const dirty = isTextTabDirty(tab);
-    return `<button class="editor-tab-menu-item ${model.statusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? '<span class="editor-dirty-dot" aria-label="Unsaved"></span>' : ""}${active ? icon("check", 14) : ""}</button>`;
+    return `<button class="editor-tab-menu-item ${model.statusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? `<span class="editor-dirty-dot" aria-label="${escapeAttribute(copy.unsaved)}"></span>` : ""}${active ? icon("check", 14) : ""}</button>`;
   }).join("");
   const preview = model.session.preview;
   const previewPath = preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
-  const previewLabel = preview?.kind === "project-image" ? "Image preview" : "Diff preview";
+  const previewLabel = preview?.kind === "project-image" ? copy.imagePreview : copy.diffPreview;
   const previewItem = preview
     ? `<button class="editor-tab-menu-item ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "project-image" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${model.session.active.kind === "preview" ? icon("check", 14) : ""}</button>`
     : "";
   return `${textItems}${previewItem}`;
 }
 
-export function renderMarkdownModeControls(tab: TextTabState | null): string {
+export function renderMarkdownModeControls(tab: TextTabState | null, copy: EditorCopy = EN_US.editor): string {
   if (!tab) return "";
   const modes: Array<[MarkdownEditorMode, string, string]> = [
-    ["source", "Source", "Edit Markdown source"],
-    ["split", "Split", "Edit source with live preview"],
-    ["preview", "Preview", "Rendered preview (read-only)"],
+    ["source", copy.source, copy.sourceTitle],
+    ["split", copy.split, copy.splitTitle],
+    ["preview", copy.renderedPreview, copy.previewTitle],
   ];
-  return `<div class="markdown-mode-controls" role="group" aria-label="Markdown editor mode">${modes.map(([mode, label, title]) => `<button type="button" data-markdown-mode="${mode}" aria-pressed="${tab.markdownMode === mode}" title="${title}">${label}</button>`).join("")}</div>`;
+  return `<div class="markdown-mode-controls" role="group" aria-label="${escapeAttribute(copy.markdownMode)}">${modes.map(([mode, label, title]) => `<button type="button" data-markdown-mode="${mode}" aria-pressed="${tab.markdownMode === mode}" title="${escapeAttribute(title)}">${escapeHtml(label)}</button>`).join("")}</div>`;
 }
 
 export function renderDiffControls(model: DiffControlsViewModel): string {
-  return `<div class="diff-toolbar" aria-label="Diff navigation and presentation">
-    <div class="diff-navigation-controls" role="group" aria-label="Diff navigation">
-      <button class="compact-icon-button" type="button" data-diff-action="previous-change" aria-label="Previous change in file" title="Previous change in file" ${model.textReady ? "" : "disabled"}>${icon("up", 15)}</button>
-      <button class="compact-icon-button" type="button" data-diff-action="next-change" aria-label="Next change in file" title="Next change in file" ${model.textReady ? "" : "disabled"}>${icon("down", 15)}</button>
+  const copy = model.copy ?? EN_US.editor;
+  return `<div class="diff-toolbar" aria-label="${escapeAttribute(copy.diffToolbar)}">
+    <div class="diff-navigation-controls" role="group" aria-label="${escapeAttribute(copy.diffNavigation)}">
+      <button class="compact-icon-button" type="button" data-diff-action="previous-change" aria-label="${escapeAttribute(copy.previousChange)}" title="${escapeAttribute(copy.previousChange)}" ${model.textReady ? "" : "disabled"}>${icon("up", 15)}</button>
+      <button class="compact-icon-button" type="button" data-diff-action="next-change" aria-label="${escapeAttribute(copy.nextChange)}" title="${escapeAttribute(copy.nextChange)}" ${model.textReady ? "" : "disabled"}>${icon("down", 15)}</button>
       <span class="diff-control-separator" aria-hidden="true"></span>
-      <button class="compact-icon-button" type="button" data-diff-action="previous-file" aria-label="Previous changed file" title="Previous changed file" ${model.previousFile ? "" : "disabled"}>${icon("back", 15)}</button>
-      <button class="compact-icon-button" type="button" data-diff-action="next-file" aria-label="Next changed file" title="Next changed file" ${model.nextFile ? "" : "disabled"}>${icon("forward", 15)}</button>
-      <button class="compact-icon-button" type="button" data-diff-action="open-source" aria-label="Open file and reveal in Project" title="Open file and reveal in Project" ${model.canOpenSource ? "" : "disabled"}>${icon("locate", 15)}</button>
-      <button class="compact-icon-button ${model.expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${model.expanded ? "Collapse" : "Expand"} unchanged lines" title="${model.expanded ? "Collapse" : "Expand"} unchanged lines" aria-pressed="${model.expanded}" ${model.textReady ? "" : "disabled"}>${icon(model.expanded ? "collapse" : "expand", 15)}</button>
+      <button class="compact-icon-button" type="button" data-diff-action="previous-file" aria-label="${escapeAttribute(copy.previousFile)}" title="${escapeAttribute(copy.previousFile)}" ${model.previousFile ? "" : "disabled"}>${icon("back", 15)}</button>
+      <button class="compact-icon-button" type="button" data-diff-action="next-file" aria-label="${escapeAttribute(copy.nextFile)}" title="${escapeAttribute(copy.nextFile)}" ${model.nextFile ? "" : "disabled"}>${icon("forward", 15)}</button>
+      <button class="compact-icon-button" type="button" data-diff-action="open-source" aria-label="${escapeAttribute(copy.openSource)}" title="${escapeAttribute(copy.openSource)}" ${model.canOpenSource ? "" : "disabled"}>${icon("locate", 15)}</button>
+      <button class="compact-icon-button ${model.expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${escapeAttribute(model.expanded ? copy.collapseUnchanged : copy.expandUnchanged)}" title="${escapeAttribute(model.expanded ? copy.collapseUnchanged : copy.expandUnchanged)}" aria-pressed="${model.expanded}" ${model.textReady ? "" : "disabled"}>${icon(model.expanded ? "collapse" : "expand", 15)}</button>
     </div>
-    ${model.imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="Diff presentation">
-      <button type="button" data-diff-layout="unified" aria-pressed="${model.preferences.diffLayout === "unified"}" title="Unified diff">Unified</button>
-      <button type="button" data-diff-layout="split" aria-pressed="${model.preferences.diffLayout === "split"}" title="Side-by-side diff">Split</button>
-      <button type="button" data-diff-whitespace aria-pressed="${model.preferences.showWhitespace}" title="Show whitespace characters">Whitespace</button>
+    ${model.imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="${escapeAttribute(copy.diffPresentation)}">
+      <button type="button" data-diff-layout="unified" aria-pressed="${model.preferences.diffLayout === "unified"}" title="${escapeAttribute(copy.unifiedTitle)}">${escapeHtml(copy.unified)}</button>
+      <button type="button" data-diff-layout="split" aria-pressed="${model.preferences.diffLayout === "split"}" title="${escapeAttribute(copy.sideBySideTitle)}">${escapeHtml(copy.sideBySide)}</button>
+      <button type="button" data-diff-whitespace aria-pressed="${model.preferences.showWhitespace}" title="${escapeAttribute(copy.whitespaceTitle)}">${escapeHtml(copy.whitespace)}</button>
     </div>`}
   </div>`;
 }
@@ -107,16 +115,16 @@ export function contentHeading(title: string, subtitle: string): string {
   return `<div class="content-title-group"><span class="content-kicker">${escapeHtml(subtitle)}</span><h2>${escapeHtml(title)}</h2></div>`;
 }
 
-export function imagePreviewCard(image: ImagePreview, label: string): string {
-  return `<figure class="image-preview-card"><figcaption><strong>${escapeHtml(label)}</strong><span>${image.width} × ${image.height} · ${formatBytes(image.byteLength)}</span></figcaption><div class="image-preview-canvas"><img src="${escapeAttribute(image.dataUrl)}" alt="${escapeAttribute(`${label} image for ${image.path}`)}" draggable="false" /></div></figure>`;
+export function imagePreviewCard(image: ImagePreview, label: string, copy: EditorCopy = EN_US.editor): string {
+  return `<figure class="image-preview-card" data-image-label="${escapeAttribute(label)}" data-image-path="${escapeAttribute(image.path)}"><figcaption><strong>${escapeHtml(label)}</strong><span>${image.width} × ${image.height} · ${formatBytes(image.byteLength)}</span></figcaption><div class="image-preview-canvas"><img src="${escapeAttribute(image.dataUrl)}" alt="${escapeAttribute(copy.imageAlt(label, image.path))}" draggable="false" /></div></figure>`;
 }
 
 export function emptyImageSide(label: string, message: string): string {
   return `<section class="image-preview-card empty"><header><strong>${escapeHtml(label)}</strong></header><div class="image-preview-empty">${escapeHtml(message)}</div></section>`;
 }
 
-export function markdownPreviewLoadingBlock(): string {
-  return '<div class="markdown-preview-message" role="status"><strong>Rendering Markdown…</strong><span>The editor remains available while the preview engine loads.</span></div>';
+export function markdownPreviewLoadingBlock(copy: EditorCopy = EN_US.editor): string {
+  return `<div class="markdown-preview-message" role="status"><strong>${escapeHtml(copy.renderingMarkdown)}</strong><span>${escapeHtml(copy.renderingMarkdownDetail)}</span></div>`;
 }
 
 export function emptyState(
@@ -136,8 +144,9 @@ export function retryState(
   detail: string,
   retryId: string,
   iconName: "folder" | "history" | "changes",
+  copy: EditorCopy = EN_US.editor,
 ): string {
-  return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><button class="secondary-button retry-button" id="${retryId}" type="button">Try again</button></div>`;
+  return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><button class="secondary-button retry-button" id="${retryId}" type="button">${escapeHtml(copy.tryAgain)}</button></div>`;
 }
 
 function previewStatusClass(

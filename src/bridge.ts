@@ -28,6 +28,8 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  RestoreChangesPlan,
+  GitWorktreeRecovery,
   GitConflictContent,
   GitOperationAction,
   GitOperationKind,
@@ -43,6 +45,7 @@ import type {
   PushPreview,
   PushMode,
   PushTagMode,
+  RemoteAuthenticationStatus,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
@@ -157,6 +160,14 @@ const demoBridge: DesktopBridge = {
       };
     }
     return invoke<OpenedProject>("open_project", { path });
+  },
+
+  async readProject(path: string): Promise<OpenedProject> {
+    if (!isTauri) {
+      await demoDelay();
+      return { root: path, repository: browserGitEnabled ? demoTrackedSnapshot(browserSnapshot) : null };
+    }
+    return invoke<OpenedProject>("read_project_snapshot", { path });
   },
 
   async readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan> {
@@ -309,20 +320,40 @@ const demoBridge: DesktopBridge = {
           });
         }
       }
+      const uniquePaths = Array.from(new Set(paths)).sort();
+      const ignoredPaths = browserGitEnabled
+        ? [".cache/session.json", "local.settings"]
+        : [];
+      for (const path of ignoredPaths) {
+        if (!demoTextFiles.has(path)) {
+          demoTextFiles.set(path, {
+            content: `Read-only ignored content for ${path}\n`,
+            utf8Bom: false,
+            revision: 1,
+          });
+        }
+      }
       return {
         root: repositoryRoot,
-        paths: Array.from(new Set(paths)).sort(),
-        files: Array.from(new Set(paths)).sort().map((path) => ({
-          repositoryId: browserGitEnabled ? "." : "workspace",
-          path,
-          workspacePath: path,
+        paths: uniquePaths,
+        files: [
+          ...uniquePaths.map((path) => ({
+            repositoryId: browserGitEnabled ? "." : "workspace",
+            path,
+            workspacePath: path,
+            readOnly: false,
+          })),
+          ...ignoredPaths.map((path) => ({
+            repositoryId: ".",
+            path,
+            workspacePath: path,
+            readOnly: true,
+          })),
+        ],
+        ignoredEntries: ignoredPaths.map((workspacePath) => ({
+          workspacePath,
+          kind: "file" as const,
         })),
-        ignoredEntries: browserGitEnabled
-          ? [
-              { workspacePath: ".cache", kind: "directory" },
-              { workspacePath: "local.settings", kind: "file" },
-            ]
-          : [],
         repositoryRoots: browserGitEnabled
           ? structuredClone(browserSnapshot.repositoryRoots)
           : [],
@@ -705,10 +736,26 @@ const demoBridge: DesktopBridge = {
     });
   },
 
+  async prepareRestoreChanges(repositoryRoot: string, selected: FileChange[]): Promise<RestoreChangesPlan> {
+    if (!isTauri) return { root: repositoryRoot, selected, paths: selected.map((file) => file.path), headOid: browserSnapshot.branch.oid ?? "demo", token: "demo-review" };
+    return invoke<RestoreChangesPlan>("prepare_restore_changes", { repositoryRoot, selected });
+  },
+
+  async listGitWorktreeRecoveries(repositoryRoot: string): Promise<GitWorktreeRecovery[]> {
+    if (!isTauri) return [];
+    return invoke<GitWorktreeRecovery[]>("list_git_worktree_recoveries", { repositoryRoot });
+  },
+
+  async undoGitWorktreeRecovery(repositoryRoot: string, recoveryId: string): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) throw new Error("Durable recovery requires the desktop application.");
+    return invoke<RepositoryMutationOutcome>("undo_git_worktree_recovery", { repositoryRoot, recoveryId });
+  },
+
   async revertChanges(
     repositoryRoot: string,
-    selected: FileChange[],
+    plan: RestoreChangesPlan,
   ): Promise<WorkingTreeMutationOutcome> {
+    const selected = plan.selected;
     if (!isTauri) {
       await demoDelay(220);
       if (
@@ -738,7 +785,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<WorkingTreeMutationOutcome>("revert_changes", {
       repositoryRoot,
-      selected,
+      plan,
     });
   },
 
@@ -798,6 +845,72 @@ const demoBridge: DesktopBridge = {
       repositoryRoot,
       remote,
       operationId,
+    });
+  },
+
+  async readRemoteAuthentication(
+    repositoryRoot: string,
+    remote: string,
+  ): Promise<RemoteAuthenticationStatus> {
+    if (!isTauri) {
+      return {
+        remote,
+        transport: "https",
+        host: "example.invalid",
+        credentialAvailable: true,
+        credentialHelperConfigured: true,
+        suggestedSshUrl: "git@example.invalid:team/repository.git",
+      };
+    }
+    return invoke<RemoteAuthenticationStatus>("read_remote_authentication", {
+      repositoryRoot,
+      remote,
+    });
+  },
+
+  async storeRemoteHttpsCredential(
+    repositoryRoot: string,
+    remote: string,
+    username: string,
+    token: string,
+  ): Promise<RemoteAuthenticationStatus> {
+    if (!isTauri) {
+      return {
+        remote,
+        transport: "https",
+        host: "example.invalid",
+        credentialAvailable: Boolean(username && token),
+        credentialHelperConfigured: true,
+        suggestedSshUrl: "git@example.invalid:team/repository.git",
+      };
+    }
+    return invoke<RemoteAuthenticationStatus>("store_remote_https_credential", {
+      repositoryRoot,
+      remote,
+      username,
+      token,
+    });
+  },
+
+  async configureRemoteSsh(
+    repositoryRoot: string,
+    remote: string,
+    sshUrl: string,
+  ): Promise<RemoteAuthenticationStatus> {
+    if (!isTauri) {
+      return {
+        remote,
+        transport: "ssh",
+        host: sshUrl.includes("@") ? sshUrl.split("@").at(-1)?.split(/[/:]/)[0] ?? null : null,
+        credentialAvailable: true,
+        credentialHelperConfigured: false,
+        suggestedSshUrl: null,
+      };
+    }
+    return invoke<RemoteAuthenticationStatus>("configure_remote_ssh", {
+      repositoryRoot,
+      remote,
+      sshUrl,
     });
   },
 

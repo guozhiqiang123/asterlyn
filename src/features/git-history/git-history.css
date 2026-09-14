@@ -15,7 +15,7 @@
 
 .history-row.selected,
 .branch-row.selected {
-  background: #214283;
+  background: var(--selection-bg);
 }
 
 .file-name,
@@ -42,7 +42,7 @@
 .selected .file-directory,
 .selected .history-meta,
 .selected .branch-copy small {
-  color: #a9bee7;
+  color: var(--info-text);
 }
 
 .history-row:hover .commit-graph-node {
@@ -50,7 +50,7 @@
 }
 
 .history-row.selected .commit-graph-node {
-  fill: #214283;
+  fill: var(--selection-bg);
 }
 
 .commit-avatar,
@@ -61,7 +61,7 @@
   place-items: center;
   margin-bottom: 15px;
   border-radius: 10px;
-  background: linear-gradient(145deg, #315b9f, #294436);
+  background: linear-gradient(145deg, var(--accent), var(--success-bg));
   color: white;
   font-size: 12px;
   font-weight: 750;

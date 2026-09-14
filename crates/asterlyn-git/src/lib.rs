@@ -12,7 +12,7 @@ pub use model::{
     GitOperationProgress, GitOperationSnapshot, GitRootDescriptor, GitRootKind, HistoryOrder,
     HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile,
     ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode, PushTagSummary,
-    RemoteSummary, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
-    UntrackedState,
+    RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositorySnapshot,
+    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 pub use repository::{CancellationToken, GitRepository};

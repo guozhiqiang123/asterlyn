@@ -8,6 +8,8 @@ import type {
   RepositoryMutationOutcome,
   RepositorySnapshot,
 } from "../../models.ts";
+import type { GitOperationCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
 
 export type GitOperationDialog = "setup" | "review" | "conflict" | null;
 
@@ -89,12 +91,14 @@ export class GitOperationController {
 
   private readonly gateway: GitOperationGateway;
   private readonly listeners = new Set<Listener>();
+  private messages: GitOperationCopy;
   private generation = 0;
   private requestSequence = 0;
   private disposed = false;
 
-  constructor(gateway: GitOperationGateway) {
+  constructor(gateway: GitOperationGateway, messages: GitOperationCopy = EN_US.gitOperations) {
     this.gateway = gateway;
+    this.messages = messages;
   }
 
   subscribe(listener: Listener): () => void {
@@ -103,31 +107,41 @@ export class GitOperationController {
     return () => this.listeners.delete(listener);
   }
 
+  setMessages(messages: GitOperationCopy): void {
+    this.messages = messages;
+  }
+
   installSnapshot(snapshot: RepositorySnapshot | null): void {
     const rootChanged = this.state.repositoryRoot !== snapshot?.root;
     const previous = this.state.operation;
+    const previousDialog = this.state.dialog;
+    const previousError = this.state.error;
+    const keepConflictDraft = this.hasUnsavedConflict();
     this.state.repositoryRoot = snapshot?.root ?? null;
     this.state.operation = snapshot?.operation ?? null;
     if (rootChanged) {
       this.generation += 1;
       this.requestSequence += 1;
       this.resetDialog();
-    } else if (!this.state.operation && previous && this.state.dialog === "conflict") {
+    } else if (!keepConflictDraft && !this.state.operation && previous && this.state.dialog === "conflict") {
       this.resetDialog();
     } else if (this.state.operation && this.state.conflict) {
       const remains = this.state.operation.conflicts.some(
         (conflict) => conflict.path === this.state.conflict?.path,
       );
-      if (!remains) {
+      if (!remains && !keepConflictDraft) {
         this.state.conflict = null;
         this.state.conflictResult = "";
         if (this.state.dialog === "conflict") this.state.dialog = null;
       }
     }
+    if (!rootChanged && keepConflictDraft && !this.state.operation?.conflicts.some((item) => item.path === this.state.conflict?.path)) {
+      this.state.error = this.messages.conflictChangedExternally;
+    }
     this.emit({
       reason: "snapshot",
       operationChanged: previous !== this.state.operation,
-      dialogChanged: rootChanged,
+      dialogChanged: rootChanged || previousDialog !== this.state.dialog || previousError !== this.state.error,
     });
   }
 
@@ -136,7 +150,7 @@ export class GitOperationController {
     targetRefs: string[] = [],
     message = "",
   ): void {
-    if (!this.state.repositoryRoot || this.state.loading) return;
+    if (!this.state.repositoryRoot || this.state.loading || this.hasUnsavedConflict()) return;
     this.state.kind = kind;
     this.state.targetText = targetRefs.join("\n");
     this.state.message = message;
@@ -146,10 +160,17 @@ export class GitOperationController {
     this.emit({ reason: "dialog", dialogChanged: true });
   }
 
-  closeDialog(): boolean {
+  hasUnsavedConflict(): boolean {
+    const conflict = this.state.conflict;
+    return !!conflict && this.state.conflictResult !== (conflict.worktree ?? conflict.ours ?? conflict.theirs ?? "");
+  }
+
+  closeDialog(discardConflict = false): boolean {
     if (this.state.loading === "execute" || this.state.loading === "action" || this.state.loading === "resolve") {
       return false;
     }
+    if (this.hasUnsavedConflict() && !discardConflict) return false;
+    this.requestSequence += 1;
     this.resetDialog();
     this.emit({ reason: "dialog", dialogChanged: true });
     return true;
@@ -166,7 +187,7 @@ export class GitOperationController {
 
   async prepare(): Promise<boolean> {
     const root = this.state.repositoryRoot;
-    if (!root || this.state.loading) return false;
+    if (!root || !canReviewGitOperation(this.state)) return false;
     const targets = operationTargets(this.state.targetText);
     const generation = this.generation;
     const request = ++this.requestSequence;
@@ -189,7 +210,7 @@ export class GitOperationController {
     } catch (error) {
       if (!this.matches(generation, request, root)) return false;
       this.state.loading = null;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.operationFailed);
       this.emit({ reason: "request-error", dialogChanged: true, error });
       return false;
     }
@@ -215,6 +236,7 @@ export class GitOperationController {
   async openConflict(path: string): Promise<boolean> {
     const root = this.state.repositoryRoot;
     if (!root || this.state.loading) return false;
+    if (this.hasUnsavedConflict()) return this.state.conflict?.path === path;
     if (!this.state.operation?.conflicts.some((conflict) => conflict.path === path)) return false;
     const generation = this.generation;
     const request = ++this.requestSequence;
@@ -234,7 +256,7 @@ export class GitOperationController {
     } catch (error) {
       if (!this.matches(generation, request, root)) return false;
       this.state.loading = null;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.operationFailed);
       this.emit({ reason: "request-error", dialogChanged: true, error });
       return false;
     }
@@ -294,7 +316,7 @@ export class GitOperationController {
     } catch (error) {
       if (!this.matches(generation, request, root)) return { status: "stale" };
       this.state.loading = null;
-      this.state.error = errorMessage(error);
+      this.state.error = errorMessage(error, this.messages.operationFailed);
       this.emit({ reason: "request-error", dialogChanged: true, error });
       return { status: "failure", error };
     }
@@ -329,12 +351,19 @@ export function operationTargets(value: string): string[] {
     .filter(Boolean);
 }
 
-function errorMessage(error: unknown): string {
+export function canReviewGitOperation(state: GitOperationState): boolean {
+  const count = operationTargets(state.targetText).length;
+  return !state.loading && count > 0 &&
+    (state.kind === "cherryPick" || count === 1) &&
+    (state.kind !== "squash" || state.message.trim().length > 0);
+}
+
+function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
     const value = error as Record<string, unknown>;
     if (typeof value.message === "string") return value.message;
   }
-  return "The Git operation could not complete.";
+  return fallback;
 }

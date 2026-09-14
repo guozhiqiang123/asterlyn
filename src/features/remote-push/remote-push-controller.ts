@@ -13,6 +13,9 @@ import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
 import { filesForPushReview } from "../../workbench/push-review.ts";
 import { isImagePreviewPath } from "../../workbench/image-preview.ts";
 import { RecentValueCache } from "../../workbench/recent-value-cache.ts";
+import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
+import { EN_US } from "../../localization/en-US.ts";
+import { localizedOperationError } from "../../localization/error-message.ts";
 import {
   createRemotePushState,
   type RemoteUpdateStrategy,
@@ -125,6 +128,8 @@ export type RemoteOperationResult =
 export interface RemotePushControllerOptions {
   previewPageSize?: number;
   detailCacheLimit?: number;
+  messages?: RemoteCopy;
+  errorMessages?: ErrorCopy;
 }
 
 type Listener = (change: RemotePushChange) => void;
@@ -136,6 +141,8 @@ export class RemotePushController {
   private readonly previewPageSize: number;
   private readonly commitDetailsCache: RecentValueCache<CommitDetails>;
   private readonly listeners = new Set<Listener>();
+  private messages: RemoteCopy;
+  private errorMessages: ErrorCopy;
   private snapshot: RepositorySnapshot | null = null;
   private repositoryGeneration = 0;
   private dialogSequence = 0;
@@ -146,6 +153,8 @@ export class RemotePushController {
 
   constructor(gateway: RemotePushGateway, options: RemotePushControllerOptions = {}) {
     this.gateway = gateway;
+    this.messages = options.messages ?? EN_US.remote;
+    this.errorMessages = options.errorMessages ?? EN_US.errors;
     this.previewPageSize = options.previewPageSize ?? PUSH_PREVIEW_PAGE_SIZE;
     this.commitDetailsCache = new RecentValueCache(
       options.detailCacheLimit ?? PUSH_COMMIT_DETAILS_CACHE_LIMIT,
@@ -156,6 +165,11 @@ export class RemotePushController {
     if (this.disposed) return () => undefined;
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  setMessages(messages: RemoteCopy, errorMessages: ErrorCopy = this.errorMessages): void {
+    this.messages = messages;
+    this.errorMessages = errorMessages;
   }
 
   installSnapshot(snapshot: RepositorySnapshot | null): void {
@@ -338,7 +352,7 @@ export class RemotePushController {
     } catch (error) {
       if (!this.detailsRequestMatches(sequence, generation, snapshot.root, oid)) return;
       this.state.pushCommitDetailsLoading = false;
-      this.state.pushCommitDetailsError = toErrorMessage(error);
+      this.state.pushCommitDetailsError = this.errorMessage(error);
       this.emit({
         reason: "commit-details-error",
         dialogChanged: true,
@@ -371,7 +385,7 @@ export class RemotePushController {
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       if (page.previewToken !== preview.previewToken) {
-        throw new Error("The branch or remote-tracking state changed. Close and review Push again.");
+        throw new Error(this.messages.branchOrRemoteChanged);
       }
       this.state.pushPreview = {
         ...page,
@@ -383,7 +397,7 @@ export class RemotePushController {
     } catch (error) {
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreviewLoadingMore = false;
-      this.state.dialogError = toErrorMessage(error);
+      this.state.dialogError = this.errorMessage(error);
       this.emit({ reason: "preview-error", dialogChanged: true, error: this.state.dialogError });
     }
   }
@@ -423,9 +437,9 @@ export class RemotePushController {
             path,
           );
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
-      if (!details) throw new Error("No outgoing commit contains this file.");
+      if (!details) throw new Error(this.messages.noOutgoingCommitForFile(path));
       const file = details.files.find((candidate) => candidate.path === path);
-      if (!file) throw new Error("The selected file is not present in its latest outgoing commit.");
+      if (!file) throw new Error(this.messages.selectedOutgoingFileMissing);
       this.state.pushDiff = {
         repositoryId: details.repositoryId,
         oid: details.oid,
@@ -443,14 +457,14 @@ export class RemotePushController {
         this.state.pushDiff = {
           ...this.state.pushDiff,
           loading: false,
-          error: toErrorMessage(error),
+          error: this.errorMessage(error),
         };
       }
       this.emit({
         reason: "diff-error",
         dialogChanged: true,
         diffChanged: true,
-        error: toErrorMessage(error),
+        error: this.errorMessage(error),
       });
     } finally {
       if (this.diffRequestMatches(sequence, generation, snapshot.root, path)) {
@@ -482,14 +496,14 @@ export class RemotePushController {
         this.state.pushDiff = {
           ...this.state.pushDiff,
           loading: false,
-          error: toErrorMessage(error),
+          error: this.errorMessage(error),
         };
       }
       this.emit({
         reason: "diff-error",
         dialogChanged: true,
         diffChanged: true,
-        error: toErrorMessage(error),
+        error: this.errorMessage(error),
       });
     }
   }
@@ -545,7 +559,7 @@ export class RemotePushController {
       if (!this.operationRequestMatches(generation, snapshot.root, operationId)) {
         return { status: "stale" };
       }
-      this.state.dialogError = toErrorMessage(error);
+      this.state.dialogError = this.errorMessage(error);
       this.emit({ reason: "dialog-error", dialogChanged: true, error: this.state.dialogError });
       return { status: "failure", error };
     } finally {
@@ -570,7 +584,7 @@ export class RemotePushController {
         reason: "operation-complete",
         toolbarChanged: true,
         dialogChanged: true,
-        error: toErrorMessage(error),
+        error: this.errorMessage(error),
       });
     }
   }
@@ -637,7 +651,7 @@ export class RemotePushController {
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreviewLoading = false;
       this.state.pushPreviewRefreshing = false;
-      this.state.dialogError = toErrorMessage(error);
+      this.state.dialogError = this.errorMessage(error);
       this.emit({ reason: "preview-error", dialogChanged: true, error: this.state.dialogError });
     }
   }
@@ -767,6 +781,10 @@ export class RemotePushController {
       this.state.operation?.id === operationId;
   }
 
+  private errorMessage(error: unknown): string {
+    return localizedOperationError(error, this.errorMessages);
+  }
+
   private emit(change: RemotePushChange): void {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
@@ -775,13 +793,4 @@ export class RemotePushController {
 
 function detailsCacheKey(repositoryRoot: string, repositoryId: string, oid: string): string {
   return `${repositoryRoot}\u0000${repositoryId}\u0000${oid}`;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return "Unexpected Git remote error";
 }

@@ -25,6 +25,39 @@ pub(crate) async fn open_project(
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<OpenedProject, WorkspaceError> {
+    let token = active_workspaces.begin_activation(window.label())?;
+    let project = read_project(path).await?;
+    active_workspaces.activate_current(
+        window.label(),
+        token,
+        Path::new(&project.root),
+        project
+            .repository
+            .as_ref()
+            .map(|repository| Path::new(&repository.git_dir)),
+    )?;
+    Ok(project)
+}
+
+#[tauri::command]
+pub(crate) async fn read_project_snapshot(
+    path: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<OpenedProject, WorkspaceError> {
+    let token = active_workspaces.activation_token(window.label())?;
+    let root = active_workspaces.resolve(window.label(), &path)?;
+    let project = read_project(root.to_string_lossy().into_owned()).await?;
+    if active_workspaces.activation_token(window.label())? != token {
+        return Err(WorkspaceError::NotAuthorized {
+            message: "the project read belongs to an obsolete workspace session".to_string(),
+        });
+    }
+    active_workspaces.resolve(window.label(), &project.root)?;
+    Ok(project)
+}
+
+async fn read_project(path: String) -> Result<OpenedProject, WorkspaceError> {
     let project = run_workspace_blocking("open project", move || {
         let workspace = Workspace::open(path)?;
         let root = workspace.root().to_path_buf();
@@ -44,14 +77,6 @@ pub(crate) async fn open_project(
         })
     })
     .await?;
-    active_workspaces.activate(
-        window.label(),
-        Path::new(&project.root),
-        project
-            .repository
-            .as_ref()
-            .map(|repository| Path::new(&repository.git_dir)),
-    )?;
     Ok(project)
 }
 

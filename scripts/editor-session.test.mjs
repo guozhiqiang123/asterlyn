@@ -83,6 +83,25 @@ test("a new Markdown tab accepts its restored presentation mode", () => {
   assert.equal(opened.session.textTabs[0].markdownMode, "preview");
 });
 
+test("read-only project files cannot become dirty or start a save", () => {
+  const readOnly = { ...document("ignored.txt"), readOnly: true };
+  const opened = openTextDocument(createEditorSession(), readOnly);
+  const session = completeTextLoad(opened.session, opened.tabId, opened.loadEpoch, {
+    workspacePath: "ignored.txt",
+    content: "ignored\n",
+    utf8Bom: false,
+    revision: "ignored-revision",
+    byteLength: 8,
+  });
+
+  const edited = markTextEdited(session, opened.tabId, "changed\n");
+  const saving = beginTextSave(edited, opened.tabId, "changed\n", "save-ignored");
+  assert.equal(edited, session);
+  assert.equal(saving.session, session);
+  assert.equal(saving.request, null);
+  assert.deepEqual(dirtyTextTabs(session), []);
+});
+
 test("stale loads and saves cannot replace newer tab state", () => {
   const opened = openTextDocument(createEditorSession(), document("one.ts"));
   const stale = completeTextLoad(opened.session, opened.tabId, 0, {

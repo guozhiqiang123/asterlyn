@@ -9,9 +9,10 @@ use asterlyn_workspace::WorkspaceError;
 #[derive(Default)]
 pub(crate) struct ActiveWorkspaces {
     roots: Mutex<HashMap<String, ActiveWorkspace>>,
+    activations: Mutex<HashMap<String, u64>>,
+    sequence: AtomicU64,
 }
 
-#[derive(Clone)]
 struct ActiveWorkspace {
     root: PathBuf,
     git_enabled: bool,
@@ -32,9 +33,9 @@ pub(crate) struct PendingRepositoryWindows {
     sequence: AtomicU64,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct WorkspaceWriteRegistry {
-    locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 #[derive(Default)]
@@ -43,7 +44,54 @@ pub(crate) struct GitMutationRegistry {
 }
 
 impl ActiveWorkspaces {
+    pub(crate) fn begin_activation(&self, window_label: &str) -> Result<u64, WorkspaceError> {
+        let mut activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        let token = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        activations.insert(window_label.to_string(), token);
+        Ok(token)
+    }
+
+    pub(crate) fn activation_token(&self, window_label: &str) -> Result<u64, WorkspaceError> {
+        self.activations
+            .lock()
+            .map_err(|_| activation_lock_error())?
+            .get(window_label)
+            .copied()
+            .ok_or_else(stale_activation)
+    }
+
+    pub(crate) fn activate_current(
+        &self,
+        window_label: &str,
+        token: u64,
+        root: &Path,
+        git_dir: Option<&Path>,
+    ) -> Result<(), WorkspaceError> {
+        let activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        if activations.get(window_label) != Some(&token) {
+            return Err(stale_activation());
+        }
+        self.install_workspace(window_label, root, git_dir)
+    }
+
+    #[cfg(test)]
     pub(crate) fn activate(
+        &self,
+        window_label: &str,
+        root: &Path,
+        git_dir: Option<&Path>,
+    ) -> Result<(), WorkspaceError> {
+        let token = self.begin_activation(window_label)?;
+        self.activate_current(window_label, token, root, git_dir)
+    }
+
+    fn install_workspace(
         &self,
         window_label: &str,
         root: &Path,
@@ -101,7 +149,11 @@ impl ActiveWorkspaces {
                 message: "open a project folder before watching files".to_string(),
             })?;
         Ok(WorkspaceWatchRoots {
-            root,
+            root: if active.root == root {
+                root
+            } else {
+                return Err(stale_activation());
+            },
             git_dir: active.git_dir.clone(),
             directories: active.watch_directories.clone(),
         })
@@ -124,16 +176,16 @@ impl ActiveWorkspaces {
                 message: "active workspace lock was poisoned".to_string(),
             })?
             .get(window_label)
-            .cloned()
+            .map(|active| active.root.clone())
             .ok_or_else(|| WorkspaceError::NotAuthorized {
                 message: "open a project folder before reading or saving files".to_string(),
             })?;
-        if requested != active.root {
+        if requested != active {
             return Err(WorkspaceError::NotAuthorized {
                 message: "the file does not belong to the active project".to_string(),
             });
         }
-        Ok(active.root)
+        Ok(active)
     }
 
     pub(crate) fn require_git(
@@ -154,26 +206,34 @@ impl ActiveWorkspaces {
                 message: "active workspace lock was poisoned".to_string(),
             })?
             .get(window_label)
-            .cloned()
+            .map(|active| (active.root.clone(), active.git_enabled))
             .ok_or_else(|| GitError::InvalidInput {
                 field: "repository root".to_string(),
                 message: "open a Git project before using Git features".to_string(),
             })?;
-        if requested != active.root || !active.git_enabled {
+        if requested != active.0 || !active.1 {
             return Err(GitError::InvalidInput {
                 field: "repository root".to_string(),
                 message: "Git features are unavailable for this ordinary folder".to_string(),
             });
         }
-        Ok(active.root)
+        Ok(active.0)
     }
 
     pub(crate) fn install_catalog(
         &self,
         window_label: &str,
+        token: u64,
         root: &Path,
         catalog: &ProjectFileList,
     ) -> Result<(), WorkspaceError> {
+        let activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        if activations.get(window_label) != Some(&token) {
+            return Err(stale_activation());
+        }
         let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
             operation: "install project catalog".to_string(),
             message: "active workspace lock was poisoned".to_string(),
@@ -232,15 +292,35 @@ impl ActiveWorkspaces {
     }
 
     pub(crate) fn remove(&self, window_label: &str) {
+        let Ok(mut activations) = self.activations.lock() else {
+            return;
+        };
+        activations.remove(window_label);
         if let Ok(mut roots) = self.roots.lock() {
             roots.remove(window_label);
         }
     }
 }
 
+fn activation_lock_error() -> WorkspaceError {
+    WorkspaceError::Io {
+        operation: "workspace activation".to_string(),
+        message: "workspace activation lock was poisoned".to_string(),
+    }
+}
+
+fn stale_activation() -> WorkspaceError {
+    WorkspaceError::NotAuthorized {
+        message: "the workspace request was superseded or its window was closed".to_string(),
+    }
+}
+
 fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<PathBuf> {
     let mut directories = BTreeSet::from([root.to_path_buf()]);
     for file in &catalog.files {
+        if file.read_only {
+            continue;
+        }
         let Some(parent) = Path::new(&file.workspace_path).parent() else {
             continue;
         };
@@ -321,5 +401,61 @@ impl GitMutationRegistry {
             .entry(identity)
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn obsolete_activation_cannot_replace_newer_authorization_or_reopen_a_closed_window() {
+        let active = ActiveWorkspaces::default();
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let old = active.begin_activation("main").unwrap();
+        let current = active.begin_activation("main").unwrap();
+        active
+            .activate_current("main", current, second.path(), None)
+            .unwrap();
+        assert!(
+            active
+                .activate_current("main", old, first.path(), None)
+                .is_err()
+        );
+        assert_eq!(
+            active
+                .resolve("main", &second.path().to_string_lossy())
+                .unwrap(),
+            std::fs::canonicalize(second.path()).unwrap()
+        );
+        active.remove("main");
+        assert!(
+            active
+                .activate_current("main", current, second.path(), None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn catalog_completion_is_bound_to_the_activation_even_when_the_same_root_returns() {
+        let active = ActiveWorkspaces::default();
+        let directory = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(directory.path()).unwrap();
+        let old = active.begin_activation("main").unwrap();
+        active.activate_current("main", old, &root, None).unwrap();
+        let current = active.begin_activation("main").unwrap();
+        active
+            .activate_current("main", current, &root, None)
+            .unwrap();
+        let catalog = crate::load_project_catalog(&root).unwrap();
+        assert!(
+            active
+                .install_catalog("main", old, &root, &catalog)
+                .is_err()
+        );
+        active
+            .install_catalog("main", current, &root, &catalog)
+            .unwrap();
     }
 }
