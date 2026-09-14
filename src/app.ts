@@ -5830,7 +5830,7 @@ export class AsterlynApp {
           <textarea id="commit-message" placeholder="${escapeAttribute(copy.commitMessage)}">${escapeHtml(this.changesState.commitMessage)}</textarea>
           <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.changesState.commitMessage.trim().length}/72</span></div>
           ${blockedMessage ? `<div class="commit-blocker" role="status">${escapeHtml(blockedMessage)}</div>` : ""}
-          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitButton(included.length))}</button><button class="secondary-button commit-button" id="commit-and-push-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitAndPushButton)}</button></div>
+          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitButton)}</button><button class="secondary-button commit-button" id="commit-and-push-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitAndPushButton)}</button></div>
         </div>
       </section>`;
   }

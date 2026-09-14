@@ -24,6 +24,8 @@ import { DEFAULT_APP_PREFERENCES } from "../src/workbench/preferences.ts";
 
 test("locale catalogs retain the same typed runtime shape", () => {
   assert.deepEqual(catalogShape(ZH_CN), catalogShape(EN_US));
+  assert.equal(EN_US.changes.commitButton, "Commit");
+  assert.equal(ZH_CN.changes.commitButton, "提交");
 });
 
 test("Simplified Chinese catalog is lazy-loadable and renders shell and settings", async () => {

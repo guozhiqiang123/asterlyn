@@ -329,7 +329,7 @@ export const EN_US: LocaleCatalog = {
       copied: "Copied", typeChanged: "Type changed", unmerged: "Unmerged", untracked: "Untracked", ignored: "Ignored", unknown: "Unknown",
     },
     changedFileCount: (count) => `${count} changed files`, resizeCommit: "Resize commit message area", createCommit: "Create commit",
-    commitMessage: "Commit Message", commitButton: (count) => `Commit ${count || ""}`.trimEnd(), commitAndPushButton: "Commit and Push…", resolveBeforeCommit: "Resolve conflicts before committing.",
+    commitMessage: "Commit Message", commitButton: "Commit", commitAndPushButton: "Commit and Push…", resolveBeforeCommit: "Resolve conflicts before committing.",
     excludeSubmodules: "Exclude submodule changes; commit them from their own Git root.", selectFileToCommit: "Select at least one file to commit.",
     saveBeforeRevert: "Save or undo the unsaved editor changes before reverting this file",
     restoreConfirm: (label) => `Restore 1 tracked file to HEAD?\n\n${label}\n\nThis replaces the reviewed staged and working-tree content. A recovery copy will be saved for Undo.`,

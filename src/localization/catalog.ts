@@ -438,7 +438,7 @@ export interface ChangesCopy {
   resizeCommit: string;
   createCommit: string;
   commitMessage: string;
-  commitButton(count: number): string;
+  commitButton: string;
   commitAndPushButton: string;
   resolveBeforeCommit: string;
   excludeSubmodules: string;
