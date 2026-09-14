@@ -75,6 +75,7 @@ import {
 } from "./features/git-operations/git-operation-controller";
 import { renderGitOperationBanner } from "./features/git-operations/git-operation-banner";
 import { GitOperationDialogBinding } from "./features/git-operations/git-operation-dialog-binding";
+import { TerminalPanel } from "./features/terminal/terminal-panel";
 import {
   ProjectFilesController,
   type ProjectFilesChange,
@@ -370,6 +371,7 @@ export class AsterlynApp {
   private readonly presentationEnvironment: PresentationEnvironment;
   private readonly releasePresentationEnvironment: () => void;
   private readonly shellController: ShellController;
+  private readonly terminalPanel: TerminalPanel;
   private projectTreeScrollFrame: number | null = null;
   private projectTreeWindowStart = 0;
   private changeTreeScrollFrame: number | null = null;
@@ -426,6 +428,10 @@ export class AsterlynApp {
       this.handleSettingsControllerChange(change),
     );
     this.shellController = new ShellController(window.localStorage);
+    this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
+      status: (message, kind) => this.setStatus(message, kind),
+      error: (error) => this.showError(error),
+    });
     this.historyController = new GitHistoryDetailsController(
       {
         readHistoryPage: (repositoryRoot, query, offset, limit) =>
@@ -661,7 +667,10 @@ export class AsterlynApp {
       },
       hideBottomTool: () => {
         const tool = this.shellState.layout.bottomTool;
-        if (tool) this.toggleTool(tool);
+        if (tool) {
+          this.toggleTool(tool);
+          this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`)?.focus();
+        }
       },
       hideLeftTool: () => {
         const tool = this.shellState.layout.leftTool;
@@ -898,6 +907,7 @@ export class AsterlynApp {
       ) return;
       const previousCatalog = this.localization.catalog;
       this.localization = createLocalization(catalog);
+      this.terminalPanel.setCopy(catalog.terminal);
       this.editorSurface.setCopy(catalog.editor);
       this.filesController.setMessages(catalog.editor);
       this.editorController.setMessages(catalog.editor);
@@ -1091,6 +1101,7 @@ export class AsterlynApp {
     this.shellController.dispose();
     this.windowChromeBinding.dispose();
     this.activityRailBinding.dispose();
+    this.terminalPanel.dispose();
     this.historyListView.unmount();
     this.editorSurface.destroy();
     this.pushDiffEditor.destroy();
@@ -1328,6 +1339,7 @@ export class AsterlynApp {
     this.pushDiffEditor.setTheme(theme);
     this.editorSurface.setPhrases(this.localization.catalog.editorPhrases);
     this.pushDiffEditor.setPhrases(this.localization.catalog.editorPhrases);
+    this.terminalPanel.refreshAppearance();
   }
 
   private async activateConfiguredEditorFont(): Promise<void> {
@@ -1436,10 +1448,13 @@ export class AsterlynApp {
         this.shellController.setLayout({
           ...this.shellState.layout,
           leftTool: "files",
-          bottomTool: null,
+          bottomTool: this.shellState.layout.bottomTool === "branches"
+            ? null
+            : this.shellState.layout.bottomTool,
         });
       }
       this.remoteController.installSnapshot(snapshot);
+      this.terminalPanel.installWorkspace(opened.root);
       this.state.error = null;
       this.closeRepositoryDialog();
       this.renderWorkspace();
@@ -2939,7 +2954,10 @@ export class AsterlynApp {
   }
 
   private toggleTool(tool: ActivityTool): void {
-    if (!this.windowSession.workspace.state.root || (tool !== "files" && !this.windowSession.repository.state.snapshot)) return;
+    if (
+      !this.windowSession.workspace.state.root ||
+      (tool !== "files" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
+    ) return;
     this.shellController.reduceLayout(
       tool === "branches" || tool === "terminal"
         ? { type: "toggle-bottom-tool", tool }
@@ -2950,7 +2968,9 @@ export class AsterlynApp {
     if ((tool === "branches" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
       this.renderBottomTool();
       if (tool === "branches") this.loadVisibleCommitDetails();
-    } else if (tool !== "branches" && tool !== "terminal" && this.shellState.layout.leftTool === tool) {
+    } else if (tool === "terminal") {
+      this.terminalPanel.hide();
+    } else if (tool !== "branches" && this.shellState.layout.leftTool === tool) {
       this.renderLeftTool();
     }
   }
@@ -3383,12 +3403,14 @@ export class AsterlynApp {
 
   private renderBottomTool(): void {
     const snapshot = this.windowSession.repository.state.snapshot;
+    const workspaceRoot = this.windowSession.workspace.state.root;
     const tool = this.shellState.layout.bottomTool;
     if (!tool) return;
     const copy = this.localShellCopy();
     const title = this.query("#bottom-tool-title");
     const hide = this.query<HTMLButtonElement>("#hide-bottom-tool");
     const operations = this.query<HTMLButtonElement>("#git-operation-open");
+    const terminalActions = this.query("#terminal-header-actions");
     const git = this.query("#git-tool-grid");
     const terminal = this.query("#terminal-tool-host");
     const isTerminal = tool === "terminal";
@@ -3396,10 +3418,16 @@ export class AsterlynApp {
     hide.setAttribute("aria-label", isTerminal ? copy.hideTerminal : copy.hideGit);
     hide.title = isTerminal ? copy.hideTerminal : copy.hideGit;
     operations.classList.toggle("hidden", isTerminal);
+    terminalActions.classList.toggle("hidden", !isTerminal);
     git.classList.toggle("hidden", isTerminal);
     terminal.classList.toggle("hidden", !isTerminal);
     this.query("#bottom-tool").setAttribute("aria-label", isTerminal ? copy.terminal : copy.branchesAndLog);
-    if (isTerminal || !snapshot) return;
+    if (isTerminal) {
+      if (workspaceRoot) this.terminalPanel.activate(workspaceRoot);
+      return;
+    }
+    this.terminalPanel.hide();
+    if (!snapshot) return;
     this.renderBranchPane(snapshot);
     this.renderHistoryPane();
     this.renderGitDetailPane(snapshot);

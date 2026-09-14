@@ -142,6 +142,10 @@ export class TerminalController {
     queueMicrotask(() => this.flushResize());
   }
 
+  reportViewFailure(error: unknown): void {
+    if (!this.disposed) this.fail(error);
+  }
+
   async close(): Promise<void> {
     const sessionId = this.value.sessionId;
     const root = this.value.root;

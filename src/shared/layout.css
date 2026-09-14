@@ -210,6 +210,32 @@
   margin-left: auto;
 }
 
+.terminal-header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.terminal-header-actions + .git-operation-open.hidden + .bottom-tool-hide {
+  margin-left: 0;
+}
+
+.terminal-session-status {
+  overflow: hidden;
+  max-width: min(260px, 30vw);
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-session-status.error {
+  color: var(--danger-text);
+}
+
 .bottom-tool-hide {
   display: inline-grid;
   width: 25px;
@@ -241,21 +267,17 @@
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+  padding: 5px 0 0 6px;
   background: var(--surface-inset);
 }
 
-.terminal-empty-state {
-  display: grid;
+.terminal-tool-host .xterm {
   height: 100%;
-  place-content: center;
-  gap: 6px;
-  color: var(--text-soft);
-  text-align: center;
 }
 
-.terminal-empty-state span {
-  color: var(--text-faint);
-  font-size: 11px;
+.terminal-tool-host .xterm-viewport,
+.terminal-tool-host .xterm-screen {
+  border-radius: 0;
 }
 
 .git-tool-pane {

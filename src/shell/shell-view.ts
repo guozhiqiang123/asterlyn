@@ -64,7 +64,7 @@ export function renderShellView(model: ShellViewModel): string {
         </div>
         <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="${escapeHtml(copy.resizeGit)}"></div>
         <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}">
-          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
+          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
           <div class="git-tool-grid" id="git-tool-grid">
             <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body"></div></section>
             <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="${escapeHtml(copy.resizeBranchTree)}"></div>
@@ -72,7 +72,7 @@ export function renderShellView(model: ShellViewModel): string {
             <div class="workbench-splitter vertical" id="branch-details-splitter" aria-label="${escapeHtml(copy.resizeGitDetails)}"></div>
             <aside class="git-tool-pane git-details-pane" aria-label="${escapeHtml(copy.gitDetails)}"><div class="git-pane-body" id="git-detail-body">${inspectorPlaceholder(copy)}</div></aside>
           </div>
-          <div class="terminal-tool-host hidden" id="terminal-tool-host"><div class="terminal-empty-state"><strong>${escapeHtml(copy.terminalStarting)}</strong><span>${escapeHtml(copy.terminalStartingDetail)}</span></div></div>
+          <div class="terminal-tool-host hidden" id="terminal-tool-host" role="region" aria-label="${escapeHtml(copy.terminal)}"></div>
         </section>
       </section>
       <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">

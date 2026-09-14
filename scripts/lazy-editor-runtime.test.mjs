@@ -26,3 +26,20 @@ test("Markdown preview runtime is absent from the static application graph", asy
   assert.doesNotMatch(surface, /from ["']\.\.\/\.\.\/workbench\/markdown-preview/);
   assert.match(surface, /import\(["']\.\.\/\.\.\/workbench\/markdown-preview\.ts["']\)/);
 });
+
+test("xterm and its stylesheet load only after Terminal activation", async () => {
+  const app = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
+  const view = await readFile(
+    new URL("../src/features/terminal/terminal-view.ts", import.meta.url),
+    "utf8",
+  );
+  const runtime = await readFile(
+    new URL("../src/features/terminal/lazy-terminal-runtime.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(app, /from ["']@xterm\//);
+  assert.match(view, /import\(["']\.\/lazy-terminal-runtime\.ts["']\)/);
+  assert.match(runtime, /import\(["']@xterm\/xterm["']\)/);
+  assert.match(runtime, /@xterm\/xterm\/css\/xterm\.css/);
+});

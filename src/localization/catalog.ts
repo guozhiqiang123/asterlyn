@@ -77,8 +77,6 @@ export interface ShellCopy {
   recoverChanges: string;
   hideGit: string;
   hideTerminal: string;
-  terminalStarting: string;
-  terminalStartingDetail: string;
   commitLog: string;
   gitDetails: string;
   resizeBranchTree: string;
@@ -107,6 +105,20 @@ export interface ShellCopy {
   refreshingRepository: string;
   refreshingProjectFiles: string;
   projectOpenedInNewWindow: string;
+}
+
+export interface TerminalCopy {
+  notRunning: string;
+  starting: string;
+  running: string;
+  started(shell: string): string;
+  exited(code: number): string;
+  failed: string;
+  newSession: string;
+  clear: string;
+  cleared: string;
+  close: string;
+  closed: string;
 }
 
 export interface SettingsCopy {
@@ -899,6 +911,7 @@ export interface LocaleCatalog {
   readonly locale: EffectiveLocale;
   readonly common: CommonCopy;
   readonly shell: ShellCopy;
+  readonly terminal: TerminalCopy;
   readonly settings: SettingsCopy;
   readonly navigation: NavigationCopy;
   readonly projectFiles: ProjectFilesCopy;
