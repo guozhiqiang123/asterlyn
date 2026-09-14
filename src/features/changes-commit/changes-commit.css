@@ -54,6 +54,11 @@
   text-transform: none;
 }
 
+.change-group > .group-header .group-title {
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .change-group > .group-header .tree-chevron,
 .change-directory > summary .tree-chevron,
 .change-directory-row .tree-chevron {

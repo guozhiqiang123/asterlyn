@@ -213,7 +213,7 @@ function appendGroupRows(
     });
     if (!collapsedDirectory) for (const child of node.children) visit(child, depth + 1);
   };
-  for (const node of buildChangeFileTree(changes)) visit(node, 0);
+  for (const node of buildChangeFileTree(changes)) visit(node, 1);
 }
 
 function renderChangeRow(
@@ -245,7 +245,7 @@ function renderChangeRow(
   const kind = effectiveChangeKind(row.change);
   const primary = state.selectedChange?.path === row.change.path;
   const included = !state.excludedPaths.has(row.change.path);
-  return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} ${row.depth === null ? "" : `style="--tree-depth:${row.depth}"`} data-change-path="${escapeAttribute(row.change.path)}" aria-selected="${primary}" aria-label="${escapeAttribute(copy.selectedDiff(row.change.path, primary))}">
+  return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} style="--tree-depth:${row.depth ?? 1}" data-change-path="${escapeAttribute(row.change.path)}" aria-selected="${primary}" aria-label="${escapeAttribute(copy.selectedDiff(row.change.path, primary))}">
     <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(row.change.path)}" aria-label="${escapeAttribute(copy.includeInCommit(row.change.path))}" ${included ? "checked" : ""} />
     <span class="change-status status-${kind}" title="${escapeAttribute(copy.changeLabels[kind])}">${changeCode(kind)}</span>
     <span class="commit-file-glyph">${fileTypeIcon(row.change.path)}</span>

@@ -24,6 +24,11 @@ test("change rows preserve groups and expanded directory hierarchy", () => {
   assert.deepEqual(changeDisclosureKeys(current), [
     "group:changes", "directory:changes:src", "directory:changes:src/deep", "group:unversioned",
   ]);
+  assert.deepEqual(
+    rows.filter((row) => row.kind === "directory" || row.kind === "file").map((row) => row.depth),
+    [1, 2, 3, 2, 1],
+  );
+  assert.match(renderChangeNavigation(current, state()), /style="--tree-depth:1"[^>]*data-change-path="new.txt"/);
 });
 
 test("large change trees mount no more than the architecture budget", () => {
