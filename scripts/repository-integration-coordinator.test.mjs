@@ -20,7 +20,7 @@ test("repository integration applies only declared projection slices", () => {
   assert.equal(fixture.records.changes.length, 1);
   assert.deepEqual(fixture.records.files, [["src/app.ts"]]);
   assert.equal(fixture.records.documents, 1);
-  assert.equal(fixture.records.remote.length, 0);
+  assert.deepEqual(fixture.records.remote, [changed]);
   assert.equal(fixture.records.history.length, 0);
   assert.equal(fixture.records.branchClears, 0);
 
@@ -29,7 +29,7 @@ test("repository integration applies only declared projection slices", () => {
     "gitMutation",
   );
 
-  assert.equal(fixture.records.remote.length, 1);
+  assert.equal(fixture.records.remote.length, 2);
   assert.equal(fixture.records.history.length, 1);
   assert.equal(fixture.records.branchClears, 1);
   assert.equal(fixture.records.changes.length, 1);
@@ -84,7 +84,7 @@ test("conflict resolution reconciles working state without reading history or re
   assert.deepEqual(fixture.records.files, [["src/resolved.ts"]]);
   assert.deepEqual(fixture.records.operations, [accepted]);
   assert.equal(fixture.records.documents, 1);
-  assert.equal(fixture.records.remote.length, 0);
+  assert.deepEqual(fixture.records.remote, [accepted]);
   assert.equal(fixture.records.history.length, 0);
   fixture.dispose();
 });
@@ -177,6 +177,7 @@ test("session scans reuse the same integration route and stop after disposal", a
 
   await fixture.session.scanUntracked("/repo", fixture.session.generation, true, "watcher");
   assert.equal(fixture.records.renders, 1);
+  assert.equal(fixture.records.remote.at(-1).untrackedState, "complete");
   assert.deepEqual(fixture.records.status.at(-1), ["Ready", "normal"]);
 
   fixture.coordinator.dispose();
@@ -208,6 +209,7 @@ test("watch reconciliation completes a pending untracked scan", async () => {
     fixture.session.repository.state.snapshot.changes.map((item) => item.path),
     ["new.txt", "tracked.txt"],
   );
+  assert.equal(fixture.records.remote.at(-1).untrackedState, "complete");
   assert.deepEqual(fixture.records.files.at(-1), ["new.txt", "tracked.txt"]);
   fixture.dispose();
 });
@@ -228,6 +230,7 @@ test("failed untracked scans replace the pending presentation", async () => {
   await settle();
 
   assert.equal(fixture.session.repository.state.snapshot.untrackedState, "failed");
+  assert.equal(fixture.records.remote.at(-1).untrackedState, "failed");
   assert.equal(fixture.records.changes.at(-1).snapshot.untrackedState, "failed");
   assert.match(String(fixture.records.errors.at(-1)), /scan unavailable/);
   fixture.dispose();

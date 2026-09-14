@@ -86,7 +86,15 @@ export function renderRemoteToolbarView(
       tracksSelected,
       localization,
     );
-    const title = `${exactScope} ${action.policy.enabled ? action.policy.detail : copy.unavailable(action.policy.detail)}`;
+    const transientBlock = operation
+      ? copy.operationInProgress(copy.actionNames[operation.kind])
+      : loading
+        ? copy.workbenchBusy
+        : null;
+    const policyDetail = action.policy.enabled
+      ? action.policy.detail
+      : copy.unavailable(action.policy.detail);
+    const title = `${exactScope} ${transientBlock ? copy.unavailable(transientBlock) : policyDetail}`;
     const unavailable = Boolean(operation) || loading || !action.policy.enabled;
     button.disabled = false;
     button.setAttribute("aria-disabled", String(unavailable));

@@ -77,3 +77,58 @@ Manual acceptance should click Update after foreground Fetch has completed, conf
 opens, execute against an already-current branch, and verify `All files are up to date` / `所有文件均为最新`.
 A real behind/divergent remote and network failure remain useful checks of the existing strategy and
 error paths; this correction does not change Git semantics.
+
+## Follow-up: canonical Update availability
+
+The installed-package screenshot exposed a second state-coherence defect. The canonical window
+session still showed branch `main` and the status bar showed `Fetch in progress…`, but a rejected
+Update used the repository-absent fallback. Two related gaps caused this contradiction:
+
+- worktree and untracked-scan changes reached Changes, Files, and Git-operation projections but not
+  the remote-command controller, even though Update policy depends on those fields;
+- starting Fetch advanced the operation generation and cancelled an in-flight untracked scan, but a
+  successful Fetch that retained `untrackedState: pending` did not restart it.
+
+The remote projection now follows canonical `head`, `refs`, `workingTree`, and `operation` slices.
+Branch selection is cleared separately and only for `head`/`refs` changes. Accepted remote outcomes
+restart untracked discovery whenever the canonical result remains pending. Runtime operation and
+workbench-busy reasons are also reflected in the toolbar's accessible description. The final
+defensive fallback says that repository state changed before the action opened; it never claims the
+workspace is not a Git repository unless the canonical repository snapshot is absent.
+
+Focused browser acceptance interrupted the demo's initial untracked scan with Fetch. After Fetch,
+the scan resumed, status returned to `Ready`, and Update reported the actual local-change blocker.
+After committing those changes, Update became available and opened its confirmation dialog.
+
+### Follow-up validation
+
+| Check | Absolute result | Conclusion |
+| --- | ---: | --- |
+| Focused policy, integration, view, and lifecycle tests | 35 passed | improved |
+| Complete script suite | 318 passed | no regression observed |
+| `asterlyn-git` Rust suite | 69 passed | no regression observed |
+| Frontend type check | passed | no regression observed |
+| Production frontend build | passed | no regression observed |
+| Browser interrupted-scan scenario | resumed to `Ready`; truthful blocker; Update dialog opened after cleanup | improved |
+| Native Linux smoke lifetime | 6,000 ms | no immediate startup regression observed |
+
+The package comparison uses the immediately preceding action-feedback build.
+
+| Output | Before | After | Normalized change | Conclusion |
+| --- | ---: | ---: | ---: | --- |
+| Main JavaScript | 475,544 B | 476,033 B | +0.10% | no material change |
+| Main JavaScript, gzip | 109,168 B | 109,268 B | +0.09% | no material change |
+| Main CSS | 118,940 B | 118,940 B | 0.00% | no material change |
+| Main CSS, gzip | 25,667 B | 25,667 B | 0.00% | no material change |
+
+No dependency, polling producer, or extra steady-state read was added. A remote transition may now
+restart one cancelled, already-required untracked scan when the accepted snapshot remains pending;
+this can repeat partial scan work once, but prevents a permanently blocked Update and remains under
+the existing bounded, cancellable scanner. Responsiveness and state correctness are **improved**;
+native memory remains **inconclusive** because no comparable heap sample was collected.
+
+The replacement Linux package completed successfully:
+
+- Debian size: 7,540,108 bytes
+- SHA-256: `e0505d9c933a350198f441a300ae099dbe4c6a3ec46cff4c0a77109de0c4c630`
+- Release binary size: 21,756,528 bytes

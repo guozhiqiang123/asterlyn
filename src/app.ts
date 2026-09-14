@@ -135,6 +135,7 @@ import type {
 import {
   RepositoryIntegrationCoordinator,
 } from "./application/repository-integration-coordinator";
+import { remoteOutcomeNeedsUntrackedScan } from "./application/repository-mutation";
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import { createAppState, type AppState } from "./application/app-state";
@@ -2289,9 +2290,9 @@ export class AsterlynApp {
     }
     if (!this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor)) {
       const reason = this.remoteActionBlockedReason(kind) ??
-        (kind === "pull"
-          ? this.localization.catalog.remote.updateUnavailable
-          : this.localization.catalog.remote.pushUnavailable);
+        this.localization.catalog.remote.actionStateChanged(
+          this.localization.catalog.remote.actionNames[kind],
+        );
       this.showWarning(reason);
     }
   }
@@ -2308,7 +2309,7 @@ export class AsterlynApp {
       );
     }
     if (this.state.loading) {
-      return copy.unavailable(copy.operationInProgress(copy.actionNames[kind]));
+      return copy.unavailable(copy.workbenchBusy);
     }
     const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
     if (!policy[kind].enabled) return copy.unavailable(policy[kind].detail);
@@ -2771,7 +2772,9 @@ export class AsterlynApp {
           this.renderLeftTool();
           this.renderEditor();
         }
-        if (result.outcome.invalidatedSlices.includes("workingTree")) {
+        // Any transition cancels an older untracked scan. A Fetch that preserves a pending
+        // snapshot must restart it or Update would remain blocked indefinitely.
+        if (remoteOutcomeNeedsUntrackedScan(result.outcome)) {
           pendingRoot = next.root;
         }
         succeeded = true;

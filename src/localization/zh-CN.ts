@@ -324,6 +324,8 @@ export const ZH_CN = {
     fetchUnavailable: "此项目不是活动 Git 仓库，无法获取。获取会刷新所选远程仓库的标准分支跟踪引用，且不会更改工作文件。",
     updateUnavailable: "此项目不是活动 Git 仓库，无法更新。更新只会影响当前检出的分支，并要求确认快进。",
     pushUnavailable: "此项目不是活动 Git 仓库，无法推送。推送会先打开当前分支审查，然后才写入远程仓库。",
+    actionStateChanged: (action) => `仓库状态在打开${action}前发生了变化。请检查当前状态后重试。`,
+    workbenchBusy: "请等待当前工作台任务完成。",
     fetchDescription: (remote, behind) => `从 ${remote} 获取。刷新此远程仓库的所有标准分支跟踪引用，不更改当前检出分支或工作文件。徽标显示上次获取后已知的 ${behind} 个传入提交。`,
     updateDescription: (source, remote, destination) => `从 ${remote}:${destination} 更新 ${source}。将打开快进、合并或变基确认。合并和变基会先获取，再要求第二次准确对象审查；冲突会暂停，等待明确解决、继续、跳过或中止。`,
     pushDescription: (source, remote, destination, ahead) => `审查从 ${source} 到 ${remote}:${destination} 的推送。徽标显示上次获取后已知的 ${ahead} 个传出提交。审查可明确纳入标签或选择带准确租约的强制推送，并且不会自动重试。`,

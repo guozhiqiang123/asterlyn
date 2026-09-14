@@ -545,6 +545,8 @@ export interface RemoteCopy {
   fetchUnavailable: string;
   updateUnavailable: string;
   pushUnavailable: string;
+  actionStateChanged(action: string): string;
+  workbenchBusy: string;
   fetchDescription(remote: string, behind: number): string;
   updateDescription(source: string, remote: string, destination: string): string;
   pushDescription(source: string, remote: string, destination: string, ahead: number): string;

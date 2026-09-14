@@ -160,6 +160,7 @@ export class RepositoryIntegrationCoordinator {
     );
     if (!snapshot) throw new Error("Working-tree result belongs to a stale repository session.");
     this.session.repository.consumeInvalidation();
+    if (plan.updateRemote) this.targets.remote.installSnapshot(snapshot);
     this.targets.changes.installSnapshot(snapshot, options);
     this.targets.files.updateChanges(snapshot.changes);
     if (plan.reconcileOpenDocuments) this.actions.reconcileWorkingDocument(snapshot);
@@ -180,6 +181,7 @@ export class RepositoryIntegrationCoordinator {
     );
     if (!snapshot) throw new Error("Git-operation result belongs to a stale repository session.");
     this.session.repository.consumeInvalidation();
+    if (plan.updateRemote) this.targets.remote.installSnapshot(snapshot);
     this.targets.changes.installSnapshot(snapshot, options);
     this.targets.files.updateChanges(snapshot.changes);
     this.targets.operations.installSnapshot(snapshot);
@@ -275,6 +277,7 @@ export class RepositoryIntegrationCoordinator {
       "workspaceReplacement",
       ["workspaceCatalog", "openDocuments", "workingTree"],
     );
+    this.targets.remote.installSnapshot(snapshot);
     if (snapshot) {
       this.targets.changes.installSnapshot(snapshot);
       this.targets.files.updateChanges(snapshot.changes);
@@ -301,8 +304,8 @@ export class RepositoryIntegrationCoordinator {
   ): void {
     if (plan.updateRemote) {
       this.targets.remote.installSnapshot(snapshot);
-      this.actions.clearBranchSelection();
     }
+    if (plan.clearBranchSelection) this.actions.clearBranchSelection();
     if (plan.updateWorkingTree) {
       this.targets.changes.installSnapshot(snapshot, options);
       this.targets.files.updateChanges(snapshot.changes);
@@ -337,6 +340,7 @@ export class RepositoryIntegrationCoordinator {
       change.reason === "untracked-scan-complete"
     ) {
       if (!change.snapshot) return;
+      this.targets.remote.installSnapshot(change.snapshot);
       this.targets.changes.installSnapshot(change.snapshot);
       this.targets.files.updateChanges(change.snapshot.changes);
       this.targets.operations.installSnapshot(change.snapshot);
@@ -359,6 +363,7 @@ export class RepositoryIntegrationCoordinator {
     }
     if (change.reason === "untracked-scan-error") {
       if (change.snapshot) {
+        this.targets.remote.installSnapshot(change.snapshot);
         this.targets.changes.installSnapshot(change.snapshot);
         this.targets.files.updateChanges(change.snapshot.changes);
         this.targets.operations.installSnapshot(change.snapshot);

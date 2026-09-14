@@ -109,6 +109,12 @@ one terminal success, no-op, cancellation, or failure result. A status-bar chang
 sufficient when the command otherwise leaves the current surface unchanged. Controls rendered
 inside replaceable feature regions use delegation from a stable owner or explicitly rebind through a
 disposable lifecycle; a visually available replacement node cannot silently lose its command route.
+The remote-command controller is a projection of the canonical repository session, not an
+independent source of Git truth. It receives every `head`, `refs`, `workingTree`, and `operation`
+change because action policy depends on branch/upstream identity, worktree cleanliness, untracked
+scan completion, and paused operations. Updating this policy projection does not clear history
+selection unless `head` or `refs` actually changed. A remote transition that cancels an incomplete
+untracked scan must restart that scan when its accepted outcome still reports `pending`.
 
 Update first presents the exact local/upstream route and offers Fast-forward, Merge, or Rebase only when the current relationship permits that strategy. A relationship already known to be divergent defaults the review to Merge, keeps Rebase explicit, and disables Fast-forward. Fast-forward performs its established bounded fetch and exact cleanliness/ref revalidation. If that fetch reveals previously unknown divergence, the failed fast-forward refreshes canonical state, leaves the Update review open, and changes its default to Merge so the user can make the now-required strategy choice. Merge and Rebase fetch first, then open a separate plan review bound to the newly observed upstream object and current clean `HEAD`; the second confirmation is mandatory because the network read may have changed the reviewed target.
 

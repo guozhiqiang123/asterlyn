@@ -35,6 +35,18 @@ test("ahead-only Update can still perform a fast-forward safety check", () => {
   controller.dispose();
 });
 
+test("same-root worktree completion makes Update available to the remote controller", () => {
+  const controller = new RemotePushController(createGateway());
+  const pending = snapshot({ untrackedState: "pending" });
+  controller.installSnapshot(pending);
+
+  assert.equal(controller.openDialog("update"), false);
+
+  controller.installSnapshot({ ...pending, untrackedState: "complete" });
+  assert.equal(controller.openDialog("update"), true);
+  controller.dispose();
+});
+
 test("latest remote preview owns completion after a remote switch", async () => {
   const origin = deferred();
   const team = deferred();

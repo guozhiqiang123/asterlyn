@@ -32,6 +32,11 @@ The feature controller owns whether an action was accepted and its typed progres
 result. The composition/presentation layer chooses the appropriate dialog, inline state, status, or
 notification; it must not infer Git success from a click or elapsed time.
 
+A rejected action reports the reason from the current canonical state. A generic fallback may say
+that state changed before the action opened, but it must not invent a specific cause such as “not a
+Git repository.” That cause is valid only when the current repository session is actually absent.
+Concurrent work such as Fetch, scanning, or another Git operation is named directly.
+
 Controls inside a replaceable render region must use event delegation from a stable owner or bind
 and dispose listeners as part of that region's explicit mount lifecycle. Replacing a button cannot
 leave a visually enabled control without its command route. A dialog-opening request that loses a

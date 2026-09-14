@@ -463,6 +463,8 @@ export const EN_US: LocaleCatalog = {
     fetchUnavailable: "Fetch is unavailable because this project is not an active Git repository. Fetch would refresh the selected remote's standard branch-tracking refs without changing working files.",
     updateUnavailable: "Update is unavailable because this project is not an active Git repository. Update would affect only the checked-out branch and would require a confirmed fast-forward.",
     pushUnavailable: "Push is unavailable because this project is not an active Git repository. Push would open a current-branch review before any remote write.",
+    actionStateChanged: (action) => `Repository state changed before ${action} could open. Review the current status and try again.`,
+    workbenchBusy: "Wait for the current workbench task to finish.",
     fetchDescription: (remote, behind) => `Fetch from ${remote}. Refresh all standard branch-tracking refs for this remote without changing the checked-out branch or working files. The badge shows ${behind} incoming ${behind === 1 ? "commit" : "commits"} known after the last Fetch.`,
     updateDescription: (source, remote, destination) => `Update ${source} from ${remote}:${destination}. Opens a confirmation for Fast-forward, Merge, or Rebase. Merge and Rebase fetch first, then require a second exact-object review; conflicts pause for explicit resolution, Continue, Skip, or Abort.`,
     pushDescription: (source, remote, destination, ahead) => `Review Push from ${source} to ${remote}:${destination}. The badge shows ${ahead} outgoing ${ahead === 1 ? "commit" : "commits"} known from the last Fetch. Review can explicitly include tags or choose Force Push with an exact lease; it never retries automatically.`,

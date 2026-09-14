@@ -75,6 +75,13 @@ test("blocked remote actions remain interactive so their exact reason can be ann
   assert.equal(blocked.elements.get("#remote-update").disabled, false);
   assert.equal(blocked.elements.get("#remote-update").getAttribute("aria-disabled"), "true");
   assert.match(blocked.elements.get("#remote-update").title, /local changes first/);
+
+  state.operation = { id: "fetch-1", root: repository.root, kind: "fetch", cancelling: false };
+  const fetching = remoteToolbarRoot();
+  renderRemoteToolbarView(fetching.root, repository, state, false);
+  assert.equal(fetching.elements.get("#remote-update").getAttribute("aria-disabled"), "true");
+  assert.match(fetching.elements.get("#remote-update").title, /Fetch in progress/);
+  assert.doesNotMatch(fetching.elements.get("#remote-update").title, /not an active Git repository/);
 });
 
 test("settings view keeps one selected section and bounded preference controls", () => {
