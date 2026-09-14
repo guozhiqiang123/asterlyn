@@ -52,6 +52,12 @@ remains user-draggable and backward-compatible with existing saved orders.
   exact emitted chunk sizes, package size, a process-tree comparison before and after first Terminal
   activation, and known Windows/macOS interaction gaps.
 
+T1 passed local acceptance on 2026-09-14. The release build keeps xterm and its stylesheet outside
+the startup graph, the native PTY test exercises input/output/resize/close, and an isolated release
+process probe confirms one shell process is added on first activation and removed with its window.
+See [`Terminal T1 acceptance evidence`](../benchmarks/2026-09-14-terminal-t1.md) for the absolute
+results, limitations, and deferred installed-package checks.
+
 ## Deferred phases
 
 ### T2 — Daily terminal controls

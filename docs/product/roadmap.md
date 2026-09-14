@@ -6,15 +6,17 @@ Seven stages are appropriate for a 3–5 year effort, but only if they are treat
 
 The roadmap therefore has seven product stages and eight continuous engineering tracks. Dates are planning ranges, not promises. Evidence at each gate decides whether to expand, revise, or stop.
 
-## Current next slice — supervised integrated terminal
+## Current delivered slice — supervised integrated terminal
 
-The current user-prioritized Stage 3 slice adds one explicitly opened terminal per project window.
+The user-prioritized Stage 3 T1 slice adds one explicitly opened terminal per project window.
 Its activity entry opens the resizable bottom tool region, the frontend emulator loads on demand,
 and a product-neutral Rust PTY capability owns the shell process behind a versioned Tauri boundary.
 The slice is intentionally limited to direct user input, bounded scrollback, explicit lifecycle,
 and measurable idle/active cost; terminal tabs, tasks, repository-defined commands, and remote
 execution remain later phases. The detailed sequence and acceptance gates are in the
-[`Integrated terminal interaction plan`](../design/terminal-interactions.md).
+[`Integrated terminal interaction plan`](../design/terminal-interactions.md). T1 is locally accepted;
+the exact validation, package, and resource results are recorded in
+[`Terminal T1 acceptance evidence`](../benchmarks/2026-09-14-terminal-t1.md).
 
 ## Stage 1 — Git GUI First and enduring foundation (months 0–4)
 
