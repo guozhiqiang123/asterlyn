@@ -16,13 +16,14 @@ It is not the final product identity and does not authorize shortcuts that would
 - Show recent commits and local/remote branches.
 - Check whole files, folders, or groups to define an explicit commit set; row selection remains independent and opens the complete local Diff.
 - Create a commit from an explicit message and the checked worktree files while preserving unrelated staged index entries.
-- Revert an explicitly selected supported tracked path to `HEAD` only after confirmation.
+- Optionally continue a verified commit into the separate full Push review without performing an automatic network write.
+- Revert an explicitly selected supported tracked path or staged addition to `HEAD` only after confirmation and a durable recovery checkpoint.
 - Refresh without blocking the UI and reject stale responses.
 - Browser demo mode for presentation work when the native shell cannot be built.
 
 ## Explicitly deferred
 
-- Deleting untracked files, general reset/clean, raw force push, interactive rebase, merge conflict editing, submodule mutation, account-password authentication, amend, commit-and-push composition, commit signing UI, and worktree management.
+- Deleting untracked files, general reset/clean, raw force push, interactive rebase, submodule mutation, account-password authentication, amend, automatic commit-and-push without separate review, commit signing UI, and worktree management.
 - File-system watchers; M1 uses explicit/event-triggered refresh.
 - Graph lane rendering and provider-specific pull-request workflows.
 - Binary-safe path transport for non-UTF-8 filenames.
@@ -56,7 +57,7 @@ It is not the final product identity and does not authorize shortcuts that would
 
 ## Current slice
 
-The current M1 interaction covers repository open/refresh, status/history/branch presentation, complete local Diff, checked-file commit, and narrowly gated tracked-file Revert. Legacy stage/unstage commands remain internal compatibility operations rather than the primary commit interface. Advanced Stage 2 operations remain outside this slice.
+The current M1 interaction covers repository open/refresh, status/history/branch presentation, complete local Diff, checked-file Commit or reviewed Commit-and-Push composition, and narrowly gated tracked/staged-addition Revert. Legacy stage/unstage commands remain internal compatibility operations rather than the primary commit interface. Advanced operation implementation exists behind later reviewed-operation boundaries and is not implied by this M1 acceptance definition.
 
 The first accepted evidence set is recorded in [`../benchmarks/2026-09-08-m1-baseline.md`](../benchmarks/2026-09-08-m1-baseline.md). Its conclusion is **mixed**: the vertical slice and packaging are viable, but large-repository untracked discovery exceeds the refresh budget and the memory margin needs repeated measurement before M1 can close.
 

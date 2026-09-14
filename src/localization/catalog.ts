@@ -438,6 +438,7 @@ export interface ChangesCopy {
   createCommit: string;
   commitMessage: string;
   commitButton(count: number): string;
+  commitAndPushButton: string;
   resolveBeforeCommit: string;
   excludeSubmodules: string;
   selectFileToCommit: string;
@@ -452,6 +453,8 @@ export interface ChangesCopy {
   commitConcurrent: string;
   commitRefreshing: string;
   commitCreated: string;
+  commitAndPushUnavailable(reason: string): string;
+  commitCreatedPushUnavailable(reason: string): string;
   patchTruncated: string;
   unexpectedError: string;
   fileSavedRefreshFailed: string;

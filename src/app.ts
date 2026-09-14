@@ -5768,7 +5768,7 @@ export class AsterlynApp {
           <textarea id="commit-message" placeholder="${escapeAttribute(copy.commitMessage)}">${escapeHtml(this.changesState.commitMessage)}</textarea>
           <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.changesState.commitMessage.trim().length}/72</span></div>
           ${blockedMessage ? `<div class="commit-blocker" role="status">${escapeHtml(blockedMessage)}</div>` : ""}
-          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitButton(included.length))}</button></div>
+          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitButton(included.length))}</button><button class="secondary-button commit-button" id="commit-and-push-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitAndPushButton)}</button></div>
         </div>
       </section>`;
   }
@@ -5780,10 +5780,12 @@ export class AsterlynApp {
       included.some((change) => change.submodule);
     const textarea = this.root.querySelector<HTMLTextAreaElement>("#commit-message");
     const button = this.root.querySelector<HTMLButtonElement>("#commit-button");
+    const commitAndPushButton = this.root.querySelector<HTMLButtonElement>("#commit-and-push-button");
     textarea?.addEventListener("input", () => {
       this.changesController.setCommitMessage(textarea.value);
-      if (button) {
-        button.disabled = textarea.value.trim().length === 0 || included.length === 0 || blocked;
+      const disabled = textarea.value.trim().length === 0 || included.length === 0 || blocked;
+      for (const action of [button, commitAndPushButton]) {
+        if (action) action.disabled = disabled;
       }
       const counter = textarea.parentElement?.querySelector(
         ".commit-hint span:last-child",
@@ -5793,10 +5795,11 @@ export class AsterlynApp {
     textarea?.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
-        if (!button?.disabled) void this.commit();
+        if (!button?.disabled) void this.commit(false);
       }
     });
-    button?.addEventListener("click", () => void this.commit());
+    button?.addEventListener("click", () => void this.commit(false));
+    commitAndPushButton?.addEventListener("click", () => void this.commit(true));
   }
 
   private refreshCommitComposer(): void {
@@ -6124,7 +6127,7 @@ export class AsterlynApp {
     }
   }
 
-  private async commit(): Promise<void> {
+  private async commit(pushAfter: boolean): Promise<void> {
     this.captureMountedTextEditor();
     if (dirtyTextTabs(this.editorState.session).length > 0) {
       if (await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.createCommit)) {
@@ -6135,10 +6138,18 @@ export class AsterlynApp {
     }
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || !this.changesController.canCommit() || this.state.loading) return;
+    if (pushAfter) {
+      const blocked = this.remoteActionBlockedReason("push");
+      if (blocked) {
+        this.showWarning(this.localization.catalog.changes.commitAndPushUnavailable(blocked));
+        return;
+      }
+    }
     const generation = this.windowSession.beginTransition();
     let pendingRoot: string | null = null;
     let refreshAfter = false;
     let commitFailure: unknown = null;
+    let openPushReview = false;
     this.setLoading(true, this.localization.catalog.changes.creatingCommit);
     try {
       const outcome = await this.changesController.commit();
@@ -6158,6 +6169,7 @@ export class AsterlynApp {
           this.renderWorkspace();
           this.loadVisibleCommitDetails();
           pendingRoot = next.root;
+          openPushReview = pushAfter && !result.verificationWarning && !result.refreshError;
         } else {
           refreshAfter = true;
         }
@@ -6171,13 +6183,34 @@ export class AsterlynApp {
         );
       }
     } finally {
-      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
+      if (generation === this.windowSession.generation) {
+        this.setLoading(false, this.localization.catalog.common.ready);
+        this.refreshCommitComposer();
+      }
     }
     if (refreshAfter && generation === this.windowSession.generation) {
       await this.refresh();
       if (commitFailure) this.showError(commitFailure);
     } else if (pendingRoot && generation === this.windowSession.generation) {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "gitMutation");
+    }
+    if (openPushReview && generation === this.windowSession.generation) {
+      const blocked = this.remoteActionBlockedReason("push");
+      if (blocked) {
+        this.showWarning(this.localization.catalog.changes.commitCreatedPushUnavailable(blocked));
+        return;
+      }
+      const anchor = this.root.querySelector<HTMLElement>("#commit-and-push-button")
+        ?? this.root.querySelector<HTMLElement>("#remote-push");
+      if (!anchor || !this.openRemoteDialog("push", anchor)) {
+        this.showWarning(
+          this.localization.catalog.changes.commitCreatedPushUnavailable(
+            this.localization.catalog.remote.actionStateChanged(
+              this.localization.catalog.remote.actionNames.push,
+            ),
+          ),
+        );
+      }
     }
   }
 
