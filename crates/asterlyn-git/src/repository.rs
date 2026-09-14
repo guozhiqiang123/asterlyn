@@ -1803,14 +1803,14 @@ impl GitRepository {
             .filter(|change| {
                 change.conflicted
                     || change.worktree_status == ChangeKind::Untracked
-                    || matches!(change.index_status, ChangeKind::Added | ChangeKind::Copied)
+                    || change.index_status == ChangeKind::Copied
             })
             .map(|change| change.path.clone())
             .collect::<Vec<_>>();
         if !unsupported.is_empty() {
             return Err(GitError::UnsafeOperation {
                 operation: "revert selected changes".to_string(),
-                message: "this version only reverts ordinary tracked files; added, untracked, conflicted, and submodule paths are left untouched".to_string(),
+                message: "revert supports tracked files and staged additions; untracked, copied, conflicted, and submodule paths are left untouched".to_string(),
                 blockers: unsupported,
             });
         }
@@ -5967,7 +5967,7 @@ mod tests {
     }
 
     #[test]
-    fn revert_selected_restores_tracked_paths_and_rejects_destructive_classes() {
+    fn revert_selected_restores_tracked_paths_and_staged_additions() {
         let directory = fixture();
         commit_file(directory.path(), "tracked.txt", "before\n", "Base");
         fs::write(directory.path().join("tracked.txt"), "after\n").expect("tracked edit");
@@ -5985,6 +5985,29 @@ mod tests {
         assert_eq!(
             fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
             "before\n"
+        );
+
+        fs::write(directory.path().join("staged-new.txt"), "staged new\n")
+            .expect("staged new file");
+        git(directory.path(), &["add", "staged-new.txt"]);
+        let staged_new = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "staged-new.txt")
+            .expect("staged addition");
+        assert_eq!(staged_new.index_status, ChangeKind::Added);
+        repository
+            .revert_selected(&[staged_new])
+            .expect("staged addition revert");
+        assert!(!directory.path().join("staged-new.txt").exists());
+        assert!(
+            repository
+                .snapshot(50)
+                .expect("clean snapshot")
+                .changes
+                .is_empty()
         );
 
         fs::write(directory.path().join("new.txt"), "new\n").expect("untracked file");

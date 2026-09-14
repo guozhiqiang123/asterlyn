@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CHANGE_TREE_MOUNT_LIMIT,
+  changeSupportsRestore,
   changeDisclosureKeys,
   changeTreeRenderWindow,
   changeViewRows,
@@ -45,6 +46,13 @@ test("large change trees mount no more than the architecture budget", () => {
   assert.match(html, /change-virtual-spacer/);
 });
 
+test("Revert supports staged additions but rejects untracked and copied paths", () => {
+  const current = snapshot([]);
+  assert.equal(changeSupportsRestore(current, change("staged-new.txt", "unmodified", "added")), true);
+  assert.equal(changeSupportsRestore(current, change("untracked.txt", "untracked")), false);
+  assert.equal(changeSupportsRestore(current, change("copied.txt", "unmodified", "copied")), false);
+});
+
 function state() {
   return {
     selectedChange: null,
@@ -61,11 +69,11 @@ function state() {
   };
 }
 
-function change(path, worktreeStatus = "modified") {
+function change(path, worktreeStatus = "modified", indexStatus = "unmodified") {
   return {
     path,
     originalPath: null,
-    indexStatus: "unmodified",
+    indexStatus,
     worktreeStatus,
     conflicted: false,
     submodule: false,

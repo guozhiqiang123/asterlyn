@@ -312,7 +312,7 @@ export const EN_US: LocaleCatalog = {
   },
   changes: {
     groups: { changes: "Changes", unversioned: "Unversioned Files" }, commitFileActions: "Commit file actions",
-    refreshChanges: "Refresh changes", selectTrackedToRestore: "Select an ordinary tracked file to restore",
+    refreshChanges: "Refresh changes", selectTrackedToRestore: "Select a tracked or staged new file to restore",
     restoreToHead: "Restore uncommitted changes to HEAD", restoreChanges: "Restore uncommitted changes",
     openSelectedDiff: "Open selected file Diff", flatList: "flat list", directoryTree: "directory tree", showAs: (view) => `Show changes as ${view}`,
     expandAll: "Expand all folders", collapseAll: "Collapse all folders", checkingUntracked: "Checking for untracked files",
@@ -331,7 +331,8 @@ export const EN_US: LocaleCatalog = {
     commitMessage: "Commit Message", commitButton: (count) => `Commit ${count || ""}`.trimEnd(), resolveBeforeCommit: "Resolve conflicts before committing.",
     excludeSubmodules: "Exclude submodule changes; commit them from their own Git root.", selectFileToCommit: "Select at least one file to commit.",
     saveBeforeRevert: "Save or undo the unsaved editor changes before reverting this file",
-    restoreConfirm: (label) => `Restore 1 tracked file to HEAD?\n\n${label}\n\nThis replaces the reviewed staged and working-tree content. A recovery copy will be saved; Undo is available from Git → Recover local changes.`,
+    restoreConfirm: (label) => `Restore 1 tracked file to HEAD?\n\n${label}\n\nThis replaces the reviewed staged and working-tree content. A recovery copy will be saved for Undo.`,
+    restoreAddedConfirm: (label) => `Remove 1 staged new file from the index and working tree?\n\n${label}\n\nThe file does not exist in HEAD, so Revert removes it. A recovery copy will be saved and can restore its exact content and staged state.`,
     saveBeforeRestore: "Save or undo unsaved editor changes before restoring these files", reverting: "Reverting selected file…",
     reverted: "Selected file reverted", filesSavedReview: "Files saved; review the refreshed selection before committing",
     creatingCommit: "Creating commit…", commitConcurrent: "Commit finished, but Git changed concurrently; inspect refreshed history before committing again",

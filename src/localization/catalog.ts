@@ -443,6 +443,7 @@ export interface ChangesCopy {
   selectFileToCommit: string;
   saveBeforeRevert: string;
   restoreConfirm(label: string): string;
+  restoreAddedConfirm(label: string): string;
   saveBeforeRestore: string;
   reverting: string;
   reverted: string;

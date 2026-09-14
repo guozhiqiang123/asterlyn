@@ -61,6 +61,7 @@ import {
 } from "./features/changes-commit/changes-commit-controller";
 import {
   CHANGE_TREE_ROW_HEIGHT,
+  changeSupportsRestore,
   changeDisclosureKeys,
   changeTreeRenderWindow,
   changeViewRows,
@@ -4084,14 +4085,10 @@ export class AsterlynApp {
     const revert = this.root.querySelector<HTMLButtonElement>("[data-change-action='revert']");
     if (diff) diff.disabled = false;
     if (revert) {
-      const unsupported =
-        !selected ||
-        this.windowSession.repository.state.snapshot.branch.unborn ||
-        selected.conflicted ||
-        selected.submodule ||
-        selected.worktreeStatus === "untracked" ||
-        selected.indexStatus === "added" ||
-        selected.indexStatus === "copied";
+      const unsupported = !changeSupportsRestore(
+        this.windowSession.repository.state.snapshot,
+        selected,
+      );
       revert.disabled = unsupported;
       revert.title = unsupported
         ? this.localization.catalog.changes.selectTrackedToRestore
@@ -5705,7 +5702,9 @@ export class AsterlynApp {
     if (!plan) return;
     if (
       !window.confirm(
-        this.localization.catalog.changes.restoreConfirm(label),
+        selected.indexStatus === "added"
+          ? this.localization.catalog.changes.restoreAddedConfirm(label)
+          : this.localization.catalog.changes.restoreConfirm(label),
       )
     ) {
       return;

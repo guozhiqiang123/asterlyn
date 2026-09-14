@@ -121,14 +121,7 @@ function renderChangeToolbar(
   const selected = state.selectedChange
     ? snapshot.changes.find((change) => change.path === state.selectedChange?.path) ?? null
     : null;
-  const revertUnsupported =
-    !selected ||
-    snapshot.branch.unborn ||
-    selected.conflicted ||
-    selected.submodule ||
-    selected.worktreeStatus === "untracked" ||
-    selected.indexStatus === "added" ||
-    selected.indexStatus === "copied";
+  const revertUnsupported = !changeSupportsRestore(snapshot, selected);
   const nextView = state.fileView === "tree" ? copy.flatList : copy.directoryTree;
   return `<div class="change-toolbar" role="toolbar" aria-label="${escapeAttribute(copy.commitFileActions)}">
     <button class="compact-icon-button" type="button" data-change-action="refresh" title="${escapeAttribute(copy.refreshChanges)}" aria-label="${escapeAttribute(copy.refreshChanges)}">${icon("refresh", 15)}</button>
@@ -139,6 +132,20 @@ function renderChangeToolbar(
     <button class="compact-icon-button" type="button" data-change-action="expand" title="${escapeAttribute(copy.expandAll)}" aria-label="${escapeAttribute(copy.expandAll)}" ${state.fileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
     <button class="compact-icon-button" type="button" data-change-action="collapse" title="${escapeAttribute(copy.collapseAll)}" aria-label="${escapeAttribute(copy.collapseAll)}" ${state.fileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
   </div>`;
+}
+
+export function changeSupportsRestore(
+  snapshot: RepositorySnapshot,
+  selected: FileChange | null,
+): boolean {
+  return Boolean(
+    selected &&
+    !snapshot.branch.unborn &&
+    !selected.conflicted &&
+    !selected.submodule &&
+    selected.worktreeStatus !== "untracked" &&
+    selected.indexStatus !== "copied",
+  );
 }
 
 function renderChangeResults(

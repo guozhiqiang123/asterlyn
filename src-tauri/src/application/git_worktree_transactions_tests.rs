@@ -80,6 +80,37 @@ fn restore_undo_after_restart_recovers_distinct_index_and_exact_worktree_bytes()
 }
 
 #[test]
+fn staged_addition_revert_is_restart_recoverable_with_exact_index_and_content() {
+    let (directory, recovery, repository) = fixture();
+    let root = directory.path();
+    fs::write(root.join("staged-new.txt"), b"staged addition\r\n").unwrap();
+    git(root, &["add", "staged-new.txt"]);
+    let index_before = fs::read(repository.git_directory().join("index")).unwrap();
+    let selected = repository.tracked_changes().unwrap().changes;
+    assert_eq!(selected.len(), 1);
+    let plan = prepare_restore(&repository, &selected).unwrap();
+
+    restore_changes(&repository, recovery.path(), &plan).unwrap();
+    assert!(!root.join("staged-new.txt").exists());
+    assert!(repository.tracked_changes().unwrap().changes.is_empty());
+
+    let reopened = GitRepository::open(root).unwrap();
+    let records = list_recoveries(&reopened, recovery.path()).unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].can_undo);
+    undo_recovery(&reopened, recovery.path(), &records[0].id).unwrap();
+    assert_eq!(
+        fs::read(root.join("staged-new.txt")).unwrap(),
+        b"staged addition\r\n"
+    );
+    assert_eq!(
+        fs::read(repository.git_directory().join("index")).unwrap(),
+        index_before
+    );
+    assert_eq!(git(root, &["show", ":staged-new.txt"]), "staged addition");
+}
+
+#[test]
 fn undo_never_overwrites_an_external_save_or_a_later_index_change() {
     let (directory, recovery, repository) = fixture();
     let root = directory.path();

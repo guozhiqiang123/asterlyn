@@ -185,7 +185,7 @@ export const ZH_CN = {
   },
   changes: {
     groups: { changes: "更改", unversioned: "未纳入版本控制的文件" }, commitFileActions: "提交文件操作",
-    refreshChanges: "刷新更改", selectTrackedToRestore: "请选择普通的已跟踪文件进行恢复", restoreToHead: "将未提交的更改恢复到 HEAD",
+    refreshChanges: "刷新更改", selectTrackedToRestore: "请选择已跟踪文件或已暂存的新增文件进行恢复", restoreToHead: "将未提交的更改恢复到 HEAD",
     restoreChanges: "恢复未提交的更改", openSelectedDiff: "打开所选文件的差异", flatList: "平铺列表", directoryTree: "目录树",
     showAs: (view) => `以${view}显示更改`, expandAll: "展开所有文件夹", collapseAll: "折叠所有文件夹",
     checkingUntracked: "正在检查未跟踪文件", trackedReady: "已跟踪的更改已就绪。", untrackedFailed: "未跟踪文件扫描失败",
@@ -201,7 +201,8 @@ export const ZH_CN = {
     changedFileCount: (count) => `${count} 个已更改文件`, resizeCommit: "调整提交消息区域大小", createCommit: "创建提交",
     commitMessage: "提交消息", commitButton: (count) => count ? `提交 ${count}` : "提交", resolveBeforeCommit: "请先解决冲突再提交。",
     excludeSubmodules: "请排除子模块更改，并在其 Git 根目录中提交。", selectFileToCommit: "请至少选择一个要提交的文件。",
-    saveBeforeRevert: "恢复此文件前，请保存或撤销未保存的编辑", restoreConfirm: (label) => `是否将 1 个已跟踪文件恢复到 HEAD？\n\n${label}\n\n这会替换已检查的暂存区和工作树内容。系统会保存恢复副本；可从 Git → 恢复本地更改中撤销。`,
+    saveBeforeRevert: "恢复此文件前，请保存或撤销未保存的编辑", restoreConfirm: (label) => `是否将 1 个已跟踪文件恢复到 HEAD？\n\n${label}\n\n这会替换已检查的暂存区和工作树内容。系统会保存恢复副本，以供撤销。`,
+    restoreAddedConfirm: (label) => `是否从暂存区和工作树中移除 1 个已暂存的新增文件？\n\n${label}\n\n该文件在 HEAD 中不存在，因此恢复操作会将其删除。系统会保存恢复副本，可还原文件的完整内容和暂存状态。`,
     saveBeforeRestore: "恢复这些文件前，请保存或撤销未保存的编辑", reverting: "正在恢复所选文件…", reverted: "已恢复所选文件",
     filesSavedReview: "文件已保存；提交前请检查刷新后的选择", creatingCommit: "正在创建提交…",
     commitConcurrent: "提交已完成，但 Git 同时发生变化；再次提交前请检查刷新的历史记录", commitRefreshing: "提交已创建，正在刷新仓库状态…",
