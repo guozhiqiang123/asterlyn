@@ -1,0 +1,13 @@
+[package]
+name = "asterlyn-terminal"
+version = "0.1.0"
+description = "Product-neutral supervised PTY sessions for Asterlyn"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+portable-pty.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
