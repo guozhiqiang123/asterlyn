@@ -11,6 +11,10 @@
   padding-left: 76px;
 }
 
+.platform-macos-native .topbar-actions {
+  padding-right: 8px;
+}
+
 .topbar-actions {
   min-width: 0;
   flex: 1 1 auto;

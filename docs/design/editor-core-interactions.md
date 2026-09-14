@@ -113,6 +113,10 @@ Manual acceptance then exposed a shell permission regression that blocked both t
 
 The platform-chrome follow-up replaces the one-style-fits-all undecorated window with one shared native-window factory. macOS now retains its operating-system title-bar decorations, left-side traffic lights, and overlay integration while hiding Asterlyn's duplicate custom controls; Windows and Linux retain the existing compact right-side custom controls. Both the initial and additional project windows use this policy. Linux release-window maximize and close paths passed, while drag/minimize automation and installed macOS visual interaction remain explicit manual-acceptance items. This changes shell presentation only and leaves the dirty-buffer gate and per-window workspace ownership intact.
 
+When native macOS chrome hides Asterlyn's custom right-side window controls, the trailing action
+group retains an eight-pixel window-edge inset. The Settings target therefore remains optically
+centered inside its hover surface instead of inheriting the missing controls' flush-right edge.
+
 ### E3.1 project-tree refresh and resize correction — 2026-09-10
 
 The Files tool now separates its 100,000-file navigation and exact-authorization catalog from the existing 5,000-candidate workspace-search budget. Closed directories retain their model nodes but mount no descendant rows until opened, and the tree projection is cached for one exact snapshot. Splitter pointer bursts apply only the latest value in each animation frame, write only the affected layout property, and request editor measurement only when the editor viewport changes.

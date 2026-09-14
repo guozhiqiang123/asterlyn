@@ -53,6 +53,14 @@ test("each owned stylesheet has one explicit entry point", async () => {
   }
 });
 
+test("native macOS chrome keeps the trailing settings action inset from the window edge", async () => {
+  const source = await readFile(new URL("../src/shell/shell.css", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /\.platform-macos-native \.topbar-actions\s*\{[^}]*padding-right:\s*8px;/s,
+  );
+});
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
