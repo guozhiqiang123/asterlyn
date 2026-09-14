@@ -182,6 +182,11 @@ import {
 } from "./workbench/markdown-mode-preferences";
 import { revealTabInStrip } from "./workbench/tab-strip";
 import { isImagePreviewPath } from "./workbench/image-preview";
+import type {
+  DiffGitBlameSources,
+  GitBlameAvailability,
+  GitBlameRuntime,
+} from "./workbench/editor-gutter";
 import {
   DEFAULT_EDITOR_FONT_ID,
   EditorFontLoader,
@@ -317,7 +322,7 @@ const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
 export class AsterlynApp {
   private localization: Localization;
   private localeRequestGeneration = 0;
-  private readonly pushDiffEditor = new LazyDiffEditor();
+  private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
   private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
@@ -399,7 +404,22 @@ export class AsterlynApp {
 
   constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
     this.localization = createLocalization(initialCatalog);
-    this.editorSurface = new EditorSurface(root, initialCatalog.editor);
+    const blameRuntime: GitBlameRuntime = {
+      load: (source) => bridge.readGitBlame(
+        source.repositoryRoot,
+        source.repositoryId,
+        source.path,
+        source.commitOid,
+        source.parent,
+      ),
+      status: (message, kind) => this.setStatus(
+        message,
+        kind === "information" ? "normal" : "warning",
+      ),
+      error: (error) => this.showError(error),
+    };
+    this.editorSurface = new EditorSurface(root, initialCatalog.editor, blameRuntime);
+    this.pushDiffEditor = new LazyDiffEditor(blameRuntime, initialCatalog.editor);
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
       activate: (tool) => this.toggleTool(tool),
@@ -920,6 +940,7 @@ export class AsterlynApp {
       this.gitOperationController.setMessages(catalog.gitOperations);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
+      this.pushDiffEditor.setBlameCopy(catalog.editor);
       document
         .querySelector<HTMLMetaElement>('meta[name="description"]')
         ?.setAttribute("content", catalog.documentDescription);
@@ -2697,6 +2718,12 @@ export class AsterlynApp {
       state.file.path,
       this.settingsState.preferences,
       this.diffPresentation(),
+      this.commitDiffBlameSources(
+        this.windowSession.workspace.state.root,
+        state.repositoryId,
+        state.oid,
+        state.file,
+      ),
     );
   }
 
@@ -4878,6 +4905,7 @@ export class AsterlynApp {
           this.changesState.workingPatch.patch ||
             copy.noTextualDiff,
           selected.path,
+          this.diffBlameSources(document),
         );
       } else if (this.changesState.workingPatchLoading) {
         this.showEditorHtml(
@@ -4953,6 +4981,7 @@ export class AsterlynApp {
         ),
         this.state.commitPatch.patch || copy.noTextualDiff,
         document.path,
+        this.diffBlameSources(document),
       );
     }
   }
@@ -4988,13 +5017,19 @@ export class AsterlynApp {
     );
   }
 
-  private mountEditorDiff(key: string, patch: string, path: string): void {
+  private mountEditorDiff(
+    key: string,
+    patch: string,
+    path: string,
+    blameSources: DiffGitBlameSources,
+  ): void {
     this.editorSurface.mountDiff(
       key,
       patch,
       path,
       this.settingsState.preferences,
       this.diffPresentation(),
+      blameSources,
       () => this.captureMountedTextEditor(),
     );
   }
@@ -5004,6 +5039,7 @@ export class AsterlynApp {
       key,
       tab,
       this.settingsState.preferences,
+      this.textBlameAvailability(tab),
       () => this.captureMountedTextEditor(),
       (tabId, content) => this.handleEditorContentChange(tabId, content),
     );
@@ -5014,9 +5050,174 @@ export class AsterlynApp {
       key,
       tab,
       this.settingsState.preferences,
+      this.textBlameAvailability(tab),
       () => this.captureMountedTextEditor(),
       (tabId, content) => this.handleEditorContentChange(tabId, content),
     );
+  }
+
+  private textBlameAvailability(tab: TextTabState): GitBlameAvailability {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const document = tab.document;
+    if (
+      !snapshot ||
+      snapshot.root !== document.repositoryRoot ||
+      !snapshot.repositoryRoots.some((root) => root.id === document.repositoryId)
+    ) {
+      return this.unavailableBlame(this.localization.catalog.editor.gitBlameRequiresGit);
+    }
+    if (isTextTabDirty(tab) || tab.saveRequest !== null) {
+      return this.unavailableBlame(
+        this.localization.catalog.editor.gitBlameRequiresSavedFile,
+      );
+    }
+    const untracked = document.readOnly === true || (
+      document.repositoryId === "." && snapshot.changes.some((change) =>
+        change.path === document.path && (
+          change.indexStatus === "untracked" || change.worktreeStatus === "untracked"
+        )
+      )
+    );
+    if (untracked) {
+      return this.unavailableBlame(
+        this.localization.catalog.editor.gitBlameRequiresTrackedFile,
+      );
+    }
+    return {
+      source: {
+        repositoryRoot: document.repositoryRoot,
+        repositoryId: document.repositoryId,
+        path: document.path,
+        commitOid: null,
+        parent: false,
+      },
+      unavailableReason: null,
+    };
+  }
+
+  private diffBlameSources(
+    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+  ): DiffGitBlameSources {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
+    if (!snapshot || snapshot.root !== document.repositoryRoot) {
+      return this.unavailableDiffBlame(unavailable);
+    }
+    if (document.kind === "commit-diff") {
+      const file = this.historyState.details?.files.find(
+        (candidate) => candidate.path === document.path,
+      ) ?? { path: document.path, originalPath: null, status: "modified" as const };
+      return this.commitDiffBlameSources(
+        document.repositoryRoot,
+        document.repositoryId,
+        document.oid,
+        file,
+      );
+    }
+
+    const change = snapshot.changes.find(
+      (candidate) => candidate.path === document.selection.path,
+    );
+    if (!change || !snapshot.branch.oid) return this.unavailableDiffBlame(unavailable);
+    const absent = this.localization.catalog.editor.gitBlameFileUnavailable;
+    const beforeUnavailable = change.indexStatus === "added" ||
+      change.indexStatus === "untracked" ||
+      change.worktreeStatus === "untracked";
+    const afterUnavailable = change.indexStatus === "deleted" ||
+      change.worktreeStatus === "deleted";
+    const afterUntracked = change.indexStatus === "added" ||
+      change.indexStatus === "untracked" ||
+      change.worktreeStatus === "untracked";
+    return {
+      old: beforeUnavailable
+        ? this.unavailableBlame(absent)
+        : {
+            source: {
+              repositoryRoot: document.repositoryRoot,
+              repositoryId: ".",
+              path: change.originalPath ?? change.path,
+              commitOid: snapshot.branch.oid,
+              parent: false,
+            },
+            unavailableReason: null,
+          },
+      new: afterUnavailable
+        ? this.unavailableBlame(absent)
+        : afterUntracked
+          ? this.unavailableBlame(
+              this.localization.catalog.editor.gitBlameRequiresTrackedFile,
+            )
+        : {
+            source: {
+              repositoryRoot: document.repositoryRoot,
+              repositoryId: ".",
+              path: change.path,
+              commitOid: null,
+              parent: false,
+            },
+            unavailableReason: null,
+          },
+      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
+    };
+  }
+
+  private commitDiffBlameSources(
+    repositoryRoot: string | null,
+    repositoryId: string | null,
+    oid: string | null,
+    file: CommitFileChange,
+  ): DiffGitBlameSources {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
+    if (
+      !repositoryRoot ||
+      !repositoryId ||
+      !oid ||
+      !snapshot ||
+      snapshot.root !== repositoryRoot ||
+      !snapshot.repositoryRoots.some((root) => root.id === repositoryId)
+    ) return this.unavailableDiffBlame(unavailable);
+
+    const absent = this.localization.catalog.editor.gitBlameFileUnavailable;
+    return {
+      old: file.status === "added"
+        ? this.unavailableBlame(absent)
+        : {
+            source: {
+              repositoryRoot,
+              repositoryId,
+              path: file.originalPath ?? file.path,
+              commitOid: oid,
+              parent: true,
+            },
+            unavailableReason: null,
+          },
+      new: file.status === "deleted"
+        ? this.unavailableBlame(absent)
+        : {
+            source: {
+              repositoryRoot,
+              repositoryId,
+              path: file.path,
+              commitOid: oid,
+              parent: false,
+            },
+            unavailableReason: null,
+          },
+      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
+    };
+  }
+
+  private unavailableDiffBlame(reason: string): DiffGitBlameSources {
+    return {
+      old: this.unavailableBlame(reason),
+      new: this.unavailableBlame(reason),
+      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
+    };
+  }
+
+  private unavailableBlame(reason: string): GitBlameAvailability {
+    return { source: null, unavailableReason: reason };
   }
 
   private handleEditorContentChange(tabId: string, content: string): void {

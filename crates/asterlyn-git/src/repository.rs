@@ -17,15 +17,17 @@ use std::os::unix::process::CommandExt;
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
-    DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
-    HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
-    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
-    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind, HistoryOrder,
+    HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile,
+    ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode, PushTagSummary,
+    RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
+    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
+    UntrackedScan, UntrackedState,
 };
-use crate::parser::{parse_branches, parse_commits, parse_status};
+use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 // Git has no "all context" switch. A deliberately unreachable practical line count requests the
 // complete file while the existing byte limit remains the authoritative output bound.
 const EXPANDED_DIFF_CONTEXT_LINES: usize = 1_000_000;
@@ -1427,6 +1429,70 @@ impl GitRepository {
         let mut details = root.repository.commit_details(oid)?;
         details.repository_id = root.descriptor.id;
         Ok(details)
+    }
+
+    pub fn repository_blame(
+        &self,
+        repository_id: &str,
+        path: &str,
+        commit_oid: Option<&str>,
+        parent: bool,
+    ) -> Result<GitBlameResult, GitError> {
+        if parent && commit_oid.is_none() {
+            return Err(GitError::InvalidInput {
+                field: "blame revision".to_string(),
+                message: "a commit id is required when requesting its parent".to_string(),
+            });
+        }
+        if let Some(oid) = commit_oid {
+            validate_object_id(oid)?;
+        }
+        validate_relative_path(path)?;
+
+        let root = self.resolve_history_root(repository_id)?;
+        let revision = match (commit_oid, parent) {
+            (Some(oid), true) => root.repository.first_parent(oid)?,
+            (Some(oid), false) => Some(oid.to_string()),
+            (None, false) => None,
+            (None, true) => unreachable!("parent without commit is rejected above"),
+        };
+        if parent && revision.is_none() {
+            return Ok(GitBlameResult {
+                repository_id: root.descriptor.id,
+                path: path.to_string(),
+                revision: None,
+                hunks: Vec::new(),
+                truncated: false,
+            });
+        }
+
+        let mut args = vec![
+            OsString::from("--literal-pathspecs"),
+            OsString::from("blame"),
+            OsString::from("--incremental"),
+            OsString::from("--no-progress"),
+        ];
+        if let Some(revision) = &revision {
+            args.push(OsString::from(revision));
+        }
+        args.push(OsString::from("--"));
+        args.push(OsString::from(path));
+        let (mut output, truncated) = root.repository.run_read_owned_bounded(
+            "read Git blame",
+            args,
+            BLAME_OUTPUT_LIMIT_BYTES,
+        )?;
+        if truncated {
+            retain_complete_blame_records(&mut output.stdout);
+        }
+        let hunks = parse_blame_incremental(&output.stdout)?;
+        Ok(GitBlameResult {
+            repository_id: root.descriptor.id,
+            path: path.to_string(),
+            revision,
+            hunks,
+            truncated,
+        })
     }
 
     pub fn commit_diff(
@@ -4547,6 +4613,26 @@ fn validate_object_id(oid: &str) -> Result<(), GitError> {
     Ok(())
 }
 
+fn retain_complete_blame_records(output: &mut Vec<u8>) {
+    const FILENAME_PREFIX: &[u8] = b"\nfilename ";
+    let Some(prefix_index) = output
+        .windows(FILENAME_PREFIX.len())
+        .rposition(|window| window == FILENAME_PREFIX)
+    else {
+        output.clear();
+        return;
+    };
+    let filename_start = prefix_index + 1;
+    let Some(line_end) = output[filename_start..]
+        .iter()
+        .position(|byte| *byte == b'\n')
+    else {
+        output.clear();
+        return;
+    };
+    output.truncate(filename_start + line_end + 1);
+}
+
 fn validate_local_branch_ref(full_name: &str) -> Result<&str, GitError> {
     let name = full_name.strip_prefix("refs/heads/").unwrap_or_default();
     if name.is_empty() || name.contains('\0') {
@@ -6325,6 +6411,50 @@ mod tests {
             Err(GitError::UnsafeOperation { .. })
         ));
         assert!(directory.path().join("new.txt").exists());
+    }
+
+    #[test]
+    fn reads_bounded_blame_for_worktree_commits_and_root_parent() {
+        let directory = fixture();
+        fs::write(directory.path().join("source.txt"), "alpha\nbeta\n").expect("fixture file");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        repository
+            .stage(&["source.txt".to_string()])
+            .expect("source stage");
+        let root_oid = repository.commit("Root source").expect("root commit");
+
+        fs::write(directory.path().join("source.txt"), "alpha\nchanged\n").expect("working edit");
+        let worktree = repository
+            .repository_blame(".", "source.txt", None, false)
+            .expect("worktree blame");
+        assert_eq!(worktree.repository_id, ".");
+        assert!(worktree.revision.is_none());
+        assert!(worktree.hunks.iter().any(|hunk| hunk.uncommitted));
+        assert!(worktree.hunks.iter().any(|hunk| hunk.oid == root_oid));
+
+        let committed = repository
+            .repository_blame(".", "source.txt", Some(&root_oid), false)
+            .expect("commit blame");
+        assert_eq!(committed.revision.as_deref(), Some(root_oid.as_str()));
+        assert_eq!(
+            committed
+                .hunks
+                .iter()
+                .map(|hunk| hunk.line_count)
+                .sum::<u32>(),
+            2
+        );
+        assert!(
+            committed
+                .hunks
+                .iter()
+                .all(|hunk| hunk.author_name == "Asterlyn Test")
+        );
+
+        let before_root = repository
+            .repository_blame(".", "source.txt", Some(&root_oid), true)
+            .expect("root parent blame");
+        assert!(before_root.hunks.is_empty());
     }
 
     #[test]

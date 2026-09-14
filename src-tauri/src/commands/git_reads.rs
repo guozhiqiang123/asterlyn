@@ -106,6 +106,28 @@ pub(crate) async fn read_commit_details(
 }
 
 #[tauri::command]
+pub(crate) async fn read_git_blame(
+    repository_root: String,
+    repository_id: String,
+    path: String,
+    commit_oid: Option<String>,
+    parent: bool,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<GitBlameResult, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read Git blame", move || {
+        GitRepository::open(root)?.repository_blame(
+            &repository_id,
+            &path,
+            commit_oid.as_deref(),
+            parent,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_commit_diff(
     repository_root: String,

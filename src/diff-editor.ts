@@ -17,7 +17,6 @@ import {
   highlightTrailingWhitespace,
   highlightWhitespace,
   keymap,
-  lineNumbers,
 } from "@codemirror/view";
 import {
   highlightSelectionMatches,
@@ -43,6 +42,17 @@ import {
 } from "./editor-theme";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { EditorLanguageLoader } from "./editor-language";
+import type { GitBlameResult } from "./models.ts";
+import {
+  blameGutter,
+  closeGutterMenu,
+  lineNumberGutter,
+  type DiffGitBlameSources,
+  type GitBlameCopy,
+  type GitBlameRuntime,
+  type GitBlameSource,
+  type GutterBlameMenuState,
+} from "./workbench/editor-gutter.ts";
 import {
   DEFAULT_APP_PREFERENCES,
   type AppPreferences,
@@ -113,6 +123,9 @@ export class DiffEditor {
     tabSize: Compartment;
     theme: Compartment;
     phrases: Compartment;
+    blame: Compartment;
+    side: "old" | "new" | null;
+    sourceLine: (documentLine: number) => number | null;
   }> = [];
   private readonly languageLoader = new EditorLanguageLoader();
   private parent: HTMLElement | null = null;
@@ -132,13 +145,30 @@ export class DiffEditor {
   private scrollDispose: (() => void) | null = null;
   private changeBlocks: DiffChangeBlock[] = [];
   private activeChangeStart: number | null = null;
+  private blameSources: DiffGitBlameSources;
+  private readonly blameState: Record<"old" | "new", {
+    result: GitBlameResult | null;
+    loading: boolean;
+    generation: number;
+  }> = {
+    old: { result: null, loading: false, generation: 0 },
+    new: { result: null, loading: false, generation: 0 },
+  };
+
+  constructor(
+    private readonly blameRuntime: GitBlameRuntime,
+    private blameCopy: GitBlameCopy,
+  ) {
+    this.blameSources = unavailableDiffBlameSources(blameCopy.gitBlameRequiresSplit);
+  }
 
   mount(
     parent: HTMLElement,
     document: string,
     path: string,
     preferences: AppPreferences,
-    presentation: DiffPresentation = this.presentation,
+    presentation: DiffPresentation,
+    blameSources: DiffGitBlameSources,
   ): void {
     this.destroy();
     this.parent = parent;
@@ -146,6 +176,7 @@ export class DiffEditor {
     this.sourcePath = path;
     this.editorPreferences = { ...preferences };
     this.presentation = { ...presentation };
+    this.blameSources = blameSources;
     this.render();
     void this.loadLanguage(parent, path);
   }
@@ -223,6 +254,15 @@ export class DiffEditor {
       binding.view.dispatch({
         effects: binding.phrases.reconfigure(EditorState.phrases.of(phrases)),
       });
+    }
+  }
+
+  setBlameCopy(copy: GitBlameCopy): void {
+    if (this.blameCopy === copy) return;
+    this.blameCopy = copy;
+    for (const side of ["old", "new"] as const) {
+      const result = this.blameState[side].result;
+      if (result) this.installBlame(side, result);
     }
   }
 
@@ -312,6 +352,12 @@ export class DiffEditor {
     const tabSize = new Compartment();
     const theme = new Compartment();
     const phrases = new Compartment();
+    const blame = new Compartment();
+    const openBlameMenu = () => this.blameMenuState(side ?? null);
+    const activeBlame = side ? this.blameState[side].result : null;
+    const sourceLine = rows && side
+      ? (documentLine: number) => rows[documentLine - 1]?.[side].lineNumber ?? null
+      : (documentLine: number) => documentLine;
     const extensions: Extension[] = [
       EditorState.readOnly.of(true),
       tabSize.of(EditorState.tabSize.of(this.editorPreferences.editorTabSize)),
@@ -322,6 +368,9 @@ export class DiffEditor {
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
+      blame.of(activeBlame
+        ? blameGutter(activeBlame, this.blameCopy, openBlameMenu, sourceLine)
+        : []),
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
       activeDiffBlockDecoration,
@@ -335,14 +384,14 @@ export class DiffEditor {
     ];
     if (rows && side) {
       extensions.push(
-        lineNumbers({
-          formatNumber: (lineNumber) =>
-            rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
-        }),
+        lineNumberGutter(
+          openBlameMenu,
+          (lineNumber) => rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
+        ),
         sourceLineDecorations(rows, side),
       );
     } else {
-      extensions.push(lineNumbers(), unifiedLineDecorations);
+      extensions.push(lineNumberGutter(openBlameMenu), unifiedLineDecorations);
     }
     if (this.presentation.layout === "unified") {
       extensions.push(EditorView.lineWrapping);
@@ -358,7 +407,16 @@ export class DiffEditor {
         extensions,
       }),
     });
-    this.languageBindings.push({ view, compartment: language, tabSize, theme, phrases });
+    this.languageBindings.push({
+      view,
+      compartment: language,
+      tabSize,
+      theme,
+      phrases,
+      blame,
+      side: side ?? null,
+      sourceLine,
+    });
     applyEditorPreferences(view, this.editorPreferences);
     this.describeLanguage(view);
     return view;
@@ -385,6 +443,93 @@ export class DiffEditor {
     view.dom.dataset.languageStatus = this.languageStatus;
   }
 
+  private blameMenuState(side: "old" | "new" | null): GutterBlameMenuState {
+    const availability = side
+      ? this.blameSources[side]
+      : { source: null, unavailableReason: this.blameSources.unifiedReason };
+    const state = side ? this.blameState[side] : null;
+    return {
+      active: Boolean(state?.result),
+      loading: state?.loading ?? false,
+      enabled: availability.source !== null,
+      unavailableReason: availability.unavailableReason,
+      copy: this.blameCopy,
+      toggle: () => side ? this.toggleBlame(side) : undefined,
+    };
+  }
+
+  private async toggleBlame(side: "old" | "new"): Promise<void> {
+    const state = this.blameState[side];
+    if (state.result || state.loading) {
+      this.clearBlame(side);
+      this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
+      return;
+    }
+    const source = this.blameSources[side].source;
+    if (!source) return;
+    const generation = ++state.generation;
+    state.loading = true;
+    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
+    try {
+      const result = await this.blameRuntime.load(source);
+      if (
+        generation !== state.generation ||
+        !sameBlameSource(this.blameSources[side].source, source)
+      ) return;
+      state.loading = false;
+      state.result = result;
+      this.installBlame(side, result);
+      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+      this.blameRuntime.status(
+        result.truncated
+          ? this.blameCopy.gitBlameLimited(lines)
+          : this.blameCopy.gitBlameLoaded(lines),
+        result.truncated ? "warning" : "information",
+      );
+    } catch (error) {
+      if (generation !== state.generation) return;
+      state.loading = false;
+      this.blameRuntime.error(error);
+    }
+  }
+
+  private installBlame(side: "old" | "new", result: GitBlameResult): void {
+    for (const binding of this.languageBindings) {
+      if (binding.side !== side) continue;
+      binding.view.dispatch({
+        effects: binding.blame.reconfigure(
+          blameGutter(
+            result,
+            this.blameCopy,
+            () => this.blameMenuState(side),
+            binding.sourceLine,
+          ),
+        ),
+      });
+    }
+  }
+
+  private clearBlame(side: "old" | "new"): void {
+    const state = this.blameState[side];
+    state.generation += 1;
+    state.loading = false;
+    state.result = null;
+    for (const binding of this.languageBindings) {
+      if (binding.side === side) {
+        binding.view.dispatch({ effects: binding.blame.reconfigure([]) });
+      }
+    }
+  }
+
+  private resetBlame(): void {
+    for (const side of ["old", "new"] as const) {
+      const state = this.blameState[side];
+      state.generation += 1;
+      state.loading = false;
+      state.result = null;
+    }
+  }
+
   private captureScroll(): { topRatio: number; left: number } {
     const first = this.views[0]?.scrollDOM;
     const maximum = first ? Math.max(0, first.scrollHeight - first.clientHeight) : 0;
@@ -395,6 +540,7 @@ export class DiffEditor {
   }
 
   private destroyViews(): void {
+    closeGutterMenu();
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.splitDispose?.();
@@ -416,6 +562,8 @@ export class DiffEditor {
     this.languageStatus = "loading";
     this.changeBlocks = [];
     this.activeChangeStart = null;
+    this.resetBlame();
+    this.blameSources = unavailableDiffBlameSources(this.blameCopy.gitBlameRequiresSplit);
   }
 }
 
@@ -479,4 +627,26 @@ function sourceLineClass(row: SourceDiffRow, side: "old" | "new"): string {
 
 function clampPercentage(value: number): number {
   return Math.min(75, Math.max(25, value));
+}
+
+function unavailableDiffBlameSources(reason: string): DiffGitBlameSources {
+  return {
+    old: { source: null, unavailableReason: reason },
+    new: { source: null, unavailableReason: reason },
+    unifiedReason: reason,
+  };
+}
+
+function sameBlameSource(
+  left: GitBlameSource | null,
+  right: GitBlameSource | null,
+): boolean {
+  return left === right || Boolean(
+    left && right &&
+      left.repositoryRoot === right.repositoryRoot &&
+      left.repositoryId === right.repositoryId &&
+      left.path === right.path &&
+      left.commitOid === right.commitOid &&
+      left.parent === right.parent,
+  );
 }

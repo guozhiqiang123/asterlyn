@@ -449,6 +449,30 @@ pub struct CommitDiffResult {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitBlameHunk {
+    pub oid: String,
+    pub original_start_line: u32,
+    pub final_start_line: u32,
+    pub line_count: u32,
+    pub author_name: String,
+    pub author_email: String,
+    pub authored_at: i64,
+    pub summary: String,
+    pub uncommitted: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBlameResult {
+    pub repository_id: String,
+    pub path: String,
+    pub revision: Option<String>,
+    pub hunks: Vec<GitBlameHunk>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct BranchSummary {
     pub repository_id: String,
     pub full_name: String,

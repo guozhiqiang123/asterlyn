@@ -4,6 +4,7 @@ import type {
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  GitBlameResult,
   RestoreChangesPlan,
   GitWorktreeRecovery,
   GitConflictContent,
@@ -138,6 +139,13 @@ export interface GitReadBridge {
     repositoryId: string,
     commitOid: string,
   ): Promise<CommitDetails>;
+  readGitBlame(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+    commitOid: string | null,
+    parent: boolean,
+  ): Promise<GitBlameResult>;
   readCommitDiff(
     repositoryRoot: string,
     repositoryId: string,

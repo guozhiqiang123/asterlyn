@@ -3,6 +3,12 @@ import type { DiffEditor } from "../../diff-editor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
+import type {
+  DiffGitBlameSources,
+  GitBlameCopy,
+  GitBlameRuntime,
+  GitBlameSource,
+} from "../../workbench/editor-gutter.ts";
 
 type TextMount = {
   parent: HTMLElement;
@@ -11,6 +17,8 @@ type TextMount = {
   content: string;
   path: string;
   preferences: AppPreferences;
+  blameSource: GitBlameSource | null;
+  blameUnavailableReason: string | null;
   onChange: (content: string) => void;
 };
 
@@ -20,10 +28,13 @@ type DiffMount = {
   path: string;
   preferences: AppPreferences;
   presentation: DiffPresentation;
+  blameSources: DiffGitBlameSources;
 };
 
 /** Loads the CodeMirror text runtime only when the first editable document is mounted. */
 export class LazyTextEditor {
+  private readonly blameRuntime: GitBlameRuntime;
+  private blameCopy: GitBlameCopy;
   private implementation: TextEditor | null = null;
   private loading: Promise<TextEditor> | null = null;
   private pendingMount: TextMount | null = null;
@@ -33,6 +44,14 @@ export class LazyTextEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
 
+  constructor(
+    blameRuntime: GitBlameRuntime,
+    blameCopy: GitBlameCopy,
+  ) {
+    this.blameRuntime = blameRuntime;
+    this.blameCopy = blameCopy;
+  }
+
   mount(
     parent: HTMLElement,
     tabId: string,
@@ -40,6 +59,8 @@ export class LazyTextEditor {
     content: string,
     path: string,
     preferences: AppPreferences,
+    blameSource: GitBlameSource | null,
+    blameUnavailableReason: string | null,
     onChange: (content: string) => void,
   ): void {
     const mount = {
@@ -49,6 +70,8 @@ export class LazyTextEditor {
       content,
       path,
       preferences,
+      blameSource,
+      blameUnavailableReason,
       onChange,
     };
     this.pendingMount = mount;
@@ -64,6 +87,8 @@ export class LazyTextEditor {
         content,
         path,
         this.preferences ?? preferences,
+        blameSource,
+        blameUnavailableReason,
         onChange,
       );
       return;
@@ -86,6 +111,8 @@ export class LazyTextEditor {
         mount.content,
         mount.path,
         this.preferences ?? mount.preferences,
+        mount.blameSource,
+        mount.blameUnavailableReason,
         mount.onChange,
       );
     });
@@ -169,6 +196,11 @@ export class LazyTextEditor {
     this.implementation?.setPhrases(phrases);
   }
 
+  setBlameCopy(copy: GitBlameCopy): void {
+    this.blameCopy = copy;
+    this.implementation?.setBlameCopy(copy);
+  }
+
   detach(): void {
     this.mountGeneration += 1;
     this.pendingMount?.parent.removeAttribute("aria-busy");
@@ -196,7 +228,7 @@ export class LazyTextEditor {
     if (this.implementation) return Promise.resolve(this.implementation);
     if (!this.loading) {
       this.loading = import("../../text-editor.ts").then(({ TextEditor }) => {
-        const editor = new TextEditor();
+        const editor = new TextEditor(this.blameRuntime, this.blameCopy);
         this.implementation = editor;
         return editor;
       });
@@ -207,6 +239,8 @@ export class LazyTextEditor {
 
 /** Loads the CodeMirror Diff runtime only when a text Diff is first inspected. */
 export class LazyDiffEditor {
+  private readonly blameRuntime: GitBlameRuntime;
+  private blameCopy: GitBlameCopy;
   private implementation: DiffEditor | null = null;
   private loading: Promise<DiffEditor> | null = null;
   private pendingMount: DiffMount | null = null;
@@ -216,14 +250,23 @@ export class LazyDiffEditor {
   private phrases: Readonly<Record<string, string>> = {};
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
 
+  constructor(
+    blameRuntime: GitBlameRuntime,
+    blameCopy: GitBlameCopy,
+  ) {
+    this.blameRuntime = blameRuntime;
+    this.blameCopy = blameCopy;
+  }
+
   mount(
     parent: HTMLElement,
     document: string,
     path: string,
     preferences: AppPreferences,
-    presentation: DiffPresentation = this.presentation,
+    presentation: DiffPresentation,
+    blameSources: DiffGitBlameSources,
   ): void {
-    const mount = { parent, document, path, preferences, presentation };
+    const mount = { parent, document, path, preferences, presentation, blameSources };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
@@ -235,6 +278,7 @@ export class LazyDiffEditor {
         path,
         this.preferences ?? preferences,
         this.presentation,
+        blameSources,
       );
       return;
     }
@@ -253,6 +297,7 @@ export class LazyDiffEditor {
         mount.path,
         this.preferences ?? mount.preferences,
         this.presentation,
+        mount.blameSources,
       );
     });
   }
@@ -285,6 +330,11 @@ export class LazyDiffEditor {
     this.implementation?.setPhrases(phrases);
   }
 
+  setBlameCopy(copy: GitBlameCopy): void {
+    this.blameCopy = copy;
+    this.implementation?.setBlameCopy(copy);
+  }
+
   destroy(): void {
     this.mountGeneration += 1;
     this.pendingMount?.parent.removeAttribute("aria-busy");
@@ -296,7 +346,7 @@ export class LazyDiffEditor {
     if (this.implementation) return Promise.resolve(this.implementation);
     if (!this.loading) {
       this.loading = import("../../diff-editor.ts").then(({ DiffEditor }) => {
-        const editor = new DiffEditor();
+        const editor = new DiffEditor(this.blameRuntime, this.blameCopy);
         this.implementation = editor;
         return editor;
       });

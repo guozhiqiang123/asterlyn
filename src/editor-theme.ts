@@ -155,6 +155,28 @@ const editorThemeRules =
       borderRight: "1px solid var(--bg-panel)",
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--bg-hover)" },
+    ".cm-git-blame-gutter": {
+      minWidth: "132px",
+      color: "var(--text-muted)",
+      backgroundColor: "var(--bg-deep)",
+    },
+    ".cm-git-blame-gutter .cm-gutterElement": {
+      boxSizing: "border-box",
+      width: "100%",
+      padding: "0 8px",
+    },
+    ".cm-git-blame-marker": {
+      display: "block",
+      maxWidth: "168px",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      cursor: "help",
+    },
+    ".cm-git-blame-uncommitted": {
+      color: "var(--warning-text)",
+      fontStyle: "italic",
+    },
     ".cm-foldGutter": { width: "19px" },
     ".cm-foldGutter .cm-gutterElement": {
       boxSizing: "border-box",

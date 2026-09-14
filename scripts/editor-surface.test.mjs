@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EditorSessionController } from "../src/features/files-editor/editor-session-controller.ts";
 import { EditorSurface } from "../src/features/files-editor/editor-surface.ts";
+import { EN_US } from "../src/localization/en-US.ts";
+
+const noBlame = { source: null, unavailableReason: null };
 
 test("capturing an obsolete mounted revision cannot overwrite an externally reloaded buffer", async () => {
   let disk = { workspacePath: "file.txt", content: "original", utf8Bom: false, revision: "one", byteLength: 8 };
@@ -10,14 +13,14 @@ test("capturing an obsolete mounted revision cannot overwrite an externally relo
   await controller.openText("/repo", { repositoryId: ".", path: "file.txt", workspacePath: "file.txt" }, "source");
   const old = controller.state.session.textTabs[0];
   const { surface } = testSurface();
-  surface.mountText("old", old, {}, () => {}, () => {});
+  surface.mountText("old", old, {}, noBlame, () => {}, () => {});
 
   disk = { ...disk, content: "external edit", revision: "two" };
   await controller.reconcileExternalPaths(["file.txt"]);
   surface.capture(controller.state.session, (id, content) => controller.captureText(id, content));
   assert.equal(controller.tab(old.id).content, "external edit");
   assert.equal(controller.dirtyTabs().length, 0);
-  surface.mountText("new", controller.tab(old.id), {}, () => {
+  surface.mountText("new", controller.tab(old.id), {}, noBlame, () => {
     surface.capture(controller.state.session, (id, content) => controller.captureText(id, content));
   }, () => {});
   assert.equal(controller.tab(old.id).content, "external edit");
@@ -26,7 +29,7 @@ test("capturing an obsolete mounted revision cannot overwrite an externally relo
 test("a synchronous flush that changes the active editor still captures the original document identity", () => {
   const { surface, runtime } = testSurface();
   const tab = { id: "a", loadEpoch: 1, content: "alpha", status: "ready", document: { path: "a.txt" } };
-  surface.mountText("a", tab, {}, () => {}, () => {});
+  surface.mountText("a", tab, {}, noBlame, () => {}, () => {});
   runtime.contents.set("b", "beta");
   runtime.flushChanges = () => { runtime.active = "b"; };
   const captured = [];
@@ -36,7 +39,11 @@ test("a synchronous flush that changes the active editor still captures the orig
 
 function testSurface() {
   const body = { innerHTML: "", classList: { add() {}, remove() {} } };
-  const surface = new EditorSurface({ querySelector() { return body; } });
+  const surface = new EditorSurface(
+    { querySelector() { return body; } },
+    EN_US.editor,
+    { async load() { throw new Error("unexpected blame request"); }, status() {}, error() {} },
+  );
   const runtime = {
     contents: new Map(), active: null,
     isMountedIn() { return false; },

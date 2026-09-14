@@ -154,6 +154,26 @@ export interface CommitDiffResult {
   truncated: boolean;
 }
 
+export interface GitBlameHunk {
+  oid: string;
+  originalStartLine: number;
+  finalStartLine: number;
+  lineCount: number;
+  authorName: string;
+  authorEmail: string;
+  authoredAt: number;
+  summary: string;
+  uncommitted: boolean;
+}
+
+export interface GitBlameResult {
+  repositoryId: string;
+  path: string;
+  revision: string | null;
+  hunks: GitBlameHunk[];
+  truncated: boolean;
+}
+
 export type BranchKind = "local" | "remote" | "tag";
 
 export interface BranchSummary {

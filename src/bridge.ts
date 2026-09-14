@@ -31,6 +31,7 @@ import type {
   RestoreChangesPlan,
   GitWorktreeRecovery,
   GitConflictContent,
+  GitBlameResult,
   GitOperationAction,
   GitOperationKind,
   GitOperationMutationOutcome,
@@ -642,6 +643,48 @@ const demoBridge: DesktopBridge = {
       repositoryRoot,
       repositoryId,
       commitOid,
+    });
+  },
+
+  async readGitBlame(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+    commitOid: string | null,
+    parent: boolean,
+  ): Promise<GitBlameResult> {
+    if (!isTauri) {
+      await demoDelay(140);
+      const selectedCommit = browserSnapshot.commits.find((item) => item.oid === commitOid) ??
+        browserSnapshot.commits[0];
+      const revision = parent ? (selectedCommit?.parents[0] ?? null) : commitOid;
+      const commit = browserSnapshot.commits.find((item) => item.oid === revision) ??
+        selectedCommit;
+      const ranges = demoBlameRanges(path);
+      return {
+        repositoryId,
+        path,
+        revision,
+        hunks: parent && revision === null ? [] : ranges.map(({ start, count }) => ({
+          oid: commit?.oid ?? "0000000000000000000000000000000000000000",
+          originalStartLine: start,
+          finalStartLine: start,
+          lineCount: count,
+          authorName: commit?.authorName ?? "Not Committed Yet",
+          authorEmail: commit?.authorEmail ?? "",
+          authoredAt: commit?.authoredAt ?? 0,
+          summary: commit?.subject ?? "Working tree content",
+          uncommitted: !commit,
+        })),
+        truncated: false,
+      };
+    }
+    return invoke<GitBlameResult>("read_git_blame", {
+      repositoryRoot,
+      repositoryId,
+      path,
+      commitOid,
+      parent,
     });
   },
 
@@ -1332,6 +1375,35 @@ function searchOperationKey(repositoryRoot: string, requestId: string): string {
 
 function demoDelay(milliseconds = 160): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function demoBlameRanges(path: string): Array<{ start: number; count: number }> {
+  const ranges = [{
+    start: 1,
+    count: Math.max(1, (demoTextFiles.get(path)?.content ?? "").split("\n").length),
+  }];
+  const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm;
+  for (const match of demoDiff(path, false).patch.matchAll(header)) {
+    for (const [startValue, countValue] of [[match[1], match[2]], [match[3], match[4]]]) {
+      const start = Number(startValue);
+      const count = countValue === undefined ? 1 : Number(countValue);
+      if (Number.isSafeInteger(start) && start > 0 && Number.isSafeInteger(count) && count > 0) {
+        ranges.push({ start, count });
+      }
+    }
+  }
+  ranges.sort((left, right) => left.start - right.start);
+  const merged: Array<{ start: number; count: number }> = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (!previous || range.start > previous.start + previous.count) {
+      merged.push({ ...range });
+      continue;
+    }
+    const end = Math.max(previous.start + previous.count, range.start + range.count);
+    previous.count = end - previous.start;
+  }
+  return merged;
 }
 
 function demoTextRevision(

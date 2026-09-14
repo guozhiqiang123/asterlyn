@@ -296,3 +296,35 @@ against the new worktree, and preserve missing-file buffers with an explicit una
 state. An unsaved conflict result blocks implicit close, survives external completion of the Git
 operation, and requires an explicit discard confirmation before closing the dialog, switching
 projects, or closing the window. This in-memory guard does not provide unsaved-draft crash recovery.
+
+### E3.1 on-demand Git Blame gutter — 2026-09-14
+
+The ordinary code editor and both sides of a side-by-side text Diff share one line-number-gutter
+context menu. `Annotate with Git Blame` is an explicit, reversible presentation action: opening a
+file, switching tabs, rendering a Diff, refreshing Git state, or focusing the window never starts a
+Blame query. A successful request adds compact date-and-author annotations beside line numbers;
+hover text retains author email, full time, object identity, and commit summary. Invoking the same
+menu again hides the annotations without changing the file, Diff, or repository.
+
+Ordinary editors bind Blame to the saved worktree file in its exact main or submodule Git root.
+Unsaved, saving, ignored, untracked, ordinary-folder, and stale-root documents expose the action as
+disabled with a reason. Editing an annotated buffer immediately invalidates and removes its
+annotations because disk line identities no longer match the in-memory document; saving and
+reconciliation make the action available again through the normal editor lifecycle. Switching
+away from the file also discards its annotations rather than retaining a potentially large result
+for every inactive tab.
+
+Split Diff binds each side independently. A working Diff reads the before side from the current
+`HEAD` object and the after side from the worktree. A commit, History, or Push-review Diff reads the
+before side from the selected commit's exact first parent and the after side from the selected
+commit. Added and deleted sides fail closed when no file exists, and files without version history
+do not pretend to have authored lines. Unified Diff deliberately disables Blame because its patch
+document line numbers are not source-file line identities.
+
+The product-neutral Git boundary invokes `git blame --incremental --no-progress` directly without a
+shell, resolves the requested repository root afresh, validates the relative path and object ID,
+and retains hunk metadata instead of expanding one object per line. Output is bounded to 16 MiB;
+only complete incremental records survive truncation and the UI reports partial coverage. Frontend
+requests are guarded by editor identity, Diff side, revision, and generation so a late response
+cannot annotate another file or replacement view. Validation and limitations are recorded in
+[`on-demand Git Blame gutter evidence`](../benchmarks/2026-09-14-editor-git-blame-gutter.md).

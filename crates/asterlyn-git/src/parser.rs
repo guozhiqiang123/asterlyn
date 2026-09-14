@@ -1,5 +1,9 @@
 use crate::error::GitError;
-use crate::model::{BranchKind, BranchState, BranchSummary, ChangeKind, CommitSummary, FileChange};
+use std::collections::HashMap;
+
+use crate::model::{
+    BranchKind, BranchState, BranchSummary, ChangeKind, CommitSummary, FileChange, GitBlameHunk,
+};
 
 pub(crate) fn parse_status(input: &[u8]) -> Result<(BranchState, Vec<FileChange>), GitError> {
     let records: Vec<&[u8]> = input.split(|byte| *byte == 0).collect();
@@ -249,6 +253,133 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
     Ok(branches)
 }
 
+#[derive(Debug, Clone, Default)]
+struct BlameCommitMetadata {
+    author_name: String,
+    author_email: String,
+    authored_at: i64,
+    summary: String,
+}
+
+#[derive(Debug)]
+struct PendingBlameHunk {
+    oid: String,
+    original_start_line: u32,
+    final_start_line: u32,
+    line_count: u32,
+    metadata: BlameCommitMetadata,
+}
+
+pub(crate) fn parse_blame_incremental(input: &[u8]) -> Result<Vec<GitBlameHunk>, GitError> {
+    let text = String::from_utf8_lossy(input);
+    let mut metadata_by_oid = HashMap::<String, BlameCommitMetadata>::new();
+    let mut pending: Option<PendingBlameHunk> = None;
+    let mut hunks = Vec::new();
+
+    for line in text.lines() {
+        if let Some(header) = parse_blame_header(line)? {
+            if pending.is_some() {
+                return Err(blame_parse_error("encountered a new hunk before filename"));
+            }
+            pending = Some(header);
+            continue;
+        }
+        let Some(hunk) = pending.as_mut() else {
+            if line.is_empty() {
+                continue;
+            }
+            return Err(blame_parse_error("metadata appeared before a hunk header"));
+        };
+        if let Some(value) = line.strip_prefix("author ") {
+            hunk.metadata.author_name = value.to_string();
+        } else if let Some(value) = line.strip_prefix("author-mail ") {
+            hunk.metadata.author_email = value
+                .strip_prefix('<')
+                .and_then(|email| email.strip_suffix('>'))
+                .unwrap_or(value)
+                .to_string();
+        } else if let Some(value) = line.strip_prefix("author-time ") {
+            hunk.metadata.authored_at = value
+                .parse()
+                .map_err(|_| blame_parse_error("author-time is not an integer"))?;
+        } else if let Some(value) = line.strip_prefix("summary ") {
+            hunk.metadata.summary = value.to_string();
+        } else if line.starts_with("filename ") {
+            let completed = pending.take().expect("pending blame hunk");
+            let metadata = if completed.metadata.author_name.is_empty() {
+                metadata_by_oid
+                    .get(&completed.oid)
+                    .cloned()
+                    .ok_or_else(|| {
+                        blame_parse_error("a repeated object omitted unknown author metadata")
+                    })?
+            } else {
+                metadata_by_oid
+                    .entry(completed.oid.clone())
+                    .or_insert_with(|| completed.metadata.clone());
+                completed.metadata
+            };
+            hunks.push(GitBlameHunk {
+                uncommitted: completed.oid.bytes().all(|byte| byte == b'0'),
+                oid: completed.oid,
+                original_start_line: completed.original_start_line,
+                final_start_line: completed.final_start_line,
+                line_count: completed.line_count,
+                author_name: metadata.author_name,
+                author_email: metadata.author_email,
+                authored_at: metadata.authored_at,
+                summary: metadata.summary,
+            });
+        }
+    }
+
+    if pending.is_some() {
+        return Err(blame_parse_error(
+            "the final hunk did not contain a filename",
+        ));
+    }
+    hunks.sort_by_key(|hunk| hunk.final_start_line);
+    Ok(hunks)
+}
+
+fn parse_blame_header(line: &str) -> Result<Option<PendingBlameHunk>, GitError> {
+    let mut fields = line.split_ascii_whitespace();
+    let Some(oid) = fields.next() else {
+        return Ok(None);
+    };
+    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Ok(None);
+    }
+    let values = fields.collect::<Vec<_>>();
+    if values.len() != 3 {
+        return Ok(None);
+    }
+    let parse_line = |value: &str, field: &str| {
+        value
+            .parse::<u32>()
+            .map_err(|_| blame_parse_error(&format!("{field} is not a positive integer")))
+            .and_then(|number| {
+                (number > 0)
+                    .then_some(number)
+                    .ok_or_else(|| blame_parse_error(&format!("{field} must be positive")))
+            })
+    };
+    Ok(Some(PendingBlameHunk {
+        oid: oid.to_string(),
+        original_start_line: parse_line(values[0], "original line")?,
+        final_start_line: parse_line(values[1], "final line")?,
+        line_count: parse_line(values[2], "line count")?,
+        metadata: BlameCommitMetadata::default(),
+    }))
+}
+
+fn blame_parse_error(message: &str) -> GitError {
+    GitError::Parse {
+        context: "git blame incremental output".to_string(),
+        message: message.to_string(),
+    }
+}
+
 fn non_empty(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
@@ -316,5 +447,30 @@ u UU N... 100644 100644 100644 100644 aaaaaaa bbbbbbb ccccccc src/conflict.rs\0"
         assert_eq!(commits.len(), 1);
         assert_eq!(commits[0].parents, ["aaaa", "bbbb"]);
         assert_eq!(commits[0].decorations, ["HEAD -> main", "tag: v1"]);
+    }
+
+    #[test]
+    fn parses_incremental_blame_and_reuses_commit_metadata() {
+        let input = b"0123456789012345678901234567890123456789 3 4 2\n\
+author Ada Lovelace\n\
+author-mail <ada@example.com>\n\
+author-time 42\n\
+summary Explain the engine\n\
+filename src/main.rs\n\
+0123456789012345678901234567890123456789 8 9 1\n\
+filename src/main.rs\n\
+0000000000000000000000000000000000000000 10 10 1\n\
+author Not Committed Yet\n\
+author-mail <not.committed.yet>\n\
+author-time 0\n\
+summary Version of src/main.rs from src/main.rs\n\
+filename src/main.rs\n";
+
+        let hunks = parse_blame_incremental(input).expect("incremental blame should parse");
+        assert_eq!(hunks.len(), 3);
+        assert_eq!(hunks[0].author_name, "Ada Lovelace");
+        assert_eq!(hunks[1].author_email, "ada@example.com");
+        assert_eq!(hunks[1].final_start_line, 9);
+        assert!(hunks[2].uncommitted);
     }
 }

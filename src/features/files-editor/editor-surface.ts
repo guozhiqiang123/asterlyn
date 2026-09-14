@@ -6,6 +6,11 @@ import { textTab, type EditorSession, type TextTabState } from "../../workbench/
 import type { AppPreferences } from "../../workbench/preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "../../workbench/markdown-format.ts";
+import type {
+  DiffGitBlameSources,
+  GitBlameAvailability,
+  GitBlameRuntime,
+} from "../../workbench/editor-gutter.ts";
 import { LazyDiffEditor, LazyTextEditor } from "./lazy-editor-runtime.ts";
 import {
   emptyImageSide,
@@ -15,7 +20,6 @@ import {
   retryState,
 } from "./editor-view.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
-import { EN_US } from "../../localization/en-US.ts";
 
 export type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -25,8 +29,8 @@ export type ImageSurfaceState =
 type DiffDocument = Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>;
 
 export class EditorSurface {
-  private readonly diffEditor = new LazyDiffEditor();
-  private readonly textEditor = new LazyTextEditor();
+  private readonly diffEditor: LazyDiffEditor;
+  private readonly textEditor: LazyTextEditor;
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private mountedTextLoadEpoch: number | null = null;
@@ -41,14 +45,22 @@ export class EditorSurface {
 
   private readonly root: HTMLElement;
   private copy: EditorCopy;
-  constructor(root: HTMLElement, copy: EditorCopy = EN_US.editor) {
+  constructor(
+    root: HTMLElement,
+    copy: EditorCopy,
+    blameRuntime: GitBlameRuntime,
+  ) {
     this.root = root;
     this.copy = copy;
+    this.diffEditor = new LazyDiffEditor(blameRuntime, copy);
+    this.textEditor = new LazyTextEditor(blameRuntime, copy);
   }
 
   setCopy(copy: EditorCopy): void {
     const previous = this.copy;
     this.copy = copy;
+    this.diffEditor.setBlameCopy(copy);
+    this.textEditor.setBlameCopy(copy);
     this.localizeMountedSurface(previous);
   }
 
@@ -202,6 +214,7 @@ export class EditorSurface {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    blameSources: DiffGitBlameSources,
     beforeTransition: () => void,
   ): void {
     if (this.mountedEditorKey === key) {
@@ -217,7 +230,7 @@ export class EditorSurface {
     body.innerHTML = "";
     this.resetBodyClasses(body);
     body.classList.add("diff-surface");
-    this.diffEditor.mount(body, patch, path, preferences, presentation);
+    this.diffEditor.mount(body, patch, path, preferences, presentation, blameSources);
     this.mountedEditorKey = key;
   }
 
@@ -225,6 +238,7 @@ export class EditorSurface {
     key: string,
     tab: TextTabState,
     preferences: AppPreferences,
+    blame: GitBlameAvailability,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
@@ -245,7 +259,7 @@ export class EditorSurface {
     body.classList.add("text-surface");
     this.mountedTextTabId = tab.id;
     this.activeMarkdownMode = null;
-    this.mountTextEditorSurface(body, tab, preferences, onContentChange);
+    this.mountTextEditorSurface(body, tab, preferences, blame, onContentChange);
     this.mountedEditorKey = key;
   }
 
@@ -253,6 +267,7 @@ export class EditorSurface {
     key: string,
     tab: TextTabState,
     preferences: AppPreferences,
+    blame: GitBlameAvailability,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
@@ -273,7 +288,7 @@ export class EditorSurface {
     if (tab.markdownMode === "source") {
       body.classList.add("markdown-source-surface");
       this.mountedTextTabId = tab.id;
-      this.mountTextEditorSurface(body, tab, preferences, onContentChange);
+      this.mountTextEditorSurface(body, tab, preferences, blame, onContentChange);
     } else if (tab.markdownMode === "split") {
       body.classList.add("markdown-split-surface");
       body.innerHTML = `<div class="markdown-split-layout" id="markdown-split-layout" style="--markdown-source-width: ${this.markdownSourcePercent}%">
@@ -282,7 +297,13 @@ export class EditorSurface {
         <section class="markdown-preview-pane" id="markdown-preview" aria-label="${escapeHtml(this.copy.markdownPreview)}">${markdownPreviewLoadingBlock(this.copy)}</section>
       </div>`;
       this.mountedTextTabId = tab.id;
-      this.mountTextEditorSurface(this.query("#markdown-source-pane"), tab, preferences, onContentChange);
+      this.mountTextEditorSurface(
+        this.query("#markdown-source-pane"),
+        tab,
+        preferences,
+        blame,
+        onContentChange,
+      );
       const layout = this.query("#markdown-split-layout");
       this.markdownSplitterDisposer = attachSplitter(this.query("#markdown-splitter"), {
         orientation: "vertical",
@@ -324,14 +345,25 @@ export class EditorSurface {
     parent: HTMLElement,
     tab: TextTabState,
     preferences: AppPreferences,
+    blame: GitBlameAvailability,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
     this.mountedTextLoadEpoch = tab.loadEpoch;
-    this.textEditor.mount(parent, tab.id, tab.loadEpoch, tab.content, tab.document.path, preferences, (content) => {
-      if (this.mountedTextTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
-      if (tab.markdownMode === "split") this.queueMarkdownPreview(tab.id, content);
-      onContentChange(tab.id, content);
-    });
+    this.textEditor.mount(
+      parent,
+      tab.id,
+      tab.loadEpoch,
+      tab.content,
+      tab.document.path,
+      preferences,
+      blame.source,
+      blame.unavailableReason,
+      (content) => {
+        if (this.mountedTextTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
+        if (tab.markdownMode === "split") this.queueMarkdownPreview(tab.id, content);
+        onContentChange(tab.id, content);
+      },
+    );
   }
 
   private queueMarkdownPreview(tabId: string, content: string, immediate = false): void {

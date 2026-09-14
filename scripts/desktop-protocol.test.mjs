@@ -88,6 +88,26 @@ test("desktop response validation accepts representative valid payloads", () => 
   assert.equal(validateDesktopResult("close_terminal", true), true);
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
   assert.deepEqual(
+    validateDesktopResult("read_git_blame", {
+      repositoryId: ".",
+      path: "src/app.ts",
+      revision: null,
+      hunks: [{
+        oid: "0".repeat(40),
+        originalStartLine: 1,
+        finalStartLine: 1,
+        lineCount: 2,
+        authorName: "Not Committed Yet",
+        authorEmail: "",
+        authoredAt: 0,
+        summary: "local changes",
+        uncommitted: true,
+      }],
+      truncated: false,
+    }).hunks[0].lineCount,
+    2,
+  );
+  assert.deepEqual(
     validateDesktopResult("read_remote_authentication", {
       remote: "origin",
       transport: "https",
@@ -119,7 +139,27 @@ test("desktop response validation accepts representative valid payloads", () => 
   );
 });
 
-test("desktop response validation rejects malformed watch status", () => {
+test("desktop response validation rejects malformed results", () => {
+  assert.throws(
+    () => validateDesktopResult("read_git_blame", {
+      repositoryId: ".",
+      path: "src/app.ts",
+      revision: null,
+      hunks: [{
+        oid: "0".repeat(40),
+        originalStartLine: 0,
+        finalStartLine: 1,
+        lineCount: 1,
+        authorName: "Local",
+        authorEmail: "",
+        authoredAt: 0,
+        summary: "local changes",
+        uncommitted: true,
+      }],
+      truncated: false,
+    }),
+    /positive integers/,
+  );
   assert.throws(
     () => validateDesktopResult("start_workspace_watch", {
       available: "yes",

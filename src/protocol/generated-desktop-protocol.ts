@@ -39,6 +39,7 @@ export interface DesktopCommandMap {
   read_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.TextFileSnapshot };
   save_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; expectedRevision: string; content: string; utf8Bom: boolean; requestId: string; }; result: Model.SaveTextFileResult };
   read_commit_details: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; }; result: Model.CommitDetails };
+  read_git_blame: { args: { repositoryRoot: string; repositoryId: string; path: string; commitOid: string | null; parent: boolean; }; result: Model.GitBlameResult };
   read_commit_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
   read_commit_image_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
   stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
@@ -106,6 +107,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_text_file: "textFileSnapshot",
   save_text_file: "saveTextFileResult",
   read_commit_details: "commitDetails",
+  read_git_blame: "gitBlameResult",
   read_commit_diff: "commitDiffResult",
   read_commit_image_diff: "imageDiffPreview",
   stage_paths: "workingTreeMutationOutcome",

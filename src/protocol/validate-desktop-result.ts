@@ -282,6 +282,30 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "commitDetails":
       assertCommitDetails(value, command);
       break;
+    case "gitBlameResult": {
+      const result = record(value, command);
+      strings(result, command, "repositoryId", "path");
+      nullableStrings(result, command, "revision");
+      arrays(result, command, "hunks");
+      booleans(result, command, "truncated");
+      for (const value of result.hunks as unknown[]) {
+        const hunk = record(value, command);
+        strings(hunk, command, "oid", "authorName", "authorEmail", "summary");
+        numbers(hunk, command, "originalStartLine", "finalStartLine", "lineCount", "authoredAt");
+        booleans(hunk, command, "uncommitted");
+        const originalStartLine = hunk.originalStartLine as number;
+        const finalStartLine = hunk.finalStartLine as number;
+        const lineCount = hunk.lineCount as number;
+        assert(
+          Number.isSafeInteger(originalStartLine) && originalStartLine > 0 &&
+            Number.isSafeInteger(finalStartLine) && finalStartLine > 0 &&
+            Number.isSafeInteger(lineCount) && lineCount > 0,
+          command,
+          "blame line ranges must contain positive integers",
+        );
+      }
+      break;
+    }
     case "nullableCommitDetails":
       if (value !== null) assertCommitDetails(value, command);
       break;

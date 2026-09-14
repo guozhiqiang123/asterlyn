@@ -12,7 +12,6 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
-  lineNumbers,
 } from "@codemirror/view";
 import { withEditorFolding } from "./editor-folding";
 import { EditorLanguageLoader, type EditorLanguageStatus } from "./editor-language";
@@ -27,6 +26,16 @@ import {
   type ExactTextContent,
   type TextChange,
 } from "./workbench/text-content";
+import {
+  blameGutter,
+  closeGutterMenu,
+  lineNumberGutter,
+  type GitBlameCopy,
+  type GitBlameRuntime,
+  type GitBlameSource,
+  type GutterBlameMenuState,
+} from "./workbench/editor-gutter.ts";
+import type { GitBlameResult } from "./models.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -45,6 +54,7 @@ interface CachedTextEditor {
   tabSize: Compartment;
   theme: Compartment;
   phrases: Compartment;
+  blame: Compartment;
   languageLoader: EditorLanguageLoader;
   languageActivation: number;
   languageName: string;
@@ -52,6 +62,11 @@ interface CachedTextEditor {
   onChange: (content: string) => void;
   changePending: boolean;
   changeFrame: number | null;
+  blameSource: GitBlameSource | null;
+  blameUnavailableReason: string | null;
+  blameResult: GitBlameResult | null;
+  blameLoading: boolean;
+  blameGeneration: number;
 }
 
 /**
@@ -67,6 +82,11 @@ export class TextEditor {
   private themeValue: EffectiveTheme = "dark";
   private phrasesValue: Readonly<Record<string, string>> = {};
 
+  constructor(
+    private readonly blameRuntime: GitBlameRuntime,
+    private blameCopy: GitBlameCopy,
+  ) {}
+
   mount(
     parent: HTMLElement,
     tabId: string,
@@ -74,6 +94,8 @@ export class TextEditor {
     content: string,
     path: string,
     preferences: AppPreferences,
+    blameSource: GitBlameSource | null,
+    blameUnavailableReason: string | null,
     onChange: (content: string) => void,
   ): void {
     const active = this.activeEntry();
@@ -83,6 +105,7 @@ export class TextEditor {
       active.view?.dom.parentElement === parent
     ) {
       active.onChange = onChange;
+      this.updateBlameAvailability(active, blameSource, blameUnavailableReason);
       applyEditorPreferences(active.view, preferences);
       active.view.requestMeasure();
       return;
@@ -98,10 +121,20 @@ export class TextEditor {
       entry = undefined;
     }
     if (!entry) {
-      entry = this.createEntry(tabId, loadEpoch, content, path, preferences, onChange);
+      entry = this.createEntry(
+        tabId,
+        loadEpoch,
+        content,
+        path,
+        preferences,
+        blameSource,
+        blameUnavailableReason,
+        onChange,
+      );
       this.entries.set(tabId, entry);
     } else {
       entry.onChange = onChange;
+      this.updateBlameAvailability(entry, blameSource, blameUnavailableReason);
     }
 
     const mountedEntry = entry;
@@ -232,6 +265,14 @@ export class TextEditor {
     }
   }
 
+  setBlameCopy(copy: GitBlameCopy): void {
+    if (this.blameCopy === copy) return;
+    this.blameCopy = copy;
+    for (const entry of this.entries.values()) {
+      if (entry.blameResult) this.installBlame(entry, entry.blameResult);
+    }
+  }
+
   detach(): void {
     this.releaseActiveView(false);
   }
@@ -244,6 +285,8 @@ export class TextEditor {
       this.activeId = null;
       return null;
     }
+    closeGutterMenu();
+    if (entry.blameResult || entry.blameLoading) this.clearBlame(entry);
     this.flushEntryChange(entry);
     entry.scrollLeft = entry.view.scrollDOM.scrollLeft;
     entry.scrollTop = entry.view.scrollDOM.scrollTop;
@@ -294,6 +337,8 @@ export class TextEditor {
     content: string,
     path: string,
     preferences: AppPreferences,
+    blameSource: GitBlameSource | null,
+    blameUnavailableReason: string | null,
     onChange: (content: string) => void,
   ): CachedTextEditor {
     const readOnly = new Compartment();
@@ -303,6 +348,7 @@ export class TextEditor {
     const tabSize = new Compartment();
     const theme = new Compartment();
     const phrases = new Compartment();
+    const blame = new Compartment();
     const entry: CachedTextEditor = {
       id,
       loadEpoch,
@@ -320,6 +366,7 @@ export class TextEditor {
       tabSize,
       theme,
       phrases,
+      blame,
       languageLoader: new EditorLanguageLoader(),
       languageActivation: 0,
       languageName: "Plain Text",
@@ -327,6 +374,11 @@ export class TextEditor {
       onChange,
       changePending: false,
       changeFrame: null,
+      blameSource,
+      blameUnavailableReason,
+      blameResult: null,
+      blameLoading: false,
+      blameGeneration: 0,
     };
     entry.state = EditorState.create({
       doc: entry.exactContent.text,
@@ -336,7 +388,8 @@ export class TextEditor {
         readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
         editable.of(EditorView.editable.of(!this.readOnlyValue)),
         language.of([]),
-        lineNumbers(),
+        blame.of([]),
+        lineNumberGutter(() => this.blameMenuState(entry)),
         foldGutter({ markerDOM: createFoldMarker }),
         history(),
         drawSelection(),
@@ -356,6 +409,7 @@ export class TextEditor {
         EditorView.updateListener.of((update) => {
           entry.state = update.state;
           if (!update.docChanged) return;
+          this.invalidateBlameForEdit(entry);
           const changes: TextChange[] = [];
           update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
             changes.push({ from, to, insert: inserted.toString() });
@@ -368,6 +422,86 @@ export class TextEditor {
       ],
     });
     return entry;
+  }
+
+  private blameMenuState(entry: CachedTextEditor): GutterBlameMenuState {
+    return {
+      active: entry.blameResult !== null,
+      loading: entry.blameLoading,
+      enabled: entry.blameSource !== null,
+      unavailableReason: entry.blameUnavailableReason,
+      copy: this.blameCopy,
+      toggle: () => this.toggleBlame(entry),
+    };
+  }
+
+  private async toggleBlame(entry: CachedTextEditor): Promise<void> {
+    if (entry.blameResult || entry.blameLoading) {
+      this.clearBlame(entry);
+      this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
+      return;
+    }
+    const source = entry.blameSource;
+    if (!source) return;
+    const generation = ++entry.blameGeneration;
+    entry.blameLoading = true;
+    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
+    try {
+      const result = await this.blameRuntime.load(source);
+      if (
+        generation !== entry.blameGeneration ||
+        this.entries.get(entry.id) !== entry ||
+        !sameBlameSource(entry.blameSource, source)
+      ) return;
+      entry.blameLoading = false;
+      entry.blameResult = result;
+      this.installBlame(entry, result);
+      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+      this.blameRuntime.status(
+        result.truncated
+          ? this.blameCopy.gitBlameLimited(lines)
+          : this.blameCopy.gitBlameLoaded(lines),
+        result.truncated ? "warning" : "information",
+      );
+    } catch (error) {
+      if (generation !== entry.blameGeneration || this.entries.get(entry.id) !== entry) return;
+      entry.blameLoading = false;
+      this.blameRuntime.error(error);
+    }
+  }
+
+  private installBlame(entry: CachedTextEditor, result: GitBlameResult): void {
+    this.dispatchEffects(
+      entry,
+      entry.blame.reconfigure(
+        blameGutter(result, this.blameCopy, () => this.blameMenuState(entry)),
+      ),
+    );
+  }
+
+  private clearBlame(entry: CachedTextEditor): void {
+    entry.blameGeneration += 1;
+    entry.blameLoading = false;
+    entry.blameResult = null;
+    this.dispatchEffects(entry, entry.blame.reconfigure([]));
+  }
+
+  private invalidateBlameForEdit(entry: CachedTextEditor): void {
+    entry.blameSource = null;
+    entry.blameUnavailableReason = this.blameCopy.gitBlameRequiresSavedFile;
+    if (entry.blameResult || entry.blameLoading) this.clearBlame(entry);
+  }
+
+  private updateBlameAvailability(
+    entry: CachedTextEditor,
+    source: GitBlameSource | null,
+    unavailableReason: string | null,
+  ): void {
+    if (!sameBlameSource(entry.blameSource, source) && (entry.blameResult || entry.blameLoading)) {
+      this.clearBlame(entry);
+    }
+    entry.blameSource = source;
+    entry.blameUnavailableReason = unavailableReason;
   }
 
   private loadLanguage(entry: CachedTextEditor): void {
@@ -457,6 +591,20 @@ function afterNextEditorPaint(): Promise<void> {
       window.setTimeout(resolve, 0);
     });
   });
+}
+
+function sameBlameSource(
+  left: GitBlameSource | null,
+  right: GitBlameSource | null,
+): boolean {
+  return left === right || Boolean(
+    left && right &&
+      left.repositoryRoot === right.repositoryRoot &&
+      left.repositoryId === right.repositoryId &&
+      left.path === right.path &&
+      left.commitOid === right.commitOid &&
+      left.parent === right.parent,
+  );
 }
 
 function createFoldMarker(open: boolean): HTMLElement {
