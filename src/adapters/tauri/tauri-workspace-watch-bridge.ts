@@ -8,10 +8,11 @@ import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
 
 export const tauriWorkspaceWatchBridge: WorkspaceWatchBridge = {
   native: true,
-  start: (workspaceRoot, generation) =>
+  start: (workspaceRoot, generation, openDocumentPaths) =>
     invokeDesktopCommand<WorkspaceWatchStatus>("start_workspace_watch", {
       workspaceRoot,
       generation,
+      openDocumentPaths,
     }),
   stop: () => invokeDesktopCommand<void>("stop_workspace_watch"),
   async subscribe(listener) {

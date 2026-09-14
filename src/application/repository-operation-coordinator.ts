@@ -1,7 +1,7 @@
 import type { RepositoryMutationOutcome } from "../models.ts";
 
 export interface RepositoryOperationSession {
-  beginTransition(): number;
+  beginTransition(options?: { reconciliationBarrier?: boolean }): number;
   matches(generation: number, root?: string): boolean;
 }
 
@@ -26,7 +26,7 @@ export class RepositoryOperationCoordinator {
     repositoryRoot: string,
     task: () => Promise<RepositoryMutationOutcome>,
   ): RepositoryOperationStart {
-    const generation = this.session.beginTransition();
+    const generation = this.session.beginTransition({ reconciliationBarrier: true });
     return {
       generation,
       completion: this.complete(repositoryRoot, generation, task),

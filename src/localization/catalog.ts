@@ -721,6 +721,7 @@ export interface ErrorCopy {
   unexpectedOperation: string;
   watchUnavailable(detail?: string): string;
   watchStartFailed(detail: string): string;
+  watchSuspended(): string;
   externalReconcileFailed(detail: string): string;
   translate(message: string): string;
 }

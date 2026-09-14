@@ -36,6 +36,64 @@ test("repository integration applies only declared projection slices", () => {
   fixture.dispose();
 });
 
+test("metadata-only reconciliation preserves newer working state in canonical and projections", () => {
+  const fixture = integrationFixture();
+  const newerWorkingTree = snapshot("/repo", [{ path: "newer.ts", conflicted: false }]);
+  fixture.coordinator.applyMutation(
+    { snapshot: newerWorkingTree, invalidatedSlices: ["workingTree"] },
+    "gitMutation",
+  );
+  const incoming = snapshot("/repo", [{ path: "older.ts", conflicted: false }]);
+  incoming.branches = [{ fullName: "refs/heads/topic", oid: "b".repeat(40) }];
+
+  const accepted = fixture.coordinator.reconcileWatchedRepository(
+    { root: "/repo", repository: incoming },
+    readLease(fixture, ["refs"]),
+    "watcher",
+  );
+
+  assert.equal(accepted, true);
+  assert.deepEqual(
+    fixture.session.repository.state.snapshot.changes.map((item) => item.path),
+    ["newer.ts"],
+  );
+  assert.deepEqual(
+    fixture.records.remote.at(-1).changes.map((item) => item.path),
+    ["newer.ts"],
+  );
+  assert.equal(fixture.records.changes.length, 1);
+  assert.deepEqual(fixture.records.files, [["newer.ts"]]);
+  fixture.dispose();
+});
+
+test("a watcher read lease cannot overwrite a later mutation commit", () => {
+  const fixture = integrationFixture();
+  const staleLease = readLease(fixture, ["head", "refs", "history"]);
+  const newer = snapshot("/repo", [{ path: "newer.ts", conflicted: false }]);
+  newer.branch = { ...newer.branch, head: "newer-operation" };
+  fixture.coordinator.applyMutation(
+    { snapshot: newer, invalidatedSlices: ["workingTree", "head", "refs", "history"] },
+    "gitMutation",
+  );
+  const stale = snapshot("/repo", [{ path: "older.ts", conflicted: false }]);
+  stale.branch = { ...stale.branch, head: "older-watch-read" };
+
+  const accepted = fixture.coordinator.reconcileWatchedRepository(
+    { root: "/repo", repository: stale },
+    staleLease,
+    "watcher",
+  );
+
+  assert.equal(accepted, false);
+  assert.equal(fixture.session.repository.state.snapshot.branch.head, "newer-operation");
+  assert.deepEqual(
+    fixture.session.repository.state.snapshot.changes.map((item) => item.path),
+    ["newer.ts"],
+  );
+  assert.equal(fixture.records.remote.at(-1).branch.head, "newer-operation");
+  fixture.dispose();
+});
+
 test("remote conflict routing selects the first conflict through one entry point", () => {
   const fixture = integrationFixture();
   const conflicted = snapshot("/repo", [
@@ -93,8 +151,8 @@ test("watch reconciliation removes unavailable Git projections without changing 
   const fixture = integrationFixture();
 
   fixture.coordinator.reconcileWatchedRepository(
-    null,
-    ["workingTree", "refs", "history", "operation"],
+    { root: "/repo", repository: null },
+    readLease(fixture, ["workingTree", "refs", "history", "operation"]),
     "watcher",
   );
 
@@ -198,8 +256,8 @@ test("watch reconciliation completes a pending untracked scan", async () => {
   const pending = { ...snapshot("/repo", [{ path: "tracked.txt", conflicted: false }]), untrackedState: "pending" };
 
   fixture.coordinator.reconcileWatchedRepository(
-    pending,
-    ["workspaceCatalog", "openDocuments", "workingTree", "head", "refs", "history", "operation"],
+    { root: "/repo", repository: pending },
+    readLease(fixture, ["workingTree", "head", "refs", "history", "operation"]),
     "focusRecovery",
   );
   await settle();
@@ -225,8 +283,8 @@ test("failed untracked scans replace the pending presentation", async () => {
   const pending = { ...snapshot("/repo", [{ path: "tracked.txt", conflicted: false }]), untrackedState: "pending" };
 
   fixture.coordinator.reconcileWatchedRepository(
-    pending,
-    ["workingTree"],
+    { root: "/repo", repository: pending },
+    readLease(fixture, ["workingTree"]),
     "watcher",
   );
   await settle();
@@ -242,6 +300,7 @@ function integrationFixture(gatewayOverrides = {}) {
   const initial = snapshot("/repo");
   const session = new WindowSession({
     readProject(path) { return this.openProject(path); },
+    readRepositorySlices(path) { return this.readProject(path); },
     async openProject(root) { return { root, repository: initial }; },
     async readTrackedChanges(root) { return { root, changes: [] }; },
     async scanUntracked(root) { return { root, changes: [] }; },
@@ -331,6 +390,10 @@ function integrationFixture(gatewayOverrides = {}) {
       session.dispose();
     },
   };
+}
+
+function readLease(fixture, slices) {
+  return fixture.session.beginRepositoryRead(fixture.session.workspace.identity(), slices);
 }
 
 function snapshot(root, changes = []) {

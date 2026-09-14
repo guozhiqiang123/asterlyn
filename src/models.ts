@@ -244,6 +244,7 @@ export interface GitConflictContent {
 export type RepositoryStateSlice =
   | "workspaceCatalog"
   | "openDocuments"
+  | "repositoryCapability"
   | "workingTree"
   | "head"
   | "refs"
@@ -253,16 +254,43 @@ export type RepositoryStateSlice =
 export interface WorkspaceWatchStatus {
   available: boolean;
   message: string | null;
+  watchInstance: number | null;
+  verificationRequired: boolean;
 }
 
 export interface WorkspaceWatchInvalidation {
   root: string;
   generation: number;
+  watchInstance: number;
   slices: RepositoryStateSlice[];
   paths: string[];
   causes: Array<"watcher" | "overflowRecovery">;
-  overflowed: boolean;
+  recovery: WorkspaceWatchRecovery;
 }
+
+export interface RepositorySliceSnapshot {
+  root: string;
+  gitDir: string;
+  repositoryRoots?: GitRootDescriptor[];
+  branch?: BranchState;
+  operation?: GitOperationSnapshot | null;
+  changes?: FileChange[];
+  commits?: CommitSummary[];
+  branches?: BranchSummary[];
+  remotes?: RemoteSummary[];
+  untrackedState?: RepositorySnapshot["untrackedState"];
+}
+
+export interface RepositorySliceProject {
+  root: string;
+  repository: RepositorySliceSnapshot | null;
+}
+
+export type WorkspaceWatchRecovery =
+  | "none"
+  | "pathsTruncated"
+  | "rootAmbiguous"
+  | "backendOverflow";
 
 export interface RepositoryMutationOutcome {
   snapshot: RepositorySnapshot;

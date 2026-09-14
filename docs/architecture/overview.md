@@ -52,6 +52,11 @@ multi-step Git mutations follow [`ADR-0008`](decisions/0008-recoverable-git-oper
 external-file awareness follows
 [`ADR-0009`](decisions/0009-hinted-workspace-reconciliation.md): operating-system events are
 coalesced hints into typed session slices, while filesystem and Git reads remain authoritative.
+The ordering, partial-merge, exact owner-plan, health/backpressure, and capability-transition
+contract is refined by
+[`ADR-0012`](decisions/0012-versioned-workspace-reconciliation.md): one versioned reconciliation
+commit boundary accepts a read or mutation before atomically projecting its exact slices, and stale
+read leases are retried rather than allowed to replace newer truth.
 One Rust watcher is shared by windows that own the same canonical root and is released with its last
 owner. Linux derives selective non-recursive directory registrations from the authorized catalog;
 macOS and Windows use native recursive workspace registrations. Content edits target open documents
@@ -96,7 +101,8 @@ Remote work follows the same reconciliation rule but uses a repository-scoped ca
 
 Returning a native project window from the background performs one controlled Fetch for the selected
 remote. A short blur/focus cycle does not force a filesystem or Git reconstruction; after at least
-five seconds away, bounded local focus recovery completes before Fetch. The canonical Fetch outcome
+30 seconds away, and only when local state is stale and outside the recovery cooldown, bounded local
+focus recovery completes before Fetch. The canonical Fetch outcome
 updates the Update incoming-count badge but never integrates commits. Automatic Fetch is skipped
 while a Remote/Push review, reviewed Git operation, or global workbench task is active, and when the
 current workspace lacks a supported selected remote. It does not lock the editor or open a modal;

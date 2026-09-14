@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,14 +16,33 @@ const WATCH_EVENT: &str = "workspace-watch-invalidation";
 const QUIET_PERIOD: Duration = Duration::from_millis(120);
 const MAX_LATENCY: Duration = Duration::from_millis(500);
 const MAX_PATHS: usize = 512;
+const MAX_REVIVABLE_DIRECTORIES: usize = 512;
 
-type Owners = Arc<Mutex<HashMap<String, u64>>>;
+type Owners = Arc<Mutex<HashMap<String, WatchOwner>>>;
+
+#[derive(Clone)]
+struct WatchOwner {
+    generation: u64,
+    directories: BTreeSet<PathBuf>,
+    revivable_directories: BTreeSet<PathBuf>,
+    revived_directories: BTreeSet<PathBuf>,
+}
+
+impl WatchOwner {
+    fn effective_directories(&self) -> impl Iterator<Item = &PathBuf> {
+        self.directories
+            .iter()
+            .chain(self.revived_directories.iter())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceWatchStatus {
     pub(crate) available: bool,
     pub(crate) message: Option<String>,
+    pub(crate) watch_instance: Option<u64>,
+    pub(crate) verification_required: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,15 +50,27 @@ pub(crate) struct WorkspaceWatchStatus {
 struct WorkspaceWatchInvalidation {
     root: String,
     generation: u64,
+    watch_instance: u64,
     slices: Vec<RepositoryStateSlice>,
     paths: Vec<String>,
     causes: Vec<&'static str>,
-    overflowed: bool,
+    recovery: WorkspaceWatchRecovery,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+enum WorkspaceWatchRecovery {
+    #[default]
+    None,
+    PathsTruncated,
+    RootAmbiguous,
+    BackendOverflow,
 }
 
 #[derive(Default)]
 pub(crate) struct WorkspaceWatchService {
     registry: Mutex<WatchRegistry>,
+    sequence: AtomicU64,
 }
 
 #[derive(Default)]
@@ -54,13 +86,14 @@ struct SharedWorkspaceWatch {
     workspace_directories: Arc<Mutex<BTreeSet<PathBuf>>>,
     metadata_roots: Vec<PathBuf>,
     owners: Owners,
+    watch_instance: u64,
 }
 
 #[derive(Default)]
 struct PendingHint {
     slices: BTreeSet<RepositoryStateSlice>,
     paths: BTreeSet<String>,
-    overflowed: bool,
+    recovery: WorkspaceWatchRecovery,
     first_event: Option<Instant>,
     last_event: Option<Instant>,
 }
@@ -78,6 +111,7 @@ impl WorkspaceWatchService {
             git_dir,
             directories,
         } = roots;
+        let requested_directories = normalized_watch_directories(&root, &directories);
         let metadata_roots = git_metadata_roots(git_dir.as_deref());
         let mut registry = match self.registry.lock() {
             Ok(registry) => registry,
@@ -93,52 +127,92 @@ impl WorkspaceWatchService {
         if let Some(watch) = registry.roots.get_mut(&root)
             && watch.metadata_roots == metadata_roots
         {
-            if let Err(message) = add_workspace_watches(watch, &root, &directories) {
-                return unavailable(message);
-            }
             let owners = Arc::clone(&watch.owners);
             if let Ok(mut owners) = owners.lock() {
-                owners.insert(window_label.to_string(), generation);
+                let previous_owner = owners.remove(window_label);
+                owners.insert(
+                    window_label.to_string(),
+                    updated_watch_owner(generation, requested_directories, previous_owner.as_ref()),
+                );
                 drop(owners);
+                let verification_required = match reconcile_workspace_watches(watch, &root) {
+                    Ok(expanded) => expanded,
+                    Err(message) => {
+                        if let Ok(mut owners) = watch.owners.lock() {
+                            if let Some(previous_owner) = previous_owner {
+                                owners.insert(window_label.to_string(), previous_owner);
+                            } else {
+                                owners.remove(window_label);
+                            }
+                        }
+                        let _ = reconcile_workspace_watches(watch, &root);
+                        return unavailable(message);
+                    }
+                };
+                let watch_instance = watch.watch_instance;
                 registry.owner_roots.insert(window_label.to_string(), root);
-                return available();
+                return available(watch_instance, verification_required);
             }
             return unavailable("workspace-watch owner lock was poisoned");
         }
 
-        let (owners, watch_directories) = if let Some(watch) = registry.roots.get(&root) {
-            let mut combined = match watch.workspace_directories.lock() {
-                Ok(directories) => directories.clone(),
-                Err(_) => return unavailable("workspace-watch directory plan lock was poisoned"),
+        let mut previous = registry.roots.remove(&root);
+        let replacing = previous.is_some();
+        let previous_owners = previous.as_ref().map(|watch| Arc::clone(&watch.owners));
+        let owners = if let Some(previous_owners) = previous_owners {
+            let owner_snapshot = match previous_owners.lock() {
+                Ok(mut owners) => {
+                    let snapshot = owners.clone();
+                    owners.clear();
+                    snapshot
+                }
+                Err(_) => {
+                    if let Some(previous) = previous.take() {
+                        registry.roots.insert(root.clone(), previous);
+                    }
+                    return unavailable("workspace-watch directory plan lock was poisoned");
+                }
             };
-            combined.extend(normalized_watch_directories(&root, &directories));
-            (Arc::clone(&watch.owners), combined.into_iter().collect())
+            Arc::new(Mutex::new(owner_snapshot))
         } else {
-            (
-                Arc::new(Mutex::new(HashMap::new())),
-                normalized_watch_directories(&root, &directories)
-                    .into_iter()
-                    .collect(),
-            )
+            Arc::new(Mutex::new(HashMap::new()))
         };
+        if let Ok(mut registered) = owners.lock() {
+            let previous_owner = registered.remove(window_label);
+            registered.insert(
+                window_label.to_string(),
+                updated_watch_owner(generation, requested_directories, previous_owner.as_ref()),
+            );
+        } else {
+            return unavailable("workspace-watch owner lock was poisoned");
+        }
+        let watch_directories = desired_workspace_directories(&root, &owners);
+        let watch_instance = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let shared = match create_watch(
             app,
             root.clone(),
             metadata_roots,
             watch_directories,
             Arc::clone(&owners),
+            watch_instance,
         ) {
             Ok(shared) => shared,
-            Err(message) => return unavailable(message),
+            Err(message) => {
+                if let Some(mut previous) = previous.take() {
+                    if let (Ok(current), Ok(mut restored)) = (owners.lock(), previous.owners.lock())
+                    {
+                        *restored = current.clone();
+                    }
+                    let _ = reconcile_workspace_watches(&mut previous, &root);
+                    registry.roots.insert(root.clone(), previous);
+                    registry.owner_roots.insert(window_label.to_string(), root);
+                }
+                return unavailable(message);
+            }
         };
-        if let Ok(mut owners) = owners.lock() {
-            owners.insert(window_label.to_string(), generation);
-        } else {
-            return unavailable("workspace-watch owner lock was poisoned");
-        }
         registry.roots.insert(root.clone(), shared);
         registry.owner_roots.insert(window_label.to_string(), root);
-        available()
+        available(watch_instance, replacing)
     }
 
     pub(crate) fn remove_window(&self, window_label: &str) {
@@ -154,6 +228,7 @@ fn create_watch(
     metadata_roots: Vec<PathBuf>,
     directories: Vec<PathBuf>,
     owners: Owners,
+    watch_instance: u64,
 ) -> Result<SharedWorkspaceWatch, String> {
     let (sender, receiver) = mpsc::channel::<notify::Result<Event>>();
     let mut watcher = notify::recommended_watcher(sender)
@@ -178,6 +253,7 @@ fn create_watch(
                 worker_metadata_roots,
                 worker_workspace_directories,
                 worker_owners,
+                watch_instance,
                 receiver,
             )
         })
@@ -187,6 +263,7 @@ fn create_watch(
         workspace_directories,
         metadata_roots,
         owners,
+        watch_instance,
     })
 }
 
@@ -199,44 +276,125 @@ fn normalized_watch_directories(root: &Path, directories: &[PathBuf]) -> BTreeSe
         .collect()
 }
 
+fn desired_workspace_directories(root: &Path, owners: &Owners) -> Vec<PathBuf> {
+    let mut desired = BTreeSet::from([root.to_path_buf()]);
+    if let Ok(owners) = owners.lock() {
+        for owner in owners.values() {
+            desired.extend(owner.effective_directories().cloned());
+        }
+    }
+    desired.into_iter().collect()
+}
+
+fn updated_watch_owner(
+    generation: u64,
+    directories: BTreeSet<PathBuf>,
+    previous: Option<&WatchOwner>,
+) -> WatchOwner {
+    let mut revivable_directories = previous
+        .map(|owner| owner.revivable_directories.clone())
+        .unwrap_or_default();
+    let mut revived_directories = BTreeSet::new();
+    if let Some(previous) = previous {
+        for directory in previous.effective_directories() {
+            if directories.contains(directory) {
+                continue;
+            }
+            if directory.is_dir() && previous.revived_directories.contains(directory) {
+                revived_directories.insert(directory.clone());
+            } else if !directory.exists() {
+                revivable_directories.insert(directory.clone());
+            }
+        }
+    }
+    let recreated: Vec<_> = revivable_directories
+        .iter()
+        .filter(|directory| directory.is_dir())
+        .cloned()
+        .collect();
+    for directory in recreated {
+        revivable_directories.remove(&directory);
+        if !directories.contains(&directory) {
+            revived_directories.insert(directory);
+        }
+    }
+    for directory in &directories {
+        revivable_directories.remove(directory);
+        revived_directories.remove(directory);
+    }
+    while revivable_directories.len() > MAX_REVIVABLE_DIRECTORIES {
+        let Some(path) = revivable_directories.iter().next_back().cloned() else {
+            break;
+        };
+        revivable_directories.remove(&path);
+    }
+    WatchOwner {
+        generation,
+        directories,
+        revivable_directories,
+        revived_directories,
+    }
+}
+
 #[cfg(target_os = "linux")]
-fn add_workspace_watches(
+fn reconcile_workspace_watches(
     watch: &mut SharedWorkspaceWatch,
     root: &Path,
-    directories: &[PathBuf],
-) -> Result<(), String> {
-    let additions = normalized_watch_directories(root, directories);
+) -> Result<bool, String> {
+    let desired =
+        normalized_watch_directories(root, &desired_workspace_directories(root, &watch.owners));
     let mut watched = watch
         .workspace_directories
         .lock()
         .map_err(|_| "workspace-watch directory plan lock was poisoned".to_string())?;
-    for directory in additions.difference(&watched) {
-        watch
-            .watcher
-            .watch(directory, RecursiveMode::NonRecursive)
-            .map_err(|error| {
-                format!(
-                    "a project directory could not be watched ({}): {error}",
-                    directory.display()
-                )
-            })?;
+    let additions: Vec<_> = desired.difference(&watched).cloned().collect();
+    let removals: Vec<_> = watched.difference(&desired).cloned().collect();
+    let mut actual = watched.clone();
+    for directory in &additions {
+        if let Err(error) = watch.watcher.watch(directory, RecursiveMode::NonRecursive) {
+            *watched = actual;
+            return Err(format!(
+                "a project directory could not be watched ({}): {error}",
+                directory.display()
+            ));
+        }
+        actual.insert(directory.clone());
     }
-    watched.extend(additions);
-    Ok(())
+    for directory in &removals {
+        match watch.watcher.unwatch(directory) {
+            Ok(()) => {
+                actual.remove(directory);
+            }
+            Err(_) if !directory.exists() => {
+                actual.remove(directory);
+            }
+            Err(error) => {
+                *watched = actual;
+                return Err(format!(
+                    "a stale project directory watch could not be removed ({}): {error}",
+                    directory.display()
+                ));
+            }
+        }
+    }
+    *watched = actual;
+    Ok(!additions.is_empty())
 }
 
 #[cfg(not(target_os = "linux"))]
-fn add_workspace_watches(
+fn reconcile_workspace_watches(
     watch: &mut SharedWorkspaceWatch,
     root: &Path,
-    directories: &[PathBuf],
-) -> Result<(), String> {
-    watch
+) -> Result<bool, String> {
+    let desired =
+        normalized_watch_directories(root, &desired_workspace_directories(root, &watch.owners));
+    let mut watched = watch
         .workspace_directories
         .lock()
-        .map_err(|_| "workspace-watch directory plan lock was poisoned".to_string())?
-        .extend(normalized_watch_directories(root, directories));
-    Ok(())
+        .map_err(|_| "workspace-watch directory plan lock was poisoned".to_string())?;
+    let expanded = desired.difference(&watched).next().is_some();
+    *watched = desired;
+    Ok(expanded)
 }
 
 fn git_metadata_roots(git_dir: Option<&Path>) -> Vec<PathBuf> {
@@ -339,6 +497,7 @@ fn watch_loop(
     metadata_roots: Vec<PathBuf>,
     workspace_directories: Arc<Mutex<BTreeSet<PathBuf>>>,
     owners: Owners,
+    watch_instance: u64,
     receiver: mpsc::Receiver<notify::Result<Event>>,
 ) {
     let mut pending = PendingHint::default();
@@ -354,16 +513,16 @@ fn watch_loop(
                     pending.merge_event(event, &root, &metadata_roots);
                 }
                 if pending.ready() {
-                    emit_pending(&app, &root, &owners, &mut pending);
+                    emit_pending(&app, &root, &owners, watch_instance, &mut pending);
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if pending.ready() {
-                    emit_pending(&app, &root, &owners, &mut pending);
+                    emit_pending(&app, &root, &owners, watch_instance, &mut pending);
                 }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                emit_pending(&app, &root, &owners, &mut pending);
+                emit_pending(&app, &root, &owners, watch_instance, &mut pending);
                 break;
             }
         }
@@ -414,12 +573,12 @@ impl PendingHint {
         let event = match event {
             Ok(event) => event,
             Err(_) => {
-                self.mark_overflow();
+                self.mark_backend_overflow();
                 return;
             }
         };
         if event.need_rescan() {
-            self.mark_overflow();
+            self.mark_backend_overflow();
             return;
         }
         if matches!(
@@ -432,7 +591,7 @@ impl PendingHint {
             return;
         }
         if event.paths.is_empty() {
-            self.mark_overflow();
+            self.mark_backend_overflow();
             return;
         }
         let catalog_changed = changes_catalog(event.kind);
@@ -467,14 +626,14 @@ impl PendingHint {
                 }
                 self.insert_path(components.join("/"));
             } else {
-                self.mark_overflow();
+                self.mark_root_ambiguous();
             }
         }
     }
 
     fn merge_git_path(&mut self, components: &[String]) {
         let Some(first) = components.first().map(String::as_str) else {
-            self.mark_overflow();
+            self.mark_root_ambiguous();
             return;
         };
         if matches!(first, "objects" | "logs" | "COMMIT_EDITMSG") {
@@ -511,18 +670,35 @@ impl PendingHint {
 
     fn insert_path(&mut self, path: String) {
         if self.paths.len() >= MAX_PATHS {
-            self.mark_overflow();
-        } else if !self.overflowed {
+            self.mark_paths_truncated();
+        } else if self.recovery == WorkspaceWatchRecovery::None {
             self.paths.insert(path);
         }
     }
 
-    fn mark_overflow(&mut self) {
-        self.overflowed = true;
+    fn mark_paths_truncated(&mut self) {
+        self.recovery = self.recovery.max(WorkspaceWatchRecovery::PathsTruncated);
+        self.paths.clear();
+    }
+
+    fn mark_root_ambiguous(&mut self) {
+        self.recovery = self.recovery.max(WorkspaceWatchRecovery::RootAmbiguous);
         self.paths.clear();
         self.slices.extend([
             RepositoryStateSlice::WorkspaceCatalog,
             RepositoryStateSlice::OpenDocuments,
+            RepositoryStateSlice::RepositoryCapability,
+            RepositoryStateSlice::WorkingTree,
+        ]);
+    }
+
+    fn mark_backend_overflow(&mut self) {
+        self.recovery = WorkspaceWatchRecovery::BackendOverflow;
+        self.paths.clear();
+        self.slices.extend([
+            RepositoryStateSlice::WorkspaceCatalog,
+            RepositoryStateSlice::OpenDocuments,
+            RepositoryStateSlice::RepositoryCapability,
             RepositoryStateSlice::WorkingTree,
             RepositoryStateSlice::Head,
             RepositoryStateSlice::Refs,
@@ -552,21 +728,33 @@ impl PendingHint {
             || now.duration_since(first) >= MAX_LATENCY
     }
 
-    fn take(&mut self) -> Option<(Vec<RepositoryStateSlice>, Vec<String>, bool)> {
+    fn take(
+        &mut self,
+    ) -> Option<(
+        Vec<RepositoryStateSlice>,
+        Vec<String>,
+        WorkspaceWatchRecovery,
+    )> {
         if self.slices.is_empty() {
             *self = Self::default();
             return None;
         }
         let slices = std::mem::take(&mut self.slices).into_iter().collect();
         let paths = std::mem::take(&mut self.paths).into_iter().collect();
-        let overflowed = self.overflowed;
+        let recovery = self.recovery;
         *self = Self::default();
-        Some((slices, paths, overflowed))
+        Some((slices, paths, recovery))
     }
 }
 
-fn emit_pending(app: &tauri::AppHandle, root: &Path, owners: &Owners, pending: &mut PendingHint) {
-    let Some((slices, paths, overflowed)) = pending.take() else {
+fn emit_pending(
+    app: &tauri::AppHandle,
+    root: &Path,
+    owners: &Owners,
+    watch_instance: u64,
+    pending: &mut PendingHint,
+) {
+    let Some((slices, paths, recovery)) = pending.take() else {
         return;
     };
     let owner_snapshot = owners
@@ -574,22 +762,42 @@ fn emit_pending(app: &tauri::AppHandle, root: &Path, owners: &Owners, pending: &
         .map(|owners| {
             owners
                 .iter()
-                .map(|(label, generation)| (label.clone(), *generation))
+                .map(|(label, owner)| (label.clone(), owner.clone()))
                 .collect()
         })
-        .unwrap_or_else(|_| Vec::<(String, u64)>::new());
-    for (label, generation) in owner_snapshot {
+        .unwrap_or_else(|_| Vec::<(String, WatchOwner)>::new());
+    let includes_shared_repository_state = slices.iter().any(|slice| {
+        matches!(
+            slice,
+            RepositoryStateSlice::RepositoryCapability
+                | RepositoryStateSlice::Head
+                | RepositoryStateSlice::Refs
+                | RepositoryStateSlice::History
+                | RepositoryStateSlice::Operation
+        )
+    });
+    for (label, owner) in owner_snapshot {
+        let owner_directories = owner.effective_directories().cloned().collect();
+        let owner_paths: Vec<_> = paths
+            .iter()
+            .filter(|path| owner_accepts_workspace_path(root, &owner_directories, path))
+            .cloned()
+            .collect();
+        if !paths.is_empty() && owner_paths.is_empty() && !includes_shared_repository_state {
+            continue;
+        }
         let payload = WorkspaceWatchInvalidation {
             root: root.to_string_lossy().into_owned(),
-            generation,
+            generation: owner.generation,
+            watch_instance,
             slices: slices.clone(),
-            paths: paths.clone(),
-            causes: vec![if overflowed {
+            paths: owner_paths,
+            causes: vec![if recovery == WorkspaceWatchRecovery::BackendOverflow {
                 "overflowRecovery"
             } else {
                 "watcher"
             }],
-            overflowed,
+            recovery,
         };
         if let Some(window) = app.get_webview_window(&label) {
             let _ = window.emit(WATCH_EVENT, payload);
@@ -597,19 +805,36 @@ fn emit_pending(app: &tauri::AppHandle, root: &Path, owners: &Owners, pending: &
     }
 }
 
+fn owner_accepts_workspace_path(
+    root: &Path,
+    directories: &BTreeSet<PathBuf>,
+    workspace_path: &str,
+) -> bool {
+    let path = root.join(workspace_path);
+    path.parent()
+        .is_some_and(|parent| directories.contains(parent))
+}
+
 fn detach_owner(registry: &mut WatchRegistry, window_label: &str) {
     let Some(root) = registry.owner_roots.remove(window_label) else {
         return;
     };
-    let remove_root = registry
-        .roots
-        .get(&root)
-        .and_then(|watch| watch.owners.lock().ok())
-        .map(|mut owners| {
-            owners.remove(window_label);
-            owners.is_empty()
-        })
-        .unwrap_or(true);
+    let remove_root = if let Some(watch) = registry.roots.get_mut(&root) {
+        let empty = watch
+            .owners
+            .lock()
+            .map(|mut owners| {
+                owners.remove(window_label);
+                owners.is_empty()
+            })
+            .unwrap_or(true);
+        if !empty {
+            let _ = reconcile_workspace_watches(watch, &root);
+        }
+        empty
+    } else {
+        true
+    };
     if remove_root {
         registry.roots.remove(&root);
     }
@@ -652,10 +877,12 @@ fn is_operation_marker(name: &str) -> bool {
     )
 }
 
-fn available() -> WorkspaceWatchStatus {
+fn available(watch_instance: u64, verification_required: bool) -> WorkspaceWatchStatus {
     WorkspaceWatchStatus {
         available: true,
         message: None,
+        watch_instance: Some(watch_instance),
+        verification_required,
     }
 }
 
@@ -663,6 +890,8 @@ fn unavailable(message: impl Into<String>) -> WorkspaceWatchStatus {
     WorkspaceWatchStatus {
         available: false,
         message: Some(message.into()),
+        watch_instance: None,
+        verification_required: false,
     }
 }
 
@@ -671,6 +900,95 @@ mod tests {
     use super::*;
     use notify::event::{CreateKind, DataChange, ModifyKind};
     use std::fs;
+
+    #[test]
+    fn shared_directory_plan_is_the_exact_union_of_current_owner_plans() {
+        let root = Path::new("/workspace");
+        let owners = Arc::new(Mutex::new(HashMap::from([
+            (
+                "first".to_string(),
+                WatchOwner {
+                    generation: 1,
+                    directories: BTreeSet::from([
+                        root.to_path_buf(),
+                        root.join("src"),
+                        root.join("docs"),
+                    ]),
+                    revivable_directories: BTreeSet::new(),
+                    revived_directories: BTreeSet::new(),
+                },
+            ),
+            (
+                "second".to_string(),
+                WatchOwner {
+                    generation: 2,
+                    directories: BTreeSet::from([root.to_path_buf(), root.join("tests")]),
+                    revivable_directories: BTreeSet::new(),
+                    revived_directories: BTreeSet::new(),
+                },
+            ),
+        ])));
+
+        assert_eq!(
+            desired_workspace_directories(root, &owners),
+            vec![
+                root.to_path_buf(),
+                root.join("docs"),
+                root.join("src"),
+                root.join("tests"),
+            ]
+        );
+
+        owners.lock().unwrap().remove("first");
+        assert_eq!(
+            desired_workspace_directories(root, &owners),
+            vec![root.to_path_buf(), root.join("tests")]
+        );
+    }
+
+    #[test]
+    fn owner_path_admission_does_not_leak_another_windows_hot_directories() {
+        let root = Path::new("/workspace");
+        let first = BTreeSet::from([root.to_path_buf(), root.join("ignored/first")]);
+        let second = BTreeSet::from([root.to_path_buf(), root.join("ignored/second")]);
+
+        assert!(owner_accepts_workspace_path(
+            root,
+            &first,
+            "ignored/first/open.txt"
+        ));
+        assert!(!owner_accepts_workspace_path(
+            root,
+            &second,
+            "ignored/first/open.txt"
+        ));
+    }
+
+    #[test]
+    fn deleted_known_directories_are_rewatched_when_the_same_path_reappears() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(directory.path()).unwrap();
+        let source = root.join("src");
+        fs::create_dir(&source).unwrap();
+
+        let initial = updated_watch_owner(1, BTreeSet::from([root.clone(), source.clone()]), None);
+        fs::remove_dir(&source).unwrap();
+        let removed = updated_watch_owner(2, BTreeSet::from([root.clone()]), Some(&initial));
+        assert!(removed.revivable_directories.contains(&source));
+        assert!(!removed.effective_directories().any(|path| path == &source));
+
+        fs::create_dir(&source).unwrap();
+        let recreated = updated_watch_owner(3, BTreeSet::from([root.clone()]), Some(&removed));
+        assert!(recreated.revived_directories.contains(&source));
+        assert!(
+            recreated
+                .effective_directories()
+                .any(|path| path == &source)
+        );
+
+        let retained = updated_watch_owner(4, BTreeSet::from([root]), Some(&recreated));
+        assert!(retained.effective_directories().any(|path| path == &source));
+    }
 
     #[test]
     fn read_access_and_access_time_metadata_do_not_invalidate_the_workspace() {
@@ -867,9 +1185,35 @@ mod tests {
             &[],
         );
 
-        assert!(hint.overflowed);
+        assert_eq!(hint.recovery, WorkspaceWatchRecovery::BackendOverflow);
         assert!(hint.paths.is_empty());
-        assert_eq!(hint.slices.len(), 7);
+        assert_eq!(hint.slices.len(), 8);
+    }
+
+    #[test]
+    fn path_truncation_keeps_the_typed_slices_and_only_drops_path_targeting() {
+        let root = Path::new("/workspace");
+        let mut hint = PendingHint::default();
+        for index in 0..=MAX_PATHS {
+            hint.merge_event(
+                Ok(
+                    Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+                        .add_path(root.join(format!("src/file-{index}.rs"))),
+                ),
+                root,
+                &[],
+            );
+        }
+
+        assert_eq!(hint.recovery, WorkspaceWatchRecovery::PathsTruncated);
+        assert!(hint.paths.is_empty());
+        assert_eq!(
+            hint.slices,
+            BTreeSet::from([
+                RepositoryStateSlice::OpenDocuments,
+                RepositoryStateSlice::WorkingTree,
+            ])
+        );
     }
 
     #[test]
@@ -897,7 +1241,10 @@ mod tests {
 
         // FSEvents may coalesce creation of the temporary root with the file event.
         // A root-level hint legitimately requests complete reconciliation without exact paths.
-        assert!(hint.overflowed || hint.paths.contains("external.txt"));
+        assert!(
+            hint.recovery == WorkspaceWatchRecovery::RootAmbiguous
+                || hint.paths.contains("external.txt")
+        );
         assert!(hint.slices.contains(&RepositoryStateSlice::OpenDocuments));
         assert!(hint.slices.contains(&RepositoryStateSlice::WorkingTree));
     }

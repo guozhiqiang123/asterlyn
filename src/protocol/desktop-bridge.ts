@@ -25,6 +25,8 @@ import type {
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
+  RepositorySliceProject,
+  RepositoryStateSlice,
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
@@ -104,6 +106,10 @@ export interface WorkspaceBridge {
 }
 
 export interface GitReadBridge {
+  readRepositorySlices(
+    repositoryRoot: string,
+    slices: RepositoryStateSlice[],
+  ): Promise<RepositorySliceProject>;
   readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan>;
   readHistoryPage(
     repositoryRoot: string,

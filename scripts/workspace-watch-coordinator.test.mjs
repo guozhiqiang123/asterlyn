@@ -24,12 +24,13 @@ test("watch hints reconcile only their typed slices", async () => {
     watch,
     session,
     { async refresh() { reads.catalog += 1; return true; } },
-    {
+    editorFixture({
       async reconcileExternalPaths(paths) { reads.documents.push([...paths]); },
-    },
+    }),
     {
-      reconcileRepository(snapshot, slices, cause) {
-        outcomes.push({ snapshot, slices, cause });
+      reconcileRepository(project, lease, cause) {
+        outcomes.push({ snapshot: project.repository, slices: lease.slices, cause });
+        return true;
       },
       refreshRemoteAfterFocus() {},
       reportWarning() {},
@@ -66,10 +67,11 @@ test("catalog and repository metadata are reconciled without accepting stale roo
     watch,
     session,
     { async refresh() { catalogReads += 1; return true; } },
-    { async reconcileExternalPaths() {} },
+    editorFixture(),
     {
-      reconcileRepository(snapshot, slices, cause) {
-        outcomes.push({ snapshot, slices, cause });
+      reconcileRepository(project, lease, cause) {
+        outcomes.push({ snapshot: project.repository, slices: lease.slices, cause });
+        return true;
       },
       refreshRemoteAfterFocus() {},
       reportWarning() {},
@@ -86,7 +88,7 @@ test("catalog and repository metadata are reconciled without accepting stale roo
   assert.equal(catalogReads, 1);
   assert.equal(projectReads, 1);
   assert.equal(watch.starts, 2);
-  assert.deepEqual(outcomes[0].slices, ["workspaceCatalog", "refs", "history"]);
+  assert.deepEqual(outcomes[0].slices, ["refs", "history"]);
   assert.equal(outcomes[0].cause, "watcher");
 
   watch.emit({ ...event(session, ["refs"], []), root: "/stale" });
@@ -110,9 +112,9 @@ test("repository reread failures are reported and a later hint can still reconci
     watch,
     session,
     { async refresh() { return true; } },
-    { async reconcileExternalPaths() {} },
+    editorFixture(),
     {
-      reconcileRepository(snapshot) { outcomes.push(snapshot); },
+      reconcileRepository(project) { outcomes.push(project.repository); return true; },
       refreshRemoteAfterFocus() {},
       reportWarning(message) { warnings.push(message); },
     },
@@ -132,6 +134,41 @@ test("repository reread failures are reported and a later hint can still reconci
   coordinator.dispose();
 });
 
+test("watch reconciliation waits for an internal transition barrier", async () => {
+  let projectReads = 0;
+  const session = activeSession({
+    async openProject(root) {
+      projectReads += 1;
+      return { root, repository: snapshot(root) };
+    },
+  });
+  const watch = fakeWatchBridge();
+  const coordinator = new WorkspaceWatchCoordinator(
+    watch,
+    session,
+    { async refresh() { return true; } },
+    editorFixture(),
+    {
+      reconcileRepository() { return true; },
+      refreshRemoteAfterFocus() {},
+      reportWarning() {},
+    },
+    null,
+  );
+  coordinator.activate();
+  await settle();
+
+  const generation = session.beginTransition({ reconciliationBarrier: true });
+  watch.emit(event(session, ["refs"], []));
+  await settle(10);
+  assert.equal(projectReads, 0);
+
+  session.completeTransition(generation);
+  await settle(10);
+  assert.equal(projectReads, 1);
+  coordinator.dispose();
+});
+
 test("a disposed coordinator releases a watch that completes activation late", async () => {
   const activation = deferred();
   let stops = 0;
@@ -146,18 +183,52 @@ test("a disposed coordinator releases a watch that completes activation late", a
     bridge,
     session,
     { async refresh() { return true; } },
-    { async reconcileExternalPaths() {} },
-    { reconcileRepository() {}, refreshRemoteAfterFocus() {}, reportWarning() {} },
+    editorFixture(),
+    { reconcileRepository() { return true; }, refreshRemoteAfterFocus() {}, reportWarning() {} },
     null,
   );
 
   coordinator.activate();
   await settle();
   coordinator.dispose();
-  activation.resolve({ available: true, message: null });
+  activation.resolve(watchStatus());
   await settle();
 
   assert.equal(stops, 2);
+});
+
+test("a superseding plan update keeps the installed watch until its replacement starts", async () => {
+  const firstActivation = deferred();
+  let starts = 0;
+  let stops = 0;
+  const bridge = {
+    native: true,
+    start() {
+      starts += 1;
+      return starts === 1 ? firstActivation.promise : Promise.resolve(watchStatus());
+    },
+    async stop() { stops += 1; },
+    async subscribe() { return () => undefined; },
+  };
+  const session = activeSession();
+  const coordinator = new WorkspaceWatchCoordinator(
+    bridge,
+    session,
+    { async refresh() { return true; } },
+    editorFixture(),
+    { reconcileRepository() { return true; }, refreshRemoteAfterFocus() {}, reportWarning() {} },
+    null,
+  );
+
+  coordinator.activate();
+  await settle();
+  coordinator.activate();
+  firstActivation.resolve(watchStatus());
+  await settle(10);
+
+  assert.equal(starts, 2);
+  assert.equal(stops, 0);
+  coordinator.dispose();
 });
 
 test("returning from the background reconciles local state before one remote refresh", async () => {
@@ -174,9 +245,9 @@ test("returning from the background reconciles local state before one remote ref
     fakeWatchBridge(),
     session,
     { async refresh() { reads.catalog += 1; return true; } },
-    { async reconcileExternalPaths() { reads.documents += 1; } },
+    editorFixture({ async reconcileExternalPaths() { reads.documents += 1; } }),
     {
-      reconcileRepository() {},
+      reconcileRepository() { return true; },
       async refreshRemoteAfterFocus() {
         assert.equal(reads.project, 1);
         assert.equal(reads.catalog, 1);
@@ -192,7 +263,7 @@ test("returning from the background reconciles local state before one remote ref
   await settle();
 
   focusTarget.dispatchEvent(new Event("blur"));
-  now += 5_001;
+  now += 30_001;
   focusTarget.dispatchEvent(new Event("focus"));
   await settle(10);
   await settle(10);
@@ -212,9 +283,152 @@ test("returning from the background reconciles local state before one remote ref
   coordinator.dispose();
 });
 
+test("old watcher instances are rejected and repeated backend overflow suspends automatic recovery", async () => {
+  let projectReads = 0;
+  const warnings = [];
+  const session = activeSession({
+    async openProject(root) {
+      projectReads += 1;
+      return { root, repository: snapshot(root) };
+    },
+  });
+  const watch = fakeWatchBridge(watchStatus({ watchInstance: 5 }));
+  const coordinator = new WorkspaceWatchCoordinator(
+    watch,
+    session,
+    { async refresh() { return true; } },
+    editorFixture(),
+    {
+      reconcileRepository() { return true; },
+      refreshRemoteAfterFocus() {},
+      reportWarning(message) { warnings.push(message); },
+    },
+    null,
+  );
+  coordinator.activate();
+  await settle();
+
+  watch.emit({ ...event(session, ["refs"], []), watchInstance: 4 });
+  await settle();
+  assert.equal(projectReads, 0);
+  watch.emit({ ...event(session, ["refs"], []), watchInstance: 6 });
+  await settle();
+  assert.equal(projectReads, 1);
+
+  const recovery = {
+    ...event(session, [
+      "workspaceCatalog",
+      "openDocuments",
+      "repositoryCapability",
+      "workingTree",
+      "head",
+      "refs",
+      "history",
+      "operation",
+    ], []),
+    causes: ["overflowRecovery"],
+    recovery: "backendOverflow",
+    watchInstance: 6,
+  };
+  for (let index = 0; index < 4; index++) watch.emit(recovery);
+  await settle(150);
+
+  assert.equal(coordinator.health, "suspended");
+  assert.ok(projectReads <= 4);
+  assert.equal(warnings.length, 1);
+  coordinator.dispose();
+});
+
+test("activation buffer overflow becomes one bounded complete verification", async () => {
+  const activation = deferred();
+  let listener = null;
+  let projectReads = 0;
+  const leases = [];
+  const session = activeSession({
+    async openProject(root) {
+      projectReads += 1;
+      return { root, repository: snapshot(root) };
+    },
+  });
+  const bridge = {
+    native: true,
+    start() { return activation.promise; },
+    async stop() {},
+    async subscribe(next) { listener = next; return () => { listener = null; }; },
+  };
+  const coordinator = new WorkspaceWatchCoordinator(
+    bridge,
+    session,
+    { async refresh() { return true; } },
+    editorFixture(),
+    {
+      reconcileRepository(_project, lease) { leases.push([...lease.slices]); return true; },
+      refreshRemoteAfterFocus() {},
+      reportWarning() {},
+    },
+    null,
+  );
+  coordinator.activate();
+  await settle();
+  for (let index = 0; index < 65; index++) {
+    listener?.(event(session, ["openDocuments"], [`src/${index}.ts`]));
+  }
+  activation.resolve(watchStatus());
+  await settle(250);
+
+  assert.equal(projectReads, 1);
+  assert.deepEqual(leases, [[
+    "repositoryCapability",
+    "workingTree",
+    "head",
+    "refs",
+    "history",
+    "operation",
+  ]]);
+  assert.equal(coordinator.health, "healthy");
+  coordinator.dispose();
+});
+
+test("stale repository reads have a retry budget and cannot self-loop", async () => {
+  let projectReads = 0;
+  const session = activeSession({
+    async openProject(root) {
+      projectReads += 1;
+      return { root, repository: snapshot(root) };
+    },
+  });
+  const watch = fakeWatchBridge();
+  const coordinator = new WorkspaceWatchCoordinator(
+    watch,
+    session,
+    { async refresh() { return true; } },
+    editorFixture(),
+    {
+      reconcileRepository() { return false; },
+      refreshRemoteAfterFocus() {},
+      reportWarning() {},
+    },
+    null,
+  );
+  coordinator.activate();
+  await settle();
+  watch.emit(event(session, ["refs"], []));
+  await settle(300);
+
+  assert.equal(projectReads, 4);
+  assert.equal(coordinator.health, "degraded");
+  await settle(150);
+  assert.equal(projectReads, 4);
+  coordinator.dispose();
+});
+
 function activeSession(overrides = {}) {
   const session = new WindowSession({
     readProject(path) { return this.openProject(path); },
+    async readRepositorySlices(root) {
+      const project = await this.openProject(root);
+      return { root: project.root, repository: project.repository };
+    },
     async openProject(root) { return { root, repository: snapshot(root) }; },
     async readTrackedChanges(root) { return { root, changes: [] }; },
     async scanUntracked(root) { return { root, changes: [] }; },
@@ -231,15 +445,22 @@ function activeSession(overrides = {}) {
   return session;
 }
 
-function fakeWatchBridge() {
+function fakeWatchBridge(status = watchStatus()) {
   let listener = null;
+  let currentStatus = status;
   return {
     native: true,
     starts: 0,
-    async start() { this.starts += 1; return { available: true, message: null }; },
+    async start() { this.starts += 1; return currentStatus; },
     async stop() {},
     async subscribe(next) { listener = next; return () => { listener = null; }; },
-    emit(event) { listener?.(event); },
+    emit(event) {
+      if (
+        currentStatus.watchInstance !== null &&
+        event.watchInstance > currentStatus.watchInstance
+      ) currentStatus = { ...currentStatus, watchInstance: event.watchInstance };
+      listener?.(event);
+    },
   };
 }
 
@@ -247,10 +468,30 @@ function event(session, slices, paths) {
   return {
     root: session.workspace.state.root,
     generation: session.workspace.state.generation,
+    watchInstance: 1,
     slices,
     paths,
     causes: ["watcher"],
-    overflowed: false,
+    recovery: "none",
+  };
+}
+
+function watchStatus(overrides = {}) {
+  return {
+    available: true,
+    message: null,
+    watchInstance: 1,
+    verificationRequired: false,
+    ...overrides,
+  };
+}
+
+function editorFixture(overrides = {}) {
+  return {
+    subscribe() { return () => undefined; },
+    workspacePaths() { return []; },
+    async reconcileExternalPaths() {},
+    ...overrides,
   };
 }
 

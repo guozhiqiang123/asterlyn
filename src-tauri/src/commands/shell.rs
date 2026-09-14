@@ -90,13 +90,80 @@ pub(crate) async fn read_project_snapshot(
 ) -> Result<OpenedProject, WorkspaceError> {
     let token = active_workspaces.activation_token(window.label())?;
     let root = active_workspaces.resolve(window.label(), &path)?;
+    let observation = active_workspaces.begin_repository_observation(window.label(), &root)?;
     let project = read_project(root.to_string_lossy().into_owned()).await?;
-    if active_workspaces.activation_token(window.label())? != token {
-        return Err(WorkspaceError::NotAuthorized {
-            message: "the project read belongs to an obsolete workspace session".to_string(),
+    active_workspaces.activate_repository_observation(
+        window.label(),
+        token,
+        observation,
+        Path::new(&project.root),
+        project
+            .repository
+            .as_ref()
+            .map(|repository| Path::new(&repository.git_dir)),
+    )?;
+    Ok(project)
+}
+
+#[tauri::command]
+pub(crate) async fn read_repository_slices(
+    repository_root: String,
+    slices: Vec<RepositoryStateSlice>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositorySliceProject, WorkspaceError> {
+    let unique_slices: HashSet<_> = slices.iter().copied().collect();
+    if slices.is_empty()
+        || unique_slices.len() != slices.len()
+        || slices.len() > 6
+        || slices.iter().any(|slice| {
+            matches!(
+                slice,
+                RepositoryStateSlice::WorkspaceCatalog | RepositoryStateSlice::OpenDocuments
+            )
+        })
+    {
+        return Err(WorkspaceError::InvalidPath {
+            message: "select one or more repository-owned state slices".to_string(),
         });
     }
-    active_workspaces.resolve(window.label(), &project.root)?;
+    let token = active_workspaces.activation_token(window.label())?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let observation = active_workspaces.begin_repository_observation(window.label(), &root)?;
+    let plan = RepositoryReadPlan {
+        working_tree: slices.contains(&RepositoryStateSlice::WorkingTree),
+        head: slices.contains(&RepositoryStateSlice::Head),
+        refs: slices.contains(&RepositoryStateSlice::Refs),
+        history: slices.contains(&RepositoryStateSlice::History),
+        operation: slices.contains(&RepositoryStateSlice::Operation),
+    };
+    let project = run_workspace_blocking("read repository slices", move || {
+        let repository = exact_git_repository(&root)?
+            .map(|repository| {
+                repository
+                    .read_slices(plan, COMMIT_LIMIT)
+                    .map_err(|error| WorkspaceError::Io {
+                        operation: "read Git project slices".to_string(),
+                        message: error.to_string(),
+                    })
+            })
+            .transpose()?;
+        Ok(RepositorySliceProject {
+            root: root.to_string_lossy().into_owned(),
+            repository,
+        })
+    })
+    .await?;
+    active_workspaces.activate_repository_observation(
+        window.label(),
+        token,
+        observation,
+        Path::new(&project.root),
+        project
+            .repository
+            .as_ref()
+            .map(|repository| Path::new(&repository.git_dir)),
+    )?;
     Ok(project)
 }
 

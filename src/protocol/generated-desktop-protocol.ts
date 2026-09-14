@@ -10,7 +10,8 @@ export interface DesktopCommandMap {
   existing_project_directories: { args: { paths: Array<string>; }; result: Array<string> };
   open_project: { args: { path: string; }; result: Model.OpenedProject };
   read_project_snapshot: { args: { path: string; }; result: Model.OpenedProject };
-  start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
+  read_repository_slices: { args: { repositoryRoot: string; slices: Array<Model.RepositoryStateSlice>; }; result: Model.RepositorySliceProject };
+  start_workspace_watch: { args: { workspaceRoot: string; generation: number; openDocumentPaths: Array<string>; }; result: Model.WorkspaceWatchStatus };
   stop_workspace_watch: { args: Record<string, never>; result: void };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
   open_repository_window: { args: { path: string; }; result: string };
@@ -71,6 +72,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   existing_project_directories: "stringArray",
   open_project: "openedProject",
   read_project_snapshot: "openedProject",
+  read_repository_slices: "repositorySliceProject",
   start_workspace_watch: "workspaceWatchStatus",
   stop_workspace_watch: "void",
   read_tracked_changes: "trackedChangeScan",

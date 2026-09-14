@@ -571,6 +571,7 @@ pub(super) fn complete_repository_slices() -> Vec<RepositoryStateSlice> {
     vec![
         RepositoryStateSlice::WorkspaceCatalog,
         RepositoryStateSlice::OpenDocuments,
+        RepositoryStateSlice::RepositoryCapability,
         RepositoryStateSlice::WorkingTree,
         RepositoryStateSlice::Head,
         RepositoryStateSlice::Refs,

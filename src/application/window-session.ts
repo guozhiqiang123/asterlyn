@@ -2,6 +2,8 @@ import type {
   GitOperationSnapshot,
   OpenedProject,
   RepositorySnapshot,
+  RepositorySliceProject,
+  RepositoryStateSlice,
   TrackedChangeScan,
   UntrackedScan,
 } from "../models.ts";
@@ -11,11 +13,16 @@ import {
   type SessionInvalidationSlice,
 } from "./session-invalidation.ts";
 import { RepositorySession } from "./repository-session.ts";
+import type { RepositoryReadCommit, RepositoryReadLease } from "./repository-session.ts";
 import { WorkspaceSession, type WorkspaceActivation, type WorkspaceSessionIdentity } from "./workspace-session.ts";
 
 export interface WindowSessionGateway {
   openProject(path: string): Promise<OpenedProject>;
   readProject(path: string): Promise<OpenedProject>;
+  readRepositorySlices(
+    repositoryRoot: string,
+    slices: RepositoryStateSlice[],
+  ): Promise<RepositorySliceProject>;
   readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan>;
   scanUntracked(repositoryRoot: string, scanId: string): Promise<UntrackedScan>;
   cancelUntrackedScan(scanId: string): Promise<void>;
@@ -25,6 +32,7 @@ export interface ProjectTransition {
   readonly generation: number;
   readonly project: OpenedProject;
   readonly activation: WorkspaceActivation;
+  settle(): void;
 }
 
 export type WindowSessionChangeReason =
@@ -53,8 +61,15 @@ export class WindowSession {
 
   private readonly listeners = new Set<Listener>();
   private operationGeneration = 0;
+  private reconciliationBarrierGeneration: number | null = null;
+  private readonly reconciliationWaiters = new Set<() => void>();
   private scanSequence = 0;
-  private activeScan: { id: string; root: string; generation: number } | null = null;
+  private activeScan: {
+    id: string;
+    root: string;
+    generation: number;
+    repositoryRevision: number;
+  } | null = null;
   private trackedRefreshTimer: number | null = null;
   private trackedRefreshRoot: string | null = null;
   private trackedRefreshCause: SessionInvalidationCause = "save";
@@ -77,11 +92,33 @@ export class WindowSession {
     return () => this.listeners.delete(listener);
   }
 
-  beginTransition(): number {
+  beginTransition(options: { reconciliationBarrier?: boolean } = {}): number {
     this.operationGeneration += 1;
+    if (options.reconciliationBarrier) {
+      this.reconciliationBarrierGeneration = this.operationGeneration;
+    } else if (this.reconciliationBarrierGeneration !== null) {
+      this.reconciliationBarrierGeneration = null;
+      for (const resolve of this.reconciliationWaiters) resolve();
+      this.reconciliationWaiters.clear();
+    }
     this.cancelUntrackedScan();
     this.cancelScheduledTrackedRefresh();
     return this.operationGeneration;
+  }
+
+  completeTransition(generation: number): void {
+    if (this.reconciliationBarrierGeneration !== generation) return;
+    this.reconciliationBarrierGeneration = null;
+    for (const resolve of this.reconciliationWaiters) resolve();
+    this.reconciliationWaiters.clear();
+  }
+
+  async whenReconciliationIdle(identity: WorkspaceSessionIdentity): Promise<boolean> {
+    while (!this.disposed && this.workspace.matches(identity)) {
+      if (this.reconciliationBarrierGeneration === null) return true;
+      await new Promise<void>((resolve) => this.reconciliationWaiters.add(resolve));
+    }
+    return false;
   }
 
   matches(generation: number, root?: string): boolean {
@@ -105,11 +142,47 @@ export class WindowSession {
     cause: SessionInvalidationCause,
     slices: Iterable<SessionInvalidationSlice>,
   ): Promise<ProjectTransition | null> {
-    const generation = this.beginTransition();
-    const project = await this.gateway.openProject(path);
-    if (!this.matches(generation)) return null;
-    const activation = this.activate(project, cause, slices);
-    return { generation, project, activation };
+    const generation = this.beginTransition({ reconciliationBarrier: true });
+    let settlementTransferred = false;
+    try {
+      const project = await this.gateway.openProject(path);
+      if (!this.matches(generation)) return null;
+      const activation = this.activate(project, cause, slices);
+      settlementTransferred = true;
+      return {
+        generation,
+        project,
+        activation,
+        settle: () => this.completeTransition(generation),
+      };
+    } finally {
+      if (!settlementTransferred) this.completeTransition(generation);
+    }
+  }
+
+  beginRepositoryRead(
+    identity: WorkspaceSessionIdentity,
+    slices: Iterable<RepositoryStateSlice>,
+  ): RepositoryReadLease | null {
+    if (this.disposed || !this.workspace.matches(identity)) return null;
+    return this.repository.beginRead(identity, slices);
+  }
+
+  installRepositoryRead(
+    lease: RepositoryReadLease,
+    project: OpenedProject,
+    cause: SessionInvalidationCause,
+    options: { paths?: Iterable<string>; recovery?: import("../models.ts").WorkspaceWatchRecovery } = {},
+  ): RepositoryReadCommit | null {
+    if (
+      this.disposed ||
+      !this.workspace.matches(lease.identity) ||
+      project.root !== lease.identity.root
+    ) return null;
+    const committed = this.repository.installRead(lease, project.repository, cause, options);
+    if (!committed) return null;
+    this.workspace.activate(project);
+    return committed;
   }
 
   async refreshProject(identity: WorkspaceSessionIdentity): Promise<OpenedProject | null> {
@@ -125,15 +198,41 @@ export class WindowSession {
     return project;
   }
 
+  async refreshRepositorySlices(
+    identity: WorkspaceSessionIdentity,
+    slices: RepositoryStateSlice[],
+  ): Promise<OpenedProject | null> {
+    if (this.disposed || !this.workspace.matches(identity)) return null;
+    const operationGeneration = this.operationGeneration;
+    const project = await this.gateway.readRepositorySlices(identity.root, slices);
+    if (
+      !this.matches(operationGeneration, identity.root) ||
+      !this.workspace.matches(identity) ||
+      project.root !== identity.root
+    ) return null;
+    const current = this.repository.state.snapshot;
+    if (!project.repository) return { root: project.root, repository: null };
+    validateRepositorySlicePayload(project.repository, identity.root, slices);
+    if (!current || current.gitDir !== project.repository.gitDir) {
+      return this.refreshProject(identity);
+    }
+    return {
+      root: project.root,
+      repository: materializeRepositorySlices(current, project.repository),
+    };
+  }
+
   installRepository(
     snapshot: RepositorySnapshot | null,
     cause: SessionInvalidationCause,
     slices: Iterable<SessionInvalidationSlice>,
-    options: { paths?: Iterable<string>; overflowed?: boolean } = {},
+    options: { paths?: Iterable<string>; recovery?: import("../models.ts").WorkspaceWatchRecovery } = {},
   ): RepositorySnapshot | null {
     const identity = this.workspace.identity();
     if (!identity) throw new Error("Open a workspace before installing repository state.");
-    return this.repository.install(identity, snapshot, cause, slices, options).snapshot;
+    const state = this.repository.install(identity, snapshot, cause, slices, options);
+    this.workspace.activate({ root: identity.root, repository: state.snapshot });
+    return state.snapshot;
   }
 
   installTracked(
@@ -193,6 +292,7 @@ export class WindowSession {
       id: `${generation}-${++this.scanSequence}`,
       root: repositoryRoot,
       generation,
+      repositoryRevision: this.repository.state.revision,
     };
     this.activeScan = scan;
     this.emit({
@@ -206,10 +306,20 @@ export class WindowSession {
       if (this.activeScan !== scan || !this.matches(generation, repositoryRoot)) return;
       const identity = this.workspace.identity();
       const state = identity
-        ? this.repository.mergeUntracked(identity, supplement, cause)
+        ? this.repository.mergeUntracked(
+            identity,
+            supplement,
+            cause,
+            scan.repositoryRevision,
+          )
         : null;
       const snapshot = state?.snapshot;
-      if (!snapshot) return;
+      if (!snapshot) {
+        if (this.matches(generation, repositoryRoot)) {
+          this.scheduleTrackedRefresh(repositoryRoot, cause, [], 0);
+        }
+        return;
+      }
       this.emit({
         reason: "untracked-scan-complete",
         root: repositoryRoot,
@@ -253,6 +363,8 @@ export class WindowSession {
     this.cancelScheduledTrackedRefresh();
     this.workspace.clear();
     this.repository.clear();
+    for (const resolve of this.reconciliationWaiters) resolve();
+    this.reconciliationWaiters.clear();
     this.listeners.clear();
   }
 
@@ -261,6 +373,7 @@ export class WindowSession {
     const root = this.trackedRefreshRoot;
     if (!root || this.repository.state.snapshot?.root !== root) return;
     const generation = this.operationGeneration;
+    const repositoryRevision = this.repository.state.revision;
     const cause = this.trackedRefreshCause;
     const paths = Array.from(this.trackedRefreshPaths);
     this.trackedRefreshRoot = null;
@@ -271,9 +384,24 @@ export class WindowSession {
       const scan = await this.gateway.readTrackedChanges(root);
       if (!this.matches(generation, root)) return;
       const identity = this.workspace.identity();
-      const state = identity ? this.repository.mergeTracked(identity, scan, cause, paths) : null;
+      const state = identity
+        ? this.repository.mergeTracked(
+            identity,
+            scan,
+            cause,
+            paths,
+            ["workingTree"],
+            repositoryRevision,
+          )
+        : null;
       const snapshot = state?.snapshot;
-      if (!snapshot) return;
+      if (!snapshot) {
+        if (this.matches(generation, root)) {
+          this.trackedRefreshRoot = root;
+          for (const path of paths) this.trackedRefreshPaths.add(path);
+        }
+        return;
+      }
       this.emit({
         reason: "tracked-refresh-complete",
         root,
@@ -311,4 +439,47 @@ export class WindowSession {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
   }
+}
+
+function validateRepositorySlicePayload(
+  snapshot: NonNullable<RepositorySliceProject["repository"]>,
+  root: string,
+  slices: Iterable<RepositoryStateSlice>,
+): void {
+  if (snapshot.root !== root) {
+    throw new Error("Repository slice snapshot belongs to another workspace session.");
+  }
+  const fields = new Set(Object.keys(snapshot));
+  const required = new Map<RepositoryStateSlice, string[]>([
+    ["workingTree", ["changes", "untrackedState"]],
+    ["head", ["branch"]],
+    ["refs", ["repositoryRoots", "branches", "remotes"]],
+    ["history", ["commits"]],
+    ["operation", ["operation"]],
+  ]);
+  for (const slice of slices) {
+    for (const field of required.get(slice) ?? []) {
+      if (!fields.has(field)) {
+        throw new Error(`Repository slice snapshot omitted ${field} for ${slice}.`);
+      }
+    }
+  }
+}
+
+function materializeRepositorySlices(
+  current: RepositorySnapshot,
+  incoming: NonNullable<RepositorySliceProject["repository"]>,
+): RepositorySnapshot {
+  return {
+    ...current,
+    gitDir: incoming.gitDir,
+    repositoryRoots: incoming.repositoryRoots ?? current.repositoryRoots,
+    branch: incoming.branch ?? current.branch,
+    operation: "operation" in incoming ? incoming.operation ?? null : current.operation,
+    changes: incoming.changes ?? current.changes,
+    commits: incoming.commits ?? current.commits,
+    branches: incoming.branches ?? current.branches,
+    remotes: incoming.remotes ?? current.remotes,
+    untrackedState: incoming.untrackedState ?? current.untrackedState,
+  };
 }

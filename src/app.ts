@@ -305,6 +305,7 @@ const RECENT_FILE_KEY = "asterlyn.recentFiles.v1";
 const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
   "workspaceCatalog",
   "openDocuments",
+  "repositoryCapability",
   "workingTree",
   "head",
   "refs",
@@ -378,6 +379,7 @@ export class AsterlynApp {
   private readonly windowSession = new WindowSession({
     openProject: (path) => bridge.openProject(path),
     readProject: (path) => bridge.readProject(path),
+    readRepositorySlices: (root, slices) => bridge.readRepositorySlices(root, slices),
     readTrackedChanges: (root) => bridge.readTrackedChanges(root),
     scanUntracked: (root, scanId) => bridge.scanUntracked(root, scanId),
     cancelUntrackedScan: (scanId) => bridge.cancelUntrackedScan(scanId),
@@ -585,8 +587,8 @@ export class AsterlynApp {
       this.filesController,
       this.editorController,
       {
-        reconcileRepository: (snapshot, slices, cause) =>
-          this.repositoryIntegration.reconcileWatchedRepository(snapshot, slices, cause),
+        reconcileRepository: (project, lease, cause) =>
+          this.repositoryIntegration.reconcileWatchedRepository(project, lease, cause),
         refreshRemoteAfterFocus: () => this.refreshRemoteAfterFocus(),
         reportWarning: (message) => this.setStatus(message, "warning"),
         messages: () => this.localization.catalog.errors,
@@ -1396,12 +1398,14 @@ export class AsterlynApp {
       COMPLETE_REPOSITORY_SLICES,
     );
     const generation = this.windowSession.generation;
+    let acceptedTransition: Awaited<typeof transition> = null;
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.setLoading(true, this.localShellCopy().openingProject);
     try {
       const result = await transition;
       if (!result) return false;
+      acceptedTransition = result;
       const opened = result.project;
       const snapshot = opened.repository;
       const repositoryChanged = previousRoot !== null && previousRoot !== opened.root;
@@ -1451,6 +1455,7 @@ export class AsterlynApp {
       if (!this.windowSession.workspace.state.root && bridge.isDemo) this.openRepositoryDialog(path);
       return false;
     } finally {
+      acceptedTransition?.settle();
       if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (pendingRoot && generation === this.windowSession.generation) {
@@ -1478,6 +1483,7 @@ export class AsterlynApp {
       COMPLETE_REPOSITORY_SLICES,
     );
     const generation = this.windowSession.generation;
+    let acceptedTransition: Awaited<typeof transition> = null;
     void this.cancelActiveRemoteOperation();
     let pendingRoot: string | null = null;
     this.clearError();
@@ -1485,18 +1491,21 @@ export class AsterlynApp {
     try {
       const result = await transition;
       if (!result) return;
+      acceptedTransition = result;
       const opened = result.project;
       const next = this.repositoryIntegration.acceptManualRefresh(
         opened.root,
         opened.repository,
         generation,
       );
+      this.workspaceWatch.recordAuthoritativeRefresh();
       if (!next) return;
       pendingRoot = next.root;
     } catch (error) {
       if (generation !== this.windowSession.generation) return;
       this.showError(error);
     } finally {
+      acceptedTransition?.settle();
       if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (pendingRoot && generation === this.windowSession.generation) {
@@ -2824,7 +2833,7 @@ export class AsterlynApp {
     }
     if (kind === "push" && !this.remoteState.pushPreview) return false;
 
-    const generation = this.windowSession.beginTransition();
+    const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
     const background = presentation === "background";
     if (!background) this.clearError();
     const actionName = this.localization.catalog.remote.actionNames[kind];
@@ -2900,6 +2909,7 @@ export class AsterlynApp {
         }
       }
     } finally {
+      this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) {
         if (!background) this.setLoading(false, this.localization.catalog.common.ready);
         if (succeeded) {
@@ -5777,7 +5787,7 @@ export class AsterlynApp {
       this.setStatus(this.localization.catalog.changes.saveBeforeRestore, "warning");
       return;
     }
-    const generation = this.windowSession.beginTransition();
+    const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
     let pendingRoot: string | null = null;
     let refreshAfterFailure = false;
     let revertFailure: unknown = null;
@@ -5795,6 +5805,7 @@ export class AsterlynApp {
         revertFailure = result.error;
       }
     } finally {
+      this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (refreshAfterFailure && generation === this.windowSession.generation) {
@@ -6041,7 +6052,7 @@ export class AsterlynApp {
         if (this.state.loading || this.windowSession.workspace.state.root !== root) throw new Error(this.localization.catalog.recovery.waitForOperation);
         this.captureMountedTextEditor();
         if (dirtyTextTabs(this.editorState.session).some((tab) => recovery.paths.includes(tab.document.workspacePath))) throw new Error(this.localization.catalog.recovery.saveBeforeRestore);
-        const generation = this.windowSession.beginTransition();
+        const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
         this.setLoading(true, this.localization.catalog.recovery.restoring);
         try {
           const outcome = await bridge.undoGitWorktreeRecovery(root, recovery.id);
@@ -6051,6 +6062,7 @@ export class AsterlynApp {
           this.renderWorkspace();
           this.setStatus(this.localization.catalog.recovery.restored, "success");
         } finally {
+          this.windowSession.completeTransition(generation);
           if (this.windowSession.matches(generation, root)) this.setLoading(false, this.localization.catalog.common.ready);
         }
       },
@@ -6135,7 +6147,7 @@ export class AsterlynApp {
     mutation: () => Promise<GitOperationResult>,
   ): Promise<void> {
     if (this.state.loading) return;
-    const generation = this.windowSession.beginTransition();
+    const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
     let nextRoot: string | null = null;
     let failed: unknown = null;
     let completedStatus: { message: string; kind: "warning" | "success" } | null = null;
@@ -6173,6 +6185,7 @@ export class AsterlynApp {
           : { message: successMessage, kind: "success" };
       }
     } finally {
+      this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
     }
     if (failed && generation === this.windowSession.generation) {
@@ -6207,7 +6220,7 @@ export class AsterlynApp {
         return;
       }
     }
-    const generation = this.windowSession.beginTransition();
+    const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
     let pendingRoot: string | null = null;
     let refreshAfter = false;
     let commitFailure: unknown = null;
@@ -6245,6 +6258,7 @@ export class AsterlynApp {
         );
       }
     } finally {
+      this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) {
         this.setLoading(false, this.localization.catalog.common.ready);
         this.refreshCommitComposer();
@@ -6351,6 +6365,7 @@ export class AsterlynApp {
       if (generation !== this.windowSession.generation) return;
       this.showError(error);
     } finally {
+      this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) {
         this.setLoading(false, this.localization.catalog.common.ready);
         this.renderBottomTool();

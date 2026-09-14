@@ -1,8 +1,9 @@
-import type { RepositoryStateSlice } from "../models.ts";
+import type { RepositoryStateSlice, WorkspaceWatchRecovery } from "../models.ts";
 
 export const SESSION_INVALIDATION_SLICES = [
   "workspaceCatalog",
   "openDocuments",
+  "repositoryCapability",
   "workingTree",
   "head",
   "refs",
@@ -29,7 +30,7 @@ export interface SessionInvalidation {
   readonly slices: readonly SessionInvalidationSlice[];
   readonly paths: readonly string[];
   readonly causes: readonly SessionInvalidationCause[];
-  readonly overflowed: boolean;
+  readonly recovery: WorkspaceWatchRecovery;
 }
 
 const sliceOrder = new Map(
@@ -41,15 +42,18 @@ export function createSessionInvalidation(
   generation: number,
   slices: Iterable<SessionInvalidationSlice>,
   cause: SessionInvalidationCause,
-  options: { paths?: Iterable<string>; overflowed?: boolean } = {},
+  options: { paths?: Iterable<string>; recovery?: WorkspaceWatchRecovery } = {},
 ): SessionInvalidation {
+  const recovery = options.recovery ?? "none";
   return {
     root,
     generation,
     slices: orderedUnique(slices, (value) => sliceOrder.get(value) ?? Number.MAX_SAFE_INTEGER),
-    paths: orderedUnique(options.paths ?? [], (_, value) => value).filter(validWorkspacePath),
+    paths: recovery === "none"
+      ? orderedUnique(options.paths ?? [], (_, value) => value).filter(validWorkspacePath)
+      : [],
     causes: [cause],
-    overflowed: options.overflowed ?? false,
+    recovery,
   };
 }
 
@@ -64,6 +68,7 @@ export function mergeSessionInvalidations(
   ) {
     return incoming;
   }
+  const recovery = strongerRecovery(current.recovery, incoming.recovery);
   return {
     root: current.root,
     generation: current.generation,
@@ -71,9 +76,11 @@ export function mergeSessionInvalidations(
       [...current.slices, ...incoming.slices],
       (value) => sliceOrder.get(value) ?? Number.MAX_SAFE_INTEGER,
     ),
-    paths: orderedUnique([...current.paths, ...incoming.paths], (_, value) => value),
+    paths: recovery === "none"
+      ? orderedUnique([...current.paths, ...incoming.paths], (_, value) => value)
+      : [],
     causes: orderedUnique([...current.causes, ...incoming.causes], (_, value) => value),
-    overflowed: current.overflowed || incoming.overflowed,
+    recovery,
   };
 }
 
@@ -100,5 +107,27 @@ function orderedUnique<T>(
 }
 
 function validWorkspacePath(path: string): boolean {
-  return Boolean(path) && path !== "." && !path.startsWith("/") && !path.includes("\0");
+  return Boolean(path) &&
+    path.length <= 4_096 &&
+    !path.startsWith("/") &&
+    !path.startsWith("\\") &&
+    !path.includes("\\") &&
+    !path.includes("\0") &&
+    !/^[a-zA-Z]:/.test(path) &&
+    path.split("/").every((component) =>
+      component.length > 0 && component !== "." && component !== ".."
+    );
+}
+
+function strongerRecovery(
+  first: WorkspaceWatchRecovery,
+  second: WorkspaceWatchRecovery,
+): WorkspaceWatchRecovery {
+  const order: WorkspaceWatchRecovery[] = [
+    "none",
+    "pathsTruncated",
+    "rootAmbiguous",
+    "backendOverflow",
+  ];
+  return order.indexOf(first) >= order.indexOf(second) ? first : second;
 }

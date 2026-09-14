@@ -31,12 +31,39 @@ test("desktop response validation accepts representative valid payloads", () => 
   );
   assert.equal(validateDesktopResult("window_chrome_mode", "macos-native"), "macos-native");
   assert.deepEqual(
+    validateDesktopResult("read_repository_slices", {
+      root: "/repo",
+      repository: {
+        root: "/repo",
+        gitDir: "/repo/.git",
+        branches: [],
+        remotes: [],
+        repositoryRoots: [],
+      },
+    }),
+    {
+      root: "/repo",
+      repository: {
+        root: "/repo",
+        gitDir: "/repo/.git",
+        branches: [],
+        remotes: [],
+        repositoryRoots: [],
+      },
+    },
+  );
+  assert.deepEqual(
     validateDesktopResult("existing_project_directories", ["/repo", "/workspace"]),
     ["/repo", "/workspace"],
   );
   assert.deepEqual(
-    validateDesktopResult("start_workspace_watch", { available: true, message: null }),
-    { available: true, message: null },
+    validateDesktopResult("start_workspace_watch", {
+      available: true,
+      message: null,
+      watchInstance: 4,
+      verificationRequired: false,
+    }),
+    { available: true, message: null, watchInstance: 4, verificationRequired: false },
   );
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
   assert.deepEqual(
@@ -73,7 +100,12 @@ test("desktop response validation accepts representative valid payloads", () => 
 
 test("desktop response validation rejects malformed watch status", () => {
   assert.throws(
-    () => validateDesktopResult("start_workspace_watch", { available: "yes", message: null }),
+    () => validateDesktopResult("start_workspace_watch", {
+      available: "yes",
+      message: null,
+      watchInstance: null,
+      verificationRequired: false,
+    }),
     /available must be a boolean/,
   );
 });

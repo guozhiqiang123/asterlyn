@@ -5,7 +5,12 @@ import type { WorkspaceWatchBridge } from "./protocol/workspace-watch.ts";
 const inactiveWorkspaceWatchBridge: WorkspaceWatchBridge = {
   native: false,
   async start() {
-    return { available: false, message: null };
+    return {
+      available: false,
+      message: null,
+      watchInstance: null,
+      verificationRequired: false,
+    };
   },
   async stop() {},
   async subscribe() {

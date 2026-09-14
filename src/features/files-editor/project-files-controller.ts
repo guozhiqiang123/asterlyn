@@ -62,6 +62,7 @@ export class ProjectFilesController {
   private generation = 0;
   private disposed = false;
   private refreshRoot: string | null = null;
+  private refreshGeneration: number | null = null;
   private refreshPromise: Promise<boolean> | null = null;
   private messages: Pick<EditorCopy, "unexpectedProjectFilesError">;
   private treeCache: {
@@ -129,13 +130,19 @@ export class ProjectFilesController {
   refresh(): Promise<boolean> {
     const root = this.state.root;
     if (!root || this.disposed) return Promise.resolve(false);
-    if (this.refreshRoot === root && this.refreshPromise) return this.refreshPromise;
+    if (
+      this.refreshRoot === root &&
+      this.refreshGeneration === this.generation &&
+      this.refreshPromise
+    ) return this.refreshPromise;
     const request = this.performRefresh(root);
     this.refreshRoot = root;
+    this.refreshGeneration = this.generation;
     this.refreshPromise = request;
     const release = () => {
       if (this.refreshPromise !== request) return;
       this.refreshRoot = null;
+      this.refreshGeneration = null;
       this.refreshPromise = null;
     };
     void request.then(release, release);

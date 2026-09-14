@@ -33,8 +33,25 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       break;
     case "workspaceWatchStatus": {
       const result = record(value, command);
-      booleans(result, command, "available");
+      booleans(result, command, "available", "verificationRequired");
       nullableStrings(result, command, "message");
+      assert(
+        result.watchInstance === null ||
+          (typeof result.watchInstance === "number" &&
+            Number.isSafeInteger(result.watchInstance) && result.watchInstance > 0),
+        command,
+        "watchInstance must be a positive integer or null",
+      );
+      assert(
+        result.available === (result.watchInstance !== null),
+        command,
+        "available and watchInstance must describe the same watcher state",
+      );
+      assert(
+        !result.verificationRequired || result.available === true,
+        command,
+        "verification requires an available watcher",
+      );
       break;
     }
     case "openedProject": {
@@ -44,6 +61,16 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         result.repository === null || isRepositorySnapshot(result.repository),
         command,
         "repository must be a snapshot or null",
+      );
+      break;
+    }
+    case "repositorySliceProject": {
+      const result = record(value, command);
+      strings(result, command, "root");
+      assert(
+        result.repository === null || isRepositorySliceSnapshot(result.repository),
+        command,
+        "repository must be a slice snapshot or null",
       );
       break;
     }
@@ -300,6 +327,7 @@ function assertRepositorySlices(value: unknown, command: DesktopCommandName): vo
   const known = new Set([
     "workspaceCatalog",
     "openDocuments",
+    "repositoryCapability",
     "workingTree",
     "head",
     "refs",
@@ -327,6 +355,24 @@ function isRepositorySnapshot(value: unknown): value is TransportRecord {
     typeof value.untrackedState === "string" &&
     (value.operation === null || isGitOperationSnapshot(value.operation))
   );
+}
+
+function isRepositorySliceSnapshot(value: unknown): value is TransportRecord {
+  if (!isRecord(value)) return false;
+  if (typeof value.root !== "string" || typeof value.gitDir !== "string") return false;
+  for (const field of ["repositoryRoots", "changes", "commits", "branches", "remotes"] as const) {
+    if (field in value && !Array.isArray(value[field])) return false;
+  }
+  if ("branch" in value && !isRecord(value.branch)) return false;
+  if (
+    "operation" in value &&
+    value.operation !== null &&
+    !isGitOperationSnapshot(value.operation)
+  ) return false;
+  return !("untrackedState" in value) ||
+    value.untrackedState === "pending" ||
+    value.untrackedState === "complete" ||
+    value.untrackedState === "failed";
 }
 
 function isGitOperationSnapshot(value: unknown): value is TransportRecord {

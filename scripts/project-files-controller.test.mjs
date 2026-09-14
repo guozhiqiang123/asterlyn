@@ -63,6 +63,36 @@ test("concurrent refreshes for one workspace share one catalog read", async () =
   assert.deepEqual(controller.state.paths, ["src/main.ts"]);
 });
 
+test("A to B to A starts a new catalog read instead of reusing obsolete A work", async () => {
+  const firstA = deferred();
+  const b = deferred();
+  const finalA = deferred();
+  const responses = [firstA.promise, b.promise, finalA.promise];
+  const roots = [];
+  const controller = new ProjectFilesController({
+    listProjectFiles(root) {
+      roots.push(root);
+      return responses.shift();
+    },
+  });
+
+  controller.installWorkspace("/a");
+  const obsoleteA = controller.refresh();
+  controller.installWorkspace("/b");
+  const obsoleteB = controller.refresh();
+  controller.installWorkspace("/a");
+  const currentA = controller.refresh();
+
+  assert.deepEqual(roots, ["/a", "/b", "/a"]);
+  firstA.resolve(catalog("/a", ["obsolete-a.txt"]));
+  b.resolve(catalog("/b", ["obsolete-b.txt"]));
+  finalA.resolve(catalog("/a", ["current-a.txt"]));
+  assert.equal(await obsoleteA, false);
+  assert.equal(await obsoleteB, false);
+  assert.equal(await currentA, true);
+  assert.deepEqual(controller.state.paths, ["current-a.txt"]);
+});
+
 test("a newly imported workspace starts with every directory collapsed", async () => {
   const controller = new ProjectFilesController({
     async listProjectFiles() {

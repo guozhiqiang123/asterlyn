@@ -49,6 +49,8 @@ import type {
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
+  RepositorySliceProject,
+  RepositoryStateSlice,
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
@@ -173,6 +175,42 @@ const demoBridge: DesktopBridge = {
       return { root: path, repository: browserGitEnabled ? demoTrackedSnapshot(browserSnapshot) : null };
     }
     return invoke<OpenedProject>("read_project_snapshot", { path });
+  },
+
+  async readRepositorySlices(
+    repositoryRoot: string,
+    slices: RepositoryStateSlice[],
+  ): Promise<RepositorySliceProject> {
+    if (isTauri) {
+      return invoke<RepositorySliceProject>("read_repository_slices", {
+        repositoryRoot,
+        slices,
+      });
+    }
+    await demoDelay();
+    if (!browserGitEnabled) return { root: repositoryRoot, repository: null };
+    const snapshot = demoTrackedSnapshot(browserSnapshot);
+    const selected = new Set(slices);
+    return {
+      root: repositoryRoot,
+      repository: {
+        root: repositoryRoot,
+        gitDir: snapshot.gitDir,
+        ...(selected.has("workingTree")
+          ? { changes: snapshot.changes, untrackedState: snapshot.untrackedState }
+          : {}),
+        ...(selected.has("head") ? { branch: snapshot.branch } : {}),
+        ...(selected.has("refs")
+          ? {
+              repositoryRoots: snapshot.repositoryRoots,
+              branches: snapshot.branches,
+              remotes: snapshot.remotes,
+            }
+          : {}),
+        ...(selected.has("history") ? { commits: snapshot.commits } : {}),
+        ...(selected.has("operation") ? { operation: snapshot.operation } : {}),
+      },
+    };
   },
 
   async readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan> {
