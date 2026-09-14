@@ -39,10 +39,15 @@ export function renderRemoteToolbarView(
   state: RemotePushState,
   loading: boolean,
   localization: Localization = DEFAULT_LOCALIZATION,
+  menuOpen = false,
 ): void {
   const toolbar = query(root, "#remote-toolbar");
   const select = query<HTMLSelectElement>(root, "#topbar-remote-select");
   const cancel = query<HTMLButtonElement>(root, "#cancel-remote-operation");
+  const menuToggle = query<HTMLButtonElement>(root, "#remote-toolbar-menu-toggle");
+  const menu = query(root, "#remote-toolbar-menu");
+  menuToggle.setAttribute("aria-expanded", String(menuOpen));
+  menu.classList.toggle("hidden", !menuOpen);
   toolbar.classList.toggle("git-unavailable", !snapshot);
   if (!snapshot) {
     renderUnavailableToolbar(root, select, cancel, localization);
@@ -66,9 +71,9 @@ export function renderRemoteToolbarView(
   select.setAttribute("aria-label", remoteScope);
   const tracksSelected = snapshot.branch.upstreamRemote === policy.selectedRemote?.name;
   const actions = [
-    { kind: "fetch", button: "#remote-fetch", hint: "#remote-fetch-hint", policy: policy.fetch, iconName: "download" },
-    { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", policy: policy.pull, iconName: "sync" },
-    { kind: "push", button: "#remote-push", hint: "#remote-push-hint", policy: policy.push, iconName: "upload" },
+    { kind: "fetch", button: "#remote-fetch", hint: null, policy: policy.fetch, iconName: "download", menuItem: true },
+    { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", policy: policy.pull, iconName: "sync", menuItem: false },
+    { kind: "push", button: "#remote-push", hint: "#remote-push-hint", policy: policy.push, iconName: "upload", menuItem: false },
   ] as const;
   for (const action of actions) {
     const button = query<HTMLButtonElement>(root, action.button);
@@ -82,17 +87,24 @@ export function renderRemoteToolbarView(
       localization,
     );
     const title = `${exactScope} ${action.policy.enabled ? action.policy.detail : copy.unavailable(action.policy.detail)}`;
-    button.disabled = Boolean(operation) || loading || !action.policy.enabled;
+    const unavailable = Boolean(operation) || loading || !action.policy.enabled;
+    button.disabled = false;
+    button.setAttribute("aria-disabled", String(unavailable));
+    button.classList.toggle("unavailable", unavailable);
     button.title = title;
     button.setAttribute("aria-label", title);
     button.classList.toggle("running", operation?.kind === action.kind);
-    button.innerHTML = operation?.kind === action.kind && !operation.cancelling
+    const visual = operation?.kind === action.kind && !operation.cancelling
       ? '<span class="spinner" aria-hidden="true"></span>'
-      : `${icon(action.iconName, 18)}${remoteCountBadge(action.kind, snapshot, tracksSelected)}`;
-    const hint = query<HTMLElement>(root, action.hint);
-    hint.title = title;
-    hint.setAttribute("aria-label", title);
-    hint.tabIndex = button.disabled ? 0 : -1;
+      : `${icon(action.iconName, action.menuItem ? 17 : 18)}${remoteCountBadge(action.kind, snapshot, tracksSelected)}`;
+    button.innerHTML = action.menuItem
+      ? `${visual}<span>${escapeHtml(action.policy.label)}</span>`
+      : visual;
+    if (action.hint) {
+      const hint = query<HTMLElement>(root, action.hint);
+      hint.title = title;
+      hint.setAttribute("aria-label", title);
+    }
   }
 
   cancel.classList.toggle("hidden", !operation);
@@ -136,14 +148,18 @@ function renderUnavailableToolbar(
   ] as const;
   for (const [selector, description] of unavailable) {
     const button = query<HTMLButtonElement>(root, selector);
-    button.disabled = true;
+    button.disabled = false;
+    button.setAttribute("aria-disabled", "true");
+    button.classList.add("unavailable");
     button.title = description;
     button.setAttribute("aria-label", description);
     const hint = button.closest<HTMLElement>(".topbar-remote-action");
     hint?.setAttribute("aria-label", description);
     if (hint) {
       hint.title = description;
-      hint.tabIndex = 0;
+    }
+    if (selector === "#remote-fetch") {
+      button.innerHTML = `${icon("download", 17)}<span>${escapeHtml(copy.actionNames.fetch)}</span>`;
     }
   }
 }
@@ -174,7 +190,7 @@ function remoteCountBadge(
   snapshot: RepositorySnapshot,
   tracksSelected: boolean,
 ): string {
-  if (kind === "fetch" && tracksSelected && snapshot.branch.behind > 0) {
+  if (kind === "pull" && tracksSelected && snapshot.branch.behind > 0) {
     return `<span class="remote-count-badge" aria-hidden="true">${compactCount(snapshot.branch.behind)}</span>`;
   }
   if (kind === "push" && tracksSelected && snapshot.branch.ahead > 0) {
@@ -208,7 +224,7 @@ function renderUpdateDialog(model: RemotePushDialogViewModel): string {
     <p id="remote-dialog-description">${escapeHtml(copy.updateDescriptionText)}</p>
     <div class="remote-dialog-route" aria-label="${escapeAttribute(copy.updateRoute)}"><code>${escapeHtml(source)}</code><span>←</span><code>${escapeHtml(`${remote}:${destination}`)}</code></div>
     ${error}
-    <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}><legend>${escapeHtml(copy.updateMethod)}</legend><label class="remote-strategy-card ${strategy === "ffOnly" ? "selected" : ""} ${snapshot.branch.ahead > 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="ffOnly" ${strategy === "ffOnly" ? "checked" : ""} ${snapshot.branch.ahead > 0 ? "disabled" : ""}/><span><strong>${escapeHtml(copy.fastForwardOnly)}</strong><small>${escapeHtml(copy.fastForwardDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "merge" ? "selected" : ""}"><input type="radio" name="update-strategy" value="merge" ${strategy === "merge" ? "checked" : ""}/><span><strong>${escapeHtml(copy.mergeIncoming)}</strong><small>${escapeHtml(copy.mergeIncomingDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "rebase" ? "selected" : ""} ${snapshot.branch.ahead === 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="rebase" ${strategy === "rebase" ? "checked" : ""} ${snapshot.branch.ahead === 0 ? "disabled" : ""}/><span><strong>${escapeHtml(copy.rebaseCurrent)}</strong><small>${escapeHtml(copy.rebaseCurrentDetail)}</small></span></label></fieldset>
+    <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}><legend>${escapeHtml(copy.updateMethod)}</legend><label class="remote-strategy-card ${strategy === "ffOnly" ? "selected" : ""} ${snapshot.branch.ahead > 0 && snapshot.branch.behind > 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="ffOnly" ${strategy === "ffOnly" ? "checked" : ""} ${snapshot.branch.ahead > 0 && snapshot.branch.behind > 0 ? "disabled" : ""}/><span><strong>${escapeHtml(copy.fastForwardOnly)}</strong><small>${escapeHtml(copy.fastForwardDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "merge" ? "selected" : ""}"><input type="radio" name="update-strategy" value="merge" ${strategy === "merge" ? "checked" : ""}/><span><strong>${escapeHtml(copy.mergeIncoming)}</strong><small>${escapeHtml(copy.mergeIncomingDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "rebase" ? "selected" : ""} ${snapshot.branch.ahead === 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="rebase" ${strategy === "rebase" ? "checked" : ""} ${snapshot.branch.ahead === 0 ? "disabled" : ""}/><span><strong>${escapeHtml(copy.rebaseCurrent)}</strong><small>${escapeHtml(copy.rebaseCurrentDetail)}</small></span></label></fieldset>
     <p class="remote-dialog-note">${escapeHtml(copy.updateSafetyNote)}</p>
     <div class="dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelUpdate)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="${escapeAttribute(strategy === "ffOnly" ? copy.updateFastForwardAria(source, remote, destination) : copy.updateReviewAria(remote, strategyLabel, destination, source))}" ${operation || !policy.pull.enabled ? "disabled" : ""}>${escapeHtml(busyLabel)}</button></div>
   </section>`;

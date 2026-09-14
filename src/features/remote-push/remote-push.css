@@ -18,6 +18,16 @@
   position: relative;
 }
 
+.remote-action-button.unavailable {
+  opacity: 0.5;
+}
+
+.remote-action-button.unavailable:hover,
+.remote-action-button.unavailable:focus-visible {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
 .remote-count-badge {
   position: absolute;
   top: 2px;

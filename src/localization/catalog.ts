@@ -30,6 +30,7 @@ export interface ShellCopy {
   remoteActions: string;
   remoteForActions: string;
   noRemote: string;
+  moreRemoteActions: string;
   fetchBranch: string;
   updateBranch: string;
   pushBranch: string;
@@ -682,7 +683,7 @@ export interface RemoteCopy {
     clearLocalChanges: string;
     reviewDivergence(ahead: number, behind: number): string;
     fastForward(count: number): string;
-    upToDate: string;
+    checkUpstream: string;
     unsupportedPush: string;
     reviewOtherRemote(remote: string, upstream: string): string;
     createRemoteBranch(remote: string): string;

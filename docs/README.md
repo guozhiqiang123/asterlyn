@@ -73,3 +73,4 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`benchmarks/2026-09-13-architecture-editor-reliability.md`](benchmarks/2026-09-13-architecture-editor-reliability.md) — watcher feedback-loop, retained editor activation, safe/recoverable Git worktree writes, bounded producers, CI, and macOS verification.
 - [`benchmarks/2026-09-13-localization-color-themes.md`](benchmarks/2026-09-13-localization-color-themes.md) — English/Chinese and System/Dark/Light implementation, visible-copy and contrast gates, browser timing, idle stability, build size, and remaining native packaging gate.
+- [`benchmarks/2026-09-14-update-project-interaction.md`](benchmarks/2026-09-14-update-project-interaction.md) — actionable Update Project strategy choice, secondary Fetch placement, blocked-action feedback, validation, bundle movement, and Debian evidence.

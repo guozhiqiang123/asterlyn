@@ -103,7 +103,7 @@ function pullState(
         : copy.fastForward(branch.behind),
     );
   }
-  return blocked(label, copy.upToDate);
+  return ready(label, copy.checkUpstream);
 }
 
 function pushState(

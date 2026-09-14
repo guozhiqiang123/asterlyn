@@ -16,7 +16,10 @@ import {
   renderWorkspaceReplacementDialog,
 } from "../src/features/files-editor/workspace-navigation-view.ts";
 import { createRemotePushState } from "../src/features/remote-push/remote-push-state.ts";
-import { renderRemoteDialogContent } from "../src/features/remote-push/remote-push-view.ts";
+import {
+  renderRemoteDialogContent,
+  renderRemoteToolbarView,
+} from "../src/features/remote-push/remote-push-view.ts";
 import { renderSettingsNavigation, renderSettingsSection } from "../src/features/settings/settings-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
@@ -42,7 +45,29 @@ test("shell view follows persisted activity order and exposes stable feature hos
   }
   assert.ok(html.indexOf('id="repository-switcher-anchor"') < html.indexOf('id="command-center-button"'));
   assert.ok(html.indexOf('id="command-center-button"') < html.indexOf('class="topbar-actions"'));
+  assert.match(html, /id="remote-toolbar-menu"[^]*id="remote-fetch"[^]*id="remote-update"/);
+  assert.doesNotMatch(html, /id="remote-update"[^>]* disabled/);
   assert.doesNotMatch(html, /id="refresh-button"/);
+});
+
+test("blocked remote actions remain interactive so their exact reason can be announced", () => {
+  const repository = repositorySnapshot();
+  repository.branch.ahead = 0;
+  repository.branch.behind = 0;
+  const state = createRemotePushState();
+  state.selectedRemote = "origin";
+  const clean = remoteToolbarRoot();
+  renderRemoteToolbarView(clean.root, repository, state, false);
+
+  assert.equal(clean.elements.get("#remote-update").disabled, false);
+  assert.equal(clean.elements.get("#remote-update").getAttribute("aria-disabled"), "false");
+
+  repository.changes = [{ path: "dirty.txt" }];
+  const blocked = remoteToolbarRoot();
+  renderRemoteToolbarView(blocked.root, repository, state, false);
+  assert.equal(blocked.elements.get("#remote-update").disabled, false);
+  assert.equal(blocked.elements.get("#remote-update").getAttribute("aria-disabled"), "true");
+  assert.match(blocked.elements.get("#remote-update").title, /local changes first/);
 });
 
 test("settings view keeps one selected section and bounded preference controls", () => {
@@ -375,6 +400,52 @@ function textTabFixture() {
     error: null,
     conflict: false,
     markdownMode: "split",
+  };
+}
+
+function remoteToolbarRoot() {
+  const selectors = [
+    "#remote-toolbar",
+    "#topbar-remote-select",
+    "#cancel-remote-operation",
+    "#remote-toolbar-menu-toggle",
+    "#remote-toolbar-menu",
+    "#remote-fetch",
+    "#remote-update",
+    "#remote-update-hint",
+    "#remote-push",
+    "#remote-push-hint",
+  ];
+  const elements = new Map(selectors.map((selector) => [selector, fakeElement()]));
+  return {
+    elements,
+    root: {
+      querySelector(selector) {
+        return elements.get(selector) ?? null;
+      },
+    },
+  };
+}
+
+function fakeElement() {
+  const attributes = new Map();
+  const classes = new Set();
+  return {
+    innerHTML: "",
+    disabled: false,
+    title: "",
+    classList: {
+      add(...names) { names.forEach((name) => classes.add(name)); },
+      toggle(name, force) {
+        const enabled = force ?? !classes.has(name);
+        if (enabled) classes.add(name);
+        else classes.delete(name);
+        return enabled;
+      },
+    },
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    getAttribute(name) { return attributes.get(name) ?? null; },
+    closest() { return null; },
   };
 }
 

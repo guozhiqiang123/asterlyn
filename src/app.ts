@@ -588,6 +588,7 @@ export class AsterlynApp {
       gitOperationDialogOpen: () => this.gitOperationState.dialog !== null,
       repositoryMenuOpen: () => this.shellState.repositoryMenuOpen,
       editorTabMenuOpen: () => this.shellState.editorTabMenuOpen,
+      remoteActionsMenuOpen: () => this.shellState.remoteActionsMenuOpen,
       settingsOpen: () => this.shellState.page === "settings",
       replacementClosable: () => Boolean(
         this.state.replacementDialog &&
@@ -605,15 +606,20 @@ export class AsterlynApp {
       toggleRepositoryMenu: () => {
         this.shellController.toggleRepositoryMenu();
         this.renderRepositoryMenu();
+        this.renderEditorTabMenu();
+        this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
+      },
+      toggleRemoteActionsMenu: () => {
+        this.shellController.toggleRemoteActionsMenu();
+        this.renderRepositoryMenu();
+        this.renderEditorTabMenu();
+        this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
       },
       selectRemote: (remote) => {
         if (this.remoteState.dialog) this.closeRemoteDialog(false);
         this.remoteController.selectRemote(remote);
       },
-      remoteAction: (kind, anchor) => {
-        if (kind === "fetch") void this.runRemoteOperation(kind);
-        else this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor);
-      },
+      remoteAction: (kind, anchor) => void this.activateRemoteAction(kind, anchor),
       cancelRemoteOperation: () => void this.cancelActiveRemoteOperation(),
       refresh: () => void this.refresh(),
       openSettings: () => this.openSettings(),
@@ -635,6 +641,8 @@ export class AsterlynApp {
       toggleEditorTabMenu: () => {
         if (this.editorState.session.textTabs.length === 0 && !this.editorState.session.preview) return;
         this.shellController.toggleEditorTabMenu();
+        this.renderRepositoryMenu();
+        this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
         this.renderEditorTabMenu();
         this.bindEditorTabMenuEvents();
       },
@@ -656,6 +664,10 @@ export class AsterlynApp {
       closeEditorTabMenu: () => {
         this.shellController.closeEditorTabMenu();
         this.renderEditorTabMenu();
+      },
+      closeRemoteActionsMenu: () => {
+        this.shellController.closeRemoteActionsMenu();
+        this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
       },
       closeHistoryFilter: () => {
         this.state.historyFilterMenu = null;
@@ -985,6 +997,7 @@ export class AsterlynApp {
     this.root.querySelector("#remote-toolbar")?.setAttribute("aria-label", copy.remoteActions);
     label(".topbar-remote-select", copy.remoteForActions);
     label("#topbar-remote-select", copy.remoteForActions);
+    label("#remote-toolbar-menu-toggle", copy.moreRemoteActions);
     label("#remote-fetch", copy.fetchBranch);
     label("#remote-update", copy.updateBranch);
     label("#remote-push", copy.pushBranch);
@@ -2250,7 +2263,49 @@ export class AsterlynApp {
       this.remoteState,
       this.state.loading,
       this.localization,
+      this.shellState.remoteActionsMenuOpen,
     );
+  }
+
+  private async activateRemoteAction(
+    kind: "fetch" | "pull" | "push",
+    anchor: HTMLButtonElement,
+  ): Promise<void> {
+    this.shellController.closeRemoteActionsMenu();
+    this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
+    const blocked = this.remoteActionBlockedReason(kind);
+    if (blocked) {
+      this.showWarning(blocked);
+      return;
+    }
+    this.clearError();
+    if (kind === "fetch") {
+      await this.runRemoteOperation(kind);
+      return;
+    }
+    this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor);
+  }
+
+  private remoteActionBlockedReason(kind: "fetch" | "pull" | "push"): string | null {
+    const copy = this.localization.catalog.remote;
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot) {
+      return { fetch: copy.fetchUnavailable, pull: copy.updateUnavailable, push: copy.pushUnavailable }[kind];
+    }
+    if (this.remoteState.operation) {
+      return copy.unavailable(
+        copy.operationInProgress(copy.actionNames[this.remoteState.operation.kind]),
+      );
+    }
+    if (this.state.loading) {
+      return copy.unavailable(copy.operationInProgress(copy.actionNames[kind]));
+    }
+    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
+    if (!policy[kind].enabled) return copy.unavailable(policy[kind].detail);
+    if (kind !== "pull" && !policy.selectedRemote) {
+      return copy.unavailable(policy[kind].detail);
+    }
+    return null;
   }
 
   private openRemoteDialog(
@@ -2696,6 +2751,14 @@ export class AsterlynApp {
             { snapshot: reconciled, invalidatedSlices: [...COMPLETE_REPOSITORY_SLICES] },
             true,
           );
+          if (
+            kind === "pull" &&
+            this.remoteState.dialog === "update" &&
+            reconciled.branch.ahead > 0 &&
+            reconciled.branch.behind > 0
+          ) {
+            this.remoteController.setUpdateStrategy("merge");
+          }
           pendingRoot = reconciled.root;
         } catch {
           this.setStatus(this.localization.catalog.remote.endedRefreshRequired, "warning");
@@ -6139,13 +6202,25 @@ export class AsterlynApp {
     const message = localizedOperationError(error, this.localization.catalog.errors);
     this.state.error = message;
     this.query("#toast-message").textContent = message;
-    this.query("#toast").classList.remove("hidden");
+    const toast = this.query("#toast");
+    toast.classList.remove("hidden", "warning");
     this.setStatus(this.localization.catalog.common.operationFailed, "warning");
+  }
+
+  private showWarning(message: string): void {
+    this.state.error = message;
+    this.query("#toast-message").textContent = message;
+    const toast = this.query("#toast");
+    toast.classList.add("warning");
+    toast.classList.remove("hidden");
+    this.setStatus(message, "warning");
   }
 
   private clearError(): void {
     this.state.error = null;
-    this.query("#toast").classList.add("hidden");
+    const toast = this.query("#toast");
+    toast.classList.add("hidden");
+    toast.classList.remove("warning");
   }
 
   private async chooseRepository(): Promise<void> {

@@ -9,6 +9,7 @@ export interface ShellEventActions {
   readonly gitOperationDialogOpen: () => boolean;
   readonly repositoryMenuOpen: () => boolean;
   readonly editorTabMenuOpen: () => boolean;
+  readonly remoteActionsMenuOpen: () => boolean;
   readonly settingsOpen: () => boolean;
   readonly replacementClosable: () => boolean;
   readonly commandSurfaceOpen: () => boolean;
@@ -17,6 +18,7 @@ export interface ShellEventActions {
   readonly activeReadyTextTab: () => string | null;
   readonly dirtyTextTabs: () => number;
   readonly toggleRepositoryMenu: () => void;
+  readonly toggleRemoteActionsMenu: () => void;
   readonly selectRemote: (remote: string) => void;
   readonly remoteAction: (kind: "fetch" | "pull" | "push", anchor: HTMLButtonElement) => void;
   readonly cancelRemoteOperation: () => void;
@@ -43,6 +45,7 @@ export interface ShellEventActions {
   readonly closeGitOperation: () => void;
   readonly closeRepositoryMenu: (restoreFocus: boolean) => void;
   readonly closeEditorTabMenu: () => void;
+  readonly closeRemoteActionsMenu: () => void;
   readonly closeHistoryFilter: () => void;
   readonly saveTextTab: (tabId: string) => void;
   readonly focusHistoryFilter: () => void;
@@ -78,6 +81,10 @@ export class ShellEventBinding {
     });
     listen(this.query("#topbar-remote-select"), "change", (event) => {
       this.actions.selectRemote((event.currentTarget as HTMLSelectElement).value);
+    });
+    listen(this.query("#remote-toolbar-menu-toggle"), "click", (event) => {
+      event.stopPropagation();
+      this.actions.toggleRemoteActionsMenu();
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-remote-action]").forEach((button) => {
       listen(button, "click", () => {
@@ -209,6 +216,7 @@ export class ShellEventBinding {
     if (this.actions.pushDiffOpen()) this.actions.closePushDiff();
     else if (this.actions.gitOperationDialogOpen()) this.actions.closeGitOperation();
     else if (this.actions.remoteDialogOpen() && !this.actions.remoteOperationActive()) this.actions.closeRemoteDialog();
+    else if (this.actions.remoteActionsMenuOpen()) this.actions.closeRemoteActionsMenu();
     else if (this.actions.repositoryMenuOpen()) this.actions.closeRepositoryMenu(true);
     else if (this.actions.editorTabMenuOpen()) this.actions.closeEditorTabMenu();
     else if (!this.query("#repository-target-dialog").classList.contains("hidden")) this.actions.closeRepositoryTargetDialog();
@@ -231,6 +239,9 @@ export class ShellEventBinding {
     }
     if (this.actions.editorTabMenuOpen() && !event.target.closest("#editor-tab-menu-anchor")) {
       this.actions.closeEditorTabMenu();
+    }
+    if (this.actions.remoteActionsMenuOpen() && !event.target.closest("#remote-toolbar-menu-anchor")) {
+      this.actions.closeRemoteActionsMenu();
     }
     if (this.actions.historyFilterOpen() && !event.target.closest(".history-toolbar")) {
       this.actions.closeHistoryFilter();

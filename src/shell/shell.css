@@ -247,6 +247,49 @@
   outline-offset: -2px;
 }
 
+.remote-toolbar-menu-anchor {
+  position: relative;
+  display: grid;
+  height: 100%;
+  place-items: center;
+}
+
+.remote-toolbar-menu {
+  position: absolute;
+  z-index: 90;
+  top: calc(100% - 3px);
+  right: 0;
+  width: 230px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-menu);
+  box-shadow: 0 10px 28px var(--shadow-menu);
+}
+
+.remote-toolbar-menu-item {
+  display: grid;
+  width: 100%;
+  min-height: 31px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.remote-toolbar-menu-item:hover:not(.unavailable),
+.remote-toolbar-menu-item:focus-visible:not(.unavailable) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .window-controls {
   display: flex;
   height: 100%;

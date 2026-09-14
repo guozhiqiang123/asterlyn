@@ -61,7 +61,7 @@ test("enables fetch and ahead-only push without requiring a clean worktree", () 
   assert.equal(policy.pull.enabled, false);
 });
 
-test("enables only clean behind-only fast-forward pull", () => {
+test("enables clean Update for both known incoming commits and a fresh upstream check", () => {
   const policy = remotePolicy(
     snapshot({ branch: { ahead: 0, behind: 2 } }),
     "origin",
@@ -69,6 +69,13 @@ test("enables only clean behind-only fast-forward pull", () => {
   assert.equal(policy.pull.enabled, true);
   assert.equal(policy.push.enabled, true);
   assert.match(policy.push.detail, /Force Push with Lease/);
+
+  const lastKnownCurrent = remotePolicy(
+    snapshot({ branch: { ahead: 0, behind: 0 } }),
+    "origin",
+  );
+  assert.equal(lastKnownCurrent.pull.enabled, true);
+  assert.match(lastKnownCurrent.pull.detail, /determine whether/);
 
   const dirty = remotePolicy(
     snapshot({ branch: { ahead: 0, behind: 2 }, changes: [{ path: "dirty.txt" }] }),

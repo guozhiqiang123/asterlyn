@@ -22,6 +22,7 @@ export interface ShellState {
   activityOrder: ActivityTool[];
   repositoryMenuOpen: boolean;
   editorTabMenuOpen: boolean;
+  remoteActionsMenuOpen: boolean;
   windowChromeMode: WindowChromeMode;
 }
 
@@ -30,7 +31,7 @@ export interface ShellChange {
   pageChanged?: boolean;
   layoutChanged?: boolean;
   activityChanged?: boolean;
-  menuChanged?: "repository" | "editor-tabs" | "all";
+  menuChanged?: "repository" | "editor-tabs" | "remote-actions" | "all";
   chromeChanged?: boolean;
 }
 
@@ -51,6 +52,7 @@ export class ShellController {
       activityOrder: loadActivityOrder(storage),
       repositoryMenuOpen: false,
       editorTabMenuOpen: false,
+      remoteActionsMenuOpen: false,
       windowChromeMode: "custom-right",
     };
   }
@@ -76,14 +78,20 @@ export class ShellController {
 
   toggleRepositoryMenu(): boolean {
     this.state.repositoryMenuOpen = !this.state.repositoryMenuOpen;
-    if (this.state.repositoryMenuOpen) this.state.editorTabMenuOpen = false;
+    if (this.state.repositoryMenuOpen) {
+      this.state.editorTabMenuOpen = false;
+      this.state.remoteActionsMenuOpen = false;
+    }
     this.emit({ reason: "menu", menuChanged: "repository" });
     return this.state.repositoryMenuOpen;
   }
 
   toggleEditorTabMenu(): boolean {
     this.state.editorTabMenuOpen = !this.state.editorTabMenuOpen;
-    if (this.state.editorTabMenuOpen) this.state.repositoryMenuOpen = false;
+    if (this.state.editorTabMenuOpen) {
+      this.state.repositoryMenuOpen = false;
+      this.state.remoteActionsMenuOpen = false;
+    }
     this.emit({ reason: "menu", menuChanged: "editor-tabs" });
     return this.state.editorTabMenuOpen;
   }
@@ -102,10 +110,32 @@ export class ShellController {
     return true;
   }
 
+  toggleRemoteActionsMenu(): boolean {
+    this.state.remoteActionsMenuOpen = !this.state.remoteActionsMenuOpen;
+    if (this.state.remoteActionsMenuOpen) {
+      this.state.repositoryMenuOpen = false;
+      this.state.editorTabMenuOpen = false;
+    }
+    this.emit({ reason: "menu", menuChanged: "remote-actions" });
+    return this.state.remoteActionsMenuOpen;
+  }
+
+  closeRemoteActionsMenu(): boolean {
+    if (!this.state.remoteActionsMenuOpen) return false;
+    this.state.remoteActionsMenuOpen = false;
+    this.emit({ reason: "menu", menuChanged: "remote-actions" });
+    return true;
+  }
+
   closeMenus(): void {
-    if (!this.state.repositoryMenuOpen && !this.state.editorTabMenuOpen) return;
+    if (
+      !this.state.repositoryMenuOpen &&
+      !this.state.editorTabMenuOpen &&
+      !this.state.remoteActionsMenuOpen
+    ) return;
     this.state.repositoryMenuOpen = false;
     this.state.editorTabMenuOpen = false;
+    this.state.remoteActionsMenuOpen = false;
     this.emit({ reason: "menu", menuChanged: "all" });
   }
 

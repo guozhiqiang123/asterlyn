@@ -69,6 +69,21 @@
   font-weight: 800;
 }
 
+.toast.warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.toast.warning .toast-icon {
+  background: var(--warning-text);
+  color: var(--bg-deep);
+}
+
+.toast.warning .toast-close {
+  color: var(--warning-text);
+}
+
 .toast-close {
   display: grid;
   width: 24px;

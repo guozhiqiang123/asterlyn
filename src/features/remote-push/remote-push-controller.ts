@@ -240,7 +240,11 @@ export class RemotePushController {
   setUpdateStrategy(strategy: RemoteUpdateStrategy): void {
     if (this.state.dialog !== "update" || this.state.operation) return;
     if (strategy === "rebase" && (this.snapshot?.branch.ahead ?? 0) === 0) return;
-    if (strategy === "ffOnly" && (this.snapshot?.branch.ahead ?? 0) > 0) return;
+    if (
+      strategy === "ffOnly" &&
+      (this.snapshot?.branch.ahead ?? 0) > 0 &&
+      (this.snapshot?.branch.behind ?? 0) > 0
+    ) return;
     if (this.state.updateStrategy === strategy) return;
     this.state.updateStrategy = strategy;
     this.emit({ reason: "update-options", dialogChanged: true });

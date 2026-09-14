@@ -20,6 +20,21 @@ test("diverged Update defaults to Merge and rejects unavailable fast-forward sel
   controller.dispose();
 });
 
+test("ahead-only Update can still perform a fast-forward safety check", () => {
+  const controller = new RemotePushController(createGateway());
+  const repository = snapshot();
+  repository.branch.ahead = 2;
+  repository.branch.behind = 0;
+  controller.installSnapshot(repository);
+
+  assert.equal(controller.openDialog("update"), true);
+  assert.equal(controller.state.updateStrategy, "ffOnly");
+  controller.setUpdateStrategy("merge");
+  controller.setUpdateStrategy("ffOnly");
+  assert.equal(controller.state.updateStrategy, "ffOnly");
+  controller.dispose();
+});
+
 test("latest remote preview owns completion after a remote switch", async () => {
   const origin = deferred();
   const team = deferred();
