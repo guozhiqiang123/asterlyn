@@ -82,6 +82,9 @@ message churn is not forwarded as a stream of UI work.
   overflow broadens the invalidation to all seven slices.
 - At most one reconciliation per slice runs for a session. A newer invalidation is retained and
   runs after the current read rather than racing it.
+- Project-catalog reads for the same canonical workspace are single-flight at the Files controller
+  boundary. Manual Refresh, focus recovery, and watcher reconciliation may share the active read;
+  they must not start parallel full-catalog scans for the same root.
 - Project catalog reconciliation preserves surviving file identity, expanded directories,
   selection, and scroll position.
 - Working-tree reconciliation uses the tracked-first Git read, then the cancellable untracked
@@ -114,9 +117,13 @@ Linux watches the workspace root plus the parent directories represented by the 
 catalog non-recursively, while watching the selected Git metadata and operation/ref directories at
 their required depth. Catalog reconciliation updates this watch plan. This avoids registering every
 directory below generated, dependency, and Git-object trees. macOS and Windows use their native
-recursive workspace backend plus the same separately resolved Git metadata roots. Multiple windows
-showing the same root share the native subscription but retain independent editor and presentation
-state. Closing the last owner releases the subscription and all pending work.
+recursive workspace backend plus the same separately resolved Git metadata roots, but workspace
+events are admitted only when their immediate parent belongs to the current catalog-derived
+directory plan. Root events and top-level membership changes remain visible so reconciliation can
+extend that plan; deep churn below excluded generated or ignored trees is discarded before it can
+schedule a full catalog read. Multiple windows showing the same root share the native subscription
+but retain independent editor and presentation state. Closing the last owner releases the
+subscription and all pending work.
 
 Submodule source paths already present in the workspace catalog are covered by the workspace plan,
 but independent monitoring of each submodule's external Git metadata is deferred. The low-frequency
@@ -192,3 +199,19 @@ mounted rows. A background catalog read does not replace existing rows with load
 unchanged completion does not redraw the tree. Editor tab and Markdown mode controls similarly keep
 stable DOM. Native acceptance explicitly checks that repeated Git snapshots produce no subsequent
 invalidation while a real external write still produces one.
+
+## Recursive-watch catalog-loop correction — 2026-09-14
+
+The recursive macOS and Windows backends previously forwarded every workspace create, remove, and
+rename event. Churn in an excluded build or dependency tree therefore scheduled a complete bounded
+catalog scan; events arriving during that scan could schedule the next scan indefinitely. The native
+adapter now applies the live catalog-derived directory plan before coalescing recursive workspace
+events. Git metadata, root-level membership, and authorized source-directory events remain intact,
+while deep events outside the plan cannot sustain an event-to-catalog-read feedback chain.
+
+The Files controller independently coalesces concurrent same-root catalog requests into one
+in-flight promise. This second boundary prevents manual Refresh, focus recovery, and a valid native
+hint from racing duplicate scans even when their scheduling causes differ. These controls bound
+producer work; unchanged-result reconciliation continues to preserve disclosure, selection, scroll,
+and mounted rows. Installed macOS acceptance remains required because Linux cannot reproduce the
+native FSEvents delivery shape.

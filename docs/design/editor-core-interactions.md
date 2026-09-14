@@ -227,12 +227,19 @@ document-, and revision-guarded, so a late event from a previous project or supe
 replace the active editor. At most 20 retained tabs are checked concurrently, matching the existing
 session bound.
 
-Linux uses a selective catalog-derived directory plan; macOS and Windows use native recursive
-workspace watching. Focus regained after a stale interval and explicit Refresh remain recovery
+Linux uses a selective catalog-derived directory plan. macOS and Windows retain native recursive
+workspace watching but filter recursive workspace events through the same live parent-directory
+plan before coalescing them; top-level membership changes remain observable while deep churn below
+excluded generated or ignored trees cannot repeatedly trigger full catalog scans. Concurrent
+same-root catalog requests also share one in-flight read across watcher, focus-recovery, and manual
+Refresh scheduling. Focus regained after a stale interval and explicit Refresh remain recovery
 paths. Low-frequency polling on unreliable filesystems, independent submodule Git-metadata roots,
 editable conflict comparison/resolution, and measured large-file degradation are still separate
 work. Complete acceptance and resource evidence is in
 [`R3.1 native workspace-watch acceptance`](../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
+The subsequent recursive-event feedback correction and its remaining installed-macOS gate are
+recorded in
+[`recursive workspace refresh-chain correction`](../benchmarks/2026-09-14-recursive-watch-refresh-chain.md).
 
 ### R4 editable Git-conflict surface — 2026-09-12
 

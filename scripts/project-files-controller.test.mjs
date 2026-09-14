@@ -41,6 +41,28 @@ test("latest workspace owns project catalog completion", async () => {
   assert.deepEqual(controller.state.paths, ["new.txt"]);
 });
 
+test("concurrent refreshes for one workspace share one catalog read", async () => {
+  const pending = deferred();
+  let reads = 0;
+  const controller = new ProjectFilesController({
+    listProjectFiles() {
+      reads += 1;
+      return pending.promise;
+    },
+  });
+  controller.installWorkspace("/repo");
+
+  const first = controller.refresh();
+  const second = controller.refresh();
+  assert.equal(first, second);
+  assert.equal(reads, 1);
+
+  pending.resolve(catalog("/repo", ["src/main.ts"]));
+  assert.equal(await first, true);
+  assert.equal(await second, true);
+  assert.deepEqual(controller.state.paths, ["src/main.ts"]);
+});
+
 test("a newly imported workspace starts with every directory collapsed", async () => {
   const controller = new ProjectFilesController({
     async listProjectFiles() {

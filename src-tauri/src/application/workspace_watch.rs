@@ -51,7 +51,7 @@ struct SharedWorkspaceWatch {
     // Owns the backend lifetime; only Linux adds registrations after construction.
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     watcher: RecommendedWatcher,
-    workspace_directories: BTreeSet<PathBuf>,
+    workspace_directories: Arc<Mutex<BTreeSet<PathBuf>>>,
     metadata_roots: Vec<PathBuf>,
     owners: Owners,
 }
@@ -106,22 +106,21 @@ impl WorkspaceWatchService {
             return unavailable("workspace-watch owner lock was poisoned");
         }
 
-        let (owners, watch_directories) = registry
-            .roots
-            .get(&root)
-            .map(|watch| {
-                let mut combined = watch.workspace_directories.clone();
-                combined.extend(normalized_watch_directories(&root, &directories));
-                (Arc::clone(&watch.owners), combined.into_iter().collect())
-            })
-            .unwrap_or_else(|| {
-                (
-                    Arc::new(Mutex::new(HashMap::new())),
-                    normalized_watch_directories(&root, &directories)
-                        .into_iter()
-                        .collect(),
-                )
-            });
+        let (owners, watch_directories) = if let Some(watch) = registry.roots.get(&root) {
+            let mut combined = match watch.workspace_directories.lock() {
+                Ok(directories) => directories.clone(),
+                Err(_) => return unavailable("workspace-watch directory plan lock was poisoned"),
+            };
+            combined.extend(normalized_watch_directories(&root, &directories));
+            (Arc::clone(&watch.owners), combined.into_iter().collect())
+        } else {
+            (
+                Arc::new(Mutex::new(HashMap::new())),
+                normalized_watch_directories(&root, &directories)
+                    .into_iter()
+                    .collect(),
+            )
+        };
         let shared = match create_watch(
             app,
             root.clone(),
@@ -166,11 +165,22 @@ fn create_watch(
         &workspace_directories.iter().cloned().collect::<Vec<_>>(),
     )?;
     install_git_watches(&mut watcher, &root, &metadata_roots)?;
+    let workspace_directories = Arc::new(Mutex::new(workspace_directories));
     let worker_owners = Arc::clone(&owners);
     let worker_metadata_roots = metadata_roots.clone();
+    let worker_workspace_directories = Arc::clone(&workspace_directories);
     thread::Builder::new()
         .name("asterlyn-workspace-watch".to_string())
-        .spawn(move || watch_loop(app, root, worker_metadata_roots, worker_owners, receiver))
+        .spawn(move || {
+            watch_loop(
+                app,
+                root,
+                worker_metadata_roots,
+                worker_workspace_directories,
+                worker_owners,
+                receiver,
+            )
+        })
         .map_err(|error| format!("workspace-watch worker could not start: {error}"))?;
     Ok(SharedWorkspaceWatch {
         watcher,
@@ -196,7 +206,11 @@ fn add_workspace_watches(
     directories: &[PathBuf],
 ) -> Result<(), String> {
     let additions = normalized_watch_directories(root, directories);
-    for directory in additions.difference(&watch.workspace_directories) {
+    let mut watched = watch
+        .workspace_directories
+        .lock()
+        .map_err(|_| "workspace-watch directory plan lock was poisoned".to_string())?;
+    for directory in additions.difference(&watched) {
         watch
             .watcher
             .watch(directory, RecursiveMode::NonRecursive)
@@ -207,16 +221,21 @@ fn add_workspace_watches(
                 )
             })?;
     }
-    watch.workspace_directories.extend(additions);
+    watched.extend(additions);
     Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]
 fn add_workspace_watches(
-    _watch: &mut SharedWorkspaceWatch,
-    _root: &Path,
-    _directories: &[PathBuf],
+    watch: &mut SharedWorkspaceWatch,
+    root: &Path,
+    directories: &[PathBuf],
 ) -> Result<(), String> {
+    watch
+        .workspace_directories
+        .lock()
+        .map_err(|_| "workspace-watch directory plan lock was poisoned".to_string())?
+        .extend(normalized_watch_directories(root, directories));
     Ok(())
 }
 
@@ -318,6 +337,7 @@ fn watch_loop(
     app: tauri::AppHandle,
     root: PathBuf,
     metadata_roots: Vec<PathBuf>,
+    workspace_directories: Arc<Mutex<BTreeSet<PathBuf>>>,
     owners: Owners,
     receiver: mpsc::Receiver<notify::Result<Event>>,
 ) {
@@ -325,7 +345,14 @@ fn watch_loop(
     loop {
         match receiver.recv_timeout(pending.next_timeout()) {
             Ok(event) => {
-                pending.merge_event(event, &root, &metadata_roots);
+                if let Some(event) = filter_workspace_event_by_directory_plan(
+                    event,
+                    &root,
+                    &metadata_roots,
+                    &workspace_directories,
+                ) {
+                    pending.merge_event(event, &root, &metadata_roots);
+                }
                 if pending.ready() {
                     emit_pending(&app, &root, &owners, &mut pending);
                 }
@@ -341,6 +368,37 @@ fn watch_loop(
             }
         }
     }
+}
+
+fn filter_workspace_event_by_directory_plan(
+    event: notify::Result<Event>,
+    root: &Path,
+    metadata_roots: &[PathBuf],
+    workspace_directories: &Mutex<BTreeSet<PathBuf>>,
+) -> Option<notify::Result<Event>> {
+    let mut event = match event {
+        Ok(event) => event,
+        Err(error) => return Some(Err(error)),
+    };
+    if event.paths.is_empty() || event.need_rescan() {
+        return Some(Ok(event));
+    }
+    let Ok(directories) = workspace_directories.lock() else {
+        return Some(Ok(event));
+    };
+    event.paths.retain(|path| {
+        metadata_roots
+            .iter()
+            .any(|metadata_root| path.starts_with(metadata_root))
+            || path == root
+            || path
+                .strip_prefix(root)
+                .ok()
+                .filter(|relative| !relative.as_os_str().is_empty())
+                .and_then(|_| path.parent())
+                .is_some_and(|parent| directories.contains(parent))
+    });
+    (!event.paths.is_empty()).then_some(Ok(event))
 }
 
 impl PendingHint {
@@ -716,6 +774,37 @@ mod tests {
             ])
         );
         assert_eq!(hint.paths, BTreeSet::from(["src/main.rs".to_string()]));
+    }
+
+    #[test]
+    fn recursive_watch_filters_events_outside_the_catalog_directory_plan() {
+        let root = Path::new("/workspace");
+        let directories = Mutex::new(BTreeSet::from([root.to_path_buf(), root.join("src")]));
+
+        let ignored = filter_workspace_event_by_directory_plan(
+            Ok(Event::new(EventKind::Create(CreateKind::File))
+                .add_path(root.join("build/generated/output.bin"))),
+            root,
+            &[],
+            &directories,
+        );
+        assert!(ignored.is_none());
+
+        let source = filter_workspace_event_by_directory_plan(
+            Ok(Event::new(EventKind::Create(CreateKind::File)).add_path(root.join("src/new.rs"))),
+            root,
+            &[],
+            &directories,
+        );
+        assert!(source.is_some());
+
+        let top_level = filter_workspace_event_by_directory_plan(
+            Ok(Event::new(EventKind::Create(CreateKind::File)).add_path(root.join("README.md"))),
+            root,
+            &[],
+            &directories,
+        );
+        assert!(top_level.is_some());
     }
 
     #[test]

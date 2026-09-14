@@ -61,6 +61,8 @@ export class ProjectFilesController {
   private catalogRoot: string | null = null;
   private generation = 0;
   private disposed = false;
+  private refreshRoot: string | null = null;
+  private refreshPromise: Promise<boolean> | null = null;
   private messages: Pick<EditorCopy, "unexpectedProjectFilesError">;
   private treeCache: {
     files: ProjectFile[];
@@ -124,9 +126,23 @@ export class ProjectFilesController {
     this.emit({ reason: "status", catalogChanged: true });
   }
 
-  async refresh(): Promise<boolean> {
+  refresh(): Promise<boolean> {
     const root = this.state.root;
-    if (!root || this.disposed) return false;
+    if (!root || this.disposed) return Promise.resolve(false);
+    if (this.refreshRoot === root && this.refreshPromise) return this.refreshPromise;
+    const request = this.performRefresh(root);
+    this.refreshRoot = root;
+    this.refreshPromise = request;
+    const release = () => {
+      if (this.refreshPromise !== request) return;
+      this.refreshRoot = null;
+      this.refreshPromise = null;
+    };
+    void request.then(release, release);
+    return request;
+  }
+
+  private async performRefresh(root: string): Promise<boolean> {
     const generation = ++this.generation;
     const hadError = this.state.error !== null;
     this.state.loading = true;
