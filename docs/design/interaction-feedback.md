@@ -26,6 +26,11 @@ contextual or global notification. Successful no-op results use an informational
 than pretending that repository content changed. Failures identify the failed action and preserve
 the most specific safe recovery guidance available from the owning capability.
 
+The compact status indicator uses stable semantics: green accompanies the initial and restored
+`Ready` state, blue denotes active work, yellow denotes a warning, and neutral gray accompanies
+ordinary informational text. Returning from a named busy operation to `Ready` restores green rather
+than leaving the indicator visually indistinguishable from an idle message.
+
 ## Lifecycle and ownership
 
 The feature controller owns whether an action was accepted and its typed progress or terminal

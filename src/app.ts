@@ -6418,7 +6418,7 @@ export class AsterlynApp {
     );
     this.root.classList.toggle("is-busy", loading);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
-    this.setStatus(message, loading ? "busy" : "normal");
+    this.setStatus(message, loading ? "busy" : "success");
   }
 
   private setStatus(

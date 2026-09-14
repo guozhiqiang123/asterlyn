@@ -79,7 +79,7 @@ export function renderShellView(model: ShellViewModel): string {
         <div class="settings-page-layout"><nav class="settings-navigation" id="settings-navigation" aria-label="${escapeHtml(copy.settingsGroups)}"></nav><div class="settings-content" id="settings-content"></div></div>
       </section>
     </div>
-    <footer class="statusbar"><div class="status-left"><span class="status-indicator" id="status-indicator"></span><span id="status-message">${escapeHtml(common.ready)}</span></div><div class="status-right"><span class="document-encoding hidden" id="document-encoding" aria-label="${escapeHtml(copy.currentEncoding)}"></span><div class="branch-status" id="branch-status"></div></div></footer>
+    <footer class="statusbar"><div class="status-left"><span class="status-indicator success" id="status-indicator"></span><span id="status-message">${escapeHtml(common.ready)}</span></div><div class="status-right"><span class="document-encoding hidden" id="document-encoding" aria-label="${escapeHtml(copy.currentEncoding)}"></span><div class="branch-status" id="branch-status"></div></div></footer>
     <div class="toast hidden" id="toast" role="status" aria-live="polite"><span class="toast-icon">!</span><span id="toast-message"></span><button class="toast-close" id="toast-close" type="button" aria-label="${escapeHtml(copy.dismissError)}">${icon("close", 15)}</button></div>
     ${repositoryDialog(copy, common)}
     ${repositoryTargetDialog(copy, common)}

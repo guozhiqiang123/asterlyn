@@ -50,6 +50,7 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.doesNotMatch(html, /id="remote-update"[^>]* disabled/);
   assert.doesNotMatch(html, /id="refresh-button"/);
   assert.doesNotMatch(html, /id="git-recoveries-open"/);
+  assert.match(html, /class="status-indicator success" id="status-indicator"/);
 });
 
 test("shell search shortcut uses the native macOS convention", () => {
