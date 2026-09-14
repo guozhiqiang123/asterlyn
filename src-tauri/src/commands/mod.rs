@@ -6,6 +6,7 @@ pub(crate) use git_recovery::{
 mod git_reads;
 mod image;
 mod shell;
+mod terminal;
 mod workspace;
 mod workspace_watch;
 
@@ -25,6 +26,7 @@ pub(crate) use shell::{
     existing_project_directories, initial_repository, open_project, open_repository_window,
     read_project_snapshot, window_chrome_mode,
 };
+pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write_terminal};
 pub(crate) use workspace::{
     apply_workspace_replacement, cancel_workspace_replacement, cancel_workspace_text_search,
     finalize_workspace_replacement, list_project_files, list_workspace_replacement_recoveries,

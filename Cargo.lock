@@ -52,6 +52,7 @@ name = "asterlyn"
 version = "0.1.0"
 dependencies = [
  "asterlyn-git",
+ "asterlyn-terminal",
  "asterlyn-workspace",
  "base64 0.22.1",
  "notify",

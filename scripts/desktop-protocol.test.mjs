@@ -38,6 +38,16 @@ test("desktop response validation accepts representative valid payloads", () => 
     validateDesktopResult("start_workspace_watch", { available: true, message: null }),
     { available: true, message: null },
   );
+  assert.deepEqual(
+    validateDesktopResult("start_terminal", {
+      protocolVersion: 1,
+      sessionId: "terminal-1",
+      shell: "bash",
+      cwd: "/repo",
+    }),
+    { protocolVersion: 1, sessionId: "terminal-1", shell: "bash", cwd: "/repo" },
+  );
+  assert.equal(validateDesktopResult("close_terminal", true), true);
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
   assert.deepEqual(
     validateDesktopResult("read_remote_authentication", {

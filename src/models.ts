@@ -302,6 +302,35 @@ export interface OpenedProject {
   repository: RepositorySnapshot | null;
 }
 
+export interface TerminalStarted {
+  protocolVersion: 1;
+  sessionId: string;
+  shell: string;
+  cwd: string;
+}
+
+export type TerminalEvent =
+  | {
+      protocolVersion: 1;
+      kind: "output";
+      sessionId: string;
+      sequence: number;
+      dataBase64: string;
+    }
+  | {
+      protocolVersion: 1;
+      kind: "exited";
+      sessionId: string;
+      exitCode: number;
+      signal: string | null;
+    }
+  | {
+      protocolVersion: 1;
+      kind: "error";
+      sessionId: string;
+      message: string;
+    };
+
 export interface ImagePreview {
   path: string;
   mediaType: string;

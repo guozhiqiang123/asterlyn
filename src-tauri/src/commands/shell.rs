@@ -67,6 +67,7 @@ pub(crate) async fn open_project(
     path: String,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
+    terminal_sessions: State<'_, asterlyn_terminal::TerminalSessions>,
 ) -> Result<OpenedProject, WorkspaceError> {
     let token = active_workspaces.begin_activation(window.label())?;
     let project = read_project(path).await?;
@@ -79,6 +80,7 @@ pub(crate) async fn open_project(
             .as_ref()
             .map(|repository| Path::new(&repository.git_dir)),
     )?;
+    terminal_sessions.remove_owner_if_root_changed(window.label(), Path::new(&project.root));
     Ok(project)
 }
 

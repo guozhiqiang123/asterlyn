@@ -35,6 +35,7 @@ import type {
   WorkspaceTextSearchReport,
 } from "../models";
 import type { WindowChromeMode } from "../workbench/window-chrome";
+import type { TerminalBridge } from "./terminal.ts";
 
 export type DirectoryChoice =
   | { kind: "selected"; path: string }
@@ -230,4 +231,4 @@ export interface GitOperationBridge {
   ): Promise<GitOperationMutationOutcome>;
 }
 
-export type DesktopBridge = DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge;
+export type DesktopBridge = DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge;

@@ -51,6 +51,8 @@ import type {
   RepositoryMutationOutcome,
   SaveTextFileResult,
   TextFileSnapshot,
+  TerminalEvent,
+  TerminalStarted,
   TrackedChangeScan,
   WorkingTreeMutationOutcome,
   UntrackedScan,
@@ -74,6 +76,9 @@ const cancelledDemoSearches = new Set<string>();
 const cancelledDemoReplacements = new Set<string>();
 const demoReplacementPlans = new Map<string, DemoReplacementPlan>();
 const demoReplacementRecoveries = new Map<string, DemoReplacementRecovery>();
+const demoTerminalListeners = new Set<(event: TerminalEvent) => void>();
+let demoTerminalSession: TerminalStarted | null = null;
+let demoTerminalSequence = 0;
 const demoTextFiles = new Map<string, { content: string; utf8Bom: boolean; revision: number }>([
   ["README.md", { content: "# Asterlyn\n\nA lightweight developer workspace.\n", utf8Bom: false, revision: 1 }],
   ["package.json", { content: '{\n  "name": "asterlyn"\n}\n', utf8Bom: false, revision: 1 }],
@@ -121,6 +126,7 @@ interface DemoReplacementRecovery extends DemoReplacementPlan {
 
 const demoBridge: DesktopBridge = {
   isDemo: !isTauri,
+  native: false,
 
   async windowChromeMode(): Promise<WindowChromeMode> {
     if (!isTauri) return "custom-right";
@@ -1125,6 +1131,58 @@ const demoBridge: DesktopBridge = {
       expectedRevisionToken,
       content,
     });
+  },
+
+  async startTerminal(workspaceRoot: string): Promise<TerminalStarted> {
+    if (demoTerminalSession) throw new Error("A terminal is already running in this window.");
+    demoTerminalSession = {
+      protocolVersion: 1,
+      sessionId: "demo-terminal-1",
+      shell: "demo-shell",
+      cwd: workspaceRoot,
+    };
+    demoTerminalSequence = 0;
+    return structuredClone(demoTerminalSession);
+  },
+
+  async writeTerminal(sessionId: string, dataBase64: string): Promise<void> {
+    if (demoTerminalSession?.sessionId !== sessionId) {
+      throw new Error("The terminal session is no longer current.");
+    }
+    demoTerminalSequence += 1;
+    const event: TerminalEvent = {
+      protocolVersion: 1,
+      kind: "output",
+      sessionId,
+      sequence: demoTerminalSequence,
+      dataBase64,
+    };
+    demoTerminalListeners.forEach((listener) => listener(event));
+  },
+
+  async resizeTerminal(sessionId: string): Promise<void> {
+    if (demoTerminalSession?.sessionId !== sessionId) {
+      throw new Error("The terminal session is no longer current.");
+    }
+  },
+
+  async closeTerminal(sessionId: string): Promise<boolean> {
+    if (demoTerminalSession?.sessionId !== sessionId) return false;
+    demoTerminalSession = null;
+    const event: TerminalEvent = {
+      protocolVersion: 1,
+      kind: "exited",
+      sessionId,
+      exitCode: 0,
+      signal: null,
+    };
+    demoTerminalListeners.forEach((listener) => listener(event));
+    return true;
+  },
+
+  async subscribeTerminal(listener: (event: TerminalEvent) => void): Promise<() => void> {
+    demoTerminalListeners.add(listener);
+    return () => demoTerminalListeners.delete(listener);
   },
 };
 

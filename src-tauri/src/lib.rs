@@ -7,6 +7,7 @@ use asterlyn_git::{
     HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
     RemoteAuthenticationStatus, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
+use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
@@ -666,6 +667,7 @@ pub fn run() {
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
         .manage(WorkspaceWatchService::default())
+        .manage(TerminalSessions::default())
         .setup(|app| {
             build_project_window(app.handle(), "main", "Asterlyn")?;
             Ok(())
@@ -686,6 +688,9 @@ pub fn run() {
                 window
                     .state::<WorkspaceReplacementRegistry>()
                     .remove_window(window.label());
+                window
+                    .state::<TerminalSessions>()
+                    .remove_owner(window.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -697,6 +702,10 @@ pub fn run() {
             open_repository_window,
             start_workspace_watch,
             stop_workspace_watch,
+            start_terminal,
+            write_terminal,
+            resize_terminal,
+            close_terminal,
             read_tracked_changes,
             read_history_page,
             scan_untracked,

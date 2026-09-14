@@ -15,6 +15,9 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "void":
       assert(value === null || value === undefined, command, "expected no response body");
       break;
+    case "boolean":
+      assert(typeof value === "boolean", command, "expected a boolean");
+      break;
     case "string":
       assert(typeof value === "string", command, "expected a string");
       break;
@@ -35,6 +38,14 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       const result = record(value, command);
       booleans(result, command, "available");
       nullableStrings(result, command, "message");
+      break;
+    }
+    case "terminalStarted": {
+      const result = record(value, command);
+      numbers(result, command, "protocolVersion");
+      strings(result, command, "sessionId", "shell", "cwd");
+      assert(result.protocolVersion === 1, command, "expected terminal protocol version 1");
+      assert(Boolean(result.sessionId), command, "terminal session ID must not be empty");
       break;
     }
     case "openedProject": {

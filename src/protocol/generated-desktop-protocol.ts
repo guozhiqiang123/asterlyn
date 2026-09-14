@@ -12,6 +12,10 @@ export interface DesktopCommandMap {
   read_project_snapshot: { args: { path: string; }; result: Model.OpenedProject };
   start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
   stop_workspace_watch: { args: Record<string, never>; result: void };
+  start_terminal: { args: { workspaceRoot: string; cols: number; rows: number; }; result: Model.TerminalStarted };
+  write_terminal: { args: { sessionId: string; dataBase64: string; }; result: void };
+  resize_terminal: { args: { sessionId: string; cols: number; rows: number; }; result: void };
+  close_terminal: { args: { sessionId: string; }; result: boolean };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
   open_repository_window: { args: { path: string; }; result: string };
   read_history_page: { args: { repositoryRoot: string; query: Model.HistoryQuery; offset: number; limit: number; }; result: Model.HistoryPage };
@@ -73,6 +77,10 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_project_snapshot: "openedProject",
   start_workspace_watch: "workspaceWatchStatus",
   stop_workspace_watch: "void",
+  start_terminal: "terminalStarted",
+  write_terminal: "void",
+  resize_terminal: "void",
+  close_terminal: "boolean",
   read_tracked_changes: "trackedChangeScan",
   open_repository_window: "string",
   read_history_page: "historyPage",
