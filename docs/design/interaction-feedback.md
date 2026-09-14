@@ -47,6 +47,22 @@ Programmatic background reconciliation is different from a user command: it may 
 status feedback and avoid stealing focus. A later explicit user activation must still receive its
 own feedback and cannot inherit an earlier background message as evidence that it ran.
 
+## Single-title hierarchy
+
+Windows, dialogs, tool columns, panels, and comparable named surfaces use one visible title style
+unless a product requirement explicitly calls for a second hierarchy level. An eyebrow, kicker,
+category label, repeated route name, or descriptive sentence cannot become a second title merely to
+fill space. Context belongs in body copy, metadata, accessible descriptions, or the owning
+navigation; counts belong adjacent to the one title when they are useful. This rule keeps compact
+surfaces visually stable and prevents presentation-only hierarchy from being mistaken for product
+structure.
+
+A documented second level must carry stable, independently useful identity rather than repeat or
+categorize the primary title. Text Diff is the current explicit exception: the filename is the
+primary title and its workspace-relative path is the secondary title, because identical filenames
+can exist in different directories. The absolute path remains available through accessible context
+when needed and is not promoted into another visible heading.
+
 ## Accessibility and timing
 
 - Visible labels, icons, badges, and animation are supplemental to a complete accessible action
@@ -55,6 +71,8 @@ own feedback and cannot inherit an earlier background message as evidence that i
   discoverable until dismissed or superseded by a newer explicit action.
 - Busy state must not repeatedly flash enabled/disabled geometry. Completion replaces progress; it
   does not append contradictory messages.
+- Each named surface has exactly one visible title unless its accepted requirement documents why a
+  second title level is necessary.
 - Automated acceptance for a replaceable action region includes activation before and after region
   reconciliation, plus success/no-op and rejected/failure outcomes where applicable.
 

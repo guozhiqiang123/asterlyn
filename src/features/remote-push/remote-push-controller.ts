@@ -4,9 +4,7 @@ import type {
   CommitFileChange,
   ImageDiffPreview,
   PushMode,
-  PushPreview,
   PushTagMode,
-  RepositoryMutationOutcome,
   RepositorySnapshot,
 } from "../../models.ts";
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
@@ -17,7 +15,18 @@ import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 import { localizedOperationError } from "../../localization/error-message.ts";
 import {
+  PUSH_COMMIT_DETAILS_CACHE_LIMIT,
+  PUSH_PREVIEW_PAGE_SIZE,
+  type RemoteOperationResult,
+  type RemotePushChange,
+  type RemotePushControllerOptions,
+  type RemotePushGateway,
+  type UpdateDialogOptions,
+} from "./remote-push-contract.ts";
+import {
   createRemotePushState,
+  defaultRemoteUpdateStrategy,
+  isRemoteUpdateStrategyAvailable,
   type RemoteUpdateStrategy,
   type RemotePushState,
 } from "./remote-push-state.ts";
@@ -27,110 +36,23 @@ export type {
   RemotePushState,
   RemoteUpdateStrategy,
 } from "./remote-push-state.ts";
-
-export const PUSH_PREVIEW_PAGE_SIZE = 100;
-export const PUSH_COMMIT_DETAILS_CACHE_LIMIT = 48;
-
-export type RemotePushChangeReason =
-  | "snapshot"
-  | "remote-selection"
-  | "dialog-open"
-  | "dialog-close"
-  | "dialog-error"
-  | "preview-refresh-start"
-  | "preview-complete"
-  | "preview-error"
-  | "preview-page-start"
-  | "preview-page-complete"
-  | "commit-selection"
-  | "commit-details-start"
-  | "commit-details-complete"
-  | "commit-details-error"
-  | "file-selection"
-  | "file-presentation"
-  | "update-options"
-  | "push-options"
-  | "diff-start"
-  | "diff-complete"
-  | "diff-error"
-  | "diff-close"
-  | "operation-start"
-  | "operation-cancelling"
-  | "operation-complete";
-
-export interface RemotePushChange {
-  reason: RemotePushChangeReason;
-  toolbarChanged?: boolean;
-  dialogChanged?: boolean;
-  diffChanged?: boolean;
-  preserveDialogDom?: boolean;
-  error?: string;
-}
-
-export interface RemotePushGateway {
-  readPushPreview(
-    repositoryRoot: string,
-    remote: string,
-    tagMode: PushTagMode,
-    offset: number,
-    pageSize: number,
-  ): Promise<PushPreview>;
-  readCommitDetails(
-    repositoryRoot: string,
-    repositoryId: string,
-    commitOid: string,
-  ): Promise<CommitDetails>;
-  readPushFileCommit(
-    repositoryRoot: string,
-    remote: string,
-    tagMode: PushTagMode,
-    previewToken: string,
-    path: string,
-  ): Promise<CommitDetails | null>;
-  readCommitDiff(
-    repositoryRoot: string,
-    repositoryId: string,
-    commitOid: string,
-    path: string,
-    originalPath: string | null,
-    expandedUnchanged: boolean,
-  ): Promise<CommitDiffResult>;
-  readCommitImageDiff(
-    repositoryRoot: string,
-    repositoryId: string,
-    commitOid: string,
-    path: string,
-    originalPath: string | null,
-  ): Promise<ImageDiffPreview>;
-  fetchRemote(
-    repositoryRoot: string,
-    remote: string,
-    operationId: string,
-  ): Promise<RepositoryMutationOutcome>;
-  pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositoryMutationOutcome>;
-  pushCurrent(
-    repositoryRoot: string,
-    remote: string,
-    mode: PushMode,
-    tagMode: PushTagMode,
-    previewToken: string,
-    operationId: string,
-  ): Promise<RepositoryMutationOutcome>;
-  cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
-}
-
-export type RemoteOperationResult =
-  | { status: "success"; outcome: RepositoryMutationOutcome }
-  | { status: "failure"; error: unknown }
-  | { status: "stale" }
-  | { status: "unavailable" };
-
-export interface RemotePushControllerOptions {
-  previewPageSize?: number;
-  detailCacheLimit?: number;
-  messages?: RemoteCopy;
-  errorMessages?: ErrorCopy;
-}
+export {
+  defaultRemoteUpdateStrategy,
+  isRemoteUpdateStrategyAvailable,
+  resolveRemoteUpdateActivation,
+} from "./remote-push-state.ts";
+export {
+  PUSH_COMMIT_DETAILS_CACHE_LIMIT,
+  PUSH_PREVIEW_PAGE_SIZE,
+} from "./remote-push-contract.ts";
+export type {
+  RemoteOperationResult,
+  RemotePushChange,
+  RemotePushChangeReason,
+  RemotePushControllerOptions,
+  RemotePushGateway,
+  UpdateDialogOptions,
+} from "./remote-push-contract.ts";
 
 type Listener = (change: RemotePushChange) => void;
 
@@ -203,7 +125,10 @@ export class RemotePushController {
     return true;
   }
 
-  openDialog(dialog: "update" | "push"): boolean {
+  openDialog(
+    dialog: "update" | "push",
+    updateOptions: UpdateDialogOptions = {},
+  ): boolean {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.operation) return false;
     const policy = remotePolicy(snapshot, this.state.selectedRemote);
@@ -213,9 +138,11 @@ export class RemotePushController {
     this.resetDialog();
     this.state.dialog = dialog;
     if (dialog === "update") {
-      this.state.updateStrategy = snapshot.branch.ahead > 0 && snapshot.branch.behind > 0
-        ? "merge"
-        : "ffOnly";
+      this.state.updateStrategy = updateOptions.strategy &&
+          isRemoteUpdateStrategyAvailable(snapshot, updateOptions.strategy)
+        ? updateOptions.strategy
+        : defaultRemoteUpdateStrategy(snapshot);
+      this.state.rememberUpdateStrategy = updateOptions.rememberStrategy ?? false;
     }
     this.state.pushPreviewLoading = dialog === "push";
     const sequence = this.dialogSequence;
@@ -239,15 +166,22 @@ export class RemotePushController {
 
   setUpdateStrategy(strategy: RemoteUpdateStrategy): void {
     if (this.state.dialog !== "update" || this.state.operation) return;
-    if (strategy === "rebase" && (this.snapshot?.branch.ahead ?? 0) === 0) return;
-    if (
-      strategy === "ffOnly" &&
-      (this.snapshot?.branch.ahead ?? 0) > 0 &&
-      (this.snapshot?.branch.behind ?? 0) > 0
-    ) return;
+    if (!this.snapshot || !isRemoteUpdateStrategyAvailable(this.snapshot, strategy)) return;
     if (this.state.updateStrategy === strategy) return;
     this.state.updateStrategy = strategy;
     this.emit({ reason: "update-options", dialogChanged: true });
+  }
+
+  setRememberUpdateStrategy(remember: boolean): void {
+    if (
+      this.state.dialog !== "update" ||
+      this.state.operation ||
+      this.state.rememberUpdateStrategy === remember
+    ) return;
+    this.state.rememberUpdateStrategy = remember;
+    // The native checkbox already reflects the pointer/keyboard change. Retaining the value in
+    // feature state is enough and avoids replacing the entire modal for a one-bit local option.
+    this.emit({ reason: "update-options" });
   }
 
   setPushTagsEnabled(enabled: boolean): void {
@@ -715,6 +649,7 @@ export class RemotePushController {
   private resetDialog(): void {
     this.state.dialog = null;
     this.state.dialogError = null;
+    this.state.rememberUpdateStrategy = false;
     this.state.pushPreview = null;
     this.state.pushPreviewLoading = false;
     this.state.pushPreviewRefreshing = false;

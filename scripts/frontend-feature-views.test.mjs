@@ -6,6 +6,7 @@ import { renderCommitDetail } from "../src/features/git-history/git-detail-view.
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
 import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
 import {
+  contentHeading,
   renderDiffControls,
   renderEditorTabMenu,
   renderEditorTabs,
@@ -107,6 +108,21 @@ test("settings view keeps one selected section and bounded preference controls",
   });
   assert.match(appearance, /data-setting-theme="system"/);
   assert.match(appearance, /data-setting-theme="light" aria-pressed="true"/);
+
+  const versionControl = renderSettingsSection({
+    section: "version-control",
+    preferences: {
+      ...DEFAULT_APP_PREFERENCES,
+      askBeforeRemoteUpdate: false,
+      preferredRemoteUpdateStrategy: "rebase",
+    },
+  }, {
+    id: null,
+    kind: "idle",
+  });
+  assert.match(versionControl, /id="setting-remote-update-strategy"/);
+  assert.match(versionControl, /value="rebase" selected/);
+  assert.doesNotMatch(versionControl, /id="setting-ask-before-remote-update"[^>]*checked/);
 });
 
 test("remote view renders explicit update and reviewed push boundaries", () => {
@@ -116,7 +132,13 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.match(update, /Fast-forward only/);
   assert.match(update, /Merge incoming changes/);
   assert.match(update, /Rebase the current branch/);
+  assert.match(update, /id="remote-update-remember-strategy"/);
+  assert.doesNotMatch(update, /panel-eyebrow/);
   assert.doesNotMatch(update, /Requires editable conflict Diff/);
+
+  state.rememberUpdateStrategy = true;
+  const rememberedUpdate = renderRemoteDialogContent(viewModel(state));
+  assert.match(rememberedUpdate, /id="remote-update-remember-strategy"[^>]*checked/);
 
   state.dialog = "push";
   state.pushPreviewLoading = true;
@@ -311,6 +333,8 @@ test("editor chrome renders tabs, Markdown modes, menu, and Diff controls indepe
   assert.match(markdown, /data-markdown-mode="split"/);
   assert.match(diff, /next-file[^>]*>/);
   assert.match(diff, /data-diff-layout="split"/);
+  const heading = contentHeading("presentation-environment.test.mjs", "scripts/presentation-environment.test.mjs");
+  assert.ok(heading.indexOf("<h2>presentation-environment.test.mjs</h2>") < heading.indexOf("<small>scripts/presentation-environment.test.mjs</small>"));
 });
 
 function viewModel(state) {

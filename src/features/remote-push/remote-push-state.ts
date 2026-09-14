@@ -6,7 +6,12 @@ import type {
   PushMode,
   PushPreview,
   PushTagMode,
+  RepositorySnapshot,
 } from "../../models.ts";
+import type {
+  AppPreferences,
+  RemoteUpdateStrategyPreference,
+} from "../../workbench/preferences.ts";
 
 export interface PushDiffState {
   repositoryId: string | null;
@@ -26,7 +31,57 @@ export interface RemoteOperationState {
   cancelling: boolean;
 }
 
-export type RemoteUpdateStrategy = "ffOnly" | "merge" | "rebase";
+export type RemoteUpdateStrategy = RemoteUpdateStrategyPreference;
+
+export function defaultRemoteUpdateStrategy(
+  snapshot: RepositorySnapshot,
+): RemoteUpdateStrategy {
+  return snapshot.branch.ahead > 0 && snapshot.branch.behind > 0
+    ? "merge"
+    : "ffOnly";
+}
+
+export function isRemoteUpdateStrategyAvailable(
+  snapshot: RepositorySnapshot,
+  strategy: RemoteUpdateStrategy,
+): boolean {
+  if (strategy === "ffOnly") {
+    return snapshot.branch.ahead === 0 || snapshot.branch.behind === 0;
+  }
+  if (strategy === "rebase") return snapshot.branch.ahead > 0;
+  return true;
+}
+
+export type RemoteUpdateActivation =
+  | { kind: "execute"; strategy: RemoteUpdateStrategy }
+  | {
+      kind: "review";
+      strategy: RemoteUpdateStrategy;
+      rememberStrategy: boolean;
+    };
+
+export function resolveRemoteUpdateActivation(
+  snapshot: RepositorySnapshot,
+  preferences: Pick<
+    AppPreferences,
+    "askBeforeRemoteUpdate" | "preferredRemoteUpdateStrategy"
+  >,
+): RemoteUpdateActivation {
+  const preferred = preferences.preferredRemoteUpdateStrategy;
+  if (
+    !preferences.askBeforeRemoteUpdate &&
+    isRemoteUpdateStrategyAvailable(snapshot, preferred)
+  ) {
+    return { kind: "execute", strategy: preferred };
+  }
+  return {
+    kind: "review",
+    strategy: isRemoteUpdateStrategyAvailable(snapshot, preferred)
+      ? preferred
+      : defaultRemoteUpdateStrategy(snapshot),
+    rememberStrategy: !preferences.askBeforeRemoteUpdate,
+  };
+}
 
 export interface RemotePushState {
   selectedRemote: string | null;
@@ -34,6 +89,7 @@ export interface RemotePushState {
   dialog: "update" | "push" | null;
   dialogError: string | null;
   updateStrategy: RemoteUpdateStrategy;
+  rememberUpdateStrategy: boolean;
   pushPreview: PushPreview | null;
   pushPreviewLoading: boolean;
   pushPreviewRefreshing: boolean;
@@ -60,6 +116,7 @@ export function createRemotePushState(): RemotePushState {
     dialog: null,
     dialogError: null,
     updateStrategy: "ffOnly",
+    rememberUpdateStrategy: false,
     pushPreview: null,
     pushPreviewLoading: false,
     pushPreviewRefreshing: false,

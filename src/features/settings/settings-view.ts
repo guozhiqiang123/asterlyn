@@ -67,7 +67,7 @@ export function renderSettingsSection(
       return settingsGroup(
         copy.versionControlTitle,
         copy.versionControlDescription,
-        `${settingsRow(copy.diffLayoutLabel, copy.diffLayoutDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.diffLayoutAria)}"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">${escapeHtml(copy.sideBySide)}</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">${escapeHtml(copy.unified)}</button></div>`)}${settingsRow(copy.whitespaceLabel, copy.whitespaceDescription, `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>${escapeHtml(copy.showWhitespace)}</span></label>`)}`,
+        `${settingsRow(copy.updateStrategyLabel, copy.updateStrategyDescription, remoteUpdateStrategySelect(preferences, copy))}${settingsRow(copy.askBeforeRemoteUpdateLabel, copy.askBeforeRemoteUpdateDescription, `<label class="setting-toggle"><input id="setting-ask-before-remote-update" type="checkbox" ${preferences.askBeforeRemoteUpdate ? "checked" : ""} /><span>${escapeHtml(copy.askBeforeRemoteUpdate)}</span></label>`)}${settingsRow(copy.diffLayoutLabel, copy.diffLayoutDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.diffLayoutAria)}"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">${escapeHtml(copy.sideBySide)}</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">${escapeHtml(copy.unified)}</button></div>`)}${settingsRow(copy.whitespaceLabel, copy.whitespaceDescription, `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>${escapeHtml(copy.showWhitespace)}</span></label>`)}`,
       );
     case "code":
       return settingsGroup(
@@ -116,6 +116,14 @@ function editorFontControl(
     ? `<button class="setting-retry-button" id="setting-editor-font-retry" type="button">${escapeHtml(copy.retryFont(editorFont(status.id).label))}</button>`
     : "";
   return `<div class="editor-font-setting">${renderSelectControl(`<select id="setting-editor-font-family" aria-label="${escapeAttribute(copy.editorFontAria)}" aria-describedby="setting-editor-font-status">${EDITOR_FONTS.map((definition) => `<option value="${definition.id}" ${definition.id === selected ? "selected" : ""}>${escapeHtml(editorFontOptionLabel(definition))}</option>`).join("")}</select>`)}<span class="editor-font-status ${statusClass}" id="setting-editor-font-status" role="status">${escapeHtml(message)}</span>${retry}</div>`;
+}
+
+function remoteUpdateStrategySelect(
+  preferences: AppPreferences,
+  copy: SettingsCopy,
+): string {
+  const strategies = ["ffOnly", "merge", "rebase"] as const;
+  return renderSelectControl(`<select id="setting-remote-update-strategy" aria-label="${escapeAttribute(copy.updateStrategyAria)}">${strategies.map((strategy) => `<option value="${strategy}" ${preferences.preferredRemoteUpdateStrategy === strategy ? "selected" : ""}>${escapeHtml(copy.updateStrategies[strategy])}</option>`).join("")}</select>`);
 }
 
 function settingsSelect(

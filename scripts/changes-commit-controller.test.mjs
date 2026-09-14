@@ -37,6 +37,29 @@ test("latest change selection owns working Diff completion", async () => {
   assert.equal(controller.state.workingPatchLoading, false);
 });
 
+test("same-file reconciliation keeps the visible Diff until its refreshed patch arrives", async () => {
+  const refreshed = deferred();
+  const responses = [Promise.resolve(diff("a.txt", "old")), refreshed.promise];
+  const controller = new ChangesCommitController(gateway({
+    readLocalDiff() {
+      return responses.shift();
+    },
+  }));
+  controller.installSnapshot(snapshot([change("a.txt")]));
+  await controller.loadSelectedDiff(false);
+
+  controller.installSnapshot(snapshot([change("a.txt"), change("new.txt")]));
+  assert.equal(controller.state.workingPatch?.patch, "old");
+  const loading = controller.loadSelectedDiff(false);
+  assert.equal(controller.state.workingPatchLoading, true);
+  assert.equal(controller.state.workingPatch?.patch, "old");
+
+  refreshed.resolve(diff("a.txt", "new"));
+  await loading;
+  assert.equal(controller.state.workingPatch?.patch, "new");
+  assert.equal(controller.state.workingPatchLoading, false);
+});
+
 test("image Diff uses the image gateway and shares stale-result protection", async () => {
   const calls = [];
   const controller = new ChangesCommitController(gateway({
@@ -139,8 +162,8 @@ function change(path) {
   };
 }
 
-function diff(path) {
-  return { path, patch: `diff --git a/${path} b/${path}`, binary: false, truncated: false };
+function diff(path, patch = `diff --git a/${path} b/${path}`) {
+  return { path, patch, binary: false, truncated: false };
 }
 
 function deferred() {

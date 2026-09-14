@@ -15,6 +15,7 @@ export const EDITOR_TAB_SIZES = [2, 4, 8] as const;
 
 export type LocalePreference = "system" | "en-US" | "zh-CN";
 export type ThemePreference = "system" | "dark" | "light";
+export type RemoteUpdateStrategyPreference = "ffOnly" | "merge" | "rebase";
 
 export interface AppPreferences {
   locale: LocalePreference;
@@ -28,6 +29,8 @@ export interface AppPreferences {
   editorTabSize: number;
   diffLayout: DiffLayout;
   showWhitespace: boolean;
+  askBeforeRemoteUpdate: boolean;
+  preferredRemoteUpdateStrategy: RemoteUpdateStrategyPreference;
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
@@ -42,6 +45,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   editorTabSize: 4,
   diffLayout: "split",
   showWhitespace: false,
+  askBeforeRemoteUpdate: true,
+  preferredRemoteUpdateStrategy: "ffOnly",
 };
 
 const LEGACY_PRESENTATION_PREFERENCES = {
@@ -68,7 +73,8 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         value.version !== 3 &&
         value.version !== 4 &&
         value.version !== 5 &&
-        value.version !== 6) ||
+        value.version !== 6 &&
+        value.version !== 7) ||
       !isRecord(value.preferences)
     ) {
       return migrationSafeDefaults();
@@ -144,6 +150,15 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         typeof preferences.showWhitespace === "boolean"
           ? preferences.showWhitespace
           : false,
+      askBeforeRemoteUpdate:
+        typeof preferences.askBeforeRemoteUpdate === "boolean"
+          ? preferences.askBeforeRemoteUpdate
+          : true,
+      preferredRemoteUpdateStrategy: isRemoteUpdateStrategyPreference(
+          preferences.preferredRemoteUpdateStrategy,
+        )
+        ? preferences.preferredRemoteUpdateStrategy
+        : "ffOnly",
     };
   } catch {
     return migrationSafeDefaults();
@@ -156,7 +171,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 6, preferences }),
+    JSON.stringify({ version: 7, preferences }),
   );
 }
 
@@ -205,6 +220,15 @@ export function updateAppPreferences(
       typeof candidate.showWhitespace === "boolean"
         ? candidate.showWhitespace
         : current.showWhitespace,
+    askBeforeRemoteUpdate:
+      typeof candidate.askBeforeRemoteUpdate === "boolean"
+        ? candidate.askBeforeRemoteUpdate
+        : current.askBeforeRemoteUpdate,
+    preferredRemoteUpdateStrategy: isRemoteUpdateStrategyPreference(
+        candidate.preferredRemoteUpdateStrategy,
+      )
+      ? candidate.preferredRemoteUpdateStrategy
+      : current.preferredRemoteUpdateStrategy,
   };
 }
 
@@ -214,6 +238,12 @@ export function isLocalePreference(value: unknown): value is LocalePreference {
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return value === "system" || value === "dark" || value === "light";
+}
+
+export function isRemoteUpdateStrategyPreference(
+  value: unknown,
+): value is RemoteUpdateStrategyPreference {
+  return value === "ffOnly" || value === "merge" || value === "rebase";
 }
 
 function migrationSafeDefaults(): AppPreferences {

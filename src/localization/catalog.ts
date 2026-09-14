@@ -148,6 +148,13 @@ export interface SettingsCopy {
   tabWidthAria: string;
   versionControlTitle: string;
   versionControlDescription: string;
+  updateStrategyLabel: string;
+  updateStrategyDescription: string;
+  updateStrategyAria: string;
+  updateStrategies: Record<"ffOnly" | "merge" | "rebase", string>;
+  askBeforeRemoteUpdateLabel: string;
+  askBeforeRemoteUpdateDescription: string;
+  askBeforeRemoteUpdate: string;
   diffLayoutLabel: string;
   diffLayoutDescription: string;
   diffLayoutAria: string;
@@ -568,6 +575,7 @@ export interface RemoteCopy {
   rebaseCurrent: string;
   rebaseCurrentDetail: string;
   updateSafetyNote: string;
+  dontAskAgain: string;
   cancelUpdate: string;
   updateFastForwardAria(source: string, remote: string, destination: string): string;
   updateReviewAria(remote: string, strategy: string, destination: string, source: string): string;

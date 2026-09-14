@@ -132,3 +132,71 @@ The replacement Linux package completed successfully:
 - Debian size: 7,540,108 bytes
 - SHA-256: `e0505d9c933a350198f441a300ae099dbe4c6a3ec46cff4c0a77109de0c4c630`
 - Release binary size: 21,756,528 bytes
+
+## Follow-up: remembered Update choice and stable Diff reconciliation
+
+The Update review now uses one title, presents `Don't ask again` beside the method choice, and
+persists the selected Fast-forward, Merge, or Rebase strategy only after a confirmed Update. The
+Version Control settings page exposes both the remembered method and the switch that restores the
+review. A stored choice cannot authorize a newly unsafe operation: an unavailable Fast-forward or
+Rebase choice reopens the review with the safe applicable default instead of silently changing the
+method. Merge and Rebase still pass through their separately reviewed exact-object operation flow.
+
+Foreground reproduction and call-path review found that one broad local recovery could reload the
+active working Diff during its tracked result, again during the untracked supplement, and again
+while accepting adjacent repository/remote integration outcomes. Snapshot installation and each
+read also cleared the displayed patch before its replacement arrived. The correction gives the
+repository integration path one working-Diff reconciliation owner, treats the untracked supplement
+as selection validation rather than a second Diff read, and makes metadata-only Fetch leave the
+working Diff untouched. A same-root, same-path refresh retains the last complete patch until the
+new guarded request succeeds. Root, selection, generation, and request-sequence changes still
+invalidate stale data.
+
+Diff presentation now uses the explicit meaningful two-level identity required by the product:
+filename is the primary title and workspace-relative path is the secondary title. Previous/next
+change navigation adds a focus outline and bright accent edge to the corresponding row in every
+visible side while keeping the center connector/action region free for later editable-Diff controls.
+
+### Follow-up validation
+
+| Check | Absolute result | Conclusion |
+| --- | ---: | --- |
+| Focused Update, integration, Diff, and view tests | 52 passed | improved |
+| Complete script suite | 323 passed | no regression observed |
+| `asterlyn-git` Rust suite | 69 passed | no regression observed |
+| Frontend type check | passed | no regression observed |
+| Production frontend build | passed | no regression observed |
+| Browser Diff heading | `app.ts` plus `src/app.ts` | improved |
+| Browser current-change marker | two split rows, each with outline and 3 px accent edge | improved |
+| Native Linux smoke lifetime | 6,000 ms | no immediate startup regression observed |
+
+The size comparison uses the immediately preceding canonical-availability package above, with the
+same dependency installation, production command, gzip measurement, release profile, and Debian
+bundler.
+
+| Output | Before | After | Normalized change | Conclusion |
+| --- | ---: | ---: | ---: | --- |
+| Main JavaScript | 476,033 B | 478,880 B | +0.60% | no material change |
+| Main JavaScript, gzip | 109,268 B | 109,904 B | +0.58% | no material change |
+| Main CSS | 118,940 B | 119,436 B | +0.42% | no material change |
+| Main CSS, gzip | 25,667 B | 25,737 B | +0.27% | no material change |
+| Release executable | 21,756,528 B | 21,760,408 B | +0.02% | no material change |
+| Debian package | 7,540,108 B | 7,544,726 B | +0.06% | no material change |
+
+No dependency, polling loop, background producer, or new Git query class was added. Foreground
+responsiveness is **improved** because one reconciliation no longer clears and remounts the same
+Diff several times. Bundle and package movement show **no material change**. Native memory remains
+**inconclusive** because no matched process-tree resource series was collected. Installed macOS
+focus behavior remains a manual acceptance item because browser mode has no native window-focus or
+filesystem-watch bridge; the controller and integration tests cover the duplicate-read and retained-
+content invariants independently.
+
+The refreshed Linux package completed successfully:
+
+- Debian size: 7,544,726 bytes
+- SHA-256: `3978c380cf6ab1ed7a4bd4971902d4ae784ee11fa3d8143c4dc816ff09e876f6`
+- Release binary size: 21,760,408 bytes
+
+The next action is installed-package acceptance of Update preference persistence and repeated
+macOS blur-to-focus transitions while a working Diff is visible. Editable per-hunk Diff actions
+remain a separate reviewed capability rather than being implied by the current navigation marker.

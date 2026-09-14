@@ -127,6 +127,7 @@ export class ChangesCommitController {
     snapshot: RepositorySnapshot | null,
     options: SnapshotInstallOptions = {},
   ): void {
+    const previousSelection = this.state.selectedChange?.path ?? null;
     const rootChanged = this.snapshot?.root !== snapshot?.root;
     this.snapshot = snapshot;
     if (rootChanged) {
@@ -145,14 +146,24 @@ export class ChangesCommitController {
     if (rootChanged || options.clearDisclosure) this.state.collapsedDirectories.clear();
     if (rootChanged || options.clearSelection) this.state.selectedChange = null;
     this.chooseValidSelection();
-    this.clearWorkingDiff(false);
+    const selectionChanged = previousSelection !== (this.state.selectedChange?.path ?? null);
+    const retainedDiff = !rootChanged && !selectionChanged && previousSelection !== null;
+    this.diffSequence += 1;
+    const diffStateChanged = !retainedDiff ||
+      this.state.workingPatchLoading || this.state.workingPatchError !== null;
+    if (!retainedDiff) {
+      this.state.workingPatch = null;
+      this.state.workingImageDiff = null;
+    }
+    this.state.workingPatchLoading = false;
+    this.state.workingPatchError = null;
     this.emit({
       reason: "snapshot",
       navigationChanged: true,
-      selectionChanged: true,
+      selectionChanged,
       inclusionChanged: true,
       composerChanged: true,
-      diffChanged: true,
+      diffChanged: diffStateChanged,
     });
   }
 
@@ -270,8 +281,8 @@ export class ChangesCommitController {
     const generation = this.repositoryGeneration;
     const path = selected.path;
     const image = isImagePreviewPath(path);
-    this.state.workingPatch = null;
-    this.state.workingImageDiff = null;
+    if (image) this.state.workingPatch = null;
+    else this.state.workingImageDiff = null;
     this.state.workingPatchLoading = true;
     this.state.workingPatchError = null;
     this.emit({ reason: "diff-start", diffChanged: true });

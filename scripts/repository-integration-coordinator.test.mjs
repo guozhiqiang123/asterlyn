@@ -19,7 +19,7 @@ test("repository integration applies only declared projection slices", () => {
 
   assert.equal(fixture.records.changes.length, 1);
   assert.deepEqual(fixture.records.files, [["src/app.ts"]]);
-  assert.equal(fixture.records.documents, 1);
+  assert.deepEqual(fixture.records.documents, [true]);
   assert.deepEqual(fixture.records.remote, [changed]);
   assert.equal(fixture.records.history.length, 0);
   assert.equal(fixture.records.branchClears, 0);
@@ -83,7 +83,7 @@ test("conflict resolution reconciles working state without reading history or re
   assert.equal(accepted.operation, operation);
   assert.deepEqual(fixture.records.files, [["src/resolved.ts"]]);
   assert.deepEqual(fixture.records.operations, [accepted]);
-  assert.equal(fixture.records.documents, 1);
+  assert.deepEqual(fixture.records.documents, [true]);
   assert.deepEqual(fixture.records.remote, [accepted]);
   assert.equal(fixture.records.history.length, 0);
   fixture.dispose();
@@ -126,7 +126,7 @@ test("manual refresh reconciles one canonical snapshot without duplicating routi
   ]);
   assert.equal(fixture.records.refreshedHistory, 1);
   assert.deepEqual(fixture.records.operations, [refreshed]);
-  assert.equal(fixture.records.documents, 1);
+  assert.deepEqual(fixture.records.documents, [true]);
   assert.equal(fixture.records.renders, 1);
   assert.deepEqual(fixture.records.loads, [
     { root: "/repo", generation: fixture.session.generation },
@@ -178,6 +178,7 @@ test("session scans reuse the same integration route and stop after disposal", a
   await fixture.session.scanUntracked("/repo", fixture.session.generation, true, "watcher");
   assert.equal(fixture.records.renders, 1);
   assert.equal(fixture.records.remote.at(-1).untrackedState, "complete");
+  assert.deepEqual(fixture.records.documents, [false]);
   assert.deepEqual(fixture.records.status.at(-1), ["Ready", "normal"]);
 
   fixture.coordinator.dispose();
@@ -211,6 +212,7 @@ test("watch reconciliation completes a pending untracked scan", async () => {
   );
   assert.equal(fixture.records.remote.at(-1).untrackedState, "complete");
   assert.deepEqual(fixture.records.files.at(-1), ["new.txt", "tracked.txt"]);
+  assert.deepEqual(fixture.records.documents, [true, false]);
   fixture.dispose();
 });
 
@@ -266,12 +268,11 @@ function integrationFixture(gatewayOverrides = {}) {
     refreshedHistory: 0,
     historyClears: 0,
     branchClears: 0,
-    documents: 0,
+    documents: [],
     hideHistory: 0,
     workspaceOnly: 0,
     renders: 0,
     details: 0,
-    reloads: 0,
     loads: [],
     showChanges: 0,
     openDiffs: [],
@@ -306,12 +307,13 @@ function integrationFixture(gatewayOverrides = {}) {
         records.history.push({ root: value.root, preferTip });
       },
       reconcileRefreshedHistory() { records.refreshedHistory += 1; },
-      reconcileWorkingDocument() { records.documents += 1; },
+      reconcileWorkingDocument(_snapshot, reloadIfValid = true) {
+        records.documents.push(reloadIfValid);
+      },
       hideHistoryTool() { records.hideHistory += 1; },
       showWorkspaceOnlyTools() { records.workspaceOnly += 1; },
       renderWorkspace() { records.renders += 1; },
       loadVisibleCommitDetails() { records.details += 1; },
-      reloadWorkingDiff() { records.reloads += 1; },
       loadProjectFiles(root, generation) { records.loads.push({ root, generation }); },
       showChangesTool() { records.showChanges += 1; },
       openWorkingDiff(root, path) { records.openDiffs.push({ root, path }); },

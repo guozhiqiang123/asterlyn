@@ -21,7 +21,10 @@ import {
   pushConfirmationAvailability,
 } from "../../workbench/push-review.ts";
 import type { RemoteAuthenticationState } from "./remote-authentication-controller.ts";
-import type { RemotePushState } from "./remote-push-state.ts";
+import {
+  isRemoteUpdateStrategyAvailable,
+  type RemotePushState,
+} from "./remote-push-state.ts";
 
 export interface RemotePushDialogViewModel {
   readonly snapshot: RepositorySnapshot;
@@ -218,6 +221,8 @@ function renderUpdateDialog(model: RemotePushDialogViewModel): string {
   const destination = snapshot.branch.upstreamRef ?? copy.noUpstream;
   const operation = state.operation?.kind === "pull" ? state.operation : null;
   const strategy = state.updateStrategy;
+  const fastForwardAvailable = isRemoteUpdateStrategyAvailable(snapshot, "ffOnly");
+  const rebaseAvailable = isRemoteUpdateStrategyAvailable(snapshot, "rebase");
   const strategyLabel = copy.strategies[strategy];
   const busyLabel = operation?.cancelling
     ? copy.cancelling
@@ -228,13 +233,13 @@ function renderUpdateDialog(model: RemotePushDialogViewModel): string {
         : copy.fetchAndReview(strategyLabel);
   const error = state.dialogError ? renderRemoteError(state.dialogError, localization) : "";
   return `<section class="dialog remote-action-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description">
-    <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.currentBranch)}</span><h2 id="remote-dialog-title">${escapeHtml(copy.updateBranch(branch))}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelUpdateConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
+    <div class="dialog-heading"><h2 id="remote-dialog-title">${escapeHtml(copy.updateBranch(branch))}</h2><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelUpdateConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
     <p id="remote-dialog-description">${escapeHtml(copy.updateDescriptionText)}</p>
     <div class="remote-dialog-route" aria-label="${escapeAttribute(copy.updateRoute)}"><code>${escapeHtml(source)}</code><span>←</span><code>${escapeHtml(`${remote}:${destination}`)}</code></div>
     ${error}
-    <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}><legend>${escapeHtml(copy.updateMethod)}</legend><label class="remote-strategy-card ${strategy === "ffOnly" ? "selected" : ""} ${snapshot.branch.ahead > 0 && snapshot.branch.behind > 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="ffOnly" ${strategy === "ffOnly" ? "checked" : ""} ${snapshot.branch.ahead > 0 && snapshot.branch.behind > 0 ? "disabled" : ""}/><span><strong>${escapeHtml(copy.fastForwardOnly)}</strong><small>${escapeHtml(copy.fastForwardDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "merge" ? "selected" : ""}"><input type="radio" name="update-strategy" value="merge" ${strategy === "merge" ? "checked" : ""}/><span><strong>${escapeHtml(copy.mergeIncoming)}</strong><small>${escapeHtml(copy.mergeIncomingDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "rebase" ? "selected" : ""} ${snapshot.branch.ahead === 0 ? "unavailable" : ""}"><input type="radio" name="update-strategy" value="rebase" ${strategy === "rebase" ? "checked" : ""} ${snapshot.branch.ahead === 0 ? "disabled" : ""}/><span><strong>${escapeHtml(copy.rebaseCurrent)}</strong><small>${escapeHtml(copy.rebaseCurrentDetail)}</small></span></label></fieldset>
+    <fieldset class="remote-strategy-list" ${operation ? "disabled" : ""}><legend>${escapeHtml(copy.updateMethod)}</legend><label class="remote-strategy-card ${strategy === "ffOnly" ? "selected" : ""} ${fastForwardAvailable ? "" : "unavailable"}"><input type="radio" name="update-strategy" value="ffOnly" ${strategy === "ffOnly" ? "checked" : ""} ${fastForwardAvailable ? "" : "disabled"}/><span><strong>${escapeHtml(copy.fastForwardOnly)}</strong><small>${escapeHtml(copy.fastForwardDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "merge" ? "selected" : ""}"><input type="radio" name="update-strategy" value="merge" ${strategy === "merge" ? "checked" : ""}/><span><strong>${escapeHtml(copy.mergeIncoming)}</strong><small>${escapeHtml(copy.mergeIncomingDetail)}</small></span></label><label class="remote-strategy-card ${strategy === "rebase" ? "selected" : ""} ${rebaseAvailable ? "" : "unavailable"}"><input type="radio" name="update-strategy" value="rebase" ${strategy === "rebase" ? "checked" : ""} ${rebaseAvailable ? "" : "disabled"}/><span><strong>${escapeHtml(copy.rebaseCurrent)}</strong><small>${escapeHtml(copy.rebaseCurrentDetail)}</small></span></label></fieldset>
     <p class="remote-dialog-note">${escapeHtml(copy.updateSafetyNote)}</p>
-    <div class="dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelUpdate)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="${escapeAttribute(strategy === "ffOnly" ? copy.updateFastForwardAria(source, remote, destination) : copy.updateReviewAria(remote, strategyLabel, destination, source))}" ${operation || !policy.pull.enabled ? "disabled" : ""}>${escapeHtml(busyLabel)}</button></div>
+    <div class="remote-update-footer"><label class="remote-update-memory"><input id="remote-update-remember-strategy" type="checkbox" ${state.rememberUpdateStrategy ? "checked" : ""} ${operation ? "disabled" : ""}/><span>${escapeHtml(copy.dontAskAgain)}</span></label><div class="dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelUpdate)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<button class="primary-button" id="remote-dialog-confirm-update" type="button" aria-label="${escapeAttribute(strategy === "ffOnly" ? copy.updateFastForwardAria(source, remote, destination) : copy.updateReviewAria(remote, strategyLabel, destination, source))}" ${operation || !policy.pull.enabled ? "disabled" : ""}>${escapeHtml(busyLabel)}</button></div></div>
   </section>`;
 }
 

@@ -197,6 +197,13 @@ Fenced Markdown code now receives static syntax highlighting through the same on
 
 Text Diff now exposes previous/next change within the current file, previous/next changed file, open-and-reveal current source, and per-document expand/collapse unchanged-line controls. Current-file navigation stops at the file boundary, while cross-file navigation follows the current working-change or selected-commit file order. Open-and-reveal uses the existing bounded project catalog and is unavailable for a deleted or otherwise absent source. Expanded context is loaded from Git on demand and remains subject to the four-MiB patch cap; image Diff supports cross-file and source navigation but not text-hunk or context controls. Exact acceptance results are recorded in [`Markdown and Diff navigation evidence`](../benchmarks/2026-09-11-markdown-diff-navigation.md).
 
+Text Diff uses its one accepted two-level identity: filename as the primary title and workspace-
+relative path as the secondary title. Navigating to a change marks the corresponding line on every
+visible side with a high-contrast focus outline and accent edge, in addition to centering the line.
+The marker does not occupy the split connector or future per-hunk action gutter. Editable Diff may
+therefore add reviewed accept/reject controls later without redefining current-position state or
+making selection color the only cue.
+
 ### E3.1 Markdown-mode memory and conflict destination — 2026-09-12
 
 Markdown presentation choice is now bounded profile state rather than incidental active-tab state. A versioned store remembers Source, Split, or Preview for up to 128 root-qualified documents and records the last-used mode as the default for newly opened Markdown files. Existing editor sessions still own the live mode and source buffer; storage failure, malformed data, or an unknown mode falls back safely without changing content, dirty state, or save behavior. Only document identity and presentation choice persist—drafts, rendered HTML, split ratios, and editor state do not.

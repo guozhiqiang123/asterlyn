@@ -2,6 +2,8 @@ import {
   Compartment,
   EditorState,
   RangeSetBuilder,
+  StateEffect,
+  StateField,
   type Extension,
   type Range,
 } from "@codemirror/state";
@@ -73,6 +75,22 @@ const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) =
     if (className) builder.add(line.from, line.from, Decoration.line({ class: className }));
   }
   return builder.finish();
+});
+
+const setActiveDiffLine = StateEffect.define<number | null>();
+const activeDiffLineDecoration = StateField.define({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    const active = transaction.effects.find((effect) => effect.is(setActiveDiffLine));
+    if (!active) return decorations.map(transaction.changes);
+    const lineNumber = active.value;
+    if (lineNumber === null || lineNumber > transaction.newDoc.lines) return Decoration.none;
+    const line = transaction.newDoc.line(lineNumber);
+    return Decoration.set([
+      Decoration.line({ class: "cm-diff-current-change" }).range(line.from),
+    ]);
+  },
+  provide: (field) => EditorView.decorations.from(field),
 });
 
 export class DiffEditor {
@@ -155,7 +173,10 @@ export class DiffEditor {
       const line = view.state.doc.line(target);
       view.dispatch({
         selection: { anchor: line.from },
-        effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+        effects: [
+          setActiveDiffLine.of(target),
+          EditorView.scrollIntoView(line.from, { y: "center" }),
+        ],
       });
     }
     this.views[0]?.focus();
@@ -291,6 +312,7 @@ export class DiffEditor {
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
+      activeDiffLineDecoration,
       keymap.of([
         ...searchKeymap,
         {

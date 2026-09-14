@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RemotePushController } from "../src/features/remote-push/remote-push-controller.ts";
+import {
+  RemotePushController,
+  resolveRemoteUpdateActivation,
+} from "../src/features/remote-push/remote-push-controller.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
 
 test("diverged Update defaults to Merge and rejects unavailable fast-forward selection", () => {
@@ -33,6 +36,43 @@ test("ahead-only Update can still perform a fast-forward safety check", () => {
   controller.setUpdateStrategy("ffOnly");
   assert.equal(controller.state.updateStrategy, "ffOnly");
   controller.dispose();
+});
+
+test("Update review retains the selected remember choice across strategy rendering", () => {
+  const controller = new RemotePushController(createGateway());
+  controller.installSnapshot(snapshot());
+
+  assert.equal(controller.openDialog("update", {
+    strategy: "merge",
+    rememberStrategy: true,
+  }), true);
+  assert.equal(controller.state.updateStrategy, "merge");
+  assert.equal(controller.state.rememberUpdateStrategy, true);
+  controller.setUpdateStrategy("rebase");
+  assert.equal(controller.state.rememberUpdateStrategy, true);
+  controller.setRememberUpdateStrategy(false);
+  assert.equal(controller.state.rememberUpdateStrategy, false);
+  controller.dispose();
+});
+
+test("remembered Update executes only while its strategy is currently available", () => {
+  const repository = snapshot();
+  assert.deepEqual(resolveRemoteUpdateActivation(repository, {
+    askBeforeRemoteUpdate: false,
+    preferredRemoteUpdateStrategy: "merge",
+  }), { kind: "execute", strategy: "merge" });
+
+  repository.branch.behind = 3;
+  assert.deepEqual(resolveRemoteUpdateActivation(repository, {
+    askBeforeRemoteUpdate: false,
+    preferredRemoteUpdateStrategy: "ffOnly",
+  }), { kind: "review", strategy: "merge", rememberStrategy: true });
+
+  repository.branch.ahead = 0;
+  assert.deepEqual(resolveRemoteUpdateActivation(repository, {
+    askBeforeRemoteUpdate: false,
+    preferredRemoteUpdateStrategy: "rebase",
+  }), { kind: "review", strategy: "ffOnly", rememberStrategy: true });
 });
 
 test("same-root worktree completion makes Update available to the remote controller", () => {

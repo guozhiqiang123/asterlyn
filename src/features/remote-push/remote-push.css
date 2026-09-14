@@ -237,6 +237,29 @@
   height: 16px;
 }
 
+.remote-update-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.remote-update-footer .dialog-actions {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.remote-update-memory {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 11px;
+}
+
 .push-preview-summary {
   display: flex;
   min-width: 0;

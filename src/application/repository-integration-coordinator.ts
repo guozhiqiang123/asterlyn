@@ -76,12 +76,11 @@ export interface RepositoryIntegrationActions {
   clearBranchSelection(): void;
   installSnapshotHistory(snapshot: RepositorySnapshot, preferTip: boolean): void;
   reconcileRefreshedHistory(snapshot: RepositorySnapshot): void;
-  reconcileWorkingDocument(snapshot: RepositorySnapshot): void;
+  reconcileWorkingDocument(snapshot: RepositorySnapshot, reloadIfValid?: boolean): void;
   hideHistoryTool(): void;
   showWorkspaceOnlyTools(): void;
   renderWorkspace(): void;
   loadVisibleCommitDetails(): void;
-  reloadWorkingDiff(): void;
   loadProjectFiles(root: string, generation?: number): void;
   showChangesTool(): void;
   openWorkingDiff(root: string, path: string): void;
@@ -210,7 +209,6 @@ export class RepositoryIntegrationCoordinator {
     this.applyMutation({ snapshot, invalidatedSlices: slices }, cause);
     this.actions.renderWorkspace();
     if (slices.includes("history")) this.actions.loadVisibleCommitDetails();
-    this.actions.reloadWorkingDiff();
     if (snapshot.untrackedState === "pending") {
       void this.session.scanUntracked(snapshot.root, this.session.generation, false, cause);
     }
@@ -229,7 +227,6 @@ export class RepositoryIntegrationCoordinator {
     if (outcome.invalidatedSlices.includes("history")) {
       this.actions.loadVisibleCommitDetails();
     }
-    this.actions.reloadWorkingDiff();
     if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
       this.actions.loadProjectFiles(snapshot.root);
     }
@@ -266,7 +263,6 @@ export class RepositoryIntegrationCoordinator {
     this.actions.reconcileWorkingDocument(snapshot);
     this.actions.renderWorkspace();
     this.actions.loadVisibleCommitDetails();
-    this.actions.reloadWorkingDiff();
     this.actions.loadProjectFiles(snapshot.root, generation);
     return snapshot;
   }
@@ -344,9 +340,11 @@ export class RepositoryIntegrationCoordinator {
       this.targets.changes.installSnapshot(change.snapshot);
       this.targets.files.updateChanges(change.snapshot.changes);
       this.targets.operations.installSnapshot(change.snapshot);
-      this.actions.reconcileWorkingDocument(change.snapshot);
+      this.actions.reconcileWorkingDocument(
+        change.snapshot,
+        change.reason !== "untracked-scan-complete",
+      );
       this.actions.renderWorkspace();
-      this.actions.reloadWorkingDiff();
       if (change.reason === "untracked-scan-complete" && change.announce) {
         const recoveries = this.actions.replacementRecoveryCount();
         this.actions.setStatus(

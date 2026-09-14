@@ -7,6 +7,7 @@ import {
   unifiedChangeStartLines,
 } from "../src/workbench/diff-navigation.ts";
 import { editorDocumentKey } from "../src/workbench/editor-document.ts";
+import { readFile } from "node:fs/promises";
 
 test("unified Diff navigation groups adjacent removed and added lines", () => {
   const patch = [
@@ -73,4 +74,15 @@ test("Diff document identities isolate source kind, side, repository, and revisi
   });
 
   assert.equal(new Set([working, staged, commit, otherCommit]).size, 4);
+});
+
+test("Diff position navigation owns a dedicated non-destructive current-change marker", async () => {
+  const [editor, theme] = await Promise.all([
+    readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /setActiveDiffLine\.of\(target\)/);
+  assert.match(editor, /cm-diff-current-change/);
+  assert.match(theme, /\.cm-diff-current-change/);
+  assert.match(theme, /boxShadow: "inset 3px 0 0 var\(--focus-ring-bright\)"/);
 });

@@ -203,7 +203,20 @@
 
 .content-header h2 {
   max-width: 680px;
+  margin: 0;
   font-size: 12px;
+  line-height: 18px;
+}
+
+.content-title-group small {
+  display: block;
+  overflow: hidden;
+  max-width: 680px;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .oid {

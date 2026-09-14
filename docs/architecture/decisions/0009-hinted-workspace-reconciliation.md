@@ -87,6 +87,10 @@ message churn is not forwarded as a stream of UI work.
 - Working-tree reconciliation uses the tracked-first Git read, then the cancellable untracked
   supplement. It updates Changes, file/tab colors, and an active working Diff without reloading
   History or refs.
+- One tracked-first reconciliation may issue at most one active working-Diff read. The later
+  untracked supplement validates that the selected path still exists but does not request the same
+  Diff again. A still-valid Diff retains its last complete content while the replacement is read;
+  stale root, selection, generation, and request results remain rejected.
 - A clean open document may reload automatically after a verified external revision change. A
   dirty document becomes an explicit external-change conflict and is never overwritten.
 - Events caused by Asterlyn's own save or Git operation are not blindly discarded. The application
@@ -136,6 +140,12 @@ Git-operation dialog, remote operation, or global workbench task is active. This
 an exact-object review or competing with a user-authorized mutation. Failure is reported in the
 shared status surface; the next blur-to-focus pair or explicit Fetch may retry. No interval timer or
 background polling loop is introduced.
+
+Fetch changes remote metadata only and therefore never reloads or clears the active working Diff.
+When the preceding broad focus recovery does include a working-tree read, repository integration
+owns the single Diff reconciliation described above. Installing the new snapshot preserves the
+visible patch for the same root and selected path until its replacement succeeds, so a blur-to-focus
+cycle cannot flash through repeated loading or empty presentations.
 
 ## Consequences
 

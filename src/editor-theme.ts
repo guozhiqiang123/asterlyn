@@ -244,6 +244,11 @@ const editorThemeRules =
       borderRadius: "2px",
       backgroundColor: "var(--editor-intraline-removed)",
     },
+    ".cm-diff-current-change": {
+      outline: "1px solid var(--focus-ring)",
+      outlineOffset: "-1px",
+      boxShadow: "inset 3px 0 0 var(--focus-ring-bright)",
+    },
   };
 
 const editorThemes = {

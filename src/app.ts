@@ -37,9 +37,12 @@ import {
 } from "./features/git-history/branch-navigation-view";
 import {
   RemotePushController,
+  isRemoteUpdateStrategyAvailable,
+  resolveRemoteUpdateActivation,
   type RemotePushChange,
   type RemotePushState,
   type RemoteUpdateStrategy,
+  type UpdateDialogOptions,
 } from "./features/remote-push/remote-push-controller";
 import {
   RemoteAuthenticationController,
@@ -186,6 +189,7 @@ import {
 } from "./workbench/editor-fonts";
 import {
   isLocalePreference,
+  isRemoteUpdateStrategyPreference,
   isThemePreference,
   type AppPreferences,
 } from "./workbench/preferences";
@@ -529,7 +533,8 @@ export class AsterlynApp {
             this.historyController.loadQuery(snapshot.root, query);
           }
         },
-        reconcileWorkingDocument: (snapshot) => this.reconcileWorkingDocument(snapshot),
+        reconcileWorkingDocument: (snapshot, reloadIfValid) =>
+          this.reconcileWorkingDocument(snapshot, reloadIfValid),
         hideHistoryTool: () => this.shellController.setLayout({
           ...this.shellState.layout,
           bottomTool: null,
@@ -541,9 +546,6 @@ export class AsterlynApp {
         }),
         renderWorkspace: () => this.renderWorkspace(),
         loadVisibleCommitDetails: () => this.loadVisibleCommitDetails(),
-        reloadWorkingDiff: () => {
-          if (this.activeDocument().kind === "working-diff") void this.loadSelectedDiff();
-        },
         loadProjectFiles: (repositoryRoot, generation) => {
           void this.loadProjectFiles(repositoryRoot, generation);
         },
@@ -1196,6 +1198,26 @@ export class AsterlynApp {
           const layout = button.dataset.settingDiffLayout as DiffLayout;
           this.updatePreferences({ diffLayout: layout }, `setting-diff-${layout}`);
         });
+      });
+    this.root
+      .querySelector<HTMLSelectElement>("#setting-remote-update-strategy")
+      ?.addEventListener("change", (event) => {
+        const strategy = (event.currentTarget as HTMLSelectElement).value;
+        if (isRemoteUpdateStrategyPreference(strategy)) {
+          this.updatePreferences(
+            { preferredRemoteUpdateStrategy: strategy },
+            "setting-remote-update-strategy",
+          );
+        }
+      });
+    this.root
+      .querySelector<HTMLInputElement>("#setting-ask-before-remote-update")
+      ?.addEventListener("change", (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        this.updatePreferences(
+          { askBeforeRemoteUpdate: target.checked },
+          target.id,
+        );
       });
     this.root
       .querySelector<HTMLInputElement>("#setting-show-whitespace")
@@ -2288,13 +2310,27 @@ export class AsterlynApp {
       await this.runRemoteOperation(kind);
       return;
     }
-    if (!this.openRemoteDialog(kind === "pull" ? "update" : "push", anchor)) {
-      const reason = this.remoteActionBlockedReason(kind) ??
-        this.localization.catalog.remote.actionStateChanged(
-          this.localization.catalog.remote.actionNames[kind],
-        );
-      this.showWarning(reason);
+    if (kind === "pull") {
+      const snapshot = this.windowSession.repository.state.snapshot;
+      const preferences = this.settingsState.preferences;
+      if (!snapshot) return;
+      const activation = resolveRemoteUpdateActivation(snapshot, preferences);
+      if (activation.kind === "execute") {
+        await this.executeRemoteUpdate(activation.strategy, anchor);
+        return;
+      }
+      if (this.openRemoteDialog("update", anchor, {
+        strategy: activation.strategy,
+        rememberStrategy: activation.rememberStrategy,
+      })) return;
+    } else if (this.openRemoteDialog("push", anchor)) {
+      return;
     }
+    const reason = this.remoteActionBlockedReason(kind) ??
+      this.localization.catalog.remote.actionStateChanged(
+        this.localization.catalog.remote.actionNames[kind],
+      );
+    this.showWarning(reason);
   }
 
   private remoteActionBlockedReason(kind: "fetch" | "pull" | "push"): string | null {
@@ -2322,8 +2358,12 @@ export class AsterlynApp {
   private openRemoteDialog(
     dialog: "update" | "push",
     returnFocus: HTMLElement,
+    updateOptions: UpdateDialogOptions = {},
   ): boolean {
-    if (this.state.loading || !this.remoteController.openDialog(dialog)) return false;
+    if (
+      this.state.loading ||
+      !this.remoteController.openDialog(dialog, updateOptions)
+    ) return false;
     this.remoteDialogReturnFocus = returnFocus;
     queueMicrotask(() => {
       this.root
@@ -2415,9 +2455,16 @@ export class AsterlynApp {
       });
     });
     this.root
+      .querySelector<HTMLInputElement>("#remote-update-remember-strategy")
+      ?.addEventListener("change", (event) => {
+        this.remoteController.setRememberUpdateStrategy(
+          (event.currentTarget as HTMLInputElement).checked,
+        );
+      });
+    this.root
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
       ?.addEventListener("click", () => {
-        if (!this.remoteState.pushPreviewRefreshing) void this.confirmRemoteDialog("push");
+        if (!this.remoteState.pushPreviewRefreshing) void this.confirmRemotePush();
       });
     const closeAuthentication = () => {
       this.remoteAuthenticationController.close();
@@ -2662,12 +2709,45 @@ export class AsterlynApp {
 
   private async confirmRemoteUpdate(): Promise<void> {
     const strategy = this.remoteState.updateStrategy;
+    const remember = this.remoteState.rememberUpdateStrategy;
+    if (remember) {
+      this.updatePreferences({
+        askBeforeRemoteUpdate: false,
+        preferredRemoteUpdateStrategy: strategy,
+      });
+    } else if (!this.settingsState.preferences.askBeforeRemoteUpdate) {
+      this.updatePreferences({ askBeforeRemoteUpdate: true });
+    }
+    await this.executeRemoteUpdate(strategy, this.remoteDialogReturnFocus ?? undefined);
+  }
+
+  private async executeRemoteUpdate(
+    strategy: RemoteUpdateStrategy,
+    returnFocus?: HTMLElement,
+  ): Promise<void> {
     if (strategy === "ffOnly") {
-      await this.confirmRemoteDialog("pull");
+      const dialogWasOpen = this.remoteState.dialog === "update";
+      const succeeded = await this.runRemoteOperation("pull");
+      if (succeeded) {
+        if (dialogWasOpen) this.closeRemoteDialog();
+        return;
+      }
+      const snapshot = this.windowSession.repository.state.snapshot;
+      if (
+        !dialogWasOpen &&
+        snapshot &&
+        !isRemoteUpdateStrategyAvailable(snapshot, strategy)
+      ) {
+        const anchor = returnFocus ?? this.query<HTMLButtonElement>("#remote-update");
+        this.openRemoteDialog("update", anchor, {
+          strategy: this.settingsState.preferences.preferredRemoteUpdateStrategy,
+          rememberStrategy: true,
+        });
+      }
       return;
     }
     if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.prepareStrategy(this.localization.catalog.remote.strategies[strategy])))) return;
-    this.closeRemoteDialog(false);
+    if (this.remoteState.dialog === "update") this.closeRemoteDialog(false);
     if (!(await this.runRemoteOperation("fetch"))) return;
 
     const snapshot = this.windowSession.repository.state.snapshot;
@@ -2686,18 +2766,16 @@ export class AsterlynApp {
     await this.gitOperationController.prepare();
   }
 
-  private async confirmRemoteDialog(kind: "pull" | "push"): Promise<void> {
-    if (kind === "push") {
-      const snapshot = this.windowSession.repository.state.snapshot;
-      const preview = this.remoteState.pushPreview;
-      if (!snapshot || !preview) return;
-      const authentication = await this.remoteAuthenticationController.check(
-        snapshot.root,
-        preview.remote,
-      );
-      if (authentication !== "ready") return;
-    }
-    const succeeded = await this.runRemoteOperation(kind);
+  private async confirmRemotePush(): Promise<void> {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const preview = this.remoteState.pushPreview;
+    if (!snapshot || !preview) return;
+    const authentication = await this.remoteAuthenticationController.check(
+      snapshot.root,
+      preview.remote,
+    );
+    if (authentication !== "ready") return;
+    const succeeded = await this.runRemoteOperation("push");
     if (succeeded) this.closeRemoteDialog();
   }
 
@@ -4671,7 +4749,17 @@ export class AsterlynApp {
         this.renderImageDiff(document, () => void this.loadSelectedDiff());
         return;
       }
-      if (this.changesState.workingPatchLoading) {
+      if (this.changesState.workingPatch) {
+        this.mountEditorDiff(
+          editorDocumentContentKey(
+            document,
+            `patch:${this.changesState.workingPatchVersion}`,
+          ),
+          this.changesState.workingPatch.patch ||
+            copy.noTextualDiff,
+          selected.path,
+        );
+      } else if (this.changesState.workingPatchLoading) {
         this.showEditorHtml(
           editorDocumentContentKey(document, "loading"),
           renderEditorLoadingBlock(copy.loadingPatch),
@@ -4693,16 +4781,6 @@ export class AsterlynApp {
         this.query("#retry-working-diff").addEventListener("click", () => {
           void this.loadSelectedDiff();
         });
-      } else if (this.changesState.workingPatch) {
-        this.mountEditorDiff(
-          editorDocumentContentKey(
-            document,
-            `patch:${this.changesState.workingPatchVersion}`,
-          ),
-          this.changesState.workingPatch.patch ||
-            copy.noTextualDiff,
-          selected.path,
-        );
       }
       return;
     }
@@ -5271,11 +5349,13 @@ export class AsterlynApp {
     }
     const key = editorDocumentKey(document);
     const version = this.changesState.workingPatchVersion;
-    this.imageSurface = this.changesState.workingPatchLoading
-      ? { key, version, status: "loading", error: null, image: null, diff: null }
-      : this.changesState.workingPatchError
-        ? { key, version, status: "error", error: this.changesState.workingPatchError, image: null, diff: null }
-        : { key, version, status: "ready", error: null, image: null, diff: this.changesState.workingImageDiff };
+    this.imageSurface = this.changesState.workingImageDiff
+      ? { key, version, status: "ready", error: null, image: null, diff: this.changesState.workingImageDiff }
+      : this.changesState.workingPatchLoading
+        ? { key, version, status: "loading", error: null, image: null, diff: null }
+        : this.changesState.workingPatchError
+          ? { key, version, status: "error", error: this.changesState.workingPatchError, image: null, diff: null }
+          : { key, version, status: "ready", error: null, image: null, diff: null };
   }
 
   private loadVisibleCommitDetails(): void {
@@ -5647,7 +5727,6 @@ export class AsterlynApp {
       if (result.status === "success") {
         const next = this.repositoryIntegration.applyWorkingTreeMutation(result.value);
         this.renderWorkspace();
-        if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
         pendingRoot = next.root;
         this.setStatus(this.localization.catalog.changes.reverted, "success");
       } else if (result.status === "failure") {
@@ -6079,7 +6158,6 @@ export class AsterlynApp {
           );
           this.renderWorkspace();
           this.loadVisibleCommitDetails();
-          if (this.activeDocument().kind === "working-diff") this.loadSelectedDiff();
           pendingRoot = next.root;
         } else {
           refreshAfter = true;
@@ -6190,15 +6268,17 @@ export class AsterlynApp {
     }
   }
 
-  private reconcileWorkingDocument(snapshot: RepositorySnapshot): void {
+  private reconcileWorkingDocument(
+    snapshot: RepositorySnapshot,
+    reloadIfValid = true,
+  ): void {
     const document = this.activeDocument();
     if (document.kind !== "working-diff") return;
     const stillValid = snapshot.changes.some(
       (change) => change.path === document.selection.path,
     );
     if (stillValid) {
-      this.clearWorkingDiff();
-      this.loadSelectedDiff();
+      if (reloadIfValid) this.loadSelectedDiff();
       return;
     }
     const replacement =
@@ -6211,7 +6291,6 @@ export class AsterlynApp {
         repositoryRoot: snapshot.root,
         selection: { ...replacement },
       });
-      this.clearWorkingDiff();
       this.loadSelectedDiff();
       return;
     }

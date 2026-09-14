@@ -72,6 +72,8 @@ test("preferences update only through bounded choices and round trip by version"
     editorTabSize: 2,
     diffLayout: "unified",
     showWhitespace: true,
+    askBeforeRemoteUpdate: false,
+    preferredRemoteUpdateStrategy: "rebase",
   });
   saveAppPreferences(storage, updated);
   assert.deepEqual(loadAppPreferences(storage), updated);
@@ -93,6 +95,11 @@ test("preferences update only through bounded choices and round trip by version"
   );
   assert.equal(updateAppPreferences(updated, { locale: "fr-FR" }).locale, "zh-CN");
   assert.equal(updateAppPreferences(updated, { theme: "sepia" }).theme, "light");
+  assert.equal(
+    updateAppPreferences(updated, { preferredRemoteUpdateStrategy: "reset" })
+      .preferredRemoteUpdateStrategy,
+    "rebase",
+  );
 });
 
 test("version one defaults migrate to the bundled editor typography baseline", () => {
@@ -130,6 +137,8 @@ test("version two preferences gain the current editor spacing defaults", () => {
     editorTabSize: 8,
     diffLayout: "unified",
     showWhitespace: true,
+    askBeforeRemoteUpdate: true,
+    preferredRemoteUpdateStrategy: "ffOnly",
   });
 });
 
@@ -174,10 +183,12 @@ test("version three untouched typography defaults migrate without replacing cust
     editorTabSize: 8,
     diffLayout: "unified",
     showWhitespace: true,
+    askBeforeRemoteUpdate: true,
+    preferredRemoteUpdateStrategy: "ffOnly",
   });
 });
 
-test("version six persists bounded presentation and editor choices", () => {
+test("version seven persists bounded presentation, editor, and Update choices", () => {
   const selected = {
     ...DEFAULT_APP_PREFERENCES,
     editorFontFamily: "cascadia-code",
@@ -199,4 +210,18 @@ test("version six persists bounded presentation and editor choices", () => {
   );
   assert.equal(loadAppPreferences(memoryStorage(malformed)).locale, "en-US");
   assert.equal(loadAppPreferences(memoryStorage(malformed)).theme, "dark");
+});
+
+test("version six gains safe prompting defaults for current-branch Update", () => {
+  const persisted = JSON.stringify({
+    version: 6,
+    preferences: {
+      ...DEFAULT_APP_PREFERENCES,
+      askBeforeRemoteUpdate: undefined,
+      preferredRemoteUpdateStrategy: undefined,
+    },
+  });
+  const loaded = loadAppPreferences(memoryStorage(persisted));
+  assert.equal(loaded.askBeforeRemoteUpdate, true);
+  assert.equal(loaded.preferredRemoteUpdateStrategy, "ffOnly");
 });

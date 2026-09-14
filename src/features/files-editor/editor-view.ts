@@ -112,7 +112,7 @@ export function renderDiffControls(model: DiffControlsViewModel): string {
 }
 
 export function contentHeading(title: string, subtitle: string): string {
-  return `<div class="content-title-group"><span class="content-kicker">${escapeHtml(subtitle)}</span><h2>${escapeHtml(title)}</h2></div>`;
+  return `<div class="content-title-group"><h2>${escapeHtml(title)}</h2><small>${escapeHtml(subtitle)}</small></div>`;
 }
 
 export function imagePreviewCard(image: ImagePreview, label: string, copy: EditorCopy = EN_US.editor): string {
