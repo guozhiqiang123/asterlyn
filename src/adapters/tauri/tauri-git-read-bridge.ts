@@ -5,6 +5,8 @@ import type {
   HistoryPage,
   ImageDiffPreview,
   PushPreview,
+  RepositorySliceProject,
+  RepositoryStateSlice,
   TrackedChangeScan,
   UntrackedScan,
 } from "../../models.ts";
@@ -12,6 +14,11 @@ import type { GitReadBridge } from "../../protocol/desktop-bridge.ts";
 import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
 
 export const tauriGitReadBridge: GitReadBridge = {
+  readRepositorySlices: (repositoryRoot, slices) =>
+    invokeDesktopCommand<RepositorySliceProject>("read_repository_slices", {
+      repositoryRoot,
+      slices: slices as RepositoryStateSlice[],
+    }),
   readTrackedChanges: (repositoryRoot) =>
     invokeDesktopCommand<TrackedChangeScan>("read_tracked_changes", { repositoryRoot }),
   readHistoryPage: (repositoryRoot, query, offset, limit) =>

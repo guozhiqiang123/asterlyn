@@ -34,13 +34,14 @@ test("branch-changing operations explicitly request every session slice", () => 
   const plan = repositoryReconciliationPlan(outcome([
     "workspaceCatalog",
     "openDocuments",
+    "repositoryCapability",
     "workingTree",
     "head",
     "refs",
     "history",
     "operation",
   ]));
-  assert.equal(plan.slices.size, 7);
+  assert.equal(plan.slices.size, 8);
   assert.equal(plan.reloadWorkspaceCatalog, true);
   assert.equal(plan.reconcileOpenDocuments, true);
   assert.equal(plan.reconcileOperation, true);

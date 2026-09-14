@@ -11,7 +11,8 @@ export interface DesktopCommandMap {
   open_project: { args: { path: string; }; result: Model.OpenedProject };
   read_project_snapshot: { args: { path: string; }; result: Model.OpenedProject };
   focus_existing_project_window: { args: { path: string; }; result: Model.ProjectWindowMatch };
-  start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
+  read_repository_slices: { args: { repositoryRoot: string; slices: Array<Model.RepositoryStateSlice>; }; result: Model.RepositorySliceProject };
+  start_workspace_watch: { args: { workspaceRoot: string; generation: number; openDocumentPaths: Array<string>; }; result: Model.WorkspaceWatchStatus };
   stop_workspace_watch: { args: Record<string, never>; result: void };
   start_terminal: { args: { workspaceRoot: string; cols: number; rows: number; }; result: Model.TerminalStarted };
   write_terminal: { args: { sessionId: string; dataBase64: string; }; result: void };
@@ -77,6 +78,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   open_project: "openedProject",
   read_project_snapshot: "openedProject",
   focus_existing_project_window: "projectWindowMatch",
+  read_repository_slices: "repositorySliceProject",
   start_workspace_watch: "workspaceWatchStatus",
   stop_workspace_watch: "void",
   start_terminal: "terminalStarted",

@@ -1,9 +1,9 @@
 import type {
   FileChange,
   GitOperationMutationOutcome,
+  OpenedProject,
   RepositoryMutationOutcome,
   RepositorySnapshot,
-  RepositoryStateSlice,
   WorkingTreeMutationOutcome,
 } from "../models.ts";
 import {
@@ -15,6 +15,7 @@ import type {
   SessionInvalidationSlice,
 } from "./session-invalidation.ts";
 import type { WindowSession, WindowSessionChange } from "./window-session.ts";
+import type { RepositoryReadLease } from "./repository-session.ts";
 
 export interface RepositoryIntegrationMessages {
   readonly conflictPaused: string;
@@ -125,7 +126,7 @@ export class RepositoryIntegrationCoordinator {
     snapshot: RepositorySnapshot | null,
     cause: SessionInvalidationCause,
     slices: Iterable<SessionInvalidationSlice>,
-    options: { paths?: Iterable<string>; overflowed?: boolean } = {},
+    options: { paths?: Iterable<string>; recovery?: import("../models.ts").WorkspaceWatchRecovery } = {},
   ): RepositorySnapshot | null {
     this.ensureActive();
     const installed = this.session.installRepository(snapshot, cause, slices, options);
@@ -139,9 +140,9 @@ export class RepositoryIntegrationCoordinator {
     options: RepositoryMutationOptions = {},
   ): RepositorySnapshot {
     this.ensureActive();
-    const snapshot = outcome.snapshot;
     const plan = repositoryReconciliationPlan(outcome);
-    this.installSnapshot(snapshot, cause, plan.slices);
+    const snapshot = this.installSnapshot(outcome.snapshot, cause, plan.slices);
+    if (!snapshot) throw new Error("Repository mutation removed the active Git capability.");
     this.applyPlan(snapshot, plan, options);
     return snapshot;
   }
@@ -190,13 +191,17 @@ export class RepositoryIntegrationCoordinator {
   }
 
   reconcileWatchedRepository(
-    snapshot: RepositorySnapshot | null,
-    slices: RepositoryStateSlice[],
+    project: OpenedProject,
+    lease: RepositoryReadLease,
     cause: SessionInvalidationCause,
-  ): void {
+  ): boolean {
     this.ensureActive();
+    const committed = this.session.installRepositoryRead(lease, project, cause);
+    if (!committed) return false;
+    this.session.repository.consumeInvalidation();
+    const snapshot = committed.state.snapshot;
+    const slices = [...committed.slices];
     if (!snapshot) {
-      this.installSnapshot(null, cause, slices);
       this.targets.remote.installSnapshot(null);
       this.targets.changes.installSnapshot(null);
       this.targets.files.updateChanges([]);
@@ -204,14 +209,15 @@ export class RepositoryIntegrationCoordinator {
       this.targets.operations.installSnapshot(null);
       this.actions.hideHistoryTool();
       this.actions.renderWorkspace();
-      return;
+      return true;
     }
-    this.applyMutation({ snapshot, invalidatedSlices: slices }, cause);
+    this.applyPlan(snapshot, repositoryReconciliationPlan({ invalidatedSlices: slices }), {});
     this.actions.renderWorkspace();
     if (slices.includes("history")) this.actions.loadVisibleCommitDetails();
-    if (snapshot.untrackedState === "pending") {
+    if (slices.includes("workingTree") && snapshot.untrackedState === "pending") {
       void this.session.scanUntracked(snapshot.root, this.session.generation, false, cause);
     }
+    return true;
   }
 
   acceptRemoteOutcome(

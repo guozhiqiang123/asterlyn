@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use asterlyn_git::{GitError, ProjectFile, ProjectFileList};
 use asterlyn_workspace::WorkspaceError;
 
+const MAX_OPEN_DOCUMENT_WATCH_PATHS: usize = 128;
+
 #[derive(Default)]
 pub(crate) struct ActiveWorkspaces {
     roots: Mutex<HashMap<String, ActiveWorkspace>>,
@@ -17,6 +19,7 @@ struct ActiveWorkspace {
     root: PathBuf,
     git_enabled: bool,
     git_dir: Option<PathBuf>,
+    repository_observation: u64,
     watch_directories: Vec<PathBuf>,
     catalog: HashMap<String, HashMap<String, ProjectFile>>,
 }
@@ -122,12 +125,14 @@ impl ActiveWorkspaces {
             operation: "activate workspace".to_string(),
             message: "active workspace lock was poisoned".to_string(),
         })?;
+        let repository_observation = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         if let Some(active) = roots
             .get_mut(window_label)
             .filter(|active| active.root == canonical)
         {
             active.git_enabled = git_dir.is_some();
             active.git_dir = git_dir;
+            active.repository_observation = repository_observation;
             return Ok(());
         }
         roots.insert(
@@ -137,9 +142,63 @@ impl ActiveWorkspaces {
                 root: canonical,
                 git_enabled: git_dir.is_some(),
                 git_dir,
+                repository_observation,
                 catalog: HashMap::new(),
             },
         );
+        Ok(())
+    }
+
+    pub(crate) fn begin_repository_observation(
+        &self,
+        window_label: &str,
+        root: &Path,
+    ) -> Result<u64, WorkspaceError> {
+        let observation = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "begin repository observation".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get_mut(window_label)
+            .filter(|active| active.root == root)
+            .ok_or_else(stale_activation)?;
+        active.repository_observation = observation;
+        Ok(observation)
+    }
+
+    pub(crate) fn activate_repository_observation(
+        &self,
+        window_label: &str,
+        activation_token: u64,
+        observation: u64,
+        root: &Path,
+        git_dir: Option<&Path>,
+    ) -> Result<(), WorkspaceError> {
+        let git_dir = git_dir
+            .map(std::fs::canonicalize)
+            .transpose()
+            .map_err(|error| WorkspaceError::Io {
+                operation: "activate repository observation".to_string(),
+                message: error.to_string(),
+            })?;
+        let activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        if activations.get(window_label) != Some(&activation_token) {
+            return Err(stale_activation());
+        }
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "activate repository observation".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get_mut(window_label)
+            .filter(|active| active.root == root && active.repository_observation == observation)
+            .ok_or_else(stale_activation)?;
+        active.git_enabled = git_dir.is_some();
+        active.git_dir = git_dir;
         Ok(())
     }
 
@@ -147,7 +206,15 @@ impl ActiveWorkspaces {
         &self,
         window_label: &str,
         requested: &str,
+        open_document_paths: &[String],
     ) -> Result<WorkspaceWatchRoots, WorkspaceError> {
+        if open_document_paths.len() > MAX_OPEN_DOCUMENT_WATCH_PATHS {
+            return Err(WorkspaceError::InvalidPath {
+                message: format!(
+                    "workspace watch accepts at most {MAX_OPEN_DOCUMENT_WATCH_PATHS} open documents"
+                ),
+            });
+        }
         let root = self.resolve(window_label, requested)?;
         let roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
             operation: "authorize workspace watch".to_string(),
@@ -158,6 +225,21 @@ impl ActiveWorkspaces {
             .ok_or_else(|| WorkspaceError::NotAuthorized {
                 message: "open a project folder before watching files".to_string(),
             })?;
+        let mut directories: BTreeSet<_> = active.watch_directories.iter().cloned().collect();
+        for workspace_path in open_document_paths {
+            let catalogued = active.catalog.values().any(|files| {
+                files
+                    .values()
+                    .any(|file| file.workspace_path == *workspace_path)
+            });
+            if !catalogued || !valid_workspace_relative_path(workspace_path) {
+                return Err(WorkspaceError::NotAuthorized {
+                    message: "an open document is absent from the current project catalog"
+                        .to_string(),
+                });
+            }
+            insert_workspace_path_directories(&mut directories, &root, workspace_path);
+        }
         Ok(WorkspaceWatchRoots {
             root: if active.root == root {
                 root
@@ -165,7 +247,7 @@ impl ActiveWorkspaces {
                 return Err(stale_activation());
             },
             git_dir: active.git_dir.clone(),
-            directories: active.watch_directories.clone(),
+            directories: directories.into_iter().collect(),
         })
     }
 
@@ -345,17 +427,7 @@ fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<Path
         if file.read_only {
             continue;
         }
-        let Some(parent) = Path::new(&file.workspace_path).parent() else {
-            continue;
-        };
-        let mut candidate = root.to_path_buf();
-        for component in parent.components() {
-            let Component::Normal(name) = component else {
-                continue;
-            };
-            candidate.push(name);
-            directories.insert(candidate.clone());
-        }
+        insert_workspace_path_directories(&mut directories, root, &file.workspace_path);
     }
     directories
         .into_iter()
@@ -365,6 +437,36 @@ fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<Path
                 .unwrap_or(false)
         })
         .collect()
+}
+
+fn insert_workspace_path_directories(
+    directories: &mut BTreeSet<PathBuf>,
+    root: &Path,
+    workspace_path: &str,
+) {
+    let Some(parent) = Path::new(workspace_path).parent() else {
+        return;
+    };
+    let mut candidate = root.to_path_buf();
+    for component in parent.components() {
+        let Component::Normal(name) = component else {
+            return;
+        };
+        candidate.push(name);
+        if candidate.is_dir() {
+            directories.insert(candidate.clone());
+        }
+    }
+}
+
+fn valid_workspace_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= 4_096
+        && !path.contains('\\')
+        && !Path::new(path).is_absolute()
+        && Path::new(path)
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
 }
 
 impl PendingRepositoryWindows {
@@ -533,5 +635,107 @@ mod tests {
 
         active.remove("project-1");
         assert_eq!(active.window_for_root(&second_root).unwrap(), None);
+    }
+
+    #[test]
+    fn ignored_open_document_adds_and_removes_its_parent_from_the_watch_plan() {
+        let active = ActiveWorkspaces::default();
+        let directory = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(directory.path()).unwrap();
+        let ignored_parent = root.join("generated/deep");
+        std::fs::create_dir_all(&ignored_parent).unwrap();
+        std::fs::write(ignored_parent.join("open.txt"), "preview").unwrap();
+        let token = active.begin_activation("main").unwrap();
+        active.activate_current("main", token, &root, None).unwrap();
+        let catalog = ProjectFileList {
+            root: root.to_string_lossy().into_owned(),
+            paths: vec!["generated/deep/open.txt".to_string()],
+            files: vec![ProjectFile {
+                repository_id: ".".to_string(),
+                path: "generated/deep/open.txt".to_string(),
+                workspace_path: "generated/deep/open.txt".to_string(),
+                read_only: true,
+            }],
+            ignored_entries: Vec::new(),
+            repository_roots: Vec::new(),
+            truncated: false,
+        };
+        active
+            .install_catalog("main", token, &root, &catalog)
+            .unwrap();
+
+        let cold = active
+            .watch_roots("main", root.to_string_lossy().as_ref(), &[])
+            .unwrap();
+        assert!(!cold.directories.contains(&ignored_parent));
+        let hot = active
+            .watch_roots(
+                "main",
+                root.to_string_lossy().as_ref(),
+                &["generated/deep/open.txt".to_string()],
+            )
+            .unwrap();
+        assert!(hot.directories.contains(&root.join("generated")));
+        assert!(hot.directories.contains(&ignored_parent));
+    }
+
+    #[test]
+    fn same_root_capability_transition_updates_git_authorization() {
+        let active = ActiveWorkspaces::default();
+        let directory = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(directory.path()).unwrap();
+        let git_dir = root.join(".git");
+        std::fs::create_dir(&git_dir).unwrap();
+        let token = active.begin_activation("main").unwrap();
+        active.activate_current("main", token, &root, None).unwrap();
+        assert!(
+            active
+                .require_git("main", root.to_string_lossy().as_ref())
+                .is_err()
+        );
+
+        active
+            .activate_current("main", token, &root, Some(&git_dir))
+            .unwrap();
+        assert!(
+            active
+                .require_git("main", root.to_string_lossy().as_ref())
+                .is_ok()
+        );
+        active.activate_current("main", token, &root, None).unwrap();
+        assert!(
+            active
+                .require_git("main", root.to_string_lossy().as_ref())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn obsolete_repository_observation_cannot_roll_back_git_authorization() {
+        let active = ActiveWorkspaces::default();
+        let directory = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(directory.path()).unwrap();
+        let git_dir = root.join(".git");
+        std::fs::create_dir(&git_dir).unwrap();
+        let activation = active.begin_activation("main").unwrap();
+        active
+            .activate_current("main", activation, &root, None)
+            .unwrap();
+        let obsolete = active.begin_repository_observation("main", &root).unwrap();
+        let current = active.begin_repository_observation("main", &root).unwrap();
+
+        active
+            .activate_repository_observation("main", activation, current, &root, Some(&git_dir))
+            .unwrap();
+        assert!(
+            active
+                .activate_repository_observation("main", activation, obsolete, &root, None)
+                .is_err()
+        );
+        assert!(
+            active
+                .require_git("main", root.to_string_lossy().as_ref())
+                .is_ok()
+        );
     }
 }

@@ -189,6 +189,20 @@ line reduction alone is not the exit condition. Low-frequency fallback polling,
 independent submodule Git-metadata watchers, and editable external-conflict resolution remain
 explicit follow-ups rather than hidden claims of R3.1.
 
+The 2026-09-14 whole-path audit reopens the reconciliation architecture as R3.2 rather than treating
+repeated watcher symptoms as isolated fixes. R3.2 is governed by
+[`ADR-0012`](../architecture/decisions/0012-versioned-workspace-reconciliation.md) and the
+[`versioned reconciliation implementation plan`](versioned-reconciliation-plan.md). It must replace
+full-snapshot/partial-fan-out behavior, stale async overwrite, add-only shared directory plans,
+unbounded broad recovery, weak event validation, activation gaps, and split same-root Git
+capability state before further watcher-specific patches are accepted.
+
+Status: **R3.2 accepted locally on 2026-09-14**. The implementation replaces those competing paths
+with versioned frontend commits and backend capability observations, exact per-owner watch plans,
+instance-qualified activation, bounded recovery, and real repository-slice reads. Evidence is
+recorded in
+[`versioned workspace reconciliation acceptance`](../benchmarks/2026-09-14-versioned-workspace-reconciliation.md).
+
 ### R4 — Recoverable Git operations
 
 Implement ADR-0008 in merge, cherry-pick, rebase, then squash order. Add restart, stale-plan,

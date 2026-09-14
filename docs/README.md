@@ -21,12 +21,14 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0009-hinted-workspace-reconciliation.md`](architecture/decisions/0009-hinted-workspace-reconciliation.md) — native watcher hints, typed slice invalidation, authoritative reconciliation, and fallback policy.
 - [`architecture/decisions/0010-read-only-ignored-previews.md`](architecture/decisions/0010-read-only-ignored-previews.md) — bounded, individually authorized read-only previews for Git-ignored files.
 - [`architecture/decisions/0011-supervised-terminal-sessions.md`](architecture/decisions/0011-supervised-terminal-sessions.md) — lazy, window-scoped PTY sessions with explicit lifecycle and resource bounds.
+- [`architecture/decisions/0012-versioned-workspace-reconciliation.md`](architecture/decisions/0012-versioned-workspace-reconciliation.md) — linearized repository commits, exact watcher ownership, bounded recovery, and capability transitions.
 
 ## Delivery
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
 - [`engineering/architecture-refactoring.md`](engineering/architecture-refactoring.md) — current architecture audit, target boundaries, migration order, and refactoring gates.
+- [`engineering/versioned-reconciliation-plan.md`](engineering/versioned-reconciliation-plan.md) — watcher/reconciliation risks, phased implementation, invariants, and acceptance matrix.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds and artifact trust boundary.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
@@ -83,3 +85,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-14-commit-push-staged-revert.md`](benchmarks/2026-09-14-commit-push-staged-revert.md) — reviewed Commit-and-Push composition, restart-recoverable staged-addition Revert, action-placement cleanup, platform shortcut labels, and Debian evidence.
 - [`benchmarks/2026-09-14-recursive-watch-refresh-chain.md`](benchmarks/2026-09-14-recursive-watch-refresh-chain.md) — macOS/Windows recursive-event filtering, same-root catalog single-flight, refresh-chain diagnosis, validation, and Debian evidence.
 - [`benchmarks/2026-09-14-terminal-t1.md`](benchmarks/2026-09-14-terminal-t1.md) — supervised PTY lifecycle, lazy xterm interaction, resource probe, full validation, and Debian acceptance evidence.
+- [`benchmarks/2026-09-14-versioned-workspace-reconciliation.md`](benchmarks/2026-09-14-versioned-workspace-reconciliation.md) — versioned state commits, exact watcher ownership, bounded recovery, partial Git reads, and Linux native acceptance.

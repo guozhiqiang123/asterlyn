@@ -7,6 +7,11 @@ slice is accepted as R3.1. R5 continues to own file creation, move, copy, paste,
 operations, but no longer owns the watcher foundation. The implementation and resource evidence is
 recorded in [`R3.1 native workspace-watch acceptance`](../../benchmarks/2026-09-12-r3-1-native-workspace-watch.md).
 
+The 2026-09-14 architecture audit found ordering, exact-plan ownership, overflow/backpressure, and
+same-root capability-transition gaps in the first implementation. Those details are superseded by
+[`ADR-0012`](0012-versioned-workspace-reconciliation.md); the foundational rule that notifications
+are hints and authoritative reads produce state remains in force.
+
 ## Context
 
 Asterlyn is intended to review code and changes produced both inside and outside its own editor.
@@ -79,7 +84,8 @@ message churn is not forwarded as a stream of UI work.
 
 - Event bursts are merged after 120 ms of quiet, with a bounded maximum wait of 500 ms so
   continuous generators still converge. One event carries at most 512 normalized workspace paths;
-  overflow broadens the invalidation to all seven slices.
+  the R3.1 implementation broadened overflow to all seven legacy slices. ADR-0012 replaces that
+  rule with eight slices including `repositoryCapability` and distinct recovery classes.
 - At most one reconciliation per slice runs for a session. A newer invalidation is retained and
   runs after the current read rather than racing it.
 - Project-catalog reads for the same canonical workspace are single-flight at the Files controller
@@ -135,10 +141,9 @@ recovery paths are overflow broadening, focus-regain reconciliation, and explici
 Each valid native window blur-to-focus transition schedules at most one Fetch for the selected
 remote. This is a remote-state reconciliation hint, not Update: it may refresh remote-tracking refs
 and ahead/behind evidence, but it never merges, rebases, fast-forwards, checks out, or changes the
-worktree. After an absence of at least five seconds, the existing broad local focus recovery drains
-first so remote integration receives the current workspace session; shorter focus cycles skip that
-heavy local read and perform only Fetch. A focus event without a preceding blur does not repeat the
-request.
+worktree. ADR-0012 raises the local-recovery absence/staleness threshold to 30 seconds and adds a
+30-second cooldown; shorter focus cycles skip that heavy local read and perform only Fetch. A focus
+event without a preceding blur does not repeat the request.
 
 Foreground Fetch reuses the feature-owned cancellable remote controller and canonical repository-
 result integration. It runs without a global editor lock or modal toast. It is skipped in demo or

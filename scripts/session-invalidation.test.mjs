@@ -19,13 +19,13 @@ test("session invalidations merge only within one exact workspace identity", () 
       3,
       ["workspaceCatalog", "workingTree"],
       "watcher",
-      { paths: ["src/b.ts"], overflowed: true },
+      { paths: ["src/b.ts"], recovery: "backendOverflow" },
     ),
   );
   assert.deepEqual(merged.slices, ["workspaceCatalog", "openDocuments", "workingTree"]);
-  assert.deepEqual(merged.paths, ["src/a.ts", "src/b.ts"]);
+  assert.deepEqual(merged.paths, []);
   assert.deepEqual(merged.causes, ["save", "watcher"]);
-  assert.equal(merged.overflowed, true);
+  assert.equal(merged.recovery, "backendOverflow");
 
   const replaced = invalidation.mergeSessionInvalidations(
     merged,

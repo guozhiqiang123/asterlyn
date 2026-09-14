@@ -596,6 +596,7 @@ export const EN_US: LocaleCatalog = {
     unexpectedOperation: "An unexpected operation error occurred.",
     watchUnavailable: (detail) => detail ?? "Native file watching is unavailable; focus and manual refresh remain active.",
     watchStartFailed: (detail) => `Native file watching could not start: ${detail}`,
+    watchSuspended: () => "Automatic watcher recovery was suspended after repeated conflicts; use Refresh to verify the workspace.",
     externalReconcileFailed: (detail) => `External changes could not be reconciled: ${detail}`,
     translate: (message) => message,
   },

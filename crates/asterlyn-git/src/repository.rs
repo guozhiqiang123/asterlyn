@@ -5,6 +5,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::Arc;
+#[cfg(test)]
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
@@ -18,8 +20,8 @@ use crate::model::{
     DiffResult, FileChange, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
     PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
-    RemoteTransport, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan,
-    UntrackedState,
+    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
+    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_branches, parse_commits, parse_status};
 
@@ -94,6 +96,8 @@ struct RemoteEndpoint {
 pub struct GitRepository {
     root: PathBuf,
     git_dir: PathBuf,
+    #[cfg(test)]
+    read_trace: Arc<Mutex<Vec<String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -148,7 +152,12 @@ impl GitRepository {
 
         let root = output_path(&root_output, "repository root")?;
         let git_dir = output_path(&git_dir_output, "Git directory")?;
-        Ok(Self { root, git_dir })
+        Ok(Self {
+            root,
+            git_dir,
+            #[cfg(test)]
+            read_trace: Arc::new(Mutex::new(Vec::new())),
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -157,6 +166,11 @@ impl GitRepository {
 
     pub fn git_directory(&self) -> &Path {
         &self.git_dir
+    }
+
+    #[cfg(test)]
+    fn take_read_trace(&self) -> Vec<String> {
+        std::mem::take(&mut *self.read_trace.lock().unwrap())
     }
 
     fn main_root_descriptor(&self) -> GitRootDescriptor {
@@ -332,9 +346,110 @@ impl GitRepository {
         })
     }
 
-    fn tracked_root_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
+    pub fn read_slices(
+        &self,
+        plan: RepositoryReadPlan,
+        commit_limit: usize,
+    ) -> Result<RepositorySliceSnapshot, GitError> {
+        let (main_branch, changes) = if plan.working_tree && (plan.head || plan.history) {
+            let (branch, changes) = self.read_branch_and_changes()?;
+            (Some(branch), Some(changes))
+        } else if plan.working_tree {
+            (None, Some(self.tracked_changes()?.changes))
+        } else if plan.head {
+            (Some(self.read_head_state()?), None)
+        } else if plan.history {
+            (
+                Some(crate::model::BranchState {
+                    oid: self.head_oid()?,
+                    ..crate::model::BranchState::default()
+                }),
+                None,
+            )
+        } else {
+            (None, None)
+        };
+
+        let roots = if plan.refs || plan.history {
+            self.discovered_roots()?
+        } else {
+            Vec::new()
+        };
+        let mut projected_branches = Vec::new();
+        let mut histories = Vec::new();
+        if plan.refs || plan.history {
+            for (index, root) in roots.iter().enumerate() {
+                let mut branches = root.repository.read_references()?;
+                let repository_id = &root.descriptor.id;
+                if plan.history {
+                    let branch = if index == 0 {
+                        main_branch.clone().expect("history reads the main branch")
+                    } else {
+                        root.repository.read_branch_and_changes()?.0
+                    };
+                    let mut tips: Vec<_> = branches
+                        .iter()
+                        .map(|reference| reference.oid.clone())
+                        .collect();
+                    if let Some(oid) = branch.oid {
+                        tips.push(oid);
+                    }
+                    tips.sort_unstable();
+                    tips.dedup();
+                    let mut commits = root
+                        .repository
+                        .read_all_commit_history(&tips, commit_limit)?;
+                    if index > 0 {
+                        scope_commits(&mut commits, repository_id);
+                    }
+                    histories.push(commits);
+                }
+                if plan.refs {
+                    if index > 0 {
+                        scope_branches(&mut branches, repository_id);
+                    }
+                    projected_branches.extend(branches);
+                }
+            }
+        }
+        if plan.refs {
+            projected_branches.sort_by(|left, right| {
+                right
+                    .committed_at
+                    .cmp(&left.committed_at)
+                    .then_with(|| left.repository_id.cmp(&right.repository_id))
+                    .then_with(|| left.full_name.cmp(&right.full_name))
+            });
+        }
+
+        Ok(RepositorySliceSnapshot {
+            root: self.root.to_string_lossy().into_owned(),
+            git_dir: self.git_dir.to_string_lossy().into_owned(),
+            repository_roots: plan
+                .refs
+                .then(|| roots.iter().map(|root| root.descriptor.clone()).collect()),
+            branch: plan
+                .head
+                .then(|| main_branch.expect("head reads the main branch")),
+            operation: plan
+                .operation
+                .then(|| self.operation_snapshot())
+                .transpose()?,
+            changes,
+            commits: plan
+                .history
+                .then(|| merge_root_histories(histories, commit_limit)),
+            branches: plan.refs.then_some(projected_branches),
+            remotes: plan.refs.then(|| self.remote_summaries()).transpose()?,
+            untracked_state: plan.working_tree.then_some(UntrackedState::Pending),
+        })
+    }
+
+    fn read_branch_and_changes(
+        &self,
+    ) -> Result<(crate::model::BranchState, Vec<FileChange>), GitError> {
         let status = self.run_read(
-            "read working tree status",
+            "read working tree branch state",
             [
                 "status",
                 "--porcelain=v2",
@@ -350,7 +465,70 @@ impl GitRepository {
             branch.upstream_remote = Some(upstream.remote);
             branch.upstream_ref = Some(upstream.merge_ref);
         }
+        Ok((branch, changes))
+    }
 
+    fn read_head_state(&self) -> Result<crate::model::BranchState, GitError> {
+        let head = self.current_branch()?;
+        let oid = self.head_oid()?;
+        let mut branch = crate::model::BranchState {
+            detached: head.is_none() && oid.is_some(),
+            unborn: head.is_some() && oid.is_none(),
+            head,
+            oid,
+            ..crate::model::BranchState::default()
+        };
+        if let Some(head) = branch.head.as_deref()
+            && let Some(upstream) = self.read_upstream_target(head)?
+        {
+            let (ahead, behind) = if branch.oid.is_some() {
+                self.ahead_behind(&upstream.tracking_ref)?
+            } else {
+                (0, 0)
+            };
+            branch.upstream = Some(short_tracking_ref(&upstream.tracking_ref));
+            branch.upstream_remote = Some(upstream.remote);
+            branch.upstream_ref = Some(upstream.merge_ref);
+            branch.ahead = ahead;
+            branch.behind = behind;
+        }
+        Ok(branch)
+    }
+
+    fn ahead_behind(&self, tracking_ref: &str) -> Result<(u32, u32), GitError> {
+        if !self.reference_exists(tracking_ref)? {
+            return Ok((0, 0));
+        }
+        let output = self.run_read_owned(
+            "read branch divergence",
+            vec![
+                OsString::from("rev-list"),
+                OsString::from("--left-right"),
+                OsString::from("--count"),
+                OsString::from(format!("HEAD...{tracking_ref}")),
+                OsString::from("--"),
+            ],
+        )?;
+        let counts: Vec<_> = String::from_utf8_lossy(&output.stdout)
+            .split_ascii_whitespace()
+            .map(str::to_string)
+            .collect();
+        if counts.len() != 2 {
+            return Err(GitError::Parse {
+                context: "branch divergence".to_string(),
+                message: "Git returned an unexpected ahead/behind count".to_string(),
+            });
+        }
+        let parse = |value: &str| {
+            value.parse::<u32>().map_err(|error| GitError::Parse {
+                context: "branch divergence".to_string(),
+                message: error.to_string(),
+            })
+        };
+        Ok((parse(&counts[0])?, parse(&counts[1])?))
+    }
+
+    fn read_references(&self) -> Result<Vec<crate::model::BranchSummary>, GitError> {
         let refs = self.run_read(
             "read branches and tags",
             [
@@ -362,7 +540,12 @@ impl GitRepository {
                 "refs/tags",
             ],
         )?;
-        let branches = parse_branches(&refs.stdout)?;
+        parse_branches(&refs.stdout)
+    }
+
+    fn tracked_root_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
+        let (branch, changes) = self.read_branch_and_changes()?;
+        let branches = self.read_references()?;
         let mut history_tips: Vec<_> = branches
             .iter()
             .map(|reference| reference.oid.clone())
@@ -3235,6 +3418,8 @@ impl GitRepository {
         operation: &str,
         args: [&str; N],
     ) -> Result<Output, GitError> {
+        #[cfg(test)]
+        self.read_trace.lock().unwrap().push(operation.to_string());
         let output = run_git_output(&self.root, args).map_err(|error| GitError::Io {
             operation: operation.to_string(),
             message: error.to_string(),
@@ -3243,6 +3428,8 @@ impl GitRepository {
     }
 
     fn run_read_owned(&self, operation: &str, args: Vec<OsString>) -> Result<Output, GitError> {
+        #[cfg(test)]
+        self.read_trace.lock().unwrap().push(operation.to_string());
         let output = run_git_output(&self.root, args).map_err(|error| GitError::Io {
             operation: operation.to_string(),
             message: error.to_string(),
@@ -3624,6 +3811,14 @@ fn scope_branches(branches: &mut [crate::model::BranchSummary], repository_id: &
     for branch in branches {
         branch.repository_id = repository_id.to_string();
     }
+}
+
+fn short_tracking_ref(reference: &str) -> String {
+    reference
+        .strip_prefix("refs/remotes/")
+        .or_else(|| reference.strip_prefix("refs/heads/"))
+        .unwrap_or(reference)
+        .to_string()
 }
 
 fn merge_root_histories(
@@ -4616,6 +4811,113 @@ mod tests {
     use super::*;
     use std::process::Command;
     use tempfile::TempDir;
+
+    #[test]
+    fn repository_slice_reads_do_not_populate_unrequested_model_groups() {
+        let directory = fixture();
+        fs::write(directory.path().join("tracked.txt"), "base\n").unwrap();
+        git(directory.path(), &["add", "tracked.txt"]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        fs::write(directory.path().join("tracked.txt"), "changed\n").unwrap();
+        let repository = GitRepository::open(directory.path()).unwrap();
+
+        let refs = repository
+            .read_slices(
+                RepositoryReadPlan {
+                    refs: true,
+                    ..RepositoryReadPlan::default()
+                },
+                150,
+            )
+            .unwrap();
+        assert!(refs.branches.is_some());
+        assert!(refs.remotes.is_some());
+        assert!(refs.repository_roots.is_some());
+        assert!(refs.branch.is_none());
+        assert!(refs.changes.is_none());
+        assert!(refs.commits.is_none());
+        assert!(refs.operation.is_none());
+        assert!(refs.untracked_state.is_none());
+        let refs_trace = repository.take_read_trace();
+        assert!(refs_trace.contains(&"read branches and tags".to_string()));
+        assert!(refs_trace.contains(&"read remotes".to_string()));
+        assert!(!refs_trace.iter().any(|operation| {
+            operation.contains("working tree status") || operation.contains("commit history")
+        }));
+
+        let working = repository
+            .read_slices(
+                RepositoryReadPlan {
+                    working_tree: true,
+                    ..RepositoryReadPlan::default()
+                },
+                150,
+            )
+            .unwrap();
+        assert_eq!(working.changes.unwrap().len(), 1);
+        assert_eq!(working.untracked_state, Some(UntrackedState::Pending));
+        assert!(working.branch.is_none());
+        assert!(working.branches.is_none());
+        assert!(working.commits.is_none());
+        assert_eq!(
+            repository.take_read_trace(),
+            vec!["read tracked working tree status".to_string()]
+        );
+
+        let expected_branch = repository.tracked_snapshot(150).unwrap().branch;
+        repository.take_read_trace();
+        let head = repository
+            .read_slices(
+                RepositoryReadPlan {
+                    head: true,
+                    ..RepositoryReadPlan::default()
+                },
+                150,
+            )
+            .unwrap();
+        assert_eq!(head.branch, Some(expected_branch));
+        assert!(head.changes.is_none());
+        assert!(head.branches.is_none());
+        assert!(head.commits.is_none());
+        assert!(
+            !repository
+                .take_read_trace()
+                .iter()
+                .any(|operation| operation.contains("working tree"))
+        );
+
+        let history = repository
+            .read_slices(
+                RepositoryReadPlan {
+                    history: true,
+                    ..RepositoryReadPlan::default()
+                },
+                150,
+            )
+            .unwrap();
+        assert_eq!(history.commits.as_ref().map(Vec::len), Some(1));
+        assert!(history.changes.is_none());
+        assert!(
+            !repository
+                .take_read_trace()
+                .iter()
+                .any(|operation| operation.contains("working tree"))
+        );
+
+        let operation = repository
+            .read_slices(
+                RepositoryReadPlan {
+                    operation: true,
+                    ..RepositoryReadPlan::default()
+                },
+                150,
+            )
+            .unwrap();
+        assert_eq!(operation.operation, Some(None));
+        assert!(operation.changes.is_none());
+        assert!(operation.branches.is_none());
+        assert!(operation.commits.is_none());
+    }
 
     #[test]
     fn background_status_does_not_write_the_index() {

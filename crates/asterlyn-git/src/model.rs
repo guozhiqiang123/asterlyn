@@ -13,6 +13,38 @@ pub struct RepositorySnapshot {
     pub untracked_state: UntrackedState,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RepositoryReadPlan {
+    pub working_tree: bool,
+    pub head: bool,
+    pub refs: bool,
+    pub history: bool,
+    pub operation: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositorySliceSnapshot {
+    pub root: String,
+    pub git_dir: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository_roots: Option<Vec<GitRootDescriptor>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<BranchState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation: Option<Option<GitOperationSnapshot>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changes: Option<Vec<FileChange>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commits: Option<Vec<CommitSummary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branches: Option<Vec<BranchSummary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remotes: Option<Vec<RemoteSummary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub untracked_state: Option<UntrackedState>,
+}
+
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum GitOperationKind {

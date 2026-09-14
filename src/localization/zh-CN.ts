@@ -445,6 +445,7 @@ export const ZH_CN = {
     unexpectedOperation: "发生意外的操作错误。",
     watchUnavailable: (detail) => detail ? `原生文件监听不可用：${detail}` : "原生文件监听不可用；窗口聚焦刷新和手动刷新仍然有效。",
     watchStartFailed: (detail) => `原生文件监听无法启动：${detail}`,
+    watchSuspended: () => "监听器连续发生冲突，自动恢复已暂停；请使用“刷新”核验工作区。",
     externalReconcileFailed: (detail) => `无法同步外部更改：${detail}`,
     translate: translateKnownError,
   },

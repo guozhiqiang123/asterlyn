@@ -24,7 +24,7 @@ pub(crate) use git_reads::{
 pub(crate) use image::{read_commit_image_diff, read_image_file, read_local_image_diff};
 pub(crate) use shell::{
     existing_project_directories, focus_existing_project_window, initial_repository, open_project,
-    open_repository_window, read_project_snapshot, window_chrome_mode,
+    open_repository_window, read_project_snapshot, read_repository_slices, window_chrome_mode,
 };
 pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write_terminal};
 pub(crate) use workspace::{

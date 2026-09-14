@@ -4,12 +4,14 @@ use super::super::*;
 pub(crate) fn start_workspace_watch(
     workspace_root: String,
     generation: u64,
+    open_document_paths: Vec<String>,
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     active_workspaces: State<'_, ActiveWorkspaces>,
     watches: State<'_, WorkspaceWatchService>,
 ) -> Result<WorkspaceWatchStatus, WorkspaceError> {
-    let roots = active_workspaces.watch_roots(window.label(), &workspace_root)?;
+    let roots =
+        active_workspaces.watch_roots(window.label(), &workspace_root, &open_document_paths)?;
     Ok(watches.activate(app, window.label(), roots, generation))
 }
 

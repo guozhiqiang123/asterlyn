@@ -5,7 +5,8 @@ use asterlyn_git::{
     CommitDetails, CommitDiffResult, DiffResult, FileChange, GitConflictContent, GitError,
     GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot, GitRepository,
     HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
-    RemoteAuthenticationStatus, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    RemoteAuthenticationStatus, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
+    TrackedChangeScan, UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
@@ -79,11 +80,14 @@ struct CommitSelectedResult {
     verification_warning: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
 #[serde(rename_all = "camelCase")]
 enum RepositoryStateSlice {
     WorkspaceCatalog,
     OpenDocuments,
+    RepositoryCapability,
     WorkingTree,
     Head,
     Refs,
@@ -133,6 +137,13 @@ enum ProjectWindowMatch {
 struct ProjectWindowOpenResult {
     window_label: String,
     focused_existing: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepositorySliceProject {
+    root: String,
+    repository: Option<RepositorySliceSnapshot>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
@@ -716,6 +727,7 @@ pub fn run() {
             focus_existing_project_window,
             open_project,
             read_project_snapshot,
+            read_repository_slices,
             open_repository_window,
             start_workspace_watch,
             stop_workspace_watch,
@@ -1250,7 +1262,7 @@ mod tests {
             .activate("main", &root, None)
             .expect("same workspace metadata refreshes");
         let watch_roots = active
-            .watch_roots("main", root.to_string_lossy().as_ref())
+            .watch_roots("main", root.to_string_lossy().as_ref(), &[])
             .expect("watch roots resolve");
         assert_eq!(watch_roots.directories, [root.clone(), root.join("src")]);
         assert_eq!(
