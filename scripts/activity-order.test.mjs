@@ -16,6 +16,7 @@ test("activity order normalization keeps every known tool exactly once", () => {
     "changes",
     "files",
     "branches",
+    "terminal",
   ]);
   assert.deepEqual(normalizeActivityOrder(null), [...ACTIVITY_TOOLS]);
 });
@@ -23,11 +24,11 @@ test("activity order normalization keeps every known tool exactly once", () => {
 test("activity tools move before or after the hovered tool", () => {
   assert.deepEqual(
     moveActivityTool(ACTIVITY_TOOLS, "changes", "files", "before"),
-    ["changes", "files", "branches"],
+    ["changes", "files", "branches", "terminal"],
   );
   assert.deepEqual(
     moveActivityTool(ACTIVITY_TOOLS, "files", "branches", "after"),
-    ["branches", "files", "changes"],
+    ["branches", "files", "changes", "terminal"],
   );
 });
 
@@ -39,6 +40,7 @@ test("keyboard offsets clamp at the rail boundaries", () => {
     "files",
     "changes",
     "branches",
+    "terminal",
   ]);
 });
 
@@ -52,9 +54,9 @@ test("activity order persists and malformed storage falls back safely", () => {
       values.set(key, value);
     },
   };
-  saveActivityOrder(storage, ["changes", "branches", "files"]);
-  assert.equal(values.get(ACTIVITY_ORDER_KEY), '["changes","branches","files"]');
-  assert.deepEqual(loadActivityOrder(storage), ["changes", "branches", "files"]);
+  saveActivityOrder(storage, ["changes", "branches", "files", "terminal"]);
+  assert.equal(values.get(ACTIVITY_ORDER_KEY), '["changes","branches","files","terminal"]');
+  assert.deepEqual(loadActivityOrder(storage), ["changes", "branches", "files", "terminal"]);
   values.set(ACTIVITY_ORDER_KEY, "not json");
   assert.deepEqual(loadActivityOrder(storage), [...ACTIVITY_TOOLS]);
 });

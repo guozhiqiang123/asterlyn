@@ -5,6 +5,7 @@ const paths: Record<string, string> = {
     '<path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="11" cy="18" r="1.6"/>',
   history:
     '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2M4.7 5.4 3 5.2l.2 1.7"/>',
+  terminal: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m7 9 3 3-3 3M12.5 15H17"/>',
   head: '<path d="M5 20V5m0 1h10l4 4-4 4H5"/>',
   refresh:
     '<path d="M18.4 8A7 7 0 1 0 19 14M18.5 4.5V8h-3.6"/>',

@@ -31,7 +31,7 @@ import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../sr
 
 test("shell view follows persisted activity order and exposes stable feature hosts", () => {
   const shell = new ShellController(memoryStorage());
-  shell.setActivityOrder(["changes", "files", "branches"]);
+  shell.setActivityOrder(["changes", "files", "branches", "terminal"]);
   const html = renderShellView({
     shell: shell.state,
     workspaceOpen: true,
@@ -41,6 +41,9 @@ test("shell view follows persisted activity order and exposes stable feature hos
   });
 
   assert.ok(html.indexOf('data-tool="changes"') < html.indexOf('data-tool="files"'));
+  assert.match(html, /data-tool="terminal"/);
+  assert.match(html, /id="terminal-tool-host"/);
+  assert.match(html, /id="hide-bottom-tool"/);
   for (const host of ["navigator-body", "content-body", "history-navigation-body", "git-detail-body"]) {
     assert.match(html, new RegExp(`id="${host}"`));
   }

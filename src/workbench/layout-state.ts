@@ -1,5 +1,5 @@
 export type LeftTool = "files" | "changes" | null;
-export type BottomTool = "branches" | null;
+export type BottomTool = "branches" | "terminal" | null;
 
 export interface WorkbenchLayout {
   version: 1;
@@ -238,7 +238,7 @@ function isLeftTool(value: unknown): value is LeftTool {
 }
 
 function isBottomTool(value: unknown): value is BottomTool {
-  return value === null || value === "branches";
+  return value === null || value === "branches" || value === "terminal";
 }
 
 function finiteOr(value: number, fallback: number): number {

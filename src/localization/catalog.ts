@@ -53,6 +53,7 @@ export interface ShellCopy {
   files: string;
   branches: string;
   changes: string;
+  terminal: string;
   toolReorder(label: string): string;
   openFolderFirst: string;
   gitUnavailableReorder: string;
@@ -75,6 +76,9 @@ export interface ShellCopy {
   gitOperations: string;
   recoverChanges: string;
   hideGit: string;
+  hideTerminal: string;
+  terminalStarting: string;
+  terminalStartingDetail: string;
   commitLog: string;
   gitDetails: string;
   resizeBranchTree: string;
@@ -190,7 +194,8 @@ export type NavigationCommandId =
   | "refresh"
   | "toggle-files"
   | "toggle-changes"
-  | "toggle-git";
+  | "toggle-git"
+  | "toggle-terminal";
 
 export interface NavigationCopy {
   navigationMode: string;

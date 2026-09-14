@@ -206,9 +206,8 @@
   font-size: 11px;
 }
 
-.bottom-tool-header span {
-  color: var(--text-faint);
-  font-size: 9px;
+.bottom-tool-header .git-operation-open {
+  margin-left: auto;
 }
 
 .bottom-tool-hide {
@@ -236,6 +235,27 @@
   min-width: 0;
   min-height: 0;
   grid-template-columns: var(--branch-tree-width) 5px minmax(320px, 1fr) 5px var(--branch-details-width);
+}
+
+.terminal-tool-host {
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-inset);
+}
+
+.terminal-empty-state {
+  display: grid;
+  height: 100%;
+  place-content: center;
+  gap: 6px;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.terminal-empty-state span {
+  color: var(--text-faint);
+  font-size: 11px;
 }
 
 .git-tool-pane {

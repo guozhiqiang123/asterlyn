@@ -541,14 +541,15 @@ export class AsterlynApp {
         },
         reconcileWorkingDocument: (snapshot, reloadIfValid) =>
           this.reconcileWorkingDocument(snapshot, reloadIfValid),
-        hideHistoryTool: () => this.shellController.setLayout({
-          ...this.shellState.layout,
-          bottomTool: null,
-        }),
+        hideHistoryTool: () => {
+          if (this.shellState.layout.bottomTool === "branches") {
+            this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
+          }
+        },
         showWorkspaceOnlyTools: () => this.shellController.setLayout({
           ...this.shellState.layout,
           leftTool: "files",
-          bottomTool: null,
+          bottomTool: this.shellState.layout.bottomTool === "terminal" ? "terminal" : null,
         }),
         renderWorkspace: () => this.renderWorkspace(),
         loadVisibleCommitDetails: () => this.loadVisibleCommitDetails(),
@@ -658,7 +659,10 @@ export class AsterlynApp {
         this.renderEditorTabMenu();
         this.bindEditorTabMenuEvents();
       },
-      hideGitTool: () => this.toggleTool("branches"),
+      hideBottomTool: () => {
+        const tool = this.shellState.layout.bottomTool;
+        if (tool) this.toggleTool(tool);
+      },
       hideLeftTool: () => {
         const tool = this.shellState.layout.leftTool;
         if (tool) this.toggleTool(tool);
@@ -1029,7 +1033,7 @@ export class AsterlynApp {
     for (const tool of this.shellState.activityOrder) {
       const button = this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       if (!button) continue;
-      const toolLabel = { files: copy.files, branches: copy.branches, changes: copy.changes }[tool];
+      const toolLabel = { files: copy.files, branches: copy.branches, changes: copy.changes, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", toolLabel);
       text(`[data-tool="${tool}"] span`, toolLabel);
     }
@@ -1830,6 +1834,7 @@ export class AsterlynApp {
       command("toggle-files", hasWorkspace),
       command("toggle-changes", Boolean(snapshot)),
       command("toggle-git", Boolean(snapshot)),
+      command("toggle-terminal", hasWorkspace),
     ];
   }
 
@@ -1864,6 +1869,9 @@ export class AsterlynApp {
         break;
       case "toggle-git":
         this.toggleTool("branches");
+        break;
+      case "toggle-terminal":
+        this.toggleTool("terminal");
         break;
     }
   }
@@ -2933,16 +2941,16 @@ export class AsterlynApp {
   private toggleTool(tool: ActivityTool): void {
     if (!this.windowSession.workspace.state.root || (tool !== "files" && !this.windowSession.repository.state.snapshot)) return;
     this.shellController.reduceLayout(
-      tool === "branches"
+      tool === "branches" || tool === "terminal"
         ? { type: "toggle-bottom-tool", tool }
         : { type: "toggle-left-tool", tool },
     );
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
-    if (tool === "branches" && this.shellState.layout.bottomTool === "branches") {
+    if ((tool === "branches" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
       this.renderBottomTool();
-      this.loadVisibleCommitDetails();
-    } else if (tool !== "branches" && this.shellState.layout.leftTool === tool) {
+      if (tool === "branches") this.loadVisibleCommitDetails();
+    } else if (tool !== "branches" && tool !== "terminal" && this.shellState.layout.leftTool === tool) {
       this.renderLeftTool();
     }
   }
@@ -2957,24 +2965,23 @@ export class AsterlynApp {
     }
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       const tool = button.dataset.tool as ActivityTool;
-      const enabled = Boolean(
-        this.windowSession.workspace.state.root && (tool === "files" || this.windowSession.repository.state.snapshot),
-      );
+      const enabled = Boolean(this.windowSession.workspace.state.root &&
+        (tool === "files" || tool === "terminal" || this.windowSession.repository.state.snapshot));
       const active =
-        tool === "branches"
-          ? this.shellState.layout.bottomTool === "branches"
+        tool === "branches" || tool === "terminal"
+          ? this.shellState.layout.bottomTool === tool
           : this.shellState.layout.leftTool === tool;
       button.classList.toggle("active", active);
       button.classList.toggle("unavailable", !enabled);
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
-      const label = { files: copy.files, branches: copy.branches, changes: copy.changes }[tool];
+      const label = { files: copy.files, branches: copy.branches, changes: copy.changes, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", label);
       const labelNode = button.querySelector("span");
       if (labelNode) labelNode.textContent = label;
       button.title = enabled
         ? copy.toolReorder(label || copy.genericTool)
-        : tool === "files"
+        : tool === "files" || tool === "terminal"
           ? copy.openFolderFirst
           : copy.gitUnavailableReorder;
     });
@@ -3376,7 +3383,23 @@ export class AsterlynApp {
 
   private renderBottomTool(): void {
     const snapshot = this.windowSession.repository.state.snapshot;
-    if (!snapshot || this.shellState.layout.bottomTool !== "branches") return;
+    const tool = this.shellState.layout.bottomTool;
+    if (!tool) return;
+    const copy = this.localShellCopy();
+    const title = this.query("#bottom-tool-title");
+    const hide = this.query<HTMLButtonElement>("#hide-bottom-tool");
+    const operations = this.query<HTMLButtonElement>("#git-operation-open");
+    const git = this.query("#git-tool-grid");
+    const terminal = this.query("#terminal-tool-host");
+    const isTerminal = tool === "terminal";
+    title.textContent = isTerminal ? copy.terminal : "Git";
+    hide.setAttribute("aria-label", isTerminal ? copy.hideTerminal : copy.hideGit);
+    hide.title = isTerminal ? copy.hideTerminal : copy.hideGit;
+    operations.classList.toggle("hidden", isTerminal);
+    git.classList.toggle("hidden", isTerminal);
+    terminal.classList.toggle("hidden", !isTerminal);
+    this.query("#bottom-tool").setAttribute("aria-label", isTerminal ? copy.terminal : copy.branchesAndLog);
+    if (isTerminal || !snapshot) return;
     this.renderBranchPane(snapshot);
     this.renderHistoryPane();
     this.renderGitDetailPane(snapshot);

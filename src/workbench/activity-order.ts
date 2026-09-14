@@ -1,4 +1,4 @@
-export const ACTIVITY_TOOLS = ["files", "branches", "changes"] as const;
+export const ACTIVITY_TOOLS = ["files", "branches", "changes", "terminal"] as const;
 
 export type ActivityTool = (typeof ACTIVITY_TOOLS)[number];
 export type ActivityDropPosition = "before" | "after";

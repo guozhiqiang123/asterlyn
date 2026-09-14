@@ -46,9 +46,6 @@
   margin-left: auto;
 }
 
-.bottom-tool-header .git-operation-open + .bottom-tool-hide {
-  margin-left: 0;
-}
 
 .git-detail-operation-actions {
   display: flex;

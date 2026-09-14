@@ -64,7 +64,7 @@ export function renderShellView(model: ShellViewModel): string {
         </div>
         <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="${escapeHtml(copy.resizeGit)}"></div>
         <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}">
-          <div class="bottom-tool-header"><strong>Git</strong><span>${escapeHtml(copy.branchesAndLog)}</span><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="bottom-tool-hide" id="hide-git-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
+          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
           <div class="git-tool-grid" id="git-tool-grid">
             <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body"></div></section>
             <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="${escapeHtml(copy.resizeBranchTree)}"></div>
@@ -72,6 +72,7 @@ export function renderShellView(model: ShellViewModel): string {
             <div class="workbench-splitter vertical" id="branch-details-splitter" aria-label="${escapeHtml(copy.resizeGitDetails)}"></div>
             <aside class="git-tool-pane git-details-pane" aria-label="${escapeHtml(copy.gitDetails)}"><div class="git-pane-body" id="git-detail-body">${inspectorPlaceholder(copy)}</div></aside>
           </div>
+          <div class="terminal-tool-host hidden" id="terminal-tool-host"><div class="terminal-empty-state"><strong>${escapeHtml(copy.terminalStarting)}</strong><span>${escapeHtml(copy.terminalStartingDetail)}</span></div></div>
         </section>
       </section>
       <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">
@@ -92,16 +93,16 @@ export function renderShellView(model: ShellViewModel): string {
 }
 
 function activityButton(tool: ActivityTool, model: ShellViewModel, copy: ShellCopy): string {
-  const labels = { files: copy.files, branches: copy.branches, changes: copy.changes } as const;
-  const icons = { files: "folder", branches: "branch", changes: "changes" } as const;
-  const active = tool === "branches"
+  const labels = { files: copy.files, branches: copy.branches, changes: copy.changes, terminal: copy.terminal } as const;
+  const icons = { files: "folder", branches: "branch", changes: "changes", terminal: "terminal" } as const;
+  const active = tool === "branches" || tool === "terminal"
     ? model.shell.layout.bottomTool === tool
     : model.shell.layout.leftTool === tool;
-  const enabled = model.workspaceOpen && (tool === "files" || model.gitAvailable);
+  const enabled = model.workspaceOpen && (tool === "files" || tool === "terminal" || model.gitAvailable);
   const label = labels[tool];
   const title = enabled
     ? copy.toolReorder(label)
-    : tool === "files"
+    : tool === "files" || tool === "terminal"
       ? copy.openFolderFirst
       : copy.gitUnavailableReorder;
   return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown">${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;

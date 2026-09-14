@@ -39,6 +39,19 @@ test("left and bottom tools toggle independently", () => {
   });
   assert.equal(branchesClosed.leftTool, "changes");
   assert.equal(branchesClosed.bottomTool, null);
+
+  const terminalOpen = reduceWorkbenchLayout(branchesClosed, {
+    type: "toggle-bottom-tool",
+    tool: "terminal",
+  });
+  assert.equal(terminalOpen.leftTool, "changes");
+  assert.equal(terminalOpen.bottomTool, "terminal");
+
+  const branchesReplaceTerminal = reduceWorkbenchLayout(terminalOpen, {
+    type: "toggle-bottom-tool",
+    tool: "branches",
+  });
+  assert.equal(branchesReplaceTerminal.bottomTool, "branches");
 });
 
 test("malformed and unknown persisted layouts reset safely", () => {

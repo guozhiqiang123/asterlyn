@@ -67,7 +67,7 @@ export interface ShellEventActions {
   readonly closeWorkspaceReplacement: () => void;
   readonly closeRemoteDialog: (restoreFocus?: boolean) => void;
   readonly toggleEditorTabMenu: () => void;
-  readonly hideGitTool: () => void;
+  readonly hideBottomTool: () => void;
   readonly hideLeftTool: () => void;
   readonly applyLayout: () => void;
   readonly closePushDiff: () => void;
@@ -189,7 +189,7 @@ export class ShellEventBinding {
       event.stopPropagation();
       this.actions.toggleEditorTabMenu();
     });
-    listen(this.query("#hide-git-tool"), "click", () => this.actions.hideGitTool());
+    listen(this.query("#hide-bottom-tool"), "click", () => this.actions.hideBottomTool());
     listen(this.query("#git-operation-open"), "click", () => this.actions.openGitOperation());
     listen(this.query("#hide-left-tool"), "click", () => this.actions.hideLeftTool());
 
