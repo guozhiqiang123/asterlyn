@@ -2,18 +2,27 @@ import type { SourceDiffRow } from "../diff-presentation.ts";
 
 export type DiffDirection = -1 | 1;
 
-export function splitChangeStartLines(rows: readonly SourceDiffRow[]): number[] {
-  return groupedStarts(
+export interface DiffChangeBlock {
+  fromLine: number;
+  toLine: number;
+}
+
+export function splitChangeBlocks(rows: readonly SourceDiffRow[]): DiffChangeBlock[] {
+  return groupedBlocks(
     rows.map((row) =>
       row.kind === "added" || row.kind === "removed" || row.kind === "modified",
     ),
   );
 }
 
-export function unifiedChangeStartLines(document: string): number[] {
+export function splitChangeStartLines(rows: readonly SourceDiffRow[]): number[] {
+  return splitChangeBlocks(rows).map((block) => block.fromLine);
+}
+
+export function unifiedChangeBlocks(document: string): DiffChangeBlock[] {
   const lines = document.split("\n");
   let inHunk = false;
-  return groupedStarts(
+  return groupedBlocks(
     lines.map((line) => {
       if (line.startsWith("diff --git ")) inHunk = false;
       if (line.startsWith("@@")) {
@@ -23,6 +32,10 @@ export function unifiedChangeStartLines(document: string): number[] {
       return inHunk && (line.startsWith("+") || line.startsWith("-"));
     }),
   );
+}
+
+export function unifiedChangeStartLines(document: string): number[] {
+  return unifiedChangeBlocks(document).map((block) => block.fromLine);
 }
 
 export function adjacentDiffItem<T>(
@@ -35,12 +48,17 @@ export function adjacentDiffItem<T>(
   return items[index + direction] ?? null;
 }
 
-function groupedStarts(changed: readonly boolean[]): number[] {
-  const starts: number[] = [];
-  let previous = false;
+function groupedBlocks(changed: readonly boolean[]): DiffChangeBlock[] {
+  const blocks: DiffChangeBlock[] = [];
+  let start: number | null = null;
   for (const [index, current] of changed.entries()) {
-    if (current && !previous) starts.push(index + 1);
-    previous = current;
+    const line = index + 1;
+    if (current && start === null) start = line;
+    if (!current && start !== null) {
+      blocks.push({ fromLine: start, toLine: line - 1 });
+      start = null;
+    }
   }
-  return starts;
+  if (start !== null) blocks.push({ fromLine: start, toLine: changed.length });
+  return blocks;
 }

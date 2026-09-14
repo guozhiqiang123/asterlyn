@@ -32,8 +32,9 @@ import {
 import { attachSplitter } from "./workbench/splitter";
 import { linkScrollElements } from "./workbench/linked-scroll";
 import {
-  splitChangeStartLines,
-  unifiedChangeStartLines,
+  splitChangeBlocks,
+  unifiedChangeBlocks,
+  type DiffChangeBlock,
   type DiffDirection,
 } from "./workbench/diff-navigation";
 import {
@@ -77,18 +78,29 @@ const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) =
   return builder.finish();
 });
 
-const setActiveDiffLine = StateEffect.define<number | null>();
-const activeDiffLineDecoration = StateField.define({
+const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
+const activeDiffBlockDecoration = StateField.define({
   create: () => Decoration.none,
   update: (decorations, transaction) => {
-    const active = transaction.effects.find((effect) => effect.is(setActiveDiffLine));
+    const active = transaction.effects.find((effect) => effect.is(setActiveDiffBlock));
     if (!active) return decorations.map(transaction.changes);
-    const lineNumber = active.value;
-    if (lineNumber === null || lineNumber > transaction.newDoc.lines) return Decoration.none;
-    const line = transaction.newDoc.line(lineNumber);
-    return Decoration.set([
-      Decoration.line({ class: "cm-diff-current-change" }).range(line.from),
-    ]);
+    const block = active.value;
+    if (block === null || block.fromLine > transaction.newDoc.lines) {
+      return Decoration.none;
+    }
+    const fromLine = Math.max(1, block.fromLine);
+    const toLine = Math.min(transaction.newDoc.lines, block.toLine);
+    const ranges: Array<Range<Decoration>> = [];
+    for (let lineNumber = fromLine; lineNumber <= toLine; lineNumber += 1) {
+      const line = transaction.newDoc.line(lineNumber);
+      const classes = [
+        "cm-diff-current-change",
+        lineNumber === fromLine ? "cm-diff-current-change-start" : "",
+        lineNumber === toLine ? "cm-diff-current-change-end" : "",
+      ].filter(Boolean).join(" ");
+      ranges.push(Decoration.line({ class: classes }).range(line.from));
+    }
+    return Decoration.set(ranges, true);
   },
   provide: (field) => EditorView.decorations.from(field),
 });
@@ -118,8 +130,8 @@ export class DiffEditor {
   };
   private splitDispose: (() => void) | null = null;
   private scrollDispose: (() => void) | null = null;
-  private changeLines: number[] = [];
-  private activeChangeLine: number | null = null;
+  private changeBlocks: DiffChangeBlock[] = [];
+  private activeChangeStart: number | null = null;
 
   mount(
     parent: HTMLElement,
@@ -159,22 +171,22 @@ export class DiffEditor {
   }
 
   navigateChange(direction: DiffDirection): boolean {
-    const target = this.activeChangeLine === null
+    const target = this.activeChangeStart === null
       ? direction === 1
-        ? this.changeLines[0]
-        : this.changeLines.at(-1)
+        ? this.changeBlocks[0]
+        : this.changeBlocks.at(-1)
       : direction === 1
-        ? this.changeLines.find((line) => line > this.activeChangeLine!)
-        : this.changeLines.slice().reverse().find((line) => line < this.activeChangeLine!);
+        ? this.changeBlocks.find((block) => block.fromLine > this.activeChangeStart!)
+        : this.changeBlocks.slice().reverse().find((block) => block.fromLine < this.activeChangeStart!);
     if (!target) return false;
-    this.activeChangeLine = target;
+    this.activeChangeStart = target.fromLine;
     for (const view of this.views) {
-      if (target > view.state.doc.lines) continue;
-      const line = view.state.doc.line(target);
+      if (target.fromLine > view.state.doc.lines) continue;
+      const line = view.state.doc.line(target.fromLine);
       view.dispatch({
         selection: { anchor: line.from },
         effects: [
-          setActiveDiffLine.of(target),
+          setActiveDiffBlock.of(target),
           EditorView.scrollIntoView(line.from, { y: "center" }),
         ],
       });
@@ -218,18 +230,18 @@ export class DiffEditor {
     const parent = this.parent;
     if (!parent) return;
     this.destroyViews();
-    this.activeChangeLine = null;
+    this.activeChangeStart = null;
     parent.replaceChildren();
     parent.classList.toggle("split-diff", this.presentation.layout === "split");
 
     if (this.presentation.layout === "unified") {
-      this.changeLines = unifiedChangeStartLines(this.sourceDocument);
+      this.changeBlocks = unifiedChangeBlocks(this.sourceDocument);
       this.views.push(this.createView(parent, this.sourceDocument));
       return;
     }
 
     const split = splitUnifiedDiff(this.sourceDocument);
-    this.changeLines = splitChangeStartLines(split.rows);
+    this.changeBlocks = splitChangeBlocks(split.rows);
     const grid = window.document.createElement("div");
     grid.className = "diff-split-grid";
     let splitPercentage = clampPercentage(this.presentation.splitPercentage ?? 50);
@@ -312,7 +324,7 @@ export class DiffEditor {
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
-      activeDiffLineDecoration,
+      activeDiffBlockDecoration,
       keymap.of([
         ...searchKeymap,
         {
@@ -402,8 +414,8 @@ export class DiffEditor {
     this.languageSupport = null;
     this.languageName = "Plain Text";
     this.languageStatus = "loading";
-    this.changeLines = [];
-    this.activeChangeLine = null;
+    this.changeBlocks = [];
+    this.activeChangeStart = null;
   }
 }
 

@@ -245,9 +245,16 @@ const editorThemeRules =
       backgroundColor: "var(--editor-intraline-removed)",
     },
     ".cm-diff-current-change": {
-      outline: "1px solid var(--focus-ring)",
-      outlineOffset: "-1px",
-      boxShadow: "inset 3px 0 0 var(--focus-ring-bright)",
+      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring)",
+    },
+    ".cm-diff-current-change-start": {
+      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 1px 0 var(--focus-ring)",
+    },
+    ".cm-diff-current-change-end": {
+      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 -1px 0 var(--focus-ring)",
+    },
+    ".cm-diff-current-change-start.cm-diff-current-change-end": {
+      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 1px 0 var(--focus-ring), inset 0 -1px 0 var(--focus-ring)",
     },
   };
 

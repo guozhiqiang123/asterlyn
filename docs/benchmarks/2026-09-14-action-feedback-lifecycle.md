@@ -154,8 +154,9 @@ invalidate stale data.
 
 Diff presentation now uses the explicit meaningful two-level identity required by the product:
 filename is the primary title and workspace-relative path is the secondary title. Previous/next
-change navigation adds a focus outline and bright accent edge to the corresponding row in every
-visible side while keeping the center connector/action region free for later editable-Diff controls.
+change navigation adds one perimeter and bright accent edge around the complete contiguous change
+block in every visible side while keeping the center connector/action region free for later
+editable-Diff controls. One-sided additions and deletions include their aligned empty rows.
 
 ### Follow-up validation
 
@@ -167,7 +168,7 @@ visible side while keeping the center connector/action region free for later edi
 | Frontend type check | passed | no regression observed |
 | Production frontend build | passed | no regression observed |
 | Browser Diff heading | `app.ts` plus `src/app.ts` | improved |
-| Browser current-change marker | two split rows, each with outline and 3 px accent edge | improved |
+| Browser current-change marker | one three-row block per split side; one start and end boundary per side | improved |
 | Native Linux smoke lifetime | 6,000 ms | no immediate startup regression observed |
 
 The size comparison uses the immediately preceding canonical-availability package above, with the
@@ -200,3 +201,38 @@ The refreshed Linux package completed successfully:
 The next action is installed-package acceptance of Update preference persistence and repeated
 macOS blur-to-focus transitions while a working Diff is visible. Editable per-hunk Diff actions
 remain a separate reviewed capability rather than being implied by the current navigation marker.
+
+### Complete change-block marker correction
+
+Manual review found that marking only the first row of a change made a multi-line replacement look
+like a one-line selection. Navigation now projects contiguous changed rows into explicit inclusive
+blocks in both unified and split layouts. The active block receives one left accent and right edge,
+plus a top edge only on its first row and a bottom edge only on its last row. Split additions and
+deletions apply the same block to aligned empty rows on the opposite side. This preserves one shared
+geometry without introducing per-line boxes or occupying the future center action gutter.
+
+| Check | Absolute result | Conclusion |
+| --- | ---: | --- |
+| Focused Diff navigation tests | 5 passed | improved |
+| Complete script suite | 323 passed | no regression observed |
+| `asterlyn-git` Rust suite | 69 passed | no regression observed |
+| Frontend type check and production build | passed | no regression observed |
+| Browser split block | 3 rows per side; 1 start and 1 end boundary per side | improved |
+| Native Linux smoke lifetime | 6,000 ms | no immediate startup regression observed |
+
+The comparison uses the immediately preceding package and identical production commands.
+
+| Output | Before | After | Normalized change | Conclusion |
+| --- | ---: | ---: | ---: | --- |
+| Main JavaScript | 478,880 B | 478,880 B | 0.00% | no material change |
+| Main JavaScript, gzip | 109,904 B | 109,901 B | -0.00% | no material change |
+| Main CSS | 119,436 B | 119,436 B | 0.00% | no material change |
+| Main CSS, gzip | 25,737 B | 25,737 B | 0.00% | no material change |
+| Release executable | 21,760,408 B | 21,760,808 B | +0.00% | no material change |
+| Debian package | 7,544,726 B | 7,545,168 B | +0.01% | no material change |
+
+No dependency, repository read, timer, or background work was added. The correction is a pure
+projection over the bounded patch rows already held by the Diff editor. Memory impact remains
+**inconclusive** because no matched process-tree resource series was collected. The refreshed local
+Debian package is 7,545,168 bytes with SHA-256
+`184c9350f50ca2d9dbf61cdfe5f2fdfb6089dfb0f12020305ea46bf7ea1e0dd6`.

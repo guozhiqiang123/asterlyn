@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   adjacentDiffItem,
+  splitChangeBlocks,
   splitChangeStartLines,
+  unifiedChangeBlocks,
   unifiedChangeStartLines,
 } from "../src/workbench/diff-navigation.ts";
 import { editorDocumentKey } from "../src/workbench/editor-document.ts";
@@ -24,6 +26,10 @@ test("unified Diff navigation groups adjacent removed and added lines", () => {
     "+after",
   ].join("\n");
   assert.deepEqual(unifiedChangeStartLines(patch), [6, 10]);
+  assert.deepEqual(unifiedChangeBlocks(patch), [
+    { fromLine: 6, toLine: 7 },
+    { fromLine: 10, toLine: 11 },
+  ]);
 });
 
 test("split Diff navigation uses the first row of each change group", () => {
@@ -36,6 +42,10 @@ test("split Diff navigation uses the first row of each change group", () => {
     { kind: "added", old: side, new: side },
   ];
   assert.deepEqual(splitChangeStartLines(rows), [2, 5]);
+  assert.deepEqual(splitChangeBlocks(rows), [
+    { fromLine: 2, toLine: 3 },
+    { fromLine: 5, toLine: 5 },
+  ]);
 });
 
 test("file navigation stops at collection boundaries", () => {
@@ -76,13 +86,16 @@ test("Diff document identities isolate source kind, side, repository, and revisi
   assert.equal(new Set([working, staged, commit, otherCommit]).size, 4);
 });
 
-test("Diff position navigation owns a dedicated non-destructive current-change marker", async () => {
+test("Diff position navigation outlines the complete current change block", async () => {
   const [editor, theme] = await Promise.all([
     readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(editor, /setActiveDiffLine\.of\(target\)/);
+  assert.match(editor, /setActiveDiffBlock\.of\(target\)/);
   assert.match(editor, /cm-diff-current-change/);
+  assert.match(editor, /lineNumber === fromLine/);
+  assert.match(editor, /lineNumber === toLine/);
   assert.match(theme, /\.cm-diff-current-change/);
-  assert.match(theme, /boxShadow: "inset 3px 0 0 var\(--focus-ring-bright\)"/);
+  assert.match(theme, /\.cm-diff-current-change-start/);
+  assert.match(theme, /\.cm-diff-current-change-end/);
 });
