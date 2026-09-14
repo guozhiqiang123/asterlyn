@@ -352,9 +352,9 @@ Before the confirmed Push enters that execution path, a feature-owned authentica
 
 ### R4 reviewed and recoverable Git operations
 
-The operation workflow now extends the compact Git workspace without turning History rows into
-direct mutation buttons. Branch details offer Merge and Rebase, commit details offer Cherry-pick
-and “Squash commits after this,” and the Git tool heading provides a general entry. Every route opens
+The operation workflow now extends the compact Git workspace without turning History rows or
+commit details into direct mutation buttons. Branch details offer Merge and Rebase, while the Git
+tool heading provides the consolidated entry for Cherry-pick, Squash, and other reviewed operations. Every route opens
 the same plan form and then a second confirmation showing the current branch, exact starting object,
 selected refs, resolved target objects, affected commit count, and Squash message where applicable.
 Changing `HEAD`, a target, cleanliness, or repository identity invalidates the review instead of

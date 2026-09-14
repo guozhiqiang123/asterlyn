@@ -268,7 +268,8 @@ file-tree disclosure, hovered rows, editor tabs, and Markdown mode controls. Rea
 no longer trigger a self-sustaining watcher loop.
 
 Restore uncommitted changes now reviews exact bytes/index before confirmation and saves durable
-recovery. Changes exposes Recover local changes for restart-safe inspection and guarded Undo.
+recovery. The restart-safe inspection and guarded Undo implementation remains lazy and intact, but
+its former Git-heading shortcut has been removed pending a deliberate permanent placement.
 Conflict Save and Stage uses the same recovery/write boundary. Git-operation Review validity updates
 in place as targets or squash messages are typed, without losing input focus. Tree accessibility
 levels and sibling positions match the nested tree hierarchy. Acceptance evidence is in

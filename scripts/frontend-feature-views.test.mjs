@@ -49,6 +49,7 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.match(html, /id="remote-toolbar-menu"[^]*id="remote-fetch"[^]*id="remote-update"/);
   assert.doesNotMatch(html, /id="remote-update"[^>]* disabled/);
   assert.doesNotMatch(html, /id="refresh-button"/);
+  assert.doesNotMatch(html, /id="git-recoveries-open"/);
 });
 
 test("blocked remote actions remain interactive so their exact reason can be announced", () => {
@@ -277,6 +278,7 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(dialog, /data-history-dialog-ref/);
   assert.match(detail, /src\/main\.ts|main\.ts/);
   assert.match(detail, /Compared with 1111111111/);
+  assert.doesNotMatch(detail, /data-start-git-operation="(?:cherryPick|squash)"/);
 });
 
 test("workspace navigation and replacement previews are feature-owned", () => {
