@@ -132,6 +132,7 @@ import { renderShellView } from "./shell/shell-view";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
+import { primaryShortcut } from "./workbench/window-chrome";
 import { WindowSession } from "./application/window-session";
 import type {
   SessionInvalidationSlice,
@@ -1000,7 +1001,9 @@ export class AsterlynApp {
     const status = this.root.querySelector<HTMLElement>("#status-message");
     if (status && status.textContent === previousCatalog?.common.ready) status.textContent = common.ready;
     text("#command-center-button span", copy.search);
-    label("#command-center-button", copy.searchFilesAndCommands, `${copy.searchFilesAndCommands} (Ctrl/Cmd+P)`);
+    const searchShortcut = primaryShortcut(this.shellState.windowChromeMode, "P");
+    text("#command-center-button kbd", searchShortcut.label);
+    label("#command-center-button", copy.searchFilesAndCommands, `${copy.searchFilesAndCommands} (${searchShortcut.accessible})`);
     this.root.querySelector("#remote-toolbar")?.setAttribute("aria-label", copy.remoteActions);
     label(".topbar-remote-select", copy.remoteForActions);
     label("#topbar-remote-select", copy.remoteForActions);
@@ -1813,13 +1816,13 @@ export class AsterlynApp {
       enabled,
     });
     return [
-      command("open-repository", true, "Ctrl+O"),
-      command("go-file", hasWorkspace, "Ctrl+P"),
-      command("recent-files", hasWorkspace, "Ctrl+E"),
-      command("find-workspace", hasWorkspace, "Ctrl+Shift+F"),
-      command("find-current", Boolean(tab?.status === "ready"), "Ctrl+F"),
-      command("save-current", Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest), "Ctrl+S"),
-      command("refresh", Boolean(hasWorkspace && !this.state.loading), "Ctrl+R"),
+      command("open-repository", true, primaryShortcut(this.shellState.windowChromeMode, "O").label),
+      command("go-file", hasWorkspace, primaryShortcut(this.shellState.windowChromeMode, "P").label),
+      command("recent-files", hasWorkspace, primaryShortcut(this.shellState.windowChromeMode, "E").label),
+      command("find-workspace", hasWorkspace, primaryShortcut(this.shellState.windowChromeMode, "F", true).label),
+      command("find-current", Boolean(tab?.status === "ready"), primaryShortcut(this.shellState.windowChromeMode, "F").label),
+      command("save-current", Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest), primaryShortcut(this.shellState.windowChromeMode, "S").label),
+      command("refresh", Boolean(hasWorkspace && !this.state.loading), primaryShortcut(this.shellState.windowChromeMode, "R").label),
       command("toggle-files", hasWorkspace),
       command("toggle-changes", Boolean(snapshot)),
       command("toggle-git", Boolean(snapshot)),

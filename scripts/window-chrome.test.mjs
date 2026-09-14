@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   parseWindowChromeMode,
+  primaryShortcut,
   showCustomWindowControls,
   windowChromeClass,
 } from "../src/workbench/window-chrome.ts";
@@ -23,4 +24,19 @@ test("browser and unknown modes fail closed to the custom layout without control
   const mode = parseWindowChromeMode("future-mode");
   assert.equal(mode, "custom-right");
   assert.equal(showCustomWindowControls(mode, false), false);
+});
+
+test("primary shortcut labels follow the native platform convention", () => {
+  assert.deepEqual(primaryShortcut("macos-native", "p"), {
+    label: "⌘P",
+    accessible: "Command+P",
+  });
+  assert.deepEqual(primaryShortcut("macos-native", "f", true), {
+    label: "⌘⇧F",
+    accessible: "Command+Shift+F",
+  });
+  assert.deepEqual(primaryShortcut("custom-right", "p"), {
+    label: "Ctrl+P",
+    accessible: "Ctrl+P",
+  });
 });

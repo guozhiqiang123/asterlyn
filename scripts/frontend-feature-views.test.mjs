@@ -52,6 +52,22 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.doesNotMatch(html, /id="git-recoveries-open"/);
 });
 
+test("shell search shortcut uses the native macOS convention", () => {
+  const shell = new ShellController(memoryStorage());
+  shell.setWindowChromeMode("macos-native");
+  const html = renderShellView({
+    shell: shell.state,
+    workspaceOpen: true,
+    gitAvailable: true,
+    demo: false,
+    windowControlsAvailable: true,
+  });
+
+  assert.match(html, /<kbd>⌘P<\/kbd>/);
+  assert.match(html, /Search files and commands \(Command\+P\)/);
+  assert.doesNotMatch(html, /Ctrl P|Ctrl\/Cmd\+P/);
+});
+
 test("blocked remote actions remain interactive so their exact reason can be announced", () => {
   const repository = repositorySnapshot();
   repository.branch.ahead = 0;
