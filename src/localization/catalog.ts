@@ -105,6 +105,7 @@ export interface ShellCopy {
   refreshingRepository: string;
   refreshingProjectFiles: string;
   projectOpenedInNewWindow: string;
+  projectFocusedInExistingWindow: string;
 }
 
 export interface TerminalCopy {

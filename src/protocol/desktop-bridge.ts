@@ -17,6 +17,8 @@ import type {
   ImageDiffPreview,
   ImagePreview,
   OpenedProject,
+  ProjectWindowMatch,
+  ProjectWindowOpenResult,
   ProjectFileList,
   PushMode,
   PushPreview,
@@ -50,7 +52,8 @@ export interface DesktopShellBridge {
   chooseRepositoryDirectory(defaultPath: string | null): Promise<DirectoryChoice>;
   openProject(path: string): Promise<OpenedProject>;
   readProject(path: string): Promise<OpenedProject>;
-  openRepositoryWindow(path: string): Promise<string>;
+  focusExistingProjectWindow(path: string): Promise<ProjectWindowMatch>;
+  openRepositoryWindow(path: string): Promise<ProjectWindowOpenResult>;
 }
 
 export interface WorkspaceBridge {

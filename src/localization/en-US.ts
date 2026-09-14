@@ -105,6 +105,7 @@ export const EN_US: LocaleCatalog = {
     refreshingRepository: "Refreshing repository…",
     refreshingProjectFiles: "Refreshing project files…",
     projectOpenedInNewWindow: "Project opened in a new window",
+    projectFocusedInExistingWindow: "Project is already open; its window was brought forward",
   },
   terminal: {
     notRunning: "No active session",

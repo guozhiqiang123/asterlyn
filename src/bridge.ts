@@ -41,6 +41,8 @@ import type {
   ImageDiffPreview,
   ImagePreview,
   ProjectFileList,
+  ProjectWindowMatch,
+  ProjectWindowOpenResult,
   OpenedProject,
   PushPreview,
   PushMode,
@@ -181,6 +183,11 @@ const demoBridge: DesktopBridge = {
     return invoke<OpenedProject>("read_project_snapshot", { path });
   },
 
+  async focusExistingProjectWindow(path: string): Promise<ProjectWindowMatch> {
+    if (!isTauri) return "notOpen";
+    return invoke<ProjectWindowMatch>("focus_existing_project_window", { path });
+  },
+
   async readTrackedChanges(repositoryRoot: string): Promise<TrackedChangeScan> {
     if (!isTauri) {
       await demoDelay(70);
@@ -190,11 +197,11 @@ const demoBridge: DesktopBridge = {
     return invoke<TrackedChangeScan>("read_tracked_changes", { repositoryRoot });
   },
 
-  async openRepositoryWindow(path: string): Promise<string> {
+  async openRepositoryWindow(path: string): Promise<ProjectWindowOpenResult> {
     if (!isTauri) {
       throw new Error("Opening another application window requires the desktop build.");
     }
-    return invoke<string>("open_repository_window", { path });
+    return invoke<ProjectWindowOpenResult>("open_repository_window", { path });
   },
 
   async readHistoryPage(

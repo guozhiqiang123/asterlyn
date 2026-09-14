@@ -31,8 +31,9 @@ use adapters::image_preview::{
     encode_image_preview,
 };
 use application::{
-    ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator, PendingRepositoryWindows,
-    ScanRegistry, StoredReplacementPlan, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
+    ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator,
+    PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
+    StoredReplacementPlan, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
     WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
 };
 #[cfg(test)]
@@ -117,6 +118,21 @@ struct GitOperationMutationOutcome {
 struct OpenedProject {
     root: String,
     repository: Option<RepositorySnapshot>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ProjectWindowMatch {
+    NotOpen,
+    Current,
+    FocusedExisting,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectWindowOpenResult {
+    window_label: String,
+    focused_existing: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
@@ -697,6 +713,7 @@ pub fn run() {
             initial_repository,
             window_chrome_mode,
             existing_project_directories,
+            focus_existing_project_window,
             open_project,
             read_project_snapshot,
             open_repository_window,
@@ -1377,18 +1394,44 @@ mod tests {
     #[test]
     fn pending_repository_windows_are_unique_and_consumed_once() {
         let pending = PendingRepositoryWindows::default();
-        let first = pending
+        let PendingRepositoryWindowReservation::Reserved(first) = pending
             .reserve(PathBuf::from("/repo/first"))
-            .expect("first window");
-        let second = pending
+            .expect("first window")
+        else {
+            panic!("first path must reserve a window");
+        };
+        let PendingRepositoryWindowReservation::Reserved(second) = pending
             .reserve(PathBuf::from("/repo/second"))
-            .expect("second window");
+            .expect("second window")
+        else {
+            panic!("second path must reserve a window");
+        };
         assert_ne!(first, second);
+        let PendingRepositoryWindowReservation::Existing(existing) = pending
+            .reserve(PathBuf::from("/repo/first"))
+            .expect("duplicate path resolves")
+        else {
+            panic!("duplicate path must reuse its pending window");
+        };
+        assert_eq!(existing, first);
         assert_eq!(
             pending.take(&first).expect("pending path"),
             Some("/repo/first".to_string())
         );
         assert_eq!(pending.take(&first).expect("path consumed"), None);
+        assert_eq!(
+            pending
+                .window_for_root(Path::new("/repo/first"))
+                .expect("consumed path remains reserved until activation"),
+            Some(first.clone())
+        );
+        pending.remove(&first);
+        assert_eq!(
+            pending
+                .window_for_root(Path::new("/repo/first"))
+                .expect("removed path is released"),
+            None
+        );
     }
 
     #[test]

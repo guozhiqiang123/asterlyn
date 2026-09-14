@@ -67,11 +67,18 @@ pub(crate) async fn open_project(
     path: String,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
+    pending: State<'_, PendingRepositoryWindows>,
     terminal_sessions: State<'_, asterlyn_terminal::TerminalSessions>,
 ) -> Result<OpenedProject, WorkspaceError> {
     let token = active_workspaces.begin_activation(window.label())?;
-    let project = read_project(path).await?;
-    active_workspaces.activate_current(
+    let project = match read_project(path).await {
+        Ok(project) => project,
+        Err(error) => {
+            pending.remove(window.label());
+            return Err(error);
+        }
+    };
+    let activation = active_workspaces.activate_current(
         window.label(),
         token,
         Path::new(&project.root),
@@ -79,7 +86,9 @@ pub(crate) async fn open_project(
             .repository
             .as_ref()
             .map(|repository| Path::new(&repository.git_dir)),
-    )?;
+    );
+    pending.remove(window.label());
+    activation?;
     terminal_sessions.remove_owner_if_root_changed(window.label(), Path::new(&project.root));
     Ok(project)
 }
@@ -125,21 +134,117 @@ async fn read_project(path: String) -> Result<OpenedProject, WorkspaceError> {
     Ok(project)
 }
 
-#[tauri::command]
-pub(crate) fn open_repository_window(
-    path: String,
-    app: tauri::AppHandle,
-    pending: State<'_, PendingRepositoryWindows>,
-) -> Result<String, GitError> {
-    let canonical = std::fs::canonicalize(&path).map_err(|error| GitError::Io {
-        operation: "open repository window".to_string(),
+fn canonical_project_path(path: &str) -> Result<PathBuf, GitError> {
+    let canonical = std::fs::canonicalize(path).map_err(|error| GitError::Io {
+        operation: "open project window".to_string(),
         message: error.to_string(),
     })?;
     Workspace::open(&canonical).map_err(|error| GitError::InvalidInput {
         field: "project path".to_string(),
         message: error.to_string(),
     })?;
-    let label = pending.reserve(canonical.clone())?;
+    Ok(canonical)
+}
+
+fn active_window_for_root(
+    active_workspaces: &ActiveWorkspaces,
+    root: &Path,
+) -> Result<Option<String>, GitError> {
+    active_workspaces
+        .window_for_root(root)
+        .map_err(|error| GitError::Io {
+            operation: "locate open project window".to_string(),
+            message: error.to_string(),
+        })
+}
+
+fn focus_project_window(app: &tauri::AppHandle, label: &str) -> Result<bool, GitError> {
+    let Some(window) = app.get_webview_window(label) else {
+        return Ok(false);
+    };
+    window.show().map_err(|error| GitError::Io {
+        operation: "show open project window".to_string(),
+        message: error.to_string(),
+    })?;
+    window.unminimize().map_err(|error| GitError::Io {
+        operation: "restore open project window".to_string(),
+        message: error.to_string(),
+    })?;
+    window.set_focus().map_err(|error| GitError::Io {
+        operation: "focus open project window".to_string(),
+        message: error.to_string(),
+    })?;
+    Ok(true)
+}
+
+fn existing_project_window(
+    app: &tauri::AppHandle,
+    root: &Path,
+    active_workspaces: &ActiveWorkspaces,
+    pending: &PendingRepositoryWindows,
+) -> Result<Option<String>, GitError> {
+    loop {
+        let label =
+            active_window_for_root(active_workspaces, root)?.or(pending.window_for_root(root)?);
+        let Some(label) = label else {
+            return Ok(None);
+        };
+        if focus_project_window(app, &label)? {
+            return Ok(Some(label));
+        }
+        active_workspaces.remove(&label);
+        pending.remove(&label);
+    }
+}
+
+#[tauri::command]
+pub(crate) fn focus_existing_project_window(
+    path: String,
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    pending: State<'_, PendingRepositoryWindows>,
+) -> Result<ProjectWindowMatch, GitError> {
+    let canonical = canonical_project_path(&path)?;
+    let Some(label) = existing_project_window(&app, &canonical, &active_workspaces, &pending)?
+    else {
+        return Ok(ProjectWindowMatch::NotOpen);
+    };
+    Ok(if label == window.label() {
+        ProjectWindowMatch::Current
+    } else {
+        ProjectWindowMatch::FocusedExisting
+    })
+}
+
+#[tauri::command]
+pub(crate) fn open_repository_window(
+    path: String,
+    app: tauri::AppHandle,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    pending: State<'_, PendingRepositoryWindows>,
+) -> Result<ProjectWindowOpenResult, GitError> {
+    let canonical = canonical_project_path(&path)?;
+    if let Some(label) = existing_project_window(&app, &canonical, &active_workspaces, &pending)? {
+        return Ok(ProjectWindowOpenResult {
+            window_label: label,
+            focused_existing: true,
+        });
+    }
+    let label = loop {
+        match pending.reserve(canonical.clone())? {
+            PendingRepositoryWindowReservation::Reserved(label) => break label,
+            PendingRepositoryWindowReservation::Existing(label) => {
+                if focus_project_window(&app, &label)? {
+                    return Ok(ProjectWindowOpenResult {
+                        window_label: label,
+                        focused_existing: true,
+                    });
+                }
+                pending.remove(&label);
+            }
+        }
+    };
     let title = canonical
         .file_name()
         .and_then(|name| name.to_str())
@@ -149,11 +254,14 @@ pub(crate) fn open_repository_window(
     if let Err(error) = result {
         pending.remove(&label);
         return Err(GitError::Io {
-            operation: "open repository window".to_string(),
+            operation: "open project window".to_string(),
             message: error.to_string(),
         });
     }
-    Ok(label)
+    Ok(ProjectWindowOpenResult {
+        window_label: label,
+        focused_existing: false,
+    })
 }
 
 #[cfg(test)]

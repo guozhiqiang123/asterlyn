@@ -29,8 +29,18 @@ pub(crate) struct WorkspaceWatchRoots {
 
 #[derive(Default)]
 pub(crate) struct PendingRepositoryWindows {
-    paths: Mutex<HashMap<String, PathBuf>>,
+    paths: Mutex<HashMap<String, PendingRepositoryWindow>>,
     sequence: AtomicU64,
+}
+
+struct PendingRepositoryWindow {
+    path: PathBuf,
+    consumed: bool,
+}
+
+pub(crate) enum PendingRepositoryWindowReservation {
+    Existing(String),
+    Reserved(String),
 }
 
 #[derive(Default, Clone)]
@@ -291,6 +301,20 @@ impl ActiveWorkspaces {
             })
     }
 
+    pub(crate) fn window_for_root(&self, root: &Path) -> Result<Option<String>, WorkspaceError> {
+        Ok(self
+            .roots
+            .lock()
+            .map_err(|_| WorkspaceError::Io {
+                operation: "locate open workspace".to_string(),
+                message: "active workspace lock was poisoned".to_string(),
+            })?
+            .iter()
+            .filter(|(_, active)| active.root == root)
+            .map(|(label, _)| label.clone())
+            .min())
+    }
+
     pub(crate) fn remove(&self, window_label: &str) {
         let Ok(mut activations) = self.activations.lock() else {
             return;
@@ -344,31 +368,58 @@ fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<Path
 }
 
 impl PendingRepositoryWindows {
-    pub(crate) fn reserve(&self, path: PathBuf) -> Result<String, GitError> {
+    pub(crate) fn reserve(
+        &self,
+        path: PathBuf,
+    ) -> Result<PendingRepositoryWindowReservation, GitError> {
+        let mut paths = self.paths.lock().map_err(|_| GitError::Io {
+            operation: "open project window".to_string(),
+            message: "pending project window lock was poisoned".to_string(),
+        })?;
+        if let Some((label, _)) = paths.iter().find(|(_, pending)| pending.path == path) {
+            return Ok(PendingRepositoryWindowReservation::Existing(label.clone()));
+        }
         let label = format!(
             "project-{}",
             self.sequence.fetch_add(1, Ordering::Relaxed) + 1
         );
-        self.paths
-            .lock()
-            .map_err(|_| GitError::Io {
-                operation: "open repository window".to_string(),
-                message: "pending repository window lock was poisoned".to_string(),
-            })?
-            .insert(label.clone(), path);
-        Ok(label)
+        paths.insert(
+            label.clone(),
+            PendingRepositoryWindow {
+                path,
+                consumed: false,
+            },
+        );
+        Ok(PendingRepositoryWindowReservation::Reserved(label))
     }
 
     pub(crate) fn take(&self, window_label: &str) -> Result<Option<String>, GitError> {
+        let mut paths = self.paths.lock().map_err(|_| GitError::Io {
+            operation: "initialize project window".to_string(),
+            message: "pending project window lock was poisoned".to_string(),
+        })?;
+        let Some(pending) = paths.get_mut(window_label) else {
+            return Ok(None);
+        };
+        if pending.consumed {
+            return Ok(None);
+        }
+        pending.consumed = true;
+        Ok(Some(pending.path.to_string_lossy().into_owned()))
+    }
+
+    pub(crate) fn window_for_root(&self, root: &Path) -> Result<Option<String>, GitError> {
         Ok(self
             .paths
             .lock()
             .map_err(|_| GitError::Io {
-                operation: "initialize repository window".to_string(),
-                message: "pending repository window lock was poisoned".to_string(),
+                operation: "locate pending project window".to_string(),
+                message: "pending project window lock was poisoned".to_string(),
             })?
-            .remove(window_label)
-            .map(|path| path.to_string_lossy().into_owned()))
+            .iter()
+            .filter(|(_, pending)| pending.path == root)
+            .map(|(label, _)| label.clone())
+            .min())
     }
 
     pub(crate) fn remove(&self, window_label: &str) {
@@ -457,5 +508,30 @@ mod tests {
         active
             .install_catalog("main", current, &root, &catalog)
             .unwrap();
+    }
+
+    #[test]
+    fn workspace_root_ownership_follows_window_activation_and_removal() {
+        let active = ActiveWorkspaces::default();
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let first_root = std::fs::canonicalize(first.path()).unwrap();
+        let second_root = std::fs::canonicalize(second.path()).unwrap();
+
+        active.activate("project-1", &first_root, None).unwrap();
+        assert_eq!(
+            active.window_for_root(&first_root).unwrap(),
+            Some("project-1".to_string())
+        );
+
+        active.activate("project-1", &second_root, None).unwrap();
+        assert_eq!(active.window_for_root(&first_root).unwrap(), None);
+        assert_eq!(
+            active.window_for_root(&second_root).unwrap(),
+            Some("project-1".to_string())
+        );
+
+        active.remove("project-1");
+        assert_eq!(active.window_for_root(&second_root).unwrap(), None);
     }
 }

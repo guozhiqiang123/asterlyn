@@ -10,6 +10,7 @@ export interface DesktopCommandMap {
   existing_project_directories: { args: { paths: Array<string>; }; result: Array<string> };
   open_project: { args: { path: string; }; result: Model.OpenedProject };
   read_project_snapshot: { args: { path: string; }; result: Model.OpenedProject };
+  focus_existing_project_window: { args: { path: string; }; result: Model.ProjectWindowMatch };
   start_workspace_watch: { args: { workspaceRoot: string; generation: number; }; result: Model.WorkspaceWatchStatus };
   stop_workspace_watch: { args: Record<string, never>; result: void };
   start_terminal: { args: { workspaceRoot: string; cols: number; rows: number; }; result: Model.TerminalStarted };
@@ -17,7 +18,7 @@ export interface DesktopCommandMap {
   resize_terminal: { args: { sessionId: string; cols: number; rows: number; }; result: void };
   close_terminal: { args: { sessionId: string; }; result: boolean };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
-  open_repository_window: { args: { path: string; }; result: string };
+  open_repository_window: { args: { path: string; }; result: Model.ProjectWindowOpenResult };
   read_history_page: { args: { repositoryRoot: string; query: Model.HistoryQuery; offset: number; limit: number; }; result: Model.HistoryPage };
   scan_untracked: { args: { repositoryRoot: string; scanId: string; }; result: Model.UntrackedScan };
   cancel_untracked_scan: { args: { scanId: string; }; result: void };
@@ -75,6 +76,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   existing_project_directories: "stringArray",
   open_project: "openedProject",
   read_project_snapshot: "openedProject",
+  focus_existing_project_window: "projectWindowMatch",
   start_workspace_watch: "workspaceWatchStatus",
   stop_workspace_watch: "void",
   start_terminal: "terminalStarted",
@@ -82,7 +84,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   resize_terminal: "void",
   close_terminal: "boolean",
   read_tracked_changes: "trackedChangeScan",
-  open_repository_window: "string",
+  open_repository_window: "projectWindowOpenResult",
   read_history_page: "historyPage",
   scan_untracked: "untrackedScan",
   cancel_untracked_scan: "void",

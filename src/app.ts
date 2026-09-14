@@ -6557,6 +6557,20 @@ export class AsterlynApp {
 
   private async requestRepositoryTarget(path: string): Promise<void> {
     this.closeRepositoryDialog();
+    try {
+      const match = await bridge.focusExistingProjectWindow(path);
+      if (match === "focusedExisting") {
+        this.showInformation(this.localization.catalog.shell.projectFocusedInExistingWindow);
+        return;
+      }
+      if (match === "current") {
+        await this.openRepository(path);
+        return;
+      }
+    } catch (error) {
+      this.showError(error);
+      return;
+    }
     const currentRoot = this.windowSession.workspace.state.root;
     if (!currentRoot || currentRoot === path) {
       await this.openRepository(path);
@@ -6573,8 +6587,12 @@ export class AsterlynApp {
 
   private async openRepositoryInNewWindow(path: string): Promise<void> {
     try {
-      await bridge.openRepositoryWindow(path);
-      this.setStatus(this.localization.catalog.shell.projectOpenedInNewWindow, "success");
+      const result = await bridge.openRepositoryWindow(path);
+      if (result.focusedExisting) {
+        this.showInformation(this.localization.catalog.shell.projectFocusedInExistingWindow);
+      } else {
+        this.setStatus(this.localization.catalog.shell.projectOpenedInNewWindow, "success");
+      }
     } catch (error) {
       this.showError(error);
     }

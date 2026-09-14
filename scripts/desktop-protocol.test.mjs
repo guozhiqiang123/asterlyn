@@ -29,6 +29,17 @@ test("desktop response validation accepts representative valid payloads", () => 
     validateDesktopResult("open_project", { root: "/repo", repository: null }),
     { root: "/repo", repository: null },
   );
+  assert.equal(
+    validateDesktopResult("focus_existing_project_window", "focusedExisting"),
+    "focusedExisting",
+  );
+  assert.deepEqual(
+    validateDesktopResult("open_repository_window", {
+      windowLabel: "project-1",
+      focusedExisting: true,
+    }),
+    { windowLabel: "project-1", focusedExisting: true },
+  );
   assert.equal(validateDesktopResult("window_chrome_mode", "macos-native"), "macos-native");
   assert.deepEqual(
     validateDesktopResult("existing_project_directories", ["/repo", "/workspace"]),
@@ -92,6 +103,20 @@ test("desktop response validation rejects malformed project-directory results", 
   assert.throws(
     () => validateDesktopResult("existing_project_directories", ["/repo", 7]),
     /array of strings/,
+  );
+});
+
+test("desktop response validation rejects malformed project-window routing results", () => {
+  assert.throws(
+    () => validateDesktopResult("focus_existing_project_window", "anotherWindow"),
+    /supported project-window match/,
+  );
+  assert.throws(
+    () => validateDesktopResult("open_repository_window", {
+      windowLabel: "",
+      focusedExisting: false,
+    }),
+    /window label must not be empty/,
   );
 });
 

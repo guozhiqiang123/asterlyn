@@ -58,6 +58,20 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       );
       break;
     }
+    case "projectWindowMatch":
+      assert(
+        value === "notOpen" || value === "current" || value === "focusedExisting",
+        command,
+        "expected a supported project-window match",
+      );
+      break;
+    case "projectWindowOpenResult": {
+      const result = record(value, command);
+      strings(result, command, "windowLabel");
+      booleans(result, command, "focusedExisting");
+      assert(Boolean(result.windowLabel), command, "window label must not be empty");
+      break;
+    }
     case "repositorySnapshot":
       assert(isRepositorySnapshot(value), command, "expected a repository snapshot");
       break;

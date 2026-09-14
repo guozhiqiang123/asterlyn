@@ -39,6 +39,7 @@ export const ZH_CN = {
     gitUnavailable: "Git 不可用", detachedAt: (oid) => `分离于 ${oid}`, noBranch: "无分支",
     openingProject: "正在打开项目…", refreshingRepository: "正在刷新仓库…", refreshingProjectFiles: "正在刷新项目文件…",
     projectOpenedInNewWindow: "项目已在新窗口中打开",
+    projectFocusedInExistingWindow: "项目已打开，现有窗口已切换到前台",
   },
   terminal: {
     notRunning: "没有活动会话",

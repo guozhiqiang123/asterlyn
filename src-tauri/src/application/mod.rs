@@ -12,7 +12,7 @@ pub(crate) use search_session::{
     WorkspaceSearchRegistry,
 };
 pub(crate) use workspace_session::{
-    ActiveWorkspaces, GitMutationRegistry, PendingRepositoryWindows, WorkspaceWatchRoots,
-    WorkspaceWriteRegistry,
+    ActiveWorkspaces, GitMutationRegistry, PendingRepositoryWindowReservation,
+    PendingRepositoryWindows, WorkspaceWatchRoots, WorkspaceWriteRegistry,
 };
 pub(crate) use workspace_watch::{WorkspaceWatchService, WorkspaceWatchStatus};

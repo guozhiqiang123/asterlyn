@@ -302,6 +302,13 @@ export interface OpenedProject {
   repository: RepositorySnapshot | null;
 }
 
+export type ProjectWindowMatch = "notOpen" | "current" | "focusedExisting";
+
+export interface ProjectWindowOpenResult {
+  windowLabel: string;
+  focusedExisting: boolean;
+}
+
 export interface TerminalStarted {
   protocolVersion: 1;
   sessionId: string;

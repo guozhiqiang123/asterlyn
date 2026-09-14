@@ -1,4 +1,8 @@
-import type { OpenedProject } from "../../models.ts";
+import type {
+  OpenedProject,
+  ProjectWindowMatch,
+  ProjectWindowOpenResult,
+} from "../../models.ts";
 import type { DesktopShellBridge, DirectoryChoice } from "../../protocol/desktop-bridge.ts";
 import { parseWindowChromeMode } from "../../workbench/window-chrome.ts";
 import { invokeDesktopCommand, openDialog } from "./desktop-command-adapter.ts";
@@ -24,6 +28,8 @@ export const tauriShellBridge: DesktopShellBridge = {
   },
   openProject: (path) => invokeDesktopCommand<OpenedProject>("open_project", { path }),
   readProject: (path) => invokeDesktopCommand<OpenedProject>("read_project_snapshot", { path }),
+  focusExistingProjectWindow: (path) =>
+    invokeDesktopCommand<ProjectWindowMatch>("focus_existing_project_window", { path }),
   openRepositoryWindow: (path) =>
-    invokeDesktopCommand<string>("open_repository_window", { path }),
+    invokeDesktopCommand<ProjectWindowOpenResult>("open_repository_window", { path }),
 };
