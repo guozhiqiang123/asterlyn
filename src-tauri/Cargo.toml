@@ -25,6 +25,7 @@ sha2.workspace = true
 tempfile.workspace = true
 tauri = { version = "2.11.5", features = [] }
 tauri-plugin-dialog = "2"
+trash = { version = "=5.2.9", default-features = false, features = ["coinit_multithreaded"] }
 
 [dev-dependencies]
 tempfile.workspace = true

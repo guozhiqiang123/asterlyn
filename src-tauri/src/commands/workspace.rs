@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::adapters::system_trash::move_to_system_trash;
 
 #[tauri::command]
 pub(crate) async fn list_project_files(
@@ -111,11 +112,16 @@ pub(crate) async fn execute_workspace_mutation(
             operation: "serialize workspace writes".to_string(),
             message: "workspace-write lock was poisoned".to_string(),
         })?;
-        Workspace::open(task_root)?.execute_mutation_plan(
-            &recovery_root,
-            &task_plan,
-            &task_cancellation,
-        )
+        let workspace = Workspace::open(task_root)?;
+        match &task_plan.operation {
+            WorkspaceMutationOperation::Trash { .. } => workspace.execute_trash_plan_with(
+                &recovery_root,
+                &task_plan,
+                &task_cancellation,
+                move_to_system_trash,
+            ),
+            _ => workspace.execute_mutation_plan(&recovery_root, &task_plan, &task_cancellation),
+        }
     })
     .await;
     mutations.finish_execution(
