@@ -267,7 +267,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       const result = record(value, command);
       strings(result, command, "planId", "collisionPolicy");
       nullableStrings(result, command, "fingerprint");
-      numbers(result, command, "entryCount", "totalBytes");
+      numbers(result, command, "entryCount", "totalBytes", "hiddenEntryCount");
       arrays(result, command, "blockers");
       assertWorkspaceMutationOperation(result.operation, command);
       assert(
@@ -277,6 +277,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       );
       assertNonNegativeInteger(result.entryCount, command, "entryCount");
       assertNonNegativeInteger(result.totalBytes, command, "totalBytes");
+      assertNonNegativeInteger(result.hiddenEntryCount, command, "hiddenEntryCount");
       assert(
         result.source === null || isWorkspaceEntryIdentity(result.source),
         command,

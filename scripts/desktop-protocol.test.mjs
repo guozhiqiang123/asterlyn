@@ -270,6 +270,7 @@ test("desktop response validation checks workspace mutation plans and outcomes",
     },
     entryCount: 3,
     totalBytes: 12,
+    hiddenEntryCount: 1,
     fingerprint: "a".repeat(64),
     blockers: [],
   };

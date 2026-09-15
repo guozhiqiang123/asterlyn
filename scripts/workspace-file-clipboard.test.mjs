@@ -31,7 +31,7 @@ test("workspace file clipboard is isolated to one exact window workspace generat
   const clipboard = new WorkspaceFileClipboard();
   const changes = [];
   clipboard.subscribe((entry) => changes.push(entry?.mode ?? null));
-  const entry = clipboard.capture("cut", "/workspace", 4, inspection());
+  const entry = clipboard.capture("cut", "/workspace", 4, ".", "src", inspection());
   assert.equal(entry.mode, "cut");
   assert.equal(clipboard.current("/workspace", 4), entry);
   assert.equal(clipboard.current("/workspace", 5), null);
@@ -50,14 +50,14 @@ test("unsafe or incomplete recursive identities never enter the clipboard", () =
     inspection({ nestedRepositoryPaths: ["src/nested/.git"] }),
     inspection({ multipleLinkPaths: ["src/hard"] }),
   ]) {
-    assert.equal(new WorkspaceFileClipboard().capture("copy", "/workspace", 1, unsafe), null);
+    assert.equal(new WorkspaceFileClipboard().capture("copy", "/workspace", 1, ".", "src", unsafe), null);
   }
 });
 
 test("paste accepts only the exact inspected source fingerprint", () => {
   const clipboard = new WorkspaceFileClipboard();
   const source = inspection();
-  const entry = clipboard.capture("copy", "/workspace", 1, source);
+  const entry = clipboard.capture("copy", "/workspace", 1, ".", "src", source);
   assert.equal(workspaceFileClipboardMatchesPreview(entry, {
     source: source.source,
     fingerprint: source.fingerprint,

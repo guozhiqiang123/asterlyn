@@ -576,6 +576,7 @@ export interface WorkspaceMutationPreview {
   source: WorkspaceEntryIdentity | null;
   entryCount: number;
   totalBytes: number;
+  hiddenEntryCount: number;
   fingerprint: string | null;
   blockers: WorkspaceMutationBlocker[];
 }

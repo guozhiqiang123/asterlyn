@@ -89,6 +89,7 @@ struct WorkspaceMutationPreview {
     source: Option<WorkspaceEntryIdentity>,
     entry_count: usize,
     total_bytes: u64,
+    hidden_entry_count: usize,
     fingerprint: Option<String>,
     blockers: Vec<WorkspaceMutationBlocker>,
 }
@@ -111,6 +112,13 @@ impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
                 .inventory
                 .as_ref()
                 .map_or(0, |inventory| inventory.total_bytes),
+            hidden_entry_count: plan.inventory.as_ref().map_or(0, |inventory| {
+                inventory
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.hidden)
+                    .count()
+            }),
             fingerprint: plan
                 .inventory
                 .as_ref()

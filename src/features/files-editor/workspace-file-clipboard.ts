@@ -11,6 +11,8 @@ export interface WorkspaceFileClipboardEntry {
   readonly workspaceGeneration: number;
   readonly workspacePath: string;
   readonly kind: WorkspaceEntryKind;
+  readonly repositoryId: string;
+  readonly repositoryPath: string;
   readonly inspection: WorkspaceEntryInspection;
 }
 
@@ -34,6 +36,8 @@ export class WorkspaceFileClipboard {
     mode: WorkspaceFileClipboardMode,
     workspaceRoot: string,
     workspaceGeneration: number,
+    repositoryId: string,
+    repositoryPath: string,
     inspection: WorkspaceEntryInspection,
   ): WorkspaceFileClipboardEntry | null {
     if (!safeInspection(inspection)) return null;
@@ -43,6 +47,8 @@ export class WorkspaceFileClipboard {
       workspaceGeneration,
       workspacePath: inspection.source.workspacePath,
       kind: inspection.source.kind,
+      repositoryId,
+      repositoryPath,
       inspection: structuredClone(inspection),
     };
     this.value = next;
