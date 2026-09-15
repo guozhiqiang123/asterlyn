@@ -1,6 +1,6 @@
 # Context-action system design and implementation plan
 
-- **Status:** CA0, CA1, R5, CM1, and CM2 locally accepted; CM3–CM4 not started
+- **Status:** CA0, CA1, R5, CM1, CM2, and CM3 locally accepted; CM4 not started
 - **Date:** 2026-09-15
 - **Behavior input:** [`Context-menu surface drafts`](../design/context-menu-drafts.md)
 - **Architecture decision:** [`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md)
@@ -459,14 +459,15 @@ opening.
 
 ### CM3 — Branch and single-commit menus
 
-Status: **reviewed mutation foundation and Branches surface locally accepted on 2026-09-15**.
+Status: **locally accepted on 2026-09-15**.
 Evidence:
 [`CM3 reviewed Git mutation foundation`](../benchmarks/2026-09-15-context-action-cm3-foundation.md).
 [`CM3 Branches context-menu acceptance`](../benchmarks/2026-09-15-context-action-cm3-branches.md).
-The single-commit provider and final CM3 combined evidence remain in progress.
+[`CM3 History single-commit acceptance`](../benchmarks/2026-09-15-context-action-cm3-history.md).
 
-Land exact-ref branch foundations and reviewed Revert first. Then contribute Branches and H1 menus,
-reusing current Update/Push/Merge/Rebase/Cherry-pick review entry points.
+Exact-ref branch foundations and reviewed Revert landed before the Branches and H1 providers. Both
+surfaces now reuse current Update/Push/Merge/Rebase/Cherry-pick review entry points and keep menu
+construction free of native work.
 
 ### CM4 — History range and commit-detail menus
 

@@ -2,12 +2,18 @@ import type {
   BranchMutationKind,
   BranchMutationPlan,
   BranchMutationRequest,
-  BranchSummary,
 } from "../../models.ts";
+
+export interface BranchMutationSource {
+  readonly repositoryId: string;
+  readonly fullName: string;
+  readonly name: string;
+  readonly oid: string;
+}
 
 export interface BranchMutationDialog {
   readonly repositoryRoot: string;
-  readonly branch: BranchSummary;
+  readonly source: BranchMutationSource;
   readonly request: BranchMutationRequest;
   value: string;
   plan: BranchMutationPlan | null;
@@ -49,16 +55,16 @@ export class BranchMutationController {
   open(
     repositoryRoot: string,
     kind: BranchMutationKind,
-    branch: BranchSummary,
+    source: BranchMutationSource,
     suggestedName = "",
   ): void {
     const dialog: BranchMutationDialog = {
       repositoryRoot,
-      branch: { ...branch },
+      source: { ...source },
       request: {
         kind,
-        sourceFullName: branch.fullName,
-        sourceOid: branch.oid,
+        sourceFullName: source.fullName,
+        sourceOid: source.oid,
         newName: mutationNeedsName(kind) ? suggestedName.trim() || null : null,
       },
       value: suggestedName,

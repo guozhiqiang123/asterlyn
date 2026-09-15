@@ -138,10 +138,11 @@ test("feature target resolvers reject stale display labels and retain exact iden
 
 test("History and commit-detail targets bind object, query generation and exact path", () => {
   const state = historyState();
-  const history = resolveHistoryCommitContextTarget(state, 5, commitKey(commit));
+  const history = resolveHistoryCommitContextTarget(state, 5, 12, commitKey(commit));
   assert.equal(history?.oid, commit.oid);
   assert.equal(history?.historyGeneration, 9);
-  assert.equal(resolveHistoryCommitContextTarget(state, 5, commit.shortOid), null);
+  assert.equal(history?.repositoryRevision, 12);
+  assert.equal(resolveHistoryCommitContextTarget(state, 5, 12, commit.shortOid), null);
 
   const fileTarget = resolveCommitDetailContextTarget(state, 5, "file", "src/app.ts");
   assert.equal(fileTarget?.kind, "file");

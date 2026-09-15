@@ -839,6 +839,7 @@ export interface ErrorCopy {
 export interface HistoryCopy {
   branchContextMenu: BranchContextMenuCopy;
   branchMutation: BranchMutationCopy;
+  commitContextMenu: HistoryCommitContextMenuCopy;
   noRefs: string;
   refsAppearHere: string;
   branchOrTag: string;
@@ -1049,6 +1050,21 @@ export interface BranchMutationCopy {
   cancel: string;
   working: string;
   failed: string;
+}
+
+export interface HistoryCommitContextMenuCopy {
+  ariaLabel(subject: string): string;
+  copyCommitId: string;
+  cherryPick: string;
+  revertCommit: string;
+  newBranchFromCommit: string;
+  copiedCommitId: string;
+  clipboardUnavailable: string;
+  busy: string;
+  cleanRequired: string;
+  localBranchRequired: string;
+  mergeMainlineRequired: string;
+  targetChanged: string;
 }
 
 export interface LocaleCatalog {

@@ -4,6 +4,11 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.history-row.context-target {
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -1px;
+}
+
 .branch-mutation-dialog {
   width: min(650px, calc(100vw - 40px));
   display: grid;

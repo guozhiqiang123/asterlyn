@@ -8,6 +8,7 @@ import {
 } from "../../shared/context-menu/delegated-context-binding.ts";
 
 export interface HistoryCommitContextTarget extends CommitIdentity {
+  readonly repositoryRevision: number;
   readonly historyGeneration: number;
   readonly key: string;
   readonly commit: CommitSummary;
@@ -21,6 +22,7 @@ export class HistoryContextBinding {
     current: () => {
       readonly state: GitHistoryDetailsState;
       readonly workspaceGeneration: number;
+      readonly repositoryRevision: number;
     },
     open: (request: DelegatedContextRequest<HistoryCommitContextTarget>) => boolean,
   ) {
@@ -33,6 +35,7 @@ export class HistoryContextBinding {
           ? resolveHistoryCommitContextTarget(
               context.state,
               context.workspaceGeneration,
+              context.repositoryRevision,
               key,
             )
           : null;
@@ -49,6 +52,7 @@ export class HistoryContextBinding {
 export function resolveHistoryCommitContextTarget(
   state: GitHistoryDetailsState,
   workspaceGeneration: number,
+  repositoryRevision: number,
   key: string,
 ): HistoryCommitContextTarget | null {
   const root = state.history.root;
@@ -59,9 +63,31 @@ export function resolveHistoryCommitContextTarget(
         workspaceGeneration,
         repositoryId: commit.repositoryId,
         oid: commit.oid,
+        repositoryRevision,
         historyGeneration: state.history.generation,
         key,
         commit: { ...commit, parents: [...commit.parents], decorations: [...commit.decorations] },
       }
     : null;
+}
+
+export function historyCommitContextTargetIsCurrent(
+  target: HistoryCommitContextTarget,
+  state: GitHistoryDetailsState,
+  workspaceGeneration: number,
+  repositoryRevision: number,
+): boolean {
+  if (
+    state.history.root !== target.workspaceRoot ||
+    workspaceGeneration !== target.workspaceGeneration ||
+    repositoryRevision !== target.repositoryRevision ||
+    state.history.generation !== target.historyGeneration
+  ) return false;
+  const commit = state.history.commits.find((candidate) => commitKey(candidate) === target.key);
+  return Boolean(
+    commit && commit.repositoryId === target.repositoryId && commit.oid === target.oid &&
+    commit.subject === target.commit.subject &&
+    commit.parents.length === target.commit.parents.length &&
+    commit.parents.every((parent, index) => parent === target.commit.parents[index]),
+  );
 }

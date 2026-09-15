@@ -47,6 +47,12 @@ import { BranchContextActions } from "./features/git-history/branch-context-acti
 import { BranchMutationController } from "./features/git-history/branch-mutation-controller.ts";
 import { BranchMutationDialogBinding } from "./features/git-history/branch-mutation-dialog-binding.ts";
 import {
+  HistoryContextBinding,
+  historyCommitContextTargetIsCurrent,
+  type HistoryCommitContextTarget,
+} from "./features/git-history/history-context-binding.ts";
+import { HistoryCommitContextActions } from "./features/git-history/history-commit-context-actions.ts";
+import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
@@ -410,6 +416,8 @@ export class AsterlynApp {
   private readonly branchContextBinding: BranchContextBinding;
   private readonly branchMutationController: BranchMutationController;
   private readonly branchMutationDialogBinding: BranchMutationDialogBinding;
+  private readonly historyCommitContextActions: HistoryCommitContextActions;
+  private readonly historyContextBinding: HistoryContextBinding;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
   private readonly remoteAuthenticationController: RemoteAuthenticationController;
@@ -708,6 +716,63 @@ export class AsterlynApp {
         selectedRepositoryIds: this.state.historyRepositoryIds,
       }),
       (request) => this.branchContextActions.open(request),
+    );
+    this.historyCommitContextActions = new HistoryCommitContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isHistoryCommitContextTargetCurrent(target),
+        select: (target) => {
+          if (!this.isHistoryCommitContextTargetCurrent(target)) return false;
+          this.selectCommit(target.key);
+          this.markHistoryCommitContextTarget(target.key);
+          return this.historyState.selectedCommit === target.key;
+        },
+        policyOptions: () => {
+          const snapshot = this.windowSession.repository.state.snapshot;
+          const safety = snapshot ? this.branchSafety(snapshot) : {
+            ready: false,
+            message: this.localization.catalog.history.commitContextMenu.cleanRequired,
+          };
+          const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
+          return {
+            busy: this.state.loading || Boolean(snapshot?.operation),
+            clean: safety.ready && !unsaved,
+            cleanReason: unsaved
+              ? this.localization.catalog.gitOperations.saveBeforeReview
+              : safety.message,
+            localBranch: Boolean(
+              snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
+            ),
+          };
+        },
+        openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
+        openBranchFromCommit: (target) => {
+          this.branchMutationController.open(
+            target.workspaceRoot,
+            "create",
+            {
+              repositoryId: target.repositoryId,
+              fullName: target.oid,
+              name: target.commit.shortOid,
+              oid: target.oid,
+            },
+          );
+        },
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.history,
+    );
+    this.historyContextBinding = new HistoryContextBinding(
+      root,
+      () => ({
+        state: this.historyState,
+        workspaceGeneration: this.windowSession.generation,
+        repositoryRevision: this.windowSession.repository.state.revision,
+      }),
+      (request) => this.historyCommitContextActions.open(request),
     );
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
@@ -1534,6 +1599,7 @@ export class AsterlynApp {
     this.clearToastDismissTimer();
     this.changesContextBinding.dispose();
     this.branchContextBinding.dispose();
+    this.historyContextBinding.dispose();
     this.projectFilesContextBinding.dispose();
     this.workspaceTrashBinding.dispose();
     this.releaseWorkspaceTrash();
@@ -5390,6 +5456,21 @@ export class AsterlynApp {
     this.updateHistoryCommitSelection(key);
     this.renderGitDetailPane();
     if (restoreFocus) this.focusHistoryCommit(key);
+  }
+
+  private isHistoryCommitContextTargetCurrent(target: HistoryCommitContextTarget): boolean {
+    return historyCommitContextTargetIsCurrent(
+      target,
+      this.historyState,
+      this.windowSession.generation,
+      this.windowSession.repository.state.revision,
+    );
+  }
+
+  private markHistoryCommitContextTarget(key: string): void {
+    this.root.querySelectorAll<HTMLElement>("[data-commit-key]").forEach((row) => {
+      row.classList.toggle("context-target", row.dataset.commitKey === key);
+    });
   }
 
   private updateHistoryCommitSelection(key: string): void {
