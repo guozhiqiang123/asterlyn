@@ -282,7 +282,7 @@ export const ZH_CN = {
     names: { merge: "合并", cherryPick: "拣选", rebase: "变基", squash: "压缩", revert: "还原", bisect: "二分查找" },
     actions: { continue: "继续", skip: "跳过", abort: "中止" },
     prepare: (name) => `准备${name}`, operation: "操作",
-    setupOptions: { merge: "合并到当前分支", cherryPick: "拣选提交", rebase: "变基当前分支", squash: "压缩当前分支提交" },
+    setupOptions: { merge: "合并到当前分支", cherryPick: "拣选提交", rebase: "变基当前分支", squash: "压缩当前分支提交", revert: "还原一个提交" },
     targetsForCherryPick: "提交（按应用顺序）", targetBeforeSquash: "范围之前的父提交", targetRef: "目标分支、标签或提交",
     targetLinesPlaceholder: "每行一个完整引用或提交", newCommitMessage: "新提交消息", squashMessagePlaceholder: "描述压缩后的更改",
     exactReviewNote: "Asterlyn 会将每个目标解析为准确对象，并把审查绑定到当前分支、HEAD、干净的暂存区和工作树。审查后的更改会使计划失效。",

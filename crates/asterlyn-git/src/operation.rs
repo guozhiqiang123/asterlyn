@@ -64,6 +64,10 @@ impl GitRepository {
         self.prepare_operation(GitOperationKind::Rebase, &[upstream_ref.to_string()], None)
     }
 
+    pub fn prepare_revert(&self, target_ref: &str) -> Result<GitOperationPlan, GitError> {
+        self.prepare_operation(GitOperationKind::Revert, &[target_ref.to_string()], None)
+    }
+
     pub fn prepare_squash(
         &self,
         base_ref: &str,
@@ -107,7 +111,8 @@ impl GitRepository {
                 single_target(plan)?,
                 plan.message.as_deref().unwrap_or_default(),
             )?,
-            GitOperationKind::Revert | GitOperationKind::Bisect => {
+            GitOperationKind::Revert => self.prepare_revert(single_target(plan)?)?,
+            GitOperationKind::Bisect => {
                 return Err(GitError::InvalidInput {
                     field: "operation plan".to_string(),
                     message: "this operation kind cannot be started by Asterlyn".to_string(),
@@ -141,7 +146,12 @@ impl GitRepository {
                 self.execute_squash(plan)?;
                 self.operation_snapshot()
             }
-            GitOperationKind::Revert | GitOperationKind::Bisect => unreachable!(),
+            GitOperationKind::Revert => self.start_git_operation(
+                GitOperationKind::Revert,
+                "revert",
+                operation_arguments("revert", &plan.target_oids),
+            ),
+            GitOperationKind::Bisect => unreachable!(),
         }
     }
 
@@ -407,7 +417,25 @@ impl GitRepository {
                 }
                 count
             }
-            GitOperationKind::Revert | GitOperationKind::Bisect => unreachable!(),
+            GitOperationKind::Revert => {
+                if target_refs.len() != 1 {
+                    return Err(GitError::InvalidInput {
+                        field: "operation targets".to_string(),
+                        message: "revert requires exactly one commit".to_string(),
+                    });
+                }
+                let parents = self.commit_parent_count(&target_oids[0])?;
+                if parents > 1 {
+                    return Err(GitError::UnsafeOperation {
+                        operation: "prepare revert".to_string(),
+                        message: "reverting a merge commit requires an explicit mainline parent"
+                            .to_string(),
+                        blockers: Vec::new(),
+                    });
+                }
+                1
+            }
+            GitOperationKind::Bisect => unreachable!(),
         };
         let summary = operation_summary(kind, target_refs, commit_count);
         let normalized_message = message.map(|value| value.trim().to_string());
@@ -507,6 +535,29 @@ impl GitRepository {
             message: "commit, stash, or remove working-tree changes before continuing".to_string(),
             blockers: Vec::new(),
         })
+    }
+
+    fn commit_parent_count(&self, oid: &str) -> Result<usize, GitError> {
+        let output = run_checked(
+            self.root(),
+            "inspect commit parents",
+            &[
+                OsString::from("rev-list"),
+                OsString::from("--parents"),
+                OsString::from("--max-count=1"),
+                OsString::from(oid),
+            ],
+            None,
+        )?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        if fields.first().is_none_or(|value| *value != oid) {
+            return Err(GitError::Parse {
+                context: "commit parents".to_string(),
+                message: "Git returned an unexpected commit identity".to_string(),
+            });
+        }
+        Ok(fields.len().saturating_sub(1))
     }
 
     fn symbolic_head_required(&self, kind: GitOperationKind) -> Result<String, GitError> {
@@ -820,7 +871,10 @@ fn allowed_actions(kind: GitOperationKind, conflicts_resolved: bool) -> Vec<GitO
     let mut actions = Vec::new();
     if matches!(
         kind,
-        GitOperationKind::Merge | GitOperationKind::CherryPick | GitOperationKind::Rebase
+        GitOperationKind::Merge
+            | GitOperationKind::CherryPick
+            | GitOperationKind::Rebase
+            | GitOperationKind::Revert
     ) && conflicts_resolved
     {
         actions.push(GitOperationAction::Continue);
@@ -833,7 +887,10 @@ fn allowed_actions(kind: GitOperationKind, conflicts_resolved: bool) -> Vec<GitO
     }
     if matches!(
         kind,
-        GitOperationKind::Merge | GitOperationKind::CherryPick | GitOperationKind::Rebase
+        GitOperationKind::Merge
+            | GitOperationKind::CherryPick
+            | GitOperationKind::Rebase
+            | GitOperationKind::Revert
     ) {
         actions.push(GitOperationAction::Abort);
     }
@@ -842,7 +899,7 @@ fn allowed_actions(kind: GitOperationKind, conflicts_resolved: bool) -> Vec<GitO
 
 fn operation_arguments(command: &str, target_oids: &[String]) -> Vec<OsString> {
     let mut arguments = vec![OsString::from(command)];
-    if command == "merge" {
+    if command == "merge" || command == "revert" {
         arguments.push(OsString::from("--no-edit"));
     }
     arguments.extend(target_oids.iter().map(OsString::from));
@@ -857,7 +914,8 @@ fn action_arguments(
         GitOperationKind::Merge => "merge",
         GitOperationKind::CherryPick => "cherry-pick",
         GitOperationKind::Rebase => "rebase",
-        GitOperationKind::Squash | GitOperationKind::Revert | GitOperationKind::Bisect => {
+        GitOperationKind::Revert => "revert",
+        GitOperationKind::Squash | GitOperationKind::Bisect => {
             return Err(GitError::UnsafeOperation {
                 operation: "resume Git operation".to_string(),
                 message: "Asterlyn cannot control this external operation".to_string(),
@@ -1243,7 +1301,8 @@ fn operation_summary(kind: GitOperationKind, targets: &[String], count: usize) -
             )
         }
         GitOperationKind::Squash => format!("Squash {count} commits after {}", targets[0]),
-        GitOperationKind::Revert | GitOperationKind::Bisect => kind.label().to_string(),
+        GitOperationKind::Revert => format!("Revert {} as a new commit", targets[0]),
+        GitOperationKind::Bisect => kind.label().to_string(),
     }
 }
 
@@ -1523,6 +1582,89 @@ mod tests {
             git_stdout(&fixture, &["log", "-2", "--format=%s"]),
             "second picked\nfirst picked"
         );
+    }
+
+    #[test]
+    fn revert_creates_a_new_commit_from_an_exact_reviewed_target() {
+        let fixture = linear_fixture();
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let target = oid(&fixture, "HEAD~1");
+        let original_head = oid(&fixture, "HEAD");
+        let plan = repository.prepare_revert(&target).expect("prepare revert");
+        assert_eq!(plan.kind, GitOperationKind::Revert);
+        assert_eq!(plan.target_oids, vec![target]);
+        assert!(plan.summary.starts_with("Revert "));
+
+        assert!(
+            repository
+                .execute_operation_plan(&plan)
+                .expect("execute revert")
+                .is_none()
+        );
+        assert_ne!(oid(&fixture, "HEAD"), original_head);
+        assert!(!fixture.path().join("file-1.txt").exists());
+        assert!(git_stdout(&fixture, &["status", "--porcelain"]).is_empty());
+    }
+
+    #[test]
+    fn revert_conflict_is_restart_safe_and_abortable_without_skip() {
+        let fixture = initialized_fixture();
+        fs::write(fixture.path().join("shared.txt"), "base\n").unwrap();
+        commit_all(&fixture, "base");
+        fs::write(fixture.path().join("shared.txt"), "target\n").unwrap();
+        commit_all(&fixture, "target change");
+        let target = oid(&fixture, "HEAD");
+        fs::write(fixture.path().join("shared.txt"), "later\n").unwrap();
+        commit_all(&fixture, "later change");
+        let original_head = oid(&fixture, "HEAD");
+
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let plan = repository.prepare_revert(&target).expect("prepare revert");
+        let active = repository
+            .execute_operation_plan(&plan)
+            .expect("execute revert")
+            .expect("revert should pause");
+        assert_eq!(active.kind, GitOperationKind::Revert);
+        assert!(active.allowed_actions.contains(&GitOperationAction::Abort));
+        assert!(!active.allowed_actions.contains(&GitOperationAction::Skip));
+
+        let reopened = GitRepository::open(fixture.path()).expect("reopen repository");
+        assert_eq!(
+            reopened.operation_snapshot().unwrap().unwrap().kind,
+            GitOperationKind::Revert
+        );
+        assert!(
+            reopened
+                .run_operation_action(GitOperationAction::Abort)
+                .expect("abort revert")
+                .is_none()
+        );
+        assert_eq!(oid(&fixture, "HEAD"), original_head);
+        assert_eq!(
+            fs::read_to_string(fixture.path().join("shared.txt")).unwrap(),
+            "later\n"
+        );
+    }
+
+    #[test]
+    fn revert_rejects_merge_commits_without_an_explicit_mainline() {
+        let fixture = initialized_fixture();
+        fs::write(fixture.path().join("base.txt"), "base\n").unwrap();
+        commit_all(&fixture, "base");
+        git(&fixture, &["switch", "-c", "feature"]);
+        fs::write(fixture.path().join("feature.txt"), "feature\n").unwrap();
+        commit_all(&fixture, "feature");
+        git(&fixture, &["switch", "main"]);
+        fs::write(fixture.path().join("main.txt"), "main\n").unwrap();
+        commit_all(&fixture, "main");
+        git(&fixture, &["merge", "--no-edit", "feature"]);
+
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let merge = oid(&fixture, "HEAD");
+        let error = repository
+            .prepare_revert(&merge)
+            .expect_err("merge revert requires a mainline");
+        assert!(error.to_string().contains("mainline parent"));
     }
 
     #[test]

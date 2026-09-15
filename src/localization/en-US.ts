@@ -420,7 +420,7 @@ export const EN_US: LocaleCatalog = {
     names: { merge: "Merge", cherryPick: "Cherry-pick", rebase: "Rebase", squash: "Squash", revert: "Revert", bisect: "Bisect" },
     actions: { continue: "Continue", skip: "Skip", abort: "Abort" },
     prepare: (name) => `Prepare ${name}`, operation: "Operation",
-    setupOptions: { merge: "Merge into current branch", cherryPick: "Cherry-pick commit(s)", rebase: "Rebase current branch", squash: "Squash current-branch commits" },
+    setupOptions: { merge: "Merge into current branch", cherryPick: "Cherry-pick commit(s)", rebase: "Rebase current branch", squash: "Squash current-branch commits", revert: "Revert one commit" },
     targetsForCherryPick: "Commits, in application order", targetBeforeSquash: "Parent commit before the range",
     targetRef: "Target branch, tag, or commit", targetLinesPlaceholder: "One full ref or commit per line",
     newCommitMessage: "New commit message", squashMessagePlaceholder: "Describe the squashed change",

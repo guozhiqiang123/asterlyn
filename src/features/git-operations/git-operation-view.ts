@@ -25,6 +25,7 @@ function renderSetup(state: GitOperationState, copy: GitOperationCopy): string {
         ${operationOption("cherryPick", state.kind, copy.setupOptions.cherryPick)}
         ${operationOption("rebase", state.kind, copy.setupOptions.rebase)}
         ${operationOption("squash", state.kind, copy.setupOptions.squash)}
+        ${operationOption("revert", state.kind, copy.setupOptions.revert)}
       </select>`)}
       <label for="git-operation-targets">${escapeHtml(state.kind === "cherryPick" ? copy.targetsForCherryPick : state.kind === "squash" ? copy.targetBeforeSquash : copy.targetRef)}</label>
       <textarea id="git-operation-targets" rows="${state.kind === "cherryPick" ? 5 : 2}" spellcheck="false" placeholder="${escapeAttribute(state.kind === "cherryPick" ? copy.targetLinesPlaceholder : "refs/heads/feature")}" ${busy ? "disabled" : ""}>${escapeHtml(state.targetText)}</textarea>

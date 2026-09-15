@@ -579,7 +579,7 @@ export interface GitOperationCopy {
   actions: Record<GitOperationAction, string>;
   prepare(name: string): string;
   operation: string;
-  setupOptions: Record<"merge" | "cherryPick" | "rebase" | "squash", string>;
+  setupOptions: Record<"merge" | "cherryPick" | "rebase" | "squash" | "revert", string>;
   targetsForCherryPick: string;
   targetBeforeSquash: string;
   targetRef: string;
