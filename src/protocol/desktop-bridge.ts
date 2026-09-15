@@ -41,6 +41,8 @@ import type {
   WorkspaceMutationOutcome,
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
+  WorkspaceEntryKind,
+  WorkspaceRevealResult,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "../models";
@@ -66,6 +68,11 @@ export interface DesktopShellBridge {
 
 export interface WorkspaceBridge {
   listProjectFiles(repositoryRoot: string): Promise<ProjectFileList>;
+  revealWorkspaceEntry(
+    repositoryRoot: string,
+    workspacePath: string,
+    kind: WorkspaceEntryKind,
+  ): Promise<WorkspaceRevealResult>;
   planWorkspaceMutation(
     repositoryRoot: string,
     planId: string,

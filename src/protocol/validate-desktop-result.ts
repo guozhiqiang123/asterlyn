@@ -236,6 +236,11 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       booleans(result, command, "truncated");
       break;
     }
+    case "workspaceRevealResult": {
+      const result = record(value, command);
+      booleans(result, command, "selected");
+      break;
+    }
     case "workspaceMutationPreview": {
       const result = record(value, command);
       strings(result, command, "planId", "collisionPolicy");

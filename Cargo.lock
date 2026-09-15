@@ -51,6 +51,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "asterlyn"
 version = "0.1.0"
 dependencies = [
+ "asterlyn-desktop",
  "asterlyn-git",
  "asterlyn-terminal",
  "asterlyn-workspace",
@@ -62,6 +63,14 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tempfile",
+]
+
+[[package]]
+name = "asterlyn-desktop"
+version = "0.1.0"
+dependencies = [
+ "asterlyn-workspace",
  "tempfile",
  "trash",
 ]

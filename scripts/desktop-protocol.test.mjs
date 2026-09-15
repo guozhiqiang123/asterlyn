@@ -68,6 +68,10 @@ test("desktop response validation accepts representative valid payloads", () => 
     ["/repo", "/workspace"],
   );
   assert.deepEqual(
+    validateDesktopResult("reveal_workspace_entry", { selected: false }),
+    { selected: false },
+  );
+  assert.deepEqual(
     validateDesktopResult("start_workspace_watch", {
       available: true,
       message: null,
@@ -175,6 +179,10 @@ test("desktop response validation rejects malformed project-directory results", 
   assert.throws(
     () => validateDesktopResult("existing_project_directories", ["/repo", 7]),
     /array of strings/,
+  );
+  assert.throws(
+    () => validateDesktopResult("reveal_workspace_entry", { selected: "no" }),
+    /selected must be a boolean/,
   );
 });
 

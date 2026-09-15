@@ -1,4 +1,7 @@
 use super::super::*;
+use crate::adapters::system_file_manager::{
+    RevealWorkspaceEntryResult, reveal_workspace_entry as reveal_in_system_file_manager,
+};
 use crate::adapters::system_trash::move_to_system_trash;
 
 #[tauri::command]
@@ -16,6 +19,19 @@ pub(crate) async fn list_project_files(
     .await?;
     active_workspaces.install_catalog(window.label(), token, &root, &catalog)?;
     Ok(catalog)
+}
+
+#[tauri::command]
+pub(crate) fn reveal_workspace_entry(
+    repository_root: String,
+    workspace_path: String,
+    kind: WorkspaceEntryKind,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RevealWorkspaceEntryResult, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let target = Workspace::open(root)?.resolve_existing_entry(&workspace_path, kind)?;
+    reveal_in_system_file_manager(&target, kind)
 }
 
 #[tauri::command]

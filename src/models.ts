@@ -539,6 +539,10 @@ export interface WorkspaceEntryIdentity {
   byteLength: number;
 }
 
+export interface WorkspaceRevealResult {
+  selected: boolean;
+}
+
 export type WorkspaceMutationOperation =
   | { kind: "createFile"; destination: string }
   | { kind: "copy"; source: string; destination: string }

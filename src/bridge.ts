@@ -69,6 +69,8 @@ import type {
   WorkspaceMutationOutcome,
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
+  WorkspaceEntryKind,
+  WorkspaceRevealResult,
 } from "./models";
 import {
   parseWindowChromeMode,
@@ -423,6 +425,19 @@ const demoBridge: DesktopBridge = {
       };
     }
     return invoke<ProjectFileList>("list_project_files", { repositoryRoot });
+  },
+
+  async revealWorkspaceEntry(
+    repositoryRoot: string,
+    workspacePath: string,
+    kind: WorkspaceEntryKind,
+  ): Promise<WorkspaceRevealResult> {
+    if (!isTauri) return { selected: false };
+    return invoke<WorkspaceRevealResult>("reveal_workspace_entry", {
+      repositoryRoot,
+      workspacePath,
+      kind,
+    });
   },
 
   async planWorkspaceMutation(

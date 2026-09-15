@@ -800,6 +800,7 @@ pub fn run() {
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,
+            reveal_workspace_entry,
             plan_workspace_mutation,
             execute_workspace_mutation,
             cancel_workspace_mutation,

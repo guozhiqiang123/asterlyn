@@ -112,6 +112,30 @@ impl Default for WorkspaceMutationLimits {
 }
 
 impl Workspace {
+    /// Resolves one existing regular file or real directory below this canonical workspace root.
+    /// Every path component is checked without following symbolic links or reparse points.
+    pub fn resolve_existing_entry(
+        &self,
+        workspace_path: &str,
+        expected_kind: WorkspaceEntryKind,
+    ) -> Result<PathBuf, WorkspaceError> {
+        let relative = validate_relative_path(workspace_path)?;
+        let resolved = self.resolve_entry_without_links(relative)?;
+        let metadata = fs::symlink_metadata(&resolved).map_err(inventory_io)?;
+        if metadata.file_type().is_symlink() {
+            return Err(WorkspaceError::OutsideWorkspace {
+                message: "workspace entry paths cannot be symbolic links".into(),
+            });
+        }
+        let actual_kind = entry_kind(&metadata)?;
+        if actual_kind != expected_kind {
+            return Err(WorkspaceError::Conflict {
+                current_revision: "workspace-entry-kind-changed".into(),
+            });
+        }
+        Ok(resolved)
+    }
+
     pub fn inspect_entry(
         &self,
         workspace_path: &str,
@@ -688,6 +712,36 @@ fn inventory_io(error: std::io::Error) -> WorkspaceError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn existing_entry_resolution_checks_kind_and_never_traverses_links() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir_all(directory.path().join("folder/child")).unwrap();
+        fs::write(directory.path().join("folder/file.txt"), b"file").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        assert_eq!(
+            workspace
+                .resolve_existing_entry("folder/file.txt", WorkspaceEntryKind::File)
+                .unwrap(),
+            directory.path().join("folder/file.txt")
+        );
+        assert!(matches!(
+            workspace.resolve_existing_entry("folder/file.txt", WorkspaceEntryKind::Directory),
+            Err(WorkspaceError::Conflict { .. })
+        ));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                directory.path().join("folder"),
+                directory.path().join("linked"),
+            )
+            .unwrap();
+            assert!(matches!(
+                workspace.resolve_existing_entry("linked/file.txt", WorkspaceEntryKind::File),
+                Err(WorkspaceError::OutsideWorkspace { .. })
+            ));
+        }
+    }
 
     #[test]
     fn inventory_is_complete_deterministic_and_includes_hidden_entries() {

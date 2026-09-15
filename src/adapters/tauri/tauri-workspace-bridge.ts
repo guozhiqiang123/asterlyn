@@ -9,6 +9,7 @@ import type {
   WorkspaceMutationOutcome,
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
+  WorkspaceRevealResult,
   WorkspaceTextSearchReport,
 } from "../../models.ts";
 import type { WorkspaceBridge } from "../../protocol/desktop-bridge.ts";
@@ -17,6 +18,12 @@ import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
 export const tauriWorkspaceBridge: WorkspaceBridge = {
   listProjectFiles: (repositoryRoot) =>
     invokeDesktopCommand<ProjectFileList>("list_project_files", { repositoryRoot }),
+  revealWorkspaceEntry: (repositoryRoot, workspacePath, kind) =>
+    invokeDesktopCommand<WorkspaceRevealResult>("reveal_workspace_entry", {
+      repositoryRoot,
+      workspacePath,
+      kind,
+    }),
   planWorkspaceMutation: (repositoryRoot, planId, operation, collisionPolicy) =>
     invokeDesktopCommand<WorkspaceMutationPreview>("plan_workspace_mutation", {
       repositoryRoot,
