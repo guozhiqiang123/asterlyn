@@ -39,6 +39,14 @@ import {
 } from "./features/git-history/branch-navigation-view";
 import { GitBranchesController } from "./features/git-history/git-branches-controller.ts";
 import {
+  BranchContextBinding,
+  branchContextTargetIsCurrent,
+  type BranchContextTarget,
+} from "./features/git-history/branch-context-binding.ts";
+import { BranchContextActions } from "./features/git-history/branch-context-actions.ts";
+import { BranchMutationController } from "./features/git-history/branch-mutation-controller.ts";
+import { BranchMutationDialogBinding } from "./features/git-history/branch-mutation-dialog-binding.ts";
+import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
@@ -318,6 +326,7 @@ import {
   type CommitFileView,
 } from "./workbench/git-presentation";
 import type {
+  BranchMutationPlan,
   BranchSummary,
   CommitDetails,
   CommitFileChange,
@@ -397,6 +406,10 @@ export class AsterlynApp {
   private readonly historyController: GitHistoryDetailsController;
   private readonly releaseHistoryController: () => void;
   private readonly branchesController: GitBranchesController;
+  private readonly branchContextActions: BranchContextActions;
+  private readonly branchContextBinding: BranchContextBinding;
+  private readonly branchMutationController: BranchMutationController;
+  private readonly branchMutationDialogBinding: BranchMutationDialogBinding;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
   private readonly remoteAuthenticationController: RemoteAuthenticationController;
@@ -547,8 +560,20 @@ export class AsterlynApp {
             }
           : null;
       },
-      checkout: (branch) => this.executeBranchCheckout(branch),
-      create: (name) => this.executeBranchCreate(name),
+      checkout: async (branch) => {
+        const root = this.windowSession.repository.state.snapshot?.root;
+        if (root) this.branchMutationController.open(root, "switch", branch);
+      },
+      create: async (name) => {
+        const snapshot = this.windowSession.repository.state.snapshot;
+        const current = snapshot?.branches.find((branch) =>
+          branch.repositoryId === "." && branch.kind === "local" && branch.current
+        );
+        if (snapshot && current) {
+          this.branchMutationController.open(snapshot.root, "create", current, name);
+          await this.branchMutationController.review();
+        }
+      },
     });
     this.remoteController = new RemotePushController({
       readPushPreview: (...args) => bridge.readPushPreview(...args),
@@ -626,6 +651,63 @@ export class AsterlynApp {
     );
     this.releaseGitOperationController = this.gitOperationController.subscribe((change) =>
       this.handleGitOperationControllerChange(change),
+    );
+    this.branchMutationController = new BranchMutationController({
+      prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
+      execute: (plan) => this.executeReviewedBranchMutation(plan),
+      errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+    });
+    this.branchMutationDialogBinding = new BranchMutationDialogBinding(
+      root,
+      this.branchMutationController,
+      () => this.localization.catalog.history.branchMutation,
+    );
+    this.branchContextActions = new BranchContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isBranchContextTargetCurrent(target),
+        select: (target) => this.markBranchContextTarget(target.key),
+        snapshot: () => this.windowSession.repository.state.snapshot,
+        policyOptions: () => {
+          const snapshot = this.windowSession.repository.state.snapshot;
+          const safety = snapshot ? this.branchSafety(snapshot) : {
+            ready: false,
+            message: this.localization.catalog.history.branchContextMenu.cleanRequired,
+          };
+          return {
+            busy: this.state.loading || Boolean(snapshot?.operation),
+            clean: safety.ready,
+            cleanReason: safety.message,
+            updateBlocked: this.remoteActionBlockedReason("pull"),
+            pushBlocked: this.remoteActionBlockedReason("push"),
+          };
+        },
+        showHistory: (target) => this.showBranchContextHistory(target),
+        openMutation: (kind, branch, suggestedName) => {
+          const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
+          if (repositoryRoot) {
+            this.branchMutationController.open(repositoryRoot, kind, branch, suggestedName);
+          }
+        },
+        openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
+        openRemoteAction: (kind, returnFocus) =>
+          this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.history,
+    );
+    this.branchContextBinding = new BranchContextBinding(
+      root,
+      () => ({
+        snapshot: this.windowSession.repository.state.snapshot,
+        workspaceGeneration: this.windowSession.generation,
+        repositoryRevision: this.windowSession.repository.state.revision,
+        selectedRepositoryIds: this.state.historyRepositoryIds,
+      }),
+      (request) => this.branchContextActions.open(request),
     );
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
@@ -1314,6 +1396,7 @@ export class AsterlynApp {
     if (this.state.replacementDialog) this.renderWorkspaceReplacementDialog();
     if (this.state.historyDialog) this.renderHistoryDialog();
     if (this.gitOperationState.dialog) this.gitOperationDialogBinding.render();
+    this.branchMutationDialogBinding.refreshCopy();
     this.recoveryDialog?.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
@@ -1450,6 +1533,7 @@ export class AsterlynApp {
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
     this.changesContextBinding.dispose();
+    this.branchContextBinding.dispose();
     this.projectFilesContextBinding.dispose();
     this.workspaceTrashBinding.dispose();
     this.releaseWorkspaceTrash();
@@ -1476,6 +1560,8 @@ export class AsterlynApp {
     this.releaseEditorController();
     this.editorController.dispose();
     this.releaseGitOperationController();
+    this.branchMutationDialogBinding.dispose();
+    this.branchMutationController.dispose();
     this.gitOperationDialogBinding.dispose();
     this.gitOperationController.dispose();
     this.windowSession.dispose();
@@ -3762,6 +3848,7 @@ export class AsterlynApp {
     this.renderBottomTool();
     this.renderEditor();
     this.renderStatus(snapshot);
+    this.branchMutationDialogBinding.render();
     this.gitOperationDialogBinding.render();
   }
 
@@ -5422,6 +5509,32 @@ export class AsterlynApp {
         .find((row) => row.dataset.branchKey === key)
         ?.focus();
     }
+  }
+
+  private isBranchContextTargetCurrent(target: BranchContextTarget): boolean {
+    return branchContextTargetIsCurrent(
+      target,
+      this.windowSession.repository.state.snapshot,
+      this.windowSession.generation,
+      this.windowSession.repository.state.revision,
+      this.state.historyRepositoryIds,
+    );
+  }
+
+  private markBranchContextTarget(key: string): void {
+    this.root.querySelectorAll<HTMLElement>("[data-branch-key]").forEach((row) => {
+      row.classList.toggle("context-target", row.dataset.branchKey === key);
+    });
+  }
+
+  private showBranchContextHistory(target: BranchContextTarget): void {
+    if (!this.isBranchContextTargetCurrent(target)) return;
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot) return;
+    const branches = this.branchesController.selectHistoryScope(snapshot, target.key);
+    if (!branches) return;
+    this.installBranchHistoryScope(branches);
+    this.applyHistoryQuery(true);
   }
 
   private renderEditor(): void {
@@ -7226,23 +7339,16 @@ export class AsterlynApp {
     await this.branchesController.checkout(branchKey(branch));
   }
 
-  private executeBranchCheckout(branch: BranchSummary): Promise<void> {
-    return this.runBranchMutation(
-      this.localization.catalog.history.checkingOut(branch.name),
-      this.localization.catalog.history.checkedOutBranch(branch.name),
-      (root) => bridge.switchBranch(root, branch.fullName),
-    );
-  }
-
   private async requestBranchCreate(): Promise<void> {
     if (await this.branchesController.create() === "accepted") this.renderBottomTool();
   }
 
-  private executeBranchCreate(name: string): Promise<void> {
+  private async executeReviewedBranchMutation(plan: BranchMutationPlan): Promise<boolean> {
+    const copy = this.localization.catalog.history.branchMutation;
     return this.runBranchMutation(
-      this.localization.catalog.history.creatingBranch(name),
-      this.localization.catalog.history.createdBranch(name),
-      (root) => bridge.createBranch(root, name),
+      copy.progress(plan.kind, plan.sourceName),
+      copy.completed(plan.kind, plan.sourceName, plan.newName),
+      (root) => bridge.executeBranchMutation(root, plan),
     );
   }
 
@@ -7250,20 +7356,21 @@ export class AsterlynApp {
     loadingMessage: string,
     successMessage: string,
     mutation: (repositoryRoot: string) => Promise<RepositoryMutationOutcome>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
-    if (!snapshot) return;
-    if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.changeBranches))) return;
+    if (!snapshot) return false;
+    if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.changeBranches))) return false;
     const operation = this.repositoryOperations.start(snapshot.root, () => mutation(snapshot.root));
     const generation = operation.generation;
     this.clearError();
     let pendingRoot: string | null = null;
     let succeeded = false;
+    let failed = false;
     this.setLoading(true, loadingMessage);
     this.renderBottomTool();
     try {
       const completion = await operation.completion;
-      if (completion.status === "stale") return;
+      if (completion.status === "stale") return false;
       if (completion.status === "failure") throw completion.error;
       const next = this.repositoryIntegration.applyMutation(completion.outcome, "gitMutation", {
         clearInclusion: true,
@@ -7271,14 +7378,15 @@ export class AsterlynApp {
       });
       this.captureMountedTextEditor();
       await this.editorController.reconcileExternalPaths([]);
-      if (!this.windowSession.matches(generation, snapshot.root)) return;
+      if (!this.windowSession.matches(generation, snapshot.root)) return false;
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
       void this.loadProjectFiles(next.root, generation);
       pendingRoot = next.root;
       succeeded = true;
     } catch (error) {
-      if (generation !== this.windowSession.generation) return;
+      if (generation !== this.windowSession.generation) return false;
+      failed = true;
       this.showError(error);
     } finally {
       this.windowSession.completeTransition(generation);
@@ -7291,6 +7399,10 @@ export class AsterlynApp {
     if (pendingRoot && generation === this.windowSession.generation) {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "gitMutation");
     }
+    if (failed && this.windowSession.workspace.state.root === snapshot.root) {
+      await this.refresh();
+    }
+    return succeeded;
   }
 
   private reconcileWorkingDocument(

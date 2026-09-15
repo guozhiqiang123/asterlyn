@@ -17,6 +17,7 @@ import "./features/files-editor/workspace-search.css";
 import "./features/git-history/git-history.css";
 import "./features/git-history/history.css";
 import "./features/git-history/branches.css";
+import "./features/git-history/branch-mutation.css";
 import "./features/git-history/details.css";
 import "./features/git-operations/git-operation-controls.css";
 import "./features/remote-push/remote-push.css";

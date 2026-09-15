@@ -125,8 +125,15 @@ test("feature target resolvers reject stale display labels and retain exact iden
   assert.equal(changesTarget?.repositoryId, ".");
   assert.equal(changesTarget?.repositoryRevision, 12);
   assert.equal(resolveChangesContextTarget(snapshot, 4, "app.ts"), null);
-  assert.equal(resolveBranchContextTarget(snapshot, 4, branchKey(branch))?.branch.fullName, branch.fullName);
-  assert.equal(resolveBranchContextTarget(snapshot, 4, branch.name), null);
+  const branchTarget = resolveBranchContextTarget(
+    snapshot, 4, 12, new Set(["."]), branchKey(branch),
+  );
+  assert.equal(branchTarget?.branch.fullName, branch.fullName);
+  assert.equal(branchTarget?.repositoryRevision, 12);
+  assert.equal(branchTarget?.matches.length, 1);
+  assert.equal(resolveBranchContextTarget(
+    snapshot, 4, 12, new Set(["."]), branch.name,
+  ), null);
 });
 
 test("History and commit-detail targets bind object, query generation and exact path", () => {

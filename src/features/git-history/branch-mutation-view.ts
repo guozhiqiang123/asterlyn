@@ -1,0 +1,50 @@
+import type { BranchMutationCopy } from "../../localization/catalog.ts";
+import type { BranchMutationState } from "./branch-mutation-controller.ts";
+import { mutationNeedsName } from "./branch-mutation-controller.ts";
+
+export function renderBranchMutationDialog(
+  state: BranchMutationState,
+  copy: BranchMutationCopy,
+): string {
+  const dialog = state.dialog;
+  if (!dialog) return "";
+  const kind = dialog.request.kind;
+  const error = dialog.error
+    ? `<div class="branch-mutation-error" role="alert">${escapeHtml(localError(dialog.error, copy))}</div>`
+    : "";
+  const heading = `<div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.eyebrow)}</span><h2 id="branch-mutation-dialog-title">${escapeHtml(copy.titles[kind])}</h2></div><button class="icon-button" data-branch-mutation-close type="button" aria-label="${escapeHtml(copy.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>`;
+  if (!dialog.plan) {
+    const name = mutationNeedsName(kind)
+      ? `<label for="branch-mutation-name">${escapeHtml(copy.branchName)}</label><input id="branch-mutation-name" name="name" type="text" value="${escapeAttribute(dialog.value)}" autocomplete="off" spellcheck="false" aria-invalid="${Boolean(dialog.error)}" ${dialog.busy ? "disabled" : ""}/>`
+      : "";
+    return `<section class="dialog branch-mutation-dialog" role="dialog" aria-modal="true" aria-labelledby="branch-mutation-dialog-title" aria-describedby="branch-mutation-description">${heading}<p id="branch-mutation-description">${escapeHtml(copy.descriptions[kind])}</p><div class="branch-mutation-source"><span><small>${escapeHtml(copy.source)}</small><strong>${escapeHtml(dialog.branch.fullName)}</strong></span><code>${escapeHtml(dialog.branch.oid.slice(0, 12))}</code></div>${error}<form id="branch-mutation-review-form" class="branch-mutation-form">${name}<div class="dialog-actions"><button class="secondary-button" data-branch-mutation-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="submit" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? copy.reviewing : copy.review)}</button></div></form></section>`;
+  }
+  const plan = dialog.plan;
+  const destination = plan.targetFullName
+    ? `<li><span>${escapeHtml(copy.destination)}</span><code>${escapeHtml(plan.targetFullName)}</code></li>`
+    : "";
+  const upstream = plan.kind === "checkoutRemote" || plan.upstream
+    ? `<li><span>${escapeHtml(copy.upstream)}</span><code>${escapeHtml(plan.kind === "checkoutRemote" ? plan.sourceFullName : plan.upstream ?? copy.noUpstream)}</code></li>`
+    : "";
+  const merged = plan.mergedIntoCurrent
+    ? `<p class="branch-mutation-confirmed">✓ ${escapeHtml(copy.mergedIntoCurrent)}</p>`
+    : "";
+  const back = mutationNeedsName(kind)
+    ? `<button class="secondary-button" data-branch-mutation-back type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.back)}</button>`
+    : "";
+  return `<section class="dialog branch-mutation-dialog" role="dialog" aria-modal="true" aria-labelledby="branch-mutation-dialog-title" aria-describedby="branch-mutation-description">${heading}<p id="branch-mutation-description">${escapeHtml(copy.descriptions[kind])}</p><div class="branch-mutation-review"><ul><li><span>${escapeHtml(copy.source)}</span><code>${escapeHtml(plan.sourceFullName)}</code></li><li><span>${escapeHtml(copy.object)}</span><code>${escapeHtml(plan.sourceOid)}</code></li>${destination}<li><span>${escapeHtml(copy.currentHead)}</span><code>${escapeHtml(plan.startHeadRef)} · ${escapeHtml(plan.startHeadOid.slice(0, 12))}</code></li>${upstream}</ul>${merged}<p>${escapeHtml(copy.localOnly)}</p></div>${error}<div class="dialog-actions">${back}<button class="secondary-button" data-branch-mutation-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="${kind === "delete" ? "danger-button" : "primary-button"}" id="branch-mutation-execute" type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? copy.working : copy.actions[kind])}</button></div></section>`;
+}
+
+function localError(error: string, copy: BranchMutationCopy): string {
+  if (error === "branch-name-required") return copy.branchNameRequired;
+  if (error === "branch-mutation-failed") return copy.failed;
+  return error;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value);
+}

@@ -1,5 +1,5 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
-import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
+import type { BranchMutationKind, ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 
 export interface CommonCopy {
   ready: string;
@@ -837,6 +837,8 @@ export interface ErrorCopy {
 }
 
 export interface HistoryCopy {
+  branchContextMenu: BranchContextMenuCopy;
+  branchMutation: BranchMutationCopy;
   noRefs: string;
   refsAppearHere: string;
   branchOrTag: string;
@@ -999,6 +1001,54 @@ export interface HistoryCopy {
   checkedOutBranch(name: string): string;
   creatingBranch(name: string): string;
   createdBranch(name: string): string;
+}
+
+export interface BranchContextMenuCopy {
+  ariaLabel(name: string): string;
+  viewHistory: string;
+  switchTo(name: string): string;
+  checkoutRemote: string;
+  newBranchFrom: string;
+  mergeIntoCurrent: string;
+  rebaseCurrentOnto: string;
+  update: string;
+  push: string;
+  rename: string;
+  copyBranch: string;
+  shortName: string;
+  fullReference: string;
+  deleteLocal: string;
+  copiedShort: string;
+  copiedFull: string;
+  clipboardUnavailable: string;
+  busy: string;
+  cleanRequired: string;
+  targetChanged: string;
+}
+
+export interface BranchMutationCopy {
+  eyebrow: string;
+  titles: Record<BranchMutationKind, string>;
+  descriptions: Record<BranchMutationKind, string>;
+  actions: Record<BranchMutationKind, string>;
+  progress(kind: BranchMutationKind, source: string): string;
+  completed(kind: BranchMutationKind, source: string, destination: string | null): string;
+  source: string;
+  object: string;
+  destination: string;
+  currentHead: string;
+  upstream: string;
+  noUpstream: string;
+  mergedIntoCurrent: string;
+  localOnly: string;
+  branchName: string;
+  branchNameRequired: string;
+  review: string;
+  reviewing: string;
+  back: string;
+  cancel: string;
+  working: string;
+  failed: string;
 }
 
 export interface LocaleCatalog {

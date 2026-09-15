@@ -1,0 +1,99 @@
+.branch-row.context-target {
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.branch-mutation-dialog {
+  width: min(650px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+}
+
+.branch-mutation-dialog > p,
+.branch-mutation-review > p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.branch-mutation-source {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.branch-mutation-source > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.branch-mutation-source small {
+  color: var(--text-muted);
+}
+
+.branch-mutation-source strong {
+  overflow-wrap: anywhere;
+}
+
+.branch-mutation-form,
+.branch-mutation-review {
+  display: grid;
+  gap: 9px;
+}
+
+.branch-mutation-form label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.branch-mutation-form input {
+  width: 100%;
+}
+
+.branch-mutation-review {
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.branch-mutation-review ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.branch-mutation-review li {
+  display: grid;
+  grid-template-columns: minmax(110px, .4fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.branch-mutation-review li > span {
+  color: var(--text-muted);
+}
+
+.branch-mutation-review code {
+  overflow-wrap: anywhere;
+}
+
+.branch-mutation-confirmed {
+  color: var(--success-text) !important;
+}
+
+.branch-mutation-error {
+  padding: 9px 11px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
