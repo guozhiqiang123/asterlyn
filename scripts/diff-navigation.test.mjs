@@ -108,7 +108,7 @@ test("ordinary and Diff editor content expose the shared Git Blame menu", async 
   ]);
   assert.match(gutterSource, /export function blameContentContextMenu/u);
   assert.match(gutterSource, /closest\("\.cm-content"\)/u);
-  assert.match(textEditorSource, /blameContentContextMenu\(\(\) => this\.blameMenuState\(entry\)\)/u);
+  assert.match(textEditorSource, /blameContentContextMenu\(\(event, view\) => this\.openBlameMenu\(entry, event, view\)\)/u);
   assert.match(diffEditorSource, /blameContentContextMenu\(openBlameMenu\)/u);
 });
 

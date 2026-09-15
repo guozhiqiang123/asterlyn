@@ -1,0 +1,87 @@
+.context-menu-layer {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  pointer-events: none;
+}
+
+.context-menu {
+  position: fixed;
+  display: grid;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 8px));
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 34px var(--shadow-dialog);
+  pointer-events: auto;
+}
+
+.context-menu-submenu {
+  min-width: 190px;
+}
+
+.context-menu-entry {
+  display: grid;
+}
+
+.context-menu-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  min-height: 29px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus-visible {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.context-menu-item[aria-disabled="true"] {
+  color: var(--text-muted);
+}
+
+.context-menu-item[data-tone="danger"] {
+  color: var(--danger-text);
+}
+
+.context-menu-mark {
+  color: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.context-menu-trailing {
+  min-width: 12px;
+  color: inherit;
+  opacity: 0.72;
+  text-align: right;
+}
+
+.context-menu-reason {
+  max-width: 330px;
+  margin: 3px 8px 5px 32px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}

@@ -42,19 +42,19 @@ import {
   asterlynEditorTheme,
   asterlynSyntaxHighlighting,
 } from "./editor-theme";
+import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
+import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 import { EditorLanguageLoader } from "./editor-language";
 import type { GitBlameResult } from "./models.ts";
 import {
   blameContentContextMenu,
   blameGutter,
-  closeGutterMenu,
   lineNumberGutter,
   type DiffGitBlameSources,
   type GitBlameCopy,
   type GitBlameRuntime,
   type GitBlameSource,
-  type GutterBlameMenuState,
 } from "./workbench/editor-gutter.ts";
 import {
   DEFAULT_APP_PREFERENCES,
@@ -172,6 +172,8 @@ export class DiffEditor {
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
     private blameCopy: GitBlameCopy,
+    private readonly contextMenu: ContextMenuPort,
+    private readonly contextOwnerId: string,
   ) {
     this.blameSources = unavailableDiffBlameSources(blameCopy.gitBlameRequiresSplit);
   }
@@ -367,7 +369,8 @@ export class DiffEditor {
     const theme = new Compartment();
     const phrases = new Compartment();
     const blame = new Compartment();
-    const openBlameMenu = () => this.blameMenuState(side ?? null);
+    const openBlameMenu = (event: MouseEvent, view: EditorView) =>
+      this.openBlameMenu(side ?? null, event, view);
     const activeBlame = side ? this.blameState[side].result : null;
     const sourceLine = rows && side
       ? (documentLine: number) => rows[documentLine - 1]?.[side].lineNumber ?? null
@@ -423,6 +426,7 @@ export class DiffEditor {
         extensions,
       }),
     });
+    view.dom.tabIndex = -1;
     this.languageBindings.push({
       view,
       compartment: language,
@@ -459,19 +463,48 @@ export class DiffEditor {
     view.dom.dataset.languageStatus = this.languageStatus;
   }
 
-  private blameMenuState(side: "old" | "new" | null): GutterBlameMenuState {
+  private openBlameMenu(
+    side: "old" | "new" | null,
+    event: MouseEvent,
+    view: EditorView,
+  ): void {
     const availability = side
       ? this.blameSources[side]
       : { source: null, unavailableReason: this.blameSources.unifiedReason };
     const state = side ? this.blameState[side] : null;
-    return {
-      active: Boolean(state?.result),
-      loading: state?.loading ?? false,
-      enabled: availability.source !== null,
-      unavailableReason: availability.unavailableReason,
-      copy: this.blameCopy,
-      toggle: () => side ? this.toggleBlame(side) : undefined,
+    const source = availability.source;
+    const generation = state?.generation ?? -1;
+    const active = Boolean(state?.result);
+    const loading = state?.loading ?? false;
+    const isCurrent = () => {
+      const currentAvailability = side
+        ? this.blameSources[side]
+        : { source: null, unavailableReason: this.blameSources.unifiedReason };
+      const currentState = side ? this.blameState[side] : null;
+      return this.languageBindings.some(
+        (binding) => binding.view === view && binding.side === side,
+      ) &&
+        sameBlameSource(source, currentAvailability.source) &&
+        generation === (currentState?.generation ?? -1) &&
+        active === Boolean(currentState?.result) &&
+        loading === (currentState?.loading ?? false);
     };
+    this.contextMenu.open(
+      { x: event.clientX, y: event.clientY },
+      gitBlameContextSession(this.contextOwnerId, {
+        active,
+        loading,
+        enabled: source !== null,
+        unavailableReason: availability.unavailableReason,
+        copy: this.blameCopy,
+        isCurrent,
+        toggle: () => side ? this.toggleBlame(side) : undefined,
+        blocked: (reason) => this.blameRuntime.status(reason, "warning"),
+        restoreFocus: () => {
+          if (this.languageBindings.some((binding) => binding.view === view)) view.dom.focus();
+        },
+      }),
+    );
   }
 
   private async toggleBlame(side: "old" | "new"): Promise<void> {
@@ -517,7 +550,7 @@ export class DiffEditor {
           blameGutter(
             result,
             this.blameCopy,
-            () => this.blameMenuState(side),
+            (event, view) => this.openBlameMenu(side, event, view),
             binding.sourceLine,
           ),
         ),
@@ -526,6 +559,7 @@ export class DiffEditor {
   }
 
   private clearBlame(side: "old" | "new"): void {
+    this.contextMenu.close(this.contextOwnerId);
     const state = this.blameState[side];
     state.generation += 1;
     state.loading = false;
@@ -556,7 +590,7 @@ export class DiffEditor {
   }
 
   private destroyViews(): void {
-    closeGutterMenu();
+    this.contextMenu.close(this.contextOwnerId);
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.splitDispose?.();

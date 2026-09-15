@@ -1,5 +1,6 @@
 import type { GitWorktreeRecoveryDialog } from "./features/git-operations/git-worktree-recovery-dialog.ts";
 import { bridge } from "./bridge";
+import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
 import {
@@ -325,6 +326,7 @@ export class AsterlynApp {
   private localeRequestGeneration = 0;
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
+  private readonly contextMenuHost: LazyContextMenuHost;
   private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
@@ -410,6 +412,7 @@ export class AsterlynApp {
 
   constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
     this.localization = createLocalization(initialCatalog);
+    this.contextMenuHost = new LazyContextMenuHost(document, window);
     const blameRuntime: GitBlameRuntime = {
       load: (source) => bridge.readGitBlame(
         source.repositoryRoot,
@@ -424,8 +427,18 @@ export class AsterlynApp {
       ),
       error: (error) => this.showError(error),
     };
-    this.editorSurface = new EditorSurface(root, initialCatalog.editor, blameRuntime);
-    this.pushDiffEditor = new LazyDiffEditor(blameRuntime, initialCatalog.editor);
+    this.editorSurface = new EditorSurface(
+      root,
+      initialCatalog.editor,
+      blameRuntime,
+      this.contextMenuHost,
+    );
+    this.pushDiffEditor = new LazyDiffEditor(
+      blameRuntime,
+      initialCatalog.editor,
+      this.contextMenuHost,
+      "editor.push-review.diff-blame",
+    );
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
       activate: (tool) => this.toggleTool(tool),
@@ -449,7 +462,10 @@ export class AsterlynApp {
           this.editorSurface.requestMeasure();
           this.pushDiffEditor.requestMeasure();
         }
-        if (snapshot.locale !== previous.locale) void this.activateLocale(snapshot.locale);
+        if (snapshot.locale !== previous.locale) {
+          this.contextMenuHost.close();
+          void this.activateLocale(snapshot.locale);
+        }
       },
     );
     this.releaseSettingsController = this.settingsController.subscribe((change) =>
@@ -1112,6 +1128,7 @@ export class AsterlynApp {
     this.changeTreeScrollFrame = null;
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
+    this.contextMenuHost.dispose();
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.repositoryIntegration.dispose();
@@ -1146,6 +1163,7 @@ export class AsterlynApp {
 
   private openSettings(): void {
     if (this.shellState.page === "settings") return;
+    this.contextMenuHost.close();
     this.captureMountedTextEditor();
     if (this.remoteState.dialog && !this.remoteState.operation) {
       this.closeRemoteDialog(false);
@@ -1431,6 +1449,7 @@ export class AsterlynApp {
     ) {
       return false;
     }
+    this.contextMenuHost.close();
     this.cancelActiveWorkspaceSearch();
     this.cancelActiveWorkspaceReplacement();
     this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);

@@ -7,6 +7,7 @@ import "./shared/select-control.css";
 import "./shared/presentation.css";
 import "./shared/content.css";
 import "./shared/overlays.css";
+import "./shared/context-menu/context-menu.css";
 import "./shell/shell.css";
 import "./features/settings/settings.css";
 import "./features/changes-commit/changes-commit.css";

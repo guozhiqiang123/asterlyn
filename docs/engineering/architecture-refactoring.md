@@ -282,6 +282,10 @@ R5 is now sequenced with the context-action foundation defined by
 4. ship Files as the first new product context menu, followed by Changes; branch, History-range,
    range-Diff, and historical-file menus wait for their own Git/application capabilities.
 
+CA0 was locally accepted on 2026-09-15 with the ordinary-editor and Diff Git Blame migration;
+results are recorded in
+[`CA0 shared context-menu host acceptance`](../benchmarks/2026-09-15-context-action-ca0.md).
+
 The menu is never the mutation boundary. Opening it performs no native work, and its cached
 availability cannot authorize a filesystem or Git operation. Workspace mutations repeat exact
 source/destination validation, publish typed path remaps and invalidation slices, and enter the

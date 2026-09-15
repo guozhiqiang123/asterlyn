@@ -10,6 +10,7 @@ const ownedStyles = [
   ["shared/presentation.css", "main.ts"],
   ["shared/content.css", "main.ts"],
   ["shared/overlays.css", "main.ts"],
+  ["shared/context-menu/context-menu.css", "main.ts"],
   ["shared/responsive.css", "main.ts"],
   ["shell/shell.css", "main.ts"],
   ["features/settings/settings.css", "main.ts"],

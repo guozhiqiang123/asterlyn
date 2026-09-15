@@ -208,59 +208,6 @@
   box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
-.editor-gutter-menu {
-  position: fixed;
-  z-index: 80;
-  display: grid;
-  min-width: 220px;
-  max-width: min(360px, calc(100vw - 8px));
-  padding: 5px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  background: var(--bg-elevated);
-  box-shadow: 0 12px 34px var(--shadow-dialog);
-}
-
-.editor-gutter-menu-item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  min-height: 29px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 4px;
-  outline: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-}
-
-.editor-gutter-menu-item:hover:not([aria-disabled="true"]),
-.editor-gutter-menu-item:focus-visible:not([aria-disabled="true"]) {
-  background: var(--selection);
-  color: var(--selection-text);
-}
-
-.editor-gutter-menu-item[aria-disabled="true"] {
-  color: var(--text-muted);
-}
-
-.editor-gutter-menu-check {
-  color: inherit;
-  font-weight: 700;
-  text-align: center;
-}
-
-.editor-gutter-menu-reason {
-  max-width: 330px;
-  margin: 3px 8px 5px 32px;
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

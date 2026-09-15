@@ -43,6 +43,7 @@ function testSurface() {
     { querySelector() { return body; } },
     EN_US.editor,
     { async load() { throw new Error("unexpected blame request"); }, status() {}, error() {} },
+    { open() {}, close() {} },
   );
   const runtime = {
     contents: new Map(), active: null,

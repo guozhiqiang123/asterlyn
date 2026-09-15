@@ -5,6 +5,7 @@ import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type 
 import { textTab, type EditorSession, type TextTabState } from "../../workbench/editor-session.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
+import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "../../workbench/markdown-format.ts";
 import type {
   DiffGitBlameSources,
@@ -49,11 +50,22 @@ export class EditorSurface {
     root: HTMLElement,
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort,
   ) {
     this.root = root;
     this.copy = copy;
-    this.diffEditor = new LazyDiffEditor(blameRuntime, copy);
-    this.textEditor = new LazyTextEditor(blameRuntime, copy);
+    this.diffEditor = new LazyDiffEditor(
+      blameRuntime,
+      copy,
+      contextMenu,
+      "editor.surface.diff-blame",
+    );
+    this.textEditor = new LazyTextEditor(
+      blameRuntime,
+      copy,
+      contextMenu,
+      "editor.surface.text-blame",
+    );
   }
 
   setCopy(copy: EditorCopy): void {

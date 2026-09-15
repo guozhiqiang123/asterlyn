@@ -3,6 +3,7 @@ import type { DiffEditor } from "../../diff-editor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
+import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import type {
   DiffGitBlameSources,
   GitBlameCopy,
@@ -43,13 +44,19 @@ export class LazyTextEditor {
   private preferences: AppPreferences | null = null;
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
+  private readonly contextMenu: ContextMenuPort;
+  private readonly contextOwnerId: string;
 
   constructor(
     blameRuntime: GitBlameRuntime,
     blameCopy: GitBlameCopy,
+    contextMenu: ContextMenuPort,
+    contextOwnerId: string,
   ) {
     this.blameRuntime = blameRuntime;
     this.blameCopy = blameCopy;
+    this.contextMenu = contextMenu;
+    this.contextOwnerId = contextOwnerId;
   }
 
   mount(
@@ -228,7 +235,12 @@ export class LazyTextEditor {
     if (this.implementation) return Promise.resolve(this.implementation);
     if (!this.loading) {
       this.loading = import("../../text-editor.ts").then(({ TextEditor }) => {
-        const editor = new TextEditor(this.blameRuntime, this.blameCopy);
+        const editor = new TextEditor(
+          this.blameRuntime,
+          this.blameCopy,
+          this.contextMenu,
+          this.contextOwnerId,
+        );
         this.implementation = editor;
         return editor;
       });
@@ -249,13 +261,19 @@ export class LazyDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
+  private readonly contextMenu: ContextMenuPort;
+  private readonly contextOwnerId: string;
 
   constructor(
     blameRuntime: GitBlameRuntime,
     blameCopy: GitBlameCopy,
+    contextMenu: ContextMenuPort,
+    contextOwnerId: string,
   ) {
     this.blameRuntime = blameRuntime;
     this.blameCopy = blameCopy;
+    this.contextMenu = contextMenu;
+    this.contextOwnerId = contextOwnerId;
   }
 
   mount(
@@ -346,7 +364,12 @@ export class LazyDiffEditor {
     if (this.implementation) return Promise.resolve(this.implementation);
     if (!this.loading) {
       this.loading = import("../../diff-editor.ts").then(({ DiffEditor }) => {
-        const editor = new DiffEditor(this.blameRuntime, this.blameCopy);
+        const editor = new DiffEditor(
+          this.blameRuntime,
+          this.blameCopy,
+          this.contextMenu,
+          this.contextOwnerId,
+        );
         this.implementation = editor;
         return editor;
       });

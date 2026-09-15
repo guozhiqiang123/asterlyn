@@ -1,6 +1,6 @@
 # Context-action system design and implementation plan
 
-- **Status:** Architecture approved; implementation not started
+- **Status:** CA0 locally accepted; CA1 and product surfaces not started
 - **Date:** 2026-09-15
 - **Behavior input:** [`Context-menu surface drafts`](../design/context-menu-drafts.md)
 - **Architecture decision:** [`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md)
@@ -212,10 +212,11 @@ host to understand editors or revisions:
   remain blocked with the existing localized reason.
 
 The target includes the window/workspace generation, editor document and mount/load identity, Diff
-side, repository identity, path, full revision, and parent flag. The CodeMirror adapter contributes
-only an anchor and target; the Editor provider owns availability, loading/result state, request
-generation, invocation, and focus fallback. Right-clicking a line number does not make the action a
-per-line command and does not move editor or Diff selection.
+side, repository identity, path, full revision, and parent flag. The CodeMirror gutter/content
+adapters contribute only an anchor and target; the Editor provider owns availability,
+loading/result state, request generation, invocation, and focus fallback. Right-clicking a line
+number or code row does not make the action a per-line command and does not move editor or Diff
+selection.
 
 CA0 removes the module-global `activeMenu`, direct body rendering, global listener lifecycle, and
 manual `closeGutterMenu()` calls from `editor-gutter.ts`. It retains the bounded incremental Git
@@ -384,6 +385,9 @@ adding more per-render listeners in `app.ts`.
 
 ### CA0 — Characterization and shared host
 
+Status: **locally accepted on 2026-09-15**. Evidence:
+[`CA0 shared context-menu host acceptance`](../benchmarks/2026-09-15-context-action-ca0.md).
+
 1. Freeze E1 characterization for ordinary saved/dirty/untracked files, working Diff `HEAD` and
    worktree sides, commit Diff parent/current sides, added/deleted/renamed/root commits, unified
    layout, bounded results, open/close lifecycle, window disposal, locale/theme refresh, and focus.
@@ -395,10 +399,10 @@ adding more per-render listeners in `app.ts`.
 4. Add a guard that prohibits module-global active context-menu state and native work during menu
    construction.
 
-Exit: the exact E1 revision/availability behavior remains functional; line-number and annotation
-gutters open the same action without changing editor/Diff selection; arrows, type-ahead, Escape,
-edge placement, focus return, stale-result rejection, window isolation, and disposal have accepted
-tests.
+Exit: the exact E1 revision/availability behavior remains functional; line-number, code-row, and
+annotation-gutter triggers open the same action without changing editor/Diff selection; arrows,
+type-ahead, Escape, edge placement, focus return, stale-result rejection, window isolation, and
+disposal have accepted tests.
 
 ### CA1 — Navigation, clipboard, and feature bindings
 
