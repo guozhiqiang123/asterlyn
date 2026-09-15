@@ -9,6 +9,7 @@ import type {
   WorkspaceMutationOutcome,
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
+  WorkspaceEntryInspection,
   WorkspaceRevealResult,
   WorkspaceTextSearchReport,
 } from "../../models.ts";
@@ -23,6 +24,11 @@ export const tauriWorkspaceBridge: WorkspaceBridge = {
       repositoryRoot,
       workspacePath,
       kind,
+    }),
+  inspectWorkspaceEntry: (repositoryRoot, workspacePath) =>
+    invokeDesktopCommand<WorkspaceEntryInspection>("inspect_workspace_entry", {
+      repositoryRoot,
+      workspacePath,
     }),
   planWorkspaceMutation: (repositoryRoot, planId, operation, collisionPolicy) =>
     invokeDesktopCommand<WorkspaceMutationPreview>("plan_workspace_mutation", {

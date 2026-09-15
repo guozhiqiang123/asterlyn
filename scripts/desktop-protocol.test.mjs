@@ -71,6 +71,24 @@ test("desktop response validation accepts representative valid payloads", () => 
     validateDesktopResult("reveal_workspace_entry", { selected: false }),
     { selected: false },
   );
+  const inspection = {
+    source: {
+      workspacePath: "src",
+      kind: "directory",
+      revision: "revision",
+      mode: 493,
+      byteLength: 12,
+    },
+    entryCount: 3,
+    totalBytes: 12,
+    hiddenEntryCount: 1,
+    symlinkPaths: [],
+    nestedRepositoryPaths: [],
+    multipleLinkPaths: [],
+    truncated: false,
+    fingerprint: "a".repeat(64),
+  };
+  assert.deepEqual(validateDesktopResult("inspect_workspace_entry", inspection), inspection);
   assert.deepEqual(
     validateDesktopResult("start_workspace_watch", {
       available: true,
@@ -184,6 +202,20 @@ test("desktop response validation rejects malformed project-directory results", 
     () => validateDesktopResult("reveal_workspace_entry", { selected: "no" }),
     /selected must be a boolean/,
   );
+  assert.throws(
+    () => validateDesktopResult("inspect_workspace_entry", {
+      source: null,
+      entryCount: 1,
+      totalBytes: 1,
+      hiddenEntryCount: 0,
+      symlinkPaths: [],
+      nestedRepositoryPaths: [],
+      multipleLinkPaths: [],
+      truncated: false,
+      fingerprint: "revision",
+    }),
+    /source must be an entry identity/,
+  );
 });
 
 test("desktop response validation rejects malformed project-window routing results", () => {
@@ -238,6 +270,7 @@ test("desktop response validation checks workspace mutation plans and outcomes",
     },
     entryCount: 3,
     totalBytes: 12,
+    fingerprint: "a".repeat(64),
     blockers: [],
   };
   assert.deepEqual(validateDesktopResult("plan_workspace_mutation", preview), preview);

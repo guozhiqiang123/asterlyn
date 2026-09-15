@@ -539,6 +539,18 @@ export interface WorkspaceEntryIdentity {
   byteLength: number;
 }
 
+export interface WorkspaceEntryInspection {
+  source: WorkspaceEntryIdentity;
+  entryCount: number;
+  totalBytes: number;
+  hiddenEntryCount: number;
+  symlinkPaths: string[];
+  nestedRepositoryPaths: string[];
+  multipleLinkPaths: string[];
+  truncated: boolean;
+  fingerprint: string;
+}
+
 export interface WorkspaceRevealResult {
   selected: boolean;
 }
@@ -564,6 +576,7 @@ export interface WorkspaceMutationPreview {
   source: WorkspaceEntryIdentity | null;
   entryCount: number;
   totalBytes: number;
+  fingerprint: string | null;
   blockers: WorkspaceMutationBlocker[];
 }
 

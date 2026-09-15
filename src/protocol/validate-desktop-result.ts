@@ -241,9 +241,32 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       booleans(result, command, "selected");
       break;
     }
+    case "workspaceEntryInspection": {
+      const result = record(value, command);
+      numbers(result, command, "entryCount", "totalBytes", "hiddenEntryCount");
+      arrays(
+        result,
+        command,
+        "symlinkPaths",
+        "nestedRepositoryPaths",
+        "multipleLinkPaths",
+      );
+      strings(result, command, "fingerprint");
+      booleans(result, command, "truncated");
+      assert(isWorkspaceEntryIdentity(result.source), command, "source must be an entry identity");
+      assertNonNegativeInteger(result.entryCount, command, "entryCount");
+      assertNonNegativeInteger(result.totalBytes, command, "totalBytes");
+      assertNonNegativeInteger(result.hiddenEntryCount, command, "hiddenEntryCount");
+      assertStringArray(result.symlinkPaths, command, "symlinkPaths");
+      assertStringArray(result.nestedRepositoryPaths, command, "nestedRepositoryPaths");
+      assertStringArray(result.multipleLinkPaths, command, "multipleLinkPaths");
+      assert(Boolean(result.fingerprint), command, "fingerprint must not be empty");
+      break;
+    }
     case "workspaceMutationPreview": {
       const result = record(value, command);
       strings(result, command, "planId", "collisionPolicy");
+      nullableStrings(result, command, "fingerprint");
       numbers(result, command, "entryCount", "totalBytes");
       arrays(result, command, "blockers");
       assertWorkspaceMutationOperation(result.operation, command);

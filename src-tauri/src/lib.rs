@@ -15,8 +15,8 @@ use asterlyn_workspace::{
     ReplacementApplyResult, ReplacementFilePreview, ReplacementLimits, ReplacementRecoverySummary,
     SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken, SearchCandidate,
     SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason, TextFileSnapshot,
-    Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceError,
-    WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
+    Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory,
+    WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
     WorkspaceMutationOutcome, WorkspaceMutationPlan, WorkspaceMutationRecoverySummary,
 };
 #[cfg(target_os = "macos")]
@@ -89,6 +89,7 @@ struct WorkspaceMutationPreview {
     source: Option<WorkspaceEntryIdentity>,
     entry_count: usize,
     total_bytes: u64,
+    fingerprint: Option<String>,
     blockers: Vec<WorkspaceMutationBlocker>,
 }
 
@@ -110,7 +111,45 @@ impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
                 .inventory
                 .as_ref()
                 .map_or(0, |inventory| inventory.total_bytes),
+            fingerprint: plan
+                .inventory
+                .as_ref()
+                .map(|inventory| inventory.fingerprint.clone()),
             blockers: plan.blockers.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceEntryInspection {
+    source: WorkspaceEntryIdentity,
+    entry_count: usize,
+    total_bytes: u64,
+    hidden_entry_count: usize,
+    symlink_paths: Vec<String>,
+    nested_repository_paths: Vec<String>,
+    multiple_link_paths: Vec<String>,
+    truncated: bool,
+    fingerprint: String,
+}
+
+impl From<WorkspaceEntryInventory> for WorkspaceEntryInspection {
+    fn from(inventory: WorkspaceEntryInventory) -> Self {
+        Self {
+            source: inventory.source,
+            entry_count: inventory.entries.len(),
+            total_bytes: inventory.total_bytes,
+            hidden_entry_count: inventory
+                .entries
+                .iter()
+                .filter(|entry| entry.hidden)
+                .count(),
+            symlink_paths: inventory.symlink_paths,
+            nested_repository_paths: inventory.nested_repository_paths,
+            multiple_link_paths: inventory.multiple_link_paths,
+            truncated: inventory.truncated,
+            fingerprint: inventory.fingerprint,
         }
     }
 }
@@ -801,6 +840,7 @@ pub fn run() {
             cancel_untracked_scan,
             list_project_files,
             reveal_workspace_entry,
+            inspect_workspace_entry,
             plan_workspace_mutation,
             execute_workspace_mutation,
             cancel_workspace_mutation,

@@ -71,6 +71,7 @@ import type {
   WorkspaceMutationRecoverySummary,
   WorkspaceEntryKind,
   WorkspaceRevealResult,
+  WorkspaceEntryInspection,
 } from "./models";
 import {
   parseWindowChromeMode,
@@ -437,6 +438,19 @@ const demoBridge: DesktopBridge = {
       repositoryRoot,
       workspacePath,
       kind,
+    });
+  },
+
+  async inspectWorkspaceEntry(
+    repositoryRoot: string,
+    workspacePath: string,
+  ): Promise<WorkspaceEntryInspection> {
+    if (!isTauri) {
+      throw new Error(`Workspace entry inspection requires the desktop build: ${workspacePath}`);
+    }
+    return invoke<WorkspaceEntryInspection>("inspect_workspace_entry", {
+      repositoryRoot,
+      workspacePath,
     });
   },
 

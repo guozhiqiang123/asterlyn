@@ -197,6 +197,7 @@ function preview(planId, operation) {
     source: null,
     entryCount: 0,
     totalBytes: 0,
+    fingerprint: null,
     blockers: [],
   };
 }

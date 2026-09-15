@@ -25,6 +25,7 @@
     { "name": "read_local_image_diff", "args": { "repositoryRoot": "string", "selected": "FileChange" }, "result": "ImageDiffPreview", "validator": "imageDiffPreview" },
     { "name": "list_project_files", "args": { "repositoryRoot": "string" }, "result": "ProjectFileList", "validator": "projectFileList" },
     { "name": "reveal_workspace_entry", "args": { "repositoryRoot": "string", "workspacePath": "string", "kind": "WorkspaceEntryKind" }, "result": "WorkspaceRevealResult", "validator": "workspaceRevealResult" },
+    { "name": "inspect_workspace_entry", "args": { "repositoryRoot": "string", "workspacePath": "string" }, "result": "WorkspaceEntryInspection", "validator": "workspaceEntryInspection" },
     { "name": "plan_workspace_mutation", "args": { "repositoryRoot": "string", "planId": "string", "operation": "WorkspaceMutationOperation", "collisionPolicy": "WorkspaceCollisionPolicy" }, "result": "WorkspaceMutationPreview", "validator": "workspaceMutationPreview" },
     { "name": "execute_workspace_mutation", "args": { "repositoryRoot": "string", "planId": "string" }, "result": "WorkspaceMutationOutcome", "validator": "workspaceMutationOutcome" },
     { "name": "cancel_workspace_mutation", "args": { "repositoryRoot": "string", "planId": "string" }, "result": "void", "validator": "void" },

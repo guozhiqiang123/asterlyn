@@ -35,6 +35,21 @@ pub(crate) fn reveal_workspace_entry(
 }
 
 #[tauri::command]
+pub(crate) async fn inspect_workspace_entry(
+    repository_root: String,
+    workspace_path: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<WorkspaceEntryInspection, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let inventory = run_workspace_blocking("inspect workspace entry", move || {
+        Workspace::open(root)?.inspect_entry(&workspace_path, WORKSPACE_MUTATION_LIMITS)
+    })
+    .await?;
+    Ok(inventory.into())
+}
+
+#[tauri::command]
 pub(crate) async fn plan_workspace_mutation(
     repository_root: String,
     plan_id: String,

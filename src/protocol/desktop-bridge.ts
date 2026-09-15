@@ -41,6 +41,7 @@ import type {
   WorkspaceMutationOutcome,
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
+  WorkspaceEntryInspection,
   WorkspaceEntryKind,
   WorkspaceRevealResult,
   WorkspaceTextSearchOptions,
@@ -73,6 +74,10 @@ export interface WorkspaceBridge {
     workspacePath: string,
     kind: WorkspaceEntryKind,
   ): Promise<WorkspaceRevealResult>;
+  inspectWorkspaceEntry(
+    repositoryRoot: string,
+    workspacePath: string,
+  ): Promise<WorkspaceEntryInspection>;
   planWorkspaceMutation(
     repositoryRoot: string,
     planId: string,
