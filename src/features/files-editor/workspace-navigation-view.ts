@@ -161,7 +161,7 @@ function renderWorkspaceSearchControls(model: CommandSurfaceViewModel): string {
   </div>`;
 }
 
-function renderCommandSurfaceResults(
+export function renderCommandSurfaceResults(
   mode: NavigationMode,
   selected: number,
   model: CommandSurfaceViewModel,

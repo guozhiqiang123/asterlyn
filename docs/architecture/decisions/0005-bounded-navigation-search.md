@@ -15,6 +15,24 @@ E2.1 adds one transient navigation surface with four modes: files, recent files,
 
 File and command ranking is a pure presentation operation over the already loaded bounded catalog and a fixed command registry. Recent files are repository-scoped presentation preferences, capped at 50 exact root-qualified identities, pruned against the current catalog, and updated only after a file opens successfully. They contain no file content or repository truth.
 
+Quick Open retains one window-scoped search projection for the exact current catalog array. The
+projection deduplicates exact repository/path identities and normalizes each workspace path once;
+catalog replacement invalidates it by object identity, while Git-status-only updates do not. An
+empty query emits recent files followed by the already sorted catalog and stops at 100 rows. A
+non-empty query scans the projection once but retains only the best 100 candidates in a bounded
+max-heap instead of allocating and sorting every match. The projection is in-memory presentation
+state only: it has no file content, disk persistence, watcher, background task, or authority to
+open a path.
+
+Typing in Files, Recent Files, or Commands preserves the mounted input and dialog. Input events
+update transient query state immediately, coalesce bursts to the latest animation frame, and
+replace only the result-list children. IME composition updates the native input without ranking
+intermediate composition states and submits the final query at composition end. Arrow movement
+updates only the previous and next selected rows. A catalog identity change may rebuild the
+complete surface; status-only reconciliation may not. Workspace text search retains its separately
+cancellable request/render lifecycle because its loading controls and replacement state change
+together.
+
 Workspace text search is a lazy application service. The desktop boundary first resolves the active canonical workspace and regenerates the Git-authorized project catalog. It passes only those exact identities and workspace paths to `asterlyn-workspace`; the workspace crate never imports Git or Tauri and never enumerates arbitrary files.
 
 The E2.1 default search is case-sensitive literal text. E2.2b preserves that entry point and fast path while adding an explicit options contract for line-local Rust regular expressions, include/exclude path globs, and zero to three preview-context lines. Regex matching is Unicode, leftmost-first, and non-overlapping; inline flags such as `(?i)` are allowed, while matches never cross a normalized newline. Zero-width results remain valid positions. E2.3 reuses these exact semantics for a separately reviewed replacement transaction.

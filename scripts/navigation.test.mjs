@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   RECENT_FILE_LIMIT,
+  ProjectFileSearchIndex,
   closeCommandSurface,
   createCommandSurfaceState,
   loadRecentFiles,
@@ -43,6 +44,28 @@ test("quick open favors basename matches and supports ordered subsequences", () 
     ["src/app.ts", "scripts/app.test.mjs", "docs/application.md"],
   );
   assert.equal(rankProjectFiles(files, "prtree")[0]?.workspacePath, "src/workbench/project-tree.ts");
+});
+
+test("persistent quick-open index retains better late matches within the bounded result set", () => {
+  const files = Array.from({ length: 500 }, (_, index) =>
+    file(`generated/noise-${index}-n-e-e-d-l-e.txt`),
+  );
+  files.push(
+    file("late/exact/needle"),
+    file("late/prefix/needle-service.ts"),
+    file("late/contains/my-needle-service.ts"),
+  );
+  const index = new ProjectFileSearchIndex(files);
+
+  assert.deepEqual(
+    index.rank("needle", [], 3).map((item) => item.workspacePath),
+    [
+      "late/exact/needle",
+      "late/prefix/needle-service.ts",
+      "late/contains/my-needle-service.ts",
+    ],
+  );
+  assert.equal(index.rank("needle").length <= 100, true);
 });
 
 test("empty quick open puts repository-scoped recent files first", () => {

@@ -77,6 +77,87 @@ interface StoredRecentFiles {
   repositories: Record<string, StoredFileIdentity[]>;
 }
 
+interface IndexedProjectFile {
+  readonly file: ProjectFile;
+  readonly key: string;
+  readonly normalizedPath: string;
+  readonly basenameStart: number;
+}
+
+interface RankedProjectFile {
+  readonly entry: IndexedProjectFile;
+  readonly score: number;
+}
+
+export class ProjectFileSearchIndex {
+  private readonly entries: readonly IndexedProjectFile[];
+  private readonly filesByKey: ReadonlyMap<string, ProjectFile>;
+
+  constructor(files: readonly ProjectFile[]) {
+    const seen = new Set<string>();
+    const entries: IndexedProjectFile[] = [];
+    const filesByKey = new Map<string, ProjectFile>();
+    for (const file of files) {
+      const key = projectFileKey(file);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const normalizedPath = file.workspacePath.toLocaleLowerCase();
+      const basenameStart = normalizedPath.lastIndexOf("/") + 1;
+      entries.push({
+        file,
+        key,
+        normalizedPath,
+        basenameStart,
+      });
+      filesByKey.set(key, file);
+    }
+    this.entries = entries;
+    this.filesByKey = filesByKey;
+  }
+
+  rank(
+    query: string,
+    recent: readonly ProjectFile[] = [],
+    limit = NAVIGATION_RESULT_LIMIT,
+  ): ProjectFile[] {
+    const boundedLimit = Math.max(0, limit);
+    if (boundedLimit === 0) return [];
+    const normalized = query.trim().toLocaleLowerCase();
+    if (normalized.length === 0) return this.rankDefault(recent, boundedLimit);
+
+    const best: RankedProjectFile[] = [];
+    for (const entry of this.entries) {
+      const score = fuzzyIndexedPathScore(entry, normalized);
+      if (score === null) continue;
+      retainBestProjectFile(best, { entry, score }, boundedLimit);
+    }
+    return best.sort(compareRankedProjectFiles).map(({ entry }) => entry.file);
+  }
+
+  resolve(identity: StoredFileIdentity): ProjectFile | undefined {
+    return this.filesByKey.get(projectFileKey(identity));
+  }
+
+  private rankDefault(recent: readonly ProjectFile[], limit: number): ProjectFile[] {
+    const ranked: ProjectFile[] = [];
+    const selected = new Set<string>();
+    for (const file of recent) {
+      const key = projectFileKey(file);
+      const available = this.filesByKey.get(key);
+      if (!available || selected.has(key)) continue;
+      selected.add(key);
+      ranked.push(available);
+      if (ranked.length === limit) return ranked;
+    }
+    for (const entry of this.entries) {
+      if (selected.has(entry.key)) continue;
+      ranked.push(entry.file);
+      if (ranked.length === limit) break;
+    }
+    return ranked;
+  }
+}
+
 export function projectFileKey(
   file: Pick<ProjectFile, "repositoryId" | "path">,
 ): string {
@@ -84,37 +165,12 @@ export function projectFileKey(
 }
 
 export function rankProjectFiles(
-  files: ProjectFile[],
+  files: readonly ProjectFile[],
   query: string,
-  recent: ProjectFile[] = [],
+  recent: readonly ProjectFile[] = [],
   limit = NAVIGATION_RESULT_LIMIT,
 ): ProjectFile[] {
-  const recentOrder = new Map(
-    recent.map((file, index) => [projectFileKey(file), index]),
-  );
-  const normalized = query.trim().toLocaleLowerCase();
-  return uniqueProjectFiles(files)
-    .flatMap((file) => {
-      const score = fuzzyPathScore(file.workspacePath, normalized);
-      return score === null ? [] : [{ file, score }];
-    })
-    .sort((left, right) => {
-      if (normalized.length === 0) {
-        const leftRecent = recentOrder.get(projectFileKey(left.file));
-        const rightRecent = recentOrder.get(projectFileKey(right.file));
-        if (leftRecent !== undefined || rightRecent !== undefined) {
-          return (leftRecent ?? Number.MAX_SAFE_INTEGER) -
-            (rightRecent ?? Number.MAX_SAFE_INTEGER);
-        }
-      }
-      return (
-        left.score - right.score ||
-        left.file.workspacePath.localeCompare(right.file.workspacePath) ||
-        projectFileKey(left.file).localeCompare(projectFileKey(right.file))
-      );
-    })
-    .slice(0, Math.max(0, limit))
-    .map(({ file }) => file);
+  return new ProjectFileSearchIndex(files).rank(query, recent, limit);
 }
 
 export function rankCommands(
@@ -147,14 +203,25 @@ export function loadRecentFiles(
   repositoryRoot: string,
   available: ProjectFile[],
 ): ProjectFile[] {
+  return loadRecentFilesFromIndex(
+    storage,
+    storageKey,
+    repositoryRoot,
+    new ProjectFileSearchIndex(available),
+  );
+}
+
+export function loadRecentFilesFromIndex(
+  storage: Pick<Storage, "getItem">,
+  storageKey: string,
+  repositoryRoot: string,
+  index: ProjectFileSearchIndex,
+): ProjectFile[] {
   try {
     const parsed = parseStoredRecentFiles(storage.getItem(storageKey));
-    const availableByKey = new Map(
-      uniqueProjectFiles(available).map((file) => [projectFileKey(file), file]),
-    );
     return (parsed.repositories[repositoryRoot] ?? [])
       .flatMap((identity) => {
-        const file = availableByKey.get(projectFileKey(identity));
+        const file = index.resolve(identity);
         return file ? [file] : [];
       })
       .slice(0, RECENT_FILE_LIMIT);
@@ -218,30 +285,72 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function uniqueProjectFiles(files: ProjectFile[]): ProjectFile[] {
-  const seen = new Set<string>();
-  return files.filter((file) => {
-    const key = projectFileKey(file);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function fuzzyIndexedPathScore(entry: IndexedProjectFile, query: string): number | null {
+  const basenameLength = entry.normalizedPath.length - entry.basenameStart;
+  if (
+    basenameLength === query.length &&
+    entry.normalizedPath.startsWith(query, entry.basenameStart)
+  ) return 0;
+  if (entry.normalizedPath.startsWith(query, entry.basenameStart)) {
+    return 10 + basenameLength - query.length;
+  }
+  const basenameIndex = entry.normalizedPath.indexOf(query, entry.basenameStart);
+  if (basenameIndex >= 0) return 30 + basenameIndex - entry.basenameStart;
+  if (entry.normalizedPath.startsWith(query)) {
+    return 50 + entry.normalizedPath.lastIndexOf("/");
+  }
+  const pathIndex = entry.normalizedPath.indexOf(query);
+  if (pathIndex >= 0) return 70 + pathIndex;
+  const subsequence = subsequenceScore(entry.normalizedPath, query);
+  return subsequence === null ? null : 120 + subsequence;
 }
 
-function fuzzyPathScore(path: string, query: string): number | null {
-  if (query.length === 0) return 0;
-  const normalizedPath = path.toLocaleLowerCase();
-  const slash = normalizedPath.lastIndexOf("/");
-  const basename = normalizedPath.slice(slash + 1);
-  if (basename === query) return 0;
-  if (basename.startsWith(query)) return 10 + basename.length - query.length;
-  const basenameIndex = basename.indexOf(query);
-  if (basenameIndex >= 0) return 30 + basenameIndex;
-  if (normalizedPath.startsWith(query)) return 50 + slash;
-  const pathIndex = normalizedPath.indexOf(query);
-  if (pathIndex >= 0) return 70 + pathIndex;
-  const subsequence = subsequenceScore(normalizedPath, query);
-  return subsequence === null ? null : 120 + subsequence;
+function retainBestProjectFile(
+  heap: RankedProjectFile[],
+  candidate: RankedProjectFile,
+  limit: number,
+): void {
+  if (heap.length < limit) {
+    heap.push(candidate);
+    siftWorstProjectFileUp(heap, heap.length - 1);
+    return;
+  }
+  if (compareRankedProjectFiles(candidate, heap[0]!) >= 0) return;
+  heap[0] = candidate;
+  siftWorstProjectFileDown(heap, 0);
+}
+
+function siftWorstProjectFileUp(heap: RankedProjectFile[], index: number): void {
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    if (compareRankedProjectFiles(heap[parent]!, heap[index]!) >= 0) return;
+    [heap[parent], heap[index]] = [heap[index]!, heap[parent]!];
+    index = parent;
+  }
+}
+
+function siftWorstProjectFileDown(heap: RankedProjectFile[], index: number): void {
+  while (true) {
+    const left = index * 2 + 1;
+    if (left >= heap.length) return;
+    const right = left + 1;
+    const worst = right < heap.length &&
+        compareRankedProjectFiles(heap[right]!, heap[left]!) > 0
+      ? right
+      : left;
+    if (compareRankedProjectFiles(heap[index]!, heap[worst]!) >= 0) return;
+    [heap[index], heap[worst]] = [heap[worst]!, heap[index]!];
+    index = worst;
+  }
+}
+
+function compareRankedProjectFiles(
+  left: RankedProjectFile,
+  right: RankedProjectFile,
+): number {
+  return left.score - right.score ||
+    left.entry.file.workspacePath.localeCompare(right.entry.file.workspacePath) ||
+    left.entry.key.localeCompare(right.entry.key);
 }
 
 function fuzzyTextScore(value: string, query: string): number | null {
