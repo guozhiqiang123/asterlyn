@@ -53,7 +53,7 @@ export function renderShellView(model: ShellViewModel): string {
         <div class="editor-row" id="editor-row">
           <aside class="navigator tool-window" id="left-tool" aria-label="${escapeHtml(copy.leftToolWindow)}">
             <div class="panel-header"><div class="navigator-title-group"><h1 id="navigator-title">${escapeHtml(copy.files)}</h1><span class="panel-count" id="navigator-count">0</span></div><div class="navigator-header-actions"><div class="navigator-context-actions" id="navigator-actions"></div><button class="compact-icon-button tool-window-hide" id="hide-left-tool" type="button" aria-label="${escapeHtml(copy.hideFiles)}" title="${escapeHtml(copy.hideFiles)}">${icon("close", 14)}</button></div></div>
-            <div class="navigator-body" id="navigator-body">${loadingBlock(copy.waitingForProject)}</div>
+            <div class="navigator-body" id="navigator-body" tabindex="-1">${loadingBlock(copy.waitingForProject)}</div>
           </aside>
           <div class="workbench-splitter vertical" id="left-splitter" aria-label="${escapeHtml(copy.resizeLeft)}"></div>
           <section class="content-panel editor-panel" id="editor-panel" aria-label="${escapeHtml(copy.editor)}">
@@ -66,11 +66,11 @@ export function renderShellView(model: ShellViewModel): string {
         <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}">
           <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
           <div class="git-tool-grid" id="git-tool-grid">
-            <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body"></div></section>
+            <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body" tabindex="-1"></div></section>
             <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="${escapeHtml(copy.resizeBranchTree)}"></div>
             <section class="git-tool-pane commit-log-pane" aria-label="${escapeHtml(copy.commitLog)}"><div class="git-pane-body" id="history-navigation-body"></div></section>
             <div class="workbench-splitter vertical" id="branch-details-splitter" aria-label="${escapeHtml(copy.resizeGitDetails)}"></div>
-            <aside class="git-tool-pane git-details-pane" aria-label="${escapeHtml(copy.gitDetails)}"><div class="git-pane-body" id="git-detail-body">${inspectorPlaceholder(copy)}</div></aside>
+            <aside class="git-tool-pane git-details-pane" aria-label="${escapeHtml(copy.gitDetails)}"><div class="git-pane-body" id="git-detail-body" tabindex="-1">${inspectorPlaceholder(copy)}</div></aside>
           </div>
           <div class="terminal-tool-host hidden" id="terminal-tool-host" role="region" aria-label="${escapeHtml(copy.terminal)}"></div>
         </section>
