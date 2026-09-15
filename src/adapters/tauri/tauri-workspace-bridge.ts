@@ -6,6 +6,9 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   WorkspaceReplacementPreview,
+  WorkspaceMutationOutcome,
+  WorkspaceMutationPreview,
+  WorkspaceMutationRecoverySummary,
   WorkspaceTextSearchReport,
 } from "../../models.ts";
 import type { WorkspaceBridge } from "../../protocol/desktop-bridge.ts";
@@ -14,6 +17,25 @@ import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
 export const tauriWorkspaceBridge: WorkspaceBridge = {
   listProjectFiles: (repositoryRoot) =>
     invokeDesktopCommand<ProjectFileList>("list_project_files", { repositoryRoot }),
+  planWorkspaceMutation: (repositoryRoot, planId, operation, collisionPolicy) =>
+    invokeDesktopCommand<WorkspaceMutationPreview>("plan_workspace_mutation", {
+      repositoryRoot,
+      planId,
+      operation,
+      collisionPolicy,
+    }),
+  executeWorkspaceMutation: (repositoryRoot, planId) =>
+    invokeDesktopCommand<WorkspaceMutationOutcome>("execute_workspace_mutation", {
+      repositoryRoot,
+      planId,
+    }),
+  cancelWorkspaceMutation: (repositoryRoot, planId) =>
+    invokeDesktopCommand<void>("cancel_workspace_mutation", { repositoryRoot, planId }),
+  listWorkspaceMutationRecoveries: (repositoryRoot) =>
+    invokeDesktopCommand<WorkspaceMutationRecoverySummary[]>(
+      "list_workspace_mutation_recoveries",
+      { repositoryRoot },
+    ),
   searchWorkspaceText: (repositoryRoot, requestId, query, options) =>
     invokeDesktopCommand<WorkspaceTextSearchReport>("search_workspace_text", {
       repositoryRoot,

@@ -64,6 +64,11 @@ import type {
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
   WorkspaceReplacementPreview,
+  WorkspaceCollisionPolicy,
+  WorkspaceMutationOperation,
+  WorkspaceMutationOutcome,
+  WorkspaceMutationPreview,
+  WorkspaceMutationRecoverySummary,
 } from "./models";
 import {
   parseWindowChromeMode,
@@ -418,6 +423,50 @@ const demoBridge: DesktopBridge = {
       };
     }
     return invoke<ProjectFileList>("list_project_files", { repositoryRoot });
+  },
+
+  async planWorkspaceMutation(
+    repositoryRoot: string,
+    planId: string,
+    operation: WorkspaceMutationOperation,
+    collisionPolicy: WorkspaceCollisionPolicy,
+  ): Promise<WorkspaceMutationPreview> {
+    if (!isTauri) {
+      throw new Error("Workspace mutations require the desktop build.");
+    }
+    return invoke<WorkspaceMutationPreview>("plan_workspace_mutation", {
+      repositoryRoot,
+      planId,
+      operation,
+      collisionPolicy,
+    });
+  },
+
+  async executeWorkspaceMutation(
+    repositoryRoot: string,
+    planId: string,
+  ): Promise<WorkspaceMutationOutcome> {
+    if (!isTauri) {
+      throw new Error("Workspace mutations require the desktop build.");
+    }
+    return invoke<WorkspaceMutationOutcome>("execute_workspace_mutation", {
+      repositoryRoot,
+      planId,
+    });
+  },
+
+  async cancelWorkspaceMutation(repositoryRoot: string, planId: string): Promise<void> {
+    if (!isTauri) return;
+    return invoke<void>("cancel_workspace_mutation", { repositoryRoot, planId });
+  },
+
+  async listWorkspaceMutationRecoveries(
+    repositoryRoot: string,
+  ): Promise<WorkspaceMutationRecoverySummary[]> {
+    if (!isTauri) return [];
+    return invoke<WorkspaceMutationRecoverySummary[]>("list_workspace_mutation_recoveries", {
+      repositoryRoot,
+    });
   },
 
   async searchWorkspaceText(

@@ -18,6 +18,141 @@ pub(crate) async fn list_project_files(
 }
 
 #[tauri::command]
+pub(crate) async fn plan_workspace_mutation(
+    repository_root: String,
+    plan_id: String,
+    operation: WorkspaceMutationOperation,
+    collision_policy: WorkspaceCollisionPolicy,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    mutations: State<'_, WorkspaceMutationCoordinator>,
+) -> Result<WorkspaceMutationPreview, WorkspaceError> {
+    let window_label = window.label().to_string();
+    let root = active_workspaces.resolve(&window_label, &repository_root)?;
+    let plan_token = mutations.begin_plan(&window_label, &repository_root, &plan_id)?;
+    let task_root = root.clone();
+    let task_plan_id = plan_id.clone();
+    let result = run_workspace_blocking("plan workspace mutation", move || {
+        let workspace = Workspace::open(&task_root)?;
+        match operation {
+            WorkspaceMutationOperation::CreateFile { destination } => {
+                workspace.plan_create_file(&task_plan_id, &destination, collision_policy)
+            }
+            WorkspaceMutationOperation::Copy {
+                source,
+                destination,
+            } => workspace.plan_copy(
+                &task_plan_id,
+                &source,
+                &destination,
+                collision_policy,
+                WORKSPACE_MUTATION_LIMITS,
+            ),
+            WorkspaceMutationOperation::Move {
+                source,
+                destination,
+            } => workspace.plan_move(
+                &task_plan_id,
+                &source,
+                &destination,
+                collision_policy,
+                WORKSPACE_MUTATION_LIMITS,
+            ),
+            WorkspaceMutationOperation::Trash { source } => {
+                workspace.plan_trash(&task_plan_id, &source, WORKSPACE_MUTATION_LIMITS)
+            }
+        }
+    })
+    .await;
+    match result {
+        Ok(plan) => {
+            let preview = WorkspaceMutationPreview::from(&plan);
+            let stored = plan
+                .executable()
+                .then_some(StoredWorkspaceMutationPlan { root, plan });
+            mutations.finish_plan(
+                &window_label,
+                &repository_root,
+                &plan_id,
+                plan_token,
+                stored,
+            )?;
+            Ok(preview)
+        }
+        Err(error) => {
+            match mutations.finish_plan(&window_label, &repository_root, &plan_id, plan_token, None)
+            {
+                Ok(()) => Err(error),
+                Err(stale) => Err(stale),
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn execute_workspace_mutation(
+    repository_root: String,
+    plan_id: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    mutations: State<'_, WorkspaceMutationCoordinator>,
+    app: tauri::AppHandle,
+) -> Result<WorkspaceMutationOutcome, WorkspaceError> {
+    let window_label = window.label().to_string();
+    let root = active_workspaces.resolve(&window_label, &repository_root)?;
+    let execution = mutations.start_execution(&window_label, &repository_root, &root, &plan_id)?;
+    let recovery_root = workspace_mutation_recovery_root(&app)?;
+    let task_plan = execution.plan.clone();
+    let task_cancellation = execution.cancellation.clone();
+    let write_lock = execution.write_lock.clone();
+    let task_root = root.clone();
+    let result = run_workspace_blocking("execute workspace mutation", move || {
+        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize workspace writes".to_string(),
+            message: "workspace-write lock was poisoned".to_string(),
+        })?;
+        Workspace::open(task_root)?.execute_mutation_plan(
+            &recovery_root,
+            &task_plan,
+            &task_cancellation,
+        )
+    })
+    .await;
+    mutations.finish_execution(
+        &window_label,
+        &repository_root,
+        &plan_id,
+        &execution.cancellation,
+    )?;
+    result
+}
+
+#[tauri::command]
+pub(crate) fn cancel_workspace_mutation(
+    repository_root: String,
+    plan_id: String,
+    window: tauri::WebviewWindow,
+    mutations: State<'_, WorkspaceMutationCoordinator>,
+) -> Result<(), WorkspaceError> {
+    mutations.cancel(window.label().to_string(), repository_root, plan_id)
+}
+
+#[tauri::command]
+pub(crate) async fn list_workspace_mutation_recoveries(
+    repository_root: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    app: tauri::AppHandle,
+) -> Result<Vec<WorkspaceMutationRecoverySummary>, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let recovery_root = workspace_mutation_recovery_root(&app)?;
+    run_workspace_blocking("list workspace mutation recoveries", move || {
+        Workspace::open(root)?.list_mutation_recoveries(&recovery_root)
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn search_workspace_text(
     repository_root: String,
     request_id: String,

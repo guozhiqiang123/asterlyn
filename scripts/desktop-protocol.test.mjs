@@ -216,6 +216,51 @@ test("desktop response validation rejects unknown mutation slices", () => {
   );
 });
 
+test("desktop response validation checks workspace mutation plans and outcomes", () => {
+  const preview = {
+    planId: "move-1",
+    operation: { kind: "move", source: "old", destination: "new" },
+    collisionPolicy: "cancel",
+    source: {
+      workspacePath: "old",
+      kind: "directory",
+      revision: "revision",
+      mode: 493,
+      byteLength: 12,
+    },
+    entryCount: 3,
+    totalBytes: 12,
+    blockers: [],
+  };
+  assert.deepEqual(validateDesktopResult("plan_workspace_mutation", preview), preview);
+
+  const outcome = {
+    planId: "move-1",
+    status: "completed",
+    affectedPaths: ["old", "new"],
+    pathRemaps: [{ source: "old", destination: "new" }],
+    invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
+    recoveryId: null,
+    error: null,
+  };
+  assert.deepEqual(validateDesktopResult("execute_workspace_mutation", outcome), outcome);
+
+  assert.throws(
+    () => validateDesktopResult("plan_workspace_mutation", {
+      ...preview,
+      blockers: [{ kind: "symlink", paths: ["valid", 7] }],
+    }),
+    /paths must contain only strings/,
+  );
+  assert.throws(
+    () => validateDesktopResult("execute_workspace_mutation", {
+      ...outcome,
+      invalidatedSlices: ["history"],
+    }),
+    /unsupported workspace slice/,
+  );
+});
+
 function repositorySnapshot() {
   return {
     root: "/repo",

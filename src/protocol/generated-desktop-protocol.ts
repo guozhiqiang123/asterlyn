@@ -28,6 +28,10 @@ export interface DesktopCommandMap {
   read_image_file: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.ImagePreview };
   read_local_image_diff: { args: { repositoryRoot: string; selected: Model.FileChange; }; result: Model.ImageDiffPreview };
   list_project_files: { args: { repositoryRoot: string; }; result: Model.ProjectFileList };
+  plan_workspace_mutation: { args: { repositoryRoot: string; planId: string; operation: Model.WorkspaceMutationOperation; collisionPolicy: Model.WorkspaceCollisionPolicy; }; result: Model.WorkspaceMutationPreview };
+  execute_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: Model.WorkspaceMutationOutcome };
+  cancel_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: void };
+  list_workspace_mutation_recoveries: { args: { repositoryRoot: string; }; result: Array<Model.WorkspaceMutationRecoverySummary> };
   search_workspace_text: { args: { repositoryRoot: string; requestId: string; query: string; options: Model.WorkspaceTextSearchOptions; }; result: Model.WorkspaceTextSearchReport };
   cancel_workspace_text_search: { args: { repositoryRoot: string; requestId: string; }; result: void };
   preview_workspace_replacement: { args: { repositoryRoot: string; planId: string; query: string; replacement: string; options: Model.WorkspaceTextSearchOptions; }; result: Model.WorkspaceReplacementPreview };
@@ -96,6 +100,10 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_image_file: "imagePreview",
   read_local_image_diff: "imageDiffPreview",
   list_project_files: "projectFileList",
+  plan_workspace_mutation: "workspaceMutationPreview",
+  execute_workspace_mutation: "workspaceMutationOutcome",
+  cancel_workspace_mutation: "void",
+  list_workspace_mutation_recoveries: "workspaceMutationRecoveryList",
   search_workspace_text: "workspaceTextSearchReport",
   cancel_workspace_text_search: "void",
   preview_workspace_replacement: "workspaceReplacementPreview",

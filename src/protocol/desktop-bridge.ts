@@ -36,6 +36,11 @@ import type {
   WorkingTreeMutationOutcome,
   UntrackedScan,
   WorkspaceReplacementPreview,
+  WorkspaceCollisionPolicy,
+  WorkspaceMutationOperation,
+  WorkspaceMutationOutcome,
+  WorkspaceMutationPreview,
+  WorkspaceMutationRecoverySummary,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "../models";
@@ -61,6 +66,20 @@ export interface DesktopShellBridge {
 
 export interface WorkspaceBridge {
   listProjectFiles(repositoryRoot: string): Promise<ProjectFileList>;
+  planWorkspaceMutation(
+    repositoryRoot: string,
+    planId: string,
+    operation: WorkspaceMutationOperation,
+    collisionPolicy: WorkspaceCollisionPolicy,
+  ): Promise<WorkspaceMutationPreview>;
+  executeWorkspaceMutation(
+    repositoryRoot: string,
+    planId: string,
+  ): Promise<WorkspaceMutationOutcome>;
+  cancelWorkspaceMutation(repositoryRoot: string, planId: string): Promise<void>;
+  listWorkspaceMutationRecoveries(
+    repositoryRoot: string,
+  ): Promise<WorkspaceMutationRecoverySummary[]>;
   searchWorkspaceText(
     repositoryRoot: string,
     requestId: string,

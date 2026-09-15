@@ -17,8 +17,8 @@ pub use entry_mutation::{
     WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationPlan,
 };
 pub use mutation_execution::{
-    WorkspaceMutationCancellationToken, WorkspaceMutationOutcome, WorkspaceMutationRecoverySummary,
-    WorkspaceMutationStatus, WorkspacePathRemap,
+    WorkspaceMutationCancellationToken, WorkspaceMutationInvalidation, WorkspaceMutationOutcome,
+    WorkspaceMutationRecoverySummary, WorkspaceMutationStatus, WorkspacePathRemap,
 };
 
 pub use replacement::{

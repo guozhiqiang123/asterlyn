@@ -2,6 +2,7 @@ mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
 mod search_session;
+mod workspace_mutation;
 mod workspace_session;
 mod workspace_watch;
 
@@ -11,6 +12,7 @@ pub(crate) use search_session::{
     AuthorizedReplacementFile, StoredReplacementPlan, WorkspaceReplacementRegistry,
     WorkspaceSearchRegistry,
 };
+pub(crate) use workspace_mutation::{StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator};
 pub(crate) use workspace_session::{
     ActiveWorkspaces, GitMutationRegistry, PendingRepositoryWindowReservation,
     PendingRepositoryWindows, WorkspaceWatchRoots, WorkspaceWriteRegistry,

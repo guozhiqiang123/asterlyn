@@ -528,6 +528,78 @@ export interface WorkspaceReplacementPreview {
   coverageReasons: SearchCoverageReason[];
 }
 
+export type WorkspaceEntryKind = "file" | "directory";
+export type WorkspaceCollisionPolicy = "cancel" | "renameTarget";
+
+export interface WorkspaceEntryIdentity {
+  workspacePath: string;
+  kind: WorkspaceEntryKind;
+  revision: string;
+  mode: number;
+  byteLength: number;
+}
+
+export type WorkspaceMutationOperation =
+  | { kind: "createFile"; destination: string }
+  | { kind: "copy"; source: string; destination: string }
+  | { kind: "move"; source: string; destination: string }
+  | { kind: "trash"; source: string };
+
+export type WorkspaceMutationBlocker =
+  | { kind: "destinationExists"; path: string }
+  | { kind: "destinationInsideSource"; path: string }
+  | { kind: "symlink"; paths: string[] }
+  | { kind: "nestedRepository"; paths: string[] }
+  | { kind: "multipleHardLinks"; paths: string[] }
+  | { kind: "inventoryTruncated" };
+
+export interface WorkspaceMutationPreview {
+  planId: string;
+  operation: WorkspaceMutationOperation;
+  collisionPolicy: WorkspaceCollisionPolicy;
+  source: WorkspaceEntryIdentity | null;
+  entryCount: number;
+  totalBytes: number;
+  blockers: WorkspaceMutationBlocker[];
+}
+
+export type WorkspaceMutationStatus =
+  | "completed"
+  | "noOp"
+  | "cancelledBeforeWrite"
+  | "failedWithoutChange"
+  | "failedWithRecovery"
+  | "uncertain";
+
+export type WorkspaceMutationInvalidation =
+  | "workspaceCatalog"
+  | "openDocuments"
+  | "workingTree";
+
+export interface WorkspacePathRemap {
+  source: string;
+  destination: string;
+}
+
+export interface WorkspaceMutationOutcome {
+  planId: string;
+  status: WorkspaceMutationStatus;
+  affectedPaths: string[];
+  pathRemaps: WorkspacePathRemap[];
+  invalidatedSlices: WorkspaceMutationInvalidation[];
+  recoveryId: string | null;
+  error: string | null;
+}
+
+export interface WorkspaceMutationRecoverySummary {
+  recoveryId: string;
+  workspaceRoot: string;
+  operation: WorkspaceMutationOperation;
+  phase: string;
+  destination: string | null;
+  sourceHold: string | null;
+}
+
 export type ReplacementRecoveryStatus = "applied" | "rolledBack" | "needsRecovery";
 export type ReplacementFileState = "original" | "replaced" | "conflict" | "unavailable";
 

@@ -28,9 +28,10 @@ pub(crate) use shell::{
 };
 pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write_terminal};
 pub(crate) use workspace::{
-    apply_workspace_replacement, cancel_workspace_replacement, cancel_workspace_text_search,
-    finalize_workspace_replacement, list_project_files, list_workspace_replacement_recoveries,
-    preview_workspace_replacement, read_text_file, rollback_workspace_replacement, save_text_file,
-    search_workspace_text,
+    apply_workspace_replacement, cancel_workspace_mutation, cancel_workspace_replacement,
+    cancel_workspace_text_search, execute_workspace_mutation, finalize_workspace_replacement,
+    list_project_files, list_workspace_mutation_recoveries, list_workspace_replacement_recoveries,
+    plan_workspace_mutation, preview_workspace_replacement, read_text_file,
+    rollback_workspace_replacement, save_text_file, search_workspace_text,
 };
 pub(crate) use workspace_watch::{start_workspace_watch, stop_workspace_watch};

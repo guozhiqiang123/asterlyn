@@ -29,6 +29,14 @@ pub struct WorkspacePathRemap {
     pub destination: String,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspaceMutationInvalidation {
+    WorkspaceCatalog,
+    OpenDocuments,
+    WorkingTree,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceMutationOutcome {
@@ -36,6 +44,7 @@ pub struct WorkspaceMutationOutcome {
     pub status: WorkspaceMutationStatus,
     pub affected_paths: Vec<String>,
     pub path_remaps: Vec<WorkspacePathRemap>,
+    pub invalidated_slices: Vec<WorkspaceMutationInvalidation>,
     pub recovery_id: Option<String>,
     pub error: Option<String>,
 }
@@ -57,12 +66,20 @@ pub struct WorkspaceMutationCancellationToken {
 }
 
 impl WorkspaceMutationCancellationToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
     }
 
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
+    }
+
+    pub fn refers_to(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.cancelled, &other.cancelled)
     }
 }
 
@@ -744,6 +761,20 @@ fn outcome(
         status,
         affected_paths,
         path_remaps: Vec::new(),
+        invalidated_slices: match &plan.operation {
+            WorkspaceMutationOperation::CreateFile { .. }
+            | WorkspaceMutationOperation::Copy { .. } => vec![
+                WorkspaceMutationInvalidation::WorkspaceCatalog,
+                WorkspaceMutationInvalidation::WorkingTree,
+            ],
+            WorkspaceMutationOperation::Move { .. } | WorkspaceMutationOperation::Trash { .. } => {
+                vec![
+                    WorkspaceMutationInvalidation::WorkspaceCatalog,
+                    WorkspaceMutationInvalidation::OpenDocuments,
+                    WorkspaceMutationInvalidation::WorkingTree,
+                ]
+            }
+        },
         recovery_id,
         error,
     }

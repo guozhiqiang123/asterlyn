@@ -236,6 +236,69 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       booleans(result, command, "truncated");
       break;
     }
+    case "workspaceMutationPreview": {
+      const result = record(value, command);
+      strings(result, command, "planId", "collisionPolicy");
+      numbers(result, command, "entryCount", "totalBytes");
+      arrays(result, command, "blockers");
+      assertWorkspaceMutationOperation(result.operation, command);
+      assert(
+        result.collisionPolicy === "cancel" || result.collisionPolicy === "renameTarget",
+        command,
+        "collisionPolicy must be supported",
+      );
+      assertNonNegativeInteger(result.entryCount, command, "entryCount");
+      assertNonNegativeInteger(result.totalBytes, command, "totalBytes");
+      assert(
+        result.source === null || isWorkspaceEntryIdentity(result.source),
+        command,
+        "source must be an entry identity or null",
+      );
+      for (const blocker of result.blockers as unknown[]) {
+        assertWorkspaceMutationBlocker(blocker, command);
+      }
+      break;
+    }
+    case "workspaceMutationOutcome": {
+      const result = record(value, command);
+      strings(result, command, "planId", "status");
+      arrays(result, command, "affectedPaths", "pathRemaps", "invalidatedSlices");
+      nullableStrings(result, command, "recoveryId", "error");
+      assert(
+        [
+          "completed",
+          "noOp",
+          "cancelledBeforeWrite",
+          "failedWithoutChange",
+          "failedWithRecovery",
+          "uncertain",
+        ].includes(result.status as string),
+        command,
+        "status must be a supported workspace mutation status",
+      );
+      assertStringArray(result.affectedPaths, command, "affectedPaths");
+      for (const remap of result.pathRemaps as unknown[]) {
+        const item = record(remap, command);
+        strings(item, command, "source", "destination");
+      }
+      assert(
+        (result.invalidatedSlices as unknown[]).every((slice) =>
+          slice === "workspaceCatalog" || slice === "openDocuments" || slice === "workingTree"
+        ),
+        command,
+        "invalidatedSlices contains an unsupported workspace slice",
+      );
+      break;
+    }
+    case "workspaceMutationRecoveryList":
+      assert(Array.isArray(value), command, "expected a workspace mutation recovery list");
+      for (const recovery of value as unknown[]) {
+        const result = record(recovery, command);
+        strings(result, command, "recoveryId", "workspaceRoot", "phase");
+        nullableStrings(result, command, "destination", "sourceHold");
+        assertWorkspaceMutationOperation(result.operation, command);
+      }
+      break;
     case "workspaceTextSearchReport": {
       const result = record(value, command);
       strings(result, command, "requestId");
@@ -505,6 +568,78 @@ function assertReplacementRecovery(
   strings(result, command, "recoveryId", "status");
   arrays(result, command, "files");
   if (withMessage) nullableStrings(result, command, "message");
+}
+
+function assertWorkspaceMutationOperation(
+  value: unknown,
+  command: DesktopCommandName,
+): void {
+  const operation = record(value, command);
+  strings(operation, command, "kind");
+  switch (operation.kind) {
+    case "createFile":
+      strings(operation, command, "destination");
+      break;
+    case "copy":
+    case "move":
+      strings(operation, command, "source", "destination");
+      break;
+    case "trash":
+      strings(operation, command, "source");
+      break;
+    default:
+      assert(false, command, "operation kind must be supported");
+  }
+}
+
+function isWorkspaceEntryIdentity(value: unknown): value is TransportRecord {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.workspacePath === "string" &&
+    (value.kind === "file" || value.kind === "directory") &&
+    typeof value.revision === "string" &&
+    typeof value.mode === "number" &&
+    Number.isSafeInteger(value.mode) &&
+    value.mode >= 0 &&
+    typeof value.byteLength === "number" &&
+    Number.isSafeInteger(value.byteLength) &&
+    value.byteLength >= 0
+  );
+}
+
+function assertWorkspaceMutationBlocker(
+  value: unknown,
+  command: DesktopCommandName,
+): void {
+  const blocker = record(value, command);
+  strings(blocker, command, "kind");
+  switch (blocker.kind) {
+    case "destinationExists":
+    case "destinationInsideSource":
+      strings(blocker, command, "path");
+      break;
+    case "symlink":
+    case "nestedRepository":
+    case "multipleHardLinks":
+      assertStringArray(blocker.paths, command, "paths");
+      break;
+    case "inventoryTruncated":
+      break;
+    default:
+      assert(false, command, "blocker kind must be supported");
+  }
+}
+
+function assertNonNegativeInteger(
+  value: unknown,
+  command: DesktopCommandName,
+  name: string,
+): void {
+  assert(
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0,
+    command,
+    `${name} must be a non-negative integer`,
+  );
 }
 
 function record(value: unknown, command: DesktopCommandName): TransportRecord {

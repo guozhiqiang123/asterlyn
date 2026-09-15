@@ -15,7 +15,9 @@ use asterlyn_workspace::{
     ReplacementApplyResult, ReplacementFilePreview, ReplacementLimits, ReplacementRecoverySummary,
     SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken, SearchCandidate,
     SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason, TextFileSnapshot,
-    Workspace, WorkspaceError,
+    Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceError,
+    WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
+    WorkspaceMutationOutcome, WorkspaceMutationPlan, WorkspaceMutationRecoverySummary,
 };
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -34,8 +36,9 @@ use adapters::image_preview::{
 use application::{
     ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator,
     PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
-    StoredReplacementPlan, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
-    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    StoredReplacementPlan, StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator,
+    WorkspaceReplacementRegistry, WorkspaceSearchRegistry, WorkspaceWatchService,
+    WorkspaceWatchStatus, WorkspaceWriteRegistry,
 };
 #[cfg(test)]
 use application::{GitMutationRegistry, RemoteOperationRegistry};
@@ -69,6 +72,48 @@ pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
     max_replacement_bytes: 16 * 1024,
     max_preview_utf16: 320,
 };
+
+pub const WORKSPACE_MUTATION_LIMITS: WorkspaceMutationLimits = WorkspaceMutationLimits {
+    max_entries: 20_000,
+    max_total_bytes: 512 * 1024 * 1024,
+    max_depth: 64,
+    max_path_bytes: 4_096,
+};
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceMutationPreview {
+    plan_id: String,
+    operation: WorkspaceMutationOperation,
+    collision_policy: WorkspaceCollisionPolicy,
+    source: Option<WorkspaceEntryIdentity>,
+    entry_count: usize,
+    total_bytes: u64,
+    blockers: Vec<WorkspaceMutationBlocker>,
+}
+
+impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
+    fn from(plan: &WorkspaceMutationPlan) -> Self {
+        Self {
+            plan_id: plan.plan_id.clone(),
+            operation: plan.operation.clone(),
+            collision_policy: plan.collision_policy,
+            source: plan
+                .inventory
+                .as_ref()
+                .map(|inventory| inventory.source.clone()),
+            entry_count: plan
+                .inventory
+                .as_ref()
+                .map_or(0, |inventory| inventory.entries.len()),
+            total_bytes: plan
+                .inventory
+                .as_ref()
+                .map_or(0, |inventory| inventory.total_bytes),
+            blockers: plan.blockers.clone(),
+        }
+    }
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -526,6 +571,16 @@ fn replacement_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, Workspac
         })
 }
 
+fn workspace_mutation_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, WorkspaceError> {
+    app.path()
+        .app_local_data_dir()
+        .map(|path| path.join("workspace-mutation-recovery-v1"))
+        .map_err(|error| WorkspaceError::Io {
+            operation: "resolve workspace mutation recovery location".to_string(),
+            message: error.to_string(),
+        })
+}
+
 #[cfg(test)]
 fn read_authorized_text_file(
     root: &Path,
@@ -684,6 +739,7 @@ where
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let writes = WorkspaceWriteRegistry::default();
+    let workspace_mutations = WorkspaceMutationCoordinator::new(writes.clone());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
@@ -693,6 +749,7 @@ pub fn run() {
         .manage(writes)
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
+        .manage(workspace_mutations)
         .manage(WorkspaceWatchService::default())
         .manage(TerminalSessions::default())
         .setup(|app| {
@@ -714,6 +771,9 @@ pub fn run() {
                     .remove_window(window.label());
                 window
                     .state::<WorkspaceReplacementRegistry>()
+                    .remove_window(window.label());
+                window
+                    .state::<WorkspaceMutationCoordinator>()
                     .remove_window(window.label());
                 window
                     .state::<TerminalSessions>()
@@ -740,6 +800,10 @@ pub fn run() {
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,
+            plan_workspace_mutation,
+            execute_workspace_mutation,
+            cancel_workspace_mutation,
+            list_workspace_mutation_recoveries,
             search_workspace_text,
             cancel_workspace_text_search,
             preview_workspace_replacement,
