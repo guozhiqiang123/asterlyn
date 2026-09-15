@@ -3,12 +3,7 @@ import {
   createHistoryFilterState,
   type HistoryFilterState,
 } from "../features/git-history/history-filter-controller.ts";
-import type {
-  BranchSummary,
-  CommitDiffResult,
-  HistoryPath,
-  HistoryRef,
-} from "../models.ts";
+import type { CommitDiffResult, HistoryPath, HistoryRef } from "../models.ts";
 import type { CommitFileView } from "../workbench/git-presentation.ts";
 import {
   createCommandSurfaceState,
@@ -46,16 +41,12 @@ export interface AppState extends HistoryFilterState {
   historyPathDraft: Map<string, HistoryPath>;
   historyPathText: string;
   historyTreeCollapsed: Set<string>;
-  branchQuery: string;
   commitFileView: CommitFileView;
   collapsedCommitFileDirectories: Set<string>;
   commitPatch: CommitDiffResult | null;
   commitPatchLoading: boolean;
   commitPatchError: string | null;
   commitPatchVersion: number;
-  selectedBranch: string | null;
-  collapsedBranchGroups: Set<BranchSummary["kind"]>;
-  newBranchName: string;
   loading: boolean;
   error: string | null;
 }
@@ -83,16 +74,12 @@ export function createAppState(commitFileView: CommitFileView): AppState {
     historyPathDraft: new Map(),
     historyPathText: "",
     historyTreeCollapsed: new Set(),
-    branchQuery: "",
     commitFileView,
     collapsedCommitFileDirectories: new Set(),
     commitPatch: null,
     commitPatchLoading: false,
     commitPatchError: null,
     commitPatchVersion: 0,
-    selectedBranch: null,
-    collapsedBranchGroups: new Set(),
-    newBranchName: "",
     loading: false,
     error: null,
   };

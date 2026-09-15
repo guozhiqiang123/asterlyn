@@ -31,11 +31,11 @@ import {
 import {
   filteredBranches as filteredBranchesForView,
   logicalBranches as logicalBranchesForView,
-  matchingBranches,
   renderBranchGroups as renderBranchGroupsView,
   renderBranchNavigation as renderBranchNavigationView,
   type BranchNavigationViewModel,
 } from "./features/git-history/branch-navigation-view";
+import { GitBranchesController } from "./features/git-history/git-branches-controller.ts";
 import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
@@ -365,6 +365,7 @@ export class AsterlynApp {
   private changeCommitSplitterDisposer: (() => void) | null = null;
   private readonly historyController: GitHistoryDetailsController;
   private readonly releaseHistoryController: () => void;
+  private readonly branchesController: GitBranchesController;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
   private readonly remoteAuthenticationController: RemoteAuthenticationController;
@@ -488,6 +489,20 @@ export class AsterlynApp {
     this.releaseHistoryController = this.historyController.subscribe((change) =>
       this.handleHistoryControllerChange(change),
     );
+    this.branchesController = new GitBranchesController({
+      current: () => {
+        const snapshot = this.windowSession.repository.state.snapshot;
+        return snapshot
+          ? {
+              snapshot,
+              loading: this.state.loading,
+              safe: this.branchSafety(snapshot).ready,
+            }
+          : null;
+      },
+      checkout: (branch) => this.executeBranchCheckout(branch),
+      create: (name) => this.executeBranchCreate(name),
+    });
     this.remoteController = new RemotePushController({
       readPushPreview: (...args) => bridge.readPushPreview(...args),
       readCommitDetails: (...args) => bridge.readCommitDetails(...args),
@@ -576,7 +591,7 @@ export class AsterlynApp {
       },
       {
         clearBranchSelection: () => {
-          this.state.selectedBranch = null;
+          this.branchesController.setSelectedBranch(null);
         },
         installSnapshotHistory: (snapshot, preferTip) =>
           this.installSnapshotHistory(snapshot, preferTip),
@@ -1497,7 +1512,7 @@ export class AsterlynApp {
       this.resetHistoryFilters();
       this.state.gitDetail = "commit";
       this.filesController.installWorkspace(opened.root, snapshot?.changes ?? []);
-      this.state.selectedBranch = null;
+      this.branchesController.setSelectedBranch(null);
       if (snapshot) {
         this.installSnapshotHistory(snapshot, true);
         this.loadHistoryPreferences(snapshot);
@@ -1587,9 +1602,7 @@ export class AsterlynApp {
   }
 
   private reconcileHistoryScope(snapshot: RepositorySnapshot): void {
-    const refKeys = new Set(snapshot.branches.map((branch) => branchKey(branch)));
-    if (this.state.selectedBranch && !refKeys.has(this.state.selectedBranch)) {
-      this.state.selectedBranch = null;
+    if (this.branchesController.reconcile(snapshot)) {
       this.state.gitDetail = "commit";
     }
     this.historyFilters.reconcile(snapshot);
@@ -4056,23 +4069,11 @@ export class AsterlynApp {
     };
   }
 
-  private allMatchingHistoryBranches(
-    branch: BranchSummary,
-    snapshot: RepositorySnapshot,
-  ): BranchSummary[] {
-    return matchingBranches(branch, this.branchNavigationViewModel(snapshot), true);
-  }
-
-  private setLogicalBranchScope(
-    branch: BranchSummary,
-    snapshot: RepositorySnapshot,
-  ): void {
-    const branches = this.allMatchingHistoryBranches(branch, snapshot);
+  private installBranchHistoryScope(branches: readonly BranchSummary[]): void {
     const references = branches.map(historyReference);
     this.state.historyRefs = new Map(
       references.map((reference) => [historyRefKey(reference), reference]),
     );
-    this.state.selectedBranch = branches.length === 1 ? branchKey(branches[0]!) : null;
     this.state.gitDetail = branches.length === 1 ? "branch" : "commit";
     for (const reference of references) this.recordRecentHistoryRef(reference);
   }
@@ -4202,10 +4203,10 @@ export class AsterlynApp {
   private branchNavigationViewModel(snapshot: RepositorySnapshot): BranchNavigationViewModel {
     return {
       snapshot,
-      query: this.state.branchQuery,
+      query: this.branchesController.state.query,
       selectedRepositoryIds: this.state.historyRepositoryIds,
       selectedRefs: this.state.historyRefs,
-      collapsedGroups: this.state.collapsedBranchGroups,
+      collapsedGroups: this.branchesController.state.collapsedGroups,
       localization: this.localization,
     };
   }
@@ -4524,12 +4525,13 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-quick-ref]").forEach((button) => {
       button.addEventListener("click", () => {
         const key = button.dataset.historyQuickRef;
-        const branch = key ? this.branchForKey(key) : null;
         const snapshot = this.windowSession.repository.state.snapshot;
-        if (!key || !branch || !snapshot) return;
+        if (!key || !snapshot) return;
         // Keep every catalog match in the query so later root-checkbox changes preserve the
         // workspace-level branch meaning; repositoryIds still controls which roots participate.
-        this.setLogicalBranchScope(branch, snapshot);
+        const branches = this.branchesController.selectHistoryScope(snapshot, key);
+        if (!branches) return;
+        this.installBranchHistoryScope(branches);
         this.state.historyFilterMenu = null;
         this.state.historyBranchSubmenu = null;
         this.applyHistoryQuery(true);
@@ -4713,7 +4715,7 @@ export class AsterlynApp {
     if (kind === "branches") {
       this.state.historyRefs = new Map(this.state.historyRefDraft);
       const selected = Array.from(this.state.historyRefs.entries());
-      this.state.selectedBranch = selected.length === 1 ? selected[0]![0] : null;
+      this.branchesController.setSelectedBranch(selected.length === 1 ? selected[0]![0] : null);
       this.state.gitDetail = selected.length === 1 ? "branch" : "commit";
       for (const reference of this.state.historyRefs.values()) {
         this.recordRecentHistoryRef(reference);
@@ -4819,7 +4821,7 @@ export class AsterlynApp {
     input?.addEventListener("input", () => {
       const snapshot = this.windowSession.repository.state.snapshot;
       if (!snapshot) return;
-      this.state.branchQuery = input.value;
+      this.branchesController.setQuery(input.value);
       this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
       this.renderBranchCount(snapshot);
       this.bindBranchRows();
@@ -4828,7 +4830,7 @@ export class AsterlynApp {
       if (event.key === "Escape" && input.value) {
         event.preventDefault();
         input.value = "";
-        this.state.branchQuery = "";
+        this.branchesController.setQuery("");
         const snapshot = this.windowSession.repository.state.snapshot;
         if (!snapshot) return;
         this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
@@ -4859,10 +4861,7 @@ export class AsterlynApp {
         button.addEventListener("click", () => {
           const kind = button.dataset.branchGroupToggle as BranchSummary["kind"] | undefined;
           if (!kind) return;
-          const collapsed = new Set(this.state.collapsedBranchGroups);
-          if (collapsed.has(kind)) collapsed.delete(kind);
-          else collapsed.add(kind);
-          this.state.collapsedBranchGroups = collapsed;
+          this.branchesController.toggleGroup(kind);
           this.query("#branch-navigation-body").innerHTML =
             this.renderBranchNavigation(this.windowSession.repository.state.snapshot!);
           this.renderBranchCount(this.windowSession.repository.state.snapshot!);
@@ -4899,15 +4898,15 @@ export class AsterlynApp {
 
   private selectBranch(key: string, restoreFocus = false): void {
     const snapshot = this.windowSession.repository.state.snapshot;
-    const branch = snapshot?.branches.find((candidate) => branchKey(candidate) === key);
-    if (!snapshot || !branch) return;
-    const branches = this.allMatchingHistoryBranches(branch, snapshot);
-    const selectedExclusively =
-      branches.length === this.state.historyRefs.size &&
-      branches.every((candidate) => this.state.historyRefs.has(branchKey(candidate)));
-    if (selectedExclusively) {
+    if (!snapshot) return;
+    const intent = this.branchesController.toggleHistoryScope(
+      snapshot,
+      key,
+      this.state.historyRefs,
+    );
+    if (!intent) return;
+    if (intent.kind === "clear") {
       this.state.historyRefs.clear();
-      this.state.selectedBranch = null;
       this.state.gitDetail = "commit";
       this.applyHistoryQuery(true);
       if (restoreFocus) {
@@ -4918,7 +4917,7 @@ export class AsterlynApp {
       }
       return;
     }
-    this.setLogicalBranchScope(branch, snapshot);
+    this.installBranchHistoryScope(intent.branches);
     this.applyHistoryQuery(true);
     if (restoreFocus) {
       const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
@@ -6314,14 +6313,14 @@ export class AsterlynApp {
 
   private renderGitDetail(snapshot: RepositorySnapshot): string {
     if (this.state.gitDetail === "branch") {
-      const branch = selectedBranch(snapshot, this.state.selectedBranch);
+      const branch = this.branchesController.selected(snapshot);
       return branch
         ? renderBranchDetail({
             snapshot,
             branch,
             safety: this.branchSafety(snapshot),
             loading: this.state.loading,
-            newBranchName: this.state.newBranchName,
+            newBranchName: this.branchesController.state.newBranchName,
             localization: this.localization,
           })
         : inspectorPlaceholder(this.localization);
@@ -6352,7 +6351,7 @@ export class AsterlynApp {
   private bindGitDetailEvents(snapshot: RepositorySnapshot): void {
     this.bindGitOperationStartActions();
     if (this.state.gitDetail === "branch") {
-      const branch = selectedBranch(snapshot, this.state.selectedBranch);
+      const branch = this.branchesController.selected(snapshot);
       if (branch) this.bindBranchInspector(branch, snapshot);
       return;
     }
@@ -6690,44 +6689,28 @@ export class AsterlynApp {
     }
   }
 
-  private async switchBranch(branch: BranchSummary): Promise<void> {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    if (
-      !snapshot ||
-      branch.kind !== "local" ||
-      branch.current ||
-      !this.branchSafety(snapshot).ready ||
-      this.state.loading
-    ) {
-      return;
-    }
-    await this.runBranchMutation(
+  private async requestBranchCheckout(branch: BranchSummary): Promise<void> {
+    await this.branchesController.checkout(branchKey(branch));
+  }
+
+  private executeBranchCheckout(branch: BranchSummary): Promise<void> {
+    return this.runBranchMutation(
       this.localization.catalog.history.checkingOut(branch.name),
       this.localization.catalog.history.checkedOutBranch(branch.name),
       (root) => bridge.switchBranch(root, branch.fullName),
     );
   }
 
-  private async createBranch(): Promise<void> {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const name = this.state.newBranchName.trim();
-    if (
-      !snapshot ||
-      !name ||
-      !this.branchSafety(snapshot).ready ||
-      this.state.loading
-    ) {
-      return;
-    }
-    await this.runBranchMutation(
+  private async requestBranchCreate(): Promise<void> {
+    if (await this.branchesController.create() === "accepted") this.renderBottomTool();
+  }
+
+  private executeBranchCreate(name: string): Promise<void> {
+    return this.runBranchMutation(
       this.localization.catalog.history.creatingBranch(name),
       this.localization.catalog.history.createdBranch(name),
       (root) => bridge.createBranch(root, name),
     );
-    if (this.windowSession.repository.state.snapshot?.branch.head === name) {
-      this.state.newBranchName = "";
-      this.renderBottomTool();
-    }
   }
 
   private async runBranchMutation(
@@ -7027,12 +7010,12 @@ export class AsterlynApp {
   ): void {
     this.root.querySelector<HTMLButtonElement>("#checkout-branch")?.addEventListener(
       "click",
-      () => void this.switchBranch(branch),
+      () => void this.requestBranchCheckout(branch),
     );
     const input = this.root.querySelector<HTMLInputElement>("#new-branch-name");
     const button = this.root.querySelector<HTMLButtonElement>("#create-branch-button");
     input?.addEventListener("input", () => {
-      this.state.newBranchName = input.value;
+      this.branchesController.setNewBranchName(input.value);
       if (button) {
         button.disabled =
           !this.branchSafety(snapshot).ready ||
@@ -7044,7 +7027,7 @@ export class AsterlynApp {
       "submit",
       (event) => {
         event.preventDefault();
-        if (!button?.disabled) void this.createBranch();
+        if (!button?.disabled) void this.requestBranchCreate();
       },
     );
   }
@@ -7108,14 +7091,6 @@ function selectedCommit(
   key: string | null,
 ): CommitSummary | null {
   return commits.find((commit) => commitKey(commit) === key) ?? commits[0] ?? null;
-}
-
-function selectedBranch(
-  snapshot: RepositorySnapshot,
-  key: string | null,
-): BranchSummary | null {
-  if (!key) return null;
-  return snapshot.branches.find((branch) => branchKey(branch) === key) ?? null;
 }
 
 function historyReference(
