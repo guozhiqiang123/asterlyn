@@ -17,6 +17,7 @@ export type SessionInvalidationCause =
   | "activation"
   | "manualRefresh"
   | "save"
+  | "workspaceMutation"
   | "workspaceReplacement"
   | "gitMutation"
   | "remoteOperation"

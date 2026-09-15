@@ -145,6 +145,11 @@ import {
 } from "./application/repository-integration-coordinator";
 import { remoteOutcomeNeedsUntrackedScan } from "./application/repository-mutation";
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
+import {
+  WorkspaceMutationCoordinator,
+  type WorkspaceMutationReconciliationLease,
+  type WorkspaceMutationReconciliationResult,
+} from "./application/workspace-mutation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import { createAppState, type AppState } from "./application/app-state";
 import { WorkspaceWatchCoordinator } from "./application/workspace-watch-coordinator";
@@ -304,6 +309,7 @@ import type {
   ReplacementApplyResult,
   RepositoryMutationOutcome,
   RepositorySnapshot,
+  WorkspaceMutationOutcome,
   WorkspaceTextSearchMatch,
 } from "./models";
 
@@ -409,6 +415,7 @@ export class AsterlynApp {
   );
   private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
   private readonly repositoryIntegration: RepositoryIntegrationCoordinator;
+  private readonly workspaceMutations: WorkspaceMutationCoordinator;
   private readonly workspaceWatch: WorkspaceWatchCoordinator;
 
   constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
@@ -643,6 +650,23 @@ export class AsterlynApp {
           fileSavedRefreshFailed: this.localization.catalog.changes.fileSavedRefreshFailed,
           recoveryCount: this.localization.catalog.replacement.recoveryCount,
         }),
+      },
+    );
+    this.workspaceMutations = new WorkspaceMutationCoordinator(
+      bridge,
+      this.editorController,
+      ({ remaps, disposedTabIds }) =>
+        this.editorSurface.applyTextPathMutation(remaps, disposedTabIds),
+      {
+        begin: (identity) => {
+          if (!this.windowSession.matches(identity.generation, identity.root)) return null;
+          return {
+            root: identity.root,
+            generation: this.windowSession.beginTransition({ reconciliationBarrier: true }),
+          };
+        },
+        accept: (lease, outcome) => this.reconcileWorkspaceMutation(lease, outcome),
+        settle: (lease) => this.windowSession.completeTransition(lease.generation),
       },
     );
     this.workspaceWatch = new WorkspaceWatchCoordinator(
@@ -1147,6 +1171,7 @@ export class AsterlynApp {
     this.contextMenuHost.dispose();
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
+    this.workspaceMutations.dispose();
     this.repositoryIntegration.dispose();
     this.releaseHistoryController();
     this.historyController.dispose();
@@ -1465,6 +1490,7 @@ export class AsterlynApp {
     ) {
       return false;
     }
+    this.workspaceMutations.cancel();
     this.contextMenuHost.close();
     this.cancelActiveWorkspaceSearch();
     this.cancelActiveWorkspaceReplacement();
@@ -2489,6 +2515,54 @@ export class AsterlynApp {
         true,
         "workspaceReplacement",
       );
+    }
+  }
+
+  private async reconcileWorkspaceMutation(
+    lease: WorkspaceMutationReconciliationLease,
+    outcome: WorkspaceMutationOutcome,
+  ): Promise<WorkspaceMutationReconciliationResult> {
+    if (!this.windowSession.matches(lease.generation, lease.root)) {
+      return { status: "stale" };
+    }
+    const workspaceIdentity = this.windowSession.workspace.identity();
+    if (!workspaceIdentity || workspaceIdentity.root !== lease.root) {
+      return { status: "stale" };
+    }
+    try {
+      let snapshot = this.windowSession.repository.state.snapshot;
+      if (outcome.invalidatedSlices.includes("workingTree")) {
+        const refreshed = await this.windowSession.refreshRepositorySlices(
+          workspaceIdentity,
+          ["workingTree"],
+        );
+        if (!refreshed || !this.windowSession.matches(lease.generation, lease.root)) {
+          return { status: "stale" };
+        }
+        snapshot = refreshed.repository;
+      }
+      this.repositoryIntegration.acceptWorkspaceMutation(snapshot, outcome);
+      if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
+        await this.loadProjectFiles(lease.root, lease.generation);
+      }
+      if (!this.windowSession.matches(lease.generation, lease.root)) {
+        return { status: "stale" };
+      }
+      if (snapshot && outcome.invalidatedSlices.includes("workingTree")) {
+        await this.windowSession.scanUntracked(
+          lease.root,
+          lease.generation,
+          false,
+          "workspaceMutation",
+        );
+      }
+      return this.windowSession.matches(lease.generation, lease.root)
+        ? { status: "accepted" }
+        : { status: "stale" };
+    } catch (error) {
+      return this.windowSession.matches(lease.generation, lease.root)
+        ? { status: "failure", error }
+        : { status: "stale" };
     }
   }
 

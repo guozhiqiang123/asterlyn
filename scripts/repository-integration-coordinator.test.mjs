@@ -36,6 +36,31 @@ test("repository integration applies only declared projection slices", () => {
   fixture.dispose();
 });
 
+test("workspace mutation reconciliation commits exact paths and projections", () => {
+  const fixture = integrationFixture();
+  const changed = snapshot("/repo", [{ path: "src/renamed.ts", conflicted: false }]);
+  const outcome = {
+    planId: "workspace-mutation-1",
+    status: "completed",
+    affectedPaths: ["src/old.ts", "src/renamed.ts"],
+    pathRemaps: [{ source: "src/old.ts", destination: "src/renamed.ts" }],
+    invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
+    recoveryId: null,
+    error: null,
+  };
+
+  fixture.coordinator.acceptWorkspaceMutation(changed, outcome);
+
+  assert.deepEqual(fixture.session.repository.state.snapshot, changed);
+  assert.deepEqual(fixture.records.changes, [{ snapshot: changed, options: {} }]);
+  assert.deepEqual(fixture.records.files, [["src/renamed.ts"]]);
+  assert.deepEqual(fixture.records.documents, [true]);
+  assert.equal(fixture.records.remote.length, 0);
+  assert.equal(fixture.records.history.length, 0);
+  assert.equal(fixture.records.renders, 1);
+  fixture.dispose();
+});
+
 test("metadata-only reconciliation preserves newer working state in canonical and projections", () => {
   const fixture = integrationFixture();
   const newerWorkingTree = snapshot("/repo", [{ path: "newer.ts", conflicted: false }]);

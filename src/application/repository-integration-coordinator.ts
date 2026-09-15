@@ -4,6 +4,7 @@ import type {
   OpenedProject,
   RepositoryMutationOutcome,
   RepositorySnapshot,
+  WorkspaceMutationOutcome,
   WorkingTreeMutationOutcome,
 } from "../models.ts";
 import {
@@ -289,6 +290,42 @@ export class RepositoryIntegrationCoordinator {
       this.targets.changes.installSnapshot(null);
       this.targets.files.updateChanges([]);
       this.targets.operations.installSnapshot(null);
+    }
+    this.actions.renderWorkspace();
+  }
+
+  acceptWorkspaceMutation(
+    snapshot: RepositorySnapshot | null,
+    outcome: WorkspaceMutationOutcome,
+  ): void {
+    this.ensureActive();
+    const previous = this.session.repository.state.snapshot;
+    const installed = this.installSnapshot(
+      snapshot,
+      "workspaceMutation",
+      outcome.invalidatedSlices,
+      { paths: outcome.affectedPaths },
+    );
+    const capabilityChanged = previous?.gitDir !== installed?.gitDir;
+    if (capabilityChanged) {
+      this.targets.remote.installSnapshot(installed);
+      this.targets.changes.installSnapshot(installed);
+      this.targets.files.installWorkspace(
+        installed?.root ?? this.session.workspace.state.root,
+        installed?.changes ?? [],
+      );
+      this.targets.operations.installSnapshot(installed);
+      if (installed) this.actions.reconcileRefreshedHistory(installed);
+      else this.targets.history.clear();
+      this.actions.renderWorkspace();
+      return;
+    }
+    if (outcome.invalidatedSlices.includes("workingTree")) {
+      this.targets.changes.installSnapshot(installed);
+      this.targets.files.updateChanges(installed?.changes ?? []);
+    }
+    if (outcome.invalidatedSlices.includes("openDocuments") && installed) {
+      this.actions.reconcileWorkingDocument(installed);
     }
     this.actions.renderWorkspace();
   }
