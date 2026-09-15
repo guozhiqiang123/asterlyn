@@ -154,7 +154,7 @@ const editorThemeRules =
       backgroundColor: "var(--bg-deep)",
       borderRight: "1px solid var(--bg-panel)",
     },
-    ".cm-activeLineGutter": { backgroundColor: "var(--bg-hover)" },
+    ".cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
     ".cm-git-blame-gutter": {
       minWidth: "132px",
       color: "var(--text-muted)",

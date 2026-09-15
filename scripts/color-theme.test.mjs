@@ -54,6 +54,18 @@ test("Diff line fills remain opaque and visibly distinct in both themes", async 
   }
 });
 
+test("CodeMirror active line and gutter use one continuous fill", async () => {
+  const source = await readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8");
+  assert.match(
+    source,
+    /"\.cm-activeLineGutter": \{ backgroundColor: "var\(--editor-active-line\)" \}/u,
+  );
+  assert.match(
+    source,
+    /"\.cm-activeLine": \{ backgroundColor: "var\(--editor-active-line\)" \}/u,
+  );
+});
+
 test("forced-colors preserves native controls, focus, and selected state", async () => {
   const source = await readFile(path.join(sourceRoot, "styles.css"), "utf8");
   const block = source.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/u)?.[1] ?? "";
