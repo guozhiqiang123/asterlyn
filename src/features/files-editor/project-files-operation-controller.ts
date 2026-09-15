@@ -131,7 +131,7 @@ export class ProjectFilesOperationController {
   }
 
   get busy(): boolean {
-    return this.value.busyPath !== null || Boolean(this.value.inlineEdit?.busy || this.value.dialog?.busy);
+    return this.value.busyPath !== null || this.value.inlineEdit !== null || this.value.dialog !== null;
   }
 
   subscribe(listener: Listener): () => void {
@@ -220,7 +220,14 @@ export class ProjectFilesOperationController {
     this.emit();
     const planned = this.mutations.plan(identity, operation, "cancel", editorRequest);
     const result = await planned.completion;
-    if (!this.sameIdentity(identity) || this.value.inlineEdit !== edit) return;
+    if (!this.sameIdentity(identity) || this.value.inlineEdit !== edit) {
+      this.mutations.cancel();
+      if (this.value.inlineEdit === edit) {
+        this.value = { ...this.value, inlineEdit: null };
+        this.emit();
+      }
+      return;
+    }
     if (result.status !== "ready") {
       edit.busy = false;
       edit.error = planFailure(result, this.messages());
@@ -279,7 +286,16 @@ export class ProjectFilesOperationController {
   async paste(target: ProjectFilesContextTarget, requestedName?: string): Promise<void> {
     const identity = this.runtime.currentIdentity();
     const source = identity && this.clipboard.current(identity.root, identity.generation);
-    if (!identity || !source || !this.runtime.isTargetCurrent(target) || this.busy) return;
+    const dialog = this.value.dialog;
+    const pasteDialogActive = dialog?.kind === "paste-name" && !dialog.busy;
+    if (
+      !identity ||
+      !source ||
+      !this.runtime.isTargetCurrent(target) ||
+      this.value.busyPath !== null ||
+      this.value.inlineEdit !== null ||
+      (this.value.dialog !== null && !pasteDialogActive)
+    ) return;
     const name = requestedName === undefined ? baseName(source.workspacePath) : validateWorkspaceEntryName(requestedName);
     if (!name) {
       this.openPasteName(target, requestedName ?? baseName(source.workspacePath), this.messages().invalidName);
@@ -299,7 +315,12 @@ export class ProjectFilesOperationController {
     this.emit();
     const planned = this.mutations.plan(identity, operation, "cancel", editorRequest);
     const result = await planned.completion;
-    if (!this.sameIdentity(identity)) return;
+    if (!this.sameIdentity(identity)) {
+      this.mutations.cancel();
+      this.value = { ...this.value, busyPath: null, dialog: null };
+      this.emit();
+      return;
+    }
     if (result.status !== "ready") {
       this.value = { ...this.value, busyPath: null };
       if (result.status === "blocked" && result.reason === "destinationExists") {
@@ -326,7 +347,12 @@ export class ProjectFilesOperationController {
       this.runtime.error(new Error(executionFailure(execution, this.messages())));
       return;
     }
-    if (source.mode === "cut") this.clipboard.consume(source);
+    if (source.mode === "cut") {
+      this.clipboard.consume(source);
+    } else {
+      const current = this.runtime.currentIdentity();
+      if (current) this.clipboard.advanceGeneration(source, current.root, current.generation);
+    }
     this.runtime.completed("paste", target, destination, outcome);
     this.runtime.status(this.messages().pasted);
   }
@@ -343,7 +369,12 @@ export class ProjectFilesOperationController {
       { kind: "trash", sourceWorkspacePath: target.workspacePath },
     );
     const result = await planned.completion;
-    if (!this.sameIdentity(identity) || !this.runtime.isTargetCurrent(target)) return;
+    if (!this.sameIdentity(identity) || !this.runtime.isTargetCurrent(target)) {
+      this.mutations.cancel();
+      this.value = { ...this.value, busyPath: null };
+      this.emit();
+      return;
+    }
     if (result.status !== "ready") {
       this.value = { ...this.value, busyPath: null };
       this.emit();
@@ -390,6 +421,14 @@ export class ProjectFilesOperationController {
     if (!this.value.dialog || this.value.dialog.busy) return;
     if (this.value.dialog.kind === "trash") this.mutations.cancel();
     this.value = { ...this.value, dialog: null, busyPath: null };
+    this.emit();
+  }
+
+  reset(): void {
+    if (this.disposed) return;
+    this.mutations.cancel();
+    this.clipboard.clear();
+    this.value = { inlineEdit: null, dialog: null, busyPath: null };
     this.emit();
   }
 

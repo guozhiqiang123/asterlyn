@@ -301,6 +301,26 @@ export interface ProjectFilesCopy {
     gitUnavailable: string;
     noHistory: string;
     ambiguousHistory: string;
+    nameLabel: string;
+    choosePasteName: string;
+    pasteNameDetail: string;
+    cancel: string;
+    working: string;
+    confirmTrashTitle: string;
+    confirmTrash: string;
+    trashFileDetail(path: string): string;
+    trashFolderDetail(entries: number, bytes: number, hidden: number): string;
+    invalidName: string;
+    unsafeSource: string;
+    sourceChanged: string;
+    destinationExists: string;
+    operationFailed: string;
+    copiedEntry: string;
+    cutEntry: string;
+    createdFile: string;
+    renamedEntry: string;
+    pastedEntry: string;
+    trashedEntry: string;
   };
 }
 

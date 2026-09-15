@@ -1,6 +1,6 @@
 # Context-action system design and implementation plan
 
-- **Status:** CA0 locally accepted; CA1 and product surfaces not started
+- **Status:** CA0, CA1, R5, and CM1 locally accepted; CM2–CM4 not started
 - **Date:** 2026-09-15
 - **Behavior input:** [`Context-menu surface drafts`](../design/context-menu-drafts.md)
 - **Architecture decision:** [`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md)
@@ -406,6 +406,11 @@ disposal have accepted tests.
 
 ### CA1 — Navigation, clipboard, and feature bindings
 
+Status: **locally accepted on 2026-09-15** as part of the R5/CM1 evidence below. Typed workbench
+navigation and text-clipboard ports, stable delegated targets for all drafted surfaces, and
+Git-Branches-owned presentation/action state are in place. Product menu providers remain owned by
+their features; the composition root only wires ports.
+
 1. Extract typed workbench navigation ports from remaining `app.ts` coordination.
 2. Add `TextClipboardPort` and shared pure builders for path/ref/commit copy groups.
 3. Give Files, Changes, History list, branch navigation, and commit details stable delegated context
@@ -417,6 +422,9 @@ toolbar/ordinary-click entry without synthetic DOM activation or a central actio
 
 ### R5 — Workspace mutation foundation
 
+Status: **locally accepted on 2026-09-15**. Evidence:
+[`R5 and CM1 acceptance`](../benchmarks/2026-09-15-context-action-r5-cm1.md).
+
 Implement R5.1 through R5.4 above with pure Rust unit tests, temporary-filesystem integration tests,
 desktop protocol validation, application-coordinator tests, editor path-remap tests, recovery fault
 injection, and platform trash/reveal smoke evidence.
@@ -426,6 +434,9 @@ dirty buffer, follow a symlink, execute from a truncated directory plan, or repo
 versioned reconciliation accepts the outcome.
 
 ### CM1 — Files menu
+
+Status: **locally accepted on 2026-09-15**. Evidence:
+[`R5 and CM1 acceptance`](../benchmarks/2026-09-15-context-action-r5-cm1.md).
 
 Ship the first new context-menu surface after the E1 migration in the order requested by the
 behavior draft. Start with copy path, Git History, and reveal, then enable

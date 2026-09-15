@@ -87,6 +87,7 @@ export function renderShellView(model: ShellViewModel): string {
     <div class="dialog-backdrop hidden history-dialog-backdrop" id="history-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden command-surface-backdrop" id="command-surface" role="presentation"></div>
     <div class="dialog-backdrop hidden replacement-dialog-backdrop" id="workspace-replacement-dialog" role="presentation"></div>
+    <div class="dialog-backdrop hidden project-files-dialog-backdrop" id="project-files-operation-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden remote-dialog-backdrop" id="remote-action-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="git-operation-dialog" role="presentation"></div>
   </main>`;

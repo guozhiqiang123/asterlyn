@@ -4,6 +4,10 @@ import type { ProjectFilesState } from "./project-files-controller.ts";
 import { findProjectTreeNode, type ProjectTreeNode } from "../../workbench/project-tree.ts";
 import type { ProjectFilesCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import type {
+  ProjectFilesInlineEdit,
+  ProjectFilesOperationState,
+} from "./project-files-operation-controller.ts";
 
 export const PROJECT_TREE_MOUNT_LIMIT = 200;
 export const PROJECT_TREE_ROW_HEIGHT = 27;
@@ -41,6 +45,8 @@ export function renderProjectNavigation(
   scrollTop: number,
   clientHeight: number,
   copy: ProjectFilesCopy = EN_US.projectFiles,
+  operations: ProjectFilesOperationState | null = null,
+  cutPath: string | null = null,
 ): string {
   if (tree.length === 0 && state.loading) {
     return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(copy.loadingProjectFiles)}</span></div>`;
@@ -69,7 +75,7 @@ export function renderProjectNavigation(
       ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(state.error)}</span></div>`
       : "",
   ].join("");
-  return `<div class="project-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRow(state, row, copy)).join("")}${bottomSpacer}</div>${notices}`;
+  return `<div class="project-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRowWithOperations(state, row, copy, operations?.inlineEdit ?? null, cutPath)).join("")}${bottomSpacer}</div>${notices}`;
 }
 
 export function projectTreeRows(
@@ -117,6 +123,44 @@ function renderProjectRow(
     return `<div class="project-directory virtual ${statusClass}"><div class="project-directory-row project-node-row ${selected ? "selected" : ""}" tabindex="0" ${common} data-project-directory="${escapeAttribute(node.path)}" aria-expanded="${expanded}"><button class="project-tree-toggle" type="button" data-project-directory-toggle="${escapeAttribute(node.path)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}"><span class="tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 12)}</span></button>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></div></div>`;
   }
   return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" ${common} data-project-file="${escapeAttribute(node.path)}"><span class="project-file-glyph">${fileTypeIcon(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
+}
+
+function renderProjectRowWithOperations(
+  state: ProjectFilesState,
+  row: ProjectTreeRow,
+  copy: ProjectFilesCopy,
+  edit: ProjectFilesInlineEdit | null,
+  cutPath: string | null,
+): string {
+  if (edit?.kind === "rename" && edit.anchorPath === row.node.path) {
+    return renderProjectEntryEdit(edit, row.depth, copy);
+  }
+  const cut = cutPath && isAtOrBelow(row.node.path, cutPath) ? " project-node-cut" : "";
+  const rendered = renderProjectRow(state, row, copy).replace(
+    /class="([^"]*project-node-row[^"]*)"/u,
+    `class="$1${cut}"`,
+  );
+  return edit?.kind === "create" && edit.anchorPath === row.node.path
+    ? `${rendered}${renderProjectEntryEdit(edit, row.depth + (row.node.kind === "directory" ? 1 : 0), copy)}`
+    : rendered;
+}
+
+function renderProjectEntryEdit(
+  edit: ProjectFilesInlineEdit,
+  depth: number,
+  copy: ProjectFilesCopy,
+): string {
+  const labels = copy.contextMenu;
+  const title = edit.kind === "create" ? labels.newFile : labels.rename;
+  return `<form class="project-entry-edit ${edit.error ? "invalid" : ""}" data-project-entry-edit="${edit.kind}" style="--tree-depth:${depth}" aria-label="${escapeAttribute(title)}">
+    <span class="project-entry-edit-glyph">${edit.busy ? '<span class="spinner"></span>' : icon(edit.sourceKind === "directory" ? "folder" : "file", 14)}</span>
+    <input id="project-entry-name" name="name" type="text" value="${escapeAttribute(edit.value)}" aria-label="${escapeAttribute(labels.nameLabel)}" aria-invalid="${Boolean(edit.error)}" ${edit.busy ? "disabled" : ""} autocomplete="off" spellcheck="false" />
+    ${edit.error ? `<small role="alert">${escapeHtml(edit.error)}</small>` : ""}
+  </form>`;
+}
+
+function isAtOrBelow(path: string, ancestor: string): boolean {
+  return path === ancestor || path.startsWith(`${ancestor}/`);
 }
 
 function escapeHtml(value: string): string {

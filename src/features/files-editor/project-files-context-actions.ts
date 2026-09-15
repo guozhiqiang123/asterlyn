@@ -78,17 +78,21 @@ export class ProjectFilesContextActions {
       model,
       isCurrent: () => this.runtime.current(target),
       invoke: async (actionId) => {
-        const pathText = textForCopyAction(pathActions, actionId);
-        if (pathText !== null) {
-          const result = await this.clipboard.writeText(pathText);
-          if (result.status === "failure") {
-            this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+        try {
+          const pathText = textForCopyAction(pathActions, actionId);
+          if (pathText !== null) {
+            const result = await this.clipboard.writeText(pathText);
+            if (result.status === "failure") {
+              this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+              return;
+            }
+            this.runtime.status(copyPathFeedback(actionId, labels));
             return;
           }
-          this.runtime.status(copyPathFeedback(actionId, labels));
-          return;
+          await this.invoke(actionId, target);
+        } catch (error) {
+          this.runtime.error(error);
         }
-        await this.invoke(actionId, target);
       },
       blocked: (reason) => this.runtime.blocked(reason),
       restoreFocus: request.restoreFocus,

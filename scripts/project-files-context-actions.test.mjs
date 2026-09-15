@@ -129,3 +129,26 @@ test("blocked policy stays semantic and provider does not open for a stale targe
   assert.equal(provider.open({ target, anchor: { x: 0, y: 0 }, trigger: {}, restoreFocus() {} }), false);
   assert.equal(opened, false);
 });
+
+test("action failures are reported through the feature runtime", async () => {
+  let session = null;
+  const errors = [];
+  const provider = new ProjectFilesContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    { writeText: async () => ({ status: "copied" }) },
+    {
+      current: () => true, select: () => true,
+      policy: () => ({ mutation: enabled, paste: enabled, history: enabled }),
+      createFile() {}, cut() {}, copy() {}, paste() {},
+      async reveal() { throw new Error("reveal failed"); },
+      rename() {}, historyIntent: () => null, installHistoryQuery() {}, trash() {},
+      blocked() {}, status() {}, error(error) { errors.push(error.message); },
+    },
+    () => EN_US.projectFiles,
+  );
+  provider.open({ target, anchor: { x: 0, y: 0 }, trigger: {}, restoreFocus() {} });
+
+  await session.invoke("project-files.context-actions.reveal");
+
+  assert.deepEqual(errors, ["reveal failed"]);
+});

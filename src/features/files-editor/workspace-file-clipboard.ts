@@ -72,6 +72,18 @@ export class WorkspaceFileClipboard {
     this.emit();
   }
 
+  advanceGeneration(
+    entry: WorkspaceFileClipboardEntry,
+    workspaceRoot: string,
+    workspaceGeneration: number,
+  ): WorkspaceFileClipboardEntry | null {
+    if (this.value !== entry || entry.workspaceRoot !== workspaceRoot) return null;
+    const next = { ...entry, workspaceGeneration };
+    this.value = next;
+    this.emit();
+    return next;
+  }
+
   clear(): void {
     if (!this.value) return;
     this.value = null;

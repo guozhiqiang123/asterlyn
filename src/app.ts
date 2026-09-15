@@ -94,6 +94,10 @@ import {
   projectFilesContextPolicy,
   projectFilesHistoryIntent,
 } from "./features/files-editor/project-files-context-policy.ts";
+import {
+  ProjectFilesOperationController,
+} from "./features/files-editor/project-files-operation-controller.ts";
+import { ProjectFilesOperationBinding } from "./features/files-editor/project-files-operation-binding.ts";
 import { createBrowserTextClipboardAdapter } from "./adapters/browser/browser-text-clipboard-adapter.ts";
 import { localizedOperationError } from "./localization/error-message";
 import {
@@ -395,6 +399,10 @@ export class AsterlynApp {
   private readonly releaseFilesController: () => void;
   private readonly projectFilesContextActions: ProjectFilesContextActions;
   private readonly projectFilesContextBinding: ProjectFilesContextBinding;
+  private readonly projectFilesOperations: ProjectFilesOperationController;
+  private readonly projectFilesOperationBinding: ProjectFilesOperationBinding;
+  private readonly releaseProjectFilesOperations: () => void;
+  private readonly releaseProjectFilesClipboard: () => void;
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
   private readonly gitOperationController: GitOperationController;
@@ -684,6 +692,54 @@ export class AsterlynApp {
         settle: (lease) => this.windowSession.completeTransition(lease.generation),
       },
     );
+    this.projectFilesOperations = new ProjectFilesOperationController(
+      {
+        inspectWorkspaceEntry: (repositoryRoot, workspacePath) =>
+          bridge.inspectWorkspaceEntry(repositoryRoot, workspacePath),
+      },
+      this.workspaceMutations,
+      {
+        currentIdentity: () => {
+          const root = this.windowSession.workspace.state.root;
+          return root ? { root, generation: this.windowSession.generation } : null;
+        },
+        isTargetCurrent: (target) => this.isProjectFilesContextTargetCurrent(target),
+        repositoryLocation: (workspacePath) =>
+          this.projectFilesRepositoryLocation(workspacePath),
+        completed: (action, target, destination, outcome) =>
+          this.completeProjectFilesOperation(action, target, destination, outcome),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => {
+        const labels = this.localization.catalog.projectFiles.contextMenu;
+        return {
+          invalidName: labels.invalidName,
+          unsafeSource: labels.unsafeSource,
+          sourceChanged: labels.sourceChanged,
+          destinationExists: labels.destinationExists,
+          operationFailed: labels.operationFailed,
+          copied: labels.copiedEntry,
+          cut: labels.cutEntry,
+          created: labels.createdFile,
+          renamed: labels.renamedEntry,
+          pasted: labels.pastedEntry,
+          trashed: labels.trashedEntry,
+        };
+      },
+    );
+    this.projectFilesOperationBinding = new ProjectFilesOperationBinding(
+      root,
+      this.projectFilesOperations,
+      () => this.localization.catalog.projectFiles,
+    );
+    this.releaseProjectFilesOperations = this.projectFilesOperations.subscribe(() => {
+      if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+      this.projectFilesOperationBinding.renderDialog();
+    });
+    this.releaseProjectFilesClipboard = this.projectFilesOperations.clipboard.subscribe(() => {
+      if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+    });
     this.projectFilesContextActions = new ProjectFilesContextActions(
       this.contextMenuHost,
       createBrowserTextClipboardAdapter(window.navigator),
@@ -699,9 +755,12 @@ export class AsterlynApp {
           return projectFilesContextPolicy(target, {
             snapshot: this.windowSession.repository.state.snapshot,
             files: this.filesState.files,
-            mutationBusy: false,
-            mutationAvailable: false,
-            clipboardAvailable: false,
+            mutationBusy: this.projectFilesOperations.busy,
+            mutationAvailable: !bridge.isDemo,
+            clipboardAvailable: Boolean(this.projectFilesOperations.clipboard.current(
+              target.workspaceRoot,
+              target.workspaceGeneration,
+            )),
             reasons: {
               readOnly: labels.readOnly,
               mutationBusy: labels.mutationBusy,
@@ -713,10 +772,15 @@ export class AsterlynApp {
             },
           });
         },
-        createFile: () => undefined,
-        cut: () => undefined,
-        copy: () => undefined,
-        paste: () => undefined,
+        createFile: (target) => {
+          if (target.kind === "directory") {
+            this.filesController.setDirectoryExpanded(target.workspacePath, true);
+          }
+          this.projectFilesOperations.beginCreate(target);
+        },
+        cut: (target) => this.projectFilesOperations.capture("cut", target),
+        copy: (target) => this.projectFilesOperations.capture("copy", target),
+        paste: (target) => this.projectFilesOperations.paste(target),
         reveal: async (target) => {
           const result = await bridge.revealWorkspaceEntry(
             target.workspaceRoot,
@@ -729,14 +793,16 @@ export class AsterlynApp {
             "success",
           );
         },
-        rename: () => undefined,
+        rename: (target) => {
+          this.projectFilesOperations.beginRename(target);
+        },
         historyIntent: (target) => projectFilesHistoryIntent(
           target,
           this.windowSession.repository.state.snapshot,
           this.filesState.files,
         ),
         installHistoryQuery: (intent) => this.installProjectFilesHistoryQuery(intent),
-        trash: () => undefined,
+        trash: (target) => this.projectFilesOperations.requestTrash(target),
         blocked: (reason) => this.setStatus(reason, "warning"),
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
@@ -1251,8 +1317,12 @@ export class AsterlynApp {
     this.changeTreeScrollFrame = null;
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
-    this.contextMenuHost.dispose();
     this.projectFilesContextBinding.dispose();
+    this.projectFilesOperationBinding.dispose();
+    this.releaseProjectFilesOperations();
+    this.releaseProjectFilesClipboard();
+    this.projectFilesOperations.dispose();
+    this.contextMenuHost.dispose();
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.workspaceMutations.dispose();
@@ -1575,6 +1645,7 @@ export class AsterlynApp {
       return false;
     }
     this.workspaceMutations.cancel();
+    this.projectFilesOperations.reset();
     this.contextMenuHost.close();
     this.cancelActiveWorkspaceSearch();
     this.cancelActiveWorkspaceReplacement();
@@ -3749,9 +3820,20 @@ export class AsterlynApp {
       scrollTop,
       body.clientHeight,
       this.localization.catalog.projectFiles,
+      this.projectFilesOperations.state,
+      this.projectFilesOperations.clipboard.current(
+        workspaceRoot,
+        this.windowSession.generation,
+      )?.mode === "cut"
+        ? this.projectFilesOperations.clipboard.current(
+          workspaceRoot,
+          this.windowSession.generation,
+        )?.workspacePath ?? null
+        : null,
     );
     body.onscroll = () => this.handleProjectTreeScroll(body);
     this.bindProjectEvents();
+    this.projectFilesOperationBinding.bindInline();
     if (preserveScroll) {
       body.scrollTop = scrollTop;
       body.scrollLeft = scrollLeft;
@@ -3878,6 +3960,56 @@ export class AsterlynApp {
       target.kind,
     );
     return Boolean(current && current.readOnly === target.readOnly);
+  }
+
+  private projectFilesRepositoryLocation(
+    workspacePath: string,
+  ): { repositoryId: string; path: string } | null {
+    const root = this.windowSession.workspace.state.root;
+    if (!root) return null;
+    const normalized = workspacePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot) return { repositoryId: "workspace", path: normalized };
+    const candidates = snapshot.repositoryRoots.filter((candidate) => {
+      const relative = candidate.relativePath === "."
+        ? ""
+        : candidate.relativePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+      return !relative || normalized === relative || normalized.startsWith(`${relative}/`);
+    }).sort((left, right) => right.relativePath.length - left.relativePath.length);
+    const repository = candidates[0];
+    if (!repository) return null;
+    const relative = repository.relativePath === "."
+      ? ""
+      : repository.relativePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+    const path = relative
+      ? normalized.slice(relative.length).replace(/^\/+/, "")
+      : normalized;
+    return { repositoryId: repository.id, path: path || "." };
+  }
+
+  private completeProjectFilesOperation(
+    action: "create" | "rename" | "paste" | "trash",
+    target: ProjectFilesContextTarget,
+    destination: string | null,
+    _outcome: WorkspaceMutationOutcome,
+  ): void {
+    if (action === "trash") {
+      const rows = projectTreeRows(this.projectTree(), this.filesState.expandedDirectories);
+      const next = rows.find((row) => row.node.path.localeCompare(target.workspacePath) > 0)
+        ?? rows.at(-1);
+      if (next) this.filesController.select(next.node.path, next.node.kind);
+      return;
+    }
+    if (!destination) return;
+    const node = findProjectTreeNode(this.projectTree(), destination);
+    if (node) {
+      this.filesController.select(destination, node.kind);
+      this.markProjectTreeSelection(destination);
+    }
+    if (action !== "create") return;
+    const root = this.windowSession.workspace.state.root;
+    const file = this.filesController.fileForWorkspacePath(destination);
+    if (root && file) void this.openProjectFile(root, file);
   }
 
   private installProjectFilesHistoryQuery(

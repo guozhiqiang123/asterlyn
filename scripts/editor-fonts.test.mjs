@@ -51,6 +51,8 @@ test("desktop packaging contains only JetBrains Mono and limits optional downloa
   assert.deepEqual(tauri.bundle.resources, {
     "../node_modules/@fontsource-variable/jetbrains-mono/LICENSE":
       "licenses/jetbrains-mono-OFL.txt",
+    "../third-party/licenses/trash-5.2.9-MIT.txt":
+      "licenses/trash-5.2.9-MIT.txt",
   });
   assert.match(tauri.app.security.csp, /font-src 'self' data: blob:/);
   assert.match(

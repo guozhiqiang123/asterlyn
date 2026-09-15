@@ -43,6 +43,15 @@ test("workspace file clipboard is isolated to one exact window workspace generat
   assert.deepEqual(changes, ["cut", null]);
 });
 
+test("a proven unchanged copy source can advance after successful reconciliation", () => {
+  const clipboard = new WorkspaceFileClipboard();
+  const entry = clipboard.capture("copy", "/workspace", 4, ".", "src", inspection());
+  const advanced = clipboard.advanceGeneration(entry, "/workspace", 5);
+  assert.equal(clipboard.current("/workspace", 4), null);
+  assert.equal(clipboard.current("/workspace", 5), advanced);
+  assert.equal(advanced.inspection.fingerprint, entry.inspection.fingerprint);
+});
+
 test("unsafe or incomplete recursive identities never enter the clipboard", () => {
   for (const unsafe of [
     inspection({ truncated: true }),

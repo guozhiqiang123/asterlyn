@@ -158,3 +158,40 @@ test("trash waits for explicit confirmation and carries inventory counts", async
   assert.deepEqual(records.executions, ["plan-1"]);
   assert.equal(records.completed[0][0], "trash");
 });
+
+test("a plan is cancelled and local busy state is cleared when the workspace changes", async () => {
+  let resolvePlan;
+  let identity = { root: "/workspace", generation: 4 };
+  let cancels = 0;
+  const controller = new ProjectFilesOperationController(
+    { inspectWorkspaceEntry: async (_root, path) => inspection(path) },
+    {
+      plan() {
+        return {
+          planId: "stale-plan",
+          completion: new Promise((resolve) => { resolvePlan = resolve; }),
+        };
+      },
+      async execute() { throw new Error("stale plans must not execute"); },
+      cancel() { cancels += 1; },
+    },
+    {
+      currentIdentity: () => identity,
+      isTargetCurrent: (candidate) => candidate.workspaceGeneration === identity.generation,
+      repositoryLocation: (path) => ({ repositoryId: ".", path }),
+      completed() {}, status() {}, error() {},
+    },
+    () => messages,
+  );
+  controller.beginCreate(target());
+  controller.updateInlineValue("new.ts");
+  const pending = controller.submitInline();
+  identity = { root: "/other", generation: 5 };
+  resolvePlan({ status: "cancelled" });
+
+  await pending;
+
+  assert.equal(cancels, 1);
+  assert.equal(controller.state.inlineEdit, null);
+  assert.equal(controller.busy, false);
+});
