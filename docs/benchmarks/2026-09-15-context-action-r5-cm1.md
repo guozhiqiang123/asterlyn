@@ -34,6 +34,11 @@ Trash uses the published `trash` 5.2.9 crate with default features disabled. Its
 version, upstream tag, package resource, and platform adapter are recorded in the repository. A
 failed trash operation never falls back to permanent deletion.
 
+The reviewed Trash lifetime is window-scoped rather than Files-scoped: one application controller
+owns one plan and one confirmation, while each feature supplies its exact target validation,
+completion, and focus behavior. This lets Changes reuse the same destructive boundary without a
+second dialog retaining a cancelled plan.
+
 ## Automated validation
 
 | Check | Result | Conclusion |

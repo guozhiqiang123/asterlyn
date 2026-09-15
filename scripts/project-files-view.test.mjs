@@ -7,7 +7,7 @@ import {
   projectTreeRows,
   renderProjectNavigation,
 } from "../src/features/files-editor/project-files-view.ts";
-import { renderProjectFilesOperationDialog } from "../src/features/files-editor/project-files-operation-view.ts";
+import { renderWorkspaceTrashDialog } from "../src/shared/workspace-trash-dialog-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { buildProjectTree } from "../src/workbench/project-tree.ts";
 
@@ -68,17 +68,25 @@ test("trash dialog reports bounded recursive and hidden-entry counts", () => {
     workspaceRoot: "/workspace", workspaceGeneration: 1, workspacePath: "src", kind: "directory",
     file: null, status: "unmodified", readOnly: false,
   };
-  const markup = renderProjectFilesOperationDialog({
-    inlineEdit: null, busyPath: null,
+  const markup = renderWorkspaceTrashDialog({
+    planningTarget: null,
     dialog: {
-      kind: "trash", target, planId: "plan", busy: false,
+      target, planId: "plan", busy: false,
       preview: {
         planId: "plan", operation: { kind: "trash", source: "src" }, collisionPolicy: "cancel",
         source: null, entryCount: 4, totalBytes: 12, hiddenEntryCount: 1,
         fingerprint: "fingerprint", blockers: [],
       },
     },
-  }, EN_US.projectFiles);
+  }, {
+    eyebrow: EN_US.projectFiles.contextMenu.trash,
+    title: EN_US.projectFiles.contextMenu.confirmTrashTitle,
+    cancel: EN_US.projectFiles.contextMenu.cancel,
+    confirm: EN_US.projectFiles.contextMenu.confirmTrash,
+    working: EN_US.projectFiles.contextMenu.working,
+    fileDetail: EN_US.projectFiles.contextMenu.trashFileDetail,
+    folderDetail: EN_US.projectFiles.contextMenu.trashFolderDetail,
+  });
   assert.match(markup, /role="alertdialog"/u);
   assert.match(markup, /4 entries \(12 bytes\)/u);
   assert.match(markup, /1 hidden entries/u);

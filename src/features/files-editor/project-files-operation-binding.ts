@@ -92,10 +92,6 @@ export class ProjectFilesOperationBinding {
         if (target) void this.controller.paste(target, input.value);
       },
     );
-    host.querySelector<HTMLButtonElement>("#project-files-confirm-trash")?.addEventListener(
-      "click",
-      () => void this.controller.confirmTrash(),
-    );
     host.onkeydown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();

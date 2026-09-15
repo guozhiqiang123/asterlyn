@@ -2,7 +2,6 @@ import type {
   WorkspaceEntryInspection,
   WorkspaceMutationOperation,
   WorkspaceMutationOutcome,
-  WorkspaceMutationPreview,
 } from "../../models.ts";
 import type {
   WorkspaceMutationExecutionResult,
@@ -37,13 +36,6 @@ export type ProjectFilesOperationDialog =
       value: string;
       error: string | null;
       busy: boolean;
-    }
-  | {
-      readonly kind: "trash";
-      readonly target: ProjectFilesContextTarget;
-      readonly planId: string;
-      readonly preview: WorkspaceMutationPreview;
-      busy: boolean;
     };
 
 export interface ProjectFilesOperationState {
@@ -63,7 +55,6 @@ export interface ProjectFilesOperationMessages {
   readonly created: string;
   readonly renamed: string;
   readonly pasted: string;
-  readonly trashed: string;
 }
 
 export interface ProjectFilesOperationGateway {
@@ -84,12 +75,17 @@ export interface ProjectFilesMutationPort {
   cancel(): void;
 }
 
+export interface ProjectFilesTrashPort {
+  readonly busy: boolean;
+  request(target: ProjectFilesContextTarget): Promise<void>;
+}
+
 export interface ProjectFilesOperationRuntime {
   currentIdentity(): WorkspaceMutationIdentity | null;
   isTargetCurrent(target: ProjectFilesContextTarget): boolean;
   repositoryLocation(workspacePath: string): { repositoryId: string; path: string } | null;
   completed(
-    action: "create" | "rename" | "paste" | "trash",
+    action: "create" | "rename" | "paste",
     target: ProjectFilesContextTarget,
     destination: string | null,
     outcome: WorkspaceMutationOutcome,
@@ -113,17 +109,20 @@ export class ProjectFilesOperationController {
   private readonly mutations: ProjectFilesMutationPort;
   private readonly runtime: ProjectFilesOperationRuntime;
   private readonly messages: () => ProjectFilesOperationMessages;
+  private readonly trash: ProjectFilesTrashPort;
 
   constructor(
     gateway: ProjectFilesOperationGateway,
     mutations: ProjectFilesMutationPort,
     runtime: ProjectFilesOperationRuntime,
     messages: () => ProjectFilesOperationMessages,
+    trash: ProjectFilesTrashPort,
   ) {
     this.gateway = gateway;
     this.mutations = mutations;
     this.runtime = runtime;
     this.messages = messages;
+    this.trash = trash;
   }
 
   get state(): ProjectFilesOperationState {
@@ -131,7 +130,8 @@ export class ProjectFilesOperationController {
   }
 
   get busy(): boolean {
-    return this.value.busyPath !== null || this.value.inlineEdit !== null || this.value.dialog !== null;
+    return this.value.busyPath !== null || this.value.inlineEdit !== null ||
+      this.value.dialog !== null || this.trash.busy;
   }
 
   subscribe(listener: Listener): () => void {
@@ -358,56 +358,13 @@ export class ProjectFilesOperationController {
   }
 
   async requestTrash(target: ProjectFilesContextTarget): Promise<void> {
-    const identity = this.runtime.currentIdentity();
-    if (!identity || !this.canStart(target)) return;
-    this.value = { ...this.value, busyPath: target.workspacePath };
-    this.emit();
-    const planned = this.mutations.plan(
-      identity,
-      { kind: "trash", source: target.workspacePath },
-      "cancel",
-      { kind: "trash", sourceWorkspacePath: target.workspacePath },
-    );
-    const result = await planned.completion;
-    if (!this.sameIdentity(identity) || !this.runtime.isTargetCurrent(target)) {
-      this.mutations.cancel();
-      this.value = { ...this.value, busyPath: null };
-      this.emit();
-      return;
-    }
-    if (result.status !== "ready") {
-      this.value = { ...this.value, busyPath: null };
-      this.emit();
-      this.runtime.error(new Error(planFailure(result, this.messages())));
-      return;
-    }
-    this.value = {
-      ...this.value,
-      busyPath: null,
-      dialog: { kind: "trash", target, planId: planned.planId, preview: result.preview, busy: false },
-    };
-    this.emit();
+    if (!this.canStart(target)) return;
+    await this.trash.request(target);
   }
 
-  async confirmTrash(): Promise<void> {
-    const dialog = this.value.dialog;
-    const identity = this.runtime.currentIdentity();
-    if (!dialog || dialog.kind !== "trash" || dialog.busy || !identity) return;
-    dialog.busy = true;
-    this.emit();
-    const execution = await this.mutations.execute(identity, dialog.planId);
-    if (this.value.dialog !== dialog) return;
-    const outcome = completedOutcome(execution);
-    this.value = { ...this.value, dialog: null };
-    this.emit();
-    if (!outcome) {
-      this.runtime.error(new Error(executionFailure(execution, this.messages())));
-      return;
-    }
+  clearClipboardAtOrBelow(workspacePath: string): void {
     const entry = this.clipboard.entry;
-    if (entry && isAtOrBelow(entry.workspacePath, dialog.target.workspacePath)) this.clipboard.clear();
-    this.runtime.completed("trash", dialog.target, null, outcome);
-    this.runtime.status(this.messages().trashed);
+    if (entry && isAtOrBelow(entry.workspacePath, workspacePath)) this.clipboard.clear();
   }
 
   updateDialogValue(value: string): void {
@@ -419,7 +376,6 @@ export class ProjectFilesOperationController {
 
   closeDialog(): void {
     if (!this.value.dialog || this.value.dialog.busy) return;
-    if (this.value.dialog.kind === "trash") this.mutations.cancel();
     this.value = { ...this.value, dialog: null, busyPath: null };
     this.emit();
   }
@@ -445,7 +401,6 @@ export class ProjectFilesOperationController {
   }
 
   private cancelPending(): void {
-    if (this.value.dialog?.kind === "trash") this.mutations.cancel();
     this.value = { ...this.value, inlineEdit: null, dialog: null };
   }
 

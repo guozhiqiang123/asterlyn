@@ -81,6 +81,7 @@ function fixture() {
     mutations,
     runtime,
     () => messages,
+    { busy: false, async request(candidate) { records.trashTarget = candidate; } },
   );
   return { controller, records, setNextPlan: (value) => { nextPlan = value; } };
 }
@@ -148,15 +149,11 @@ test("destination collision requests a new name and changed source cancels safel
   assert.equal(changed.records.errors.at(-1), "source changed");
 });
 
-test("trash waits for explicit confirmation and carries inventory counts", async () => {
+test("trash delegates the exact current target to the shared reviewed workflow", async () => {
   const { controller, records } = fixture();
   await controller.requestTrash(target());
-  assert.equal(controller.state.dialog.kind, "trash");
-  assert.equal(controller.state.dialog.preview.entryCount, 1);
+  assert.equal(records.trashTarget.workspacePath, "src/app.ts");
   assert.deepEqual(records.executions, []);
-  await controller.confirmTrash();
-  assert.deepEqual(records.executions, ["plan-1"]);
-  assert.equal(records.completed[0][0], "trash");
 });
 
 test("a plan is cancelled and local busy state is cleared when the workspace changes", async () => {
@@ -182,6 +179,7 @@ test("a plan is cancelled and local busy state is cleared when the workspace cha
       completed() {}, status() {}, error() {},
     },
     () => messages,
+    { busy: false, async request() {} },
   );
   controller.beginCreate(target());
   controller.updateInlineValue("new.ts");

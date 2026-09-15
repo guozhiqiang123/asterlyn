@@ -344,6 +344,11 @@ and native behavior are recorded. If the system trash is unavailable, Asterlyn f
 falling back to permanent deletion. The confirmation and result explicitly identify files versus a
 fully inventoried directory subtree.
 
+One window-wide `WorkspaceTrashController` owns the single reviewed plan and confirmation lifetime.
+Files and Changes contribute typed targets, current-target validation, completion behavior, and
+focus restoration; they do not instantiate competing Trash coordinators or duplicate mutation
+execution. The shared dialog remains business-neutral and receives localized copy from composition.
+
 ## Git and historical capability prerequisites
 
 These foundations belong to Git/application services and can land independently of menu UI:
