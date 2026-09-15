@@ -189,6 +189,31 @@ export interface BranchSummary {
   subject: string;
 }
 
+export type BranchMutationKind = "switch" | "create" | "checkoutRemote" | "rename" | "delete";
+
+export interface BranchMutationRequest {
+  kind: BranchMutationKind;
+  sourceFullName: string;
+  sourceOid: string;
+  newName: string | null;
+}
+
+export interface BranchMutationPlan {
+  repositoryRoot: string;
+  kind: BranchMutationKind;
+  sourceFullName: string;
+  sourceOid: string;
+  sourceKind: "local" | "remote" | "commit";
+  sourceName: string;
+  targetFullName: string | null;
+  newName: string | null;
+  startHeadRef: string;
+  startHeadOid: string;
+  upstream: string | null;
+  mergedIntoCurrent: boolean | null;
+  previewToken: string;
+}
+
 export interface RepositorySnapshot {
   root: string;
   gitDir: string;

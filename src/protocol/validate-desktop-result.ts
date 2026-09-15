@@ -129,6 +129,39 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       assertStringArray(result.targetOids, command, "targetOids");
       break;
     }
+    case "branchMutationPlan": {
+      const result = record(value, command);
+      strings(
+        result,
+        command,
+        "repositoryRoot",
+        "kind",
+        "sourceFullName",
+        "sourceOid",
+        "sourceKind",
+        "sourceName",
+        "startHeadRef",
+        "startHeadOid",
+        "previewToken",
+      );
+      nullableStrings(result, command, "targetFullName", "newName", "upstream");
+      assert(
+        ["switch", "create", "checkoutRemote", "rename", "delete"].includes(String(result.kind)),
+        command,
+        "kind must be a supported branch mutation kind",
+      );
+      assert(
+        ["local", "remote", "commit"].includes(String(result.sourceKind)),
+        command,
+        "sourceKind must be local, remote, or commit",
+      );
+      assert(
+        result.mergedIntoCurrent === null || typeof result.mergedIntoCurrent === "boolean",
+        command,
+        "mergedIntoCurrent must be boolean or null",
+      );
+      break;
+    }
     case "gitConflictContent": {
       const result = record(value, command);
       strings(result, command, "path", "revisionToken");

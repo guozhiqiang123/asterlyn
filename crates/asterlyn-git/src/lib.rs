@@ -6,7 +6,8 @@ mod repository;
 
 pub use error::{GitError, RemoteFailureKind};
 pub use model::{
-    BinaryDiffResult, BranchKind, BranchState, BranchSummary, ChangeKind, CommitDetails,
+    BinaryDiffResult, BranchKind, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
+    BranchMutationSourceKind, BranchState, BranchSummary, ChangeKind, CommitDetails,
     CommitDiffResult, CommitFileChange, CommitSummary, DiffResult, FileChange, GitBlameHunk,
     GitBlameResult, GitConflictContent, GitConflictFile, GitOperationAction, GitOperationKind,
     GitOperationPhase, GitOperationPlan, GitOperationProgress, GitOperationSnapshot,

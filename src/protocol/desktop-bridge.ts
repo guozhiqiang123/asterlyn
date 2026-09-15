@@ -1,4 +1,6 @@
 import type {
+  BranchMutationPlan,
+  BranchMutationRequest,
   CommitDetails,
   CommitDiffResult,
   CommitSelectedResult,
@@ -225,6 +227,14 @@ export interface GitOperationBridge {
   undoGitWorktreeRecovery(repositoryRoot: string, recoveryId: string): Promise<RepositoryMutationOutcome>;
   switchBranch(repositoryRoot: string, targetFullName: string): Promise<RepositoryMutationOutcome>;
   createBranch(repositoryRoot: string, name: string): Promise<RepositoryMutationOutcome>;
+  prepareBranchMutation(
+    repositoryRoot: string,
+    request: BranchMutationRequest,
+  ): Promise<BranchMutationPlan>;
+  executeBranchMutation(
+    repositoryRoot: string,
+    plan: BranchMutationPlan,
+  ): Promise<RepositoryMutationOutcome>;
   readRemoteAuthentication(
     repositoryRoot: string,
     remote: string,

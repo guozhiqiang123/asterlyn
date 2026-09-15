@@ -1,4 +1,5 @@
 import type {
+  BranchMutationPlan,
   CommitSelectedResult,
   RestoreChangesPlan,
   GitWorktreeRecovery,
@@ -42,6 +43,10 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     }),
   createBranch: (repositoryRoot, name) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("create_branch", { repositoryRoot, name }),
+  prepareBranchMutation: (repositoryRoot, request) =>
+    invokeDesktopCommand<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, request }),
+  executeBranchMutation: (repositoryRoot, plan) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_branch_mutation", { repositoryRoot, plan }),
   readRemoteAuthentication: (repositoryRoot, remote) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {
       repositoryRoot,

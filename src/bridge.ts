@@ -10,6 +10,8 @@ import {
   demoCommitDiff,
   demoQueryHistory,
   demoCreateBranch,
+  demoExecuteBranchMutation,
+  demoPrepareBranchMutation,
   demoDiff,
   demoFetchRemote,
   demoPullCurrent,
@@ -22,6 +24,8 @@ import {
   demoUnstage,
 } from "./demo";
 import type {
+  BranchMutationPlan,
+  BranchMutationRequest,
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
@@ -1000,6 +1004,29 @@ const demoBridge: DesktopBridge = {
       repositoryRoot,
       name,
     });
+  },
+
+  async prepareBranchMutation(
+    repositoryRoot: string,
+    request: BranchMutationRequest,
+  ): Promise<BranchMutationPlan> {
+    if (!isTauri) return demoPrepareBranchMutation(browserSnapshot, request);
+    return invoke<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, request });
+  },
+
+  async executeBranchMutation(
+    repositoryRoot: string,
+    plan: BranchMutationPlan,
+  ): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) {
+      await demoDelay(260);
+      browserSnapshot = demoExecuteBranchMutation(browserSnapshot, plan);
+      return {
+        snapshot: demoTrackedSnapshot(browserSnapshot),
+        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
+      };
+    }
+    return invoke<RepositoryMutationOutcome>("execute_branch_mutation", { repositoryRoot, plan });
   },
 
   async fetchRemote(

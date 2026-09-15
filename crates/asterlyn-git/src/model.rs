@@ -494,6 +494,73 @@ pub enum BranchKind {
     Tag,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum BranchMutationKind {
+    Switch,
+    Create,
+    CheckoutRemote,
+    Rename,
+    Delete,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum BranchMutationSourceKind {
+    Local,
+    Remote,
+    Commit,
+}
+
+impl BranchMutationSourceKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Remote => "remote",
+            Self::Commit => "commit",
+        }
+    }
+}
+
+impl BranchMutationKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Switch => "switch",
+            Self::Create => "create",
+            Self::CheckoutRemote => "checkout-remote",
+            Self::Rename => "rename",
+            Self::Delete => "delete",
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchMutationRequest {
+    pub kind: BranchMutationKind,
+    pub source_full_name: String,
+    pub source_oid: String,
+    pub new_name: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchMutationPlan {
+    pub repository_root: String,
+    pub kind: BranchMutationKind,
+    pub source_full_name: String,
+    pub source_oid: String,
+    pub source_kind: BranchMutationSourceKind,
+    pub source_name: String,
+    pub target_full_name: Option<String>,
+    pub new_name: Option<String>,
+    pub start_head_ref: String,
+    pub start_head_oid: String,
+    pub upstream: Option<String>,
+    pub merged_into_current: Option<bool>,
+    pub preview_token: String,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DiffResult {

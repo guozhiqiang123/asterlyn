@@ -16,11 +16,12 @@ use std::os::unix::process::CommandExt;
 
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
-    BinaryDiffResult, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
-    DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind, HistoryOrder,
-    HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile,
-    ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode, PushTagSummary,
-    RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
+    BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
+    BranchMutationSourceKind, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange,
+    CommitSummary, DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind,
+    HistoryOrder, HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind,
+    ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode,
+    PushTagSummary, RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
     RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
     UntrackedScan, UntrackedState,
 };
@@ -2266,6 +2267,340 @@ impl GitRepository {
             ],
         )?;
         Ok(())
+    }
+
+    pub fn prepare_branch_mutation(
+        &self,
+        request: &BranchMutationRequest,
+    ) -> Result<BranchMutationPlan, GitError> {
+        self.ensure_no_repository_operation("prepare branch mutation")?;
+        validate_object_id(&request.source_oid)?;
+        let start_name = self
+            .current_branch()?
+            .ok_or_else(|| GitError::UnsafeOperation {
+                operation: "prepare branch mutation".to_string(),
+                message: "a checked-out local branch with an existing HEAD is required".to_string(),
+                blockers: Vec::new(),
+            })?;
+        let start_head_ref = format!("refs/heads/{start_name}");
+        let start_head_oid = self.resolve_commit("HEAD", "read branch mutation HEAD")?;
+        let references = self.read_references()?;
+        let reference = references
+            .iter()
+            .find(|candidate| candidate.full_name == request.source_full_name);
+        let (source_kind, source_name, source_oid, upstream) = match request.kind {
+            BranchMutationKind::Switch
+            | BranchMutationKind::Rename
+            | BranchMutationKind::Delete => {
+                let source = reference
+                    .filter(|candidate| {
+                        candidate.kind == crate::model::BranchKind::Local
+                            && candidate.repository_id == "."
+                    })
+                    .ok_or_else(|| GitError::InvalidInput {
+                        field: "source branch".to_string(),
+                        message: "select an existing local branch".to_string(),
+                    })?;
+                (
+                    BranchMutationSourceKind::Local,
+                    source.name.clone(),
+                    source.oid.clone(),
+                    source.upstream.clone(),
+                )
+            }
+            BranchMutationKind::CheckoutRemote => {
+                let source = reference
+                    .filter(|candidate| {
+                        candidate.kind == crate::model::BranchKind::Remote
+                            && candidate.repository_id == "."
+                    })
+                    .ok_or_else(|| GitError::InvalidInput {
+                        field: "source branch".to_string(),
+                        message: "select an existing remote-tracking branch".to_string(),
+                    })?;
+                (
+                    BranchMutationSourceKind::Remote,
+                    source.name.clone(),
+                    source.oid.clone(),
+                    None,
+                )
+            }
+            BranchMutationKind::Create => match reference {
+                Some(source)
+                    if source.repository_id == "."
+                        && matches!(
+                            source.kind,
+                            crate::model::BranchKind::Local | crate::model::BranchKind::Remote
+                        ) =>
+                {
+                    (
+                        match source.kind {
+                            crate::model::BranchKind::Local => BranchMutationSourceKind::Local,
+                            crate::model::BranchKind::Remote => BranchMutationSourceKind::Remote,
+                            crate::model::BranchKind::Tag => unreachable!(),
+                        },
+                        source.name.clone(),
+                        source.oid.clone(),
+                        None,
+                    )
+                }
+                _ if request.source_full_name == request.source_oid => (
+                    BranchMutationSourceKind::Commit,
+                    request.source_oid.chars().take(12).collect(),
+                    self.resolve_commit(&request.source_oid, "resolve branch starting commit")?,
+                    None,
+                ),
+                _ => {
+                    return Err(GitError::InvalidInput {
+                        field: "source branch".to_string(),
+                        message: "select an existing local branch, remote branch, or exact commit"
+                            .to_string(),
+                    });
+                }
+            },
+        };
+        if source_oid != request.source_oid {
+            return Err(GitError::UnsafeOperation {
+                operation: "prepare branch mutation".to_string(),
+                message: "the selected branch moved; reopen its menu and review the current object"
+                    .to_string(),
+                blockers: Vec::new(),
+            });
+        }
+
+        let current_source = request.source_full_name == start_head_ref;
+        match request.kind {
+            BranchMutationKind::Switch if current_source => {
+                return Err(GitError::InvalidInput {
+                    field: "source branch".to_string(),
+                    message: "the selected branch is already checked out".to_string(),
+                });
+            }
+            BranchMutationKind::Delete if current_source => {
+                return Err(GitError::UnsafeOperation {
+                    operation: "prepare branch deletion".to_string(),
+                    message: "the checked-out branch cannot be deleted".to_string(),
+                    blockers: Vec::new(),
+                });
+            }
+            _ => {}
+        }
+
+        let checked_out = if source_kind == BranchMutationSourceKind::Local {
+            self.branch_worktree_checkout_count(&request.source_full_name)?
+        } else {
+            0
+        };
+        let allowed_here = usize::from(current_source);
+        if (matches!(
+            request.kind,
+            BranchMutationKind::Switch | BranchMutationKind::Delete
+        ) && checked_out > 0)
+            || (request.kind == BranchMutationKind::Rename && checked_out > allowed_here)
+        {
+            return Err(GitError::UnsafeOperation {
+                operation: "prepare branch mutation".to_string(),
+                message: "the selected branch is checked out in another Git worktree".to_string(),
+                blockers: Vec::new(),
+            });
+        }
+
+        if matches!(
+            request.kind,
+            BranchMutationKind::Switch
+                | BranchMutationKind::Create
+                | BranchMutationKind::CheckoutRemote
+        ) {
+            self.ensure_clean_worktree("prepare branch mutation")?;
+        }
+
+        let (new_name, target_full_name) = match request.kind {
+            BranchMutationKind::Create
+            | BranchMutationKind::CheckoutRemote
+            | BranchMutationKind::Rename => {
+                let name =
+                    self.validate_branch_name(request.new_name.as_deref().unwrap_or_default())?;
+                let target = format!("refs/heads/{name}");
+                if request.kind == BranchMutationKind::Rename && target == request.source_full_name
+                {
+                    return Err(GitError::InvalidInput {
+                        field: "branch name".to_string(),
+                        message: "enter a different local branch name".to_string(),
+                    });
+                }
+                if target != request.source_full_name && self.reference_exists(&target)? {
+                    return Err(GitError::InvalidInput {
+                        field: "branch name".to_string(),
+                        message: format!("'{name}' already exists"),
+                    });
+                }
+                (Some(name.to_string()), Some(target))
+            }
+            BranchMutationKind::Switch | BranchMutationKind::Delete => (None, None),
+        };
+        let merged_into_current = if request.kind == BranchMutationKind::Delete {
+            let merged = self.is_ancestor(&source_oid, &start_head_oid)?;
+            if !merged {
+                return Err(GitError::UnsafeOperation {
+                    operation: "prepare branch deletion".to_string(),
+                    message: "only a branch already merged into the current HEAD can be deleted"
+                        .to_string(),
+                    blockers: Vec::new(),
+                });
+            }
+            Some(true)
+        } else {
+            None
+        };
+        let preview_token = branch_mutation_token(&[
+            request.kind.label(),
+            &request.source_full_name,
+            &source_oid,
+            source_kind.label(),
+            new_name.as_deref().unwrap_or(""),
+            &start_head_ref,
+            &start_head_oid,
+            upstream.as_deref().unwrap_or(""),
+            if merged_into_current == Some(true) {
+                "merged"
+            } else {
+                ""
+            },
+        ]);
+        Ok(BranchMutationPlan {
+            repository_root: self.root.to_string_lossy().into_owned(),
+            kind: request.kind,
+            source_full_name: request.source_full_name.clone(),
+            source_oid,
+            source_kind,
+            source_name,
+            target_full_name,
+            new_name,
+            start_head_ref,
+            start_head_oid,
+            upstream,
+            merged_into_current,
+            preview_token,
+        })
+    }
+
+    pub fn execute_branch_mutation(&self, plan: &BranchMutationPlan) -> Result<(), GitError> {
+        if plan.repository_root != self.root.to_string_lossy() {
+            return Err(stale_branch_plan(
+                "the reviewed plan belongs to another repository",
+            ));
+        }
+        let request = BranchMutationRequest {
+            kind: plan.kind,
+            source_full_name: plan.source_full_name.clone(),
+            source_oid: plan.source_oid.clone(),
+            new_name: plan.new_name.clone(),
+        };
+        let refreshed = self.prepare_branch_mutation(&request)?;
+        if refreshed.preview_token != plan.preview_token {
+            return Err(stale_branch_plan(
+                "HEAD, the source ref, its upstream, or the destination changed",
+            ));
+        }
+        match plan.kind {
+            BranchMutationKind::Switch => self.switch_branch(&plan.source_full_name),
+            BranchMutationKind::Create => self.create_branch_from(plan, false),
+            BranchMutationKind::CheckoutRemote => self.create_branch_from(plan, true),
+            BranchMutationKind::Rename => self.rename_branch_from_plan(plan),
+            BranchMutationKind::Delete => self.delete_branch_from_plan(plan),
+        }
+    }
+
+    fn create_branch_from(
+        &self,
+        plan: &BranchMutationPlan,
+        track_source: bool,
+    ) -> Result<(), GitError> {
+        let name = plan
+            .new_name
+            .as_deref()
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "branch mutation plan".to_string(),
+                message: "a destination branch name is required".to_string(),
+            })?;
+        self.run_mutation(
+            "create branch from reviewed object",
+            vec![
+                OsString::from("switch"),
+                OsString::from("--no-track"),
+                OsString::from("--create"),
+                OsString::from(name),
+                OsString::from(&plan.source_oid),
+            ],
+        )?;
+        if track_source
+            && let Err(error) = self.run_mutation(
+                "set reviewed branch upstream",
+                vec![
+                    OsString::from("branch"),
+                    OsString::from(format!("--set-upstream-to={}", plan.source_full_name)),
+                    OsString::from(name),
+                ],
+            )
+        {
+            return Err(GitError::UnsafeOperation {
+                operation: "checkout remote branch".to_string(),
+                message: format!(
+                    "the local branch was created at the reviewed object, but its upstream could not be set: {error}"
+                ),
+                blockers: vec![format!("refs/heads/{name}")],
+            });
+        }
+        Ok(())
+    }
+
+    fn rename_branch_from_plan(&self, plan: &BranchMutationPlan) -> Result<(), GitError> {
+        let old_name = validate_local_branch_ref(&plan.source_full_name)?;
+        let new_name = plan
+            .new_name
+            .as_deref()
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "branch mutation plan".to_string(),
+                message: "a destination branch name is required".to_string(),
+            })?;
+        let mut arguments = vec![OsString::from("branch"), OsString::from("--move")];
+        if plan.source_full_name != plan.start_head_ref {
+            arguments.push(OsString::from(old_name));
+        }
+        arguments.push(OsString::from(new_name));
+        self.run_mutation("rename reviewed branch", arguments)?;
+        Ok(())
+    }
+
+    fn delete_branch_from_plan(&self, plan: &BranchMutationPlan) -> Result<(), GitError> {
+        self.run_mutation(
+            "delete reviewed branch",
+            vec![
+                OsString::from("update-ref"),
+                OsString::from("-d"),
+                OsString::from(&plan.source_full_name),
+                OsString::from(&plan.source_oid),
+            ],
+        )?;
+        let name = validate_local_branch_ref(&plan.source_full_name)?;
+        let _ = run_git_output(
+            &self.root,
+            ["config", "--remove-section", &format!("branch.{name}")],
+        );
+        Ok(())
+    }
+
+    fn branch_worktree_checkout_count(&self, full_name: &str) -> Result<usize, GitError> {
+        let output = self.run_read(
+            "read linked worktree branches",
+            ["worktree", "list", "--porcelain", "-z"],
+        )?;
+        let expected = format!("branch {full_name}");
+        Ok(output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|field| String::from_utf8_lossy(field).trim() == expected)
+            .count())
     }
 
     pub fn fetch_remote(
@@ -4644,6 +4979,25 @@ fn validate_local_branch_ref(full_name: &str) -> Result<&str, GitError> {
     Ok(name)
 }
 
+fn branch_mutation_token(fields: &[&str]) -> String {
+    let mut token = String::from("asterlyn-branch-mutation-v1");
+    for field in fields {
+        token.push('|');
+        token.push_str(&field.len().to_string());
+        token.push(':');
+        token.push_str(field);
+    }
+    token
+}
+
+fn stale_branch_plan(message: &str) -> GitError {
+    GitError::UnsafeOperation {
+        operation: "execute reviewed branch mutation".to_string(),
+        message: format!("the reviewed branch plan is stale: {message}; prepare it again"),
+        blockers: Vec::new(),
+    }
+}
+
 fn validate_history_ref(full_name: &str) -> Result<&str, GitError> {
     let suffix = ["refs/heads/", "refs/remotes/", "refs/tags/"]
         .iter()
@@ -6712,6 +7066,199 @@ mod tests {
             .switch_branch("refs/remotes/origin/main")
             .expect_err("remote refs are not implicit local branches");
         assert!(matches!(remote, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn reviewed_branch_creation_uses_the_selected_object_instead_of_head() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        git(directory.path(), &["branch", "source"]);
+        commit_file(directory.path(), "main.txt", "main\n", "Main only");
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/source"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = BranchMutationRequest {
+            kind: BranchMutationKind::Create,
+            source_full_name: "refs/heads/source".to_string(),
+            source_oid: source_oid.clone(),
+            new_name: Some("feature/from-source".to_string()),
+        };
+        let plan = repository
+            .prepare_branch_mutation(&request)
+            .expect("branch plan");
+        assert_eq!(plan.source_kind, BranchMutationSourceKind::Local);
+        assert_eq!(plan.start_head_ref, "refs/heads/main");
+        repository
+            .execute_branch_mutation(&plan)
+            .expect("execute branch plan");
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "feature/from-source"
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["rev-parse", "HEAD"]),
+            source_oid
+        );
+        assert!(
+            repository
+                .read_references()
+                .unwrap()
+                .into_iter()
+                .find(|branch| branch.full_name == "refs/heads/feature/from-source")
+                .is_some_and(|branch| branch.upstream.is_none())
+        );
+    }
+
+    #[test]
+    fn reviewed_remote_checkout_sets_the_exact_upstream() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(
+            directory.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://example.invalid/repository.git",
+            ],
+        );
+        git(
+            directory.path(),
+            &["update-ref", "refs/remotes/origin/topic", &source_oid],
+        );
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = BranchMutationRequest {
+            kind: BranchMutationKind::CheckoutRemote,
+            source_full_name: "refs/remotes/origin/topic".to_string(),
+            source_oid,
+            new_name: Some("topic".to_string()),
+        };
+        let plan = repository
+            .prepare_branch_mutation(&request)
+            .expect("remote checkout plan");
+        repository
+            .execute_branch_mutation(&plan)
+            .expect("execute remote checkout");
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "topic"
+        );
+        assert_eq!(
+            git_stdout(
+                directory.path(),
+                &["rev-parse", "--abbrev-ref", "@{upstream}"]
+            ),
+            "origin/topic"
+        );
+    }
+
+    #[test]
+    fn reviewed_rename_and_delete_revalidate_refs_and_keep_remote_refs() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["branch", "old-name"]);
+        git(
+            directory.path(),
+            &["update-ref", "refs/remotes/origin/old-name", &oid],
+        );
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let rename = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Rename,
+                source_full_name: "refs/heads/old-name".to_string(),
+                source_oid: oid.clone(),
+                new_name: Some("new-name".to_string()),
+            })
+            .expect("rename plan");
+        repository
+            .execute_branch_mutation(&rename)
+            .expect("rename branch");
+        assert_eq!(
+            git_stdout(directory.path(), &["rev-parse", "refs/heads/new-name"]),
+            oid
+        );
+
+        let delete = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Delete,
+                source_full_name: "refs/heads/new-name".to_string(),
+                source_oid: oid.clone(),
+                new_name: None,
+            })
+            .expect("delete plan");
+        assert_eq!(delete.merged_into_current, Some(true));
+        repository
+            .execute_branch_mutation(&delete)
+            .expect("delete branch");
+        assert!(!repository.reference_exists("refs/heads/new-name").unwrap());
+        assert!(
+            repository
+                .reference_exists("refs/remotes/origin/old-name")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn reviewed_branch_plans_reject_stale_unmerged_and_linked_worktree_targets() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        git(directory.path(), &["branch", "stale"]);
+        let stale_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/stale"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let switch = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Switch,
+                source_full_name: "refs/heads/stale".to_string(),
+                source_oid: stale_oid.clone(),
+                new_name: None,
+            })
+            .expect("switch plan");
+        git(
+            directory.path(),
+            &["update-ref", "refs/heads/stale", "HEAD", &stale_oid],
+        );
+        commit_file(directory.path(), "later.txt", "later\n", "Later");
+        git(
+            directory.path(),
+            &["update-ref", "refs/heads/stale", "HEAD", &stale_oid],
+        );
+        assert!(matches!(
+            repository.execute_branch_mutation(&switch),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+
+        git(directory.path(), &["switch", "stale"]);
+        commit_file(directory.path(), "side.txt", "side\n", "Side");
+        let side_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["switch", "main"]);
+        let unmerged = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Delete,
+                source_full_name: "refs/heads/stale".to_string(),
+                source_oid: side_oid,
+                new_name: None,
+            })
+            .expect_err("unmerged deletion is blocked");
+        assert!(unmerged.to_string().contains("already merged"));
+
+        git(directory.path(), &["branch", "linked"]);
+        let linked_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/linked"]);
+        let linked_root = tempfile::tempdir().unwrap();
+        let linked_path = linked_root.path().join("checkout");
+        git(
+            directory.path(),
+            &["worktree", "add", linked_path.to_str().unwrap(), "linked"],
+        );
+        let linked = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Delete,
+                source_full_name: "refs/heads/linked".to_string(),
+                source_oid: linked_oid,
+                new_name: None,
+            })
+            .expect_err("linked worktree deletion is blocked");
+        assert!(linked.to_string().contains("another Git worktree"));
     }
 
     #[test]

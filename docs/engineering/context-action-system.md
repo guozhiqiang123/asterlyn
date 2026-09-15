@@ -459,6 +459,10 @@ opening.
 
 ### CM3 — Branch and single-commit menus
 
+Status: **reviewed mutation foundation locally accepted on 2026-09-15**. Evidence:
+[`CM3 reviewed Git mutation foundation`](../benchmarks/2026-09-15-context-action-cm3-foundation.md).
+The visible menu providers, branch dialog, and browser/accessibility evidence remain in progress.
+
 Land exact-ref branch foundations and reviewed Revert first. Then contribute Branches and H1 menus,
 reusing current Update/Push/Merge/Rebase/Cherry-pick review entry points.
 

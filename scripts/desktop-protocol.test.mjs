@@ -159,6 +159,22 @@ test("desktop response validation accepts representative valid payloads", () => 
       invalidatedSlices: ["openDocuments", "workingTree", "operation"],
     },
   );
+  const branchPlan = {
+    repositoryRoot: "/repo",
+    kind: "rename",
+    sourceFullName: "refs/heads/old",
+    sourceOid: "a".repeat(40),
+    sourceKind: "local",
+    sourceName: "old",
+    targetFullName: "refs/heads/new",
+    newName: "new",
+    startHeadRef: "refs/heads/main",
+    startHeadOid: "b".repeat(40),
+    upstream: "origin/old",
+    mergedIntoCurrent: null,
+    previewToken: "reviewed-plan",
+  };
+  assert.deepEqual(validateDesktopResult("prepare_branch_mutation", branchPlan), branchPlan);
 });
 
 test("desktop response validation rejects malformed results", () => {
@@ -190,6 +206,16 @@ test("desktop response validation rejects malformed results", () => {
       verificationRequired: false,
     }),
     /available must be a boolean/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_branch_mutation", {
+      repositoryRoot: "/repo", kind: "forceDelete", sourceFullName: "refs/heads/topic",
+      sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
+      targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
+      startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: true,
+      previewToken: "reviewed-plan",
+    }),
+    /supported branch mutation kind/,
   );
 });
 

@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use asterlyn_git::{
-    CommitDetails, CommitDiffResult, DiffResult, FileChange, GitBlameResult, GitConflictContent,
-    GitError, GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot,
-    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview,
-    PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan, RepositorySliceSnapshot,
-    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    BranchMutationPlan, BranchMutationRequest, CommitDetails, CommitDiffResult, DiffResult,
+    FileChange, GitBlameResult, GitConflictContent, GitError, GitOperationAction, GitOperationKind,
+    GitOperationPlan, GitOperationSnapshot, GitRepository, HistoryPage, HistoryQuery, ProjectFile,
+    ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
+    RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot, TrackedChangeScan,
+    UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
@@ -880,6 +881,8 @@ pub fn run() {
             undo_git_worktree_recovery,
             switch_branch,
             create_branch,
+            prepare_branch_mutation,
+            execute_branch_mutation,
             fetch_remote,
             read_remote_authentication,
             store_remote_https_credential,

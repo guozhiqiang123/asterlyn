@@ -53,6 +53,8 @@
     { "name": "revert_changes", "args": { "repositoryRoot": "string", "plan": "RestoreChangesPlan" }, "result": "WorkingTreeMutationOutcome", "validator": "workingTreeMutationOutcome" },
     { "name": "switch_branch", "args": { "repositoryRoot": "string", "targetFullName": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "create_branch", "args": { "repositoryRoot": "string", "name": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
+    { "name": "prepare_branch_mutation", "args": { "repositoryRoot": "string", "request": "BranchMutationRequest" }, "result": "BranchMutationPlan", "validator": "branchMutationPlan" },
+    { "name": "execute_branch_mutation", "args": { "repositoryRoot": "string", "plan": "BranchMutationPlan" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "read_remote_authentication", "args": { "repositoryRoot": "string", "remote": "string" }, "result": "RemoteAuthenticationStatus", "validator": "remoteAuthenticationStatus" },
     { "name": "store_remote_https_credential", "args": { "repositoryRoot": "string", "remote": "string", "username": "string", "token": "string" }, "result": "RemoteAuthenticationStatus", "validator": "remoteAuthenticationStatus" },
     { "name": "configure_remote_ssh", "args": { "repositoryRoot": "string", "remote": "string", "sshUrl": "string" }, "result": "RemoteAuthenticationStatus", "validator": "remoteAuthenticationStatus" },

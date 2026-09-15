@@ -12,10 +12,11 @@ mod workspace_watch;
 
 pub(crate) use git_operations::{
     cancel_remote_operation, commit_changes, configure_remote_ssh, create_branch,
-    execute_git_operation, fetch_remote, prepare_git_operation, pull_current, push_current,
-    read_conflict_content, read_git_operation, read_push_file_commit, read_push_preview,
-    read_remote_authentication, resolve_conflict, revert_changes, run_git_operation_action,
-    stage_paths, store_remote_https_credential, switch_branch, unstage_paths,
+    execute_branch_mutation, execute_git_operation, fetch_remote, prepare_branch_mutation,
+    prepare_git_operation, pull_current, push_current, read_conflict_content, read_git_operation,
+    read_push_file_commit, read_push_preview, read_remote_authentication, resolve_conflict,
+    revert_changes, run_git_operation_action, stage_paths, store_remote_https_credential,
+    switch_branch, unstage_paths,
 };
 pub(crate) use git_reads::{
     cancel_untracked_scan, read_commit_details, read_commit_diff, read_diff, read_git_blame,
