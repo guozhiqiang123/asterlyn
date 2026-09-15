@@ -237,7 +237,7 @@ test("session scans reuse the same integration route and stop after disposal", a
   assert.equal(fixture.records.renders, 1);
   assert.equal(fixture.records.remote.at(-1).untrackedState, "complete");
   assert.deepEqual(fixture.records.documents, [false]);
-  assert.deepEqual(fixture.records.status.at(-1), ["Ready", "normal"]);
+  assert.deepEqual(fixture.records.status.at(-1), ["Ready", "success"]);
 
   fixture.coordinator.dispose();
   await fixture.session.scanUntracked("/repo", fixture.session.generation, true, "watcher");

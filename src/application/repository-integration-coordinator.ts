@@ -355,7 +355,7 @@ export class RepositoryIntegrationCoordinator {
         const recoveries = this.actions.replacementRecoveryCount();
         this.actions.setStatus(
           recoveries > 0 ? this.messages().recoveryCount(recoveries) : this.messages().ready,
-          recoveries > 0 ? "warning" : "normal",
+          recoveries > 0 ? "warning" : "success",
         );
       }
       return;
