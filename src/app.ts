@@ -8,8 +8,10 @@ import { remotePolicy } from "./remote-policy";
 import {
   GitHistoryListView,
   HISTORY_ROW_LIMIT,
+  historySelectionEntries,
   type HistoryListPresentation,
 } from "./features/git-history/history-list-view";
+import { HistoryRangeSelectionController } from "./features/git-history/history-range-selection.ts";
 import {
   historyScope,
   renderHistoryNavigation as renderHistoryNavigationView,
@@ -410,6 +412,7 @@ export class AsterlynApp {
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
   private readonly historyController: GitHistoryDetailsController;
+  private readonly historyRangeSelection = new HistoryRangeSelectionController();
   private readonly releaseHistoryController: () => void;
   private readonly branchesController: GitBranchesController;
   private readonly branchContextActions: BranchContextActions;
@@ -4197,7 +4200,8 @@ export class AsterlynApp {
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
     this.historyListView.mount(this.query("#history-results"), {
-      selectCommit: (key, restoreFocus) => this.selectCommit(key, restoreFocus),
+      selectCommit: (key, restoreFocus, extend) =>
+        this.selectHistoryCommit(key, restoreFocus, extend),
       expandLinearHistory: (firstKey) => {
         this.state.historyCollapseLinear = false;
         this.renderHistoryPane();
@@ -4777,7 +4781,8 @@ export class AsterlynApp {
   private historyListPresentation(): HistoryListPresentation {
     const snapshot = this.windowSession.repository.state.snapshot!;
     const filtered = this.filteredHistory();
-    return {
+    const scopeKey = this.historySelectionScopeKey();
+    const base: HistoryListPresentation = {
       status: this.historyState.history.status,
       error: this.historyState.history.error,
       loadedCommits: this.historyState.history.commits,
@@ -4793,6 +4798,29 @@ export class AsterlynApp {
       hasMore: this.historyState.hasMore,
       localization: this.localization,
     };
+    let selection = this.historyRangeSelection.reconcile(
+      scopeKey,
+      historySelectionEntries(base),
+    );
+    if (!selection && base.selectedCommit) {
+      selection = this.historyRangeSelection.select(base.selectedCommit, false).selection;
+    }
+    return {
+      ...base,
+      selectedCommitKeys: selection?.commits.map(commitKey) ?? (
+        base.selectedCommit ? [base.selectedCommit] : []
+      ),
+    };
+  }
+
+  private historySelectionScopeKey(): string {
+    return JSON.stringify([
+      this.historyState.history.generation,
+      this.state.historyQuery,
+      this.state.historyCaseSensitive,
+      this.state.historyRegularExpression,
+      this.state.historyCollapseLinear,
+    ]);
   }
 
   private shouldBridgeOmittedGraphParents(commits: CommitSummary[]): boolean {
@@ -5458,6 +5486,20 @@ export class AsterlynApp {
     if (restoreFocus) this.focusHistoryCommit(key);
   }
 
+  private selectHistoryCommit(key: string, restoreFocus: boolean, extend: boolean): void {
+    this.historyListPresentation();
+    const result = this.historyRangeSelection.select(key, extend);
+    const activeKey = result.selection?.activeKey ?? key;
+    this.selectCommit(activeKey, restoreFocus);
+    this.updateHistoryCommitSelection(activeKey);
+    if (result.limitedBy) {
+      const message = result.limitedBy === "limit"
+        ? this.localization.catalog.history.rangeSelectionLimit
+        : this.localization.catalog.history.rangeSelectionBarrier;
+      this.setStatus(message, "warning");
+    }
+  }
+
   private isHistoryCommitContextTargetCurrent(target: HistoryCommitContextTarget): boolean {
     return historyCommitContextTargetIsCurrent(
       target,
@@ -5474,7 +5516,8 @@ export class AsterlynApp {
   }
 
   private updateHistoryCommitSelection(key: string): void {
-    this.historyListView.updateSelection(key);
+    const selectedKeys = this.historyRangeSelection.selection?.commits.map(commitKey) ?? [key];
+    this.historyListView.updateSelection(key, selectedKeys);
   }
 
   private focusHistoryCommit(key: string): void {

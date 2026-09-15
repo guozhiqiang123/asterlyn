@@ -509,6 +509,8 @@ export const EN_US: LocaleCatalog = {
       mergeMainlineRequired: "Merge commits require an explicit mainline parent, which is not available yet",
       targetChanged: "The commit or History query changed; open its menu again",
     },
+    rangeSelectionLimit: "A History range can contain at most 100 commits",
+    rangeSelectionBarrier: "Expand the collapsed history before selecting across it",
     noRefs: "No refs", refsAppearHere: "Branches and tags will appear here.", branchOrTag: "Branch or tag",
     filterBranchesAndTags: "Filter branches and tags", noMatchingRefs: "No matching refs",
     tryAnotherRef: "Try another branch, remote, or tag name.", groups: { local: "Local", remote: "Remote", tag: "Tags" },

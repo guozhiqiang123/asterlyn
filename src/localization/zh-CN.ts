@@ -363,6 +363,8 @@ export const ZH_CN = {
       mergeMainlineRequired: "合并提交需要明确选择主线父提交，此能力尚未提供",
       targetChanged: "提交或历史查询已变化，请重新打开菜单",
     },
+    rangeSelectionLimit: "历史范围最多可包含 100 个提交",
+    rangeSelectionBarrier: "请先展开折叠的历史，再跨越该位置选择",
     noRefs: "没有引用", refsAppearHere: "分支和标签会显示在这里。", branchOrTag: "分支或标签",
     filterBranchesAndTags: "筛选分支和标签", noMatchingRefs: "没有匹配的引用", tryAnotherRef: "请尝试其他分支、远程或标签名称。",
     groups: { local: "本地", remote: "远程", tag: "标签" }, activateAgainForAllRefs: "再次激活可显示所有引用",

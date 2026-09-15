@@ -17,6 +17,7 @@ import {
   type HistoryDisplayEntry,
 } from "../../workbench/history-collapse.ts";
 import { commitKey } from "../../workbench/history-identity.ts";
+import type { HistorySelectionEntry } from "./history-range-selection.ts";
 
 export const HISTORY_ROW_LIMIT = 3_000;
 export const HISTORY_MOUNT_LIMIT = 200;
@@ -35,6 +36,7 @@ export interface HistoryListPresentation {
   commits: CommitSummary[];
   textError: string | null;
   selectedCommit: string | null;
+  selectedCommitKeys?: readonly string[];
   collapseLinear: boolean;
   bridgeOmittedParents: boolean;
   repositoryRoots: GitRootDescriptor[];
@@ -46,7 +48,7 @@ export interface HistoryListPresentation {
 }
 
 export interface HistoryListActions {
-  selectCommit(key: string, restoreFocus: boolean): void;
+  selectCommit(key: string, restoreFocus: boolean, extend: boolean): void;
   expandLinearHistory(firstKey: string | null): void;
   retryPaging(): void;
   scroll(host: HTMLElement): void;
@@ -106,10 +108,12 @@ export class GitHistoryListView {
     this.host.scrollLeft = scrollLeft;
   }
 
-  updateSelection(key: string): void {
+  updateSelection(key: string, selectedKeys: readonly string[] = [key]): void {
+    const selection = new Set(selectedKeys);
     this.host?.querySelectorAll<HTMLButtonElement>("[data-commit-key]").forEach((row) => {
-      const selected = row.dataset.commitKey === key;
+      const selected = Boolean(row.dataset.commitKey && selection.has(row.dataset.commitKey));
       row.classList.toggle("selected", selected);
+      row.classList.toggle("active", row.dataset.commitKey === key);
       row.setAttribute("aria-selected", String(selected));
     });
   }
@@ -146,7 +150,7 @@ export class GitHistoryListView {
     }
     const row = target.closest<HTMLButtonElement>("[data-commit-key]");
     const key = row?.dataset.commitKey;
-    if (key) this.actions?.selectCommit(key, false);
+    if (key) this.actions?.selectCommit(key, false, event instanceof MouseEvent && event.shiftKey);
   };
 
   private readonly handleKeydown = (event: KeyboardEvent): void => {
@@ -154,21 +158,21 @@ export class GitHistoryListView {
     const target = event.target instanceof Element
       ? event.target.closest<HTMLButtonElement>("[data-commit-key]")
       : null;
-    if (!target || !this.host?.contains(target)) return;
-    const rows = Array.from(
-      this.host.querySelectorAll<HTMLButtonElement>("[data-commit-key]"),
+    if (!target || !this.host?.contains(target) || !this.presentation) return;
+    const entries = historyDisplayEntries(this.presentation);
+    const current = entries.findIndex(
+      (entry) => entry.kind === "commit" && commitKey(entry.commit) === target.dataset.commitKey,
     );
-    const current = rows.indexOf(target);
     if (current < 0) return;
     event.preventDefault();
-    const destination =
+    const destinationEntry =
       event.key === "Home"
-        ? rows[0]
+        ? entries.find((entry) => entry.kind === "commit")
         : event.key === "End"
-          ? rows.at(-1)
-          : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
-    const key = destination?.dataset.commitKey;
-    if (key) this.actions?.selectCommit(key, true);
+          ? [...entries].reverse().find((entry) => entry.kind === "commit")
+          : entries[current + (event.key === "ArrowDown" ? 1 : -1)];
+    const key = destinationEntry?.kind === "commit" ? commitKey(destinationEntry.commit) : null;
+    if (key) this.actions?.selectCommit(key, true, event.shiftKey);
   };
 
   private readonly handleScroll = (): void => {
@@ -216,6 +220,9 @@ export function renderHistoryList(
   const visibleEntries = boundedWindow
     ? entries.slice(boundedWindow.start, boundedWindow.end)
     : entries;
+  const selectedKeys = new Set(presentation.selectedCommitKeys ?? (
+    presentation.selectedCommit ? [presentation.selectedCommit] : []
+  ));
   const rows = visibleEntries
     .map((entry, visibleIndex) => {
       const index = (boundedWindow?.start ?? 0) + visibleIndex;
@@ -224,7 +231,8 @@ export function renderHistoryList(
       }
       const commit = entry.commit;
       const key = commitKey(commit);
-      const selected = key === presentation.selectedCommit;
+      const selected = selectedKeys.has(key);
+      const active = key === presentation.selectedCommit;
       const references = renderCommitReferenceBadges(
         commit.decorations,
         presentation.branches.filter((branch) => branch.repositoryId === commit.repositoryId),
@@ -236,7 +244,7 @@ export function renderHistoryList(
         ? `<span class="history-root-badge" title="${escapeAttribute(copy.gitRoot(root?.relativePath ?? commit.repositoryId))}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
         : "";
       const authoredAt = commit.authoredAt ? localization.shortDateTime.format(new Date(commit.authoredAt * 1000)) : copy.unknownTime;
-      return `<button class="history-row ${selected ? "selected" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
+      return `<button class="history-row ${selected ? "selected" : ""} ${active ? "active" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
     })
     .join("");
   const topSpacer = boundedWindow && boundedWindow.start > 0
@@ -247,7 +255,7 @@ export function renderHistoryList(
     ? `<div class="history-virtual-spacer" aria-hidden="true" style="height:${bottomCount * HISTORY_ROW_HEIGHT}px"></div>`
     : "";
 
-  return `${textError}<div class="history-list" role="listbox" aria-label="${escapeAttribute(copy.commitHistory)}" style="--history-graph-width:${graphWidth}px">${topSpacer}${rows}${bottomSpacer}</div>${renderPagingStatus(presentation)}`;
+  return `${textError}<div class="history-list" role="listbox" aria-multiselectable="true" aria-label="${escapeAttribute(copy.commitHistory)}" style="--history-graph-width:${graphWidth}px">${topSpacer}${rows}${bottomSpacer}</div>${renderPagingStatus(presentation)}`;
 }
 
 export function historyRenderWindow(
@@ -269,10 +277,23 @@ export function historyRenderWindow(
   return { start, end: Math.min(entryCount, start + windowSize) };
 }
 
-function historyDisplayEntries(presentation: HistoryListPresentation): HistoryDisplayEntry[] {
+export function historyDisplayEntries(presentation: HistoryListPresentation): HistoryDisplayEntry[] {
   return presentation.collapseLinear
-    ? collapseLinearHistory(presentation.commits, presentation.selectedCommit)
+    ? collapseLinearHistory(
+        presentation.commits,
+        new Set(presentation.selectedCommitKeys ?? (
+          presentation.selectedCommit ? [presentation.selectedCommit] : []
+        )),
+      )
     : presentation.commits.map((commit) => ({ kind: "commit", commit, graphCommit: commit }));
+}
+
+export function historySelectionEntries(
+  presentation: HistoryListPresentation,
+): HistorySelectionEntry[] {
+  return historyDisplayEntries(presentation).map((entry) => entry.kind === "commit"
+    ? { kind: "commit", key: commitKey(entry.commit), commit: entry.commit }
+    : { kind: "barrier", id: entry.id });
 }
 
 function clampHistoryRenderWindow(

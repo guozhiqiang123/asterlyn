@@ -18,8 +18,11 @@ export type HistoryDisplayEntry =
 
 export function collapseLinearHistory(
   commits: CommitSummary[],
-  selectedKey: string | null,
+  selectedKeys: string | null | ReadonlySet<string>,
 ): HistoryDisplayEntry[] {
+  const selected = selectedKeys instanceof Set
+    ? selectedKeys
+    : new Set(selectedKeys ? [selectedKeys] : []);
   if (commits.length < 4) return commitEntries(commits);
   const loaded = new Set(commits.map(commitKey));
   const childCounts = new Map(commits.map((commit) => [commitKey(commit), 0]));
@@ -46,7 +49,7 @@ export function collapseLinearHistory(
   const collapsedStarts = new Map<string, string>();
   let index = 0;
   while (index < commits.length) {
-    if (!isCollapsible(commits, index, childCounts, selectedKey)) {
+    if (!isCollapsible(commits, index, childCounts, selected)) {
       rawEntries.push({ kind: "commit", commit: commits[index]! });
       index += 1;
       continue;
@@ -55,7 +58,7 @@ export function collapseLinearHistory(
     let end = start;
     while (
       end + 1 < commits.length &&
-      isCollapsible(commits, end + 1, childCounts, selectedKey) &&
+      isCollapsible(commits, end + 1, childCounts, selected) &&
       commits[end]!.repositoryId === commits[end + 1]!.repositoryId &&
       commits[end]!.parents[0] === commits[end + 1]!.oid
     ) {
@@ -122,13 +125,13 @@ function isCollapsible(
   commits: CommitSummary[],
   index: number,
   childCounts: Map<string, number>,
-  selectedKey: string | null,
+  selectedKeys: ReadonlySet<string>,
 ): boolean {
   const commit = commits[index]!;
   return (
     index > 0 &&
     index < commits.length - 1 &&
-    commitKey(commit) !== selectedKey &&
+    !selectedKeys.has(commitKey(commit)) &&
     commit.decorations.length === 0 &&
     commit.parents.length === 1 &&
     childCounts.get(commitKey(commit)) === 1

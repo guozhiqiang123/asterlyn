@@ -97,3 +97,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-15-context-action-cm3-foundation.md`](benchmarks/2026-09-15-context-action-cm3-foundation.md) — exact-ref branch mutation and single-commit Revert review foundations for CM3.
 - [`benchmarks/2026-09-15-context-action-cm3-branches.md`](benchmarks/2026-09-15-context-action-cm3-branches.md) — feature-owned Branches menus, reviewed ref-change dialog, interaction, and bundle evidence.
 - [`benchmarks/2026-09-15-context-action-cm3-history.md`](benchmarks/2026-09-15-context-action-cm3-history.md) — History single-commit menus, exact-object action routing, interaction, and final CM3 evidence.
+- [`benchmarks/2026-09-15-context-action-cm4-selection.md`](benchmarks/2026-09-15-context-action-cm4-selection.md) — DOM-independent History range selection, virtual-list projection, limits, and interaction evidence.

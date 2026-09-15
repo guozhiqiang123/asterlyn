@@ -18,6 +18,14 @@
   background: var(--selection-bg);
 }
 
+.history-row.selected:not(.active) {
+  background: color-mix(in srgb, var(--selection-bg) 68%, transparent);
+}
+
+.history-row.active {
+  box-shadow: inset 2px 0 var(--accent);
+}
+
 .file-name,
 .history-subject,
 .branch-copy > span {

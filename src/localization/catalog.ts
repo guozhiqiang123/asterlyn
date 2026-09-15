@@ -840,6 +840,8 @@ export interface HistoryCopy {
   branchContextMenu: BranchContextMenuCopy;
   branchMutation: BranchMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
+  rangeSelectionLimit: string;
+  rangeSelectionBarrier: string;
   noRefs: string;
   refsAppearHere: string;
   branchOrTag: string;
