@@ -259,6 +259,15 @@ export const EN_US: LocaleCatalog = {
       copied: "Copied", typeChanged: "Type changed", unmerged: "Unmerged", untracked: "Untracked",
       ignored: "Ignored", unknown: "Unknown",
     },
+    contextMenu: {
+      ariaLabel: (path) => `File actions for ${path}`,
+      newFile: "New File…", cut: "Cut", copy: "Copy", paste: "Paste",
+      reveal: "Reveal in File Manager", rename: "Rename…", copyPath: "Copy Path",
+      fileName: "File Name", relativePath: "Relative Path", absolutePath: "Absolute Path",
+      gitHistory: "Git History", trash: "Move to Trash…",
+      copiedFileName: "File name copied", copiedRelativePath: "Relative path copied",
+      copiedAbsolutePath: "Absolute path copied", clipboardUnavailable: "Could not copy to the clipboard",
+    },
   },
   editor: {
     conflict: "Conflict", saving: "Saving", unsaved: "Unsaved", saved: "Saved", close: "Close",

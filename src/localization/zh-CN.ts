@@ -137,6 +137,15 @@ export const ZH_CN = {
       copied: "已复制", typeChanged: "类型已更改", unmerged: "未合并", untracked: "未跟踪",
       ignored: "已忽略", unknown: "未知",
     },
+    contextMenu: {
+      ariaLabel: (path) => `${path} 的文件操作`,
+      newFile: "新建文件…", cut: "剪切", copy: "复制", paste: "粘贴",
+      reveal: "在文件管理器中显示", rename: "重命名…", copyPath: "复制路径",
+      fileName: "文件名", relativePath: "相对路径", absolutePath: "绝对路径",
+      gitHistory: "Git History", trash: "移到回收站…",
+      copiedFileName: "已复制文件名", copiedRelativePath: "已复制相对路径",
+      copiedAbsolutePath: "已复制绝对路径", clipboardUnavailable: "无法复制到剪贴板",
+    },
   },
   editor: {
     conflict: "冲突", saving: "正在保存", unsaved: "未保存", saved: "已保存", close: "关闭",

@@ -274,6 +274,25 @@ export interface ProjectFilesCopy {
   collapsePath(path: string): string;
   expandPath(path: string): string;
   changeLabels: Record<ChangeKind, string>;
+  contextMenu: {
+    ariaLabel(path: string): string;
+    newFile: string;
+    cut: string;
+    copy: string;
+    paste: string;
+    reveal: string;
+    rename: string;
+    copyPath: string;
+    fileName: string;
+    relativePath: string;
+    absolutePath: string;
+    gitHistory: string;
+    trash: string;
+    copiedFileName: string;
+    copiedRelativePath: string;
+    copiedAbsolutePath: string;
+    clipboardUnavailable: string;
+  };
 }
 
 export interface EditorCopy {
