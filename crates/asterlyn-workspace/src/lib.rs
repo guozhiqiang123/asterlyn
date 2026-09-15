@@ -6,9 +6,15 @@ use std::path::{Component, Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 mod durable_file;
+mod entry_mutation;
 mod replacement;
 mod search;
 pub use durable_file::{FileSnapshot, FileVersion};
+pub use entry_mutation::{
+    WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory,
+    WorkspaceEntryInventoryItem, WorkspaceEntryKind, WorkspaceMutationBlocker,
+    WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationPlan,
+};
 
 pub use replacement::{
     PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
@@ -84,6 +90,7 @@ pub enum WorkspaceError {
     InvalidSearch { message: String },
     Cancelled { message: String },
     InvalidReplacement { message: String },
+    InvalidMutation { message: String },
     Io { operation: String, message: String },
 }
 
@@ -99,7 +106,9 @@ impl Display for WorkspaceError {
             | Self::Busy { message }
             | Self::InvalidSearch { message }
             | Self::Cancelled { message } => formatter.write_str(message),
-            Self::InvalidReplacement { message } => formatter.write_str(message),
+            Self::InvalidReplacement { message } | Self::InvalidMutation { message } => {
+                formatter.write_str(message)
+            }
             Self::FileTooLarge { limit_bytes } => {
                 write!(
                     formatter,
