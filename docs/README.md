@@ -22,6 +22,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0010-read-only-ignored-previews.md`](architecture/decisions/0010-read-only-ignored-previews.md) — bounded, individually authorized read-only previews for Git-ignored files.
 - [`architecture/decisions/0011-supervised-terminal-sessions.md`](architecture/decisions/0011-supervised-terminal-sessions.md) — lazy, window-scoped PTY sessions with explicit lifecycle and resource bounds.
 - [`architecture/decisions/0012-versioned-workspace-reconciliation.md`](architecture/decisions/0012-versioned-workspace-reconciliation.md) — linearized repository commits, exact watcher ownership, bounded recovery, and capability transitions.
+- [`architecture/decisions/0013-feature-owned-context-actions.md`](architecture/decisions/0013-feature-owned-context-actions.md) — feature-owned context actions presented through one business-neutral window menu host.
 
 ## Delivery
 
@@ -29,6 +30,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
 - [`engineering/architecture-refactoring.md`](engineering/architecture-refactoring.md) — current architecture audit, target boundaries, migration order, and refactoring gates.
 - [`engineering/versioned-reconciliation-plan.md`](engineering/versioned-reconciliation-plan.md) — watcher/reconciliation risks, phased implementation, invariants, and acceptance matrix.
+- [`engineering/context-action-system.md`](engineering/context-action-system.md) — whole-draft audit, context-action architecture, R5 prerequisites, surface ownership, and delivery sequence.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds and artifact trust boundary.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
@@ -36,6 +38,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Design and references
 
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
+- [`design/context-menu-drafts.md`](design/context-menu-drafts.md) — reviewed per-surface context-menu behavior inputs for Editor/Diff Git Blame, Files, Changes, Branches, History, and commit details.
 - [`design/interaction-feedback.md`](design/interaction-feedback.md) — mandatory visible feedback and stable event-lifecycle rules for every user-invoked action.
 - [`design/daily-driver-interactions.md`](design/daily-driver-interactions.md) — usability audit and ordered interaction/feature slices.
 - [`design/editor-core-interactions.md`](design/editor-core-interactions.md) — Stage 3 editor slices, invariants, and acceptance evidence.

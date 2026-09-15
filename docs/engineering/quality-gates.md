@@ -32,6 +32,12 @@ Performance budgets are guardrails. They may change only through a documented de
 - A feature owns its serializable state, actions, asynchronous-result identity, stable DOM host,
   listeners, and disposal. The application shell may compose features but cannot become their
   alternate state owner.
+- Context menus use the shared window-scoped presentation host, while their target identity,
+  selection behavior, availability policy, and action routing remain feature-owned. Opening a menu
+  performs no native work; activation revalidates the exact target through the same application
+  action used by toolbar, keyboard, or ordinary-click entry points. Context actions cannot add a
+  central business-action switch to the Shell/composition root, and adapters cannot retain a
+  module-global active menu or independently own document/window listener lifecycles.
 - Selection, progress, and detail-result changes must update only affected feature regions.
   Replacing a list scroll container is reserved for a changed query, repository, ordering, or page
   projection and must preserve valid focus and selection identities.

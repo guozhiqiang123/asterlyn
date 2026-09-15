@@ -269,8 +269,29 @@ source/destination revisions, explicit collision policy, case-only rename handli
 behavior, and recoverable multi-file outcomes. The Files tree, editor tabs, search, and Git status
 reconcile from one session catalog.
 
+R5 is now sequenced with the context-action foundation defined by
+[`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md) and the
+[`context-action implementation plan`](context-action-system.md):
+
+1. characterize and introduce the shared window-scoped presentation host, then migrate the existing
+   ordinary-editor and Diff Git Blame gutter menu without adding or rewriting domain behavior;
+2. extract typed cross-feature navigation and feature-owned delegated context bindings instead of
+   adding menu routing to `AsterlynApp`;
+3. add real file/directory identities, bounded recursive plans, the workspace mutation coordinator,
+   durable recovery, editor path-remap leases, and platform reveal/trash adapters;
+4. ship Files as the first new product context menu, followed by Changes; branch, History-range,
+   range-Diff, and historical-file menus wait for their own Git/application capabilities.
+
+The menu is never the mutation boundary. Opening it performs no native work, and its cached
+availability cannot authorize a filesystem or Git operation. Workspace mutations repeat exact
+source/destination validation, publish typed path remaps and invalidation slices, and enter the
+versioned session reconciliation barrier before feature projections change.
+
 Exit gate: file operations cannot escape the workspace, destroy an unreviewed destination, or lose
-open-buffer identity, disclosure, selection, and scroll state.
+open-buffer identity, disclosure, selection, and scroll state. The context host additionally must
+remain business-neutral, window-scoped, keyboard accessible, focus-restoring, and fully disposable;
+feature providers must reuse existing application actions without a central action switch or
+synthetic DOM activation.
 
 ## Performance budgets
 
