@@ -23,6 +23,26 @@ test("history filter controller owns query normalization and repository reconcil
   assert.equal(controller.query().firstParent, true);
 });
 
+test("history filter controller installs an exact cross-feature query", () => {
+  const state = createHistoryFilterState();
+  const controller = new HistoryFilterController(state, memoryStorage());
+  state.historyCollapseLinear = true;
+  controller.install({
+    repositoryIds: ["."],
+    refs: [],
+    authorEmails: ["developer@example.com"],
+    currentAuthor: false,
+    sinceEpoch: null,
+    paths: [{ repositoryId: ".", path: "src" }],
+    firstParent: false,
+    excludeMerges: false,
+    order: "topological",
+  });
+  assert.deepEqual(controller.query().paths, [{ repositoryId: ".", path: "src" }]);
+  assert.deepEqual(controller.query().repositoryIds, ["."]);
+  assert.equal(state.historyCollapseLinear, true);
+});
+
 test("history filter preferences and recent paths remain repository scoped", () => {
   const state = createHistoryFilterState();
   const storage = memoryStorage();

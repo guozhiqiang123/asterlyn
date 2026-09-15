@@ -82,6 +82,19 @@ import {
   type ProjectFilesChange,
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
+import {
+  ProjectFilesContextBinding,
+  resolveProjectFilesContextTarget,
+  type ProjectFilesContextTarget,
+} from "./features/files-editor/project-files-binding.ts";
+import {
+  ProjectFilesContextActions,
+} from "./features/files-editor/project-files-context-actions.ts";
+import {
+  projectFilesContextPolicy,
+  projectFilesHistoryIntent,
+} from "./features/files-editor/project-files-context-policy.ts";
+import { createBrowserTextClipboardAdapter } from "./adapters/browser/browser-text-clipboard-adapter.ts";
 import { localizedOperationError } from "./localization/error-message";
 import {
   commandSurfaceResultCount as commandSurfaceViewResultCount,
@@ -380,6 +393,8 @@ export class AsterlynApp {
   private readonly releaseChangesController: () => void;
   private readonly filesController: ProjectFilesController;
   private readonly releaseFilesController: () => void;
+  private readonly projectFilesContextActions: ProjectFilesContextActions;
+  private readonly projectFilesContextBinding: ProjectFilesContextBinding;
   private readonly editorController: EditorSessionController;
   private readonly releaseEditorController: () => void;
   private readonly gitOperationController: GitOperationController;
@@ -668,6 +683,74 @@ export class AsterlynApp {
         accept: (lease, outcome) => this.reconcileWorkspaceMutation(lease, outcome),
         settle: (lease) => this.windowSession.completeTransition(lease.generation),
       },
+    );
+    this.projectFilesContextActions = new ProjectFilesContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isProjectFilesContextTargetCurrent(target),
+        select: (target) => {
+          const selected = this.filesController.select(target.workspacePath, target.kind);
+          if (selected) this.markProjectTreeSelection(target.workspacePath);
+          return selected;
+        },
+        policy: (target) => {
+          const labels = this.localization.catalog.projectFiles.contextMenu;
+          return projectFilesContextPolicy(target, {
+            snapshot: this.windowSession.repository.state.snapshot,
+            files: this.filesState.files,
+            mutationBusy: false,
+            mutationAvailable: false,
+            clipboardAvailable: false,
+            reasons: {
+              readOnly: labels.readOnly,
+              mutationBusy: labels.mutationBusy,
+              clipboardEmpty: labels.clipboardEmpty,
+              operationsUnavailable: labels.operationsUnavailable,
+              gitUnavailable: labels.gitUnavailable,
+              noHistory: labels.noHistory,
+              ambiguousHistory: labels.ambiguousHistory,
+            },
+          });
+        },
+        createFile: () => undefined,
+        cut: () => undefined,
+        copy: () => undefined,
+        paste: () => undefined,
+        reveal: async (target) => {
+          const result = await bridge.revealWorkspaceEntry(
+            target.workspaceRoot,
+            target.workspacePath,
+            target.kind,
+          );
+          const labels = this.localization.catalog.projectFiles.contextMenu;
+          this.setStatus(
+            result.selected ? labels.revealedSelection : labels.openedContainingFolder,
+            "success",
+          );
+        },
+        rename: () => undefined,
+        historyIntent: (target) => projectFilesHistoryIntent(
+          target,
+          this.windowSession.repository.state.snapshot,
+          this.filesState.files,
+        ),
+        installHistoryQuery: (intent) => this.installProjectFilesHistoryQuery(intent),
+        trash: () => undefined,
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.projectFiles,
+    );
+    this.projectFilesContextBinding = new ProjectFilesContextBinding(
+      root,
+      () => ({
+        state: this.filesState,
+        tree: this.projectTree(),
+        workspaceGeneration: this.windowSession.generation,
+      }),
+      (request) => this.projectFilesContextActions.open(request),
     );
     this.workspaceWatch = new WorkspaceWatchCoordinator(
       workspaceWatchBridge,
@@ -1169,6 +1252,7 @@ export class AsterlynApp {
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
     this.contextMenuHost.dispose();
+    this.projectFilesContextBinding.dispose();
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.workspaceMutations.dispose();
@@ -3782,6 +3866,40 @@ export class AsterlynApp {
 
   private projectTree(): ProjectTreeNode[] {
     return this.filesController.tree();
+  }
+
+  private isProjectFilesContextTargetCurrent(target: ProjectFilesContextTarget): boolean {
+    if (!this.windowSession.matches(target.workspaceGeneration, target.workspaceRoot)) return false;
+    const current = resolveProjectFilesContextTarget(
+      this.filesState,
+      this.projectTree(),
+      this.windowSession.generation,
+      target.workspacePath,
+      target.kind,
+    );
+    return Boolean(current && current.readOnly === target.readOnly);
+  }
+
+  private installProjectFilesHistoryQuery(
+    intent: import("./application/workbench-navigation.ts").HistoryQueryIntent,
+  ): void {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (
+      !snapshot ||
+      !this.windowSession.matches(intent.workspaceGeneration, intent.workspaceRoot) ||
+      intent.query.paths.length !== 1 ||
+      !snapshot.repositoryRoots.some((root) => root.id === intent.query.paths[0]?.repositoryId)
+    ) return;
+    this.historyFilters.install(intent.query);
+    this.recordRecentHistoryPath(intent.query.paths[0]!);
+    this.state.historyQuery = "";
+    this.state.historyFilterMenu = null;
+    this.state.historyBranchSubmenu = null;
+    this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "branches" }, true);
+    this.applyWorkbenchLayout(true);
+    this.renderActivityRail();
+    this.historyController.loadQuery(snapshot.root, this.activeHistoryQuery());
+    this.renderBottomTool();
   }
 
   private bindProjectEvents(): void {

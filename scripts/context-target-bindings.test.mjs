@@ -111,7 +111,10 @@ test("feature target resolvers reject stale display labels and retain exact iden
   const tree = buildProjectTree([file.workspacePath]);
   assert.deepEqual(
     resolveProjectFilesContextTarget(filesState, tree, 4, "src/app.ts", "file"),
-    { workspaceRoot: "/workspace", workspaceGeneration: 4, workspacePath: "src/app.ts", kind: "file", file },
+    {
+      workspaceRoot: "/workspace", workspaceGeneration: 4, workspacePath: "src/app.ts",
+      kind: "file", file, status: "unmodified", readOnly: false,
+    },
   );
   assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "app.ts", "file"), null);
   assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "src", "file"), null);

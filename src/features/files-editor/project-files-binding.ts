@@ -1,4 +1,4 @@
-import type { ProjectFile } from "../../models.ts";
+import type { ChangeKind, ProjectFile } from "../../models.ts";
 import type { WorkspaceEntryIdentity } from "../../application/workbench-navigation.ts";
 import {
   findProjectTreeNode,
@@ -12,6 +12,8 @@ import {
 
 export type ProjectFilesContextTarget = WorkspaceEntryIdentity & {
   readonly file: ProjectFile | null;
+  readonly status: ChangeKind;
+  readonly readOnly: boolean;
 };
 
 export class ProjectFilesContextBinding {
@@ -70,5 +72,7 @@ export function resolveProjectFilesContextTarget(
     workspacePath,
     kind: node.kind,
     file: file ? { ...file } : null,
+    status: node.status,
+    readOnly: node.status === "ignored" || file?.readOnly === true,
   };
 }

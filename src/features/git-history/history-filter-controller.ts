@@ -42,7 +42,12 @@ export class HistoryFilterController {
   }
 
   reset(): void {
-    const query = defaultHistoryQuery();
+    this.install(defaultHistoryQuery());
+    this.state.historyCollapseLinear = false;
+  }
+
+  install(input: HistoryQuery): void {
+    const query = normalizeHistoryQuery(input);
     this.state.historyRefs = keyedRefs(query.refs);
     this.state.historyAuthorEmails = new Set(query.authorEmails);
     this.state.historyCurrentAuthor = query.currentAuthor;
@@ -53,7 +58,6 @@ export class HistoryFilterController {
     this.state.historyOrder = query.order;
     this.state.historyFirstParent = query.firstParent;
     this.state.historyExcludeMerges = query.excludeMerges;
-    this.state.historyCollapseLinear = false;
   }
 
   reconcile(snapshot: RepositorySnapshot): void {

@@ -292,6 +292,15 @@ export interface ProjectFilesCopy {
     copiedRelativePath: string;
     copiedAbsolutePath: string;
     clipboardUnavailable: string;
+    revealedSelection: string;
+    openedContainingFolder: string;
+    readOnly: string;
+    mutationBusy: string;
+    clipboardEmpty: string;
+    operationsUnavailable: string;
+    gitUnavailable: string;
+    noHistory: string;
+    ambiguousHistory: string;
   };
 }
 

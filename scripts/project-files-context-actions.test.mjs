@@ -13,6 +13,8 @@ const target = {
   workspaceGeneration: 7,
   workspacePath: "src/app.ts",
   kind: "file",
+  status: "unmodified",
+  readOnly: false,
   file: {
     repositoryId: ".",
     path: "src/app.ts",
