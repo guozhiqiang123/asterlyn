@@ -1,6 +1,6 @@
 # Context-action system design and implementation plan
 
-- **Status:** CA0, CA1, R5, and CM1 locally accepted; CM2–CM4 not started
+- **Status:** CA0, CA1, R5, CM1, and CM2 locally accepted; CM3–CM4 not started
 - **Date:** 2026-09-15
 - **Behavior input:** [`Context-menu surface drafts`](../design/context-menu-drafts.md)
 - **Architecture decision:** [`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md)
@@ -449,6 +449,9 @@ create/rename/copy/move/paste/trash only after their R5 capability passes. File 
 keep the same visible item set with target-specific availability.
 
 ### CM2 — Changes menu
+
+Status: **locally accepted on 2026-09-15**. Evidence:
+[`CM2 Changes context-menu acceptance`](../benchmarks/2026-09-15-context-action-cm2.md).
 
 Reuse inclusion, working Diff, conflict, tracked restore, and navigation actions. Add untracked trash
 only through R5. The context target must not toggle commit inclusion or load a Diff merely by

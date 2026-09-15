@@ -313,6 +313,7 @@ export interface ProjectFilesCopy {
     invalidName: string;
     unsafeSource: string;
     sourceChanged: string;
+    trashBlocked: string;
     destinationExists: string;
     operationFailed: string;
     copiedEntry: string;
@@ -483,6 +484,35 @@ export interface ReplacementCopy {
 }
 
 export interface ChangesCopy {
+  contextMenu: {
+    ariaLabel(path: string): string;
+    includeInCommit: string;
+    showDiff: string;
+    jumpToSource: string;
+    resolveConflict: string;
+    restoreChanges: string;
+    trash: string;
+    copyPath: string;
+    fileName: string;
+    relativePath: string;
+    absolutePath: string;
+    gitHistory: string;
+    included: string;
+    excluded: string;
+    copiedFileName: string;
+    copiedRelativePath: string;
+    copiedAbsolutePath: string;
+    clipboardUnavailable: string;
+    conflictsStayIncluded: string;
+    sourceDeleted: string;
+    sourceUnavailable: string;
+    conflictUnavailable: string;
+    restoreUnavailable: string;
+    mutationBusy: string;
+    operationsUnavailable: string;
+    noHistory: string;
+    targetChanged: string;
+  };
   groups: Record<"changes" | "unversioned", string>;
   commitFileActions: string;
   refreshChanges: string;

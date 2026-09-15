@@ -81,7 +81,7 @@ function fixture() {
     mutations,
     runtime,
     () => messages,
-    { busy: false, async request(candidate) { records.trashTarget = candidate; } },
+    { busy: () => false, async request(candidate) { records.trashTarget = candidate; } },
   );
   return { controller, records, setNextPlan: (value) => { nextPlan = value; } };
 }
@@ -179,7 +179,7 @@ test("a plan is cancelled and local busy state is cleared when the workspace cha
       completed() {}, status() {}, error() {},
     },
     () => messages,
-    { busy: false, async request() {} },
+    { busy: () => false, async request() {} },
   );
   controller.beginCreate(target());
   controller.updateInlineValue("new.ts");

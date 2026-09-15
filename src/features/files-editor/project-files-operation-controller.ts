@@ -76,7 +76,7 @@ export interface ProjectFilesMutationPort {
 }
 
 export interface ProjectFilesTrashPort {
-  readonly busy: boolean;
+  busy(): boolean;
   request(target: ProjectFilesContextTarget): Promise<void>;
 }
 
@@ -131,7 +131,7 @@ export class ProjectFilesOperationController {
 
   get busy(): boolean {
     return this.value.busyPath !== null || this.value.inlineEdit !== null ||
-      this.value.dialog !== null || this.trash.busy;
+      this.value.dialog !== null || this.trash.busy();
   }
 
   subscribe(listener: Listener): () => void {

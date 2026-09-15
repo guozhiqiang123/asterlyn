@@ -45,6 +45,7 @@ export interface WorkspaceTrashRuntime<TTarget extends WorkspaceTrashTarget> {
 
 export interface WorkspaceTrashMessages {
   readonly targetChanged: string;
+  readonly blocked: string;
   readonly operationFailed: string;
   readonly trashed: string;
 }
@@ -188,6 +189,7 @@ function completedOutcome(result: WorkspaceMutationExecutionResult): WorkspaceMu
 }
 
 function planFailure(result: WorkspaceMutationPlanResult, messages: WorkspaceTrashMessages): string {
+  if (result.status === "blocked") return messages.blocked;
   if (result.status === "failure" && result.error instanceof Error) return result.error.message;
   return messages.operationFailed;
 }

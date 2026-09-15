@@ -6,6 +6,10 @@ import {
 } from "../../shared/context-menu/delegated-context-binding.ts";
 
 export interface ChangesContextTarget extends WorkspaceTargetIdentity {
+  readonly workspacePath: string;
+  readonly kind: "file";
+  readonly repositoryId: string;
+  readonly repositoryRevision: number;
   readonly path: string;
   readonly change: FileChange;
 }
@@ -18,6 +22,8 @@ export class ChangesContextBinding {
     current: () => {
       readonly snapshot: RepositorySnapshot | null;
       readonly workspaceGeneration: number;
+      readonly repositoryId: string;
+      readonly repositoryRevision: number;
     },
     open: (request: DelegatedContextRequest<ChangesContextTarget>) => boolean,
   ) {
@@ -31,6 +37,8 @@ export class ChangesContextBinding {
               context.snapshot,
               context.workspaceGeneration,
               path,
+              context.repositoryId,
+              context.repositoryRevision,
             )
           : null;
       },
@@ -47,12 +55,18 @@ export function resolveChangesContextTarget(
   snapshot: RepositorySnapshot | null,
   workspaceGeneration: number,
   path: string,
+  repositoryId = ".",
+  repositoryRevision = 0,
 ): ChangesContextTarget | null {
   const change = snapshot?.changes.find((candidate) => candidate.path === path);
   return snapshot && change
     ? {
         workspaceRoot: snapshot.root,
         workspaceGeneration,
+        workspacePath: path,
+        kind: "file",
+        repositoryId,
+        repositoryRevision,
         path,
         change: { ...change },
       }

@@ -60,6 +60,19 @@ test("same-file reconciliation keeps the visible Diff until its refreshed patch 
   assert.equal(controller.state.workingPatchLoading, false);
 });
 
+test("context selection moves the row without clearing or retargeting the visible Diff", async () => {
+  const controller = new ChangesCommitController(gateway());
+  controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
+  controller.selectChange("a.txt");
+  await controller.loadSelectedDiff(false);
+
+  assert.equal(controller.selectContextChange("b.txt"), true);
+
+  assert.equal(controller.state.selectedChange?.path, "b.txt");
+  assert.equal(controller.state.workingDiffPath, "a.txt");
+  assert.equal(controller.state.workingPatch?.path, "a.txt");
+});
+
 test("image Diff uses the image gateway and shares stale-result protection", async () => {
   const calls = [];
   const controller = new ChangesCommitController(gateway({

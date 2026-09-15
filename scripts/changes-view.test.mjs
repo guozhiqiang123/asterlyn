@@ -61,6 +61,7 @@ test("Revert supports staged additions but rejects untracked and copied paths", 
 function state() {
   return {
     selectedChange: null,
+    workingDiffPath: null,
     excludedPaths: new Set(),
     fileView: "tree",
     collapsedDirectories: new Set(),

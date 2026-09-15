@@ -120,7 +120,10 @@ test("feature target resolvers reject stale display labels and retain exact iden
   assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "src", "file"), null);
 
   const snapshot = repositorySnapshot();
-  assert.equal(resolveChangesContextTarget(snapshot, 4, "src/app.ts")?.change.path, "src/app.ts");
+  const changesTarget = resolveChangesContextTarget(snapshot, 4, "src/app.ts", ".", 12);
+  assert.equal(changesTarget?.change.path, "src/app.ts");
+  assert.equal(changesTarget?.repositoryId, ".");
+  assert.equal(changesTarget?.repositoryRevision, 12);
   assert.equal(resolveChangesContextTarget(snapshot, 4, "app.ts"), null);
   assert.equal(resolveBranchContextTarget(snapshot, 4, branchKey(branch))?.branch.fullName, branch.fullName);
   assert.equal(resolveBranchContextTarget(snapshot, 4, branch.name), null);

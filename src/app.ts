@@ -71,6 +71,12 @@ import {
   renderChangeNavigation,
 } from "./features/changes-commit/changes-view";
 import {
+  ChangesContextBinding,
+  resolveChangesContextTarget,
+  type ChangesContextTarget,
+} from "./features/changes-commit/changes-navigation-binding.ts";
+import { ChangesContextActions } from "./features/changes-commit/changes-context-actions.ts";
+import {
   GitOperationController,
   type GitOperationChange,
   type GitOperationResult,
@@ -397,12 +403,18 @@ export class AsterlynApp {
   private readonly releaseRemoteAuthenticationController: () => void;
   private readonly changesController: ChangesCommitController;
   private readonly releaseChangesController: () => void;
+  private readonly changesContextActions: ChangesContextActions;
+  private readonly changesContextBinding: ChangesContextBinding;
   private readonly filesController: ProjectFilesController;
   private readonly releaseFilesController: () => void;
   private readonly projectFilesContextActions: ProjectFilesContextActions;
   private readonly projectFilesContextBinding: ProjectFilesContextBinding;
-  private readonly workspaceTrash: WorkspaceTrashController<ProjectFilesContextTarget>;
-  private readonly workspaceTrashBinding: WorkspaceTrashDialogBinding<ProjectFilesContextTarget>;
+  private readonly workspaceTrash: WorkspaceTrashController<
+    ProjectFilesContextTarget | ChangesContextTarget
+  >;
+  private readonly workspaceTrashBinding: WorkspaceTrashDialogBinding<
+    ProjectFilesContextTarget | ChangesContextTarget
+  >;
   private readonly releaseWorkspaceTrash: () => void;
   private readonly projectFilesOperations: ProjectFilesOperationController;
   private readonly projectFilesOperationBinding: ProjectFilesOperationBinding;
@@ -704,10 +716,16 @@ export class AsterlynApp {
           const root = this.windowSession.workspace.state.root;
           return root ? { root, generation: this.windowSession.generation } : null;
         },
-        isTargetCurrent: (target) => this.isProjectFilesContextTargetCurrent(target),
+        isTargetCurrent: (target) => "change" in target
+          ? this.isChangesContextTargetCurrent(target)
+          : this.isProjectFilesContextTargetCurrent(target),
         completed: (target, outcome) => {
-          this.projectFilesOperations.clearClipboardAtOrBelow(target.workspacePath);
-          this.completeProjectFilesTrash(target, outcome);
+          if ("change" in target) {
+            this.completeChangesTrash(target, outcome);
+          } else {
+            this.projectFilesOperations.clearClipboardAtOrBelow(target.workspacePath);
+            this.completeProjectFilesTrash(target, outcome);
+          }
         },
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
@@ -716,6 +734,7 @@ export class AsterlynApp {
         const labels = this.localization.catalog.projectFiles.contextMenu;
         return {
           targetChanged: labels.sourceChanged,
+          blocked: labels.trashBlocked,
           operationFailed: labels.operationFailed,
           trashed: labels.trashedEntry,
         };
@@ -736,11 +755,18 @@ export class AsterlynApp {
           folderDetail: labels.trashFolderDetail,
         };
       },
-      (target) => Array.from(this.root.querySelectorAll<HTMLElement>("[data-project-node]"))
-        .find((element) => element.dataset.projectNode === target.workspacePath) ?? null,
+      (target) => Array.from(this.root.querySelectorAll<HTMLElement>(
+        "change" in target ? "[data-change-path]" : "[data-project-node]",
+      )).find((element) => (
+        "change" in target
+          ? element.dataset.changePath === target.path
+          : element.dataset.projectNode === target.workspacePath
+      )) ?? null,
     );
     this.releaseWorkspaceTrash = this.workspaceTrash.subscribe(() => {
-      if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+      if (this.shellState.layout.leftTool === "files" || this.shellState.layout.leftTool === "changes") {
+        this.renderLeftTool();
+      }
       this.workspaceTrashBinding.render();
     });
     this.projectFilesOperations = new ProjectFilesOperationController(
@@ -777,7 +803,10 @@ export class AsterlynApp {
           pasted: labels.pastedEntry,
         };
       },
-      this.workspaceTrash,
+      {
+        busy: () => this.workspaceTrash.busy,
+        request: (target) => this.workspaceTrash.request(target),
+      },
     );
     this.projectFilesOperationBinding = new ProjectFilesOperationBinding(
       root,
@@ -852,7 +881,7 @@ export class AsterlynApp {
           this.windowSession.repository.state.snapshot,
           this.filesState.files,
         ),
-        installHistoryQuery: (intent) => this.installProjectFilesHistoryQuery(intent),
+        installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
         trash: (target) => this.projectFilesOperations.requestTrash(target),
         blocked: (reason) => this.setStatus(reason, "warning"),
         status: (message) => this.setStatus(message, "success"),
@@ -868,6 +897,57 @@ export class AsterlynApp {
         workspaceGeneration: this.windowSession.generation,
       }),
       (request) => this.projectFilesContextActions.open(request),
+    );
+    this.changesContextActions = new ChangesContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isChangesContextTargetCurrent(target),
+        select: (target) => {
+          const selected = this.changesController.selectContextChange(target.path);
+          if (selected) this.markChangeSelection(target.path);
+          return selected;
+        },
+        included: (target) => !this.changesState.excludedPaths.has(target.path),
+        snapshot: () => this.windowSession.repository.state.snapshot,
+        policyOptions: (target) => {
+          const snapshot = this.windowSession.repository.state.snapshot;
+          const labels = this.localization.catalog.changes.contextMenu;
+          const source = this.filesController.fileForWorkspacePath(target.workspacePath);
+          return {
+            sourceAvailable: Boolean(source && !source.readOnly),
+            conflictAvailable: Boolean(
+              target.change.conflicted &&
+              snapshot?.operation?.conflicts.some((conflict) => conflict.path === target.path)
+            ),
+            mutationBusy: this.state.loading || this.changesState.mutation !== null ||
+              this.workspaceTrash.busy,
+            trashAvailable: !bridge.isDemo,
+            reasons: labels,
+          };
+        },
+        setIncluded: (target, included) => this.setChangePathsIncluded([target.path], included),
+        showDiff: (target) => this.openChangesContextDiff(target),
+        jumpToSource: (target) => this.openChangesContextSource(target),
+        resolveConflict: (target) => this.gitOperationDialogBinding.openConflict(target.path),
+        restore: (target) => this.restoreChangesContextTarget(target),
+        trash: (target) => this.workspaceTrash.request(target),
+        installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.changes,
+    );
+    this.changesContextBinding = new ChangesContextBinding(
+      root,
+      () => ({
+        snapshot: this.windowSession.repository.state.snapshot,
+        workspaceGeneration: this.windowSession.generation,
+        repositoryId: ".",
+        repositoryRevision: this.windowSession.repository.state.revision,
+      }),
+      (request) => this.changesContextActions.open(request),
     );
     this.workspaceWatch = new WorkspaceWatchCoordinator(
       workspaceWatchBridge,
@@ -1102,6 +1182,7 @@ export class AsterlynApp {
   }
 
   private handleChangesControllerChange(change: ChangesCommitChange): void {
+    if (change.reason === "snapshot") this.contextMenuHost.close();
     if (change.reason === "presentation" && this.shellState.layout.leftTool === "changes") {
       this.renderLeftTool();
     } else if (change.inclusionChanged) {
@@ -1368,6 +1449,7 @@ export class AsterlynApp {
     this.changeTreeScrollFrame = null;
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
+    this.changesContextBinding.dispose();
     this.projectFilesContextBinding.dispose();
     this.workspaceTrashBinding.dispose();
     this.releaseWorkspaceTrash();
@@ -4017,6 +4099,23 @@ export class AsterlynApp {
     return Boolean(current && current.readOnly === target.readOnly);
   }
 
+  private isChangesContextTargetCurrent(target: ChangesContextTarget): boolean {
+    if (!this.windowSession.matches(target.workspaceGeneration, target.workspaceRoot)) return false;
+    const current = resolveChangesContextTarget(
+      this.windowSession.repository.state.snapshot,
+      this.windowSession.generation,
+      target.path,
+      target.repositoryId,
+      this.windowSession.repository.state.revision,
+    );
+    return Boolean(current && current.repositoryRevision === target.repositoryRevision &&
+      current.change.originalPath === target.change.originalPath &&
+      current.change.indexStatus === target.change.indexStatus &&
+      current.change.worktreeStatus === target.change.worktreeStatus &&
+      current.change.conflicted === target.change.conflicted &&
+      current.change.submodule === target.change.submodule);
+  }
+
   private projectFilesRepositoryLocation(
     workspacePath: string,
   ): { repositoryId: string; path: string } | null {
@@ -4070,15 +4169,24 @@ export class AsterlynApp {
     if (next) this.filesController.select(next.node.path, next.node.kind);
   }
 
-  private installProjectFilesHistoryQuery(
+  private completeChangesTrash(
+    _target: ChangesContextTarget,
+    _outcome: WorkspaceMutationOutcome,
+  ): void {
+    // Versioned reconciliation has already removed the file and selected the next valid change.
+  }
+
+  private installContextHistoryQuery(
     intent: import("./application/workbench-navigation.ts").HistoryQueryIntent,
   ): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (
       !snapshot ||
       !this.windowSession.matches(intent.workspaceGeneration, intent.workspaceRoot) ||
-      intent.query.paths.length !== 1 ||
-      !snapshot.repositoryRoots.some((root) => root.id === intent.query.paths[0]?.repositoryId)
+      intent.query.paths.length === 0 ||
+      intent.query.paths.some((path) =>
+        !snapshot.repositoryRoots.some((root) => root.id === path.repositoryId)
+      )
     ) return;
     this.historyFilters.install(intent.query);
     this.recordRecentHistoryPath(intent.query.paths[0]!);
@@ -4757,18 +4865,27 @@ export class AsterlynApp {
         selection: { ...this.changesState.selectedChange },
       });
     }
+    this.markChangeSelection(path);
+    this.renderEditor();
+    if (this.changesState.selectedChange) void this.loadSelectedDiff();
+    if (restoreFocus) this.focusChangeRow(path);
+  }
+
+  private markChangeSelection(path: string): void {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot) return;
     this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((candidate) => {
       const primary = candidate.dataset.changePath === path;
       candidate.classList.toggle("primary", primary);
       candidate.setAttribute("aria-selected", String(primary));
     });
-    const selected = this.selectedChangeModel(this.windowSession.repository.state.snapshot);
+    const selected = this.selectedChangeModel(snapshot);
     const diff = this.root.querySelector<HTMLButtonElement>("[data-change-action='diff']");
     const revert = this.root.querySelector<HTMLButtonElement>("[data-change-action='revert']");
     if (diff) diff.disabled = false;
     if (revert) {
       const unsupported = !changeSupportsRestore(
-        this.windowSession.repository.state.snapshot,
+        snapshot,
         selected,
       );
       revert.disabled = unsupported;
@@ -4776,9 +4893,6 @@ export class AsterlynApp {
         ? this.localization.catalog.changes.selectTrackedToRestore
         : this.localization.catalog.changes.restoreToHead;
     }
-    this.renderEditor();
-    if (this.changesState.selectedChange) void this.loadSelectedDiff();
-    if (restoreFocus) this.focusChangeRow(path);
   }
 
   private setChangePathsIncluded(paths: string[], included: boolean): void {
@@ -6532,6 +6646,42 @@ export class AsterlynApp {
     });
     this.renderEditor();
     this.loadSelectedDiff();
+  }
+
+  private openChangesContextDiff(target: ChangesContextTarget): void {
+    if (!this.isChangesContextTargetCurrent(target)) {
+      this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
+      return;
+    }
+    this.openSelectedChangeDiff();
+  }
+
+  private async openChangesContextSource(target: ChangesContextTarget): Promise<void> {
+    if (!this.isChangesContextTargetCurrent(target)) {
+      this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
+      return;
+    }
+    const file = this.filesController.fileForWorkspacePath(target.workspacePath);
+    if (!file || file.readOnly) {
+      this.setStatus(this.localization.catalog.changes.contextMenu.sourceUnavailable, "warning");
+      return;
+    }
+    this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" }, true);
+    this.applyWorkbenchLayout(true);
+    this.renderActivityRail();
+    await this.openProjectFile(target.workspaceRoot, file);
+    if (this.windowSession.matches(target.workspaceGeneration, target.workspaceRoot)) {
+      this.locateCurrentProjectFile();
+    }
+  }
+
+  private async restoreChangesContextTarget(target: ChangesContextTarget): Promise<void> {
+    if (!this.isChangesContextTargetCurrent(target) ||
+      !this.changesController.selectContextChange(target.path)) {
+      this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
+      return;
+    }
+    await this.revertSelectedChange();
   }
 
   private async revertSelectedChange(): Promise<void> {

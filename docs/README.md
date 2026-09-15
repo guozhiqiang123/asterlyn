@@ -93,3 +93,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-09-15-quick-open-input-latency.md`](benchmarks/2026-09-15-quick-open-input-latency.md) — retained Quick Open input, catalog-scoped ranking projection, bounded top-result selection, stress latency, memory, and Debian evidence.
 - [`benchmarks/2026-09-15-context-action-ca0.md`](benchmarks/2026-09-15-context-action-ca0.md) — shared per-window context-menu host, Git Blame migration, interaction, output, and local acceptance evidence.
 - [`benchmarks/2026-09-15-context-action-r5-cm1.md`](benchmarks/2026-09-15-context-action-r5-cm1.md) — bounded workspace mutations, system Trash/reveal adapters, editor remapping, and the complete Files context menu.
+- [`benchmarks/2026-09-15-context-action-cm2.md`](benchmarks/2026-09-15-context-action-cm2.md) — Changes file context actions, independent context/Diff selection, shared reviewed Trash, interaction, and output evidence.

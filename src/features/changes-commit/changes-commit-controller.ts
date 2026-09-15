@@ -19,6 +19,7 @@ import { EN_US } from "../../localization/en-US.ts";
 
 export interface ChangesCommitState {
   selectedChange: ChangeSelection | null;
+  workingDiffPath: string | null;
   excludedPaths: Set<string>;
   fileView: ChangeFileView;
   collapsedDirectories: Set<string>;
@@ -128,6 +129,7 @@ export class ChangesCommitController {
     options: SnapshotInstallOptions = {},
   ): void {
     const previousSelection = this.state.selectedChange?.path ?? null;
+    const previousDiffPath = this.state.workingDiffPath;
     const rootChanged = this.snapshot?.root !== snapshot?.root;
     this.snapshot = snapshot;
     if (rootChanged) {
@@ -147,13 +149,15 @@ export class ChangesCommitController {
     if (rootChanged || options.clearSelection) this.state.selectedChange = null;
     this.chooseValidSelection();
     const selectionChanged = previousSelection !== (this.state.selectedChange?.path ?? null);
-    const retainedDiff = !rootChanged && !selectionChanged && previousSelection !== null;
+    const retainedDiff = !rootChanged && previousDiffPath !== null &&
+      Boolean(snapshot?.changes.some((change) => change.path === previousDiffPath));
     this.diffSequence += 1;
     const diffStateChanged = !retainedDiff ||
       this.state.workingPatchLoading || this.state.workingPatchError !== null;
     if (!retainedDiff) {
       this.state.workingPatch = null;
       this.state.workingImageDiff = null;
+      this.state.workingDiffPath = null;
     }
     this.state.workingPatchLoading = false;
     this.state.workingPatchError = null;
@@ -191,6 +195,21 @@ export class ChangesCommitController {
       navigationChanged: false,
       diffChanged: true,
     });
+    return true;
+  }
+
+  selectContextChange(path: string): boolean {
+    if (!this.snapshot?.changes.some((change) => change.path === path)) return false;
+    const changed = this.state.selectedChange?.path !== path;
+    this.state.selectedChange = { path, staged: false };
+    if (changed) {
+      this.emit({
+        reason: "selection",
+        selectionChanged: true,
+        navigationChanged: true,
+        diffChanged: false,
+      });
+    }
     return true;
   }
 
@@ -268,6 +287,7 @@ export class ChangesCommitController {
     this.diffSequence += 1;
     this.state.workingPatch = null;
     this.state.workingImageDiff = null;
+    this.state.workingDiffPath = null;
     this.state.workingPatchLoading = false;
     this.state.workingPatchError = null;
     if (emit) this.emit({ reason: "diff-clear", diffChanged: true });
@@ -280,6 +300,7 @@ export class ChangesCommitController {
     const sequence = ++this.diffSequence;
     const generation = this.repositoryGeneration;
     const path = selected.path;
+    this.state.workingDiffPath = path;
     const image = isImagePreviewPath(path);
     if (image) this.state.workingPatch = null;
     else this.state.workingImageDiff = null;
@@ -416,7 +437,7 @@ export class ChangesCommitController {
       sequence === this.diffSequence &&
       generation === this.repositoryGeneration &&
       this.snapshot?.root === root &&
-      this.state.selectedChange?.path === path;
+      this.state.workingDiffPath === path;
   }
 
   private mutationRequestMatches(
@@ -441,6 +462,7 @@ export class ChangesCommitController {
 export function createChangesCommitState(fileView: ChangeFileView): ChangesCommitState {
   return {
     selectedChange: null,
+    workingDiffPath: null,
     excludedPaths: new Set(),
     fileView,
     collapsedDirectories: new Set(),

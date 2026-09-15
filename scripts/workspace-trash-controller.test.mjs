@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { WorkspaceTrashController } from "../src/application/workspace-trash-controller.ts";
 
-const messages = { targetChanged: "changed", operationFailed: "failed", trashed: "trashed" };
+const messages = { targetChanged: "changed", blocked: "blocked", operationFailed: "failed", trashed: "trashed" };
 const target = {
   workspaceRoot: "/workspace", workspaceGeneration: 4, workspacePath: "src/app.ts", kind: "file",
 };
@@ -95,7 +95,7 @@ test("blocked and replaced workspaces clear planning state without opening a rev
   blocked.setNextPlan({ status: "blocked", source: "workspace", preview: preview(), reason: "link" });
   await blocked.controller.request(target);
   assert.equal(blocked.controller.busy, false);
-  assert.deepEqual(blocked.records.errors, ["failed"]);
+  assert.deepEqual(blocked.records.errors, ["blocked"]);
 
   const replaced = fixture();
   let resolvePlan;
