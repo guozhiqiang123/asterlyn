@@ -116,6 +116,98 @@ test("newer image navigation rejects an older completion", async () => {
   assert.equal((await b.completion).status, "ready");
 });
 
+test("editor path migration commits runtime identity changes before publishing state", async () => {
+  const controller = new EditorSessionController(gateway({
+    async readTextFile(_root, _repository, path) { return snapshot(path, path); },
+  }));
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("src/a.ts"), "source");
+  const original = controller.state.session.textTabs[0];
+  controller.markEdited(original.id, "unsaved");
+  const prepared = controller.preparePathMigration("/repo", {
+    kind: "move",
+    mapping: {
+      sourceWorkspacePath: "src",
+      destinationWorkspacePath: "lib",
+      sourceRepositoryId: ".",
+      destinationRepositoryId: ".",
+      sourcePath: "src",
+      destinationPath: "lib",
+    },
+  });
+  assert.equal(prepared.status, "ready");
+  let stateDuringRuntime = null;
+  const status = controller.applyPathMigration(prepared.lease, (change) => {
+    stateDuringRuntime = controller.state.session.textTabs[0].document.workspacePath;
+    assert.equal(change.remaps[0].sourceId, original.id);
+    return true;
+  });
+
+  assert.equal(status, "applied");
+  assert.equal(stateDuringRuntime, "src/a.ts");
+  assert.equal(controller.state.session.textTabs[0].document.workspacePath, "lib/a.ts");
+  assert.equal(controller.state.session.textTabs[0].content, "unsaved");
+});
+
+test("editor path migration preserves later edits, blocks saves, and refuses stale leases", async () => {
+  const controller = new EditorSessionController(gateway());
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("a.ts"), "source");
+  const request = {
+    kind: "move",
+    mapping: {
+      sourceWorkspacePath: "a.ts",
+      destinationWorkspacePath: "b.ts",
+      sourceRepositoryId: ".",
+      destinationRepositoryId: ".",
+      sourcePath: "a.ts",
+      destinationPath: "b.ts",
+    },
+  };
+  const current = controller.preparePathMigration("/repo", request);
+  controller.markEdited(controller.state.session.textTabs[0].id, "late");
+  assert.equal(
+    (await controller.saveText(controller.state.session.textTabs[0].id, "late")).status,
+    "busy",
+  );
+  assert.equal(controller.applyPathMigration(current.lease, () => true), "applied");
+  assert.equal(controller.state.session.textTabs[0].content, "late");
+
+  const stale = controller.preparePathMigration("/repo", {
+    ...request,
+    mapping: {
+      ...request.mapping,
+      sourceWorkspacePath: "b.ts",
+      destinationWorkspacePath: "c.ts",
+      sourcePath: "b.ts",
+      destinationPath: "c.ts",
+    },
+  });
+  controller.installWorkspace("/other");
+  assert.equal(controller.applyPathMigration(stale.lease, () => true), "stale");
+});
+
+test("editor path migration keeps the lease when the runtime cache reports a conflict", async () => {
+  const controller = new EditorSessionController(gateway());
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("a.ts"), "source");
+  const current = controller.preparePathMigration("/repo", {
+    kind: "move",
+    mapping: {
+      sourceWorkspacePath: "a.ts",
+      destinationWorkspacePath: "b.ts",
+      sourceRepositoryId: ".",
+      destinationRepositoryId: ".",
+      sourcePath: "a.ts",
+      destinationPath: "b.ts",
+    },
+  });
+  const before = controller.state.session;
+  assert.equal(controller.applyPathMigration(current.lease, () => false), "runtime-conflict");
+  assert.equal(controller.state.session, before);
+  assert.equal(controller.applyPathMigration(current.lease, () => true), "applied");
+});
+
 function gateway(overrides = {}) {
   return {
     readTextFile() { return overrides.read ?? Promise.resolve(snapshot("a.ts", "base")); },

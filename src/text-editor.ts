@@ -37,6 +37,8 @@ import {
   type GitBlameSource,
 } from "./workbench/editor-gutter.ts";
 import type { GitBlameResult } from "./models.ts";
+import type { EditorRuntimeTabRemap } from "./workbench/editor-session.ts";
+import { remapEditorCacheEntries } from "./workbench/editor-cache-remap.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -313,6 +315,13 @@ export class TextEditor {
     for (const tabId of this.entries.keys()) {
       if (!retained.has(tabId)) this.dispose(tabId);
     }
+  }
+
+  remap(remaps: readonly EditorRuntimeTabRemap[]): boolean {
+    const result = remapEditorCacheEntries(this.entries, this.activeId, remaps);
+    if (result.status === "conflict") return false;
+    this.activeId = result.activeId;
+    return true;
   }
 
   dispose(tabId: string): void {

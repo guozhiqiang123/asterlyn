@@ -2,7 +2,12 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { ImageDiffPreview, ImagePreview } from "../../models.ts";
 import { attachSplitter } from "../../workbench/splitter.ts";
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../workbench/editor-document.ts";
-import { textTab, type EditorSession, type TextTabState } from "../../workbench/editor-session.ts";
+import {
+  textTab,
+  type EditorRuntimeTabRemap,
+  type EditorSession,
+  type TextTabState,
+} from "../../workbench/editor-session.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
@@ -78,6 +83,15 @@ export class EditorSurface {
 
   retain(tabIds: readonly string[]): void {
     this.textEditor.retain(tabIds);
+  }
+
+  applyTextPathMutation(
+    remaps: readonly EditorRuntimeTabRemap[],
+    disposedTabIds: readonly string[],
+  ): boolean {
+    if (!this.textEditor.remap(remaps)) return false;
+    for (const tabId of disposedTabIds) this.textEditor.dispose(tabId);
+    return true;
   }
 
   capture(

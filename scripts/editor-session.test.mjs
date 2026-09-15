@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   TEXT_TAB_LIMIT,
   activatePreview,
+  applyEditorPathMutation,
   beginTextReload,
   beginTextSave,
   closeTextTab,
@@ -14,6 +15,7 @@ import {
   failTextSave,
   markTextEdited,
   openTextDocument,
+  prepareEditorPathMutation,
   reconcileExternalTextSnapshot,
   setTextTabMarkdownMode,
 } from "../src/workbench/editor-session.ts";
@@ -158,6 +160,99 @@ test("a clean tab can start a fresh guarded reload but dirty or saving tabs cann
 
   const saving = beginTextSave(session, tabId, "edited", "save-1");
   assert.equal(beginTextReload(saving.session, tabId).loadEpoch, null);
+});
+
+test("a move lease remaps folder descendants without replacing editor state", () => {
+  let session = loaded(createEditorSession(), "src/a.ts");
+  session = loaded(session, "src/nested/b.ts");
+  session = markTextEdited(session, session.textTabs[0].id, "unsaved");
+  session = activatePreview(session, {
+    kind: "project-image",
+    repositoryRoot: "/repo",
+    repositoryId: ".",
+    path: "src/logo.png",
+    workspacePath: "src/logo.png",
+  });
+  const request = {
+    kind: "move",
+    mapping: {
+      sourceWorkspacePath: "src",
+      destinationWorkspacePath: "lib",
+      sourceRepositoryId: ".",
+      destinationRepositoryId: ".",
+      sourcePath: "src",
+      destinationPath: "lib",
+    },
+  };
+  const prepared = prepareEditorPathMutation(session, request);
+  assert.equal(prepared.status, "ready");
+  const result = applyEditorPathMutation(session, prepared.lease);
+
+  assert.equal(result.status, "applied");
+  assert.deepEqual(result.session.textTabs.map((tab) => tab.document.workspacePath), [
+    "lib/a.ts",
+    "lib/nested/b.ts",
+  ]);
+  assert.equal(result.session.textTabs[0].content, "unsaved");
+  assert.equal(result.session.preview.workspacePath, "lib/logo.png");
+  assert.deepEqual(result.remaps.map((remap) => remap.destinationPath), [
+    "lib/a.ts",
+    "lib/nested/b.ts",
+  ]);
+});
+
+test("path leases block saves, destination collisions, and dirty deletion", () => {
+  let session = loaded(createEditorSession(), "a.ts");
+  session = loaded(session, "b.ts");
+  const first = session.textTabs[0];
+  const collision = prepareEditorPathMutation(session, {
+    kind: "move",
+    mapping: {
+      sourceWorkspacePath: "a.ts",
+      destinationWorkspacePath: "b.ts",
+      sourceRepositoryId: ".",
+      destinationRepositoryId: ".",
+      sourcePath: "a.ts",
+      destinationPath: "b.ts",
+    },
+  });
+  assert.deepEqual(collision, { status: "blocked", reason: "destinationOpen" });
+
+  session = markTextEdited(session, first.id, "dirty");
+  assert.deepEqual(
+    prepareEditorPathMutation(session, { kind: "trash", sourceWorkspacePath: "a.ts" }),
+    { status: "blocked", reason: "dirtyDelete" },
+  );
+  const saving = beginTextSave(session, first.id, "dirty", "save-before-move");
+  assert.deepEqual(
+    prepareEditorPathMutation(saving.session, {
+      kind: "move",
+      mapping: {
+        sourceWorkspacePath: "a.ts",
+        destinationWorkspacePath: "c.ts",
+        sourceRepositoryId: ".",
+        destinationRepositoryId: ".",
+        sourcePath: "a.ts",
+        destinationPath: "c.ts",
+      },
+    }),
+    { status: "blocked", reason: "saveInFlight" },
+  );
+});
+
+test("a trash lease becomes stale after an edit and clean trash closes only affected tabs", () => {
+  let session = loaded(createEditorSession(), "folder/a.ts");
+  session = loaded(session, "keep.ts");
+  const request = { kind: "trash", sourceWorkspacePath: "folder" };
+  const prepared = prepareEditorPathMutation(session, request);
+  assert.equal(prepared.status, "ready");
+  const changed = markTextEdited(session, session.textTabs[0].id, "late edit");
+  assert.deepEqual(applyEditorPathMutation(changed, prepared.lease), { status: "stale" });
+
+  const result = applyEditorPathMutation(session, prepared.lease);
+  assert.equal(result.status, "applied");
+  assert.deepEqual(result.disposedTabIds, [session.textTabs[0].id]);
+  assert.deepEqual(result.session.textTabs.map((tab) => tab.document.workspacePath), ["keep.ts"]);
 });
 
 test("edits during save remain dirty and conflicts retain content", () => {

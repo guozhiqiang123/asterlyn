@@ -15,6 +15,7 @@ import {
   activateTextTab,
   activateWelcome,
   activeEditorDocument,
+  applyEditorPathMutation,
   beginTextReload,
   beginTextSave,
   captureTextContent,
@@ -30,10 +31,15 @@ import {
   markTextExternalConflict,
   markTextEdited,
   openTextDocument,
+  prepareEditorPathMutation,
   reconcileExternalTextSnapshot,
   setTextTabMarkdownMode,
   textTab,
   type EditorSession,
+  type EditorPathMutationBlocker,
+  type EditorPathMutationLease,
+  type EditorPathMutationRequest,
+  type EditorRuntimeTabRemap,
   type MarkdownEditorMode,
   type TextTabState,
 } from "../../workbench/editor-session.ts";
@@ -59,6 +65,7 @@ export type EditorSessionChangeReason =
   | "save-complete"
   | "save-error"
   | "external-change"
+  | "path-migration"
   | "close";
 
 export interface EditorSessionChange {
@@ -115,6 +122,23 @@ export interface ImageLoadRequest {
   completion: Promise<ImageLoadResult>;
 }
 
+export interface EditorPathMigrationLease {
+  id: number;
+  workspaceRoot: string;
+  workspaceGeneration: number;
+  editor: EditorPathMutationLease;
+}
+
+export type EditorPathMigrationPreparation =
+  | { status: "ready"; lease: EditorPathMigrationLease }
+  | { status: "blocked"; reason: EditorPathMutationBlocker }
+  | { status: "stale" };
+
+export interface EditorPathRuntimeChange {
+  remaps: readonly EditorRuntimeTabRemap[];
+  disposedTabIds: readonly string[];
+}
+
 type Listener = (change: EditorSessionChange) => void;
 
 export class EditorSessionController {
@@ -128,6 +152,8 @@ export class EditorSessionController {
   private workspaceGeneration = 0;
   private saveSequence = 0;
   private imageSequence = 0;
+  private pathMigrationSequence = 0;
+  private activePathMigration: EditorPathMigrationLease | null = null;
   private disposed = false;
   private messages: Pick<EditorCopy, "externalDirtyConflict" | "externalUnavailable" | "unexpectedEditorError">;
 
@@ -152,6 +178,7 @@ export class EditorSessionController {
   installWorkspace(root: string | null): void {
     const changed = this.state.workspaceRoot !== root;
     this.state.workspaceRoot = root;
+    this.activePathMigration = null;
     if (changed) {
       this.workspaceGeneration += 1;
       this.imageSequence += 1;
@@ -165,6 +192,7 @@ export class EditorSessionController {
   resetSession(): void {
     this.workspaceGeneration += 1;
     this.imageSequence += 1;
+    this.activePathMigration = null;
     this.state.session = createEditorSession();
     this.emit({ reason: "workspace", documentChanged: true, tabsChanged: true });
   }
@@ -235,6 +263,7 @@ export class EditorSessionController {
   }
 
   closeText(tabId: string): boolean {
+    if (this.pathMigrationOwnsTab(tabId)) return false;
     const closed = closeTextTab(this.state.session, tabId);
     this.state.session = closed.session;
     if (!closed.blocked) {
@@ -318,7 +347,7 @@ export class EditorSessionController {
   async reloadPaths(workspacePaths: Iterable<string>): Promise<void> {
     const selected = new Set(workspacePaths);
     const tabs = this.state.session.textTabs.filter((tab) =>
-      selected.has(tab.document.workspacePath),
+      selected.has(tab.document.workspacePath) && !this.pathMigrationOwnsTab(tab.id),
     );
     const generation = this.workspaceGeneration;
     for (const tab of tabs) {
@@ -352,12 +381,69 @@ export class EditorSessionController {
     return this.state.session.textTabs.map((tab) => tab.document.workspacePath);
   }
 
+  preparePathMigration(
+    repositoryRoot: string,
+    request: EditorPathMutationRequest,
+  ): EditorPathMigrationPreparation {
+    if (this.disposed || this.state.workspaceRoot !== repositoryRoot) {
+      return { status: "stale" };
+    }
+    if (this.activePathMigration) {
+      return { status: "blocked", reason: "mutationInProgress" };
+    }
+    const prepared = prepareEditorPathMutation(this.state.session, request);
+    const result: EditorPathMigrationPreparation = prepared.status === "blocked"
+      ? prepared
+      : {
+          status: "ready",
+          lease: {
+            id: ++this.pathMigrationSequence,
+            workspaceRoot: repositoryRoot,
+            workspaceGeneration: this.workspaceGeneration,
+            editor: prepared.lease,
+          },
+        };
+    if (result.status === "ready") this.activePathMigration = result.lease;
+    return result;
+  }
+
+  applyPathMigration(
+    lease: EditorPathMigrationLease,
+    applyRuntime: (change: EditorPathRuntimeChange) => boolean,
+  ): "applied" | "stale" | "runtime-conflict" {
+    if (
+      this.activePathMigration !== lease ||
+      !this.workspaceMatches(lease.workspaceGeneration, lease.workspaceRoot)
+    ) return "stale";
+    const applied = applyEditorPathMutation(this.state.session, lease.editor);
+    if (applied.status !== "applied") return "stale";
+    if (!applyRuntime({
+      remaps: applied.remaps,
+      disposedTabIds: applied.disposedTabIds,
+    })) return "runtime-conflict";
+    this.state.session = applied.session;
+    this.activePathMigration = null;
+    this.workspaceGeneration += 1;
+    this.imageSequence += 1;
+    this.emit({
+      reason: "path-migration",
+      documentChanged: true,
+      tabsChanged: applied.remaps.length > 0 || applied.disposedTabIds.length > 0,
+    });
+    return "applied";
+  }
+
+  releasePathMigration(lease: EditorPathMigrationLease): void {
+    if (this.activePathMigration === lease) this.activePathMigration = null;
+  }
+
   async reconcileExternalPaths(workspacePaths: Iterable<string>): Promise<void> {
     const selected = Array.from(new Set(workspacePaths));
     const tabs = this.state.session.textTabs.filter((tab) =>
-      selected.length === 0 || selected.some((path) =>
+      !this.pathMigrationOwnsTab(tab.id) &&
+      (selected.length === 0 || selected.some((path) =>
         tab.document.workspacePath === path || tab.document.workspacePath.startsWith(`${path}/`)
-      )
+      ))
     );
     const generation = this.workspaceGeneration;
     await Promise.all(tabs.map(async (candidate) => {
@@ -409,6 +495,7 @@ export class EditorSessionController {
   }
 
   async saveText(tabId: string, content: string): Promise<SaveTextResult> {
+    if (this.pathMigrationOwnsTab(tabId)) return { status: "busy" };
     const current = textTab(this.state.session, tabId);
     if (!current) return { status: "clean" };
     const requestId = `text-save-${Date.now()}-${++this.saveSequence}`;
@@ -493,6 +580,7 @@ export class EditorSessionController {
     this.disposed = true;
     this.workspaceGeneration += 1;
     this.imageSequence += 1;
+    this.activePathMigration = null;
     this.listeners.clear();
     this.state.session = createEditorSession();
   }
@@ -501,6 +589,10 @@ export class EditorSessionController {
     return !this.disposed &&
       generation === this.workspaceGeneration &&
       this.state.workspaceRoot === root;
+  }
+
+  private pathMigrationOwnsTab(tabId: string): boolean {
+    return this.activePathMigration?.editor.tabs.some((tab) => tab.id === tabId) === true;
   }
 
   private emit(change: EditorSessionChange): void {

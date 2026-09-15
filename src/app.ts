@@ -813,7 +813,8 @@ export class AsterlynApp {
       change.reason === "save-start" ||
       change.reason === "save-complete" ||
       change.reason === "save-error" ||
-      change.reason === "external-change"
+      change.reason === "external-change" ||
+      change.reason === "path-migration"
     ) {
       this.renderEditor();
     }

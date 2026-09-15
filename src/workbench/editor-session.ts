@@ -3,6 +3,7 @@ import {
   editorDocumentKey,
   type EditorDocument,
   type ProjectFileDocument,
+  type ProjectImageDocument,
 } from "./editor-document.ts";
 
 export const TEXT_TAB_LIMIT = 20;
@@ -54,8 +55,169 @@ export type ExternalTextReconciliationStatus =
   | "conflict"
   | "stale";
 
+export interface EditorPathMapping {
+  sourceWorkspacePath: string;
+  destinationWorkspacePath: string;
+  sourceRepositoryId: string;
+  destinationRepositoryId: string;
+  sourcePath: string;
+  destinationPath: string;
+}
+
+export type EditorPathMutationRequest =
+  | { kind: "move"; mapping: EditorPathMapping }
+  | { kind: "trash"; sourceWorkspacePath: string };
+
+export type EditorPathMutationBlocker =
+  | "invalidMapping"
+  | "mutationInProgress"
+  | "saveInFlight"
+  | "sourceLoading"
+  | "destinationOpen"
+  | "dirtyDelete";
+
+interface EditorPathMutationLeaseTab {
+  id: string;
+  loadEpoch: number;
+  revision: string | null;
+  persistedContent: string;
+}
+
+export interface EditorPathMutationLease {
+  request: EditorPathMutationRequest;
+  tabs: EditorPathMutationLeaseTab[];
+}
+
+export interface EditorRuntimeTabRemap {
+  sourceId: string;
+  destinationId: string;
+  destinationPath: string;
+}
+
+export type EditorPathMutationPreparation =
+  | { status: "ready"; lease: EditorPathMutationLease }
+  | { status: "blocked"; reason: EditorPathMutationBlocker };
+
+export type EditorPathMutationApplication =
+  | {
+      status: "applied";
+      session: EditorSession;
+      remaps: EditorRuntimeTabRemap[];
+      disposedTabIds: string[];
+    }
+  | { status: "stale" };
+
 export function createEditorSession(): EditorSession {
   return { textTabs: [], preview: null, active: { kind: "welcome" } };
+}
+
+export function prepareEditorPathMutation(
+  session: EditorSession,
+  request: EditorPathMutationRequest,
+): EditorPathMutationPreparation {
+  if (!validMutationRequest(request)) {
+    return { status: "blocked", reason: "invalidMapping" };
+  }
+  const sourceWorkspacePath = request.kind === "move"
+    ? request.mapping.sourceWorkspacePath
+    : request.sourceWorkspacePath;
+  const affected = session.textTabs.filter((tab) =>
+    isAtOrBelow(tab.document.workspacePath, sourceWorkspacePath)
+  );
+  if (affected.some((tab) => tab.saveRequest !== null)) {
+    return { status: "blocked", reason: "saveInFlight" };
+  }
+  if (affected.some((tab) => tab.status === "loading")) {
+    return { status: "blocked", reason: "sourceLoading" };
+  }
+  if (request.kind === "trash" && affected.some(isTextTabDirty)) {
+    return { status: "blocked", reason: "dirtyDelete" };
+  }
+  if (request.kind === "move") {
+    const destinations = affected.map((tab) => remapProjectDocument(tab.document, request.mapping));
+    if (destinations.some((document) => document === null)) {
+      return { status: "blocked", reason: "invalidMapping" };
+    }
+    const affectedIds = new Set(affected.map((tab) => tab.id));
+    const destinationIds = destinations.map((document) => editorDocumentKey(document!));
+    if (
+      new Set(destinationIds).size !== destinationIds.length ||
+      session.textTabs.some((tab) =>
+        !affectedIds.has(tab.id) && destinationIds.includes(tab.id)
+      )
+    ) {
+      return { status: "blocked", reason: "destinationOpen" };
+    }
+  }
+  return {
+    status: "ready",
+    lease: {
+      request,
+      tabs: affected.map(leaseTab),
+    },
+  };
+}
+
+export function applyEditorPathMutation(
+  session: EditorSession,
+  lease: EditorPathMutationLease,
+): EditorPathMutationApplication {
+  const refreshed = prepareEditorPathMutation(session, lease.request);
+  if (
+    refreshed.status !== "ready" ||
+    !sameLeaseTabs(refreshed.lease.tabs, lease.tabs)
+  ) {
+    return { status: "stale" };
+  }
+  const affectedIds = new Set(lease.tabs.map((tab) => tab.id));
+  if (lease.request.kind === "trash") {
+    let next = session;
+    for (const tabId of affectedIds) {
+      const closed = closeTextTab(next, tabId);
+      if (closed.blocked) return { status: "stale" };
+      next = closed.session;
+    }
+    if (
+      next.preview?.kind === "project-image" &&
+      isAtOrBelow(next.preview.workspacePath, lease.request.sourceWorkspacePath)
+    ) {
+      next = closePreview(next);
+    }
+    return {
+      status: "applied",
+      session: next,
+      remaps: [],
+      disposedTabIds: [...affectedIds],
+    };
+  }
+
+  const mapping = lease.request.mapping;
+  const remaps: EditorRuntimeTabRemap[] = [];
+  const textTabs = session.textTabs.map((tab) => {
+    if (!affectedIds.has(tab.id)) return tab;
+    const document = remapProjectDocument(tab.document, mapping);
+    if (!document) return tab;
+    const id = editorDocumentKey(document);
+    remaps.push({ sourceId: tab.id, destinationId: id, destinationPath: document.path });
+    return { ...tab, id, document };
+  });
+  const idRemaps = new Map(remaps.map((remap) => [remap.sourceId, remap.destinationId]));
+  const preview = session.preview?.kind === "project-image"
+    ? remapProjectDocument(session.preview, mapping) ?? session.preview
+    : session.preview;
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      textTabs,
+      preview,
+      active: session.active.kind === "text" && idRemaps.has(session.active.id)
+        ? { kind: "text", id: idRemaps.get(session.active.id)! }
+        : session.active,
+    },
+    remaps,
+    disposedTabIds: [],
+  };
 }
 
 export function activeEditorDocument(session: EditorSession): EditorDocument {
@@ -471,6 +633,80 @@ export function dirtyTextTabs(session: EditorSession): TextTabState[] {
 
 export function isTextTabDirty(tab: TextTabState): boolean {
   return tab.document.readOnly !== true && tab.content !== tab.persistedContent;
+}
+
+function leaseTab(tab: TextTabState): EditorPathMutationLeaseTab {
+  return {
+    id: tab.id,
+    loadEpoch: tab.loadEpoch,
+    revision: tab.revision,
+    persistedContent: tab.persistedContent,
+  };
+}
+
+function sameLeaseTabs(
+  left: readonly EditorPathMutationLeaseTab[],
+  right: readonly EditorPathMutationLeaseTab[],
+): boolean {
+  return left.length === right.length && left.every((tab, index) => {
+    const other = right[index];
+    return other !== undefined &&
+      tab.id === other.id &&
+      tab.loadEpoch === other.loadEpoch &&
+      tab.revision === other.revision &&
+      tab.persistedContent === other.persistedContent;
+  });
+}
+
+function validMutationRequest(request: EditorPathMutationRequest): boolean {
+  if (request.kind === "trash") return validRelativePrefix(request.sourceWorkspacePath);
+  const mapping = request.mapping;
+  return validRelativePrefix(mapping.sourceWorkspacePath) &&
+    validRelativePrefix(mapping.destinationWorkspacePath) &&
+    validRelativePrefix(mapping.sourcePath) &&
+    validRelativePrefix(mapping.destinationPath) &&
+    Boolean(mapping.sourceRepositoryId) &&
+    Boolean(mapping.destinationRepositoryId) &&
+    mapping.sourceWorkspacePath !== mapping.destinationWorkspacePath;
+}
+
+function validRelativePrefix(path: string): boolean {
+  return path.length > 0 &&
+    path.length <= 4_096 &&
+    !path.includes("\\") &&
+    !path.startsWith("/") &&
+    !path.endsWith("/") &&
+    path.split("/").every((component) => component !== "" && component !== "." && component !== "..");
+}
+
+function isAtOrBelow(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+function remapPrefix(path: string, source: string, destination: string): string | null {
+  if (path === source) return destination;
+  return path.startsWith(`${source}/`)
+    ? `${destination}${path.slice(source.length)}`
+    : null;
+}
+
+function remapProjectDocument<
+  Document extends ProjectFileDocument | ProjectImageDocument,
+>(document: Document, mapping: EditorPathMapping): Document | null {
+  if (document.repositoryId !== mapping.sourceRepositoryId) return null;
+  const workspacePath = remapPrefix(
+    document.workspacePath,
+    mapping.sourceWorkspacePath,
+    mapping.destinationWorkspacePath,
+  );
+  const path = remapPrefix(document.path, mapping.sourcePath, mapping.destinationPath);
+  if (!workspacePath || !path) return null;
+  return {
+    ...document,
+    repositoryId: mapping.destinationRepositoryId,
+    workspacePath,
+    path,
+  };
 }
 
 function updateMatchingTab(

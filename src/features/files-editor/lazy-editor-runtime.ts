@@ -2,6 +2,7 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffEditor } from "../../diff-editor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { EditorRuntimeTabRemap } from "../../workbench/editor-session.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import type {
@@ -217,6 +218,21 @@ export class LazyTextEditor {
 
   retain(tabIds: readonly string[]): void {
     this.implementation?.retain(tabIds);
+  }
+
+  remap(remaps: readonly EditorRuntimeTabRemap[]): boolean {
+    const pending = this.pendingMount;
+    if (pending) {
+      const remap = remaps.find((candidate) => candidate.sourceId === pending.tabId);
+      if (remap) {
+        this.pendingMount = {
+          ...pending,
+          tabId: remap.destinationId,
+          path: remap.destinationPath,
+        };
+      }
+    }
+    return this.implementation?.remap(remaps) ?? true;
   }
 
   dispose(tabId: string): void {
