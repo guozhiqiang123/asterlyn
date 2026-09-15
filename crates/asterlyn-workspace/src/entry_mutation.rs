@@ -80,6 +80,7 @@ pub struct WorkspaceMutationPlan {
     pub plan_id: String,
     pub operation: WorkspaceMutationOperation,
     pub collision_policy: WorkspaceCollisionPolicy,
+    pub limits: WorkspaceMutationLimits,
     pub inventory: Option<WorkspaceEntryInventory>,
     pub blockers: Vec<WorkspaceMutationBlocker>,
 }
@@ -126,7 +127,7 @@ impl Workspace {
             });
         }
         let kind = entry_kind(&metadata)?;
-        let mut builder = InventoryBuilder::new(limits);
+        let mut builder = InventoryBuilder::new(relative, limits);
         builder.collect(relative, &source, &metadata, 0)?;
         builder.finish(workspace_path, kind, &metadata)
     }
@@ -151,6 +152,7 @@ impl Workspace {
                 destination: destination.to_string(),
             },
             collision_policy,
+            limits: WorkspaceMutationLimits::default(),
             inventory: None,
             blockers,
         })
@@ -200,6 +202,7 @@ impl Workspace {
                 source: source.to_string(),
             },
             collision_policy: WorkspaceCollisionPolicy::Cancel,
+            limits,
             inventory: Some(inventory),
             blockers,
         })
@@ -250,6 +253,7 @@ impl Workspace {
                 }
             },
             collision_policy,
+            limits,
             inventory: Some(inventory),
             blockers,
         })
@@ -294,6 +298,7 @@ impl Workspace {
 }
 
 struct InventoryBuilder {
+    source: PathBuf,
     limits: WorkspaceMutationLimits,
     entries: Vec<WorkspaceEntryInventoryItem>,
     total_bytes: u64,
@@ -305,8 +310,9 @@ struct InventoryBuilder {
 }
 
 impl InventoryBuilder {
-    fn new(limits: WorkspaceMutationLimits) -> Self {
+    fn new(source: &Path, limits: WorkspaceMutationLimits) -> Self {
         Self {
+            source: source.to_path_buf(),
             limits,
             entries: Vec::new(),
             total_bytes: 0,
@@ -357,13 +363,20 @@ impl InventoryBuilder {
                 self.truncated = true;
                 return Ok(());
             }
-            let revision = hash_file(absolute, length)?;
+            let revision = hash_file(absolute, length, metadata)?;
             self.total_bytes += length;
             (revision, length)
         } else {
             (directory_revision(metadata), 0)
         };
-        self.digest.update(path.as_bytes());
+        let fingerprint_path =
+            relative
+                .strip_prefix(&self.source)
+                .map_err(|_| WorkspaceError::InvalidMutation {
+                    message: "workspace mutation inventory escaped its source".into(),
+                })?;
+        self.digest
+            .update(workspace_path(fingerprint_path)?.as_bytes());
         self.digest.update([kind_tag(kind)]);
         self.digest.update(revision.as_bytes());
         self.entries.push(WorkspaceEntryInventoryItem {
@@ -493,6 +506,11 @@ fn validate_plan_id(plan_id: &str) -> Result<(), WorkspaceError> {
                 .into(),
         });
     }
+    if plan_id.contains(['/', '\\', '\0', '\r', '\n']) {
+        return Err(WorkspaceError::InvalidMutation {
+            message: "workspace mutation plan IDs cannot contain path separators".into(),
+        });
+    }
     Ok(())
 }
 
@@ -521,8 +539,18 @@ fn entry_kind(metadata: &Metadata) -> Result<WorkspaceEntryKind, WorkspaceError>
     }
 }
 
-fn hash_file(path: &Path, expected_length: u64) -> Result<String, WorkspaceError> {
-    let mut file = fs::File::open(path).map_err(inventory_io)?;
+fn hash_file(
+    path: &Path,
+    expected_length: u64,
+    expected_metadata: &Metadata,
+) -> Result<String, WorkspaceError> {
+    let mut file = open_file_without_links(path)?;
+    let opened_metadata = file.metadata().map_err(inventory_io)?;
+    if !same_metadata_identity(expected_metadata, &opened_metadata) {
+        return Err(WorkspaceError::Conflict {
+            current_revision: "identity-changed-during-inventory".into(),
+        });
+    }
     let mut digest = Sha256::new();
     digest.update(b"workspace-entry-file-v1\0");
     digest.update(expected_length.to_le_bytes());
@@ -542,6 +570,50 @@ fn hash_file(path: &Path, expected_length: u64) -> Result<String, WorkspaceError
         });
     }
     Ok(format!("{:x}", digest.finalize()))
+}
+
+#[cfg(unix)]
+fn open_file_without_links(path: &Path) -> Result<fs::File, WorkspaceError> {
+    use std::os::unix::fs::OpenOptionsExt;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(inventory_io)
+}
+
+#[cfg(windows)]
+fn open_file_without_links(path: &Path) -> Result<fs::File, WorkspaceError> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .map_err(inventory_io)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_file_without_links(path: &Path) -> Result<fs::File, WorkspaceError> {
+    fs::File::open(path).map_err(inventory_io)
+}
+
+#[cfg(unix)]
+fn same_metadata_identity(left: &Metadata, right: &Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    left.dev() == right.dev() && left.ino() == right.ino()
+}
+
+#[cfg(windows)]
+fn same_metadata_identity(left: &Metadata, right: &Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    left.volume_serial_number() == right.volume_serial_number()
+        && left.file_index() == right.file_index()
+}
+
+#[cfg(not(any(unix, windows)))]
+fn same_metadata_identity(left: &Metadata, right: &Metadata) -> bool {
+    left.len() == right.len() && left.permissions().readonly() == right.permissions().readonly()
 }
 
 fn directory_revision(metadata: &Metadata) -> String {

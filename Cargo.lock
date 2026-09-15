@@ -87,6 +87,7 @@ name = "asterlyn-workspace"
 version = "0.1.0"
 dependencies = [
  "glob",
+ "libc",
  "memchr",
  "regex",
  "serde",
