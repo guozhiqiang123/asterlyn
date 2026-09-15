@@ -66,6 +66,25 @@ test("CodeMirror active line and gutter use one continuous fill", async () => {
   );
 });
 
+test("Git Blame and Diff gutters use semantic background layers", async () => {
+  const source = await readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8");
+  for (const className of [
+    "cm-git-blame-tone-0",
+    "cm-git-blame-tone-1",
+    "cm-git-blame-tone-2",
+    "cm-git-blame-tone-3",
+    "cm-git-blame-local",
+    "cm-source-added-gutter",
+    "cm-source-removed-gutter",
+    "cm-source-spacer-gutter",
+    "cm-source-omitted-gutter",
+  ]) {
+    assert.match(source, new RegExp(`"\\.${className}"`));
+  }
+  assert.match(source, /var\(--editor-diff-added-bg\)/u);
+  assert.match(source, /var\(--editor-diff-removed-bg\)/u);
+});
+
 test("forced-colors preserves native controls, focus, and selected state", async () => {
   const source = await readFile(path.join(sourceRoot, "styles.css"), "utf8");
   const block = source.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/u)?.[1] ?? "";

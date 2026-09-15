@@ -27,6 +27,12 @@ request. Results retain contiguous hunks rather than expanding one DTO per line.
 bounded to 16 MiB; a truncated result retains only complete records and reports partial coverage.
 Frontend completion requires the same editor, document, revision, side, and request generation.
 
+Committed annotation cells now receive a low-intensity, object-stable tint; uncommitted cells use a
+separate local-change tint. Split Diff applies its existing added/removed fill to every gutter on
+the corresponding row. The presentation deliberately does not infer insertion versus replacement
+for ordinary-editor worktree lines because the current Blame contract reports only uncommitted
+ownership.
+
 ## Validation
 
 | Check | Absolute result | Conclusion |
@@ -89,6 +95,24 @@ The local unsigned acceptance package is:
 - Path: `target/release/bundle/deb/Asterlyn_0.1.0_amd64.deb`
 - Size: 8,023,596 bytes
 - SHA-256: `da82ae3300e548325d4a61af21fbdb0f3a29647b338d9cd61e2ca962abe2c932`
+
+## Presentation follow-up — 2026-09-15
+
+The follow-up comparison uses the immediately preceding 8,027,432-byte local package and the same
+deterministic browser Diff fixture. The focused color/navigation set passed 13/13, the complete
+frontend script suite passed 355/355, TypeScript checking passed, and the production build still
+transformed 326 modules. Right-clicking the right-hand Split Diff code row exposed the same checked
+Blame action as its gutter. For the first three sampled rows, annotation-gutter and code-row top
+coordinates and heights were identical; each height was 18.890625 px. Added and omitted samples
+also reported identical semantic background colors on both sides of the gutter/content boundary.
+
+The updated native executable remained alive for the 6,000 ms smoke interval. The Debian package
+is 8,028,926 bytes with SHA-256
+`f0eaf81e1b3bc9d99493c2ecda22209702c16e34eac64da06797cfed6be4554c`, an increase of 1,494 bytes
+(0.02%) from the immediate reference. Functionality and visual continuity are **improved**; package
+movement is **no material change**. Memory remains **inconclusive** because this presentation-only
+correction did not repeat a process-memory series. Manual installed-package review remains the next
+action, especially for author widths and light-theme tint strength.
 
 ## Limitations and next action
 

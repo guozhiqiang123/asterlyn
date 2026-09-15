@@ -227,7 +227,9 @@ class GitBlameMarker extends GutterMarker {
     private readonly copy: GitBlameCopy,
   ) {
     super();
-    this.elementClass = hunk.uncommitted ? "cm-git-blame-uncommitted" : "";
+    this.elementClass = hunk.uncommitted
+      ? "cm-git-blame-uncommitted cm-git-blame-local"
+      : `cm-git-blame-tone-${blameTone(hunk.oid)}`;
   }
 
   eq(other: GitBlameMarker): boolean {
@@ -252,6 +254,11 @@ class GitBlameMarker extends GutterMarker {
     );
     return marker;
   }
+}
+
+function blameTone(oid: string): number {
+  const suffix = Number.parseInt(oid.slice(-2), 16);
+  return Number.isFinite(suffix) ? suffix % 4 : 0;
 }
 
 function compactDate(epochSeconds: number): string {

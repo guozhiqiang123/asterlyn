@@ -303,9 +303,15 @@ The ordinary code editor and both sides of a side-by-side text Diff share one li
 both the line-number gutter and the code row. `Annotate with Git Blame` is an explicit, reversible
 presentation action: opening a file, switching tabs, rendering a Diff, refreshing Git state, or
 focusing the window never starts a Blame query. A successful request adds compact date-and-author
-annotations beside line numbers;
-hover text retains author email, full time, object identity, and commit summary. Invoking the same
+annotations beside line numbers; hover text retains author email, full time, object identity, and
+commit summary. Invoking the same
 menu again hides the annotations without changing the file, Diff, or repository.
+
+Annotation cells use a subtle deterministic tint derived from the exact commit object, so adjacent
+history remains scannable without implying author, age, or branch semantics. Uncommitted worktree
+lines use a separate local-change tint. In side-by-side Diff, line-number and annotation gutters
+mirror the existing added/removed line fills. Outside Diff, Asterlyn does not guess whether an
+uncommitted line is an insertion or replacement when Git Blame supplies only local ownership.
 
 Ordinary editors bind Blame to the saved worktree file in its exact main or submodule Git root.
 Unsaved, saving, ignored, untracked, ordinary-folder, and stale-root documents expose the action as

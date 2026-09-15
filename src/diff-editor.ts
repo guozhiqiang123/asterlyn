@@ -11,7 +11,9 @@ import type { LanguageSupport } from "@codemirror/language";
 import {
   Decoration,
   EditorView,
+  GutterMarker,
   drawSelection,
+  gutterLineClass,
   highlightActiveLine,
   highlightActiveLineGutter,
   highlightTrailingWhitespace,
@@ -88,6 +90,17 @@ const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) =
   }
   return builder.finish();
 });
+
+class SourceDiffGutterMarker extends GutterMarker {
+  constructor(readonly elementClass: string) {
+    super();
+  }
+}
+
+const sourceAddedGutterMarker = new SourceDiffGutterMarker("cm-source-added-gutter");
+const sourceRemovedGutterMarker = new SourceDiffGutterMarker("cm-source-removed-gutter");
+const sourceSpacerGutterMarker = new SourceDiffGutterMarker("cm-source-spacer-gutter");
+const sourceOmittedGutterMarker = new SourceDiffGutterMarker("cm-source-omitted-gutter");
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -390,6 +403,7 @@ export class DiffEditor {
           openBlameMenu,
           (lineNumber) => rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
         ),
+        sourceGutterDecorations(rows, side),
         sourceLineDecorations(rows, side),
       );
     } else {
@@ -611,6 +625,34 @@ function sourceLineDecorations(
       }
     }
     return Decoration.set(decorations, true);
+  });
+}
+
+function sourceGutterDecorations(
+  rows: SourceDiffRow[],
+  side: "old" | "new",
+): Extension {
+  return gutterLineClass.compute(["doc"], (state) => {
+    const builder = new RangeSetBuilder<GutterMarker>();
+    for (const [index, row] of rows.entries()) {
+      if (index >= state.doc.lines) break;
+      const marker = row.kind === "omitted"
+        ? sourceOmittedGutterMarker
+        : row[side].lineNumber === null
+          ? sourceSpacerGutterMarker
+          : side === "old"
+            ? row.kind === "removed" || row.kind === "modified"
+              ? sourceRemovedGutterMarker
+              : null
+            : row.kind === "added" || row.kind === "modified"
+              ? sourceAddedGutterMarker
+              : null;
+      if (marker) {
+        const position = state.doc.line(index + 1).from;
+        builder.add(position, position, marker);
+      }
+    }
+    return builder.finish();
   });
 }
 

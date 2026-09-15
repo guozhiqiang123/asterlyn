@@ -173,6 +173,21 @@ const editorThemeRules =
       whiteSpace: "nowrap",
       cursor: "help",
     },
+    ".cm-git-blame-tone-0": {
+      backgroundColor: "color-mix(in srgb, var(--graph-1) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-tone-1": {
+      backgroundColor: "color-mix(in srgb, var(--graph-2) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-tone-2": {
+      backgroundColor: "color-mix(in srgb, var(--graph-3) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-tone-3": {
+      backgroundColor: "color-mix(in srgb, var(--graph-4) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-local": {
+      backgroundColor: "color-mix(in srgb, var(--file-modified) 18%, var(--bg-deep))",
+    },
     ".cm-git-blame-uncommitted": {
       color: "var(--warning-text)",
       fontStyle: "italic",
@@ -245,6 +260,13 @@ const editorThemeRules =
     },
     ".cm-source-added": { backgroundColor: "var(--editor-diff-added-bg)" },
     ".cm-source-removed": { backgroundColor: "var(--editor-diff-removed-bg)" },
+    ".cm-source-added-gutter": { backgroundColor: "var(--editor-diff-added-bg)" },
+    ".cm-source-removed-gutter": { backgroundColor: "var(--editor-diff-removed-bg)" },
+    ".cm-source-spacer-gutter": { backgroundColor: "var(--surface-editor-secondary)" },
+    ".cm-source-omitted-gutter": { backgroundColor: "var(--info-bg)" },
+    ".cm-git-blame-gutter .cm-gutterElement.cm-activeLineGutter:not(.cm-source-added-gutter):not(.cm-source-removed-gutter):not(.cm-source-spacer-gutter):not(.cm-source-omitted-gutter)": {
+      backgroundColor: "var(--editor-active-line)",
+    },
     ".cm-source-spacer": {
       backgroundColor: "var(--surface-editor-secondary)",
       color: "transparent",

@@ -111,3 +111,13 @@ test("ordinary and Diff editor content expose the shared Git Blame menu", async 
   assert.match(textEditorSource, /blameContentContextMenu\(\(\) => this\.blameMenuState\(entry\)\)/u);
   assert.match(diffEditorSource, /blameContentContextMenu\(openBlameMenu\)/u);
 });
+
+test("split Diff projects added and removed state into every gutter", async () => {
+  const source = await readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8");
+  assert.match(source, /gutterLineClass\.compute/u);
+  assert.match(source, /cm-source-added-gutter/u);
+  assert.match(source, /cm-source-removed-gutter/u);
+  assert.match(source, /cm-source-spacer-gutter/u);
+  assert.match(source, /cm-source-omitted-gutter/u);
+  assert.match(source, /sourceGutterDecorations\(rows, side\)/u);
+});
