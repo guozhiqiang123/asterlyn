@@ -6,9 +6,10 @@ Status: locally accepted; installed-package interaction remains for manual accep
 
 ## Scope and behavior
 
-This focused slice adds one shared line-number-gutter action to ordinary CodeMirror editors and
-text Diff editors. Right-clicking a line number exposes `Annotate with Git Blame`; a successful
-request adds compact date-and-author annotations, and invoking the same action again hides them.
+This focused slice adds one shared line action to ordinary CodeMirror editors and text Diff
+editors. Right-clicking either a line number or its code row exposes `Annotate with Git Blame`; a
+successful request adds compact date-and-author annotations, and invoking the same action again
+hides them.
 The action is available independently on both sides of side-by-side Diff and is explicitly disabled
 with a reason in unified Diff. No unrelated Android Studio gutter menu actions, language service,
 index, cache database, polling task, background Blame scan, or Git mutation is added.

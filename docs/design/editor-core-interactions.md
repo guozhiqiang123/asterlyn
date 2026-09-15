@@ -299,10 +299,11 @@ projects, or closing the window. This in-memory guard does not provide unsaved-d
 
 ### E3.1 on-demand Git Blame gutter — 2026-09-14
 
-The ordinary code editor and both sides of a side-by-side text Diff share one line-number-gutter
-context menu. `Annotate with Git Blame` is an explicit, reversible presentation action: opening a
-file, switching tabs, rendering a Diff, refreshing Git state, or focusing the window never starts a
-Blame query. A successful request adds compact date-and-author annotations beside line numbers;
+The ordinary code editor and both sides of a side-by-side text Diff share one line action menu from
+both the line-number gutter and the code row. `Annotate with Git Blame` is an explicit, reversible
+presentation action: opening a file, switching tabs, rendering a Diff, refreshing Git state, or
+focusing the window never starts a Blame query. A successful request adds compact date-and-author
+annotations beside line numbers;
 hover text retains author email, full time, object identity, and commit summary. Invoking the same
 menu again hides the annotations without changing the file, Diff, or repository.
 

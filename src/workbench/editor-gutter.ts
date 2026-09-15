@@ -1,5 +1,6 @@
 import type { Extension } from "@codemirror/state";
 import {
+  EditorView,
   GutterMarker,
   gutter,
   lineNumbers,
@@ -76,6 +77,24 @@ export function lineNumberGutter(
         showGutterMenu(event as MouseEvent, openMenu(event as MouseEvent));
         return true;
       },
+    },
+  });
+}
+
+export function blameContentContextMenu(
+  openMenu: (event: MouseEvent) => GutterBlameMenuState,
+): Extension {
+  return EditorView.domEventHandlers({
+    contextmenu: (event) => {
+      const target = event.target;
+      const element = target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null;
+      if (!element?.closest(".cm-content")) return false;
+      showGutterMenu(event, openMenu(event));
+      return true;
     },
   });
 }

@@ -99,3 +99,15 @@ test("Diff position navigation outlines the complete current change block", asyn
   assert.match(theme, /\.cm-diff-current-change-start/);
   assert.match(theme, /\.cm-diff-current-change-end/);
 });
+
+test("ordinary and Diff editor content expose the shared Git Blame menu", async () => {
+  const [gutterSource, textEditorSource, diffEditorSource] = await Promise.all([
+    readFile(new URL("../src/workbench/editor-gutter.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/text-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(gutterSource, /export function blameContentContextMenu/u);
+  assert.match(gutterSource, /closest\("\.cm-content"\)/u);
+  assert.match(textEditorSource, /blameContentContextMenu\(\(\) => this\.blameMenuState\(entry\)\)/u);
+  assert.match(diffEditorSource, /blameContentContextMenu\(openBlameMenu\)/u);
+});

@@ -27,6 +27,7 @@ import {
   type TextChange,
 } from "./workbench/text-content";
 import {
+  blameContentContextMenu,
   blameGutter,
   closeGutterMenu,
   lineNumberGutter,
@@ -390,6 +391,7 @@ export class TextEditor {
         language.of([]),
         blame.of([]),
         lineNumberGutter(() => this.blameMenuState(entry)),
+        blameContentContextMenu(() => this.blameMenuState(entry)),
         foldGutter({ markerDOM: createFoldMarker }),
         history(),
         drawSelection(),

@@ -44,6 +44,7 @@ import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { EditorLanguageLoader } from "./editor-language";
 import type { GitBlameResult } from "./models.ts";
 import {
+  blameContentContextMenu,
   blameGutter,
   closeGutterMenu,
   lineNumberGutter,
@@ -368,6 +369,7 @@ export class DiffEditor {
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
+      blameContentContextMenu(openBlameMenu),
       blame.of(activeBlame
         ? blameGutter(activeBlame, this.blameCopy, openBlameMenu, sourceLine)
         : []),
