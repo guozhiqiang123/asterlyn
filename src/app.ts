@@ -107,11 +107,12 @@ import {
   renderChangeNavigation,
 } from "./features/changes-commit/changes-view";
 import {
-  ChangesContextBinding,
   resolveChangesContextTarget,
   type ChangesContextTarget,
 } from "./features/changes-commit/changes-navigation-binding.ts";
-import { ChangesContextActions } from "./features/changes-commit/changes-context-actions.ts";
+import {
+  ChangesContextSurfaceRuntime,
+} from "./features/changes-commit/changes-context-runtime.ts";
 import {
   GitOperationController,
   type GitOperationChange,
@@ -127,13 +128,12 @@ import {
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
 import {
-  ProjectFilesContextBinding,
   resolveProjectFilesContextTarget,
   type ProjectFilesContextTarget,
 } from "./features/files-editor/project-files-binding.ts";
 import {
-  ProjectFilesContextActions,
-} from "./features/files-editor/project-files-context-actions.ts";
+  ProjectFilesContextSurfaceRuntime,
+} from "./features/files-editor/project-files-context-runtime.ts";
 import {
   projectFilesContextPolicy,
   projectFilesHistoryIntent,
@@ -420,12 +420,10 @@ export class AsterlynApp {
   private readonly releaseRemoteAuthenticationController: () => void;
   private readonly changesController: ChangesCommitController;
   private readonly releaseChangesController: () => void;
-  private readonly changesContextActions: ChangesContextActions;
-  private readonly changesContextBinding: ChangesContextBinding;
+  private readonly changesContextRuntime: ChangesContextSurfaceRuntime;
   private readonly filesController: ProjectFilesController;
   private readonly releaseFilesController: () => void;
-  private readonly projectFilesContextActions: ProjectFilesContextActions;
-  private readonly projectFilesContextBinding: ProjectFilesContextBinding;
+  private readonly projectFilesContextRuntime: ProjectFilesContextSurfaceRuntime;
   private readonly workspaceTrash: WorkspaceTrashController<
     ProjectFilesContextTarget | ChangesContextTarget
   >;
@@ -1090,10 +1088,16 @@ export class AsterlynApp {
     this.releaseProjectFilesClipboard = this.projectFilesOperations.clipboard.subscribe(() => {
       if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
     });
-    this.projectFilesContextActions = new ProjectFilesContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
+    this.projectFilesContextRuntime = new ProjectFilesContextSurfaceRuntime({
+      root,
+      host: this.contextMenuHost,
+      clipboard: createBrowserTextClipboardAdapter(window.navigator),
+      source: () => ({
+        state: this.filesState,
+        tree: this.projectTree(),
+        workspaceGeneration: this.windowSession.generation,
+      }),
+      actions: {
         current: (target) => this.isProjectFilesContextTargetCurrent(target),
         select: (target) => {
           const selected = this.filesController.select(target.workspacePath, target.kind);
@@ -1157,21 +1161,19 @@ export class AsterlynApp {
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
-      () => this.localization.catalog.projectFiles,
-    );
-    this.projectFilesContextBinding = new ProjectFilesContextBinding(
+      copy: () => this.localization.catalog.projectFiles,
+    });
+    this.changesContextRuntime = new ChangesContextSurfaceRuntime({
       root,
-      () => ({
-        state: this.filesState,
-        tree: this.projectTree(),
+      host: this.contextMenuHost,
+      clipboard: createBrowserTextClipboardAdapter(window.navigator),
+      source: () => ({
+        snapshot: this.windowSession.repository.state.snapshot,
         workspaceGeneration: this.windowSession.generation,
+        repositoryId: ".",
+        repositoryRevision: this.windowSession.repository.state.revision,
       }),
-      (request) => this.projectFilesContextActions.open(request),
-    );
-    this.changesContextActions = new ChangesContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
+      actions: {
         current: (target) => this.isChangesContextTargetCurrent(target),
         select: (target) => {
           const selected = this.changesController.selectContextChange(target.path);
@@ -1207,18 +1209,8 @@ export class AsterlynApp {
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
-      () => this.localization.catalog.changes,
-    );
-    this.changesContextBinding = new ChangesContextBinding(
-      root,
-      () => ({
-        snapshot: this.windowSession.repository.state.snapshot,
-        workspaceGeneration: this.windowSession.generation,
-        repositoryId: ".",
-        repositoryRevision: this.windowSession.repository.state.revision,
-      }),
-      (request) => this.changesContextActions.open(request),
-    );
+      copy: () => this.localization.catalog.changes,
+    });
     this.workspaceWatch = new WorkspaceWatchCoordinator(
       workspaceWatchBridge,
       this.windowSession,
@@ -1761,9 +1753,9 @@ export class AsterlynApp {
     this.changeTreeScrollFrame = null;
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
-    this.changesContextBinding.dispose();
+    this.changesContextRuntime.dispose();
     this.gitHistoryContextRuntime.dispose();
-    this.projectFilesContextBinding.dispose();
+    this.projectFilesContextRuntime.dispose();
     this.workspaceTrashBinding.dispose();
     this.releaseWorkspaceTrash();
     this.workspaceTrash.dispose();

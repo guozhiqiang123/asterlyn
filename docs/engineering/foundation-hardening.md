@@ -187,7 +187,11 @@ with a matching ceiling. Git History's branch, commit, range, commit-file, and c
 menus now share one feature-owned DOM runtime as well. It owns the three delegated binding pairs,
 routes single and range commit targets, shares the clipboard port, and disposes as one unit while
 the composition root supplies only explicit state and action ports. After this slice, `src/app.ts`
-is 8,879 lines with a matching ceiling.
+is 8,879 lines with a matching ceiling. Files and Changes now use the same feature-owned context
+surface pattern: each runtime owns its action provider and delegated DOM binding, while workspace
+identity, policy inputs, and cross-feature actions remain explicit injected ports. This leaves
+`src/app.ts` at 8,871 lines with a matching ceiling and establishes one lifecycle model across the
+three context-menu feature areas.
 
 Extract vertical slices in this order:
 
