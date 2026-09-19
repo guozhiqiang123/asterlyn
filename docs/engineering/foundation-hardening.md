@@ -141,8 +141,10 @@ was moved out of the application-service directory and is explicitly a temporary
 state until FH4 removes feature-owned fields. The window-chrome transport type and parser now live
 in `src/protocol`; presentation helpers consume that contract without making protocol depend on
 `workbench`. The shared Trash application workflow now has a named `workspace-trash` feature for
-its dialog view/binding instead of placing business presentation in `src/shared`. The dependency
-debt list is empty; remaining FH3 debt is application timer/focus runtime access and the broader
+its dialog view/binding instead of placing business presentation in `src/shared`. Application
+timers and window focus are now explicit `RuntimeScheduler` and `WorkspaceFocusPort` dependencies,
+implemented at the browser adapter edge; application services no longer import DOM runtimes. The
+dependency and application-DOM debt lists are empty. The remaining FH3 task is the broader
 `workbench` classification.
 
 1. Move History filter state contracts out of feature presentation modules into a feature-owned

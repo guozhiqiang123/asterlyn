@@ -331,7 +331,7 @@ function integrationFixture(gatewayOverrides = {}) {
     async scanUntracked(root) { return { root, changes: [] }; },
     async cancelUntrackedScan() {},
     ...gatewayOverrides,
-  });
+  }, runtimeScheduler);
   session.beginTransition();
   session.activate(
     { root: "/repo", repository: initial },
@@ -457,6 +457,11 @@ function change(path) {
     submodule: false,
   };
 }
+
+const runtimeScheduler = {
+  schedule: (task, delayMs) => setTimeout(task, delayMs),
+  cancel: (task) => clearTimeout(task),
+};
 
 function settle() {
   return new Promise((resolve) => setTimeout(resolve, 0));

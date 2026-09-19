@@ -4,8 +4,6 @@ import test from "node:test";
 import { WorkspaceWatchCoordinator } from "../src/application/workspace-watch-coordinator.ts";
 import { WindowSession } from "../src/application/window-session.ts";
 
-globalThis.window ??= globalThis;
-
 test("watch hints reconcile only their typed slices", async () => {
   const reads = { project: 0, tracked: 0, catalog: 0, documents: [] };
   const session = activeSession({
@@ -20,7 +18,7 @@ test("watch hints reconcile only their typed slices", async () => {
   });
   const watch = fakeWatchBridge();
   const outcomes = [];
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     watch,
     session,
     { async refresh() { reads.catalog += 1; return true; } },
@@ -63,7 +61,7 @@ test("catalog and repository metadata are reconciled without accepting stale roo
   const watch = fakeWatchBridge();
   let catalogReads = 0;
   const outcomes = [];
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     watch,
     session,
     { async refresh() { catalogReads += 1; return true; } },
@@ -108,7 +106,7 @@ test("repository reread failures are reported and a later hint can still reconci
   const watch = fakeWatchBridge();
   const warnings = [];
   const outcomes = [];
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     watch,
     session,
     { async refresh() { return true; } },
@@ -143,7 +141,7 @@ test("watch reconciliation waits for an internal transition barrier", async () =
     },
   });
   const watch = fakeWatchBridge();
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     watch,
     session,
     { async refresh() { return true; } },
@@ -179,7 +177,7 @@ test("a disposed coordinator releases a watch that completes activation late", a
     async subscribe() { return () => undefined; },
   };
   const session = activeSession();
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     bridge,
     session,
     { async refresh() { return true; } },
@@ -211,7 +209,7 @@ test("a superseding plan update keeps the installed watch until its replacement 
     async subscribe() { return () => undefined; },
   };
   const session = activeSession();
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     bridge,
     session,
     { async refresh() { return true; } },
@@ -240,8 +238,8 @@ test("returning from the background reconciles local state before one remote ref
       return { root, repository: snapshot(root) };
     },
   });
-  const focusTarget = new EventTarget();
-  const coordinator = new WorkspaceWatchCoordinator(
+  const focus = fakeFocusPort();
+  const coordinator = createCoordinator(
     fakeWatchBridge(),
     session,
     { async refresh() { reads.catalog += 1; return true; } },
@@ -256,31 +254,36 @@ test("returning from the background reconciles local state before one remote ref
       },
       reportWarning() {},
     },
-    focusTarget,
+    focus,
     () => now,
   );
   coordinator.activate();
   await settle();
 
-  focusTarget.dispatchEvent(new Event("blur"));
+  focus.blur();
   now += 30_001;
-  focusTarget.dispatchEvent(new Event("focus"));
+  focus.focus();
   await settle(10);
   await settle(10);
 
   assert.equal(reads.remote, 1);
-  focusTarget.dispatchEvent(new Event("blur"));
+  focus.blur();
   now += 1;
-  focusTarget.dispatchEvent(new Event("focus"));
+  focus.focus();
   await settle(10);
   assert.equal(reads.project, 1);
   assert.equal(reads.catalog, 1);
   assert.equal(reads.documents, 1);
   assert.equal(reads.remote, 2);
-  focusTarget.dispatchEvent(new Event("focus"));
+  focus.focus();
   await settle();
   assert.equal(reads.remote, 2);
   coordinator.dispose();
+  focus.blur();
+  now += 30_001;
+  focus.focus();
+  await settle();
+  assert.equal(reads.remote, 2);
 });
 
 test("old watcher instances are rejected and repeated backend overflow suspends automatic recovery", async () => {
@@ -293,7 +296,7 @@ test("old watcher instances are rejected and repeated backend overflow suspends 
     },
   });
   const watch = fakeWatchBridge(watchStatus({ watchInstance: 5 }));
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     watch,
     session,
     { async refresh() { return true; } },
@@ -356,7 +359,7 @@ test("activation buffer overflow becomes one bounded complete verification", asy
     async stop() {},
     async subscribe(next) { listener = next; return () => { listener = null; }; },
   };
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     bridge,
     session,
     { async refresh() { return true; } },
@@ -398,7 +401,7 @@ test("stale repository reads have a retry budget and cannot self-loop", async ()
     },
   });
   const watch = fakeWatchBridge();
-  const coordinator = new WorkspaceWatchCoordinator(
+  const coordinator = createCoordinator(
     watch,
     session,
     { async refresh() { return true; } },
@@ -423,7 +426,7 @@ test("stale repository reads have a retry budget and cannot self-loop", async ()
 });
 
 function activeSession(overrides = {}) {
-  const session = new WindowSession({
+  const session = createSession({
     readProject(path) { return this.openProject(path); },
     async readRepositorySlices(root) {
       const project = await this.openProject(root);
@@ -444,6 +447,45 @@ function activeSession(overrides = {}) {
   session.repository.consumeInvalidation();
   return session;
 }
+
+function createSession(gateway) {
+  return new WindowSession(gateway, runtimeScheduler);
+}
+
+function createCoordinator(bridge, session, files, editor, actions, focus = null, now) {
+  return new WorkspaceWatchCoordinator(
+    bridge,
+    session,
+    files,
+    editor,
+    actions,
+    runtimeScheduler,
+    focus,
+    now,
+  );
+}
+
+function fakeFocusPort() {
+  let onBlur = null;
+  let onFocus = null;
+  return {
+    subscribe(nextBlur, nextFocus) {
+      onBlur = nextBlur;
+      onFocus = nextFocus;
+      return () => {
+        onBlur = null;
+        onFocus = null;
+      };
+    },
+    blur() { onBlur?.(); },
+    focus() { onFocus?.(); },
+  };
+}
+
+const runtimeScheduler = {
+  schedule: (task, delayMs) => setTimeout(task, delayMs),
+  cancel: (task) => clearTimeout(task),
+};
 
 function fakeWatchBridge(status = watchStatus()) {
   let listener = null;

@@ -13,6 +13,7 @@ import {
 } from "./session-invalidation.ts";
 import type { WindowSession } from "./window-session.ts";
 import type { RepositoryReadLease } from "./repository-session.ts";
+import type { RuntimeScheduler, ScheduledTask } from "./runtime-scheduler.ts";
 
 const FOCUS_RECOVERY_AFTER_MS = 30_000;
 const FOCUS_RECOVERY_COOLDOWN_MS = 30_000;
@@ -51,6 +52,10 @@ export interface WorkspaceWatchEditorPort {
   reconcileExternalPaths(workspacePaths: Iterable<string>): Promise<void>;
 }
 
+export interface WorkspaceFocusPort {
+  subscribe(onBlur: () => void, onFocus: () => void): () => void;
+}
+
 export interface WorkspaceWatchMessages {
   watchUnavailable(detail?: string): string;
   watchStartFailed(detail: string): string;
@@ -87,15 +92,16 @@ export class WorkspaceWatchCoordinator {
   private activationBufferOverflowed = false;
   private watchHealth: WorkspaceWatchHealth = "starting";
   private broadRecoveryTimes: number[] = [];
-  private recoveryTimer: number | null = null;
+  private recoveryTimer: ScheduledTask | null = null;
   private drainDeferred = false;
   private staleReadRetries = 0;
   private suspendedWarningReported = false;
   private lastAcceptedAt = 0;
   private lastFocusRecoveryAt: number | null = null;
   private blurredAt: number | null = null;
-  private readonly focusController = new AbortController();
+  private readonly releaseFocusSubscription: () => void;
   private readonly now: () => number;
+  private readonly scheduler: RuntimeScheduler;
 
   constructor(
     bridge: WorkspaceWatchBridge,
@@ -103,7 +109,8 @@ export class WorkspaceWatchCoordinator {
     files: WorkspaceWatchFilesPort,
     editor: WorkspaceWatchEditorPort,
     actions: WorkspaceWatchCoordinatorActions,
-    focusTarget: EventTarget | null = typeof window === "undefined" ? null : window,
+    scheduler: RuntimeScheduler,
+    focus: WorkspaceFocusPort | null = null,
     now: () => number = () => Date.now(),
   ) {
     this.bridge = bridge;
@@ -111,16 +118,14 @@ export class WorkspaceWatchCoordinator {
     this.files = files;
     this.editor = editor;
     this.actions = actions;
+    this.scheduler = scheduler;
     this.now = now;
     this.releaseEditorSubscription = editor.subscribe((change) => {
       if (change.tabsChanged) this.activate();
     });
-    focusTarget?.addEventListener("blur", () => {
+    this.releaseFocusSubscription = focus?.subscribe(() => {
       this.blurredAt = this.now();
-    }, { signal: this.focusController.signal });
-    focusTarget?.addEventListener("focus", () => this.recoverAfterFocus(), {
-      signal: this.focusController.signal,
-    });
+    }, () => this.recoverAfterFocus()) ?? (() => undefined);
   }
 
   get health(): WorkspaceWatchHealth {
@@ -216,11 +221,11 @@ export class WorkspaceWatchCoordinator {
     this.bufferedActivationEvents = [];
     this.activationBufferOverflowed = false;
     if (this.recoveryTimer !== null) {
-      window.clearTimeout(this.recoveryTimer);
+      this.scheduler.cancel(this.recoveryTimer);
       this.recoveryTimer = null;
     }
     this.pending = null;
-    this.focusController.abort();
+    this.releaseFocusSubscription();
     this.releaseSubscription?.();
     this.releaseSubscription = null;
     this.releaseEditorSubscription();
@@ -335,7 +340,7 @@ export class WorkspaceWatchCoordinator {
     if (this.disposed) return;
     if (delay <= 0) {
       if (this.recoveryTimer !== null) {
-        window.clearTimeout(this.recoveryTimer);
+        this.scheduler.cancel(this.recoveryTimer);
         this.recoveryTimer = null;
       }
       this.drainDeferred = false;
@@ -344,7 +349,7 @@ export class WorkspaceWatchCoordinator {
     }
     if (this.recoveryTimer !== null) return;
     this.drainDeferred = true;
-    this.recoveryTimer = window.setTimeout(() => {
+    this.recoveryTimer = this.scheduler.schedule(() => {
       this.recoveryTimer = null;
       this.drainDeferred = false;
       void this.drain();

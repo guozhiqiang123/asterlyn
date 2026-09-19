@@ -14,6 +14,7 @@ import {
 } from "./session-invalidation.ts";
 import { RepositorySession } from "./repository-session.ts";
 import type { RepositoryReadCommit, RepositoryReadLease } from "./repository-session.ts";
+import type { RuntimeScheduler, ScheduledTask } from "./runtime-scheduler.ts";
 import { WorkspaceSession, type WorkspaceActivation, type WorkspaceSessionIdentity } from "./workspace-session.ts";
 
 export interface WindowSessionGateway {
@@ -70,16 +71,18 @@ export class WindowSession {
     generation: number;
     repositoryRevision: number;
   } | null = null;
-  private trackedRefreshTimer: number | null = null;
+  private trackedRefreshTimer: ScheduledTask | null = null;
   private trackedRefreshRoot: string | null = null;
   private trackedRefreshCause: SessionInvalidationCause = "save";
   private trackedRefreshPaths = new Set<string>();
   private trackedRefreshRunning = false;
   private disposed = false;
   private readonly gateway: WindowSessionGateway;
+  private readonly scheduler: RuntimeScheduler;
 
-  constructor(gateway: WindowSessionGateway) {
+  constructor(gateway: WindowSessionGateway, scheduler: RuntimeScheduler) {
     this.gateway = gateway;
+    this.scheduler = scheduler;
   }
 
   get generation(): number {
@@ -274,7 +277,7 @@ export class WindowSession {
     this.trackedRefreshCause = cause;
     for (const path of paths) this.trackedRefreshPaths.add(path);
     if (this.trackedRefreshRunning || this.trackedRefreshTimer !== null) return;
-    this.trackedRefreshTimer = window.setTimeout(() => {
+    this.trackedRefreshTimer = this.scheduler.schedule(() => {
       this.trackedRefreshTimer = null;
       void this.refreshTracked();
     }, delay);
@@ -428,7 +431,7 @@ export class WindowSession {
 
   private cancelScheduledTrackedRefresh(): void {
     if (this.trackedRefreshTimer !== null) {
-      window.clearTimeout(this.trackedRefreshTimer);
+      this.scheduler.cancel(this.trackedRefreshTimer);
       this.trackedRefreshTimer = null;
     }
     this.trackedRefreshRoot = null;

@@ -3,11 +3,9 @@ import test from "node:test";
 
 import { WindowSession } from "../src/application/window-session.ts";
 
-globalThis.window ??= globalThis;
-
 test("tracked refresh updates only working state and follows with one untracked scan", async () => {
   const events = [];
-  const session = new WindowSession({
+  const session = createSession({
     readProject(path) { return this.openProject(path); },
     readRepositorySlices(path) { return this.readProject(path); },
     async openProject(root) { return { root, repository: snapshot(root) }; },
@@ -55,7 +53,7 @@ test("a new transition cancels the active scan and rejects its late result", asy
   const pending = deferred();
   const cancelled = [];
   const events = [];
-  const session = new WindowSession({
+  const session = createSession({
     readProject(path) { return this.openProject(path); },
     readRepositorySlices(path) { return this.readProject(path); },
     async openProject(root) { return { root, repository: snapshot(root) }; },
@@ -83,7 +81,7 @@ test("a new transition cancels the active scan and rejects its late result", asy
 
 test("project transitions activate only the latest window request", async () => {
   const first = deferred();
-  const session = new WindowSession({
+  const session = createSession({
     readProject(path) { return this.openProject(path); },
     readRepositorySlices(path) { return this.readProject(path); },
     openProject(path) {
@@ -116,7 +114,7 @@ test("project transitions activate only the latest window request", async () => 
 
 test("project refresh rejects a result after the window changes workspace", async () => {
   const pending = deferred();
-  const session = new WindowSession({
+  const session = createSession({
     readProject(path) { return this.openProject(path); },
     readRepositorySlices(path) { return this.readProject(path); },
     openProject(path) {
@@ -147,7 +145,7 @@ test("project refresh rejects a result after the window changes workspace", asyn
 
 test("project refresh uses workspace identity after unrelated operation generations advance", async () => {
   let reads = 0;
-  const session = new WindowSession({
+  const session = createSession({
     readProject(path) { return this.openProject(path); },
     readRepositorySlices(path) { return this.readProject(path); },
     async openProject(root) {
@@ -174,7 +172,7 @@ test("project refresh uses workspace identity after unrelated operation generati
 });
 
 test("repository slice refresh materializes only returned fields over the current revision", async () => {
-  const session = new WindowSession({
+  const session = createSession({
     async openProject(root) { return { root, repository: snapshot(root) }; },
     async readProject(root) { return { root, repository: snapshot(root) }; },
     async readRepositorySlices(root, slices) {
@@ -211,7 +209,7 @@ test("repository slice refresh materializes only returned fields over the curren
 test("same-root Git capability transitions use one full fallback and update both sessions", async () => {
   let gitAvailable = true;
   let fullReads = 0;
-  const session = new WindowSession({
+  const session = createSession({
     async openProject(root) { return { root, repository: null }; },
     async readProject(root) {
       fullReads += 1;
@@ -290,6 +288,15 @@ function change(path, worktreeStatus) {
     submodule: false,
   };
 }
+
+function createSession(gateway) {
+  return new WindowSession(gateway, runtimeScheduler);
+}
+
+const runtimeScheduler = {
+  schedule: (task, delayMs) => setTimeout(task, delayMs),
+  cancel: (task) => clearTimeout(task),
+};
 
 function deferred() {
   let resolve;

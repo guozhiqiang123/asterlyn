@@ -24,8 +24,5 @@
     }
   },
   "dependencyDebt": [],
-  "applicationDomDebt": {
-    "src/application/window-session.ts": "FH3",
-    "src/application/workspace-watch-coordinator.ts": "FH3"
-  }
+  "applicationDomDebt": {}
 }

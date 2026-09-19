@@ -205,12 +205,8 @@ import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
 import { primaryShortcut } from "./workbench/window-chrome";
 import { WindowSession } from "./application/window-session";
-import type {
-  SessionInvalidationSlice,
-} from "./application/session-invalidation";
-import {
-  RepositoryIntegrationCoordinator,
-} from "./application/repository-integration-coordinator";
+import type { SessionInvalidationSlice } from "./application/session-invalidation";
+import { RepositoryIntegrationCoordinator } from "./application/repository-integration-coordinator";
 import { remoteOutcomeNeedsUntrackedScan } from "./application/repository-mutation";
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
 import {
@@ -221,6 +217,7 @@ import {
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import { createAppState, type AppState } from "./app-state";
 import { WorkspaceWatchCoordinator } from "./application/workspace-watch-coordinator";
+import { browserRuntimeScheduler, browserWindowFocusPort } from "./adapters/browser/browser-runtime";
 import { workspaceWatchBridge } from "./workspace-watch-bridge";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";
 import {
@@ -513,7 +510,7 @@ export class AsterlynApp {
     readTrackedChanges: (root) => bridge.readTrackedChanges(root),
     scanUntracked: (root, scanId) => bridge.scanUntracked(root, scanId),
     cancelUntrackedScan: (scanId) => bridge.cancelUntrackedScan(scanId),
-  });
+  }, browserRuntimeScheduler);
   private readonly workspaceOperations = new WorkspaceOperationCoordinator(
     bridge,
     () => {
@@ -1313,6 +1310,8 @@ export class AsterlynApp {
         reportWarning: (message) => this.setStatus(message, "warning"),
         messages: () => this.localization.catalog.errors,
       },
+      browserRuntimeScheduler,
+      browserWindowFocusPort,
     );
     this.shellEventBinding = new ShellEventBinding(root, {
       workspaceOpen: () => this.windowSession.workspace.state.root !== null,
