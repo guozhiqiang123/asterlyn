@@ -329,8 +329,14 @@ the existing fresh-authorization and query-mapping characterization tests remain
 
 Workspace Replacement planning now lives in `application/workspace_replacement.rs`. It owns the
 bounded replacement policy, preview mapping, reviewed file identities, and the fresh-catalog check
-performed immediately before application. Tauri-specific recovery-path lookup, write-lock
-acquisition, and background dispatch remain at the composed desktop edge.
+performed immediately before application. Tauri-specific recovery-path lookup and background
+dispatch remain at the composed desktop edge.
+
+The replacement slice now also owns its stored-plan representation, serialized apply boundary,
+and list/rollback/finalize recovery operations. Commands pass the platform-selected recovery root
+and dispatch the blocking work; fresh authorization and the shared workspace write lock remain
+inside the application service. The replacement characterization test now exercises this complete
+service rather than reaching through to the workspace crate.
 
 Authorized text reads and optimistic saves now live in `application/workspace_document.rs`.
 Read-only rejection, fresh identity authorization, and workspace I/O form one application service;

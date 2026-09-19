@@ -1,15 +1,16 @@
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use asterlyn_git::ProjectFile;
 use asterlyn_workspace::{
-    ReplacementFilePreview, ReplacementLimits, SearchCancellationToken, SearchCandidate,
+    PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
+    ReplacementLimits, ReplacementRecoverySummary, SearchCancellationToken, SearchCandidate,
     SearchCoverageReason, SearchOptions, Workspace, WorkspaceError,
 };
 
-use super::search_session::{AuthorizedReplacementFile, StoredReplacementPlan};
 use super::workspace_catalog::load_authorized_project_catalog;
 use super::workspace_search::WORKSPACE_SEARCH_LIMITS;
+use super::workspace_session::WorkspaceWriteRegistry;
 
 const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
     max_files: 200,
@@ -17,6 +18,30 @@ const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
     max_replacement_bytes: 16 * 1024,
     max_preview_utf16: 320,
 };
+
+#[derive(Clone)]
+pub(crate) struct StoredReplacementPlan {
+    root: PathBuf,
+    plan: PreparedWorkspaceReplacement,
+    files: Vec<AuthorizedReplacementFile>,
+}
+
+impl StoredReplacementPlan {
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub(crate) fn plan_id(&self) -> &str {
+        self.plan.plan_id()
+    }
+}
+
+#[derive(Clone)]
+struct AuthorizedReplacementFile {
+    repository_id: String,
+    path: String,
+    workspace_path: String,
+}
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -155,4 +180,61 @@ pub(crate) fn authorize_replacement_selection(
         }
     }
     Ok(())
+}
+
+pub(crate) fn apply_authorized_replacement(
+    root: &Path,
+    recovery_root: &Path,
+    stored: StoredReplacementPlan,
+    selected_paths: &[String],
+    cancellation: &SearchCancellationToken,
+    writes: &WorkspaceWriteRegistry,
+) -> Result<ReplacementApplyResult, WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "serialize workspace writes".to_string(),
+        message: "workspace-write lock was poisoned".to_string(),
+    })?;
+    authorize_replacement_selection(root, &stored, selected_paths)?;
+    Workspace::open(root)?.apply_replacement_plan(
+        recovery_root,
+        &stored.plan,
+        selected_paths,
+        cancellation,
+    )
+}
+
+pub(crate) fn list_replacement_recoveries(
+    root: &Path,
+    recovery_root: &Path,
+) -> Result<Vec<ReplacementRecoverySummary>, WorkspaceError> {
+    Workspace::open(root)?.list_replacement_recoveries(recovery_root)
+}
+
+pub(crate) fn rollback_replacement(
+    root: &Path,
+    recovery_root: &Path,
+    recovery_id: &str,
+    writes: &WorkspaceWriteRegistry,
+) -> Result<ReplacementApplyResult, WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "serialize workspace writes".to_string(),
+        message: "workspace-write lock was poisoned".to_string(),
+    })?;
+    Workspace::open(root)?.rollback_replacement(recovery_root, recovery_id)
+}
+
+pub(crate) fn finalize_replacement(
+    root: &Path,
+    recovery_root: &Path,
+    recovery_id: &str,
+    writes: &WorkspaceWriteRegistry,
+) -> Result<(), WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "serialize workspace writes".to_string(),
+        message: "workspace-write lock was poisoned".to_string(),
+    })?;
+    Workspace::open(root)?.finalize_replacement(recovery_root, recovery_id)
 }

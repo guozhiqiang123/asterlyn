@@ -39,9 +39,10 @@ use application::{
     WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
     WorkspaceReplacementPreview, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
     WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
-    authorize_replacement_selection, exact_git_repository, execute_workspace_mutation_plan,
-    inspect_workspace_entry_inventory, load_project_catalog, prepare_authorized_replacement,
-    prepare_workspace_mutation_plan, read_session_text_file, reauthorize_session_file_for_read,
+    apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
+    finalize_replacement, inspect_workspace_entry_inventory, list_replacement_recoveries,
+    load_project_catalog, prepare_authorized_replacement, prepare_workspace_mutation_plan,
+    read_session_text_file, reauthorize_session_file_for_read, rollback_replacement,
     save_session_text_file, search_authorized_workspace,
 };
 #[cfg(test)]
@@ -630,17 +631,16 @@ mod tests {
         assert_eq!(preview.files.len(), 2);
         assert!(preview.files.iter().all(|file| file.repository_id == "."));
 
-        authorize_replacement_selection(directory.path(), &stored, &["tracked.txt".to_string()])
-            .expect("tracked selection remains authorized");
-        let applied = Workspace::open(directory.path())
-            .unwrap()
-            .apply_replacement_plan(
-                recovery.path(),
-                &stored.plan,
-                &["tracked.txt".to_string()],
-                &SearchCancellationToken::new(),
-            )
-            .expect("selected replacement applies");
+        let writes = WorkspaceWriteRegistry::default();
+        let applied = apply_authorized_replacement(
+            directory.path(),
+            recovery.path(),
+            stored.clone(),
+            &["tracked.txt".to_string()],
+            &SearchCancellationToken::new(),
+            &writes,
+        )
+        .expect("selected replacement applies");
         assert_eq!(
             applied.status,
             asterlyn_workspace::ReplacementRecoveryStatus::Applied
@@ -656,10 +656,13 @@ mod tests {
 
         fs::write(directory.path().join(".gitignore"), "untracked.txt\n")
             .expect("ignore untracked file");
-        let revoked = authorize_replacement_selection(
+        let revoked = apply_authorized_replacement(
             directory.path(),
-            &stored,
+            recovery.path(),
+            stored,
             &["untracked.txt".to_string()],
+            &SearchCancellationToken::new(),
+            &writes,
         )
         .expect_err("fresh catalog revokes replacement authorization");
         assert!(matches!(revoked, WorkspaceError::NotAuthorized { .. }));

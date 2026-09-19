@@ -247,22 +247,17 @@ pub(crate) async fn apply_workspace_replacement(
     let root = active_workspaces.resolve(&window_label, &repository_root)?;
     let (stored, cancellation) =
         replacements.start_application(&window_label, &repository_root, &root, &plan_id)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let writes = writes.inner().clone();
     let recovery_root = replacement_recovery_root(&app)?;
-    let task_plan = stored.plan.clone();
-    let task_stored = stored.clone();
     let task_cancellation = cancellation.clone();
     let result = run_workspace_blocking("apply workspace replacement", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        authorize_replacement_selection(&root, &task_stored, &selected_paths)?;
-        Workspace::open(&root)?.apply_replacement_plan(
+        apply_authorized_replacement(
+            &root,
             &recovery_root,
-            &task_plan,
+            stored,
             &selected_paths,
             &task_cancellation,
+            &writes,
         )
     })
     .await;
@@ -290,7 +285,7 @@ pub(crate) async fn list_workspace_replacement_recoveries(
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let recovery_root = replacement_recovery_root(&app)?;
     run_workspace_blocking("list replacement recoveries", move || {
-        Workspace::open(root)?.list_replacement_recoveries(&recovery_root)
+        list_replacement_recoveries(&root, &recovery_root)
     })
     .await
 }
@@ -305,14 +300,10 @@ pub(crate) async fn rollback_workspace_replacement(
     app: tauri::AppHandle,
 ) -> Result<ReplacementApplyResult, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let writes = writes.inner().clone();
     let recovery_root = replacement_recovery_root(&app)?;
     run_workspace_blocking("rollback workspace replacement", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        Workspace::open(root)?.rollback_replacement(&recovery_root, &recovery_id)
+        rollback_replacement(&root, &recovery_root, &recovery_id, &writes)
     })
     .await
 }
@@ -327,14 +318,10 @@ pub(crate) async fn finalize_workspace_replacement(
     app: tauri::AppHandle,
 ) -> Result<(), WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let writes = writes.inner().clone();
     let recovery_root = replacement_recovery_root(&app)?;
     run_workspace_blocking("finalize workspace replacement", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        Workspace::open(root)?.finalize_replacement(&recovery_root, &recovery_id)
+        finalize_replacement(&root, &recovery_root, &recovery_id, &writes)
     })
     .await
 }

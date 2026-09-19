@@ -1,25 +1,13 @@
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 
-use asterlyn_workspace::{PreparedWorkspaceReplacement, SearchCancellationToken, WorkspaceError};
+use asterlyn_workspace::{SearchCancellationToken, WorkspaceError};
+
+use super::workspace_replacement::StoredReplacementPlan;
 
 const CANCELLED_SEARCH_RETENTION: usize = 128;
 const REPLACEMENT_PLAN_RETENTION: usize = 16;
-
-#[derive(Clone)]
-pub(crate) struct StoredReplacementPlan {
-    pub(crate) root: PathBuf,
-    pub(crate) plan: PreparedWorkspaceReplacement,
-    pub(crate) files: Vec<AuthorizedReplacementFile>,
-}
-
-#[derive(Clone)]
-pub(crate) struct AuthorizedReplacementFile {
-    pub(crate) repository_id: String,
-    pub(crate) path: String,
-    pub(crate) workspace_path: String,
-}
 
 struct ActiveWorkspaceSearch {
     id: String,
@@ -309,7 +297,7 @@ impl WorkspaceReplacementRegistryState {
         let removed_plan = self
             .plans
             .get(&plan_key)
-            .is_some_and(|stored| stored.root == Path::new(&repository_root));
+            .is_some_and(|stored| stored.root() == Path::new(&repository_root));
         if removed_plan {
             self.plans.remove(&plan_key);
         }
@@ -338,10 +326,11 @@ impl WorkspaceReplacementRegistryState {
         if self.plans.len() >= REPLACEMENT_PLAN_RETENTION {
             self.plans.clear();
         }
-        self.plans
-            .retain(|(label, _), existing| label != window_label || existing.root != stored.root);
+        self.plans.retain(|(label, _), existing| {
+            label != window_label || existing.root() != stored.root()
+        });
         self.plans.insert(
-            (window_label.to_string(), stored.plan.plan_id().to_string()),
+            (window_label.to_string(), stored.plan_id().to_string()),
             stored,
         );
     }
@@ -354,7 +343,7 @@ impl WorkspaceReplacementRegistryState {
     ) -> Result<StoredReplacementPlan, WorkspaceError> {
         self.plans
             .get(&(window_label.to_string(), plan_id.to_string()))
-            .filter(|stored| stored.root == root)
+            .filter(|stored| stored.root() == root)
             .cloned()
             .ok_or_else(|| WorkspaceError::InvalidReplacement {
                 message: "replacement preview is stale; create a new preview".to_string(),
