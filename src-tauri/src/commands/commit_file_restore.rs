@@ -4,6 +4,7 @@ use asterlyn_workspace::{FileRestoreApplyResult, FileRestorePreview, FileRestore
 use tauri::Manager;
 
 use super::super::*;
+use crate::application::StoredCommitFileRestorePlan;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

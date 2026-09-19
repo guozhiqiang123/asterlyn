@@ -165,7 +165,7 @@ impl WorkspaceMutationCoordinator {
         plan_id: &str,
         cancellation: &WorkspaceMutationCancellationToken,
     ) -> Result<(), WorkspaceError> {
-        validate_plan_id(&plan_id)?;
+        validate_plan_id(plan_id)?;
         let mut state = self.lock("finish workspace mutation")?;
         let scope = (window_label.to_string(), repository_root.to_string());
         if state.active.get(&scope).is_some_and(|active| {
@@ -195,11 +195,11 @@ impl WorkspaceMutationCoordinator {
             state.planning.remove(&scope);
             return Ok(());
         }
-        if let Some(active) = state.active.get(&scope) {
-            if active.plan_id == plan_id {
-                active.cancellation.cancel();
-                return Ok(());
-            }
+        if let Some(active) = state.active.get(&scope)
+            && active.plan_id == plan_id
+        {
+            active.cancellation.cancel();
+            return Ok(());
         }
         if state
             .plans

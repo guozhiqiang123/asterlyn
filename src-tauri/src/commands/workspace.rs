@@ -3,6 +3,7 @@ use crate::adapters::system_file_manager::{
     RevealWorkspaceEntryResult, reveal_workspace_entry as reveal_in_system_file_manager,
 };
 use crate::adapters::system_trash::move_to_system_trash;
+use asterlyn_workspace::WorkspaceEntryKind;
 
 #[tauri::command]
 pub(crate) async fn list_project_files(
