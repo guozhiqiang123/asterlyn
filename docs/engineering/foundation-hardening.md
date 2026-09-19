@@ -418,6 +418,9 @@ The bounded `git diff --no-index` helper now also starts through the runner, pre
 4 MiB patch budget, 64 KiB diagnostics budget, accepted diff exit status, and normalization rules.
 Consequently every production `git` executable construction and spawn in `asterlyn-git` is now
 confined to the process boundary; remaining direct constructions are test-fixture helpers only.
+The raw command builder and profile-specific wait functions are private as well: callers select a
+runner profile, request a bounded child, and return it to the same profile for collection, preventing
+future code from silently mixing ordinary and remote output policy.
 
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the

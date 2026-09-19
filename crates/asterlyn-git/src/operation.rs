@@ -1189,7 +1189,8 @@ fn run_operation_command(
     arguments: &[OsString],
     stdin: Option<&[u8]>,
 ) -> Result<Output, GitError> {
-    let mut child = GitRunner::operation(root)
+    let runner = GitRunner::operation(root);
+    let mut child = runner
         .spawn(
             arguments,
             if stdin.is_some() {
@@ -1210,7 +1211,8 @@ fn run_operation_command(
             .write_all(bytes)
             .map_err(|error| io_error("write Git operation input", error))?;
     }
-    crate::process::wait_with_bounded_output(child)
+    runner
+        .wait(child)
         .map_err(|error| io_error("wait for Git operation", error))
 }
 

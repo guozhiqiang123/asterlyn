@@ -26,8 +26,7 @@ use crate::model::{
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
     GitRunner, GitStdin, join_limited_stream, join_stream, read_stream, read_stream_bounded,
-    read_stream_limited_with_signal, terminate_process_tree, wait_with_bounded_output,
-    wait_with_remote_output,
+    read_stream_limited_with_signal, terminate_process_tree,
 };
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -2251,7 +2250,8 @@ impl GitRepository {
             });
         }
 
-        let mut child = GitRunner::new(&self.root)
+        let runner = GitRunner::new(&self.root);
+        let mut child = runner
             .spawn(["commit", "--file=-", "--cleanup=strip"], GitStdin::Piped)
             .map_err(|error| GitError::Io {
                 operation: "create commit".to_string(),
@@ -2270,7 +2270,7 @@ impl GitRepository {
                 message: error.to_string(),
             })?;
 
-        let output = wait_with_bounded_output(child).map_err(|error| GitError::Io {
+        let output = runner.wait(child).map_err(|error| GitError::Io {
             operation: "create commit".to_string(),
             message: error.to_string(),
         })?;
@@ -2330,7 +2330,8 @@ impl GitRepository {
                 OsString::from("--"),
             ];
             args.extend(pathspecs.iter().cloned());
-            let mut child = GitRunner::new(&self.root)
+            let runner = GitRunner::new(&self.root);
+            let mut child = runner
                 .spawn(args, GitStdin::Piped)
                 .map_err(|error| GitError::Io {
                     operation: "create selected commit".to_string(),
@@ -2348,7 +2349,7 @@ impl GitRepository {
                     operation: "create selected commit".to_string(),
                     message: error.to_string(),
                 })?;
-            wait_with_bounded_output(child).map_err(|error| GitError::Io {
+            runner.wait(child).map_err(|error| GitError::Io {
                 operation: "create selected commit".to_string(),
                 message: error.to_string(),
             })
@@ -3798,7 +3799,8 @@ impl GitRepository {
         action: &str,
         input: &[u8],
     ) -> Result<Output, GitError> {
-        let mut child = GitRunner::remote(&self.root)
+        let runner = GitRunner::remote(&self.root);
+        let mut child = runner
             .spawn(["credential", action], GitStdin::Piped)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
@@ -3813,7 +3815,7 @@ impl GitRepository {
             message: format!("could not send credential metadata to Git: {error}"),
         })?;
         drop(stdin);
-        wait_with_remote_output(child).map_err(|error| GitError::Io {
+        runner.wait(child).map_err(|error| GitError::Io {
             operation: operation.to_string(),
             message: error.to_string(),
         })

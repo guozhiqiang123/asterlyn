@@ -57,7 +57,7 @@ impl<'a> GitRunner<'a> {
         }
     }
 
-    pub(crate) fn command(&self) -> Command {
+    fn command(&self) -> Command {
         let mut command = Command::new("git");
         command
             .arg("-C")
@@ -88,6 +88,10 @@ impl<'a> GitRunner<'a> {
         S: AsRef<OsStr>,
     {
         let child = self.spawn(args, GitStdin::Inherit)?;
+        self.wait(child)
+    }
+
+    pub(crate) fn wait(&self, child: Child) -> std::io::Result<Output> {
         match self.profile {
             GitProcessProfile::Standard | GitProcessProfile::Operation => {
                 wait_with_bounded_output(child)
@@ -153,7 +157,7 @@ fn should_remove_remote_environment(key: &OsStr) -> bool {
         || name.starts_with("GIT_CONFIG_VALUE_")
 }
 
-pub(crate) fn wait_with_bounded_output(mut child: Child) -> std::io::Result<Output> {
+fn wait_with_bounded_output(mut child: Child) -> std::io::Result<Output> {
     let stdout = child
         .stdout
         .take()
@@ -178,7 +182,7 @@ pub(crate) fn wait_with_bounded_output(mut child: Child) -> std::io::Result<Outp
     })
 }
 
-pub(crate) fn wait_with_remote_output(mut child: Child) -> std::io::Result<Output> {
+fn wait_with_remote_output(mut child: Child) -> std::io::Result<Output> {
     let stdout = child
         .stdout
         .take()
