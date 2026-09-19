@@ -382,7 +382,7 @@ transport validation and dispatch only; protocol generation and all native tests
 
 ### FH6 — Establish one Git process policy
 
-Status: in progress.
+Status: complete on 2026-09-19.
 
 Characterize read, mutation, remote, cancellation, overflow, Windows process-tree, and uncertain
 outcome behavior. Introduce a product-neutral runner inside `asterlyn-git`, migrate callers by
@@ -438,6 +438,14 @@ An executable source-boundary test now scans every production Rust module in `as
 fails if Git construction or subprocess spawning appears outside `process.rs`; it also requires the
 boundary itself to retain exactly one auditable construction and spawn point. Test-fixture helpers
 after `#[cfg(test)]` remain free to invoke Git directly.
+
+Exit evidence: Rust formatting passes; all 93 `asterlyn-git` tests plus doc tests pass; strict
+Clippy passes across the complete Cargo workspace; and all 494 script tests pass, including the new
+process-boundary guard. Source inspection reports one production `Command::new("git")` and one
+production `.spawn()` in `process.rs`; every other direct Git construction is below a test-only
+module boundary. The Linux host exercised Unix process-group cancellation. Windows `taskkill`
+behavior preserves the previously accepted implementation but remains pending native Windows
+execution because only `x86_64-unknown-linux-gnu` is installed on this host.
 
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the

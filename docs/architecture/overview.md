@@ -178,6 +178,14 @@ drained to completion and report an uncertain result if output exceeds the budge
 workspace traversal caps candidate enumeration, retained names, and recursion (64 levels) before
 collecting directory contents. Truncated huge directories do not promise a global lexical prefix.
 
+All production Git subprocesses are created by `asterlyn-git`'s product-neutral process runner.
+Its ordinary, reviewed-operation, and remote profiles own executable selection, repository scoping,
+stable locale, non-interactive/editor policy, inherited remote-environment sanitization, pipe setup,
+bounded output collection, cancellation polling, and direct-child or process-tree termination.
+Repository reads and mutations retain Git semantics and map completed/cancelled outcomes into typed
+domain errors, but cannot construct or spawn a process. An executable source-boundary test rejects
+new production construction or spawn points outside that module.
+
 Recoverable worktree transactions are host application services, described in ADR-0008. Git and
 Workspace retain independent domain crates; the host supplies recovery storage and one shared
 workspace write registry. The frontend recovery surface loads on demand. Watcher reconciliation
