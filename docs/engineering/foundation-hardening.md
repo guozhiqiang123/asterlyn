@@ -407,6 +407,13 @@ prompts, while callers retain their existing exact-object leases, cleanup, confl
 and uncertain-success verification. Its policy is characterized directly and the existing reviewed
 operation and concurrent-history tests continue to cover behavior.
 
+Remote credential exchange and cancellable fetch/pull/push execution now use the remote runner
+profile for process creation and pipes. Cross-platform process-tree termination moved beside the
+Unix process-group and Windows `taskkill` policy it depends on. Repository code still decides when
+cancellation makes repository or remote state uncertain and preserves those typed flags; the
+existing remote cancellation, fetch, pull, push, force-with-lease, and authentication tests remain
+the behavioral contract.
+
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
 source of truth.

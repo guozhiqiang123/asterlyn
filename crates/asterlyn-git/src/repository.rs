@@ -3,7 +3,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::Output;
 use std::sync::Arc;
 #[cfg(test)]
 use std::sync::Mutex;
@@ -26,7 +26,8 @@ use crate::model::{
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
     GitRunner, GitStdin, join_limited_stream, join_stream, read_stream, read_stream_bounded,
-    read_stream_limited_with_signal, wait_with_bounded_output, wait_with_remote_output,
+    read_stream_limited_with_signal, terminate_process_tree, wait_with_bounded_output,
+    wait_with_remote_output,
 };
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -3797,13 +3798,8 @@ impl GitRepository {
         action: &str,
         input: &[u8],
     ) -> Result<Output, GitError> {
-        let mut child = remote_command(&self.root)
-            .arg("credential")
-            .arg(action)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+        let mut child = GitRunner::remote(&self.root)
+            .spawn(["credential", action], GitStdin::Piped)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
@@ -4361,11 +4357,8 @@ impl GitRepository {
             ));
         }
 
-        let mut child = remote_command(&self.root)
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+        let mut child = GitRunner::remote(&self.root)
+            .spawn(args, GitStdin::Inherit)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
@@ -4736,46 +4729,6 @@ where
     S: AsRef<OsStr>,
 {
     GitRunner::new(path).output(args)
-}
-
-fn remote_command(path: &Path) -> Command {
-    GitRunner::remote(path).command()
-}
-
-fn terminate_process_tree(child: &mut Child) {
-    #[cfg(unix)]
-    {
-        let process_group = -(child.id() as i32);
-        // SAFETY: the child was placed in its own process group before spawn. Signals target only
-        // that group, and failures fall back to Child::kill below.
-        unsafe {
-            libc::kill(process_group, libc::SIGTERM);
-        }
-        for _ in 0..25 {
-            if child.try_wait().ok().flatten().is_some() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(4));
-        }
-        // SAFETY: same dedicated process-group invariant as above. Sending SIGKILL even after the
-        // direct child exits also removes a descendant that ignored SIGTERM.
-        unsafe {
-            libc::kill(process_group, libc::SIGKILL);
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        let _ = Command::new("taskkill")
-            .args(["/PID", &child.id().to_string(), "/T", "/F"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 fn ensure_success(operation: &str, output: Output) -> Result<Output, GitError> {

@@ -203,6 +203,42 @@ pub(crate) fn wait_with_remote_output(mut child: Child) -> std::io::Result<Outpu
     })
 }
 
+pub(crate) fn terminate_process_tree(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        let process_group = -(child.id() as i32);
+        // SAFETY: remote children are placed in their own process group before spawn. Signals
+        // target only that group, and failures fall back to Child::kill below.
+        unsafe {
+            libc::kill(process_group, libc::SIGTERM);
+        }
+        for _ in 0..25 {
+            if child.try_wait().ok().flatten().is_some() {
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(4));
+        }
+        // SAFETY: same dedicated process-group invariant as above. Sending SIGKILL even after the
+        // direct child exits also removes a descendant that ignored SIGTERM.
+        unsafe {
+            libc::kill(process_group, libc::SIGKILL);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 pub(crate) fn read_stream(stream: impl Read) -> std::io::Result<Vec<u8>> {
     let (bytes, truncated) = read_stream_limited(stream, STANDARD_OUTPUT_LIMIT_BYTES)?;
     if truncated {
