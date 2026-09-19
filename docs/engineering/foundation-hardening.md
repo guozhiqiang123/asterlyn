@@ -311,6 +311,10 @@ feature owns disposal and a stable DOM boundary.
 
 ### FH5 — Extract desktop application services
 
+Status: complete for the workspace and historical-file service scope on 2026-09-19. Git read,
+mutation, and remote command families intentionally remain for FH6 because their extraction depends
+on the single Git process policy.
+
 Move authorized catalog/search/replacement preparation, result mapping, and relevant registries out
 of `src-tauri/src/lib.rs` into capability-oriented `src-tauri/src/application` modules. Keep command
 functions thin and keep `run()` responsible for Tauri setup, managed state, lifecycle hooks, and
@@ -365,6 +369,13 @@ write serialization, cancellation, and operation dispatch are Tauri-independent;
 injects only its system-trash adapter and recovery location. A new application-level test executes
 the full create plan without constructing Tauri, bringing the desktop suite to 53 passing tests
 with the same two watcher tests reserved for native acceptance.
+
+Exit evidence: desktop protocol generation is stable; `npm run check` and all 493 script tests
+pass; the production build passes with a 323.92 kB main chunk; the desktop library has 54 passing
+tests with two operating-system watcher tests explicitly deferred to native acceptance;
+`asterlyn-git` has 87 passing tests and `asterlyn-workspace` has 48; and
+`cargo clippy --workspace --all-targets -- -D warnings` passes. The public search and replacement
+limit constants remain available to the inspection examples after their policy moved inward.
 
 Exit gate: application behavior is testable without constructing Tauri; command modules perform
 transport validation and dispatch only; protocol generation and all native tests pass.
