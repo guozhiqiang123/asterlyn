@@ -10,9 +10,9 @@
 The context-action sequence proved the shared presentation-host design and the reviewed mutation
 boundaries, but it also made the remaining concentration points more expensive:
 
-- `src/app.ts` is 9,242 lines and its constructor spans 1,088 lines;
-- `AppState` still owns Search, Replacement, and History-filter state that ADR-0007 assigns to
-  features;
+- at the recorded baseline, `src/app.ts` was 9,242 lines and its constructor spanned 1,088 lines;
+- at the recorded baseline, `AppState` still owned Search, Replacement, and History-filter state
+  that ADR-0007 assigns to features;
 - three `src/application` modules import concrete feature controllers or feature state;
 - the native production startup graph still contains the deterministic browser demo;
 - the production startup JavaScript is 685,945 bytes, above the 500 kB target;
@@ -167,8 +167,12 @@ Progress: Files Search controls, request identity, result/error state, cancellat
 completion acceptance now have one `WorkspaceSearchController` owner in `files-editor`. Replacement
 text, preview/apply state, file selection, recovery inventory/dialog state, and operation busy
 identity likewise have one `WorkspaceReplacementController` owner. The mixed `AppState` no longer
-stores Search or Replacement state, and architecture tests prevent that ownership from returning
-to the composition root.
+stores Search or Replacement state. History text matching, query filters, menus, dialog drafts,
+path validation, preference state, and normalized query routing now have one private
+`HistoryFilterController` state owner. `AppState` stores none of those three feature slices;
+architecture tests prevent their ownership from returning to the composition root. After the
+History slice, `src/app.ts` is 9,033 lines and its non-growing ownership ceiling has been lowered to
+match.
 
 Extract vertical slices in this order:
 

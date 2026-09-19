@@ -91,6 +91,18 @@ test("workspace replacement state has one feature owner", async () => {
   assert.match(controller, /private value: WorkspaceReplacementControllerState/);
 });
 
+test("history filter and dialog state has one feature owner", async () => {
+  const appState = await readFile(path.join(repositoryRoot, "src/app-state.ts"), "utf8");
+  const controller = await readFile(
+    path.join(repositoryRoot, "src/features/git-history/history-filter-controller.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(appState, /history(?:Query|Refs|Dialog|FilterMenu|PathDraft)/);
+  assert.match(controller, /class HistoryFilterController/);
+  assert.match(controller, /private readonly value = createHistoryFilterState\(\)/);
+  assert.match(controller, /get state\(\): HistoryFilterViewState/);
+});
+
 async function typescriptFiles(roots) {
   const files = [];
   for (const root of roots) {

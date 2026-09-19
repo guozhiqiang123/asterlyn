@@ -1,13 +1,6 @@
-import type { HistoryFilterMenu } from "./features/git-history/history-navigation-view.ts";
-import {
-  createHistoryFilterState,
-  type HistoryFilterState,
-} from "./features/git-history/history-filter-controller.ts";
 import type {
   CommitComparisonDiffResult,
   CommitDiffResult,
-  HistoryPath,
-  HistoryRef,
 } from "./models.ts";
 import type { CommitFileView } from "./workbench/git-presentation.ts";
 import {
@@ -15,21 +8,9 @@ import {
   type CommandSurfaceState,
 } from "./workbench/navigation.ts";
 
-export interface AppState extends HistoryFilterState {
+export interface AppState {
   gitDetail: "branch" | "commit" | "comparison" | "folder";
   commandSurface: CommandSurfaceState;
-  historyQuery: string;
-  historyCaseSensitive: boolean;
-  historyRegularExpression: boolean;
-  historyFilterMenu: HistoryFilterMenu | null;
-  historyBranchSubmenu: string | null;
-  historyDialog: "branches" | "paths-text" | "paths-tree" | null;
-  historyDialogQuery: string;
-  historyDialogError: string | null;
-  historyRefDraft: Map<string, HistoryRef>;
-  historyPathDraft: Map<string, HistoryPath>;
-  historyPathText: string;
-  historyTreeCollapsed: Set<string>;
   commitFileView: CommitFileView;
   collapsedCommitFileDirectories: Set<string>;
   commitPatch: CommitDiffResult | null;
@@ -48,19 +29,6 @@ export function createAppState(commitFileView: CommitFileView): AppState {
   return {
     gitDetail: "commit",
     commandSurface: createCommandSurfaceState(),
-    ...createHistoryFilterState(),
-    historyQuery: "",
-    historyCaseSensitive: false,
-    historyRegularExpression: false,
-    historyFilterMenu: null,
-    historyBranchSubmenu: null,
-    historyDialog: null,
-    historyDialogQuery: "",
-    historyDialogError: null,
-    historyRefDraft: new Map(),
-    historyPathDraft: new Map(),
-    historyPathText: "",
-    historyTreeCollapsed: new Set(),
     commitFileView,
     collapsedCommitFileDirectories: new Set(),
     commitPatch: null,

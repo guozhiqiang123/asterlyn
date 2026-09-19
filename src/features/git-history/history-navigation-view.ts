@@ -28,9 +28,10 @@ import {
 } from "../../workbench/history-path-selection.ts";
 import { effectiveHistoryRootIds } from "../../workbench/history-root-selection.ts";
 import { matchingBranches, type BranchNavigationViewModel } from "./branch-navigation-view.ts";
+import type { HistoryFilterMenu } from "./history-filter-controller.ts";
 import { renderHistoryList, type HistoryListPresentation } from "./history-list-view.ts";
 
-export type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
+export type { HistoryFilterMenu } from "./history-filter-controller.ts";
 
 export interface HistoryNavigationViewModel {
   readonly snapshot: RepositorySnapshot;
