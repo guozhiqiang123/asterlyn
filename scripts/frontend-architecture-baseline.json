@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "sourceReviewThreshold": 800,
+  "sourceOwnership": {
+    "src/app.ts": {
+      "owner": "window composition",
+      "maximumLines": 9242,
+      "burnDownPhase": "FH4"
+    },
+    "src/bridge.ts": {
+      "owner": "runtime bridge transition",
+      "maximumLines": 2375,
+      "burnDownPhase": "FH2"
+    },
+    "src/localization/catalog.ts": {
+      "owner": "localization schema",
+      "maximumLines": 1210,
+      "burnDownPhase": "reviewed cohesive catalog"
+    },
+    "src/localization/en-US.ts": {
+      "owner": "English localization data",
+      "maximumLines": 830,
+      "burnDownPhase": "reviewed localization data"
+    }
+  },
+  "dependencyDebt": [
+    {
+      "from": "src/application/app-state.ts",
+      "to": "src/features/git-history/history-filter-controller.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/application/app-state.ts",
+      "to": "src/features/git-history/history-navigation-view.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/application/workspace-mutation-coordinator.ts",
+      "to": "src/features/files-editor/editor-session-controller.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/application/workspace-watch-coordinator.ts",
+      "to": "src/features/files-editor/editor-session-controller.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/application/workspace-watch-coordinator.ts",
+      "to": "src/features/files-editor/project-files-controller.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/protocol/desktop-bridge.ts",
+      "to": "src/workbench/window-chrome.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/protocol/generated-desktop-protocol.ts",
+      "to": "src/workbench/window-chrome.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/shared/workspace-trash-dialog-binding.ts",
+      "to": "src/application/workspace-trash-controller.ts",
+      "burnDownPhase": "FH3"
+    },
+    {
+      "from": "src/shared/workspace-trash-dialog-view.ts",
+      "to": "src/application/workspace-trash-controller.ts",
+      "burnDownPhase": "FH3"
+    }
+  ],
+  "applicationDomDebt": {
+    "src/application/window-session.ts": "FH3",
+    "src/application/workspace-watch-coordinator.ts": "FH3"
+  }
+}

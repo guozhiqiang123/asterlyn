@@ -4,6 +4,9 @@ import path from "node:path";
 import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const architectureBaseline = JSON.parse(
+  await readFile(new URL("./frontend-architecture-baseline.json", import.meta.url), "utf8"),
+);
 
 test("composition adapter delegates repository reconciliation ownership", async () => {
   const source = await readFile(path.join(repositoryRoot, "src/app.ts"), "utf8");
@@ -25,21 +28,30 @@ test("composition adapter delegates repository reconciliation ownership", async 
   );
 });
 
-test("feature and shell boundaries stay below the decomposition trigger", async () => {
-  const files = await typescriptFiles([
-    path.join(repositoryRoot, "src/application"),
-    path.join(repositoryRoot, "src/adapters"),
-    path.join(repositoryRoot, "src/features"),
-    path.join(repositoryRoot, "src/protocol"),
-    path.join(repositoryRoot, "src/shell"),
-  ]);
+test("every production TypeScript source above the review trigger has non-growing ownership", async () => {
+  const files = await typescriptFiles([path.join(repositoryRoot, "src")]);
+  const reviewed = architectureBaseline.sourceOwnership;
+  const oversized = new Map();
   for (const file of files) {
     const source = await readFile(file, "utf8");
+    const relative = portablePath(path.relative(repositoryRoot, file));
+    const lines = lineCount(source);
+    if (lines <= architectureBaseline.sourceReviewThreshold) continue;
+    oversized.set(relative, lines);
+    const review = reviewed[relative];
+    assert.ok(review, `${relative} reached ${lines} lines without a named ownership review`);
+    assert.ok(review.owner?.trim(), `${relative} has no named owner`);
+    assert.ok(review.burnDownPhase?.trim(), `${relative} has no review disposition`);
     assert.ok(
-      lineCount(source) <= 800,
-      `${path.relative(repositoryRoot, file)} reached ${lineCount(source)} lines`,
+      lines <= review.maximumLines,
+      `${relative} grew from its reviewed ${review.maximumLines}-line ceiling to ${lines} lines`,
     );
   }
+  assert.deepEqual(
+    [...Object.keys(reviewed)].sort(),
+    [...oversized.keys()].sort(),
+    "the source ownership baseline must exactly match current files above the review trigger",
+  );
 });
 
 test("window-wide bindings have explicit listener and observer disposal", async () => {
@@ -71,4 +83,8 @@ async function typescriptFiles(roots) {
 
 function lineCount(source) {
   return source.endsWith("\n") ? source.split("\n").length - 1 : source.split("\n").length;
+}
+
+function portablePath(value) {
+  return value.split(path.sep).join("/");
 }

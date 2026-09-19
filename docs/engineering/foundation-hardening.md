@@ -101,6 +101,10 @@ are part of the repository source of truth.
 
 ### FH1 — Make architectural drift executable
 
+Progress: complete TypeScript/style discovery, non-growing oversized-source ownership, dependency
+direction debt, cross-feature isolation, and application DOM debt are enforced. The startup graph
+and generated bundle hard gate land with FH2 so the accepted limit is green when introduced.
+
 1. Replace curated stylesheet checks with complete `src/**/*.css` discovery and exactly-one-entry
    ownership validation.
 2. Inventory every production TypeScript file above the review thresholds. Known oversized files

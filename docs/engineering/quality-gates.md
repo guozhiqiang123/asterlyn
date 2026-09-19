@@ -56,6 +56,11 @@ Performance budgets are guardrails. They may change only through a documented de
   dependencies are explicit. It blocks new capability work only when the review finds mixed or
   duplicated ownership. Mechanical splitting, forwarding-only wrappers, and moving lines merely to
   satisfy a threshold do not improve the architecture and do not satisfy this gate.
+- Architecture tests discover the complete production TypeScript and stylesheet trees. Every
+  source above the review threshold has a named owner and a non-increasing reviewed ceiling; every
+  stylesheet has exactly one declared entry point. Frontend layer inversions, cross-feature
+  imports, and application-layer DOM access are forbidden except for named migration debt that may
+  only shrink and carries a removal phase.
 - The main production frontend chunk should remain below 500 kB uncompressed. A temporary breach
   is accepted during the migration only when the build records the warning and the next extraction
   keeps optional feature code behind a lazy boundary.
