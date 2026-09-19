@@ -1,5 +1,10 @@
 # Architecture refactoring plan
 
+> **Current continuation (2026-09-19):** The accepted R1–R5 migrations established the intended
+> capability boundaries, but the post-CM4 audit found remaining enforceability, startup, and
+> ownership debt. Unrelated capability expansion is paused under the
+> [`foundation hardening plan`](foundation-hardening.md) until its frontend exit gate passes.
+
 ## Purpose
 
 Asterlyn pauses high-blast-radius feature expansion long enough to turn its proven first vertical

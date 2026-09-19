@@ -1,6 +1,11 @@
 # Context-action system design and implementation plan
 
 - **Status:** CA0, CA1, R5, CM1, CM2, CM3, and CM4 locally accepted
+
+> Further context-action capability expansion is paused while the
+> [`foundation hardening plan`](foundation-hardening.md) closes the startup, dependency-direction,
+> and feature-state ownership gaps exposed by the completed CM4 sequence. Accepted menu behavior
+> remains a compatibility contract during that refactor.
 - **Date:** 2026-09-19
 - **Behavior input:** [`Context-menu surface drafts`](../design/context-menu-drafts.md)
 - **Architecture decision:** [`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md)
