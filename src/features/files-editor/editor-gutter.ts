@@ -5,7 +5,7 @@ import {
   gutter,
   lineNumbers,
 } from "@codemirror/view";
-import type { GitBlameHunk, GitBlameResult } from "../models.ts";
+import type { GitBlameHunk, GitBlameResult } from "../../models.ts";
 
 export interface GitBlameSource {
   repositoryRoot: string;

@@ -163,7 +163,7 @@ test("Git Blame provider retains checked, busy, blocked, and current-target beha
 
 test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", async () => {
   const [gutter, host, lazyHost, app] = await Promise.all([
-    readFile(new URL("../src/workbench/editor-gutter.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/context-menu/context-menu-host.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/context-menu/lazy-context-menu-host.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app.ts", import.meta.url), "utf8"),

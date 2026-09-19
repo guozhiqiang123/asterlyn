@@ -8,7 +8,7 @@ import {
   markdownModeForDocument,
   rememberMarkdownMode,
   saveMarkdownModePreferences,
-} from "../src/workbench/markdown-mode-preferences.ts";
+} from "../src/features/files-editor/markdown-mode-preferences.ts";
 
 function memoryStorage(initial = new Map()) {
   return {

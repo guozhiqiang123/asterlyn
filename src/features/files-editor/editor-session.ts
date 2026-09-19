@@ -1,4 +1,4 @@
-import type { SaveTextFileResult, TextFileSnapshot } from "../models";
+import type { SaveTextFileResult, TextFileSnapshot } from "../../models";
 import type {
   EditorPathMapping,
   EditorPathMutationBlocker,
@@ -6,20 +6,20 @@ import type {
   EditorPathMutationLeaseTab,
   EditorPathMutationRequest,
   EditorRuntimeTabRemap,
-} from "../editor-path-mutation.ts";
+} from "../../editor-path-mutation.ts";
 export type {
   EditorPathMapping,
   EditorPathMutationBlocker,
   EditorPathMutationLease,
   EditorPathMutationRequest,
   EditorRuntimeTabRemap,
-} from "../editor-path-mutation.ts";
+} from "../../editor-path-mutation.ts";
 import {
   editorDocumentKey,
   type EditorDocument,
   type ProjectFileDocument,
   type ProjectImageDocument,
-} from "../editor-document.ts";
+} from "../../editor-document.ts";
 
 export const TEXT_TAB_LIMIT = 20;
 

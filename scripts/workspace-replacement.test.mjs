@@ -11,7 +11,7 @@ import {
   matchesReplacementRequest,
   selectAllReplacementFiles,
   toggleReplacementFile,
-} from "../src/workbench/workspace-replacement.ts";
+} from "../src/features/files-editor/workspace-replacement.ts";
 
 const options = {
   mode: "regex",

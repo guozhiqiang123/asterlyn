@@ -27,7 +27,7 @@ import {
   encodeExactText,
   type ExactTextContent,
   type TextChange,
-} from "./workbench/text-content";
+} from "./features/files-editor/text-content";
 import {
   blameContentContextMenu,
   blameGutter,
@@ -35,10 +35,10 @@ import {
   type GitBlameCopy,
   type GitBlameRuntime,
   type GitBlameSource,
-} from "./workbench/editor-gutter.ts";
+} from "./features/files-editor/editor-gutter.ts";
 import type { GitBlameResult } from "./models.ts";
 import type { EditorRuntimeTabRemap } from "./editor-path-mutation.ts";
-import { remapEditorCacheEntries } from "./workbench/editor-cache-remap.ts";
+import { remapEditorCacheEntries } from "./features/files-editor/editor-cache-remap.ts";
 
 interface CachedTextEditor {
   id: string;

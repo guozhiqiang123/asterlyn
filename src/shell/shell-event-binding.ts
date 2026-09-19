@@ -1,4 +1,4 @@
-import type { NavigationMode } from "../workbench/navigation.ts";
+import type { NavigationMode } from "../features/files-editor/navigation.ts";
 import { scrollTabStrip } from "../presentation/tab-strip.ts";
 
 export type RemoteActionKind = "fetch" | "pull" | "push";

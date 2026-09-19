@@ -7,7 +7,7 @@ import {
   updateCommandSurfaceQuery,
   type CommandSurfaceState,
   type NavigationMode,
-} from "../../workbench/navigation.ts";
+} from "./navigation.ts";
 
 export class CommandSurfaceController {
   private value: CommandSurfaceState = createCommandSurfaceState();

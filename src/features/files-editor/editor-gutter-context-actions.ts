@@ -2,7 +2,7 @@ import type {
   ContextMenuAvailability,
   ContextMenuSession,
 } from "../../shared/context-menu/context-menu-model.ts";
-import type { GitBlameCopy } from "../../workbench/editor-gutter.ts";
+import type { GitBlameCopy } from "./editor-gutter.ts";
 
 export const GIT_BLAME_TOGGLE_ACTION = "editor.git-blame.toggle";
 

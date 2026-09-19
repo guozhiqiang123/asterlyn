@@ -28,10 +28,10 @@ import {
 import { renderSettingsNavigation, renderSettingsSection } from "../src/features/settings/settings-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
-import { createCommandSurfaceState, openCommandSurface } from "../src/workbench/navigation.ts";
+import { createCommandSurfaceState, openCommandSurface } from "../src/features/files-editor/navigation.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
-import { createWorkspaceReplacementState } from "../src/workbench/workspace-replacement.ts";
-import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/workbench/workspace-search.ts";
+import { createWorkspaceReplacementState } from "../src/features/files-editor/workspace-replacement.ts";
+import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/features/files-editor/workspace-search.ts";
 
 test("shell view follows persisted activity order and exposes stable feature hosts", () => {
   const shell = new ShellController(memoryStorage());

@@ -25,18 +25,5 @@
   },
   "dependencyDebt": [],
   "applicationDomDebt": {},
-  "workbenchOwnership": {
-    "src/workbench/diff-navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/diff-navigation.ts", "migrationPhase": "FH4" },
-    "src/workbench/editor-cache-remap.ts": { "owner": "files-editor", "target": "src/features/files-editor/editor-cache-remap.ts", "migrationPhase": "FH4" },
-    "src/workbench/editor-gutter.ts": { "owner": "files-editor", "target": "src/features/files-editor/editor-gutter.ts", "migrationPhase": "FH4" },
-    "src/workbench/editor-session.ts": { "owner": "files-editor", "target": "src/features/files-editor/editor-session.ts", "migrationPhase": "FH4" },
-    "src/workbench/markdown-format.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-format.ts", "migrationPhase": "FH4" },
-    "src/workbench/markdown-mode-preferences.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-mode-preferences.ts", "migrationPhase": "FH4" },
-    "src/workbench/markdown-preview.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-preview.ts", "migrationPhase": "FH4" },
-    "src/workbench/navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/navigation.ts", "migrationPhase": "FH4" },
-    "src/workbench/search-navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/search-navigation.ts", "migrationPhase": "FH4" },
-    "src/workbench/text-content.ts": { "owner": "files-editor", "target": "src/features/files-editor/text-content.ts", "migrationPhase": "FH4" },
-    "src/workbench/workspace-replacement.ts": { "owner": "files-editor", "target": "src/features/files-editor/workspace-replacement.ts", "migrationPhase": "FH4" },
-    "src/workbench/workspace-search.ts": { "owner": "files-editor", "target": "src/features/files-editor/workspace-search.ts", "migrationPhase": "FH4" }
-  }
+  "workbenchOwnership": {}
 }

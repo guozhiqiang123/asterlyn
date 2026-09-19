@@ -5,12 +5,12 @@ import type {
   CommandSurfaceState,
   NavigationCommand,
   NavigationMode,
-} from "../../workbench/navigation.ts";
+} from "./navigation.ts";
 import {
   type WorkspaceSearchControls,
   type WorkspaceSearchState,
-} from "../../workbench/workspace-search.ts";
-import type { WorkspaceReplacementState } from "../../workbench/workspace-replacement.ts";
+} from "./workspace-search.ts";
+import type { WorkspaceReplacementState } from "./workspace-replacement.ts";
 import type { NavigationCopy, ReplacementCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 

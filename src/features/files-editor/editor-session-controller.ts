@@ -44,7 +44,7 @@ import {
   type EditorSession,
   type MarkdownEditorMode,
   type TextTabState,
-} from "../../workbench/editor-session.ts";
+} from "./editor-session.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 

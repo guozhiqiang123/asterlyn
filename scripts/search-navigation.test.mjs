@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { evaluateSearchNavigation } from "../src/workbench/search-navigation.ts";
+import { evaluateSearchNavigation } from "../src/features/files-editor/search-navigation.ts";
 
 function tab(overrides = {}) {
   return {

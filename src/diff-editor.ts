@@ -37,7 +37,7 @@ import {
   unifiedChangeBlocks,
   type DiffChangeBlock,
   type DiffDirection,
-} from "./workbench/diff-navigation";
+} from "./features/files-editor/diff-navigation";
 import {
   asterlynEditorTheme,
   asterlynSyntaxHighlighting,
@@ -55,7 +55,7 @@ import {
   type GitBlameCopy,
   type GitBlameRuntime,
   type GitBlameSource,
-} from "./workbench/editor-gutter.ts";
+} from "./features/files-editor/editor-gutter.ts";
 import {
   DEFAULT_APP_PREFERENCES,
   type AppPreferences,

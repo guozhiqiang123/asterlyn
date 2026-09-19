@@ -14,7 +14,7 @@ import {
   rankProjectFiles,
   touchRecentFile,
   updateCommandSurfaceQuery,
-} from "../src/workbench/navigation.ts";
+} from "../src/features/files-editor/navigation.ts";
 
 function file(path, repositoryId = ".") {
   return { repositoryId, path, workspacePath: path };

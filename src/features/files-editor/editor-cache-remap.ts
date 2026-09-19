@@ -1,4 +1,4 @@
-import type { EditorRuntimeTabRemap } from "../editor-path-mutation.ts";
+import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
 
 interface KeyedEditorEntry {
   id: string;

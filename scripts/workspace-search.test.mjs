@@ -12,7 +12,7 @@ import {
   parsePathGlobs,
   sameWorkspaceSearchOptions,
   workspaceSearchOptions,
-} from "../src/workbench/workspace-search.ts";
+} from "../src/features/files-editor/workspace-search.ts";
 
 const defaultOptions = workspaceSearchOptions(createWorkspaceSearchControls());
 

@@ -7,7 +7,7 @@ import {
   splitChangeStartLines,
   unifiedChangeBlocks,
   unifiedChangeStartLines,
-} from "../src/workbench/diff-navigation.ts";
+} from "../src/features/files-editor/diff-navigation.ts";
 import { editorDocumentKey } from "../src/editor-document.ts";
 import { readFile } from "node:fs/promises";
 
@@ -111,7 +111,7 @@ test("Diff position navigation outlines the complete current change block", asyn
 
 test("ordinary and Diff editor content expose the shared Git Blame menu", async () => {
   const [gutterSource, textEditorSource, diffEditorSource] = await Promise.all([
-    readFile(new URL("../src/workbench/editor-gutter.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/text-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
   ]);

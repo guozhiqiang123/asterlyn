@@ -19,7 +19,7 @@ import {
   type WorkspaceSearchControls,
   type WorkspaceSearchRequest,
   type WorkspaceSearchState,
-} from "../../workbench/workspace-search.ts";
+} from "./workspace-search.ts";
 
 export interface WorkspaceSearchOperations {
   startSearch(

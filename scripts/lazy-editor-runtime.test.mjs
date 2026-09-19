@@ -22,9 +22,9 @@ test("Markdown preview runtime is absent from the static application graph", asy
     "utf8",
   );
 
-  assert.doesNotMatch(app, /from ["']\.\/workbench\/markdown-preview/);
-  assert.doesNotMatch(surface, /from ["']\.\.\/\.\.\/workbench\/markdown-preview/);
-  assert.match(surface, /import\(["']\.\.\/\.\.\/workbench\/markdown-preview\.ts["']\)/);
+  assert.doesNotMatch(app, /from ["']\.\/features\/files-editor\/markdown-preview/);
+  assert.doesNotMatch(surface, /from ["']\.\/markdown-preview/);
+  assert.match(surface, /import\(["']\.\/markdown-preview\.ts["']\)/);
 });
 
 test("xterm and its stylesheet load only after Terminal activation", async () => {

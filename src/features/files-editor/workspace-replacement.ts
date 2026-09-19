@@ -3,7 +3,7 @@ import type {
   ReplacementRecoverySummary,
   WorkspaceReplacementPreview,
   WorkspaceTextSearchOptions,
-} from "../models";
+} from "../../models";
 import { sameWorkspaceSearchOptions } from "./workspace-search.ts";
 
 export interface WorkspaceReplacementRequest {

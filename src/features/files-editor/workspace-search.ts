@@ -2,7 +2,7 @@ import type {
   WorkspaceTextSearchMode,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
-} from "../models";
+} from "../../models";
 
 export interface WorkspaceSearchControls {
   mode: WorkspaceTextSearchMode;

@@ -213,31 +213,31 @@ import {
   textTab,
   type MarkdownEditorMode,
   type TextTabState,
-} from "./workbench/editor-session";
+} from "./features/files-editor/editor-session";
 import {
   WORKBENCH_LAYOUT_DEFAULTS,
   WORKBENCH_LIMITS,
 } from "./shell/layout-state";
 import { attachSplitter } from "./presentation/splitter";
-import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
+import { adjacentDiffItem, type DiffDirection } from "./features/files-editor/diff-navigation";
 import {
   nextPushCommitSelection,
 } from "./features/remote-push/push-review";
 import type { ActivityTool } from "./shell/activity-order";
-import { isMarkdownPath } from "./workbench/markdown-format";
+import { isMarkdownPath } from "./features/files-editor/markdown-format";
 import {
   loadMarkdownModePreferences,
   markdownModeForDocument,
   rememberMarkdownMode,
   saveMarkdownModePreferences,
-} from "./workbench/markdown-mode-preferences";
+} from "./features/files-editor/markdown-mode-preferences";
 import { revealTabInStrip } from "./presentation/tab-strip";
 import { isImagePreviewPath } from "./presentation/image-preview";
 import type {
   DiffGitBlameSources,
   GitBlameAvailability,
   GitBlameRuntime,
-} from "./workbench/editor-gutter";
+} from "./features/files-editor/editor-gutter";
 import {
   DEFAULT_EDITOR_FONT_ID,
   EditorFontLoader,
@@ -299,9 +299,9 @@ import {
   touchRecentFile,
   type NavigationCommand,
   type NavigationMode,
-} from "./workbench/navigation";
-import { evaluateSearchNavigation } from "./workbench/search-navigation";
-import type { WorkspaceSearchControls } from "./workbench/workspace-search";
+} from "./features/files-editor/navigation";
+import { evaluateSearchNavigation } from "./features/files-editor/search-navigation";
+import type { WorkspaceSearchControls } from "./features/files-editor/workspace-search";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,

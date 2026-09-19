@@ -10,7 +10,7 @@ import type {
   GitBlameCopy,
   GitBlameRuntime,
   GitBlameSource,
-} from "../../workbench/editor-gutter.ts";
+} from "./editor-gutter.ts";
 
 type TextMount = {
   parent: HTMLElement;

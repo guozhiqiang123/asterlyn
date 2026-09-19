@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { remapEditorCacheEntries } from "../src/workbench/editor-cache-remap.ts";
+import { remapEditorCacheEntries } from "../src/features/files-editor/editor-cache-remap.ts";
 
 test("text editor cache remaps identity without replacing CodeMirror state", () => {
   const entries = new Map();

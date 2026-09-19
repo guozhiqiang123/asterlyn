@@ -69,7 +69,7 @@ test("application DOM runtime debt is explicit and cannot spread", async () => {
 
 test("every transitional workbench module has one owner and destination", async () => {
   const workbenchRoot = path.join(sourceRoot, "workbench");
-  const files = (await typescriptFiles(workbenchRoot)).map(relativeSource).sort();
+  const files = (await optionalTypescriptFiles(workbenchRoot)).map(relativeSource).sort();
   const ownership = baseline.workbenchOwnership;
   assert.deepEqual(files, Object.keys(ownership).sort());
   const allowedOwners = new Set([
@@ -90,6 +90,15 @@ test("every transitional workbench module has one owner and destination", async 
     assert.equal(review.migrationPhase, "FH4", `${file} has no scheduled migration phase`);
   }
 });
+
+async function optionalTypescriptFiles(root) {
+  try {
+    return await typescriptFiles(root);
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
 
 async function typescriptFiles(root) {
   const files = [];

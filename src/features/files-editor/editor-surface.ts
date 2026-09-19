@@ -6,17 +6,17 @@ import {
   textTab,
   type EditorSession,
   type TextTabState,
-} from "../../workbench/editor-session.ts";
+} from "./editor-session.ts";
 import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
-import { MARKDOWN_PREVIEW_MAX_BYTES } from "../../workbench/markdown-format.ts";
+import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
 import type {
   DiffGitBlameSources,
   GitBlameAvailability,
   GitBlameRuntime,
-} from "../../workbench/editor-gutter.ts";
+} from "./editor-gutter.ts";
 import { LazyDiffEditor, LazyTextEditor } from "./lazy-editor-runtime.ts";
 import {
   emptyImageSide,
@@ -486,7 +486,7 @@ export class EditorSurface {
 
   private async updateMarkdownPreview(request: { tabId: string; content: string; request: number }): Promise<void> {
     try {
-      const { renderMarkdownPreview } = await import("../../workbench/markdown-preview.ts");
+      const { renderMarkdownPreview } = await import("./markdown-preview.ts");
       const result = await renderMarkdownPreview(request.content, this.copy);
       if (request.request !== this.markdownPreviewSequence) return;
       const preview = this.root.querySelector<HTMLElement>("#markdown-preview");

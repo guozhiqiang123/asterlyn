@@ -5,7 +5,7 @@ import {
   applyExactTextChanges,
   decodeExactText,
   encodeExactText,
-} from "../src/workbench/text-content.ts";
+} from "../src/features/files-editor/text-content.ts";
 
 test("exact text codec preserves mixed endings, bare CR, and final newline", () => {
   const source = "one\r\ntwo\nthree\rlast\r\n";

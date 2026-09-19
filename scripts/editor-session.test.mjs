@@ -18,7 +18,7 @@ import {
   prepareEditorPathMutation,
   reconcileExternalTextSnapshot,
   setTextTabMarkdownMode,
-} from "../src/workbench/editor-session.ts";
+} from "../src/features/files-editor/editor-session.ts";
 
 function document(path) {
   return {

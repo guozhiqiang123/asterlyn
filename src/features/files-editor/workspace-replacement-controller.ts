@@ -9,7 +9,7 @@ import type {
   WorkspaceOperationIdentity,
   WorkspaceOperationStart,
 } from "../../application/workspace-operation-coordinator.ts";
-import type { WorkspaceSearchRequest } from "../../workbench/workspace-search.ts";
+import type { WorkspaceSearchRequest } from "./workspace-search.ts";
 import {
   beginReplacementApply,
   beginReplacementPreview,
@@ -23,7 +23,7 @@ import {
   toggleReplacementFile,
   type WorkspaceReplacementRequest,
   type WorkspaceReplacementState,
-} from "../../workbench/workspace-replacement.ts";
+} from "./workspace-replacement.ts";
 
 export type WorkspaceReplacementDialog = "preview" | "recovery" | null;
 export type WorkspaceReplacementRecoveryAction = "keep" | "rollback";

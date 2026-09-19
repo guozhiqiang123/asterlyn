@@ -6,7 +6,7 @@ import {
   MARKDOWN_PREVIEW_MAX_BYTES,
   isMarkdownPath,
   renderMarkdownPreview,
-} from "../src/workbench/markdown-preview.ts";
+} from "../src/features/files-editor/markdown-preview.ts";
 
 function deferred() {
   let resolve;

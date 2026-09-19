@@ -1,4 +1,4 @@
-import type { ProjectFile } from "../models";
+import type { ProjectFile } from "../../models";
 
 export const RECENT_FILE_LIMIT = 50;
 export const NAVIGATION_RESULT_LIMIT = 100;

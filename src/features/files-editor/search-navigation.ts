@@ -1,4 +1,4 @@
-import type { WorkspaceTextSearchMatch } from "../models";
+import type { WorkspaceTextSearchMatch } from "../../models";
 import { isTextTabDirty, type TextTabState } from "./editor-session.ts";
 
 export type SearchNavigationDecision =

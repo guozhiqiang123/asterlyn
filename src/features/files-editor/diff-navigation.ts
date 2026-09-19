@@ -1,4 +1,4 @@
-import type { SourceDiffRow } from "../diff-presentation.ts";
+import type { SourceDiffRow } from "../../diff-presentation.ts";
 
 export type DiffDirection = -1 | 1;
 

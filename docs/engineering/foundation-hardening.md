@@ -286,6 +286,12 @@ identity facade, paging, path selection, persisted ref preferences, repository-r
 ref-history request state. Their internal imports are feature-local and their product contracts
 still point inward to `models.ts` and `history-query.ts`.
 
+Files/Editor now owns the final twelve transitional modules: Diff navigation, cache remapping,
+editor gutters and session state, Markdown formatting/mode/preview, navigation and search routing,
+text-content limits, and workspace search/replacement state. `src/workbench` is empty, its ownership
+debt baseline is empty, and the architecture test also handles the directory being absent in a clean
+checkout.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

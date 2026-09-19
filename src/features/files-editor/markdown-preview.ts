@@ -1,6 +1,6 @@
 import type { LanguageSupport } from "@codemirror/language";
 import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
-import { editorLanguageDescriptionByName } from "../editor-language.ts";
+import { editorLanguageDescriptionByName } from "../../editor-language.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
 
 export { MARKDOWN_PREVIEW_MAX_BYTES, isMarkdownPath } from "./markdown-format.ts";
