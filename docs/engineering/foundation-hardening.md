@@ -262,6 +262,10 @@ font loader/catalog lives under Settings. Font identities and History query sele
 lifted into the inward contracts before the move, so the root contracts do not depend back on a
 feature merely to validate persisted data or normalize a query.
 
+Settings now owns its preference store and browser synchronization port next to the controller that
+consumes them. Composition depends on that explicit Settings port rather than a generic transitional
+`workbench` location.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

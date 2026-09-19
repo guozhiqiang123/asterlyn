@@ -5,7 +5,7 @@ import {
   PreferenceStore,
   createSilentPreferenceSync,
   type PreferenceSyncPort,
-} from "../../workbench/preference-store.ts";
+} from "./preference-store.ts";
 
 export type SettingsSection = "general" | "appearance" | "editor" | "version-control" | "code";
 

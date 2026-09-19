@@ -4,7 +4,7 @@ import {
   saveAppPreferences,
   updateAppPreferences,
   type AppPreferences,
-} from "../preferences.ts";
+} from "../../preferences.ts";
 
 export interface PreferenceSyncSignal {
   readonly sourceId: string;

@@ -44,7 +44,6 @@
     "src/workbench/markdown-mode-preferences.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-mode-preferences.ts", "migrationPhase": "FH4" },
     "src/workbench/markdown-preview.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-preview.ts", "migrationPhase": "FH4" },
     "src/workbench/navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/navigation.ts", "migrationPhase": "FH4" },
-    "src/workbench/preference-store.ts": { "owner": "settings", "target": "src/features/settings/preference-store.ts", "migrationPhase": "FH4" },
     "src/workbench/project-tree.ts": { "owner": "shared-presentation", "target": "src/presentation/project-tree.ts", "migrationPhase": "FH4" },
     "src/workbench/push-review.ts": { "owner": "remote-push", "target": "src/features/remote-push/push-review.ts", "migrationPhase": "FH4" },
     "src/workbench/recent-value-cache.ts": { "owner": "shared-utility", "target": "src/shared/recent-value-cache.ts", "migrationPhase": "FH4" },

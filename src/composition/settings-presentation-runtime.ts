@@ -6,7 +6,7 @@ import {
   type PresentationSnapshot,
   type SystemPresentationPort,
 } from "../presentation/presentation-environment.ts";
-import type { PreferenceSyncPort } from "../workbench/preference-store.ts";
+import type { PreferenceSyncPort } from "../features/settings/preference-store.ts";
 
 export interface SettingsPresentationRuntimeOptions {
   readonly storage: Storage;

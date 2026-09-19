@@ -8,7 +8,7 @@ import {
   resolvePresentationSnapshot,
 } from "../src/presentation/presentation-environment.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
-import { PreferenceStore } from "../src/workbench/preference-store.ts";
+import { PreferenceStore } from "../src/features/settings/preference-store.ts";
 
 test("system locale maps only supported Simplified Chinese locales", () => {
   assert.equal(resolveEffectiveLocale("system", ["zh-CN"]), "zh-CN");

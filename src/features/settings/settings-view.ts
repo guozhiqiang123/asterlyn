@@ -5,7 +5,7 @@ import {
   editorFontOptionLabel,
   type EditorFontId,
   type EditorFontLoadSource,
-} from "../../features/settings/editor-fonts.ts";
+} from "./editor-fonts.ts";
 import {
   EDITOR_FONT_SIZES,
   EDITOR_INDENT_SIZES,

@@ -252,7 +252,7 @@ import {
   isThemePreference,
   type AppPreferences,
 } from "./preferences";
-import { createBrowserPreferenceSync } from "./workbench/preference-store";
+import { createBrowserPreferenceSync } from "./features/settings/preference-store";
 import {
   createBrowserSystemPresentationPort,
 } from "./presentation/presentation-environment";
