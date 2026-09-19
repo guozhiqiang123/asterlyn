@@ -193,6 +193,11 @@ identity, policy inputs, and cross-feature actions remain explicit injected port
 `src/app.ts` at 8,871 lines with a matching ceiling and establishes one lifecycle model across the
 three context-menu feature areas.
 
+Remote Push and authentication now share a `RemoteRuntime` that owns both controllers, their
+subscriptions, and their coordinated disposal behind separate typed gateways. The composition root
+no longer retains release handles for either controller; `src/app.ts` is 8,863 lines with a
+matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

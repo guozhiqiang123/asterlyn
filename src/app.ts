@@ -75,7 +75,6 @@ import { CommitFileRestoreController } from "./features/git-history/commit-file-
 import { CommitFileRestoreDialogBinding } from "./features/git-history/commit-file-restore-dialog-binding.ts";
 import { GitHistoryContextRuntime } from "./features/git-history/git-history-context-runtime.ts";
 import {
-  RemotePushController,
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
   type RemotePushChange,
@@ -84,9 +83,9 @@ import {
   type UpdateDialogOptions,
 } from "./features/remote-push/remote-push-controller";
 import {
-  RemoteAuthenticationController,
   type RemoteAuthenticationResult,
 } from "./features/remote-push/remote-authentication-controller";
+import { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import {
   pushReviewFiles,
@@ -414,10 +413,7 @@ export class AsterlynApp {
   private readonly branchMutationController: BranchMutationController;
   private readonly branchMutationDialogBinding: BranchMutationDialogBinding;
   private readonly gitHistoryContextRuntime: GitHistoryContextRuntime;
-  private readonly remoteController: RemotePushController;
-  private readonly releaseRemoteController: () => void;
-  private readonly remoteAuthenticationController: RemoteAuthenticationController;
-  private readonly releaseRemoteAuthenticationController: () => void;
+  private readonly remoteRuntime: RemoteRuntime;
   private readonly changesController: ChangesCommitController;
   private readonly releaseChangesController: () => void;
   private readonly changesContextRuntime: ChangesContextSurfaceRuntime;
@@ -632,32 +628,31 @@ export class AsterlynApp {
         }
       },
     });
-    this.remoteController = new RemotePushController({
-      readPushPreview: (...args) => bridge.readPushPreview(...args),
-      readCommitDetails: (...args) => bridge.readCommitDetails(...args),
-      readPushFileCommit: (...args) => bridge.readPushFileCommit(...args),
-      readCommitDiff: (...args) => bridge.readCommitDiff(...args),
-      readCommitImageDiff: (...args) => bridge.readCommitImageDiff(...args),
-      fetchRemote: (...args) => bridge.fetchRemote(...args),
-      pullCurrent: (...args) => bridge.pullCurrent(...args),
-      pushCurrent: (...args) => bridge.pushCurrent(...args),
-      cancelRemoteOperation: (...args) => bridge.cancelRemoteOperation(...args),
-    }, { messages: initialCatalog.remote, errorMessages: initialCatalog.errors });
-    this.releaseRemoteController = this.remoteController.subscribe((change) =>
-      this.handleRemoteControllerChange(change),
-    );
-    this.remoteAuthenticationController = new RemoteAuthenticationController(
+    this.remoteRuntime = new RemoteRuntime(
       {
-        readRemoteAuthentication: (...args) => bridge.readRemoteAuthentication(...args),
-        storeRemoteHttpsCredential: (...args) => bridge.storeRemoteHttpsCredential(...args),
-        configureRemoteSsh: (...args) => bridge.configureRemoteSsh(...args),
+        push: {
+          readPushPreview: (...args) => bridge.readPushPreview(...args),
+          readCommitDetails: (...args) => bridge.readCommitDetails(...args),
+          readPushFileCommit: (...args) => bridge.readPushFileCommit(...args),
+          readCommitDiff: (...args) => bridge.readCommitDiff(...args),
+          readCommitImageDiff: (...args) => bridge.readCommitImageDiff(...args),
+          fetchRemote: (...args) => bridge.fetchRemote(...args),
+          pullCurrent: (...args) => bridge.pullCurrent(...args),
+          pushCurrent: (...args) => bridge.pushCurrent(...args),
+          cancelRemoteOperation: (...args) => bridge.cancelRemoteOperation(...args),
+        },
+        authentication: {
+          readRemoteAuthentication: (...args) => bridge.readRemoteAuthentication(...args),
+          storeRemoteHttpsCredential: (...args) => bridge.storeRemoteHttpsCredential(...args),
+          configureRemoteSsh: (...args) => bridge.configureRemoteSsh(...args),
+        },
       },
-      initialCatalog.remote,
-      initialCatalog.errors,
-    );
-    this.releaseRemoteAuthenticationController = this.remoteAuthenticationController.subscribe(
-      () => {
+      { remote: initialCatalog.remote, errors: initialCatalog.errors },
+      {
+        pushChanged: (change) => this.handleRemoteControllerChange(change),
+        authenticationChanged: () => {
         if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog();
+        },
       },
     );
     this.changesController = new ChangesCommitController(
@@ -897,7 +892,7 @@ export class AsterlynApp {
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
       {
-        remote: this.remoteController,
+        remote: this.remoteRuntime.push,
         changes: this.changesController,
         files: this.filesController,
         history: this.historyReadRuntime.details,
@@ -1263,7 +1258,7 @@ export class AsterlynApp {
       },
       selectRemote: (remote) => {
         if (this.remoteState.dialog) this.closeRemoteDialog(false);
-        this.remoteController.selectRemote(remote);
+        this.remoteRuntime.push.selectRemote(remote);
       },
       remoteAction: (kind, anchor) => void this.activateRemoteAction(kind, anchor),
       cancelRemoteOperation: () => void this.cancelActiveRemoteOperation(),
@@ -1345,7 +1340,7 @@ export class AsterlynApp {
   }
 
   private get remoteState(): RemotePushState {
-    return this.remoteController.state;
+    return this.remoteRuntime.push.state;
   }
 
   private get changesState(): ChangesCommitState {
@@ -1585,8 +1580,8 @@ export class AsterlynApp {
       this.editorController.setMessages(catalog.editor);
       this.changesController.setMessages(catalog.changes);
       this.historyReadRuntime.details.setMessages(catalog.history);
-      this.remoteController.setMessages(catalog.remote, catalog.errors);
-      this.remoteAuthenticationController.setMessages(catalog.remote, catalog.errors);
+      this.remoteRuntime.push.setMessages(catalog.remote, catalog.errors);
+      this.remoteRuntime.authentication.setMessages(catalog.remote, catalog.errors);
       this.gitOperationController.setMessages(catalog.gitOperations);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
@@ -1773,10 +1768,7 @@ export class AsterlynApp {
     this.historyReadRuntime.dispose();
     this.commitFileRestoreDialogBinding.dispose();
     this.commitFileRestoreController.dispose();
-    this.releaseRemoteController();
-    this.remoteController.dispose();
-    this.releaseRemoteAuthenticationController();
-    this.remoteAuthenticationController.dispose();
+    this.remoteRuntime.dispose();
     this.releaseChangesController();
     this.changesController.dispose();
     this.releaseFilesController();
@@ -2155,7 +2147,7 @@ export class AsterlynApp {
             : this.shellState.layout.bottomTool,
         });
       }
-      this.remoteController.installSnapshot(snapshot);
+      this.remoteRuntime.push.installSnapshot(snapshot);
       this.terminalPanel.installWorkspace(opened.root);
       this.state.error = null;
       this.closeRepositoryDialog();
@@ -3122,7 +3114,7 @@ export class AsterlynApp {
   ): boolean {
     if (
       this.state.loading ||
-      !this.remoteController.openDialog(dialog, updateOptions)
+      !this.remoteRuntime.push.openDialog(dialog, updateOptions)
     ) return false;
     this.remoteDialogReturnFocus = returnFocus;
     queueMicrotask(() => {
@@ -3134,8 +3126,8 @@ export class AsterlynApp {
   }
 
   private closeRemoteDialog(restoreFocus = true): void {
-    this.remoteAuthenticationController.close();
-    if (!this.remoteController.closeDialog()) return;
+    this.remoteRuntime.authentication.close();
+    if (!this.remoteRuntime.push.closeDialog()) return;
     const target = this.remoteDialogReturnFocus;
     this.remoteDialogReturnFocus = null;
     if (restoreFocus) queueMicrotask(() => target?.focus());
@@ -3161,13 +3153,13 @@ export class AsterlynApp {
       workspaceRoot: this.windowSession.workspace.state.root,
       preferences: this.settingsState.preferences,
       selectedProjectFileAvailable: this.pushSelectedProjectFile() !== null,
-      authentication: this.remoteAuthenticationController.state,
+      authentication: this.remoteRuntime.authentication.state,
       localization: this.localization,
     });
     this.bindRemoteDialogEvents();
-    if (this.remoteAuthenticationController.state.dialog) {
+    if (this.remoteRuntime.authentication.state.dialog) {
       queueMicrotask(() => {
-        const status = this.remoteAuthenticationController.state.dialog?.status;
+        const status = this.remoteRuntime.authentication.state.dialog?.status;
         const target = status?.transport === "https" && status.credentialHelperConfigured
           ? this.root.querySelector<HTMLInputElement>("#remote-auth-username")
           : this.root.querySelector<HTMLInputElement>("#remote-auth-ssh-url") ??
@@ -3178,7 +3170,7 @@ export class AsterlynApp {
     if (dialog === "push" && this.remoteState.pushDiff) {
       queueMicrotask(() => this.mountPushDiffSurface());
     }
-    if (focusedId && !this.remoteAuthenticationController.state.dialog) {
+    if (focusedId && !this.remoteRuntime.authentication.state.dialog) {
       queueMicrotask(() =>
         this.root.querySelector<HTMLElement>(`#${focusedId}`)?.focus(),
       );
@@ -3188,10 +3180,10 @@ export class AsterlynApp {
   private bindRemoteDialogEvents(): void {
     this.root.querySelector<HTMLSelectElement>("#push-remote-select")?.addEventListener("change", (event) => {
       const remote = (event.currentTarget as HTMLSelectElement).value;
-      if (remote) this.remoteController.selectRemote(remote);
+      if (remote) this.remoteRuntime.push.selectRemote(remote);
     });
     this.root.querySelector<HTMLButtonElement>("#push-all-commits")?.addEventListener("click", () => {
-      void this.remoteController.selectPushCommit(null);
+      void this.remoteRuntime.push.selectPushCommit(null);
     });
     this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.addEventListener(
       "click",
@@ -3210,14 +3202,14 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLInputElement>("input[name='update-strategy']").forEach((radio) => {
       radio.addEventListener("change", () => {
         if (radio.checked) {
-          this.remoteController.setUpdateStrategy(radio.value as RemoteUpdateStrategy);
+          this.remoteRuntime.push.setUpdateStrategy(radio.value as RemoteUpdateStrategy);
         }
       });
     });
     this.root
       .querySelector<HTMLInputElement>("#remote-update-remember-strategy")
       ?.addEventListener("change", (event) => {
-        this.remoteController.setRememberUpdateStrategy(
+        this.remoteRuntime.push.setRememberUpdateStrategy(
           (event.currentTarget as HTMLInputElement).checked,
         );
       });
@@ -3227,7 +3219,7 @@ export class AsterlynApp {
         if (!this.remoteState.pushPreviewRefreshing) void this.confirmRemotePush();
       });
     const closeAuthentication = () => {
-      this.remoteAuthenticationController.close();
+      this.remoteRuntime.authentication.close();
       queueMicrotask(() =>
         this.root.querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")?.focus(),
       );
@@ -3241,10 +3233,10 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#remote-authentication-recheck")
       ?.addEventListener("click", () => {
-        const entry = this.remoteAuthenticationController.state.dialog;
+        const entry = this.remoteRuntime.authentication.state.dialog;
         if (!entry) return;
         void this.resumePushAfterAuthentication(
-          this.remoteAuthenticationController.check(
+          this.remoteRuntime.authentication.check(
             entry.repositoryRoot,
             entry.status.remote,
           ),
@@ -3259,7 +3251,7 @@ export class AsterlynApp {
         const token = tokenInput?.value ?? "";
         if (tokenInput) tokenInput.value = "";
         void this.resumePushAfterAuthentication(
-          this.remoteAuthenticationController.storeHttpsCredential(username, token),
+          this.remoteRuntime.authentication.storeHttpsCredential(username, token),
         );
       });
     this.root
@@ -3268,30 +3260,30 @@ export class AsterlynApp {
         event.preventDefault();
         const sshUrl = this.root.querySelector<HTMLInputElement>("#remote-auth-ssh-url")?.value ?? "";
         void this.resumePushAfterAuthentication(
-          this.remoteAuthenticationController.configureSsh(sshUrl),
+          this.remoteRuntime.authentication.configureSsh(sshUrl),
         );
       });
     this.root.querySelector<HTMLInputElement>("#push-tags-enabled")?.addEventListener("change", (event) => {
-      this.remoteController.setPushTagsEnabled((event.currentTarget as HTMLInputElement).checked);
+      this.remoteRuntime.push.setPushTagsEnabled((event.currentTarget as HTMLInputElement).checked);
     });
     this.root.querySelector<HTMLSelectElement>("#push-tag-mode")?.addEventListener("change", (event) => {
-      this.remoteController.setPushTagMode(
+      this.remoteRuntime.push.setPushTagMode(
         (event.currentTarget as HTMLSelectElement).value as Exclude<PushTagMode, "none">,
       );
     });
     this.root.querySelector<HTMLButtonElement>("#push-mode-toggle")?.addEventListener("click", () => {
-      this.remoteController.togglePushModeMenu();
+      this.remoteRuntime.push.togglePushModeMenu();
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-mode]").forEach((button) => {
       button.addEventListener("click", () => {
-        this.remoteController.setPushMode(button.dataset.pushMode as PushMode);
+        this.remoteRuntime.push.setPushMode(button.dataset.pushMode as PushMode);
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-commit]").forEach((button) => {
       button.addEventListener("click", () => {
         const oid = button.dataset.pushCommit;
         if (oid) {
-          void this.remoteController.selectPushCommit(
+          void this.remoteRuntime.push.selectPushCommit(
             nextPushCommitSelection(this.remoteState.pushSelectedCommit, oid),
           );
         }
@@ -3301,29 +3293,29 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const path = button.dataset.pushFile;
         if (!path) return;
-        this.remoteController.selectPushFile(path);
-        void this.remoteController.openSelectedPushFileDiff();
+        this.remoteRuntime.push.selectPushFile(path);
+        void this.remoteRuntime.push.openSelectedPushFileDiff();
       });
     });
     this.root.querySelectorAll<HTMLDetailsElement>("[data-push-directory]").forEach((details) => {
       details.addEventListener("toggle", () => {
         const path = details.dataset.pushDirectory;
         if (!path) return;
-        this.remoteController.setPushDirectoryExpanded(path, details.open);
+        this.remoteRuntime.push.setPushDirectoryExpanded(path, details.open);
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-file-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const action = button.dataset.pushFileAction;
         if (action === "view") {
-          this.remoteController.togglePushFileView();
+          this.remoteRuntime.push.togglePushFileView();
         } else if (action === "expand") {
-          this.remoteController.expandPushDirectories();
+          this.remoteRuntime.push.expandPushDirectories();
         } else if (action === "collapse") {
           const preview = this.remoteState.pushPreview;
           if (!preview) return;
           const files = pushReviewFiles(preview, this.remoteState);
-          this.remoteController.collapsePushDirectories([
+          this.remoteRuntime.push.collapsePushDirectories([
             ".",
             ...commitFileDirectoryPaths(buildCommitFileTree(files)),
           ]);
@@ -3331,13 +3323,13 @@ export class AsterlynApp {
         } else if (action === "open") {
           void this.openSelectedPushFile();
         } else if (action === "diff") {
-          void this.remoteController.openSelectedPushFileDiff();
+          void this.remoteRuntime.push.openSelectedPushFileDiff();
         }
       });
     });
     this.root.querySelector<HTMLButtonElement>("#push-load-more")?.addEventListener(
       "click",
-      () => void this.remoteController.loadMorePushPreview(),
+      () => void this.remoteRuntime.push.loadMorePushPreview(),
     );
     this.root.querySelector<HTMLButtonElement>("#push-diff-close")?.addEventListener(
       "click",
@@ -3442,12 +3434,12 @@ export class AsterlynApp {
             action === "next-file" ? 1 : -1,
           );
           if (!path) return;
-          this.remoteController.selectPushFile(path);
-          void this.remoteController.openSelectedPushFileDiff();
+          this.remoteRuntime.push.selectPushFile(path);
+          void this.remoteRuntime.push.openSelectedPushFileDiff();
         } else if (action === "open-source") {
           void this.openSelectedPushFile();
         } else if (action === "toggle-unchanged") {
-          void this.remoteController.togglePushDiffUnchangedLines();
+          void this.remoteRuntime.push.togglePushDiffUnchangedLines();
         }
       });
     });
@@ -3463,7 +3455,7 @@ export class AsterlynApp {
 
 
   private closePushDiff(): void {
-    const path = this.remoteController.closePushDiff();
+    const path = this.remoteRuntime.push.closePushDiff();
     if (path) {
       queueMicrotask(() => {
         Array.from(this.root.querySelectorAll<HTMLButtonElement>("[data-push-file]"))
@@ -3536,7 +3528,7 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     const preview = this.remoteState.pushPreview;
     if (!snapshot || !preview) return;
-    const authentication = await this.remoteAuthenticationController.check(
+    const authentication = await this.remoteRuntime.authentication.check(
       snapshot.root,
       preview.remote,
     );
@@ -3597,7 +3589,7 @@ export class AsterlynApp {
     let failureMessage: string | null = null;
 
     try {
-      const result = await this.remoteController.runOperation(kind);
+      const result = await this.remoteRuntime.push.runOperation(kind);
       if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
         const feedback = remoteOperationCompletionFeedback(
@@ -3627,7 +3619,7 @@ export class AsterlynApp {
         failureMessage = localizedOperationError(result.error, this.localization.catalog.errors);
         if (!background) this.showError(result.error);
         if (kind === "push" && policy.selectedRemote && isRemoteAuthenticationError(result.error)) {
-          await this.remoteAuthenticationController.check(
+          await this.remoteRuntime.authentication.check(
             snapshot.root,
             policy.selectedRemote.name,
             true,
@@ -3650,7 +3642,7 @@ export class AsterlynApp {
             reconciled.branch.ahead > 0 &&
             reconciled.branch.behind > 0
           ) {
-            this.remoteController.setUpdateStrategy("merge");
+            this.remoteRuntime.push.setUpdateStrategy("merge");
           }
           pendingRoot = reconciled.root;
         } catch {
@@ -3686,7 +3678,7 @@ export class AsterlynApp {
     if (this.windowSession.repository.state.snapshot?.root === operation.root) {
       this.setStatus(this.localization.catalog.remote.cancellingOperation(this.localization.catalog.remote.actionNames[operation.kind]), "busy");
     }
-    await this.remoteController.cancelActiveOperation();
+    await this.remoteRuntime.push.cancelActiveOperation();
   }
 
   private toggleTool(tool: ActivityTool): void {
