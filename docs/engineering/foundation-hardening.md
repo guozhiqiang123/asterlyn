@@ -316,6 +316,12 @@ of `src-tauri/src/lib.rs` into capability-oriented `src-tauri/src/application` m
 functions thin and keep `run()` responsible for Tauri setup, managed state, lifecycle hooks, and
 handler registration.
 
+Progress: the first desktop slice now lives in `application/workspace_catalog.rs`. Exact Git-root
+detection, ordinary/Git catalog construction, and read/write reauthorization share one
+Tauri-independent application boundary; existing command and session callers retain the same
+authorization behavior. The desktop library suite passes with 52 tests and the two real watcher
+backend tests explicitly ignored by their existing native-acceptance contract.
+
 Exit gate: application behavior is testable without constructing Tauri; command modules perform
 transport validation and dispatch only; protocol generation and all native tests pass.
 
