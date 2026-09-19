@@ -91,6 +91,18 @@ test("workspace replacement state has one feature owner", async () => {
   assert.match(controller, /private value: WorkspaceReplacementControllerState/);
 });
 
+test("command surface state has one feature owner", async () => {
+  const appState = await readFile(path.join(repositoryRoot, "src/app-state.ts"), "utf8");
+  const controller = await readFile(
+    path.join(repositoryRoot, "src/features/files-editor/command-surface-controller.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(appState, /commandSurface/);
+  assert.match(controller, /class CommandSurfaceController/);
+  assert.match(controller, /private value: CommandSurfaceState/);
+  assert.match(controller, /get state\(\): Readonly<CommandSurfaceState>/);
+});
+
 test("history filter and dialog state has one feature owner", async () => {
   const appState = await readFile(path.join(repositoryRoot, "src/app-state.ts"), "utf8");
   const controller = await readFile(

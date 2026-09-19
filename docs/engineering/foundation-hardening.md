@@ -176,7 +176,10 @@ match. Commit-detail mode, file-tree disclosure, persisted file view, and commit
 request generations and results now have one `HistoryDetailPresentationController` owner. The
 controller rejects stale Diff completions and `AppState` no longer contains Git History detail
 presentation state. After this slice, `src/app.ts` is 8,980 lines and its ceiling has again been
-lowered to match.
+lowered to match. Quick-open mode, query, and selection now have one
+`CommandSurfaceController` owner in `files-editor`; the remaining `AppState` contains only the
+window-wide loading and error status. After that slice, `src/app.ts` is 8,961 lines with a matching
+non-growing ceiling.
 
 Extract vertical slices in this order:
 

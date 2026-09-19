@@ -4,7 +4,7 @@
   "sourceOwnership": {
     "src/app.ts": {
       "owner": "window composition",
-      "maximumLines": 8980,
+      "maximumLines": 8961,
       "burnDownPhase": "FH4"
     },
     "src/adapters/demo/demo-desktop-bridge.ts": {
