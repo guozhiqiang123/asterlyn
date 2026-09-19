@@ -1,4 +1,6 @@
 import type {
+  CommitComparisonDetails,
+  CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
   DiffResult,
@@ -44,6 +46,13 @@ export const tauriGitReadBridge: GitReadBridge = {
       repositoryId,
       commitOid,
     }),
+  readCommitComparisonDetails: (repositoryRoot, repositoryId, beforeOid, afterOid) =>
+    invokeDesktopCommand<CommitComparisonDetails>("read_commit_comparison_details", {
+      repositoryRoot,
+      repositoryId,
+      beforeOid,
+      afterOid,
+    }),
   readGitBlame: (repositoryRoot, repositoryId, path, commitOid, parent) =>
     invokeDesktopCommand<GitBlameResult>("read_git_blame", {
       repositoryRoot,
@@ -67,6 +76,23 @@ export const tauriGitReadBridge: GitReadBridge = {
     originalPath,
     expandedUnchanged,
   }),
+  readCommitComparisonDiff: (
+    repositoryRoot,
+    repositoryId,
+    beforeOid,
+    afterOid,
+    path,
+    originalPath,
+    expandedUnchanged = false,
+  ) => invokeDesktopCommand<CommitComparisonDiffResult>("read_commit_comparison_diff", {
+    repositoryRoot,
+    repositoryId,
+    beforeOid,
+    afterOid,
+    path,
+    originalPath,
+    expandedUnchanged,
+  }),
   readCommitImageDiff: (repositoryRoot, repositoryId, commitOid, path, originalPath) =>
     invokeDesktopCommand<ImageDiffPreview>("read_commit_image_diff", {
       repositoryRoot,
@@ -75,6 +101,21 @@ export const tauriGitReadBridge: GitReadBridge = {
       path,
       originalPath,
     }),
+  readCommitComparisonImageDiff: (
+    repositoryRoot,
+    repositoryId,
+    beforeOid,
+    afterOid,
+    path,
+    originalPath,
+  ) => invokeDesktopCommand<ImageDiffPreview>("read_commit_comparison_image_diff", {
+    repositoryRoot,
+    repositoryId,
+    beforeOid,
+    afterOid,
+    path,
+    originalPath,
+  }),
   readPushPreview: (repositoryRoot, remote, tagMode, offset, pageSize) =>
     invokeDesktopCommand<PushPreview>("read_push_preview", {
       repositoryRoot,

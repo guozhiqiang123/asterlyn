@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use asterlyn_git::{
-    BranchMutationPlan, BranchMutationRequest, CommitDetails, CommitDiffResult, DiffResult,
-    FileChange, GitBlameResult, GitConflictContent, GitError, GitOperationAction, GitOperationKind,
-    GitOperationPlan, GitOperationSnapshot, GitRepository, HistoryPage, HistoryQuery, ProjectFile,
-    ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
-    RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot, TrackedChangeScan,
-    UntrackedScan,
+    BranchMutationPlan, BranchMutationRequest, CommitComparisonDetails, CommitComparisonDiffResult,
+    CommitDetails, CommitDiffResult, DiffResult, FileChange, GitBlameResult, GitConflictContent,
+    GitError, GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot,
+    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview,
+    PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan, RepositorySliceSnapshot,
+    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
@@ -869,9 +869,12 @@ pub fn run() {
             read_local_diff,
             read_local_image_diff,
             read_commit_details,
+            read_commit_comparison_details,
             read_git_blame,
             read_commit_diff,
+            read_commit_comparison_diff,
             read_commit_image_diff,
+            read_commit_comparison_image_diff,
             stage_paths,
             unstage_paths,
             commit_changes,

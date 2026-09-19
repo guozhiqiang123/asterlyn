@@ -45,9 +45,12 @@ export interface DesktopCommandMap {
   read_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.TextFileSnapshot };
   save_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; expectedRevision: string; content: string; utf8Bom: boolean; requestId: string; }; result: Model.SaveTextFileResult };
   read_commit_details: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; }; result: Model.CommitDetails };
+  read_commit_comparison_details: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; }; result: Model.CommitComparisonDetails };
   read_git_blame: { args: { repositoryRoot: string; repositoryId: string; path: string; commitOid: string | null; parent: boolean; }; result: Model.GitBlameResult };
   read_commit_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
+  read_commit_comparison_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitComparisonDiffResult };
   read_commit_image_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
+  read_commit_comparison_image_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
   stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
@@ -121,9 +124,12 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_text_file: "textFileSnapshot",
   save_text_file: "saveTextFileResult",
   read_commit_details: "commitDetails",
+  read_commit_comparison_details: "commitComparisonDetails",
   read_git_blame: "gitBlameResult",
   read_commit_diff: "commitDiffResult",
+  read_commit_comparison_diff: "commitComparisonDiffResult",
   read_commit_image_diff: "imageDiffPreview",
+  read_commit_comparison_image_diff: "imageDiffPreview",
   stage_paths: "workingTreeMutationOutcome",
   unstage_paths: "workingTreeMutationOutcome",
   commit_changes: "commitSelectedResult",

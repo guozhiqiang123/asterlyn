@@ -139,6 +139,13 @@ export interface CommitDetails {
   files: CommitFileChange[];
 }
 
+export interface CommitComparisonDetails {
+  repositoryId: string;
+  beforeOid: string;
+  afterOid: string;
+  files: CommitFileChange[];
+}
+
 export interface CommitFileChange {
   path: string;
   originalPath: string | null;
@@ -148,6 +155,16 @@ export interface CommitFileChange {
 export interface CommitDiffResult {
   repositoryId: string;
   oid: string;
+  path: string;
+  patch: string;
+  binary: boolean;
+  truncated: boolean;
+}
+
+export interface CommitComparisonDiffResult {
+  repositoryId: string;
+  beforeOid: string;
+  afterOid: string;
   path: string;
   patch: string;
   binary: boolean;

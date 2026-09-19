@@ -26,6 +26,8 @@ import {
 import type {
   BranchMutationPlan,
   BranchMutationRequest,
+  CommitComparisonDetails,
+  CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
@@ -728,6 +730,31 @@ const demoBridge: DesktopBridge = {
     });
   },
 
+  async readCommitComparisonDetails(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
+  ): Promise<CommitComparisonDetails> {
+    if (!isTauri) {
+      await demoDelay(180);
+      return {
+        repositoryId,
+        beforeOid,
+        afterOid,
+        files: structuredClone(
+          browserCommitFiles.get(afterOid) ?? demoCommitDetails(afterOid).files,
+        ),
+      };
+    }
+    return invoke<CommitComparisonDetails>("read_commit_comparison_details", {
+      repositoryRoot,
+      repositoryId,
+      beforeOid,
+      afterOid,
+    });
+  },
+
   async readGitBlame(
     repositoryRoot: string,
     repositoryId: string,
@@ -794,6 +821,39 @@ const demoBridge: DesktopBridge = {
     });
   },
 
+  async readCommitComparisonDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
+    path: string,
+    originalPath: string | null,
+    expandedUnchanged = false,
+  ): Promise<CommitComparisonDiffResult> {
+    if (!isTauri) {
+      await demoDelay(110);
+      const diff = demoCommitDiff(afterOid, path);
+      return {
+        repositoryId,
+        beforeOid,
+        afterOid,
+        path: diff.path,
+        patch: diff.patch,
+        binary: diff.binary,
+        truncated: diff.truncated,
+      };
+    }
+    return invoke<CommitComparisonDiffResult>("read_commit_comparison_diff", {
+      repositoryRoot,
+      repositoryId,
+      beforeOid,
+      afterOid,
+      path,
+      originalPath,
+      expandedUnchanged,
+    });
+  },
+
   async readCommitImageDiff(
     repositoryRoot: string,
     repositoryId: string,
@@ -809,6 +869,28 @@ const demoBridge: DesktopBridge = {
       repositoryRoot,
       repositoryId,
       commitOid,
+      path,
+      originalPath,
+    });
+  },
+
+  async readCommitComparisonImageDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
+    path: string,
+    originalPath: string | null,
+  ): Promise<ImageDiffPreview> {
+    if (!isTauri) {
+      await demoDelay(90);
+      return { path, before: demoImage(path), after: demoImage(path) };
+    }
+    return invoke<ImageDiffPreview>("read_commit_comparison_image_diff", {
+      repositoryRoot,
+      repositoryId,
+      beforeOid,
+      afterOid,
       path,
       originalPath,
     });

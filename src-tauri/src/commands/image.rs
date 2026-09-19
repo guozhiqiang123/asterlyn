@@ -63,3 +63,29 @@ pub(crate) async fn read_commit_image_diff(
     })
     .await
 }
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn read_commit_comparison_image_diff(
+    repository_root: String,
+    repository_id: String,
+    before_oid: String,
+    after_oid: String,
+    path: String,
+    original_path: Option<String>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<ImageDiffPreview, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read commit comparison image diff", move || {
+        let diff = GitRepository::open(root)?.repository_commit_comparison_binary_diff(
+            &repository_id,
+            &before_oid,
+            &after_oid,
+            &path,
+            original_path.as_deref(),
+        )?;
+        encode_image_diff(diff.path, diff.before, diff.after)
+    })
+    .await
+}

@@ -920,9 +920,13 @@ Cherry-pick、Revert 和 Squash 共用一次只读的多提交选择分析，但
 - 多提交 Revert 的计划、执行顺序、进度、Continue/Skip/Abort 和协议；
 - 验证显式选区恰好对应现有 bounded Squash 的 base-to-`HEAD` 完整范围。
 
-以下能力仍待后续检查点补齐：
+CM4 双提交比较底层检查点又补齐了：
 
-- 任意两个提交树之间的文件范围和单文件 Diff。
+- 独立的 `{ repositoryId, beforeOid, afterOid }` 比较身份，以及任意两个精确提交树之间的净文件范围；
+- 只接受该范围内文件身份的 bounded 文本 Diff 和双侧图片读取，并覆盖祖先、分叉、重命名和非法目标；
+- 版本化桌面协议、Tauri/演示桥接和返回值校验。
+
+剩余工作是把该底层能力接入 H2 菜单、比较文件树、交换两侧和共享只读 Diff 展示生命周期。
 
 ### 验收草稿
 

@@ -17,13 +17,13 @@ use std::os::unix::process::CommandExt;
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
-    BranchMutationSourceKind, ChangeKind, CommitDetails, CommitDiffResult, CommitFileChange,
-    CommitSummary, DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind,
-    HistoryOrder, HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind,
-    ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode,
-    PushTagSummary, RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
-    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
-    UntrackedScan, UntrackedState,
+    BranchMutationSourceKind, ChangeKind, CommitComparisonDetails, CommitComparisonDiffResult,
+    CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult, FileChange,
+    GitBlameResult, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
+    HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
+    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
+    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
+    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 
@@ -1432,6 +1432,49 @@ impl GitRepository {
         Ok(details)
     }
 
+    pub fn commit_comparison_details(
+        &self,
+        before_oid: &str,
+        after_oid: &str,
+    ) -> Result<CommitComparisonDetails, GitError> {
+        validate_distinct_commit_ids(before_oid, after_oid)?;
+        self.first_parent(before_oid)?;
+        self.first_parent(after_oid)?;
+        let output = self.run_read_owned(
+            "read commit comparison file list",
+            vec![
+                OsString::from("diff"),
+                OsString::from("--no-ext-diff"),
+                OsString::from("--name-status"),
+                OsString::from("-z"),
+                OsString::from("-M"),
+                OsString::from("-C"),
+                OsString::from(before_oid),
+                OsString::from(after_oid),
+            ],
+        )?;
+        Ok(CommitComparisonDetails {
+            repository_id: ".".to_string(),
+            before_oid: before_oid.to_string(),
+            after_oid: after_oid.to_string(),
+            files: parse_commit_files(&output.stdout)?,
+        })
+    }
+
+    pub fn repository_commit_comparison_details(
+        &self,
+        repository_id: &str,
+        before_oid: &str,
+        after_oid: &str,
+    ) -> Result<CommitComparisonDetails, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        let mut details = root
+            .repository
+            .commit_comparison_details(before_oid, after_oid)?;
+        details.repository_id = root.descriptor.id;
+        Ok(details)
+    }
+
     pub fn repository_blame(
         &self,
         repository_id: &str,
@@ -1606,6 +1649,146 @@ impl GitRepository {
     ) -> Result<BinaryDiffResult, GitError> {
         let root = self.resolve_history_root(repository_id)?;
         root.repository.commit_binary_diff(oid, path, original_path)
+    }
+
+    pub fn commit_comparison_diff(
+        &self,
+        before_oid: &str,
+        after_oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<CommitComparisonDiffResult, GitError> {
+        self.commit_comparison_diff_with_unchanged(
+            before_oid,
+            after_oid,
+            path,
+            original_path,
+            false,
+        )
+    }
+
+    pub fn commit_comparison_diff_with_unchanged(
+        &self,
+        before_oid: &str,
+        after_oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+        expanded_unchanged: bool,
+    ) -> Result<CommitComparisonDiffResult, GitError> {
+        let selected =
+            self.require_commit_comparison_file(before_oid, after_oid, path, original_path)?;
+        let mut args = vec![
+            OsString::from("diff"),
+            OsString::from("--no-ext-diff"),
+            OsString::from("--no-color"),
+            diff_context_argument(expanded_unchanged),
+            OsString::from("-M"),
+            OsString::from("-C"),
+            OsString::from(before_oid),
+            OsString::from(after_oid),
+            OsString::from("--"),
+        ];
+        if let Some(original_path) = selected.original_path.as_deref() {
+            args.push(OsString::from(original_path));
+        }
+        args.push(OsString::from(&selected.path));
+
+        let (output, output_truncated) = self.run_read_owned_bounded(
+            "read commit comparison file diff",
+            args,
+            DIFF_LIMIT_BYTES + 1,
+        )?;
+        let mut patch = output.stdout;
+        let binary = patch.windows(15).any(|window| window == b"Binary files ");
+        let truncated = output_truncated || patch.len() > DIFF_LIMIT_BYTES;
+        if truncated {
+            patch.truncate(DIFF_LIMIT_BYTES);
+            patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
+        }
+        Ok(CommitComparisonDiffResult {
+            repository_id: ".".to_string(),
+            before_oid: before_oid.to_string(),
+            after_oid: after_oid.to_string(),
+            path: selected.path,
+            patch: String::from_utf8_lossy(&patch).into_owned(),
+            binary,
+            truncated,
+        })
+    }
+
+    pub fn repository_commit_comparison_diff_with_unchanged(
+        &self,
+        repository_id: &str,
+        before_oid: &str,
+        after_oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+        expanded_unchanged: bool,
+    ) -> Result<CommitComparisonDiffResult, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        let mut diff = root.repository.commit_comparison_diff_with_unchanged(
+            before_oid,
+            after_oid,
+            path,
+            original_path,
+            expanded_unchanged,
+        )?;
+        diff.repository_id = root.descriptor.id;
+        Ok(diff)
+    }
+
+    pub fn repository_commit_comparison_binary_diff(
+        &self,
+        repository_id: &str,
+        before_oid: &str,
+        after_oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<BinaryDiffResult, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        root.repository
+            .commit_comparison_binary_diff(before_oid, after_oid, path, original_path)
+    }
+
+    fn commit_comparison_binary_diff(
+        &self,
+        before_oid: &str,
+        after_oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<BinaryDiffResult, GitError> {
+        let selected =
+            self.require_commit_comparison_file(before_oid, after_oid, path, original_path)?;
+        let before_path = selected.original_path.as_deref().unwrap_or(&selected.path);
+        let before = self.read_binary_at_revision(before_oid, before_path)?;
+        let after = self.read_binary_at_revision(after_oid, &selected.path)?;
+        Ok(BinaryDiffResult {
+            path: selected.path,
+            before,
+            after,
+        })
+    }
+
+    fn require_commit_comparison_file(
+        &self,
+        before_oid: &str,
+        after_oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<CommitFileChange, GitError> {
+        validate_relative_path(path)?;
+        if let Some(original_path) = original_path {
+            validate_relative_path(original_path)?;
+        }
+        let details = self.commit_comparison_details(before_oid, after_oid)?;
+        details
+            .files
+            .into_iter()
+            .find(|file| file.path == path && file.original_path.as_deref() == original_path)
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "comparison file".to_string(),
+                message: "select a file from the current commit comparison".to_string(),
+            })
     }
 
     fn commit_binary_diff(
@@ -4948,6 +5131,18 @@ fn validate_object_id(oid: &str) -> Result<(), GitError> {
     Ok(())
 }
 
+fn validate_distinct_commit_ids(before_oid: &str, after_oid: &str) -> Result<(), GitError> {
+    validate_object_id(before_oid)?;
+    validate_object_id(after_oid)?;
+    if before_oid.eq_ignore_ascii_case(after_oid) {
+        return Err(GitError::InvalidInput {
+            field: "commit comparison".to_string(),
+            message: "select two distinct commits".to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn retain_complete_blame_records(output: &mut Vec<u8>) {
     const FILENAME_PREFIX: &[u8] = b"\nfilename ";
     let Some(prefix_index) = output
@@ -6678,6 +6873,7 @@ mod tests {
         fs::write(&path, before).expect("write original image");
         git(directory.path(), &["add", "image.png"]);
         git(directory.path(), &["commit", "-m", "Original image"]);
+        let before_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
         fs::write(&path, after).expect("write changed image");
         let repository = GitRepository::open(directory.path()).expect("repository opens");
         let selected = repository
@@ -6702,6 +6898,11 @@ mod tests {
             .expect("commit binary diff");
         assert_eq!(committed.before.as_deref(), Some(before.as_slice()));
         assert_eq!(committed.after.as_deref(), Some(after.as_slice()));
+        let compared = repository
+            .repository_commit_comparison_binary_diff(".", &before_oid, &oid, "image.png", None)
+            .expect("commit comparison binary diff");
+        assert_eq!(compared.before.as_deref(), Some(before.as_slice()));
+        assert_eq!(compared.after.as_deref(), Some(after.as_slice()));
         assert!(matches!(
             repository.repository_commit_binary_diff(".", &oid, "other.png", None),
             Err(GitError::InvalidInput { .. })
@@ -6901,6 +7102,89 @@ mod tests {
             .expect("rename patch loads");
         assert!(patch.patch.contains("rename from old-name.txt"));
         assert!(patch.patch.contains("rename to new-name.txt"));
+    }
+
+    #[test]
+    fn compares_exact_ancestor_and_divergent_commit_trees() {
+        let directory = fixture();
+        fs::write(directory.path().join("shared.txt"), "base\n").expect("base file");
+        fs::write(directory.path().join("old-name.txt"), "rename me\n").expect("rename base");
+        git(directory.path(), &["add", "shared.txt", "old-name.txt"]);
+        git(directory.path(), &["commit", "-m", "Base"]);
+        let base_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["branch", "side"]);
+
+        fs::write(directory.path().join("shared.txt"), "main\n").expect("main file");
+        fs::rename(
+            directory.path().join("old-name.txt"),
+            directory.path().join("new-name.txt"),
+        )
+        .expect("rename file");
+        git(
+            directory.path(),
+            &["add", "shared.txt", "old-name.txt", "new-name.txt"],
+        );
+        git(directory.path(), &["commit", "-m", "Main"]);
+        let main_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let ancestor = repository
+            .commit_comparison_details(&base_oid, &main_oid)
+            .expect("ancestor comparison");
+        assert_eq!(ancestor.before_oid, base_oid);
+        assert_eq!(ancestor.after_oid, main_oid);
+        let renamed = ancestor
+            .files
+            .iter()
+            .find(|file| file.path == "new-name.txt")
+            .expect("renamed file");
+        assert_eq!(renamed.original_path.as_deref(), Some("old-name.txt"));
+        let rename_diff = repository
+            .commit_comparison_diff(
+                &ancestor.before_oid,
+                &ancestor.after_oid,
+                &renamed.path,
+                renamed.original_path.as_deref(),
+            )
+            .expect("rename comparison diff");
+        assert!(rename_diff.patch.contains("rename from old-name.txt"));
+        assert!(rename_diff.patch.contains("rename to new-name.txt"));
+        assert!(matches!(
+            repository.commit_comparison_diff(
+                &ancestor.before_oid,
+                &ancestor.after_oid,
+                "not-selected.txt",
+                None,
+            ),
+            Err(GitError::InvalidInput { .. })
+        ));
+
+        git(directory.path(), &["checkout", "side"]);
+        fs::write(directory.path().join("shared.txt"), "side\n").expect("side file");
+        git(directory.path(), &["add", "shared.txt"]);
+        git(directory.path(), &["commit", "-m", "Side"]);
+        let side_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        let divergent = repository
+            .commit_comparison_details(&main_oid, &side_oid)
+            .expect("divergent comparison");
+        let shared = divergent
+            .files
+            .iter()
+            .find(|file| file.path == "shared.txt")
+            .expect("shared divergent file");
+        let divergent_diff = repository
+            .commit_comparison_diff(&main_oid, &side_oid, &shared.path, None)
+            .expect("divergent file diff");
+        assert!(divergent_diff.patch.contains("-main"));
+        assert!(divergent_diff.patch.contains("+side"));
+        assert!(matches!(
+            repository.commit_comparison_details(&main_oid, &main_oid),
+            Err(GitError::InvalidInput { .. })
+        ));
+        assert!(matches!(
+            repository.commit_comparison_details("HEAD", &side_oid),
+            Err(GitError::InvalidInput { .. })
+        ));
     }
 
     #[test]

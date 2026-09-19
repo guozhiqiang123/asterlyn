@@ -1,6 +1,8 @@
 import type {
   BranchMutationPlan,
   BranchMutationRequest,
+  CommitComparisonDetails,
+  CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
   CommitSelectedResult,
@@ -172,6 +174,12 @@ export interface GitReadBridge {
     repositoryId: string,
     commitOid: string,
   ): Promise<CommitDetails>;
+  readCommitComparisonDetails(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
+  ): Promise<CommitComparisonDetails>;
   readGitBlame(
     repositoryRoot: string,
     repositoryId: string,
@@ -187,10 +195,27 @@ export interface GitReadBridge {
     originalPath: string | null,
     expandedUnchanged?: boolean,
   ): Promise<CommitDiffResult>;
+  readCommitComparisonDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
+    path: string,
+    originalPath: string | null,
+    expandedUnchanged?: boolean,
+  ): Promise<CommitComparisonDiffResult>;
   readCommitImageDiff(
     repositoryRoot: string,
     repositoryId: string,
     commitOid: string,
+    path: string,
+    originalPath: string | null,
+  ): Promise<ImageDiffPreview>;
+  readCommitComparisonImageDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
     path: string,
     originalPath: string | null,
   ): Promise<ImageDiffPreview>;

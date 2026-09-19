@@ -110,6 +110,32 @@ test("desktop response validation accepts representative valid payloads", () => 
   assert.equal(validateDesktopResult("close_terminal", true), true);
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
   assert.deepEqual(
+    validateDesktopResult("read_commit_comparison_details", {
+      repositoryId: ".",
+      beforeOid: "1".repeat(40),
+      afterOid: "2".repeat(40),
+      files: [],
+    }),
+    {
+      repositoryId: ".",
+      beforeOid: "1".repeat(40),
+      afterOid: "2".repeat(40),
+      files: [],
+    },
+  );
+  assert.deepEqual(
+    validateDesktopResult("read_commit_comparison_diff", {
+      repositoryId: ".",
+      beforeOid: "1".repeat(40),
+      afterOid: "2".repeat(40),
+      path: "src/app.ts",
+      patch: "diff --git a/src/app.ts b/src/app.ts\n",
+      binary: false,
+      truncated: false,
+    }).path,
+    "src/app.ts",
+  );
+  assert.deepEqual(
     validateDesktopResult("read_git_blame", {
       repositoryId: ".",
       path: "src/app.ts",

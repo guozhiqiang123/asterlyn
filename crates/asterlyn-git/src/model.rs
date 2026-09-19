@@ -430,6 +430,15 @@ pub struct CommitDetails {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CommitComparisonDetails {
+    pub repository_id: String,
+    pub before_oid: String,
+    pub after_oid: String,
+    pub files: Vec<CommitFileChange>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitFileChange {
     pub path: String,
     pub original_path: Option<String>,
@@ -441,6 +450,18 @@ pub struct CommitFileChange {
 pub struct CommitDiffResult {
     pub repository_id: String,
     pub oid: String,
+    pub path: String,
+    pub patch: String,
+    pub binary: bool,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitComparisonDiffResult {
+    pub repository_id: String,
+    pub before_oid: String,
+    pub after_oid: String,
     pub path: String,
     pub patch: String,
     pub binary: bool,

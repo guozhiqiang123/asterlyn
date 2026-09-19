@@ -106,6 +106,26 @@ pub(crate) async fn read_commit_details(
 }
 
 #[tauri::command]
+pub(crate) async fn read_commit_comparison_details(
+    repository_root: String,
+    repository_id: String,
+    before_oid: String,
+    after_oid: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<CommitComparisonDetails, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read commit comparison details", move || {
+        GitRepository::open(root)?.repository_commit_comparison_details(
+            &repository_id,
+            &before_oid,
+            &after_oid,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn read_git_blame(
     repository_root: String,
     repository_id: String,
@@ -144,6 +164,33 @@ pub(crate) async fn read_commit_diff(
         GitRepository::open(root)?.repository_commit_diff_with_unchanged(
             &repository_id,
             &commit_oid,
+            &path,
+            original_path.as_deref(),
+            expanded_unchanged,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn read_commit_comparison_diff(
+    repository_root: String,
+    repository_id: String,
+    before_oid: String,
+    after_oid: String,
+    path: String,
+    original_path: Option<String>,
+    expanded_unchanged: bool,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<CommitComparisonDiffResult, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read commit comparison diff", move || {
+        GitRepository::open(root)?.repository_commit_comparison_diff_with_unchanged(
+            &repository_id,
+            &before_oid,
+            &after_oid,
             &path,
             original_path.as_deref(),
             expanded_unchanged,

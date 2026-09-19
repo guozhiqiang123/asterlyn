@@ -407,6 +407,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "commitDetails":
       assertCommitDetails(value, command);
       break;
+    case "commitComparisonDetails": {
+      const result = record(value, command);
+      strings(result, command, "repositoryId", "beforeOid", "afterOid");
+      arrays(result, command, "files");
+      break;
+    }
     case "gitBlameResult": {
       const result = record(value, command);
       strings(result, command, "repositoryId", "path");
@@ -437,6 +443,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "commitDiffResult": {
       const result = record(value, command);
       strings(result, command, "repositoryId", "oid", "path", "patch");
+      booleans(result, command, "binary", "truncated");
+      break;
+    }
+    case "commitComparisonDiffResult": {
+      const result = record(value, command);
+      strings(result, command, "repositoryId", "beforeOid", "afterOid", "path", "patch");
       booleans(result, command, "binary", "truncated");
       break;
     }
