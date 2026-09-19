@@ -9,7 +9,6 @@ import {
   historySelectionEntries,
   type HistoryListPresentation,
 } from "./features/git-history/history-list-view";
-import { HistoryRangeSelectionController } from "./features/git-history/history-range-selection.ts";
 import {
   historyScope,
   renderHistoryNavigation as renderHistoryNavigationView,
@@ -31,9 +30,7 @@ import {
 import {
   GitHistoryReadRuntime,
 } from "./features/git-history/git-history-read-runtime.ts";
-import { HistoryDetailPresentationController } from "./features/git-history/history-detail-presentation-controller.ts";
 import {
-  HistoryFilterController,
   type HistoryFilterDialog,
 } from "./features/git-history/history-filter-controller";
 import {
@@ -43,7 +40,6 @@ import {
   renderBranchNavigation as renderBranchNavigationView,
   type BranchNavigationViewModel,
 } from "./features/git-history/branch-navigation-view";
-import { GitBranchesController } from "./features/git-history/git-branches-controller.ts";
 import {
   branchContextTargetIsCurrent,
   type BranchContextTarget,
@@ -65,10 +61,10 @@ import {
   type CommitDetailFileContextTarget,
 } from "./features/git-history/commit-detail-context-binding.ts";
 import { commitFolderContextPolicy } from "./features/git-history/commit-folder-context-policy.ts";
-import { CommitFolderDiffController } from "./features/git-history/commit-folder-diff-controller.ts";
 import { commitFileContextPolicy } from "./features/git-history/commit-file-context-policy.ts";
 import { GitHistoryContextRuntime } from "./features/git-history/git-history-context-runtime.ts";
 import { GitHistoryMutationRuntime } from "./features/git-history/git-history-mutation-runtime.ts";
+import { GitHistoryPresentationRuntime } from "./features/git-history/git-history-presentation-runtime.ts";
 import {
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
@@ -355,12 +351,6 @@ export class AsterlynApp {
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
   private readonly state = createAppState();
-  private readonly historyFilters = new HistoryFilterController(window.localStorage);
-  private readonly historyFilterState = this.historyFilters.state;
-  private readonly historyDetailPresentation = new HistoryDetailPresentationController(
-    window.localStorage,
-  );
-  private readonly historyDetailState = this.historyDetailPresentation.state;
   private editorFontRequestGeneration = 0;
   private editorFontStatus: {
     id: EditorFontId | null;
@@ -389,9 +379,7 @@ export class AsterlynApp {
   private comparisonDetailFocus: "swap" | "retry" | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
   private readonly historyReadRuntime: GitHistoryReadRuntime;
-  private readonly historyRangeSelection = new HistoryRangeSelectionController();
-  private readonly commitFolderDiffController = new CommitFolderDiffController();
-  private readonly branchesController: GitBranchesController;
+  private readonly gitHistoryPresentationRuntime: GitHistoryPresentationRuntime;
   private readonly gitHistoryMutationRuntime: GitHistoryMutationRuntime;
   private readonly gitHistoryContextRuntime: GitHistoryContextRuntime;
   private readonly remoteRuntime: RemoteRuntime;
@@ -570,7 +558,7 @@ export class AsterlynApp {
         },
       },
     });
-    this.branchesController = new GitBranchesController({
+    this.gitHistoryPresentationRuntime = new GitHistoryPresentationRuntime(window.localStorage, {
       current: () => {
         const snapshot = this.windowSession.repository.state.snapshot;
         return snapshot
@@ -714,7 +702,7 @@ export class AsterlynApp {
           snapshot: this.windowSession.repository.state.snapshot,
           workspaceGeneration: this.windowSession.generation,
           repositoryRevision: this.windowSession.repository.state.revision,
-          selectedRepositoryIds: this.historyFilterState.historyRepositoryIds,
+          selectedRepositoryIds: this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
         }),
         history: () => ({
           state: this.historyState,
@@ -726,9 +714,9 @@ export class AsterlynApp {
           workspaceGeneration: this.windowSession.generation,
           repositoryRevision: this.windowSession.repository.state.revision,
           snapshot: this.windowSession.repository.state.snapshot,
-          fileView: this.historyDetailState.commitFileView,
+          fileView: this.gitHistoryPresentationRuntime.detailState.commitFileView,
         }),
-        rangeSelection: (key) => this.historyRangeSelection.contextTarget(key),
+        rangeSelection: (key) => this.gitHistoryPresentationRuntime.rangeSelection.contextTarget(key),
         markHistoryTarget: (key) => this.markHistoryCommitContextTarget(key),
       },
       ports: {
@@ -885,7 +873,7 @@ export class AsterlynApp {
       },
       {
         clearBranchSelection: () => {
-          this.branchesController.setSelectedBranch(null);
+          this.gitHistoryPresentationRuntime.branches.setSelectedBranch(null);
         },
         installSnapshotHistory: (snapshot, preferTip) =>
           this.installSnapshotHistory(snapshot, preferTip),
@@ -1217,7 +1205,7 @@ export class AsterlynApp {
         !this.filesEditorRuntime.replacement.state.recoveryBusy
       ),
       commandSurfaceOpen: () => this.filesEditorRuntime.commands.state.mode !== null,
-      historyFilterOpen: () => this.historyFilterState.historyFilterMenu !== null,
+      historyFilterOpen: () => this.gitHistoryPresentationRuntime.filterState.historyFilterMenu !== null,
       historyToolOpen: () => this.shellState.layout.bottomTool === "branches",
       activeReadyTextTab: () => {
         const tab = activeTextTab(this.editorState.session);
@@ -1297,7 +1285,7 @@ export class AsterlynApp {
         this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
       },
       closeHistoryFilter: () => {
-        this.historyFilters.closeMenus();
+        this.gitHistoryPresentationRuntime.filters.closeMenus();
         if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
       },
       saveTextTab: (tabId) => void this.saveTextTab(tabId),
@@ -1388,7 +1376,7 @@ export class AsterlynApp {
     if (
       change.catalogChanged &&
       this.shellState.layout.bottomTool === "branches" &&
-      this.historyFilterState.historyFilterMenu === "paths"
+      this.gitHistoryPresentationRuntime.filterState.historyFilterMenu === "paths"
     ) {
       this.renderHistoryPane();
     }
@@ -1434,8 +1422,8 @@ export class AsterlynApp {
   }
 
   private handleHistoryControllerChange(change: HistoryDetailsChange): void {
-    if (this.historyDetailState.gitDetail === "folder" && change.reason !== "file-selection") {
-      const folder = this.commitFolderDiffController.state.target;
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder" && change.reason !== "file-selection") {
+      const folder = this.gitHistoryPresentationRuntime.folderDiff.state.target;
       const details = this.historyState.details;
       if (
         !folder ||
@@ -1444,8 +1432,8 @@ export class AsterlynApp {
         details.oid !== folder.oid ||
         details.parentOid !== folder.parentOid
       ) {
-        this.commitFolderDiffController.clear();
-        this.historyDetailPresentation.show("commit");
+        this.gitHistoryPresentationRuntime.folderDiff.clear();
+        this.gitHistoryPresentationRuntime.detail.show("commit");
       }
     }
     if (change.selectionChanged) this.clearCommitDiffInspection();
@@ -1485,7 +1473,7 @@ export class AsterlynApp {
       return;
     }
     if (
-      this.historyDetailState.gitDetail === "comparison" &&
+      this.gitHistoryPresentationRuntime.detailState.gitDetail === "comparison" &&
       this.root.querySelector("#git-detail-body")
     ) {
       this.renderGitDetailPane();
@@ -1586,7 +1574,7 @@ export class AsterlynApp {
     if (this.filesEditorRuntime.replacement.state.dialog) {
       this.renderWorkspaceReplacementDialog();
     }
-    if (this.historyFilterState.historyDialog) this.renderHistoryDialog();
+    if (this.gitHistoryPresentationRuntime.filterState.historyDialog) this.renderHistoryDialog();
     this.gitOperationRuntime.refreshCopy();
     this.gitHistoryMutationRuntime.refreshCopy();
     this.localizeShellChrome(previousCatalog);
@@ -2079,16 +2067,13 @@ export class AsterlynApp {
         clearDisclosure: true,
         clearSelection: true,
       });
-      this.historyFilters.resetWorkspace();
+      this.gitHistoryPresentationRuntime.resetWorkspace();
       this.closeHistoryDialogHost();
       this.historyReadRuntime.comparison.clear();
       this.historyReadRuntime.historicalFile.clear();
       this.historyReadRuntime.historicalFileComparison.clear();
       this.clearComparisonDiffInspection();
-      this.commitFolderDiffController.clear();
-      this.historyDetailPresentation.resetWorkspace();
       this.filesEditorRuntime.files.installWorkspace(opened.root, snapshot?.changes ?? []);
-      this.branchesController.setSelectedBranch(null);
       if (snapshot) {
         this.installSnapshotHistory(snapshot, true);
         this.loadHistoryPreferences(snapshot);
@@ -2175,10 +2160,10 @@ export class AsterlynApp {
   }
 
   private reconcileHistoryScope(snapshot: RepositorySnapshot): void {
-    if (this.branchesController.reconcile(snapshot)) {
-      this.historyDetailPresentation.show("commit");
+    if (this.gitHistoryPresentationRuntime.branches.reconcile(snapshot)) {
+      this.gitHistoryPresentationRuntime.detail.show("commit");
     }
-    this.historyFilters.reconcile(snapshot);
+    this.gitHistoryPresentationRuntime.filters.reconcile(snapshot);
     this.closeHistoryDialog();
   }
 
@@ -4166,7 +4151,7 @@ export class AsterlynApp {
       selectCommit: (key, restoreFocus, extend) =>
         this.selectHistoryCommit(key, restoreFocus, extend),
       expandLinearHistory: (firstKey) => {
-        this.historyFilters.expandLinearHistory();
+        this.gitHistoryPresentationRuntime.filters.expandLinearHistory();
         this.renderHistoryPane();
         if (firstKey) this.focusHistoryCommit(firstKey);
       },
@@ -4308,12 +4293,12 @@ export class AsterlynApp {
         !snapshot.repositoryRoots.some((root) => root.id === path.repositoryId)
       )
     ) return;
-    this.commitFolderDiffController.clear();
-    this.historyDetailPresentation.show("commit");
-    this.historyFilters.install(intent.query);
+    this.gitHistoryPresentationRuntime.folderDiff.clear();
+    this.gitHistoryPresentationRuntime.detail.show("commit");
+    this.gitHistoryPresentationRuntime.filters.install(intent.query);
     this.recordRecentHistoryPath(intent.query.paths[0]!);
-    this.historyFilters.clearTextQuery();
-    this.historyFilters.closeMenus();
+    this.gitHistoryPresentationRuntime.filters.clearTextQuery();
+    this.gitHistoryPresentationRuntime.filters.closeMenus();
     this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "branches" }, true);
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
@@ -4660,45 +4645,45 @@ export class AsterlynApp {
       filesError: this.filesState.error,
       filesTruncated: this.filesState.truncated,
       presentation: this.historyListPresentation(),
-      query: this.historyFilterState.historyQuery,
-      caseSensitive: this.historyFilterState.historyCaseSensitive,
-      regularExpression: this.historyFilterState.historyRegularExpression,
-      refs: this.historyFilterState.historyRefs,
-      startCommit: this.historyFilterState.historyStartCommit,
-      authorEmails: this.historyFilterState.historyAuthorEmails,
-      currentAuthor: this.historyFilterState.historyCurrentAuthor,
-      datePreset: this.historyFilterState.historyDatePreset,
-      paths: this.historyFilterState.historyPaths,
-      repositoryIds: this.historyFilterState.historyRepositoryIds,
-      recentPaths: this.historyFilterState.historyRecentPaths,
-      order: this.historyFilterState.historyOrder,
-      firstParent: this.historyFilterState.historyFirstParent,
-      excludeMerges: this.historyFilterState.historyExcludeMerges,
-      collapseLinear: this.historyFilterState.historyCollapseLinear,
-      filterMenu: this.historyFilterState.historyFilterMenu,
-      branchSubmenu: this.historyFilterState.historyBranchSubmenu,
-      favoriteRefs: this.historyFilterState.historyFavoriteRefs,
-      recentRefs: this.historyFilterState.historyRecentRefs,
+      query: this.gitHistoryPresentationRuntime.filterState.historyQuery,
+      caseSensitive: this.gitHistoryPresentationRuntime.filterState.historyCaseSensitive,
+      regularExpression: this.gitHistoryPresentationRuntime.filterState.historyRegularExpression,
+      refs: this.gitHistoryPresentationRuntime.filterState.historyRefs,
+      startCommit: this.gitHistoryPresentationRuntime.filterState.historyStartCommit,
+      authorEmails: this.gitHistoryPresentationRuntime.filterState.historyAuthorEmails,
+      currentAuthor: this.gitHistoryPresentationRuntime.filterState.historyCurrentAuthor,
+      datePreset: this.gitHistoryPresentationRuntime.filterState.historyDatePreset,
+      paths: this.gitHistoryPresentationRuntime.filterState.historyPaths,
+      repositoryIds: this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
+      recentPaths: this.gitHistoryPresentationRuntime.filterState.historyRecentPaths,
+      order: this.gitHistoryPresentationRuntime.filterState.historyOrder,
+      firstParent: this.gitHistoryPresentationRuntime.filterState.historyFirstParent,
+      excludeMerges: this.gitHistoryPresentationRuntime.filterState.historyExcludeMerges,
+      collapseLinear: this.gitHistoryPresentationRuntime.filterState.historyCollapseLinear,
+      filterMenu: this.gitHistoryPresentationRuntime.filterState.historyFilterMenu,
+      branchSubmenu: this.gitHistoryPresentationRuntime.filterState.historyBranchSubmenu,
+      favoriteRefs: this.gitHistoryPresentationRuntime.filterState.historyFavoriteRefs,
+      recentRefs: this.gitHistoryPresentationRuntime.filterState.historyRecentRefs,
       localization: this.localization,
     };
   }
 
   private installBranchHistoryScope(branches: readonly BranchSummary[]): void {
     const references = branches.map(historyReference);
-    this.historyFilters.installRefs(references);
-    this.historyDetailPresentation.show(branches.length === 1 ? "branch" : "commit");
+    this.gitHistoryPresentationRuntime.filters.installRefs(references);
+    this.gitHistoryPresentationRuntime.detail.show(branches.length === 1 ? "branch" : "commit");
     for (const reference of references) this.recordRecentHistoryRef(reference);
   }
 
   private openHistoryDialog(kind: HistoryFilterDialog): void {
-    this.historyFilters.openDialog(kind, this.filesState.files);
+    this.gitHistoryPresentationRuntime.filters.openDialog(kind, this.filesState.files);
     this.renderHistoryPane();
     this.renderHistoryDialog();
   }
 
   private closeHistoryDialog(): void {
-    if (!this.historyFilterState.historyDialog) return;
-    this.historyFilters.closeDialog();
+    if (!this.gitHistoryPresentationRuntime.filterState.historyDialog) return;
+    this.gitHistoryPresentationRuntime.filters.closeDialog();
     this.closeHistoryDialogHost();
   }
 
@@ -4711,7 +4696,7 @@ export class AsterlynApp {
 
   private renderHistoryDialog(): void {
     const host = this.query("#history-dialog");
-    const kind = this.historyFilterState.historyDialog;
+    const kind = this.gitHistoryPresentationRuntime.filterState.historyDialog;
     if (!kind) {
       host.classList.add("hidden");
       host.innerHTML = "";
@@ -4722,13 +4707,13 @@ export class AsterlynApp {
       kind,
       snapshot: this.windowSession.repository.state.snapshot!,
       files: this.filesState.files,
-      query: this.historyFilterState.historyDialogQuery,
-      error: this.historyFilterState.historyDialogError,
-      refDraft: this.historyFilterState.historyRefDraft,
-      favoriteRefs: this.historyFilterState.historyFavoriteRefs,
-      pathDraft: this.historyFilterState.historyPathDraft,
-      pathText: this.historyFilterState.historyPathText,
-      collapsedTreePaths: this.historyFilterState.historyTreeCollapsed,
+      query: this.gitHistoryPresentationRuntime.filterState.historyDialogQuery,
+      error: this.gitHistoryPresentationRuntime.filterState.historyDialogError,
+      refDraft: this.gitHistoryPresentationRuntime.filterState.historyRefDraft,
+      favoriteRefs: this.gitHistoryPresentationRuntime.filterState.historyFavoriteRefs,
+      pathDraft: this.gitHistoryPresentationRuntime.filterState.historyPathDraft,
+      pathText: this.gitHistoryPresentationRuntime.filterState.historyPathText,
+      collapsedTreePaths: this.gitHistoryPresentationRuntime.filterState.historyTreeCollapsed,
       localization: this.localization,
     });
     this.bindHistoryDialogEvents();
@@ -4745,7 +4730,7 @@ export class AsterlynApp {
       commits: filtered.commits,
       textError: filtered.error,
       selectedCommit: this.historyState.selectedCommit,
-      collapseLinear: this.historyFilterState.historyCollapseLinear,
+      collapseLinear: this.gitHistoryPresentationRuntime.filterState.historyCollapseLinear,
       bridgeOmittedParents: this.shouldBridgeOmittedGraphParents(filtered.commits),
       repositoryRoots: snapshot.repositoryRoots,
       branches: snapshot.branches,
@@ -4754,12 +4739,12 @@ export class AsterlynApp {
       hasMore: this.historyState.hasMore,
       localization: this.localization,
     };
-    let selection = this.historyRangeSelection.reconcile(
+    let selection = this.gitHistoryPresentationRuntime.rangeSelection.reconcile(
       scopeKey,
       historySelectionEntries(base),
     );
     if (!selection && base.selectedCommit) {
-      selection = this.historyRangeSelection.select(base.selectedCommit, false).selection;
+      selection = this.gitHistoryPresentationRuntime.rangeSelection.select(base.selectedCommit, false).selection;
     }
     return {
       ...base,
@@ -4772,10 +4757,10 @@ export class AsterlynApp {
   private historySelectionScopeKey(): string {
     return JSON.stringify([
       this.historyState.history.generation,
-      this.historyFilterState.historyQuery,
-      this.historyFilterState.historyCaseSensitive,
-      this.historyFilterState.historyRegularExpression,
-      this.historyFilterState.historyCollapseLinear,
+      this.gitHistoryPresentationRuntime.filterState.historyQuery,
+      this.gitHistoryPresentationRuntime.filterState.historyCaseSensitive,
+      this.gitHistoryPresentationRuntime.filterState.historyRegularExpression,
+      this.gitHistoryPresentationRuntime.filterState.historyCollapseLinear,
     ]);
   }
 
@@ -4802,9 +4787,9 @@ export class AsterlynApp {
   }
 
   private filteredHistory(): ReturnType<typeof filterHistoryText> {
-    return filterHistoryText(this.historyState.history.commits, this.historyFilterState.historyQuery, {
-      caseSensitive: this.historyFilterState.historyCaseSensitive,
-      regularExpression: this.historyFilterState.historyRegularExpression,
+    return filterHistoryText(this.historyState.history.commits, this.gitHistoryPresentationRuntime.filterState.historyQuery, {
+      caseSensitive: this.gitHistoryPresentationRuntime.filterState.historyCaseSensitive,
+      regularExpression: this.gitHistoryPresentationRuntime.filterState.historyRegularExpression,
     });
   }
 
@@ -4831,10 +4816,10 @@ export class AsterlynApp {
   private branchNavigationViewModel(snapshot: RepositorySnapshot): BranchNavigationViewModel {
     return {
       snapshot,
-      query: this.branchesController.state.query,
-      selectedRepositoryIds: this.historyFilterState.historyRepositoryIds,
-      selectedRefs: this.historyFilterState.historyRefs,
-      collapsedGroups: this.branchesController.state.collapsedGroups,
+      query: this.gitHistoryPresentationRuntime.branches.state.query,
+      selectedRepositoryIds: this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
+      selectedRefs: this.gitHistoryPresentationRuntime.filterState.historyRefs,
+      collapsedGroups: this.gitHistoryPresentationRuntime.branches.state.collapsedGroups,
       localization: this.localization,
     };
   }
@@ -5099,7 +5084,7 @@ export class AsterlynApp {
   private bindHistoryEvents(): void {
     const input = this.root.querySelector<HTMLInputElement>("#history-filter");
     input?.addEventListener("input", () => {
-      this.historyFilters.setTextQuery(input.value);
+      this.gitHistoryPresentationRuntime.filters.setTextQuery(input.value);
       this.renderHistoryResults();
     });
     input?.addEventListener("keydown", (event) => {
@@ -5107,7 +5092,7 @@ export class AsterlynApp {
         event.preventDefault();
         event.stopPropagation();
         input.value = "";
-        this.historyFilters.clearTextQuery();
+        this.gitHistoryPresentationRuntime.filters.clearTextQuery();
         this.renderHistoryResults();
         return;
       }
@@ -5121,7 +5106,7 @@ export class AsterlynApp {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-text-mode]").forEach((button) => {
       button.addEventListener("click", () => {
-        this.historyFilters.toggleTextMode(
+        this.gitHistoryPresentationRuntime.filters.toggleTextMode(
           button.dataset.historyTextMode === "case" ? "case" : "regex",
         );
         this.renderHistoryPane();
@@ -5133,14 +5118,14 @@ export class AsterlynApp {
         event.stopPropagation();
         const menu = button.dataset.historyMenu as HistoryFilterMenu | undefined;
         if (!menu) return;
-        this.historyFilters.toggleMenu(menu);
+        this.gitHistoryPresentationRuntime.filters.toggleMenu(menu);
         this.renderHistoryPane();
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-branch-submenu]").forEach((button) => {
       const open = () => {
         const submenu = button.dataset.historyBranchSubmenu;
-        if (!submenu || !this.historyFilters.openBranchSubmenu(submenu)) return;
+        if (!submenu || !this.gitHistoryPresentationRuntime.filters.openBranchSubmenu(submenu)) return;
         this.renderHistoryPane();
       };
       button.addEventListener("pointerenter", open);
@@ -5159,26 +5144,26 @@ export class AsterlynApp {
         if (!key || !snapshot) return;
         // Keep every catalog match in the query so later root-checkbox changes preserve the
         // workspace-level branch meaning; repositoryIds still controls which roots participate.
-        const branches = this.branchesController.selectHistoryScope(snapshot, key);
+        const branches = this.gitHistoryPresentationRuntime.branches.selectHistoryScope(snapshot, key);
         if (!branches) return;
         this.installBranchHistoryScope(branches);
-        this.historyFilters.closeMenus();
+        this.gitHistoryPresentationRuntime.filters.closeMenus();
         this.applyHistoryQuery(true);
       });
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-clear-users]")?.addEventListener("click", () => {
-      this.historyFilters.clearAuthors();
+      this.gitHistoryPresentationRuntime.filters.clearAuthors();
       this.applyHistoryQuery();
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-me]")?.addEventListener("click", () => {
-      this.historyFilters.toggleCurrentAuthor();
+      this.gitHistoryPresentationRuntime.filters.toggleCurrentAuthor();
       this.applyHistoryQuery();
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-author]").forEach((button) => {
       button.addEventListener("click", () => {
         const email = button.dataset.historyAuthor;
         if (!email) return;
-        this.historyFilters.toggleAuthor(email);
+        this.gitHistoryPresentationRuntime.filters.toggleAuthor(email);
         this.applyHistoryQuery();
       });
     });
@@ -5186,13 +5171,13 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const preset = button.dataset.historyDate as HistoryDatePreset | undefined;
         if (!preset) return;
-        this.historyFilters.setDatePreset(preset, historyDateSince(preset));
+        this.gitHistoryPresentationRuntime.filters.setDatePreset(preset, historyDateSince(preset));
         this.applyHistoryQuery();
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-order]").forEach((button) => {
       button.addEventListener("click", () => {
-        this.historyFilters.setOrder(
+        this.gitHistoryPresentationRuntime.filters.setOrder(
           button.dataset.historyOrder === "date" ? "date" : "topological",
         );
         this.applyHistoryQuery();
@@ -5203,7 +5188,7 @@ export class AsterlynApp {
         const repositoryId = checkbox.dataset.historyRoot;
         const snapshot = this.windowSession.repository.state.snapshot;
         if (!repositoryId || !snapshot) return;
-        this.historyFilters.toggleRepositoryRoot(
+        this.gitHistoryPresentationRuntime.filters.toggleRepositoryRoot(
           snapshot.repositoryRoots.map((root) => root.id),
           repositoryId,
           checkbox.checked,
@@ -5216,13 +5201,13 @@ export class AsterlynApp {
         const key = button.dataset.historyQuickPath;
         const path = key ? this.pathForKey(key) : null;
         if (!key || !path) return;
-        this.historyFilters.selectPath(key, path);
+        this.gitHistoryPresentationRuntime.filters.selectPath(key, path);
         this.applyHistoryQuery();
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-graph-option]").forEach((button) => {
       button.addEventListener("click", () => {
-        this.historyFilters.toggleGraphOption(
+        this.gitHistoryPresentationRuntime.filters.toggleGraphOption(
           button.dataset.historyGraphOption === "first-parent"
             ? "first-parent"
             : "exclude-merges",
@@ -5231,20 +5216,20 @@ export class AsterlynApp {
       });
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-collapse-linear]")?.addEventListener("click", () => {
-      this.historyFilters.toggleCollapseLinear();
+      this.gitHistoryPresentationRuntime.filters.toggleCollapseLinear();
       this.renderHistoryPane();
     });
   }
 
   private bindHistoryDialogEvents(): void {
-    const kind = this.historyFilterState.historyDialog;
+    const kind = this.gitHistoryPresentationRuntime.filterState.historyDialog;
     if (!kind) return;
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-dialog-cancel]").forEach((button) => {
       button.addEventListener("click", () => this.closeHistoryDialog());
     });
     const search = this.root.querySelector<HTMLInputElement>("#history-dialog-search");
     search?.addEventListener("input", () => {
-      this.historyFilters.setDialogQuery(search.value);
+      this.gitHistoryPresentationRuntime.filters.setDialogQuery(search.value);
       const position = search.selectionStart ?? search.value.length;
       this.renderHistoryDialog();
       const replacement = this.root.querySelector<HTMLInputElement>("#history-dialog-search");
@@ -5256,8 +5241,8 @@ export class AsterlynApp {
         const key = input.dataset.historyDialogRef;
         const branch = key ? this.branchForKey(key) : null;
         if (!key || !branch) return;
-        this.historyFilters.setRefDraft(key, historyReference(branch), input.checked);
-        this.updateHistoryDialogApplyCount(this.historyFilterState.historyRefDraft.size || "all");
+        this.gitHistoryPresentationRuntime.filters.setRefDraft(key, historyReference(branch), input.checked);
+        this.updateHistoryDialogApplyCount(this.gitHistoryPresentationRuntime.filterState.historyRefDraft.size || "all");
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-dialog-favorite]").forEach((button) => {
@@ -5278,7 +5263,7 @@ export class AsterlynApp {
             )
           : null;
         if (!key || !candidate) return;
-        this.historyFilters.setPathDraft(key, candidate, input.checked);
+        this.gitHistoryPresentationRuntime.filters.setPathDraft(key, candidate, input.checked);
         this.renderHistoryDialog();
       });
     });
@@ -5286,12 +5271,12 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const key = button.dataset.historyTreeToggle;
         if (!key) return;
-        this.historyFilters.toggleTreePath(key);
+        this.gitHistoryPresentationRuntime.filters.toggleTreePath(key);
         this.renderHistoryDialog();
       });
     });
     this.root.querySelector<HTMLTextAreaElement>("#history-path-text")?.addEventListener("input", (event) => {
-      this.historyFilters.setPathText((event.currentTarget as HTMLTextAreaElement).value);
+      this.gitHistoryPresentationRuntime.filters.setPathText((event.currentTarget as HTMLTextAreaElement).value);
     });
     this.root.querySelector<HTMLTextAreaElement>("#history-path-text")?.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -5300,7 +5285,7 @@ export class AsterlynApp {
       }
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-dialog-clear]")?.addEventListener("click", () => {
-      this.historyFilters.clearDialogDraft();
+      this.gitHistoryPresentationRuntime.filters.clearDialogDraft();
       this.renderHistoryDialog();
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-dialog-apply]")?.addEventListener("click", () => {
@@ -5313,7 +5298,7 @@ export class AsterlynApp {
   }
 
   private applyHistoryDialog(): void {
-    const result = this.historyFilters.applyDialog(
+    const result = this.gitHistoryPresentationRuntime.filters.applyDialog(
       this.filesState.files,
       this.localization.catalog.history,
     );
@@ -5324,8 +5309,8 @@ export class AsterlynApp {
     }
     if (result.kind === "branches") {
       const selected = Array.from(result.refs.entries());
-      this.branchesController.setSelectedBranch(selected.length === 1 ? selected[0]![0] : null);
-      this.historyDetailPresentation.show(selected.length === 1 ? "branch" : "commit");
+      this.gitHistoryPresentationRuntime.branches.setSelectedBranch(selected.length === 1 ? selected[0]![0] : null);
+      this.gitHistoryPresentationRuntime.detail.show(selected.length === 1 ? "branch" : "commit");
       for (const reference of result.refs.values()) {
         this.recordRecentHistoryRef(reference);
       }
@@ -5338,7 +5323,7 @@ export class AsterlynApp {
 
   private updateHistoryDialogApplyCount(count: number | string): void {
     const button = this.root.querySelector<HTMLButtonElement>("[data-history-dialog-apply]");
-    if (button && this.historyFilterState.historyDialog === "branches") button.textContent = this.localization.catalog.history.applyCount(String(count));
+    if (button && this.gitHistoryPresentationRuntime.filterState.historyDialog === "branches") button.textContent = this.localization.catalog.history.applyCount(String(count));
   }
 
   private renderHistoryResults(): void {
@@ -5393,12 +5378,12 @@ export class AsterlynApp {
   private selectCommit(key: string, restoreFocus = false): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
-    if (this.historyDetailState.gitDetail === "comparison") {
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "comparison") {
       this.historyReadRuntime.comparison.clear();
       this.clearComparisonDiffInspection();
     }
-    if (this.historyDetailState.gitDetail === "folder") this.commitFolderDiffController.clear();
-    this.historyDetailPresentation.show("commit");
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder") this.gitHistoryPresentationRuntime.folderDiff.clear();
+    this.gitHistoryPresentationRuntime.detail.show("commit");
     if (!this.historyReadRuntime.details.selectCommit(snapshot.root, key, true)) return;
     this.updateHistoryCommitSelection(key);
     this.renderGitDetailPane();
@@ -5407,7 +5392,7 @@ export class AsterlynApp {
 
   private selectHistoryCommit(key: string, restoreFocus: boolean, extend: boolean): void {
     this.historyListPresentation();
-    const result = this.historyRangeSelection.select(key, extend);
+    const result = this.gitHistoryPresentationRuntime.rangeSelection.select(key, extend);
     const activeKey = result.selection?.activeKey ?? key;
     this.selectCommit(activeKey, restoreFocus);
     this.updateHistoryCommitSelection(activeKey);
@@ -5431,7 +5416,7 @@ export class AsterlynApp {
   private isHistoryCommitRangeTargetCurrent(target: HistoryCommitRangeTarget): boolean {
     return historyCommitRangeTargetIsCurrent(
       target,
-      this.historyRangeSelection.selection,
+      this.gitHistoryPresentationRuntime.rangeSelection.selection,
       this.historyState,
       this.windowSession.generation,
       this.windowSession.repository.state.revision,
@@ -5444,9 +5429,9 @@ export class AsterlynApp {
     const active = target.commits.find((commit) => commitKey(commit) === target.activeKey);
     if (!anchor || !active || anchor.repositoryId !== active.repositoryId) return;
     this.clearComparisonDiffInspection();
-    this.commitFolderDiffController.clear();
-    this.historyDetailPresentation.expandDirectories();
-    this.historyDetailPresentation.show("comparison");
+    this.gitHistoryPresentationRuntime.folderDiff.clear();
+    this.gitHistoryPresentationRuntime.detail.expandDirectories();
+    this.gitHistoryPresentationRuntime.detail.show("comparison");
     this.historyReadRuntime.comparison.open({
       workspaceRoot: target.workspaceRoot,
       workspaceGeneration: target.workspaceGeneration,
@@ -5469,7 +5454,7 @@ export class AsterlynApp {
       target.path,
       this.windowSession.repository.state.snapshot,
       this.windowSession.repository.state.revision,
-      this.historyDetailState.commitFileView,
+      this.gitHistoryPresentationRuntime.detailState.commitFileView,
     );
     return Boolean(
       current &&
@@ -5494,7 +5479,7 @@ export class AsterlynApp {
       target.path,
       this.windowSession.repository.state.snapshot,
       this.windowSession.repository.state.revision,
-      this.historyDetailState.commitFileView,
+      this.gitHistoryPresentationRuntime.detailState.commitFileView,
     );
     return Boolean(
       current && current.kind === "file" && current.file &&
@@ -5644,9 +5629,9 @@ export class AsterlynApp {
     }
     this.historyReadRuntime.comparison.clear();
     this.clearComparisonDiffInspection();
-    this.commitFolderDiffController.open(target);
-    this.historyDetailPresentation.expandDirectories();
-    this.historyDetailPresentation.show("folder");
+    this.gitHistoryPresentationRuntime.folderDiff.open(target);
+    this.gitHistoryPresentationRuntime.detail.expandDirectories();
+    this.gitHistoryPresentationRuntime.detail.show("folder");
     this.renderGitDetailPane();
   }
 
@@ -5683,7 +5668,7 @@ export class AsterlynApp {
   }
 
   private updateHistoryCommitSelection(key: string): void {
-    const selectedKeys = this.historyRangeSelection.selection?.commits.map(commitKey) ?? [key];
+    const selectedKeys = this.gitHistoryPresentationRuntime.rangeSelection.selection?.commits.map(commitKey) ?? [key];
     this.historyListView.updateSelection(key, selectedKeys);
   }
 
@@ -5696,7 +5681,7 @@ export class AsterlynApp {
     input?.addEventListener("input", () => {
       const snapshot = this.windowSession.repository.state.snapshot;
       if (!snapshot) return;
-      this.branchesController.setQuery(input.value);
+      this.gitHistoryPresentationRuntime.branches.setQuery(input.value);
       this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
       this.renderBranchCount(snapshot);
       this.bindBranchRows();
@@ -5705,7 +5690,7 @@ export class AsterlynApp {
       if (event.key === "Escape" && input.value) {
         event.preventDefault();
         input.value = "";
-        this.branchesController.setQuery("");
+        this.gitHistoryPresentationRuntime.branches.setQuery("");
         const snapshot = this.windowSession.repository.state.snapshot;
         if (!snapshot) return;
         this.query("#branch-results").innerHTML = this.renderBranchGroups(snapshot);
@@ -5736,7 +5721,7 @@ export class AsterlynApp {
         button.addEventListener("click", () => {
           const kind = button.dataset.branchGroupToggle as BranchSummary["kind"] | undefined;
           if (!kind) return;
-          this.branchesController.toggleGroup(kind);
+          this.gitHistoryPresentationRuntime.branches.toggleGroup(kind);
           this.query("#branch-navigation-body").innerHTML =
             this.renderBranchNavigation(this.windowSession.repository.state.snapshot!);
           this.renderBranchCount(this.windowSession.repository.state.snapshot!);
@@ -5774,15 +5759,15 @@ export class AsterlynApp {
   private selectBranch(key: string, restoreFocus = false): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
-    const intent = this.branchesController.toggleHistoryScope(
+    const intent = this.gitHistoryPresentationRuntime.branches.toggleHistoryScope(
       snapshot,
       key,
-      this.historyFilterState.historyRefs,
+      this.gitHistoryPresentationRuntime.filterState.historyRefs,
     );
     if (!intent) return;
     if (intent.kind === "clear") {
-      this.historyFilters.clearRefs();
-      this.historyDetailPresentation.show("commit");
+      this.gitHistoryPresentationRuntime.filters.clearRefs();
+      this.gitHistoryPresentationRuntime.detail.show("commit");
       this.applyHistoryQuery(true);
       if (restoreFocus) {
         const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-branch]");
@@ -5808,7 +5793,7 @@ export class AsterlynApp {
       this.windowSession.repository.state.snapshot,
       this.windowSession.generation,
       this.windowSession.repository.state.revision,
-      this.historyFilterState.historyRepositoryIds,
+      this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
     );
   }
 
@@ -5822,7 +5807,7 @@ export class AsterlynApp {
     if (!this.isBranchContextTargetCurrent(target)) return;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
-    const branches = this.branchesController.selectHistoryScope(snapshot, target.key);
+    const branches = this.gitHistoryPresentationRuntime.branches.selectHistoryScope(snapshot, target.key);
     if (!branches) return;
     this.installBranchHistoryScope(branches);
     this.applyHistoryQuery(true);
@@ -6013,17 +5998,17 @@ export class AsterlynApp {
         this.renderImageDiff(document, () => void this.loadSelectedComparisonDiff());
         return;
       }
-      if (this.historyDetailState.comparisonPatchLoading) {
+      if (this.gitHistoryPresentationRuntime.detailState.comparisonPatchLoading) {
         this.showEditorHtml(
           editorDocumentContentKey(document, "loading"),
           renderEditorLoadingBlock(copy.loadingCommitPatch),
         );
-      } else if (this.historyDetailState.comparisonPatchError) {
+      } else if (this.gitHistoryPresentationRuntime.detailState.comparisonPatchError) {
         this.showEditorHtml(
-          editorDocumentContentKey(document, `error:${this.historyDetailState.comparisonPatchError}`),
+          editorDocumentContentKey(document, `error:${this.gitHistoryPresentationRuntime.detailState.comparisonPatchError}`),
           renderEditorRetryState(
             copy.patchLoadFailed,
-            this.historyDetailState.comparisonPatchError,
+            this.gitHistoryPresentationRuntime.detailState.comparisonPatchError,
             "retry-comparison-patch",
             "changes",
             copy,
@@ -6032,13 +6017,13 @@ export class AsterlynApp {
         this.query("#retry-comparison-patch").addEventListener("click", () => {
           void this.loadSelectedComparisonDiff();
         });
-      } else if (this.historyDetailState.comparisonPatch) {
+      } else if (this.gitHistoryPresentationRuntime.detailState.comparisonPatch) {
         this.mountEditorDiff(
           editorDocumentContentKey(
             document,
-            `patch:${this.historyDetailState.comparisonPatchVersion}`,
+            `patch:${this.gitHistoryPresentationRuntime.detailState.comparisonPatchVersion}`,
           ),
-          this.historyDetailState.comparisonPatch.patch || copy.noTextualDiff,
+          this.gitHistoryPresentationRuntime.detailState.comparisonPatch.patch || copy.noTextualDiff,
           document.path,
           this.diffBlameSources(document),
         );
@@ -6064,20 +6049,20 @@ export class AsterlynApp {
       this.renderImageDiff(document, () => void this.loadSelectedCommitDiff());
       return;
     }
-    if (this.historyDetailState.commitPatchLoading) {
+    if (this.gitHistoryPresentationRuntime.detailState.commitPatchLoading) {
       this.showEditorHtml(
         editorDocumentContentKey(document, "loading"),
         renderEditorLoadingBlock(copy.loadingCommitPatch),
       );
-    } else if (this.historyDetailState.commitPatchError) {
+    } else if (this.gitHistoryPresentationRuntime.detailState.commitPatchError) {
       this.showEditorHtml(
         editorDocumentContentKey(
           document,
-          `error:${this.historyDetailState.commitPatchError}`,
+          `error:${this.gitHistoryPresentationRuntime.detailState.commitPatchError}`,
         ),
         renderEditorRetryState(
           copy.patchLoadFailed,
-          this.historyDetailState.commitPatchError,
+          this.gitHistoryPresentationRuntime.detailState.commitPatchError,
           "retry-commit-patch",
           "changes",
           copy,
@@ -6086,13 +6071,13 @@ export class AsterlynApp {
       this.query("#retry-commit-patch").addEventListener("click", () => {
         void this.loadSelectedCommitDiff();
       });
-    } else if (this.historyDetailState.commitPatch) {
+    } else if (this.gitHistoryPresentationRuntime.detailState.commitPatch) {
       this.mountEditorDiff(
         editorDocumentContentKey(
           document,
-          `patch:${this.historyDetailState.commitPatchVersion}`,
+          `patch:${this.gitHistoryPresentationRuntime.detailState.commitPatchVersion}`,
         ),
-        this.historyDetailState.commitPatch.patch || copy.noTextualDiff,
+        this.gitHistoryPresentationRuntime.detailState.commitPatch.patch || copy.noTextualDiff,
         document.path,
         this.diffBlameSources(document),
       );
@@ -6829,8 +6814,8 @@ export class AsterlynApp {
       document.kind === "working-diff"
         ? this.changesState.workingPatch !== null
         : document.kind === "commit-diff"
-          ? this.historyDetailState.commitPatch !== null
-          : this.historyDetailState.comparisonPatch !== null
+          ? this.gitHistoryPresentationRuntime.detailState.commitPatch !== null
+          : this.gitHistoryPresentationRuntime.detailState.comparisonPatch !== null
     );
     return renderEditorDiffControls({
       imageDiff,
@@ -6910,7 +6895,7 @@ export class AsterlynApp {
       return;
     }
     if (document.kind === "commit-diff") {
-      if (this.historyDetailState.gitDetail === "folder") this.selectCommitFolderFile(path, false);
+      if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder") this.selectCommitFolderFile(path, false);
       else this.selectCommitFile(path, false);
       return;
     }
@@ -6935,9 +6920,9 @@ export class AsterlynApp {
   private commitDiffFileRange(
     document: Extract<EditorDocument, { kind: "commit-diff" }>,
   ): readonly CommitFileChange[] {
-    const folder = this.commitFolderDiffController.state.target;
+    const folder = this.gitHistoryPresentationRuntime.folderDiff.state.target;
     if (
-      this.historyDetailState.gitDetail === "folder" &&
+      this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder" &&
       folder?.repositoryId === document.repositoryId &&
       folder.oid === document.oid
     ) return folder.descendants;
@@ -7076,7 +7061,7 @@ export class AsterlynApp {
     if (
       snapshot &&
       this.shellState.layout.bottomTool === "branches" &&
-      this.historyDetailState.gitDetail === "commit"
+      this.gitHistoryPresentationRuntime.detailState.gitDetail === "commit"
     ) {
       this.historyReadRuntime.details.ensureSelectedDetails(snapshot.root);
     }
@@ -7102,7 +7087,7 @@ export class AsterlynApp {
     const oid = details.oid;
     const key = commitKey(details);
     const repositoryId = details.repositoryId;
-    const generation = this.historyDetailPresentation.beginCommitPatch();
+    const generation = this.gitHistoryPresentationRuntime.detail.beginCommitPatch();
     const imageDiff = isImagePreviewPath(file.path);
     const imageKey = editorDocumentKey(document);
     if (imageDiff) {
@@ -7129,7 +7114,7 @@ export class AsterlynApp {
         );
         const activeDocument = this.activeDocument();
         if (
-          !this.historyDetailPresentation.commitPatchIsCurrent(generation) ||
+          !this.gitHistoryPresentationRuntime.detail.commitPatchIsCurrent(generation) ||
           this.windowSession.repository.state.snapshot?.root !== snapshot.root ||
           this.historyState.selectedCommit !== key ||
           this.historyState.selectedFile !== file.path ||
@@ -7147,7 +7132,7 @@ export class AsterlynApp {
           image: null,
           diff,
         };
-        this.historyDetailPresentation.completeCommitPatch(generation, null);
+        this.gitHistoryPresentationRuntime.detail.completeCommitPatch(generation, null);
         this.renderEditor();
         if (restoreFocus) this.focusCommitFile(file.path);
         return;
@@ -7162,7 +7147,7 @@ export class AsterlynApp {
       );
       const activeDocument = this.activeDocument();
       if (
-        !this.historyDetailPresentation.commitPatchIsCurrent(generation) ||
+        !this.gitHistoryPresentationRuntime.detail.commitPatchIsCurrent(generation) ||
         this.windowSession.repository.state.snapshot?.root !== snapshot.root ||
         this.historyState.selectedCommit !== key ||
         this.historyState.selectedFile !== file.path ||
@@ -7176,14 +7161,14 @@ export class AsterlynApp {
       ) {
         return;
       }
-      this.historyDetailPresentation.completeCommitPatch(generation, diff);
+      this.gitHistoryPresentationRuntime.detail.completeCommitPatch(generation, diff);
       this.renderEditor();
       if (restoreFocus) this.focusCommitFile(file.path);
       if (diff.truncated) this.setStatus(this.localization.catalog.editor.patchTruncated, "warning");
     } catch (error) {
       const activeDocument = this.activeDocument();
       if (
-        !this.historyDetailPresentation.commitPatchIsCurrent(generation) ||
+        !this.gitHistoryPresentationRuntime.detail.commitPatchIsCurrent(generation) ||
         this.windowSession.repository.state.snapshot?.root !== snapshot.root ||
         this.historyState.selectedCommit !== key ||
         this.historyState.selectedFile !== file.path ||
@@ -7195,7 +7180,7 @@ export class AsterlynApp {
         return;
       }
       const message = localizedOperationError(error, this.localization.catalog.errors);
-      this.historyDetailPresentation.failCommitPatch(generation, message);
+      this.gitHistoryPresentationRuntime.detail.failCommitPatch(generation, message);
       if (imageDiff) {
         this.imageSurface = {
           key: imageKey,
@@ -7242,14 +7227,14 @@ export class AsterlynApp {
           const path = details.dataset.comparisonFileDirectory;
           if (!path) return;
           const renderedExpanded = details.dataset.comparisonFileRenderedExpanded === "true";
-          this.historyDetailPresentation.setDirectoryExpanded(path, details.open);
+          this.gitHistoryPresentationRuntime.detail.setDirectoryExpanded(path, details.open);
           if (details.open !== renderedExpanded) this.renderGitDetailPane(snapshot);
         });
       });
     this.root.querySelector<HTMLButtonElement>("#comparison-file-view-toggle")?.addEventListener(
       "click",
       () => {
-        this.historyDetailPresentation.toggleFileView();
+        this.gitHistoryPresentationRuntime.detail.toggleFileView();
         this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#comparison-file-view-toggle")?.focus();
       },
@@ -7257,7 +7242,7 @@ export class AsterlynApp {
     this.root.querySelector<HTMLButtonElement>("#comparison-file-expand-all")?.addEventListener(
       "click",
       () => {
-        this.historyDetailPresentation.expandDirectories();
+        this.gitHistoryPresentationRuntime.detail.expandDirectories();
         this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#comparison-file-expand-all")?.focus();
       },
@@ -7267,7 +7252,7 @@ export class AsterlynApp {
       () => {
         const details = this.historyReadRuntime.comparison.state.details;
         if (!details) return;
-        this.historyDetailPresentation.collapseDirectories([
+        this.gitHistoryPresentationRuntime.detail.collapseDirectories([
           ".",
           ...commitFileDirectoryPaths(buildCommitFileTree(details.files)),
         ]);
@@ -7279,7 +7264,7 @@ export class AsterlynApp {
       "click",
       () => {
         this.comparisonDetailFocus = "swap";
-        this.historyDetailPresentation.expandDirectories();
+        this.gitHistoryPresentationRuntime.detail.expandDirectories();
         this.historyReadRuntime.comparison.swap();
       },
     );
@@ -7344,27 +7329,27 @@ export class AsterlynApp {
           const path = details.dataset.commitFolderFileDirectory;
           if (!path) return;
           const renderedExpanded = details.dataset.commitFolderFileRenderedExpanded === "true";
-          this.historyDetailPresentation.setDirectoryExpanded(path, details.open);
+          this.gitHistoryPresentationRuntime.detail.setDirectoryExpanded(path, details.open);
           if (details.open !== renderedExpanded) this.renderGitDetailPane(snapshot);
         });
       });
     this.root.querySelector<HTMLButtonElement>("#commit-folder-file-view-toggle")
       ?.addEventListener("click", () => {
-        this.historyDetailPresentation.toggleFileView();
+        this.gitHistoryPresentationRuntime.detail.toggleFileView();
         this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#commit-folder-file-view-toggle")?.focus();
       });
     this.root.querySelector<HTMLButtonElement>("#commit-folder-expand-all")
       ?.addEventListener("click", () => {
-        this.historyDetailPresentation.expandDirectories();
+        this.gitHistoryPresentationRuntime.detail.expandDirectories();
         this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#commit-folder-expand-all")?.focus();
       });
     this.root.querySelector<HTMLButtonElement>("#commit-folder-collapse-all")
       ?.addEventListener("click", () => {
-        const target = this.commitFolderDiffController.state.target;
+        const target = this.gitHistoryPresentationRuntime.folderDiff.state.target;
         if (!target) return;
-        this.historyDetailPresentation.collapseDirectories([
+        this.gitHistoryPresentationRuntime.detail.collapseDirectories([
           target.path,
           ...commitFileDirectoryPaths(buildCommitFileTree([...target.descendants])),
         ]);
@@ -7376,7 +7361,7 @@ export class AsterlynApp {
 
   private selectCommitFolderFile(path: string, restoreFocus: boolean): void {
     const snapshot = this.windowSession.repository.state.snapshot;
-    const target = this.commitFolderDiffController.state.target;
+    const target = this.gitHistoryPresentationRuntime.folderDiff.state.target;
     const details = this.historyState.details;
     if (
       !snapshot ||
@@ -7386,7 +7371,7 @@ export class AsterlynApp {
       details.oid !== target.oid ||
       !target.descendants.some((file) => file.path === path)
     ) return;
-    const file = this.commitFolderDiffController.selectFile(path);
+    const file = this.gitHistoryPresentationRuntime.folderDiff.selectFile(path);
     if (!file || !this.historyReadRuntime.details.selectFile(path)) return;
     this.activateDiffPreview({
       kind: "commit-diff",
@@ -7437,7 +7422,7 @@ export class AsterlynApp {
     const details = this.historyReadRuntime.comparison.state.details;
     const file = this.historyReadRuntime.comparison.selectFile(path);
     if (!snapshot || !details || !file) return;
-    this.historyDetailPresentation.show("comparison");
+    this.gitHistoryPresentationRuntime.detail.show("comparison");
     this.activateDiffPreview({
       kind: "commit-comparison-diff",
       repositoryRoot: snapshot.root,
@@ -7468,7 +7453,7 @@ export class AsterlynApp {
       document.afterOid !== details.afterOid ||
       document.path !== file.path
     ) return;
-    const generation = this.historyDetailPresentation.beginComparisonPatch();
+    const generation = this.gitHistoryPresentationRuntime.detail.beginComparisonPatch();
     const imageDiff = isImagePreviewPath(file.path);
     const imageKey = editorDocumentKey(document);
     if (imageDiff) {
@@ -7495,7 +7480,7 @@ export class AsterlynApp {
         );
         const active = this.activeDocument();
         if (
-          !this.historyDetailPresentation.comparisonPatchIsCurrent(generation) ||
+          !this.gitHistoryPresentationRuntime.detail.comparisonPatchIsCurrent(generation) ||
           this.historyReadRuntime.comparison.state.details !== details ||
           this.historyReadRuntime.comparison.state.selectedFile !== file.path ||
           active.kind !== "commit-comparison-diff" ||
@@ -7510,7 +7495,7 @@ export class AsterlynApp {
           image: null,
           diff,
         };
-        this.historyDetailPresentation.completeComparisonPatch(generation, null);
+        this.gitHistoryPresentationRuntime.detail.completeComparisonPatch(generation, null);
         this.renderEditor();
         if (restoreFocus) this.focusComparisonFile(file.path);
         return;
@@ -7526,7 +7511,7 @@ export class AsterlynApp {
       );
       const active = this.activeDocument();
       if (
-        !this.historyDetailPresentation.comparisonPatchIsCurrent(generation) ||
+        !this.gitHistoryPresentationRuntime.detail.comparisonPatchIsCurrent(generation) ||
         this.historyReadRuntime.comparison.state.details !== details ||
         this.historyReadRuntime.comparison.state.selectedFile !== file.path ||
         active.kind !== "commit-comparison-diff" ||
@@ -7539,14 +7524,14 @@ export class AsterlynApp {
         diff.afterOid !== details.afterOid ||
         diff.path !== file.path
       ) return;
-      this.historyDetailPresentation.completeComparisonPatch(generation, diff);
+      this.gitHistoryPresentationRuntime.detail.completeComparisonPatch(generation, diff);
       this.renderEditor();
       if (restoreFocus) this.focusComparisonFile(file.path);
       if (diff.truncated) this.setStatus(this.localization.catalog.editor.patchTruncated, "warning");
     } catch (error) {
       const active = this.activeDocument();
       if (
-        !this.historyDetailPresentation.comparisonPatchIsCurrent(generation) ||
+        !this.gitHistoryPresentationRuntime.detail.comparisonPatchIsCurrent(generation) ||
         this.historyReadRuntime.comparison.state.details !== details ||
         this.historyReadRuntime.comparison.state.selectedFile !== file.path ||
         active.kind !== "commit-comparison-diff" ||
@@ -7556,7 +7541,7 @@ export class AsterlynApp {
         active.path !== file.path
       ) return;
       const message = localizedOperationError(error, this.localization.catalog.errors);
-      this.historyDetailPresentation.failComparisonPatch(generation, message);
+      this.gitHistoryPresentationRuntime.detail.failComparisonPatch(generation, message);
       if (imageDiff) {
         this.imageSurface = {
           key: imageKey,
@@ -7588,7 +7573,7 @@ export class AsterlynApp {
   }
 
   private clearComparisonDiffInspection(): void {
-    this.historyDetailPresentation.clearComparisonPatch();
+    this.gitHistoryPresentationRuntime.detail.clearComparisonPatch();
     if (this.imageSurface?.key.startsWith("comparison\0")) this.imageSurface = null;
     if (this.activeDocument().kind === "commit-comparison-diff") {
       this.filesEditorRuntime.editor.closePreview();
@@ -7630,7 +7615,7 @@ export class AsterlynApp {
       return;
     }
     if (!this.historyReadRuntime.details.selectFile(path)) return;
-    this.historyDetailPresentation.show("commit");
+    this.gitHistoryPresentationRuntime.detail.show("commit");
     this.activateDiffPreview({
       kind: "commit-diff",
       repositoryRoot: snapshot.root,
@@ -7671,7 +7656,7 @@ export class AsterlynApp {
   }
 
   private clearCommitDiffInspection(): void {
-    this.historyDetailPresentation.clearCommitPatch();
+    this.gitHistoryPresentationRuntime.detail.clearCommitPatch();
     if (this.imageSurface?.key.startsWith("commit\0")) this.imageSurface = null;
   }
 
@@ -7690,25 +7675,25 @@ export class AsterlynApp {
   }
 
   private resetHistoryFilters(): void {
-    this.historyFilters.reset();
+    this.gitHistoryPresentationRuntime.filters.reset();
   }
 
   private loadHistoryPreferences(snapshot: RepositorySnapshot): void {
-    this.historyFilters.loadPreferences(snapshot);
+    this.gitHistoryPresentationRuntime.filters.loadPreferences(snapshot);
   }
 
   private recordRecentHistoryRef(reference: HistoryRef): void {
     const root = this.windowSession.repository.state.snapshot?.root;
-    if (root) this.historyFilters.recordRecentRef(root, reference);
+    if (root) this.gitHistoryPresentationRuntime.filters.recordRecentRef(root, reference);
   }
 
   private toggleFavoriteHistoryRef(branch: BranchSummary): void {
     const root = this.windowSession.repository.state.snapshot?.root;
-    if (root) this.historyFilters.toggleFavorite(root, branch);
+    if (root) this.gitHistoryPresentationRuntime.filters.toggleFavorite(root, branch);
   }
 
   private recordRecentHistoryPath(path: HistoryPath): void {
-    this.historyFilters.recordRecentPath(path);
+    this.gitHistoryPresentationRuntime.filters.recordRecentPath(path);
   }
 
   private branchForKey(key: string): BranchSummary | null {
@@ -7725,7 +7710,7 @@ export class AsterlynApp {
   }
 
   private activeHistoryQuery(): HistoryQuery {
-    return this.historyFilters.query();
+    return this.gitHistoryPresentationRuntime.filters.query();
   }
 
   private applyHistoryQuery(preferTip = false): void {
@@ -7964,7 +7949,7 @@ export class AsterlynApp {
   }
 
   private renderGitDetail(snapshot: RepositorySnapshot): string {
-    if (this.historyDetailState.gitDetail === "comparison") {
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "comparison") {
       const comparison = this.historyReadRuntime.comparison.state;
       const request = comparison.request;
       if (!request) return inspectorPlaceholder(this.localization);
@@ -7977,32 +7962,32 @@ export class AsterlynApp {
         loading: comparison.status === "loading",
         error: comparison.error,
         selectedFile: comparison.selectedFile,
-        fileView: this.historyDetailState.commitFileView,
-        collapsedDirectories: this.historyDetailState.collapsedCommitFileDirectories,
+        fileView: this.gitHistoryPresentationRuntime.detailState.commitFileView,
+        collapsedDirectories: this.gitHistoryPresentationRuntime.detailState.collapsedCommitFileDirectories,
         localization: this.localization,
       });
     }
-    if (this.historyDetailState.gitDetail === "folder") {
-      const folder = this.commitFolderDiffController.state;
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder") {
+      const folder = this.gitHistoryPresentationRuntime.folderDiff.state;
       return folder.target
         ? renderCommitFolderDetail({
             target: folder.target,
             selectedFile: folder.selectedFile,
-            fileView: this.historyDetailState.commitFileView,
-            collapsedDirectories: this.historyDetailState.collapsedCommitFileDirectories,
+            fileView: this.gitHistoryPresentationRuntime.detailState.commitFileView,
+            collapsedDirectories: this.gitHistoryPresentationRuntime.detailState.collapsedCommitFileDirectories,
             localization: this.localization,
           })
         : inspectorPlaceholder(this.localization);
     }
-    if (this.historyDetailState.gitDetail === "branch") {
-      const branch = this.branchesController.selected(snapshot);
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "branch") {
+      const branch = this.gitHistoryPresentationRuntime.branches.selected(snapshot);
       return branch
         ? renderBranchDetail({
             snapshot,
             branch,
             safety: this.branchSafety(snapshot),
             loading: this.state.loading,
-            newBranchName: this.branchesController.state.newBranchName,
+            newBranchName: this.gitHistoryPresentationRuntime.branches.state.newBranchName,
             localization: this.localization,
           })
         : inspectorPlaceholder(this.localization);
@@ -8024,24 +8009,24 @@ export class AsterlynApp {
       loading: this.historyState.detailsLoading,
       error: this.historyState.detailsError,
       selectedFile: this.historyState.selectedFile,
-      fileView: this.historyDetailState.commitFileView,
-      collapsedDirectories: this.historyDetailState.collapsedCommitFileDirectories,
+      fileView: this.gitHistoryPresentationRuntime.detailState.commitFileView,
+      collapsedDirectories: this.gitHistoryPresentationRuntime.detailState.collapsedCommitFileDirectories,
       localization: this.localization,
     });
   }
 
   private bindGitDetailEvents(snapshot: RepositorySnapshot): void {
     this.bindGitOperationStartActions();
-    if (this.historyDetailState.gitDetail === "comparison") {
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "comparison") {
       this.bindComparisonDetailEvents(snapshot);
       return;
     }
-    if (this.historyDetailState.gitDetail === "folder") {
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder") {
       this.bindCommitFolderDetailEvents(snapshot);
       return;
     }
-    if (this.historyDetailState.gitDetail === "branch") {
-      const branch = this.branchesController.selected(snapshot);
+    if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "branch") {
+      const branch = this.gitHistoryPresentationRuntime.branches.selected(snapshot);
       if (branch) this.bindBranchInspector(branch, snapshot);
       return;
     }
@@ -8053,21 +8038,21 @@ export class AsterlynApp {
           const path = details.dataset.commitFileDirectory;
           if (!path) return;
           const renderedExpanded = details.dataset.commitFileRenderedExpanded === "true";
-          this.historyDetailPresentation.setDirectoryExpanded(path, details.open);
+          this.gitHistoryPresentationRuntime.detail.setDirectoryExpanded(path, details.open);
           if (details.open !== renderedExpanded) this.renderGitDetailPane(snapshot);
         });
       });
     this.root
       .querySelector<HTMLButtonElement>("#commit-file-view-toggle")
       ?.addEventListener("click", () => {
-        this.historyDetailPresentation.toggleFileView();
+        this.gitHistoryPresentationRuntime.detail.toggleFileView();
         this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#commit-file-view-toggle")?.focus();
       });
     this.root
       .querySelector<HTMLButtonElement>("#commit-file-expand-all")
       ?.addEventListener("click", () => {
-        this.historyDetailPresentation.expandDirectories();
+        this.gitHistoryPresentationRuntime.detail.expandDirectories();
         this.renderGitDetailPane(snapshot);
         this.root.querySelector<HTMLButtonElement>("#commit-file-expand-all")?.focus();
       });
@@ -8076,7 +8061,7 @@ export class AsterlynApp {
       ?.addEventListener("click", () => {
         const details = this.historyState.details;
         if (!details) return;
-        this.historyDetailPresentation.collapseDirectories([
+        this.gitHistoryPresentationRuntime.detail.collapseDirectories([
           ".",
           ...commitFileDirectoryPaths(buildCommitFileTree(details.files)),
         ]);
@@ -8355,11 +8340,11 @@ export class AsterlynApp {
   }
 
   private async requestBranchCheckout(branch: BranchSummary): Promise<void> {
-    await this.branchesController.checkout(branchKey(branch));
+    await this.gitHistoryPresentationRuntime.branches.checkout(branchKey(branch));
   }
 
   private async requestBranchCreate(): Promise<void> {
-    if (await this.branchesController.create() === "accepted") this.renderBottomTool();
+    if (await this.gitHistoryPresentationRuntime.branches.create() === "accepted") this.renderBottomTool();
   }
 
   private async executeReviewedBranchMutation(plan: BranchMutationPlan): Promise<boolean> {
@@ -8682,7 +8667,7 @@ export class AsterlynApp {
     const input = this.root.querySelector<HTMLInputElement>("#new-branch-name");
     const button = this.root.querySelector<HTMLButtonElement>("#create-branch-button");
     input?.addEventListener("input", () => {
-      this.branchesController.setNewBranchName(input.value);
+      this.gitHistoryPresentationRuntime.branches.setNewBranchName(input.value);
       if (button) {
         button.disabled =
           !this.branchSafety(snapshot).ready ||

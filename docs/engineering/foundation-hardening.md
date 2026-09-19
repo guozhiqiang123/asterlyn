@@ -247,6 +247,11 @@ controller's current state instead of retaining the initial state object, which 
 mode, query, and selection from becoming stale after immutable state transitions. `src/app.ts` is
 8,796 lines with a matching ceiling.
 
+Git History's synchronous presentation state now has one feature runtime as well. Filters, detail
+presentation, logical range selection, bounded folder Diff state, and the branch panel are
+constructed and reset together; the composition root no longer instantiates those controllers or
+retains aliases to their state objects. `src/app.ts` is 8,781 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
