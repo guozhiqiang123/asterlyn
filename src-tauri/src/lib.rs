@@ -15,11 +15,10 @@ use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
     BinaryFileSnapshot, ReplacementApplyResult, ReplacementFilePreview, ReplacementLimits,
     ReplacementRecoverySummary, SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken,
-    SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason,
-    TextFileSnapshot, Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity,
-    WorkspaceEntryInventory, WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationLimits,
-    WorkspaceMutationOperation, WorkspaceMutationOutcome, WorkspaceMutationPlan,
-    WorkspaceMutationRecoverySummary,
+    SearchCandidate, SearchCoverageReason, SearchOptions, TextFileSnapshot, Workspace,
+    WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory, WorkspaceError,
+    WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
+    WorkspaceMutationOutcome, WorkspaceMutationPlan, WorkspaceMutationRecoverySummary,
 };
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -41,35 +40,21 @@ use application::{
     ActiveWorkspaces, AuthorizedReplacementFile, CommitFileRestoreRegistry,
     GitOperationCoordinator, PROJECT_FILE_LIMIT, PendingRepositoryWindowReservation,
     PendingRepositoryWindows, ScanRegistry, StoredReplacementPlan, StoredWorkspaceMutationPlan,
-    WorkspaceMutationCoordinator, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
-    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry, exact_git_repository,
+    WORKSPACE_SEARCH_LIMITS, WorkspaceMutationCoordinator, WorkspaceReplacementRegistry,
+    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
+    WorkspaceWatchStatus, WorkspaceWriteRegistry, exact_git_repository,
     load_authorized_project_catalog, load_project_catalog, reauthorize_session_file,
-    reauthorize_session_file_for_read,
+    reauthorize_session_file_for_read, search_authorized_workspace,
 };
 #[cfg(test)]
 use application::{GitMutationRegistry, RemoteOperationRegistry, authorize_project_file};
 use commands::*;
 
 const COMMIT_LIMIT: usize = 150;
-const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 5_000;
 const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
 const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
 const PROJECT_WINDOW_MIN_WIDTH: f64 = 920.0;
 const PROJECT_WINDOW_MIN_HEIGHT: f64 = 600.0;
-
-pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
-    max_candidates: WORKSPACE_SEARCH_CANDIDATE_LIMIT,
-    max_total_bytes: 64 * 1024 * 1024,
-    max_matches: 500,
-    max_preview_utf16: 320,
-    max_reported_skips: 100,
-    max_query_bytes: 4_096,
-    max_path_patterns_per_kind: 32,
-    max_path_pattern_bytes: 256,
-    max_context_lines: 3,
-    max_regex_size_bytes: 2 * 1024 * 1024,
-    max_regex_dfa_size_bytes: 2 * 1024 * 1024,
-};
 
 pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
     max_files: 200,
@@ -245,47 +230,6 @@ struct RepositorySliceProject {
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct WorkspaceTextSearchReport {
-    request_id: String,
-    matches: Vec<WorkspaceTextSearchMatch>,
-    catalog_candidates: usize,
-    eligible_candidates: usize,
-    files_searched: usize,
-    bytes_read: usize,
-    skipped_count: usize,
-    skipped_files: Vec<WorkspaceTextSearchSkippedFile>,
-    coverage_reasons: Vec<SearchCoverageReason>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceTextSearchMatch {
-    repository_id: String,
-    path: String,
-    workspace_path: String,
-    revision: String,
-    from_utf16: usize,
-    to_utf16: usize,
-    line: usize,
-    column_utf16: usize,
-    preview: String,
-    preview_from_utf16: usize,
-    preview_to_utf16: usize,
-    leading_clipped: bool,
-    trailing_clipped: bool,
-}
-
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceTextSearchSkippedFile {
-    repository_id: String,
-    path: String,
-    workspace_path: String,
-    reason: SearchSkipReason,
-}
-
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 struct WorkspaceReplacementPreview {
     plan_id: String,
     files: Vec<WorkspaceReplacementFilePreview>,
@@ -335,98 +279,6 @@ fn build_project_window(
     let builder = builder.decorations(false);
 
     builder.build()
-}
-
-fn search_authorized_workspace(
-    root: &Path,
-    request_id: &str,
-    query: &str,
-    options: &SearchOptions,
-    cancellation: &SearchCancellationToken,
-) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
-    let catalog = load_authorized_project_catalog(root)?;
-    if cancellation.is_cancelled() {
-        return Err(WorkspaceError::Cancelled {
-            message: "workspace search was cancelled".to_string(),
-        });
-    }
-    let candidates: Vec<_> = catalog
-        .files
-        .iter()
-        .map(|file| SearchCandidate {
-            workspace_path: file.workspace_path.clone(),
-        })
-        .collect();
-    let report = Workspace::open(root)?.search_text(
-        request_id,
-        &candidates,
-        catalog.truncated,
-        query,
-        options,
-        cancellation,
-        WORKSPACE_SEARCH_LIMITS,
-    )?;
-
-    let matches = report
-        .matches
-        .into_iter()
-        .map(|found| {
-            let file =
-                catalog
-                    .files
-                    .get(found.candidate_index)
-                    .ok_or_else(|| WorkspaceError::Io {
-                        operation: "map workspace search result".to_string(),
-                        message: "search returned an unknown catalog candidate".to_string(),
-                    })?;
-            Ok(WorkspaceTextSearchMatch {
-                repository_id: file.repository_id.clone(),
-                path: file.path.clone(),
-                workspace_path: found.workspace_path,
-                revision: found.revision,
-                from_utf16: found.from_utf16,
-                to_utf16: found.to_utf16,
-                line: found.line,
-                column_utf16: found.column_utf16,
-                preview: found.preview,
-                preview_from_utf16: found.preview_from_utf16,
-                preview_to_utf16: found.preview_to_utf16,
-                leading_clipped: found.leading_clipped,
-                trailing_clipped: found.trailing_clipped,
-            })
-        })
-        .collect::<Result<Vec<_>, WorkspaceError>>()?;
-    let skipped_files =
-        report
-            .skipped_files
-            .into_iter()
-            .map(|skipped| {
-                let file = catalog.files.get(skipped.candidate_index).ok_or_else(|| {
-                    WorkspaceError::Io {
-                        operation: "map skipped workspace search file".to_string(),
-                        message: "search returned an unknown skipped candidate".to_string(),
-                    }
-                })?;
-                Ok(WorkspaceTextSearchSkippedFile {
-                    repository_id: file.repository_id.clone(),
-                    path: file.path.clone(),
-                    workspace_path: skipped.workspace_path,
-                    reason: skipped.reason,
-                })
-            })
-            .collect::<Result<Vec<_>, WorkspaceError>>()?;
-
-    Ok(WorkspaceTextSearchReport {
-        request_id: report.request_id,
-        matches,
-        catalog_candidates: report.catalog_candidates,
-        eligible_candidates: report.eligible_candidates,
-        files_searched: report.files_searched,
-        bytes_read: report.bytes_read,
-        skipped_count: report.skipped_count,
-        skipped_files,
-        coverage_reasons: report.coverage_reasons,
-    })
 }
 
 fn prepare_authorized_replacement(

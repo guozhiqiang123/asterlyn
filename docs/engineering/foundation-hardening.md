@@ -322,6 +322,11 @@ Tauri-independent application boundary; existing command and session callers ret
 authorization behavior. The desktop library suite passes with 52 tests and the two real watcher
 backend tests explicitly ignored by their existing native-acceptance contract.
 
+Workspace Search preparation and response mapping now live in `application/workspace_search.rs`
+with the bounded search policy and transport-neutral response types. The command retains only
+active-workspace resolution, cancellation registration, blocking dispatch, and exact completion;
+the existing fresh-authorization and query-mapping characterization tests remain green.
+
 Exit gate: application behavior is testable without constructing Tauri; command modules perform
 transport validation and dispatch only; protocol generation and all native tests pass.
 

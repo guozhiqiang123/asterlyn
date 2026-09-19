@@ -5,6 +5,7 @@ mod operation_supervisor;
 mod search_session;
 mod workspace_catalog;
 mod workspace_mutation;
+mod workspace_search;
 mod workspace_session;
 mod workspace_watch;
 
@@ -22,6 +23,9 @@ pub(crate) use workspace_catalog::{
     load_project_catalog, reauthorize_session_file, reauthorize_session_file_for_read,
 };
 pub(crate) use workspace_mutation::{StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator};
+pub(crate) use workspace_search::{
+    WORKSPACE_SEARCH_LIMITS, WorkspaceTextSearchReport, search_authorized_workspace,
+};
 pub(crate) use workspace_session::{
     ActiveWorkspaces, GitMutationRegistry, PendingRepositoryWindowReservation,
     PendingRepositoryWindows, WorkspaceWatchRoots, WorkspaceWriteRegistry,
