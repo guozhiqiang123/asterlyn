@@ -18,16 +18,19 @@ use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
     BranchMutationSourceKind, ChangeKind, CommitComparisonDetails, CommitComparisonDiffResult,
-    CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary, DiffResult, FileChange,
-    GitBlameResult, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath,
-    HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
-    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
-    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    CommitComparisonRelation, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
+    DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind, HistoryOrder,
+    HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile,
+    ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode, PushTagSummary,
+    RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
+    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
+    UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+const COMMIT_COMPARISON_FILE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_COMMIT_COMPARISON_FILES: usize = 20_000;
 const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 // Git has no "all context" switch. A deliberately unreachable practical line count requests the
 // complete file while the existing byte limit remains the authoritative output bound.
@@ -1440,7 +1443,14 @@ impl GitRepository {
         validate_distinct_commit_ids(before_oid, after_oid)?;
         self.first_parent(before_oid)?;
         self.first_parent(after_oid)?;
-        let output = self.run_read_owned(
+        let relation = if self.is_ancestor(before_oid, after_oid)? {
+            CommitComparisonRelation::BeforeIsAncestor
+        } else if self.is_ancestor(after_oid, before_oid)? {
+            CommitComparisonRelation::AfterIsAncestor
+        } else {
+            CommitComparisonRelation::Divergent
+        };
+        let (output, truncated) = self.run_read_owned_bounded(
             "read commit comparison file list",
             vec![
                 OsString::from("diff"),
@@ -1452,12 +1462,25 @@ impl GitRepository {
                 OsString::from(before_oid),
                 OsString::from(after_oid),
             ],
+            COMMIT_COMPARISON_FILE_LIMIT_BYTES + 1,
         )?;
+        if truncated || output.stdout.len() > COMMIT_COMPARISON_FILE_LIMIT_BYTES {
+            return Err(commit_comparison_limit_error(
+                "the changed-file list exceeded the 16 MiB read limit",
+            ));
+        }
+        let files = parse_commit_files(&output.stdout)?;
+        if files.len() > MAX_COMMIT_COMPARISON_FILES {
+            return Err(commit_comparison_limit_error(
+                "the comparison contains more than 20,000 changed files",
+            ));
+        }
         Ok(CommitComparisonDetails {
             repository_id: ".".to_string(),
             before_oid: before_oid.to_string(),
             after_oid: after_oid.to_string(),
-            files: parse_commit_files(&output.stdout)?,
+            relation,
+            files,
         })
     }
 
@@ -5143,6 +5166,13 @@ fn validate_distinct_commit_ids(before_oid: &str, after_oid: &str) -> Result<(),
     Ok(())
 }
 
+fn commit_comparison_limit_error(message: &str) -> GitError {
+    GitError::InvalidInput {
+        field: "commit comparison".to_string(),
+        message: message.to_string(),
+    }
+}
+
 fn retain_complete_blame_records(output: &mut Vec<u8>) {
     const FILENAME_PREFIX: &[u8] = b"\nfilename ";
     let Some(prefix_index) = output
@@ -7133,6 +7163,10 @@ mod tests {
             .expect("ancestor comparison");
         assert_eq!(ancestor.before_oid, base_oid);
         assert_eq!(ancestor.after_oid, main_oid);
+        assert_eq!(
+            ancestor.relation,
+            CommitComparisonRelation::BeforeIsAncestor
+        );
         let renamed = ancestor
             .files
             .iter()
@@ -7167,6 +7201,7 @@ mod tests {
         let divergent = repository
             .commit_comparison_details(&main_oid, &side_oid)
             .expect("divergent comparison");
+        assert_eq!(divergent.relation, CommitComparisonRelation::Divergent);
         let shared = divergent
             .files
             .iter()

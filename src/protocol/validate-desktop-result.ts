@@ -409,8 +409,15 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       break;
     case "commitComparisonDetails": {
       const result = record(value, command);
-      strings(result, command, "repositoryId", "beforeOid", "afterOid");
+      strings(result, command, "repositoryId", "beforeOid", "afterOid", "relation");
       arrays(result, command, "files");
+      assert(
+        ["beforeIsAncestor", "afterIsAncestor", "divergent"].includes(
+          result.relation as string,
+        ),
+        command,
+        "relation must be a supported commit-comparison relation",
+      );
       break;
     }
     case "gitBlameResult": {

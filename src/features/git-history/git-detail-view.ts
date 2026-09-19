@@ -4,6 +4,7 @@ import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/loca
 import type {
   BranchSummary,
   ChangeKind,
+  CommitComparisonDetails,
   CommitDetails,
   CommitFileChange,
   CommitSummary,
@@ -20,6 +21,20 @@ export interface CommitDetailViewModel {
   readonly snapshot: RepositorySnapshot;
   readonly commit: CommitSummary;
   readonly details: CommitDetails | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly selectedFile: string | null;
+  readonly fileView: CommitFileView;
+  readonly collapsedDirectories: ReadonlySet<string>;
+  readonly localization?: Localization;
+}
+
+export interface CommitComparisonDetailViewModel {
+  readonly snapshot: RepositorySnapshot;
+  readonly repositoryId: string;
+  readonly beforeOid: string;
+  readonly afterOid: string;
+  readonly details: CommitComparisonDetails | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly selectedFile: string | null;
@@ -50,6 +65,29 @@ export function renderCommitDetail(model: CommitDetailViewModel): string {
   const fileRows = commitFileRows(model);
   const nextView = model.fileView === "tree" ? copy.flatList : copy.directoryTree;
   return `<div class="commit-detail-layout"><section class="git-detail-files" aria-label="${escapeAttribute(copy.changedFiles)}"><div class="commit-files-toolbar"><span class="commit-files-label">${icon("folder", 13)}<span>${escapeHtml(copy.files)}</span><b>${fileCount}</b></span><button class="compact-icon-button" id="commit-file-view-toggle" type="button" aria-label="${escapeAttribute(copy.showChangedFilesAs(nextView))}" aria-pressed="${model.fileView === "tree"}" title="${escapeAttribute(copy.showChangedFilesAs(nextView))}">${icon("eye", 14)}</button><button class="compact-icon-button" id="commit-file-expand-all" type="button" aria-label="${escapeAttribute(copy.expandChangedFolders)}" title="${escapeAttribute(copy.expandChangedFolders)}" ${model.fileView === "flat" || !model.details?.files.length ? "disabled" : ""}>${icon("expand", 14)}</button><button class="compact-icon-button" id="commit-file-collapse-all" type="button" aria-label="${escapeAttribute(copy.collapseChangedFolders)}" title="${escapeAttribute(copy.collapseChangedFolders)}" ${model.fileView === "flat" || !model.details?.files.length ? "disabled" : ""}>${icon("collapse", 14)}</button></div><div class="commit-file-list ${model.fileView}">${fileRows}</div></section><div class="workbench-splitter horizontal commit-summary-splitter" id="commit-summary-splitter" aria-label="${escapeAttribute(copy.resizeCommitDetails)}"></div>${commitInspector(model)}</div>`;
+}
+
+export function renderCommitComparisonDetail(model: CommitComparisonDetailViewModel): string {
+  const localization = model.localization ?? DEFAULT_LOCALIZATION;
+  const copy = localization.catalog.history;
+  const fileCount = model.loading
+    ? "…"
+    : model.error
+      ? "!"
+      : model.details
+        ? localization.number.format(model.details.files.length)
+        : "…";
+  const nextView = model.fileView === "tree" ? copy.flatList : copy.directoryTree;
+  const before = (model.details?.beforeOid ?? model.beforeOid).slice(0, 10);
+  const after = (model.details?.afterOid ?? model.afterOid).slice(0, 10);
+  const relation = !model.details
+    ? ""
+    : model.details.relation === "divergent"
+      ? copy.comparisonDivergent
+      : model.details.relation === "afterIsAncestor"
+        ? copy.comparisonReversed
+        : copy.comparisonRelated;
+  return `<div class="commit-detail-layout comparison-detail-layout"><section class="git-detail-files" aria-label="${escapeAttribute(copy.comparisonFileRange)}"><div class="commit-files-toolbar"><span class="commit-files-label">${icon("folder", 13)}<span>${escapeHtml(copy.comparisonFileRange)}</span><b>${fileCount}</b></span><button class="compact-icon-button" id="comparison-file-view-toggle" type="button" aria-label="${escapeAttribute(copy.showChangedFilesAs(nextView))}" aria-pressed="${model.fileView === "tree"}" title="${escapeAttribute(copy.showChangedFilesAs(nextView))}">${icon("eye", 14)}</button><button class="compact-icon-button" id="comparison-file-expand-all" type="button" aria-label="${escapeAttribute(copy.expandChangedFolders)}" title="${escapeAttribute(copy.expandChangedFolders)}" ${model.fileView === "flat" || !model.details?.files.length ? "disabled" : ""}>${icon("expand", 14)}</button><button class="compact-icon-button" id="comparison-file-collapse-all" type="button" aria-label="${escapeAttribute(copy.collapseChangedFolders)}" title="${escapeAttribute(copy.collapseChangedFolders)}" ${model.fileView === "flat" || !model.details?.files.length ? "disabled" : ""}>${icon("collapse", 14)}</button></div><div class="commit-file-list ${model.fileView}">${comparisonFileRows(model)}</div></section><div class="workbench-splitter horizontal commit-summary-splitter" id="commit-summary-splitter" aria-label="${escapeAttribute(copy.resizeCommitDetails)}"></div><section class="commit-information comparison-information" aria-label="${escapeAttribute(copy.comparisonAria(before, after))}"><span class="panel-eyebrow">${escapeHtml(copy.comparisonTitle)}</span><h2><code>${escapeHtml(before)}</code><span aria-hidden="true"> → </span><code>${escapeHtml(after)}</code></h2><p class="muted-copy">${escapeHtml(relation)}</p><dl class="metadata-list"><div><dt>${escapeHtml(copy.comparisonBefore)}</dt><dd><code title="${escapeAttribute(model.details?.beforeOid ?? model.beforeOid)}">${escapeHtml(before)}</code></dd></div><div><dt>${escapeHtml(copy.comparisonAfter)}</dt><dd><code title="${escapeAttribute(model.details?.afterOid ?? model.afterOid)}">${escapeHtml(after)}</code></dd></div></dl><button class="secondary-button" id="swap-comparison-sides" type="button" ${model.loading || !model.details ? "disabled" : ""}>${escapeHtml(copy.swapComparisonSides)}</button></section></div>`;
 }
 
 export function renderBranchDetail(model: BranchDetailViewModel): string {
@@ -85,6 +123,60 @@ function commitFileRows(model: CommitDetailViewModel): string {
   const rootExpanded = !model.collapsedDirectories.has(".");
   const rootName = model.snapshot.repositoryRoots.find((root) => root.id === model.commit.repositoryId)?.displayName ?? basename(model.snapshot.root);
   return `<div class="commit-file-tree" role="tree" aria-label="${escapeAttribute(copy.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-commit-file-directory="." data-commit-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(rootName)}</span><small>${escapeHtml(copy.fileCount(model.details.files.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(model.details.files).map((node) => commitFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
+}
+
+function comparisonFileRows(model: CommitComparisonDetailViewModel): string {
+  const localization = model.localization ?? DEFAULT_LOCALIZATION;
+  const copy = localization.catalog.history;
+  if (model.loading) return loadingBlock(copy.loadingChangedFiles);
+  if (model.error) {
+    return `<div class="empty-state"><span class="empty-icon">${icon("history", 24)}</span><strong>${escapeHtml(copy.couldNotLoadComparison)}</strong><p>${escapeHtml(localization.catalog.errors.translate(model.error))}</p><button class="secondary-button retry-button" id="retry-commit-comparison" type="button">${escapeHtml(localization.catalog.common.retry)}</button></div>`;
+  }
+  if (!model.details) return loadingBlock(copy.loadingChangedFiles);
+  if (model.details.files.length === 0) {
+    return `<div class="group-empty">${escapeHtml(copy.noComparisonChanges)}</div>`;
+  }
+  if (model.fileView === "flat") {
+    return [...model.details.files]
+      .sort((left, right) => left.path.localeCompare(right.path))
+      .map((file) => comparisonFileRow(file, file.path === model.selectedFile, null, localization))
+      .join("");
+  }
+  const rootExpanded = !model.collapsedDirectories.has(".");
+  const rootName = model.snapshot.repositoryRoots.find(
+    (root) => root.id === model.repositoryId,
+  )?.displayName ?? basename(model.snapshot.root);
+  return `<div class="commit-file-tree" role="tree" aria-label="${escapeAttribute(copy.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-comparison-file-directory="." data-comparison-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(rootName)}</span><small>${escapeHtml(copy.fileCount(model.details.files.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(model.details.files).map((node) => comparisonFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
+}
+
+function comparisonFileTreeNode(
+  node: CommitFileTreeNode,
+  depth: number,
+  model: CommitComparisonDetailViewModel,
+): string {
+  if (node.kind === "directory") {
+    const expanded = !model.collapsedDirectories.has(node.path);
+    return `<details class="commit-file-directory" data-comparison-file-directory="${escapeAttribute(node.path)}" data-comparison-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => comparisonFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
+  }
+  return comparisonFileRow(
+    node.file!,
+    node.file!.path === model.selectedFile,
+    depth,
+    model.localization ?? DEFAULT_LOCALIZATION,
+  );
+}
+
+function comparisonFileRow(
+  file: CommitFileChange,
+  selected: boolean,
+  depth: number | null,
+  localization: Localization,
+): string {
+  const previous = file.originalPath
+    ? `<span class="commit-file-origin">${escapeHtml(file.originalPath)} →</span>`
+    : "";
+  const tree = depth !== null;
+  return `<button class="commit-file-row file-status-${file.status} ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" ${tree ? `style="--tree-depth:${depth}"` : ""} data-comparison-file="${escapeAttribute(file.path)}" aria-pressed="${selected}" title="${escapeAttribute(file.path)}"><span class="change-status status-${file.status}" title="${escapeAttribute(localization.catalog.changes.changeLabels[file.status])}">${changeCode(file.status)}</span><span class="commit-file-glyph">${fileTypeIcon(file.path)}</span><span class="change-path">${previous}<span class="file-name">${escapeHtml(basename(file.path))}</span>${tree ? "" : `<span class="file-directory">${escapeHtml(dirname(file.path))}</span>`}</span></button>`;
 }
 
 function commitFileTreeNode(node: CommitFileTreeNode, depth: number, model: CommitDetailViewModel): string {

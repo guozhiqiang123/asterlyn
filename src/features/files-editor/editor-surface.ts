@@ -32,7 +32,10 @@ export type ImageSurfaceState =
   | { key: string; version: number; status: "ready"; error: null; image: ImagePreview | null; diff: ImageDiffPreview | null }
   | { key: string; version: number; status: "error"; error: string; image: null; diff: null };
 
-type DiffDocument = Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>;
+type DiffDocument = Extract<
+  EditorDocument,
+  { kind: "working-diff" | "commit-diff" | "commit-comparison-diff" }
+>;
 
 export class EditorSurface {
   private readonly diffEditor: LazyDiffEditor;

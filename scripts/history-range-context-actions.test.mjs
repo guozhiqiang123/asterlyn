@@ -28,6 +28,7 @@ test("a direct HEAD suffix receives ordered reviewed range actions", () => {
   assert.deepEqual(contextMenuModelErrors(model), []);
   assert.deepEqual(ids(model), [
     "git-history.range-context-actions.copy-commit-ids",
+    "git-history.range-context-actions.compare",
     "git-history.range-context-actions.cherry-pick",
     "git-history.range-context-actions.revert",
     "git-history.range-context-actions.squash",
@@ -74,6 +75,7 @@ test("provider copies visible order and routes operation-specific topology order
         commit("new", ["middle"]), commit("middle", ["old"]), commit("old", []),
       ], "new"),
       openGitOperation: (kind, values) => events.push([kind, ...values]),
+      openComparison: (target) => events.push(["compare", target.anchorKey, target.activeKey]),
       blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]),
       error: (error) => events.push(["error", error]),
@@ -82,14 +84,39 @@ test("provider copies visible order and routes operation-specific topology order
   );
   provider.open({ target: selected, anchor: { x: 1, y: 2 }, trigger: {}, restoreFocus() {} });
   await session.invoke("git-history.range-context-actions.copy-commit-ids");
+  await session.invoke("git-history.range-context-actions.compare");
   await session.invoke("git-history.range-context-actions.cherry-pick");
   await session.invoke("git-history.range-context-actions.revert");
   await session.invoke("git-history.range-context-actions.squash");
   assert.deepEqual(events, [
     ["copy", "new\nmiddle"], ["status", "2 full commit IDs copied"],
+    ["compare", ".:new", ".:middle"],
     ["cherryPick", "middle", "new"], ["revert", "new", "middle"],
     ["squash", "old"],
   ]);
+});
+
+test("compare is shown only for exactly two commits from one Git root", () => {
+  const three = target([
+    commit("new", ["middle"]), commit("middle", ["old"]), commit("old", ["base"]),
+  ]);
+  assert.equal(
+    ids(historyCommitRangeContextMenuModel(
+      three,
+      historyCommitRangePolicy(three, options(three.commits, "new")),
+      EN_US.history,
+    )).includes("git-history.range-context-actions.compare"),
+    false,
+  );
+  const crossRoot = target([commit("new", ["old"]), commit("old", [], "nested")]);
+  assert.equal(
+    ids(historyCommitRangeContextMenuModel(
+      crossRoot,
+      historyCommitRangePolicy(crossRoot, options(crossRoot.commits, "new")),
+      EN_US.history,
+    )).includes("git-history.range-context-actions.compare"),
+    false,
+  );
 });
 
 test("range context snapshot validates the entire logical selection", () => {

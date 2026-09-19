@@ -3,7 +3,12 @@ import {
   createHistoryFilterState,
   type HistoryFilterState,
 } from "../features/git-history/history-filter-controller.ts";
-import type { CommitDiffResult, HistoryPath, HistoryRef } from "../models.ts";
+import type {
+  CommitComparisonDiffResult,
+  CommitDiffResult,
+  HistoryPath,
+  HistoryRef,
+} from "../models.ts";
 import type { CommitFileView } from "../workbench/git-presentation.ts";
 import {
   createCommandSurfaceState,
@@ -21,7 +26,7 @@ import {
 } from "../workbench/workspace-search.ts";
 
 export interface AppState extends HistoryFilterState {
-  gitDetail: "branch" | "commit";
+  gitDetail: "branch" | "commit" | "comparison";
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
   workspaceSearchControls: WorkspaceSearchControls;
@@ -47,6 +52,10 @@ export interface AppState extends HistoryFilterState {
   commitPatchLoading: boolean;
   commitPatchError: string | null;
   commitPatchVersion: number;
+  comparisonPatch: CommitComparisonDiffResult | null;
+  comparisonPatchLoading: boolean;
+  comparisonPatchError: string | null;
+  comparisonPatchVersion: number;
   loading: boolean;
   error: string | null;
 }
@@ -80,6 +89,10 @@ export function createAppState(commitFileView: CommitFileView): AppState {
     commitPatchLoading: false,
     commitPatchError: null,
     commitPatchVersion: 0,
+    comparisonPatch: null,
+    comparisonPatchLoading: false,
+    comparisonPatchError: null,
+    comparisonPatchVersion: 0,
     loading: false,
     error: null,
   };

@@ -32,6 +32,14 @@ export type EditorDocument =
       repositoryId: string;
       oid: string;
       path: string;
+    }
+  | {
+      kind: "commit-comparison-diff";
+      repositoryRoot: string;
+      repositoryId: string;
+      beforeOid: string;
+      afterOid: string;
+      path: string;
     };
 
 export function editorDocumentKey(document: EditorDocument): string {
@@ -46,6 +54,8 @@ export function editorDocumentKey(document: EditorDocument): string {
       return `working\0${document.repositoryRoot}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":
       return `commit\0${document.repositoryRoot}\0${document.repositoryId}\0${document.oid}\0${document.path}`;
+    case "commit-comparison-diff":
+      return `comparison\0${document.repositoryRoot}\0${document.repositoryId}\0${document.beforeOid}\0${document.afterOid}\0${document.path}`;
   }
 }
 

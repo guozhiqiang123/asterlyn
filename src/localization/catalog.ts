@@ -843,6 +843,17 @@ export interface HistoryCopy {
   rangeContextMenu: HistoryCommitRangeContextMenuCopy;
   rangeSelectionLimit: string;
   rangeSelectionBarrier: string;
+  comparisonTitle: string;
+  comparisonFileRange: string;
+  swapComparisonSides: string;
+  comparisonBefore: string;
+  comparisonAfter: string;
+  comparisonDivergent: string;
+  comparisonRelated: string;
+  comparisonReversed: string;
+  couldNotLoadComparison: string;
+  noComparisonChanges: string;
+  comparisonAria(before: string, after: string): string;
   noRefs: string;
   refsAppearHere: string;
   branchOrTag: string;
@@ -1073,6 +1084,7 @@ export interface HistoryCommitContextMenuCopy {
 export interface HistoryCommitRangeContextMenuCopy extends HistoryCommitRangePolicyCopy {
   ariaLabel(count: number): string;
   copyCommitIds: string;
+  compareTwoCommits: string;
   cherryPickSelected: string;
   revertSelected: string;
   squashSelected: string;

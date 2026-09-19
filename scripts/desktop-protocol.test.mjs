@@ -114,12 +114,14 @@ test("desktop response validation accepts representative valid payloads", () => 
       repositoryId: ".",
       beforeOid: "1".repeat(40),
       afterOid: "2".repeat(40),
+      relation: "beforeIsAncestor",
       files: [],
     }),
     {
       repositoryId: ".",
       beforeOid: "1".repeat(40),
       afterOid: "2".repeat(40),
+      relation: "beforeIsAncestor",
       files: [],
     },
   );

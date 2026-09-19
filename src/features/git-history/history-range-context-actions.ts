@@ -21,6 +21,7 @@ export interface HistoryCommitRangeRuntime {
   current(target: HistoryCommitRangeTarget): boolean;
   policyOptions(target: HistoryCommitRangeTarget): Omit<HistoryCommitRangePolicyOptions, "reasons">;
   openGitOperation(kind: "cherryPick" | "revert" | "squash", targets: readonly string[]): void;
+  openComparison(target: HistoryCommitRangeTarget): void;
   blocked(reason: string): void;
   status(message: string): void;
   error(error: unknown): void;
@@ -68,7 +69,7 @@ export class HistoryCommitRangeContextActions {
             this.runtime.status(labels.copiedCommitIds(request.target.commits.length));
             return;
           }
-          this.invoke(actionId, policy);
+          this.invoke(actionId, policy, request.target);
         } catch (error) {
           this.runtime.error(error);
         }
@@ -79,7 +80,11 @@ export class HistoryCommitRangeContextActions {
     return true;
   }
 
-  private invoke(actionId: string, policy: HistoryCommitRangePolicy): void {
+  private invoke(
+    actionId: string,
+    policy: HistoryCommitRangePolicy,
+    target: HistoryCommitRangeTarget,
+  ): void {
     switch (actionId) {
       case `${OWNER_ID}.cherry-pick`:
         this.runtime.openGitOperation("cherryPick", policy.oldestToNewest.map((commit) => commit.oid));
@@ -89,6 +94,9 @@ export class HistoryCommitRangeContextActions {
         return;
       case `${OWNER_ID}.squash`:
         if (policy.squashBaseOid) this.runtime.openGitOperation("squash", [policy.squashBaseOid]);
+        return;
+      case `${OWNER_ID}.compare`:
+        this.runtime.openComparison(target);
         return;
       default: throw new Error(`Unknown History range context action: ${actionId}`);
     }
@@ -114,6 +122,9 @@ export function historyCommitRangeContextMenuModel(
     ariaLabel: labels.ariaLabel(target.commits.length),
     items: [
       command("copy-commit-ids", labels.copyCommitIds, { kind: "enabled" }),
+      ...(target.commits.length === 2 && policy.sameRoot
+        ? [command("compare", labels.compareTwoCommits, { kind: "enabled" })]
+        : []),
       { kind: "separator" },
       command("cherry-pick", labels.cherryPickSelected, policy.cherryPick),
       command("revert", labels.revertSelected, policy.revert),

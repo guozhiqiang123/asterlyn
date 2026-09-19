@@ -143,8 +143,14 @@ export interface CommitComparisonDetails {
   repositoryId: string;
   beforeOid: string;
   afterOid: string;
+  relation: CommitComparisonRelation;
   files: CommitFileChange[];
 }
+
+export type CommitComparisonRelation =
+  | "beforeIsAncestor"
+  | "afterIsAncestor"
+  | "divergent";
 
 export interface CommitFileChange {
   path: string;

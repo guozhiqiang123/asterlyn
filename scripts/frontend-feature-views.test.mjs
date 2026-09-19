@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { renderBranchNavigation } from "../src/features/git-history/branch-navigation-view.ts";
-import { renderCommitDetail } from "../src/features/git-history/git-detail-view.ts";
+import {
+  renderCommitComparisonDetail,
+  renderCommitDetail,
+} from "../src/features/git-history/git-detail-view.ts";
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
 import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
 import {
@@ -294,12 +297,34 @@ test("history dialogs and commit details render without the application shell", 
     fileView: "tree",
     collapsedDirectories: new Set(),
   });
+  const comparison = renderCommitComparisonDetail({
+    snapshot,
+    repositoryId: ".",
+    beforeOid: "1".repeat(40),
+    afterOid: "2".repeat(40),
+    details: {
+      repositoryId: ".",
+      beforeOid: "1".repeat(40),
+      afterOid: "2".repeat(40),
+      relation: "divergent",
+      files: [{ path: "src/compare.ts", originalPath: null, status: "modified" }],
+    },
+    loading: false,
+    error: null,
+    selectedFile: null,
+    fileView: "tree",
+    collapsedDirectories: new Set(),
+  });
 
   assert.match(dialog, /Select Branches or Tags/);
   assert.match(dialog, /data-history-dialog-ref/);
   assert.match(detail, /src\/main\.ts|main\.ts/);
   assert.match(detail, /Compared with 1111111111/);
   assert.doesNotMatch(detail, /data-start-git-operation="(?:cherryPick|squash)"/);
+  assert.match(comparison, /Net changed files/);
+  assert.match(comparison, /data-comparison-file="src\/compare\.ts"/);
+  assert.match(comparison, /Swap Before and After/);
+  assert.match(comparison, /divergent histories/);
 });
 
 test("workspace navigation and replacement previews are feature-owned", () => {

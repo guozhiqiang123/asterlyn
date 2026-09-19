@@ -4,7 +4,7 @@
 
 - The comparison identity is an exact repository-qualified pair: `repositoryId`, `beforeOid`, and `afterOid`.
 - Both revisions must be distinct full object IDs that resolve as commits. Symbolic refs are rejected.
-- Git computes one net rename/copy-aware file range between the two trees. Text and image reads revalidate that the requested current/original path pair belongs to that range.
+- Git computes one net rename/copy-aware file range between the two trees. The list is capped at 20,000 files and 16 MiB of Git output; exceeding either bound fails instead of exposing a partial range. Text and image reads revalidate that the requested current/original path pair belongs to that range.
 - The comparison does not consult or modify `HEAD`, the index, or the worktree. Ancestor and divergent pairs use the same read-only contract.
 - Text output retains the existing 4 MiB bounded reader and visible truncation marker. Image reads retain the existing binary preview and decoder limits.
 

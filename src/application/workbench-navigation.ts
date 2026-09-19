@@ -31,8 +31,8 @@ export interface CommitFileIdentity extends CommitIdentity {
 
 export interface CommitRangeIdentity extends WorkspaceTargetIdentity {
   readonly repositoryId: string;
-  readonly olderOid: string;
-  readonly newerOid: string;
+  readonly beforeOid: string;
+  readonly afterOid: string;
 }
 
 export interface HistoryQueryIntent extends WorkspaceTargetIdentity {

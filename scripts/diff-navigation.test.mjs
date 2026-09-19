@@ -82,8 +82,17 @@ test("Diff document identities isolate source kind, side, repository, and revisi
     oid: "b".repeat(40),
     path: "src/file.ts",
   });
+  const comparison = editorDocumentKey({
+    kind: "commit-comparison-diff",
+    repositoryRoot: "/repo",
+    repositoryId: ".",
+    beforeOid: "a".repeat(40),
+    afterOid: "b".repeat(40),
+    path: "src/file.ts",
+  });
 
-  assert.equal(new Set([working, staged, commit, otherCommit]).size, 4);
+  assert.equal(new Set([working, staged, commit, otherCommit, comparison]).size, 5);
+  assert.match(comparison, /^comparison\0/);
 });
 
 test("Diff position navigation outlines the complete current change block", async () => {

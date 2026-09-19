@@ -738,13 +738,32 @@ const demoBridge: DesktopBridge = {
   ): Promise<CommitComparisonDetails> {
     if (!isTauri) {
       await demoDelay(180);
+      const before = browserSnapshot.commits.find((commit) => commit.oid === beforeOid);
+      const after = browserSnapshot.commits.find((commit) => commit.oid === afterOid);
+      const relation = after?.parents.includes(beforeOid)
+        ? "beforeIsAncestor"
+        : before?.parents.includes(afterOid)
+          ? "afterIsAncestor"
+          : "divergent";
+      const fileSourceOid = relation === "afterIsAncestor" ? beforeOid : afterOid;
+      const files = structuredClone(
+        browserCommitFiles.get(fileSourceOid) ?? demoCommitDetails(fileSourceOid).files,
+      );
       return {
         repositoryId,
         beforeOid,
         afterOid,
-        files: structuredClone(
-          browserCommitFiles.get(afterOid) ?? demoCommitDetails(afterOid).files,
-        ),
+        relation,
+        files: relation === "afterIsAncestor"
+          ? files.map((file) => ({
+              ...file,
+              status: file.status === "added"
+                ? "deleted" as const
+                : file.status === "deleted"
+                  ? "added" as const
+                  : file.status,
+            }))
+          : files,
       };
     }
     return invoke<CommitComparisonDetails>("read_commit_comparison_details", {

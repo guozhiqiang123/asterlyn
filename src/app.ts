@@ -22,6 +22,7 @@ import { renderHistoryDialogView } from "./features/git-history/history-dialog-v
 import {
   inspectorPlaceholder,
   renderBranchDetail,
+  renderCommitComparisonDetail,
   renderCommitDetail,
 } from "./features/git-history/git-detail-view";
 import {
@@ -60,6 +61,10 @@ import {
   type HistoryCommitRangeTarget,
 } from "./features/git-history/history-range-context.ts";
 import { HistoryCommitRangeContextActions } from "./features/git-history/history-range-context-actions.ts";
+import {
+  HistoryComparisonController,
+  type HistoryComparisonChange,
+} from "./features/git-history/history-comparison-controller.ts";
 import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
@@ -399,6 +404,7 @@ export class AsterlynApp {
   } = { id: null, kind: "idle" };
   private expandedUnchangedDiffKey: string | null = null;
   private commitDiffGeneration = 0;
+  private comparisonDiffGeneration = 0;
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
@@ -416,10 +422,13 @@ export class AsterlynApp {
   private readonly windowChromeBinding: WindowChromeBinding;
   private splitterDisposers: Array<() => void> = [];
   private commitDetailSplitterDisposer: (() => void) | null = null;
+  private comparisonDetailFocus: "swap" | "retry" | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
   private readonly historyController: GitHistoryDetailsController;
   private readonly historyRangeSelection = new HistoryRangeSelectionController();
   private readonly releaseHistoryController: () => void;
+  private readonly historyComparisonController: HistoryComparisonController;
+  private readonly releaseHistoryComparisonController: () => void;
   private readonly branchesController: GitBranchesController;
   private readonly branchContextActions: BranchContextActions;
   private readonly branchContextBinding: BranchContextBinding;
@@ -566,6 +575,12 @@ export class AsterlynApp {
     );
     this.releaseHistoryController = this.historyController.subscribe((change) =>
       this.handleHistoryControllerChange(change),
+    );
+    this.historyComparisonController = new HistoryComparisonController({
+      readCommitComparisonDetails: (...args) => bridge.readCommitComparisonDetails(...args),
+    });
+    this.releaseHistoryComparisonController = this.historyComparisonController.subscribe(
+      (change) => this.handleHistoryComparisonChange(change),
     );
     this.branchesController = new GitBranchesController({
       current: () => {
@@ -801,6 +816,7 @@ export class AsterlynApp {
           };
         },
         openGitOperation: (kind, targets) => this.openGitOperation(kind, [...targets]),
+        openComparison: (target) => this.openHistoryComparison(target),
         blocked: (reason) => this.setStatus(reason, "warning"),
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
@@ -1416,6 +1432,28 @@ export class AsterlynApp {
     if (change.error) this.showError(change.error);
   }
 
+  private handleHistoryComparisonChange(change: HistoryComparisonChange): void {
+    if (change.reason === "load-start") this.clearComparisonDiffInspection();
+    if (change.reason === "file-selection") {
+      const path = this.historyComparisonController.state.selectedFile;
+      if (path) this.updateComparisonFileSelection(path);
+      return;
+    }
+    if (
+      this.state.gitDetail === "comparison" &&
+      this.root.querySelector("#git-detail-body")
+    ) {
+      this.renderGitDetailPane();
+      if (this.comparisonDetailFocus && change.reason !== "load-start") {
+        const id = this.comparisonDetailFocus === "swap"
+          ? "#swap-comparison-sides"
+          : "#retry-commit-comparison";
+        this.root.querySelector<HTMLButtonElement>(id)?.focus();
+        this.comparisonDetailFocus = null;
+      }
+    }
+  }
+
   async start(): Promise<void> {
     this.shellController.setWindowChromeMode(await bridge.windowChromeMode());
     this.renderShell();
@@ -1657,6 +1695,8 @@ export class AsterlynApp {
     this.repositoryIntegration.dispose();
     this.releaseHistoryController();
     this.historyController.dispose();
+    this.releaseHistoryComparisonController();
+    this.historyComparisonController.dispose();
     this.releaseRemoteController();
     this.remoteController.dispose();
     this.releaseRemoteAuthenticationController();
@@ -2023,6 +2063,8 @@ export class AsterlynApp {
       this.state.historyRecentPaths = [];
       this.closeHistoryDialog();
       this.resetHistoryFilters();
+      this.historyComparisonController.clear();
+      this.clearComparisonDiffInspection();
       this.state.gitDetail = "commit";
       this.filesController.installWorkspace(opened.root, snapshot?.changes ?? []);
       this.branchesController.setSelectedBranch(null);
@@ -5518,6 +5560,10 @@ export class AsterlynApp {
   private selectCommit(key: string, restoreFocus = false): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
+    if (this.state.gitDetail === "comparison") {
+      this.historyComparisonController.clear();
+      this.clearComparisonDiffInspection();
+    }
     this.state.gitDetail = "commit";
     if (!this.historyController.selectCommit(snapshot.root, key, true)) return;
     this.updateHistoryCommitSelection(key);
@@ -5556,6 +5602,25 @@ export class AsterlynApp {
       this.windowSession.generation,
       this.windowSession.repository.state.revision,
     );
+  }
+
+  private openHistoryComparison(target: HistoryCommitRangeTarget): void {
+    if (!this.isHistoryCommitRangeTargetCurrent(target) || target.commits.length !== 2) return;
+    const anchor = target.commits.find((commit) => commitKey(commit) === target.anchorKey);
+    const active = target.commits.find((commit) => commitKey(commit) === target.activeKey);
+    if (!anchor || !active || anchor.repositoryId !== active.repositoryId) return;
+    this.clearComparisonDiffInspection();
+    this.state.collapsedCommitFileDirectories.clear();
+    this.state.gitDetail = "comparison";
+    this.historyComparisonController.open({
+      workspaceRoot: target.workspaceRoot,
+      workspaceGeneration: target.workspaceGeneration,
+      repositoryRevision: target.repositoryRevision,
+      repositoryId: anchor.repositoryId,
+      anchorOid: anchor.oid,
+      activeOid: active.oid,
+    });
+    this.renderGitDetailPane();
   }
 
   private openHistoryContextActions(
@@ -5755,7 +5820,9 @@ export class AsterlynApp {
     this.renderEditorTabMenu();
     this.renderDocumentStatus();
     const showContextHeader =
-      document.kind === "working-diff" || document.kind === "commit-diff";
+      document.kind === "working-diff" ||
+      document.kind === "commit-diff" ||
+      document.kind === "commit-comparison-diff";
     editorPanel.classList.toggle("show-context-header", showContextHeader);
     if (!showContextHeader) header.innerHTML = "";
     if (revealActiveTab) this.revealActiveEditorTab();
@@ -5871,6 +5938,51 @@ export class AsterlynApp {
         this.query("#retry-working-diff").addEventListener("click", () => {
           void this.loadSelectedDiff();
         });
+      }
+      return;
+    }
+
+    if (document.kind === "commit-comparison-diff") {
+      const copy = this.localization.catalog.editor;
+      const imageDiff = isImagePreviewPath(document.path);
+      header.innerHTML = `
+        ${renderContentHeading(basename(document.path), document.path)}
+        <div class="header-actions">${this.diffControls(document, imageDiff)}<code class="oid">${escapeHtml(document.beforeOid.slice(0, 8))} → ${escapeHtml(document.afterOid.slice(0, 8))}</code></div>
+      `;
+      this.bindDiffControls();
+      if (imageDiff) {
+        this.renderImageDiff(document, () => void this.loadSelectedComparisonDiff());
+        return;
+      }
+      if (this.state.comparisonPatchLoading) {
+        this.showEditorHtml(
+          editorDocumentContentKey(document, "loading"),
+          renderEditorLoadingBlock(copy.loadingCommitPatch),
+        );
+      } else if (this.state.comparisonPatchError) {
+        this.showEditorHtml(
+          editorDocumentContentKey(document, `error:${this.state.comparisonPatchError}`),
+          renderEditorRetryState(
+            copy.patchLoadFailed,
+            this.state.comparisonPatchError,
+            "retry-comparison-patch",
+            "changes",
+            copy,
+          ),
+        );
+        this.query("#retry-comparison-patch").addEventListener("click", () => {
+          void this.loadSelectedComparisonDiff();
+        });
+      } else if (this.state.comparisonPatch) {
+        this.mountEditorDiff(
+          editorDocumentContentKey(
+            document,
+            `patch:${this.state.comparisonPatchVersion}`,
+          ),
+          this.state.comparisonPatch.patch || copy.noTextualDiff,
+          document.path,
+          this.diffBlameSources(document),
+        );
       }
       return;
     }
@@ -6038,7 +6150,9 @@ export class AsterlynApp {
   }
 
   private diffBlameSources(
-    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
   ): DiffGitBlameSources {
     const snapshot = this.windowSession.repository.state.snapshot;
     const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
@@ -6055,6 +6169,12 @@ export class AsterlynApp {
         document.oid,
         file,
       );
+    }
+    if (document.kind === "commit-comparison-diff") {
+      const file = this.historyComparisonController.state.details?.files.find(
+        (candidate) => candidate.path === document.path,
+      ) ?? { path: document.path, originalPath: null, status: "modified" as const };
+      return this.comparisonDiffBlameSources(document, file);
     }
 
     const change = snapshot.changes.find(
@@ -6142,6 +6262,47 @@ export class AsterlynApp {
               repositoryId,
               path: file.path,
               commitOid: oid,
+              parent: false,
+            },
+            unavailableReason: null,
+          },
+      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
+    };
+  }
+
+  private comparisonDiffBlameSources(
+    document: Extract<EditorDocument, { kind: "commit-comparison-diff" }>,
+    file: CommitFileChange,
+  ): DiffGitBlameSources {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
+    if (
+      !snapshot ||
+      snapshot.root !== document.repositoryRoot ||
+      !snapshot.repositoryRoots.some((root) => root.id === document.repositoryId)
+    ) return this.unavailableDiffBlame(unavailable);
+    const absent = this.localization.catalog.editor.gitBlameFileUnavailable;
+    return {
+      old: file.status === "added"
+        ? this.unavailableBlame(absent)
+        : {
+            source: {
+              repositoryRoot: document.repositoryRoot,
+              repositoryId: document.repositoryId,
+              path: file.originalPath ?? file.path,
+              commitOid: document.beforeOid,
+              parent: false,
+            },
+            unavailableReason: null,
+          },
+      new: file.status === "deleted"
+        ? this.unavailableBlame(absent)
+        : {
+            source: {
+              repositoryRoot: document.repositoryRoot,
+              repositoryId: document.repositoryId,
+              path: file.path,
+              commitOid: document.afterOid,
               parent: false,
             },
             unavailableReason: null,
@@ -6414,12 +6575,18 @@ export class AsterlynApp {
   }
 
   private diffControls(
-    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
     imageDiff: boolean,
   ): string {
-    const textReady = !imageDiff && (document.kind === "working-diff"
-      ? this.changesState.workingPatch !== null
-      : this.state.commitPatch !== null);
+    const textReady = !imageDiff && (
+      document.kind === "working-diff"
+        ? this.changesState.workingPatch !== null
+        : document.kind === "commit-diff"
+          ? this.state.commitPatch !== null
+          : this.state.comparisonPatch !== null
+    );
     return renderEditorDiffControls({
       imageDiff,
       textReady,
@@ -6471,19 +6638,27 @@ export class AsterlynApp {
   }
 
   private adjacentDiffPath(
-    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
     direction: DiffDirection,
   ): string | null {
     const paths = document.kind === "working-diff"
       ? this.windowSession.repository.state.snapshot?.changes.map((change) => change.path) ?? []
-      : this.historyState.details?.files.map((file) => file.path) ?? [];
+      : document.kind === "commit-diff"
+        ? this.historyState.details?.files.map((file) => file.path) ?? []
+        : this.historyComparisonController.state.details?.files.map((file) => file.path) ?? [];
     const current = document.kind === "working-diff" ? document.selection.path : document.path;
     return adjacentDiffItem(paths, current, direction);
   }
 
   private navigateDiffFile(direction: DiffDirection): void {
     const document = this.activeDocument();
-    if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
+    if (
+      document.kind !== "working-diff" &&
+      document.kind !== "commit-diff" &&
+      document.kind !== "commit-comparison-diff"
+    ) return;
     const path = this.adjacentDiffPath(document, direction);
     if (!path) {
       this.setStatus(this.localization.catalog.editor.noChangedFile(direction === 1 ? "next" : "previous"), "normal");
@@ -6491,6 +6666,10 @@ export class AsterlynApp {
     }
     if (document.kind === "commit-diff") {
       this.selectCommitFile(path, false);
+      return;
+    }
+    if (document.kind === "commit-comparison-diff") {
+      this.selectComparisonFile(path, false);
       return;
     }
     const snapshot = this.windowSession.repository.state.snapshot;
@@ -6508,7 +6687,9 @@ export class AsterlynApp {
   }
 
   private diffProjectFile(
-    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
   ): ProjectFile | null {
     return document.kind === "working-diff"
       ? this.filesState.files.find(
@@ -6521,7 +6702,11 @@ export class AsterlynApp {
 
   private async openDiffSourceFile(): Promise<void> {
     const document = this.activeDocument();
-    if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
+    if (
+      document.kind !== "working-diff" &&
+      document.kind !== "commit-diff" &&
+      document.kind !== "commit-comparison-diff"
+    ) return;
     const file = this.diffProjectFile(document);
     if (!file) {
       this.setStatus(this.localization.catalog.editor.diffFileMissing, "warning");
@@ -6535,18 +6720,25 @@ export class AsterlynApp {
   }
 
   private isDiffExpanded(
-    document: Extract<EditorDocument, { kind: "working-diff" | "commit-diff" }>,
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
   ): boolean {
     return this.expandedUnchangedDiffKey === editorDocumentKey(document);
   }
 
   private toggleDiffUnchangedLines(): void {
     const document = this.activeDocument();
-    if (document.kind !== "working-diff" && document.kind !== "commit-diff") return;
+    if (
+      document.kind !== "working-diff" &&
+      document.kind !== "commit-diff" &&
+      document.kind !== "commit-comparison-diff"
+    ) return;
     const key = editorDocumentKey(document);
     this.expandedUnchangedDiffKey = this.expandedUnchangedDiffKey === key ? null : key;
     if (document.kind === "working-diff") void this.loadSelectedDiff();
-    else void this.loadSelectedCommitDiff();
+    else if (document.kind === "commit-diff") void this.loadSelectedCommitDiff();
+    else void this.loadSelectedComparisonDiff();
   }
 
   private syncDiffControls(): void {
@@ -6765,6 +6957,287 @@ export class AsterlynApp {
       this.renderEditor();
       if (restoreFocus) this.focusCommitFile(file.path);
       this.showError(error);
+    }
+  }
+
+  private bindComparisonDetailEvents(snapshot: RepositorySnapshot): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-comparison-file]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const path = row.dataset.comparisonFile;
+        if (path) this.selectComparisonFile(path, false);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        const rows = Array.from(
+          this.root.querySelectorAll<HTMLButtonElement>("[data-comparison-file]"),
+        );
+        const current = rows.indexOf(row);
+        if (current < 0) return;
+        event.preventDefault();
+        const target = event.key === "Home"
+          ? rows[0]
+          : event.key === "End"
+            ? rows.at(-1)
+            : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
+        const path = target?.dataset.comparisonFile;
+        if (path) this.selectComparisonFile(path, true);
+      });
+    });
+    this.root
+      .querySelectorAll<HTMLDetailsElement>("[data-comparison-file-directory]")
+      .forEach((details) => {
+        details.addEventListener("toggle", () => {
+          const path = details.dataset.comparisonFileDirectory;
+          if (!path) return;
+          const renderedExpanded = details.dataset.comparisonFileRenderedExpanded === "true";
+          if (details.open) this.state.collapsedCommitFileDirectories.delete(path);
+          else this.state.collapsedCommitFileDirectories.add(path);
+          if (details.open !== renderedExpanded) this.renderGitDetailPane(snapshot);
+        });
+      });
+    this.root.querySelector<HTMLButtonElement>("#comparison-file-view-toggle")?.addEventListener(
+      "click",
+      () => {
+        this.state.commitFileView = this.state.commitFileView === "tree" ? "flat" : "tree";
+        saveCommitFileView(window.localStorage, this.state.commitFileView);
+        this.renderGitDetailPane(snapshot);
+        this.root.querySelector<HTMLButtonElement>("#comparison-file-view-toggle")?.focus();
+      },
+    );
+    this.root.querySelector<HTMLButtonElement>("#comparison-file-expand-all")?.addEventListener(
+      "click",
+      () => {
+        this.state.collapsedCommitFileDirectories.clear();
+        this.renderGitDetailPane(snapshot);
+        this.root.querySelector<HTMLButtonElement>("#comparison-file-expand-all")?.focus();
+      },
+    );
+    this.root.querySelector<HTMLButtonElement>("#comparison-file-collapse-all")?.addEventListener(
+      "click",
+      () => {
+        const details = this.historyComparisonController.state.details;
+        if (!details) return;
+        this.state.collapsedCommitFileDirectories = new Set([
+          ".",
+          ...commitFileDirectoryPaths(buildCommitFileTree(details.files)),
+        ]);
+        this.renderGitDetailPane(snapshot);
+        this.root.querySelector<HTMLButtonElement>("#comparison-file-collapse-all")?.focus();
+      },
+    );
+    this.root.querySelector<HTMLButtonElement>("#swap-comparison-sides")?.addEventListener(
+      "click",
+      () => {
+        this.comparisonDetailFocus = "swap";
+        this.state.collapsedCommitFileDirectories.clear();
+        this.historyComparisonController.swap();
+      },
+    );
+    this.root.querySelector<HTMLButtonElement>("#retry-commit-comparison")?.addEventListener(
+      "click",
+      () => {
+        this.comparisonDetailFocus = "retry";
+        this.historyComparisonController.retry();
+      },
+    );
+    const splitter = this.root.querySelector<HTMLElement>("#commit-summary-splitter");
+    const layout = this.root.querySelector<HTMLElement>(".commit-detail-layout");
+    if (splitter && layout) {
+      this.commitDetailSplitterDisposer = attachSplitter(splitter, {
+        orientation: "horizontal",
+        direction: -1,
+        getValue: () => this.shellState.layout.commitSummaryHeight,
+        getRange: () => ({
+          minimum: WORKBENCH_LIMITS.commitSummaryMin,
+          maximum: Math.max(
+            WORKBENCH_LIMITS.commitSummaryMin,
+            layout.clientHeight - WORKBENCH_LIMITS.commitFilesMin - WORKBENCH_LIMITS.separatorSize,
+          ),
+        }),
+        onChange: (value) => this.resizeWorkbench("commitSummaryHeight", value),
+        onCommit: () => this.persistWorkbenchLayout(),
+        onReset: () => this.resizeWorkbench(
+          "commitSummaryHeight",
+          WORKBENCH_LAYOUT_DEFAULTS.commitSummaryHeight,
+        ),
+      });
+    }
+  }
+
+  private selectComparisonFile(path: string, restoreFocus: boolean): void {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const details = this.historyComparisonController.state.details;
+    const file = this.historyComparisonController.selectFile(path);
+    if (!snapshot || !details || !file) return;
+    this.state.gitDetail = "comparison";
+    this.activateDiffPreview({
+      kind: "commit-comparison-diff",
+      repositoryRoot: snapshot.root,
+      repositoryId: details.repositoryId,
+      beforeOid: details.beforeOid,
+      afterOid: details.afterOid,
+      path,
+    });
+    this.state.comparisonPatch = null;
+    this.state.comparisonPatchLoading = true;
+    this.state.comparisonPatchError = null;
+    this.updateComparisonFileSelection(path);
+    if (restoreFocus) this.focusComparisonFile(path);
+    void this.loadSelectedComparisonDiff(restoreFocus);
+  }
+
+  private async loadSelectedComparisonDiff(restoreFocus = false): Promise<void> {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const comparison = this.historyComparisonController.state;
+    const details = comparison.details;
+    const file = details?.files.find((candidate) => candidate.path === comparison.selectedFile);
+    const document = this.activeDocument();
+    if (
+      !snapshot ||
+      !details ||
+      !file ||
+      document.kind !== "commit-comparison-diff" ||
+      document.repositoryRoot !== snapshot.root ||
+      document.repositoryId !== details.repositoryId ||
+      document.beforeOid !== details.beforeOid ||
+      document.afterOid !== details.afterOid ||
+      document.path !== file.path
+    ) return;
+    const generation = ++this.comparisonDiffGeneration;
+    const imageDiff = isImagePreviewPath(file.path);
+    const imageKey = editorDocumentKey(document);
+    this.state.comparisonPatch = null;
+    this.state.comparisonPatchLoading = true;
+    this.state.comparisonPatchError = null;
+    if (imageDiff) {
+      this.imageSurface = {
+        key: imageKey,
+        version: generation,
+        status: "loading",
+        error: null,
+        image: null,
+        diff: null,
+      };
+    }
+    this.renderEditor();
+    if (restoreFocus) this.focusComparisonFile(file.path);
+    try {
+      if (imageDiff) {
+        const diff = await bridge.readCommitComparisonImageDiff(
+          snapshot.root,
+          details.repositoryId,
+          details.beforeOid,
+          details.afterOid,
+          file.path,
+          file.originalPath,
+        );
+        const active = this.activeDocument();
+        if (
+          generation !== this.comparisonDiffGeneration ||
+          this.historyComparisonController.state.details !== details ||
+          this.historyComparisonController.state.selectedFile !== file.path ||
+          active.kind !== "commit-comparison-diff" ||
+          editorDocumentKey(active) !== imageKey ||
+          diff.path !== file.path
+        ) return;
+        this.imageSurface = {
+          key: imageKey,
+          version: generation,
+          status: "ready",
+          error: null,
+          image: null,
+          diff,
+        };
+        this.state.comparisonPatchLoading = false;
+        this.state.comparisonPatchVersion = generation;
+        this.renderEditor();
+        if (restoreFocus) this.focusComparisonFile(file.path);
+        return;
+      }
+      const diff = await bridge.readCommitComparisonDiff(
+        snapshot.root,
+        details.repositoryId,
+        details.beforeOid,
+        details.afterOid,
+        file.path,
+        file.originalPath,
+        this.isDiffExpanded(document),
+      );
+      const active = this.activeDocument();
+      if (
+        generation !== this.comparisonDiffGeneration ||
+        this.historyComparisonController.state.details !== details ||
+        this.historyComparisonController.state.selectedFile !== file.path ||
+        active.kind !== "commit-comparison-diff" ||
+        active.repositoryId !== details.repositoryId ||
+        active.beforeOid !== details.beforeOid ||
+        active.afterOid !== details.afterOid ||
+        active.path !== file.path ||
+        diff.repositoryId !== details.repositoryId ||
+        diff.beforeOid !== details.beforeOid ||
+        diff.afterOid !== details.afterOid ||
+        diff.path !== file.path
+      ) return;
+      this.state.comparisonPatch = diff;
+      this.state.comparisonPatchLoading = false;
+      this.state.comparisonPatchVersion = generation;
+      this.renderEditor();
+      if (restoreFocus) this.focusComparisonFile(file.path);
+      if (diff.truncated) this.setStatus(this.localization.catalog.editor.patchTruncated, "warning");
+    } catch (error) {
+      const active = this.activeDocument();
+      if (
+        generation !== this.comparisonDiffGeneration ||
+        this.historyComparisonController.state.details !== details ||
+        this.historyComparisonController.state.selectedFile !== file.path ||
+        active.kind !== "commit-comparison-diff" ||
+        active.repositoryId !== details.repositoryId ||
+        active.beforeOid !== details.beforeOid ||
+        active.afterOid !== details.afterOid ||
+        active.path !== file.path
+      ) return;
+      const message = localizedOperationError(error, this.localization.catalog.errors);
+      this.state.comparisonPatchLoading = false;
+      this.state.comparisonPatchError = message;
+      if (imageDiff) {
+        this.imageSurface = {
+          key: imageKey,
+          version: generation,
+          status: "error",
+          error: message,
+          image: null,
+          diff: null,
+        };
+      }
+      this.renderEditor();
+      if (restoreFocus) this.focusComparisonFile(file.path);
+      this.showError(error);
+    }
+  }
+
+  private updateComparisonFileSelection(path: string): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-comparison-file]").forEach((row) => {
+      const selected = row.dataset.comparisonFile === path;
+      row.classList.toggle("selected", selected);
+      row.setAttribute("aria-pressed", String(selected));
+    });
+  }
+
+  private focusComparisonFile(path: string): void {
+    Array.from(this.root.querySelectorAll<HTMLButtonElement>("[data-comparison-file]"))
+      .find((row) => row.dataset.comparisonFile === path)
+      ?.focus();
+  }
+
+  private clearComparisonDiffInspection(): void {
+    this.comparisonDiffGeneration += 1;
+    this.state.comparisonPatch = null;
+    this.state.comparisonPatchLoading = false;
+    this.state.comparisonPatchError = null;
+    if (this.imageSurface?.key.startsWith("comparison\0")) this.imageSurface = null;
+    if (this.activeDocument().kind === "commit-comparison-diff") {
+      this.editorController.closePreview();
+      if (this.root.querySelector("#editor-content")) this.renderEditor();
     }
   }
 
@@ -7143,6 +7616,24 @@ export class AsterlynApp {
   }
 
   private renderGitDetail(snapshot: RepositorySnapshot): string {
+    if (this.state.gitDetail === "comparison") {
+      const comparison = this.historyComparisonController.state;
+      const request = comparison.request;
+      if (!request) return inspectorPlaceholder(this.localization);
+      return renderCommitComparisonDetail({
+        snapshot,
+        repositoryId: request.repositoryId,
+        beforeOid: comparison.beforeOid ?? request.anchorOid,
+        afterOid: comparison.afterOid ?? request.activeOid,
+        details: comparison.details,
+        loading: comparison.status === "loading",
+        error: comparison.error,
+        selectedFile: comparison.selectedFile,
+        fileView: this.state.commitFileView,
+        collapsedDirectories: this.state.collapsedCommitFileDirectories,
+        localization: this.localization,
+      });
+    }
     if (this.state.gitDetail === "branch") {
       const branch = this.branchesController.selected(snapshot);
       return branch
@@ -7181,6 +7672,10 @@ export class AsterlynApp {
 
   private bindGitDetailEvents(snapshot: RepositorySnapshot): void {
     this.bindGitOperationStartActions();
+    if (this.state.gitDetail === "comparison") {
+      this.bindComparisonDetailEvents(snapshot);
+      return;
+    }
     if (this.state.gitDetail === "branch") {
       const branch = this.branchesController.selected(snapshot);
       if (branch) this.bindBranchInspector(branch, snapshot);

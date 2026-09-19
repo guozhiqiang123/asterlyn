@@ -434,7 +434,16 @@ pub struct CommitComparisonDetails {
     pub repository_id: String,
     pub before_oid: String,
     pub after_oid: String,
+    pub relation: CommitComparisonRelation,
     pub files: Vec<CommitFileChange>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CommitComparisonRelation {
+    BeforeIsAncestor,
+    AfterIsAncestor,
+    Divergent,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
