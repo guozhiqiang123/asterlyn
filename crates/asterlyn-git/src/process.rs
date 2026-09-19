@@ -3,7 +3,7 @@ use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -55,6 +55,12 @@ impl CancellationToken {
 pub(crate) enum CancellableOutput {
     Completed(Output),
     Cancelled,
+}
+
+pub(crate) struct BoundedOutput {
+    pub(crate) output: Output,
+    pub(crate) stdout_truncated: bool,
+    pub(crate) stderr_truncated: bool,
 }
 
 /// Constructs Git subprocesses with one stable, non-interactive process policy.
@@ -195,7 +201,7 @@ impl<'a> GitRunner<'a> {
 
         let status = loop {
             if !matches!(self.profile, GitProcessProfile::Remote) && cancellation.is_cancelled() {
-                terminate_child(&mut child, false);
+                let _ = terminate_child(&mut child, false);
                 let _ = join_output_reader(stdout_reader, "stdout");
                 let _ = join_output_reader(stderr_reader, "stderr");
                 return Ok(CancellableOutput::Cancelled);
@@ -203,7 +209,7 @@ impl<'a> GitRunner<'a> {
             match child.try_wait() {
                 Ok(Some(status)) => break status,
                 Ok(None) if cancellation.is_cancelled() => {
-                    terminate_child(
+                    let _ = terminate_child(
                         &mut child,
                         matches!(self.profile, GitProcessProfile::Remote),
                     );
@@ -213,7 +219,7 @@ impl<'a> GitRunner<'a> {
                 }
                 Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
                 Err(error) => {
-                    terminate_child(
+                    let _ = terminate_child(
                         &mut child,
                         matches!(self.profile, GitProcessProfile::Remote),
                     );
@@ -229,6 +235,67 @@ impl<'a> GitRunner<'a> {
             stdout: join_output_reader(stdout_reader, "stdout")?,
             stderr: join_output_reader(stderr_reader, "stderr")?,
         }))
+    }
+
+    pub(crate) fn bounded_output<I, S>(
+        &self,
+        args: I,
+        stdin: GitStdin,
+        stdout_limit: usize,
+        stderr_limit: usize,
+    ) -> std::io::Result<BoundedOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut child = self.spawn(args, stdin)?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
+        let (limit_sender, limit_receiver) = std::sync::mpsc::sync_channel(1);
+        let stdout_reader = thread::spawn(move || {
+            read_stream_limited_with_signal(stdout, stdout_limit, Some(limit_sender))
+        });
+        let stderr_reader = thread::spawn(move || read_stream_limited(stderr, stderr_limit));
+        let mut terminated_at_limit = false;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if limit_receiver.try_recv().is_ok() => {
+                    terminated_at_limit = true;
+                    break terminate_child(
+                        &mut child,
+                        matches!(self.profile, GitProcessProfile::Remote),
+                    )?;
+                }
+                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
+                Err(error) => {
+                    let _ = terminate_child(
+                        &mut child,
+                        matches!(self.profile, GitProcessProfile::Remote),
+                    );
+                    let _ = join_limited_output_reader(stdout_reader, "stdout");
+                    let _ = join_limited_output_reader(stderr_reader, "stderr");
+                    return Err(error);
+                }
+            }
+        };
+        let (stdout, stdout_truncated) = join_limited_output_reader(stdout_reader, "stdout")?;
+        let (stderr, stderr_truncated) = join_limited_output_reader(stderr_reader, "stderr")?;
+        Ok(BoundedOutput {
+            output: Output {
+                status,
+                stdout,
+                stderr,
+            },
+            stdout_truncated: terminated_at_limit || stdout_truncated,
+            stderr_truncated,
+        })
     }
 }
 
@@ -316,7 +383,7 @@ fn wait_with_remote_output(mut child: Child) -> std::io::Result<Output> {
     })
 }
 
-pub(crate) fn terminate_process_tree(child: &mut Child) {
+fn terminate_process_tree(child: &mut Child) -> std::io::Result<ExitStatus> {
     #[cfg(unix)]
     {
         let process_group = -(child.id() as i32);
@@ -349,15 +416,15 @@ pub(crate) fn terminate_process_tree(child: &mut Child) {
     }
 
     let _ = child.kill();
-    let _ = child.wait();
+    child.wait()
 }
 
-fn terminate_child(child: &mut Child, process_tree: bool) {
+fn terminate_child(child: &mut Child, process_tree: bool) -> std::io::Result<ExitStatus> {
     if process_tree {
-        terminate_process_tree(child);
+        terminate_process_tree(child)
     } else {
         let _ = child.kill();
-        let _ = child.wait();
+        child.wait()
     }
 }
 
@@ -421,27 +488,20 @@ pub(crate) fn join_stream(
         })
 }
 
-pub(crate) fn join_limited_stream(
-    reader: thread::JoinHandle<std::io::Result<(Vec<u8>, bool)>>,
-    operation: &str,
-    stream: &str,
-) -> Result<(Vec<u8>, bool), GitError> {
-    reader
-        .join()
-        .map_err(|_| GitError::Io {
-            operation: operation.to_string(),
-            message: format!("Git {stream} reader stopped unexpectedly"),
-        })?
-        .map_err(|error| GitError::Io {
-            operation: operation.to_string(),
-            message: format!("could not read Git {stream}: {error}"),
-        })
-}
-
 fn join_output_reader(
     reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
     stream: &str,
 ) -> std::io::Result<Vec<u8>> {
+    reader
+        .join()
+        .map_err(|_| std::io::Error::other(format!("Git {stream} reader stopped unexpectedly")))?
+        .map_err(|error| std::io::Error::other(format!("could not read Git {stream}: {error}")))
+}
+
+fn join_limited_output_reader(
+    reader: thread::JoinHandle<std::io::Result<(Vec<u8>, bool)>>,
+    stream: &str,
+) -> std::io::Result<(Vec<u8>, bool)> {
     reader
         .join()
         .map_err(|_| std::io::Error::other(format!("Git {stream} reader stopped unexpectedly")))?

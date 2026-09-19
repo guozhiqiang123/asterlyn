@@ -429,6 +429,11 @@ owning subprocess waiting itself. A process-level pre-cancellation test proves t
 started after cancellation, while the existing untracked-scan and remote-operation tests cover
 in-flight behavior.
 
+Byte-budget enforcement now has the same lifecycle boundary: bounded repository reads and
+`diff --no-index` both ask the runner to drain stdout/stderr within explicit budgets, terminate the
+child when stdout crosses its reviewed limit, and return truncation metadata for domain-specific
+interpretation. Repository code no longer owns byte-limit polling or child cleanup.
+
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
 source of truth.

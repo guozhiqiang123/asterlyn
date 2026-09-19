@@ -1,7 +1,6 @@
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::process::ExitStatus;
-use std::thread;
 
 use tempfile::tempdir;
 
@@ -32,8 +31,8 @@ pub fn bounded_text_diff(
     write_file(&before_path, before)?;
     write_file(&after_path, after)?;
 
-    let mut child = GitRunner::new(directory.path())
-        .spawn(
+    let bounded = GitRunner::new(directory.path())
+        .bounded_output(
             [
                 "diff",
                 "--no-index",
@@ -47,30 +46,25 @@ pub fn bounded_text_diff(
                 "after",
             ],
             GitStdin::Null,
+            DIFF_OUTPUT_LIMIT_BYTES,
+            STDERR_LIMIT_BYTES,
         )
-        .map_err(|error| io_error("start text diff", error))?;
-    let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
-        operation: "read text diff".to_string(),
-        message: "Git stdout was unavailable".to_string(),
-    })?;
-    let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
-        operation: "read text diff".to_string(),
-        message: "Git stderr was unavailable".to_string(),
-    })?;
-    let stdout_reader = thread::spawn(move || read_limited(stdout, DIFF_OUTPUT_LIMIT_BYTES));
-    let stderr_reader = thread::spawn(move || read_limited(stderr, STDERR_LIMIT_BYTES));
-    let status = child
-        .wait()
-        .map_err(|error| io_error("wait for text diff", error))?;
-    let (stdout, truncated) = join_reader(stdout_reader, "stdout")?;
-    let (stderr, stderr_truncated) = join_reader(stderr_reader, "stderr")?;
-    ensure_diff_status(status, &stderr, stderr_truncated, truncated)?;
+        .map_err(|error| io_error("run text diff", error))?;
+    ensure_diff_status(
+        bounded.output.status,
+        &bounded.output.stderr,
+        bounded.stderr_truncated,
+        bounded.stdout_truncated,
+    )?;
 
-    let mut patch = normalize_patch(path, &stdout);
-    if truncated {
+    let mut patch = normalize_patch(path, &bounded.output.stdout);
+    if bounded.stdout_truncated {
         patch.push_str("\n\n[Diff truncated at 4 MiB]\n");
     }
-    Ok(BoundedTextDiff { patch, truncated })
+    Ok(BoundedTextDiff {
+        patch,
+        truncated: bounded.stdout_truncated,
+    })
 }
 
 fn write_file(path: &std::path::Path, content: &str) -> Result<(), GitError> {
@@ -79,30 +73,6 @@ fn write_file(path: &std::path::Path, content: &str) -> Result<(), GitError> {
     file.write_all(content.as_bytes())
         .and_then(|_| file.flush())
         .map_err(|error| io_error("write text diff input", error))
-}
-
-fn read_limited(mut input: impl Read, limit: usize) -> std::io::Result<(Vec<u8>, bool)> {
-    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
-    input
-        .by_ref()
-        .take(limit.saturating_add(1) as u64)
-        .read_to_end(&mut bytes)?;
-    let truncated = bytes.len() > limit;
-    bytes.truncate(limit);
-    Ok((bytes, truncated))
-}
-
-fn join_reader(
-    reader: thread::JoinHandle<std::io::Result<(Vec<u8>, bool)>>,
-    stream: &str,
-) -> Result<(Vec<u8>, bool), GitError> {
-    reader
-        .join()
-        .map_err(|_| GitError::Io {
-            operation: "read text diff".to_string(),
-            message: format!("Git {stream} reader stopped unexpectedly"),
-        })?
-        .map_err(|error| io_error("read text diff", error))
 }
 
 fn ensure_diff_status(

@@ -7,7 +7,6 @@ use std::process::Output;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
@@ -23,8 +22,7 @@ use crate::model::{
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
-    CancellableOutput, CancellationToken, GitRunner, GitStdin, join_limited_stream, join_stream,
-    read_stream_bounded, read_stream_limited_with_signal,
+    CancellableOutput, CancellationToken, GitRunner, GitStdin, join_stream, read_stream_bounded,
 };
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -43,7 +41,6 @@ const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
 const MAX_PUSH_PREVIEW_FILES: usize = 20_000;
 const MAX_PUSH_PREVIEW_FILE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PUSH_TAGS: usize = 1_000;
-const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 fn diff_context_argument(expanded_unchanged: bool) -> OsString {
     let lines = if expanded_unchanged {
@@ -4251,60 +4248,16 @@ impl GitRepository {
         args: Vec<OsString>,
         stdout_limit: usize,
     ) -> Result<(Output, bool), GitError> {
-        let mut child = GitRunner::new(&self.root)
-            .spawn(args, GitStdin::Inherit)
+        let bounded = GitRunner::new(&self.root)
+            .bounded_output(args, GitStdin::Inherit, stdout_limit, 64 * 1024)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
             })?;
-        let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
-            operation: operation.to_string(),
-            message: "Git stdout was not available".to_string(),
-        })?;
-        let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
-            operation: operation.to_string(),
-            message: "Git stderr was not available".to_string(),
-        })?;
-        let (limit_sender, limit_receiver) = std::sync::mpsc::sync_channel(1);
-        let stdout_reader = thread::spawn(move || {
-            read_stream_limited_with_signal(stdout, stdout_limit, Some(limit_sender))
-        });
-        let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
-        let mut terminated_at_limit = false;
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) if limit_receiver.try_recv().is_ok() => {
-                    terminated_at_limit = true;
-                    let _ = child.kill();
-                    break child.wait().map_err(|error| GitError::Io {
-                        operation: operation.to_string(),
-                        message: error.to_string(),
-                    })?;
-                }
-                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    let _ = join_limited_stream(stdout_reader, operation, "stdout");
-                    let _ = join_stream(stderr_reader, operation, "stderr");
-                    return Err(GitError::Io {
-                        operation: operation.to_string(),
-                        message: error.to_string(),
-                    });
-                }
-            }
-        };
-        let (stdout, stdout_truncated) = join_limited_stream(stdout_reader, operation, "stdout")?;
-        let output = Output {
-            status,
-            stdout,
-            stderr: join_stream(stderr_reader, operation, "stderr")?,
-        };
-        if terminated_at_limit || stdout_truncated {
-            Ok((output, true))
+        if bounded.stdout_truncated {
+            Ok((bounded.output, true))
         } else {
-            Ok((ensure_success(operation, output)?, false))
+            Ok((ensure_success(operation, bounded.output)?, false))
         }
     }
 
