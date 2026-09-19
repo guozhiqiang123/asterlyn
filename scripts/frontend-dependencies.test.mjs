@@ -5,10 +5,6 @@ import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const sourceRoot = path.join(repositoryRoot, "src");
-const baseline = JSON.parse(
-  await readFile(new URL("./frontend-architecture-baseline.json", import.meta.url), "utf8"),
-);
-
 test("frontend dependencies keep feature and layer direction explicit", async () => {
   const files = await typescriptFiles(sourceRoot);
   const violations = [];
@@ -39,19 +35,14 @@ test("frontend dependencies keep feature and layer direction explicit", async ()
     }
   }
 
-  const actualDebt = violations.map(({ from, to }) => ({ from, to }));
-  const expectedDebt = baseline.dependencyDebt.map(({ from, to }) => ({ from, to }));
   assert.deepEqual(
-    sortEdges(actualDebt),
-    sortEdges(expectedDebt),
-    `frontend dependency debt changed:\n${violations.map(formatViolation).join("\n")}`,
+    sortEdges(violations.map(({ from, to }) => ({ from, to }))),
+    [],
+    `frontend dependency direction was violated:\n${violations.map(formatViolation).join("\n")}`,
   );
-  for (const edge of baseline.dependencyDebt) {
-    assert.ok(edge.burnDownPhase?.trim(), `${edge.from} -> ${edge.to} has no burn-down phase`);
-  }
 });
 
-test("application DOM runtime debt is explicit and cannot spread", async () => {
+test("application layer remains independent of the DOM runtime", async () => {
   const applicationRoot = path.join(sourceRoot, "application");
   const files = await typescriptFiles(applicationRoot);
   const actual = [];
@@ -61,34 +52,13 @@ test("application DOM runtime debt is explicit and cannot spread", async () => {
       actual.push(relativeSource(file));
     }
   }
-  assert.deepEqual(actual.sort(), Object.keys(baseline.applicationDomDebt).sort());
-  for (const [file, phase] of Object.entries(baseline.applicationDomDebt)) {
-    assert.ok(phase.trim(), `${file} has no DOM debt burn-down phase`);
-  }
+  assert.deepEqual(actual.sort(), [], "application code must remain independent of the DOM runtime");
 });
 
-test("every transitional workbench module has one owner and destination", async () => {
+test("transitional workbench modules are not reintroduced", async () => {
   const workbenchRoot = path.join(sourceRoot, "workbench");
   const files = (await optionalTypescriptFiles(workbenchRoot)).map(relativeSource).sort();
-  const ownership = baseline.workbenchOwnership;
-  assert.deepEqual(files, Object.keys(ownership).sort());
-  const allowedOwners = new Set([
-    "application",
-    "changes-commit",
-    "files-editor",
-    "git-history",
-    "product-contract",
-    "remote-push",
-    "settings",
-    "shared-presentation",
-    "shared-utility",
-    "shell",
-  ]);
-  for (const [file, review] of Object.entries(ownership)) {
-    assert.ok(allowedOwners.has(review.owner), `${file} has an unknown owner: ${review.owner}`);
-    assert.match(review.target, /^src\/(?!workbench\/).+\.ts$/, `${file} has no target outside workbench`);
-    assert.equal(review.migrationPhase, "FH4", `${file} has no scheduled migration phase`);
-  }
+  assert.deepEqual(files, [], "transitional workbench modules must not be reintroduced");
 });
 
 async function optionalTypescriptFiles(root) {

@@ -22,8 +22,5 @@
       "maximumLines": 830,
       "burnDownPhase": "reviewed localization data"
     }
-  },
-  "dependencyDebt": [],
-  "applicationDomDebt": {},
-  "workbenchOwnership": {}
+  }
 }
