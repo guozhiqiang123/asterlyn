@@ -1,11 +1,12 @@
 use std::fs;
 use std::io::{Read, Write};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::ExitStatus;
 use std::thread;
 
 use tempfile::tempdir;
 
 use crate::GitError;
+use crate::process::{GitRunner, GitStdin};
 
 const DIFF_OUTPUT_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const STDERR_LIMIT_BYTES: usize = 64 * 1024;
@@ -31,29 +32,22 @@ pub fn bounded_text_diff(
     write_file(&before_path, before)?;
     write_file(&after_path, after)?;
 
-    let mut child = Command::new("git")
-        .current_dir(directory.path())
-        .args([
-            "--no-pager",
-            "diff",
-            "--no-index",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--no-color",
-            "--text",
-            "--unified=3",
-            "--",
-            "before",
-            "after",
-        ])
-        .env("LC_ALL", "C")
-        .env("LANG", "C")
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    let mut child = GitRunner::new(directory.path())
+        .spawn(
+            [
+                "diff",
+                "--no-index",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-color",
+                "--text",
+                "--unified=3",
+                "--",
+                "before",
+                "after",
+            ],
+            GitStdin::Null,
+        )
         .map_err(|error| io_error("start text diff", error))?;
     let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
         operation: "read text diff".to_string(),
