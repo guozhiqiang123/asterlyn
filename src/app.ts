@@ -172,7 +172,6 @@ import {
   type EditorSessionState,
 } from "./features/files-editor/editor-session-controller";
 import {
-  SettingsController,
   type SettingsChange,
   type SettingsSection,
   type SettingsState,
@@ -263,10 +262,10 @@ import {
 } from "./workbench/preferences";
 import { createBrowserPreferenceSync } from "./workbench/preference-store";
 import {
-  PresentationEnvironment,
   createBrowserSystemPresentationPort,
 } from "./presentation/presentation-environment";
 import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter";
+import { SettingsPresentationRuntime } from "./composition/settings-presentation-runtime.ts";
 import type { LocaleCatalog, NavigationCommandId } from "./localization/catalog";
 import { loadLocale } from "./localization/locale-loader";
 import { createLocalization, type Localization } from "./localization/localization";
@@ -419,10 +418,7 @@ export class AsterlynApp {
   private readonly gitOperationRuntime: GitOperationRuntime;
   private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private editorTabsMarkup = "";
-  private readonly settingsController: SettingsController;
-  private readonly releaseSettingsController: () => void;
-  private readonly presentationEnvironment: PresentationEnvironment;
-  private readonly releasePresentationEnvironment: () => void;
+  private readonly settingsPresentationRuntime: SettingsPresentationRuntime;
   private readonly shellController: ShellController;
   private readonly terminalPanel: TerminalPanel;
   private projectTreeScrollFrame: number | null = null;
@@ -490,18 +486,13 @@ export class AsterlynApp {
       activate: (tool) => this.toggleTool(tool),
       commitOrder: (order, focusTool) => this.commitActivityOrder(order, focusTool),
     });
-    this.settingsController = new SettingsController(
-      window.localStorage,
-      createBrowserPreferenceSync(window),
-    );
-    this.presentationEnvironment = new PresentationEnvironment(
-      this.settingsController.state.preferences,
-      createBrowserSystemPresentationPort(window),
+    this.settingsPresentationRuntime = new SettingsPresentationRuntime({
+      storage: window.localStorage,
+      preferenceSync: createBrowserPreferenceSync(window),
+      systemPresentation: createBrowserSystemPresentationPort(window),
       document,
       nativeAppearance,
-    );
-    this.releasePresentationEnvironment = this.presentationEnvironment.subscribe(
-      (snapshot, previous) => {
+      presentationChanged: (snapshot, previous) => {
         if (snapshot.theme !== previous.theme) {
           this.editorSurface.setTheme(snapshot.theme);
           this.pushDiffEditor.setTheme(snapshot.theme);
@@ -513,10 +504,8 @@ export class AsterlynApp {
           void this.activateLocale(snapshot.locale);
         }
       },
-    );
-    this.releaseSettingsController = this.settingsController.subscribe((change) =>
-      this.handleSettingsControllerChange(change),
-    );
+      settingsChanged: (change) => this.handleSettingsControllerChange(change),
+    });
     this.shellController = new ShellController(window.localStorage);
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),
@@ -1331,7 +1320,7 @@ export class AsterlynApp {
   }
 
   private get settingsState(): SettingsState {
-    return this.settingsController.state;
+    return this.settingsPresentationRuntime.settings.state;
   }
 
   private get gitOperationState(): GitOperationState {
@@ -1542,7 +1531,7 @@ export class AsterlynApp {
       const catalog = await loadLocale(locale);
       if (
         request !== this.localeRequestGeneration ||
-        this.presentationEnvironment.snapshot.locale !== locale
+        this.settingsPresentationRuntime.presentation.snapshot.locale !== locale
       ) return;
       const previousCatalog = this.localization.catalog;
       this.localization = createLocalization(catalog);
@@ -1742,10 +1731,7 @@ export class AsterlynApp {
     this.branchMutationController.dispose();
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
-    this.releaseSettingsController();
-    this.settingsController.dispose();
-    this.releasePresentationEnvironment();
-    this.presentationEnvironment.dispose();
+    this.settingsPresentationRuntime.dispose();
     this.shellController.dispose();
     this.windowChromeBinding.dispose();
     this.activityRailBinding.dispose();
@@ -1806,7 +1792,7 @@ export class AsterlynApp {
       .forEach((button) => {
         button.addEventListener("click", () => {
           const section = button.dataset.settingsSection as SettingsSection;
-          this.settingsController.selectSection(section);
+          this.settingsPresentationRuntime.settings.selectSection(section);
           this.renderSettingsPage();
           queueMicrotask(() =>
             this.root
@@ -1905,7 +1891,7 @@ export class AsterlynApp {
   ): void {
     const previous = this.settingsState.preferences;
     try {
-      if (!this.settingsController.update(patch)) return;
+      if (!this.settingsPresentationRuntime.settings.update(patch)) return;
     } catch (error) {
       this.showError(error);
       return;
@@ -1955,7 +1941,7 @@ export class AsterlynApp {
     previous: AppPreferences,
     next: AppPreferences,
   ): void {
-    this.presentationEnvironment.updatePreferences(next);
+    this.settingsPresentationRuntime.presentation.updatePreferences(next);
     if (!this.root.querySelector(".app-shell")) return;
     this.applyAppPreferences();
     if (
@@ -1983,7 +1969,7 @@ export class AsterlynApp {
       `${this.settingsState.preferences.uiFontSize}px`,
     );
     this.editorSurface.setPreferences(this.settingsState.preferences);
-    const theme = this.presentationEnvironment.snapshot.theme;
+    const theme = this.settingsPresentationRuntime.presentation.snapshot.theme;
     this.editorSurface.setTheme(theme);
     this.pushDiffEditor.setTheme(theme);
     this.editorSurface.setPhrases(this.localization.catalog.editorPhrases);

@@ -221,6 +221,12 @@ and disposal. Mutation orchestration remains an explicit composition callback ra
 application coordination into presentation code. `src/app.ts` is 8,826 lines with a matching
 ceiling.
 
+Settings persistence and the effective presentation environment now meet in a small composition
+runtime. It owns both subscriptions and their disposal while keeping browser preference sync,
+system appearance, native appearance, and UI reactions as explicit injected ports. This removes
+the last manually retained release handles from `AsterlynApp`; `src/app.ts` is 8,812 lines with a
+matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
