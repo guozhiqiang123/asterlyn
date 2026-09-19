@@ -2,7 +2,7 @@ import type {
   EditorPathMutationBlocker,
   EditorPathMutationLease,
   EditorRuntimeTabRemap,
-} from "../workbench/editor-session.ts";
+} from "../editor-path-mutation.ts";
 
 export interface EditorPathMigrationLease {
   id: number;

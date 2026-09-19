@@ -5,7 +5,7 @@ import type {
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
 } from "../models.ts";
-import type { EditorPathMutationRequest } from "../workbench/editor-session.ts";
+import type { EditorPathMutationRequest } from "../editor-path-mutation.ts";
 import type {
   EditorPathMigrationLease,
   EditorPathMigrationPreparation,

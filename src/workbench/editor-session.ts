@@ -1,4 +1,19 @@
 import type { SaveTextFileResult, TextFileSnapshot } from "../models";
+import type {
+  EditorPathMapping,
+  EditorPathMutationBlocker,
+  EditorPathMutationLease,
+  EditorPathMutationLeaseTab,
+  EditorPathMutationRequest,
+  EditorRuntimeTabRemap,
+} from "../editor-path-mutation.ts";
+export type {
+  EditorPathMapping,
+  EditorPathMutationBlocker,
+  EditorPathMutationLease,
+  EditorPathMutationRequest,
+  EditorRuntimeTabRemap,
+} from "../editor-path-mutation.ts";
 import {
   editorDocumentKey,
   type EditorDocument,
@@ -54,45 +69,6 @@ export type ExternalTextReconciliationStatus =
   | "reloaded"
   | "conflict"
   | "stale";
-
-export interface EditorPathMapping {
-  sourceWorkspacePath: string;
-  destinationWorkspacePath: string;
-  sourceRepositoryId: string;
-  destinationRepositoryId: string;
-  sourcePath: string;
-  destinationPath: string;
-}
-
-export type EditorPathMutationRequest =
-  | { kind: "move"; mapping: EditorPathMapping }
-  | { kind: "trash"; sourceWorkspacePath: string };
-
-export type EditorPathMutationBlocker =
-  | "invalidMapping"
-  | "mutationInProgress"
-  | "saveInFlight"
-  | "sourceLoading"
-  | "destinationOpen"
-  | "dirtyDelete";
-
-interface EditorPathMutationLeaseTab {
-  id: string;
-  loadEpoch: number;
-  revision: string | null;
-  persistedContent: string;
-}
-
-export interface EditorPathMutationLease {
-  request: EditorPathMutationRequest;
-  tabs: EditorPathMutationLeaseTab[];
-}
-
-export interface EditorRuntimeTabRemap {
-  sourceId: string;
-  destinationId: string;
-  destinationPath: string;
-}
 
 export type EditorPathMutationPreparation =
   | { status: "ready"; lease: EditorPathMutationLease }

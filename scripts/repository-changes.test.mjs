@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeTrackedChanges } from "../src/workbench/repository-changes.ts";
+import { mergeTrackedChanges } from "../src/application/repository-changes.ts";
 
 function change(path, worktreeStatus) {
   return {

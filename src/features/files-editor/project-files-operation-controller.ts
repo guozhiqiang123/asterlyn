@@ -8,7 +8,7 @@ import type {
   WorkspaceMutationIdentity,
   WorkspaceMutationPlanResult,
 } from "../../application/workspace-mutation-coordinator.ts";
-import type { EditorPathMutationRequest } from "../../workbench/editor-session.ts";
+import type { EditorPathMutationRequest } from "../../editor-path-mutation.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 import {
   WorkspaceFileClipboard,

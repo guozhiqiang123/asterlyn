@@ -1,4 +1,4 @@
-import type { RepositorySnapshot, TrackedChangeScan } from "../models";
+import type { RepositorySnapshot, TrackedChangeScan } from "../models.ts";
 
 export function mergeTrackedChanges(
   snapshot: RepositorySnapshot,

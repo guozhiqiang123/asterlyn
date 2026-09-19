@@ -24,7 +24,10 @@ test("frontend dependencies keep feature and layer direction explicit", async ()
       const toFeature = feature(to);
       if (fromFeature && toFeature && fromFeature !== toFeature) {
         violations.push({ from, to, reason: "cross-feature import" });
-      } else if (fromLayer === "application" && ["features", "shell", "adapters"].includes(toLayer)) {
+      } else if (
+        fromLayer === "application" &&
+        ["features", "shell", "adapters", "workbench"].includes(toLayer)
+      ) {
         violations.push({ from, to, reason: "application imports a concrete outer layer" });
       } else if (fromLayer === "protocol" && ["application", "features", "shell", "adapters", "shared", "workbench"].includes(toLayer)) {
         violations.push({ from, to, reason: "protocol imports a product or presentation layer" });
@@ -61,6 +64,30 @@ test("application DOM runtime debt is explicit and cannot spread", async () => {
   assert.deepEqual(actual.sort(), Object.keys(baseline.applicationDomDebt).sort());
   for (const [file, phase] of Object.entries(baseline.applicationDomDebt)) {
     assert.ok(phase.trim(), `${file} has no DOM debt burn-down phase`);
+  }
+});
+
+test("every transitional workbench module has one owner and destination", async () => {
+  const workbenchRoot = path.join(sourceRoot, "workbench");
+  const files = (await typescriptFiles(workbenchRoot)).map(relativeSource).sort();
+  const ownership = baseline.workbenchOwnership;
+  assert.deepEqual(files, Object.keys(ownership).sort());
+  const allowedOwners = new Set([
+    "application",
+    "changes-commit",
+    "files-editor",
+    "git-history",
+    "product-contract",
+    "remote-push",
+    "settings",
+    "shared-presentation",
+    "shared-utility",
+    "shell",
+  ]);
+  for (const [file, review] of Object.entries(ownership)) {
+    assert.ok(allowedOwners.has(review.owner), `${file} has an unknown owner: ${review.owner}`);
+    assert.match(review.target, /^src\/(?!workbench\/).+\.ts$/, `${file} has no target outside workbench`);
+    assert.equal(review.migrationPhase, "FH4", `${file} has no scheduled migration phase`);
   }
 });
 

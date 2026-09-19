@@ -144,8 +144,11 @@ in `src/protocol`; presentation helpers consume that contract without making pro
 its dialog view/binding instead of placing business presentation in `src/shared`. Application
 timers and window focus are now explicit `RuntimeScheduler` and `WorkspaceFocusPort` dependencies,
 implemented at the browser adapter edge; application services no longer import DOM runtimes. The
-dependency and application-DOM debt lists are empty. The remaining FH3 task is the broader
-`workbench` classification.
+dependency and application-DOM debt lists are empty. Application services no longer import the
+transitional `workbench` layer: editor path-mutation contracts are product-neutral, while tracked
+change merge policy is application-owned. All remaining `workbench` modules have an executable,
+exact owner/destination inventory; new unclassified modules fail the architecture gate. Their
+owner-by-owner moves are part of the FH4 feature extraction rather than mechanical FH3 churn.
 
 1. Move History filter state contracts out of feature presentation modules into a feature-owned
    controller/facade exposed through an application port.

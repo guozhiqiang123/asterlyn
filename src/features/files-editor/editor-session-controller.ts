@@ -9,6 +9,7 @@ import type {
   EditorPathMigrationPreparation,
   EditorPathRuntimeChange,
 } from "../../application/editor-session-port.ts";
+import type { EditorPathMutationRequest } from "../../editor-path-mutation.ts";
 import {
   editorDocumentKey,
   type EditorDocument,
@@ -41,7 +42,6 @@ import {
   setTextTabMarkdownMode,
   textTab,
   type EditorSession,
-  type EditorPathMutationRequest,
   type MarkdownEditorMode,
   type TextTabState,
 } from "../../workbench/editor-session.ts";

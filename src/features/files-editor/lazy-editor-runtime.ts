@@ -2,7 +2,7 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffEditor } from "../../diff-editor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../workbench/preferences.ts";
-import type { EditorRuntimeTabRemap } from "../../workbench/editor-session.ts";
+import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import type {

@@ -60,7 +60,9 @@ Performance budgets are guardrails. They may change only through a documented de
   source above the review threshold has a named owner and a non-increasing reviewed ceiling; every
   stylesheet has exactly one declared entry point. Frontend layer inversions, cross-feature
   imports, and application-layer DOM access are forbidden except for named migration debt that may
-  only shrink and carries a removal phase.
+  only shrink and carries a removal phase. Every transitional `src/workbench` module has exactly
+  one named owner, one destination outside that directory, and a scheduled migration phase; an
+  unclassified module cannot be added there.
 - The main production frontend chunk should remain below 500 kB uncompressed. A temporary breach
   is accepted during the migration only when the build records the warning and the next extraction
   keeps optional feature code behind a lazy boundary.

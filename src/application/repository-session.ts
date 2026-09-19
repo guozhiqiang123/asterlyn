@@ -5,7 +5,7 @@ import type {
   TrackedChangeScan,
   UntrackedScan,
 } from "../models.ts";
-import { mergeTrackedChanges } from "../workbench/repository-changes.ts";
+import { mergeTrackedChanges } from "./repository-changes.ts";
 import {
   createSessionInvalidation,
   mergeSessionInvalidations,

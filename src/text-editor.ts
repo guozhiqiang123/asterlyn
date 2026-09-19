@@ -37,7 +37,7 @@ import {
   type GitBlameSource,
 } from "./workbench/editor-gutter.ts";
 import type { GitBlameResult } from "./models.ts";
-import type { EditorRuntimeTabRemap } from "./workbench/editor-session.ts";
+import type { EditorRuntimeTabRemap } from "./editor-path-mutation.ts";
 import { remapEditorCacheEntries } from "./workbench/editor-cache-remap.ts";
 
 interface CachedTextEditor {
