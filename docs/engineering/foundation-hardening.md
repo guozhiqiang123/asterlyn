@@ -237,6 +237,11 @@ late-import guard, localization refresh, and disposal share the feature lifecycl
 workspace/editor reconciliation required by Undo remains an injected composition callback. The
 `src/app.ts` ceiling remains 8,808 lines.
 
+The Files/Editor runtime now also owns the Search and Replacement controllers and their cancellation
+lifecycle. All four Files/Editor state owners share the same workspace-operation port, and the
+composition root no longer disposes feature controllers individually. `src/app.ts` is 8,799 lines
+with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

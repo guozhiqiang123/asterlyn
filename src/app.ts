@@ -306,8 +306,6 @@ import {
 } from "./workbench/navigation";
 import { evaluateSearchNavigation } from "./workbench/search-navigation";
 import type { WorkspaceSearchControls } from "./workbench/workspace-search";
-import { WorkspaceSearchController } from "./features/files-editor/workspace-search-controller";
-import { WorkspaceReplacementController } from "./features/files-editor/workspace-replacement-controller";
 import { CommandSurfaceController } from "./features/files-editor/command-surface-controller.ts";
 import {
   buildCommitFileTree,
@@ -432,12 +430,6 @@ export class AsterlynApp {
       const root = this.windowSession.workspace.state.root;
       return root ? { root, generation: this.windowSession.generation } : null;
     },
-  );
-  private readonly workspaceSearchController = new WorkspaceSearchController(
-    this.workspaceOperations,
-  );
-  private readonly workspaceReplacementController = new WorkspaceReplacementController(
-    this.workspaceOperations,
   );
   private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
   private readonly repositoryIntegration: RepositoryIntegrationCoordinator;
@@ -656,6 +648,7 @@ export class AsterlynApp {
           saveTextFile: (...args) => bridge.saveTextFile(...args),
           readImageFile: (...args) => bridge.readImageFile(...args),
         },
+        workspace: this.workspaceOperations,
       },
       initialCatalog.editor,
       {
@@ -869,7 +862,7 @@ export class AsterlynApp {
                 this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
               restoreBlockedReason: this.commitFileRestoreBlockReason(target.workspacePath),
               busy: this.state.loading || this.projectFilesOperationRuntime.controller.busy ||
-                this.workspaceReplacementController.state.dialog !== null,
+                this.filesEditorRuntime.replacement.state.dialog !== null,
               busyReason: this.localization.catalog.history.commitFileContextMenu.restoreBusy,
             });
           },
@@ -938,7 +931,7 @@ export class AsterlynApp {
           void this.loadSelectedDiff();
         },
         replacementRecoveryCount: () =>
-          this.workspaceReplacementController.state.replacement.recoveries.length,
+          this.filesEditorRuntime.replacement.state.replacement.recoveries.length,
         setStatus: (message, kind) => this.setStatus(message, kind),
         reportError: (error) => this.showError(error),
         messages: () => ({
@@ -1222,9 +1215,9 @@ export class AsterlynApp {
       remoteActionsMenuOpen: () => this.shellState.remoteActionsMenuOpen,
       settingsOpen: () => this.shellState.page === "settings",
       replacementClosable: () => Boolean(
-        this.workspaceReplacementController.state.dialog &&
-        this.workspaceReplacementController.state.replacement.status !== "applying" &&
-        !this.workspaceReplacementController.state.recoveryBusy
+        this.filesEditorRuntime.replacement.state.dialog &&
+        this.filesEditorRuntime.replacement.state.replacement.status !== "applying" &&
+        !this.filesEditorRuntime.replacement.state.recoveryBusy
       ),
       commandSurfaceOpen: () => this.commandSurfaceState.mode !== null,
       historyFilterOpen: () => this.historyFilterState.historyFilterMenu !== null,
@@ -1593,7 +1586,7 @@ export class AsterlynApp {
     if (this.shellState.layout.leftTool) this.renderLeftTool();
     this.relocalizeBottomTool();
     if (this.commandSurfaceState.mode) this.renderCommandSurface();
-    if (this.workspaceReplacementController.state.dialog) {
+    if (this.filesEditorRuntime.replacement.state.dialog) {
       this.renderWorkspaceReplacementDialog();
     }
     if (this.historyFilterState.historyDialog) this.renderHistoryDialog();
@@ -1741,8 +1734,6 @@ export class AsterlynApp {
     this.contextMenuHost.dispose();
     this.workspaceWatch.dispose();
     this.workspaceMutations.dispose();
-    this.workspaceSearchController.dispose();
-    this.workspaceReplacementController.dispose();
     this.repositoryIntegration.dispose();
     this.historyReadRuntime.dispose();
     this.gitHistoryMutationRuntime.dispose();
@@ -2054,8 +2045,8 @@ export class AsterlynApp {
     this.workspaceTrashRuntime.controller.reset();
     this.projectFilesOperationRuntime.controller.reset();
     this.contextMenuHost.close();
-    this.workspaceSearchController.invalidate();
-    this.workspaceReplacementController.reset();
+    this.filesEditorRuntime.search.invalidate();
+    this.filesEditorRuntime.replacement.reset();
     this.commandSurfaceController.close();
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
@@ -2145,8 +2136,8 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot || this.state.loading) return;
-    this.workspaceSearchController.invalidate();
-    this.workspaceReplacementController.reset();
+    this.filesEditorRuntime.search.invalidate();
+    this.filesEditorRuntime.replacement.reset();
     this.commandSurfaceController.close();
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
@@ -2198,14 +2189,14 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (mode !== "commands" && !workspaceRoot) return;
     if (this.commandSurfaceState.mode === "workspace" && mode !== "workspace") {
-      this.workspaceSearchController.invalidate();
+      this.filesEditorRuntime.search.invalidate();
     }
     if (!this.commandSurfaceState.mode) {
       this.commandSurfaceReturnFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     }
     const retainedQuery =
-      mode === "workspace" ? (this.workspaceSearchController.state.search.request?.query ?? "") : "";
+      mode === "workspace" ? (this.filesEditorRuntime.search.state.search.request?.query ?? "") : "";
     this.commandSurfaceController.open(mode, retainedQuery);
     this.renderCommandSurface(true);
     if (mode === "recent" && workspaceRoot && !this.filesState.loading) {
@@ -2214,7 +2205,7 @@ export class AsterlynApp {
   }
 
   private dismissCommandSurface(): void {
-    this.workspaceSearchController.invalidate();
+    this.filesEditorRuntime.search.invalidate();
     this.commandSurfaceController.close();
     this.renderCommandSurface();
     const target = this.commandSurfaceReturnFocus;
@@ -2254,12 +2245,12 @@ export class AsterlynApp {
       filesLoading: this.filesState.loading,
       files: this.commandSurfaceFiles,
       commands: this.commandSurfaceCommands,
-      workspaceSearch: this.workspaceSearchController.state.search,
-      workspaceSearchControls: this.workspaceSearchController.state.controls,
+      workspaceSearch: this.filesEditorRuntime.search.state.search,
+      workspaceSearchControls: this.filesEditorRuntime.search.state.controls,
       searchRequestIsCurrent: this.workspaceSearchRequestIsCurrent(),
-      replacementText: this.workspaceReplacementController.state.text,
+      replacementText: this.filesEditorRuntime.replacement.state.text,
       replacementRecoveryCount:
-        this.workspaceReplacementController.state.replacement.recoveries.length,
+        this.filesEditorRuntime.replacement.state.replacement.recoveries.length,
       copy: this.localization.catalog.navigation,
     };
   }
@@ -2276,9 +2267,9 @@ export class AsterlynApp {
     input.addEventListener("input", (event) => {
       if (
         this.commandSurfaceState.mode === "workspace" &&
-        this.workspaceSearchController.state.search.request?.query !== input.value
+        this.filesEditorRuntime.search.state.search.request?.query !== input.value
       ) {
-        this.workspaceSearchController.invalidate();
+        this.filesEditorRuntime.search.invalidate();
         this.invalidateWorkspaceReplacementPreview();
       }
       this.commandSurfaceController.updateQuery(input.value);
@@ -2324,7 +2315,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#workspace-search-mode")
       ?.addEventListener("click", () => {
-        const controls = this.workspaceSearchController.state.controls;
+        const controls = this.filesEditorRuntime.search.state.controls;
         const mode = controls.mode === "literal" ? "regex" : "literal";
         this.updateWorkspaceSearchControls(
           { ...controls, mode },
@@ -2337,7 +2328,7 @@ export class AsterlynApp {
         const target = event.currentTarget as HTMLInputElement;
         this.updateWorkspaceSearchControls(
           {
-            ...this.workspaceSearchController.state.controls,
+            ...this.filesEditorRuntime.search.state.controls,
             [field === "include" ? "includeText" : "excludeText"]: target.value,
           },
           id,
@@ -2351,7 +2342,7 @@ export class AsterlynApp {
         const target = event.currentTarget as HTMLSelectElement;
         this.updateWorkspaceSearchControls(
           {
-            ...this.workspaceSearchController.state.controls,
+            ...this.filesEditorRuntime.search.state.controls,
             contextLines: Number(target.value),
           },
           "workspace-search-context",
@@ -2361,7 +2352,7 @@ export class AsterlynApp {
       .querySelector<HTMLInputElement>("#workspace-replacement-text")
       ?.addEventListener("input", (event) => {
         const target = event.currentTarget as HTMLInputElement;
-        this.workspaceReplacementController.setText(target.value);
+        this.filesEditorRuntime.replacement.setText(target.value);
         this.invalidateWorkspaceReplacementPreview();
       });
     this.root
@@ -2370,7 +2361,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#workspace-recovery-open")
       ?.addEventListener("click", () => {
-        this.workspaceReplacementController.openRecoveries();
+        this.filesEditorRuntime.replacement.openRecoveries();
         this.renderWorkspaceReplacementDialog();
       });
     this.bindCommandSurfaceResultEvents();
@@ -2484,7 +2475,7 @@ export class AsterlynApp {
     caret?: number,
   ): void {
     this.invalidateWorkspaceReplacementPreview();
-    this.workspaceSearchController.updateControls(controls);
+    this.filesEditorRuntime.search.updateControls(controls);
     this.renderCommandSurface();
     queueMicrotask(() => {
       const target = this.root.querySelector<HTMLElement>(`#${focusId}`);
@@ -2536,13 +2527,13 @@ export class AsterlynApp {
   }
 
   private workspaceSearchHasCurrentResults(): boolean {
-    return this.workspaceSearchController.hasCurrentResults(
+    return this.filesEditorRuntime.search.hasCurrentResults(
       this.commandSurfaceState.query,
     );
   }
 
   private workspaceSearchRequestIsCurrent(): boolean {
-    return this.workspaceSearchController.requestIsCurrent(
+    return this.filesEditorRuntime.search.requestIsCurrent(
       this.commandSurfaceState.query,
     );
   }
@@ -2564,7 +2555,7 @@ export class AsterlynApp {
       return;
     }
     if (mode === "workspace") {
-      const match = this.workspaceSearchController.state.search.report?.matches[index];
+      const match = this.filesEditorRuntime.search.state.search.report?.matches[index];
       if (match) await this.openWorkspaceSearchMatch(match);
     }
   }
@@ -2643,7 +2634,7 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     const query = this.commandSurfaceState.query;
     if (!workspaceRoot || query.trim().length === 0) return;
-    const completion = this.workspaceSearchController.run(
+    const completion = this.filesEditorRuntime.search.run(
       { root: workspaceRoot, generation: this.windowSession.generation },
       query,
       (error) => localizedOperationError(error, this.localization.catalog.errors),
@@ -2655,15 +2646,15 @@ export class AsterlynApp {
   }
 
   private invalidateWorkspaceReplacementPreview(): void {
-    const dialog = this.workspaceReplacementController.state.dialog;
-    if (!this.workspaceReplacementController.invalidatePreview()) return;
+    const dialog = this.filesEditorRuntime.replacement.state.dialog;
+    if (!this.filesEditorRuntime.replacement.invalidatePreview()) return;
     if (dialog === "preview") this.renderWorkspaceReplacementDialog();
   }
 
   private async previewWorkspaceReplacement(): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const searchRequest = this.workspaceSearchController.state.search.request;
-    const report = this.workspaceSearchController.state.search.report;
+    const searchRequest = this.filesEditorRuntime.search.state.search.request;
+    const report = this.filesEditorRuntime.search.state.search.report;
     if (
       !workspaceRoot ||
       !searchRequest ||
@@ -2673,7 +2664,7 @@ export class AsterlynApp {
     ) {
       return;
     }
-    const completion = this.workspaceReplacementController.preview(
+    const completion = this.filesEditorRuntime.replacement.preview(
       { root: workspaceRoot, generation: this.windowSession.generation },
       searchRequest,
       (error) => localizedOperationError(error, this.localization.catalog.errors),
@@ -2684,7 +2675,7 @@ export class AsterlynApp {
 
   private renderWorkspaceReplacementDialog(): void {
     const host = this.query("#workspace-replacement-dialog");
-    const replacementState = this.workspaceReplacementController.state;
+    const replacementState = this.filesEditorRuntime.replacement.state;
     const mode = replacementState.dialog;
     host.classList.toggle("hidden", mode === null);
     const blockedOpenPaths = new Set(
@@ -2711,7 +2702,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLInputElement>("#replacement-select-all")
       ?.addEventListener("change", (event) => {
-        this.workspaceReplacementController.selectAll(
+        this.filesEditorRuntime.replacement.selectAll(
           (event.currentTarget as HTMLInputElement).checked,
         );
         this.renderWorkspaceReplacementDialog();
@@ -2720,7 +2711,7 @@ export class AsterlynApp {
       checkbox.addEventListener("change", () => {
         const path = checkbox.dataset.replacementFile;
         if (!path) return;
-        this.workspaceReplacementController.toggleFile(path);
+        this.filesEditorRuntime.replacement.toggleFile(path);
         this.renderWorkspaceReplacementDialog();
       });
     });
@@ -2742,12 +2733,12 @@ export class AsterlynApp {
   }
 
   private closeWorkspaceReplacementDialog(): void {
-    this.workspaceReplacementController.closeDialog();
+    this.filesEditorRuntime.replacement.closeDialog();
     this.renderWorkspaceReplacementDialog();
   }
 
   private requestWorkspaceReplacementCancellation(): void {
-    const outcome = this.workspaceReplacementController.requestCancellation(
+    const outcome = this.filesEditorRuntime.replacement.requestCancellation(
       this.localization.catalog.replacement.cancellationRequested,
     );
     if (outcome !== "ignored") this.renderWorkspaceReplacementDialog();
@@ -2755,7 +2746,7 @@ export class AsterlynApp {
 
   private async applyWorkspaceReplacement(): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const replacement = this.workspaceReplacementController.state.replacement;
+    const replacement = this.filesEditorRuntime.replacement.state.replacement;
     const request = replacement.request;
     const preview = replacement.preview;
     if (!workspaceRoot || !request || !preview || replacement.status !== "ready") return;
@@ -2767,7 +2758,7 @@ export class AsterlynApp {
         (tab.status !== "ready" || isTextTabDirty(tab) || tab.saveRequest !== null),
     );
     if (blocked.length > 0) {
-      this.workspaceReplacementController.setError(
+      this.filesEditorRuntime.replacement.setError(
         this.localization.catalog.replacement.blockedPaths(
           blocked.map((tab) => tab.document.workspacePath).join(", "),
         ),
@@ -2776,7 +2767,7 @@ export class AsterlynApp {
       this.renderWorkspaceReplacementDialog();
       return;
     }
-    const completion = this.workspaceReplacementController.apply(
+    const completion = this.filesEditorRuntime.replacement.apply(
       workspaceRoot,
       (error) => localizedOperationError(error, this.localization.catalog.errors),
     );
@@ -2803,7 +2794,7 @@ export class AsterlynApp {
       return;
     }
     await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
-    this.workspaceReplacementController.openRecoveryAfterFailure();
+    this.filesEditorRuntime.replacement.openRecoveryAfterFailure();
     this.renderWorkspaceReplacementDialog();
     this.showError(outcome.error);
   }
@@ -2812,7 +2803,7 @@ export class AsterlynApp {
     repositoryRoot: string,
     generation = this.windowSession.generation,
   ): Promise<void> {
-    const outcome = await this.workspaceReplacementController.loadRecoveries(
+    const outcome = await this.filesEditorRuntime.replacement.loadRecoveries(
       repositoryRoot,
       () => generation === this.windowSession.generation &&
         this.windowSession.workspace.state.root === repositoryRoot,
@@ -2827,7 +2818,7 @@ export class AsterlynApp {
         );
       }
       if (this.commandSurfaceState.mode === "workspace") this.renderCommandSurface();
-      if (this.workspaceReplacementController.state.dialog === "recovery") {
+      if (this.filesEditorRuntime.replacement.state.dialog === "recovery") {
         this.renderWorkspaceReplacementDialog();
       }
       return;
@@ -2837,7 +2828,7 @@ export class AsterlynApp {
   }
 
   private refreshWorkspaceSearchAfterReplacement(): void {
-    this.workspaceSearchController.invalidate();
+    this.filesEditorRuntime.search.invalidate();
     if (
       this.commandSurfaceState.mode === "workspace" &&
       this.commandSurfaceState.query.trim().length > 0
@@ -2853,7 +2844,7 @@ export class AsterlynApp {
     action: "keep" | "rollback",
   ): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const replacementState = this.workspaceReplacementController.state;
+    const replacementState = this.filesEditorRuntime.replacement.state;
     const recovery = replacementState.replacement.recoveries.find(
       (candidate) => candidate.recoveryId === recoveryId,
     );
@@ -2872,7 +2863,7 @@ export class AsterlynApp {
       );
       return;
     }
-    const completion = this.workspaceReplacementController.resolveRecovery(
+    const completion = this.filesEditorRuntime.replacement.resolveRecovery(
       workspaceRoot,
       recoveryId,
       action,
@@ -2888,7 +2879,7 @@ export class AsterlynApp {
       }
       if (this.windowSession.workspace.state.root !== workspaceRoot) return;
       await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
-      const unresolved = this.workspaceReplacementController.reconcileRecoveryDialog();
+      const unresolved = this.filesEditorRuntime.replacement.reconcileRecoveryDialog();
       if (unresolved > 0) {
         this.setStatus(
           outcome.result?.status === "needsRecovery"
@@ -2994,7 +2985,7 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (
       !workspaceRoot ||
-      workspaceRoot !== this.workspaceSearchController.state.search.request?.repositoryRoot
+      workspaceRoot !== this.filesEditorRuntime.search.state.search.request?.repositoryRoot
     ) {
       this.setStatus(this.localization.catalog.editor.wrongWorkspace, "warning");
       return;
