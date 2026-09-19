@@ -49,8 +49,6 @@ import {
   branchContextTargetIsCurrent,
   type BranchContextTarget,
 } from "./features/git-history/branch-context-binding.ts";
-import { BranchMutationController } from "./features/git-history/branch-mutation-controller.ts";
-import { BranchMutationDialogBinding } from "./features/git-history/branch-mutation-dialog-binding.ts";
 import {
   historyCommitContextTargetIsCurrent,
   type HistoryCommitContextTarget,
@@ -70,9 +68,8 @@ import {
 import { commitFolderContextPolicy } from "./features/git-history/commit-folder-context-policy.ts";
 import { CommitFolderDiffController } from "./features/git-history/commit-folder-diff-controller.ts";
 import { commitFileContextPolicy } from "./features/git-history/commit-file-context-policy.ts";
-import { CommitFileRestoreController } from "./features/git-history/commit-file-restore-controller.ts";
-import { CommitFileRestoreDialogBinding } from "./features/git-history/commit-file-restore-dialog-binding.ts";
 import { GitHistoryContextRuntime } from "./features/git-history/git-history-context-runtime.ts";
+import { GitHistoryMutationRuntime } from "./features/git-history/git-history-mutation-runtime.ts";
 import {
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
@@ -400,11 +397,8 @@ export class AsterlynApp {
   private readonly historyReadRuntime: GitHistoryReadRuntime;
   private readonly historyRangeSelection = new HistoryRangeSelectionController();
   private readonly commitFolderDiffController = new CommitFolderDiffController();
-  private readonly commitFileRestoreController: CommitFileRestoreController;
-  private readonly commitFileRestoreDialogBinding: CommitFileRestoreDialogBinding;
   private readonly branchesController: GitBranchesController;
-  private readonly branchMutationController: BranchMutationController;
-  private readonly branchMutationDialogBinding: BranchMutationDialogBinding;
+  private readonly gitHistoryMutationRuntime: GitHistoryMutationRuntime;
   private readonly gitHistoryContextRuntime: GitHistoryContextRuntime;
   private readonly remoteRuntime: RemoteRuntime;
   private readonly changesRuntime: ChangesRuntime;
@@ -537,41 +531,58 @@ export class AsterlynApp {
           if (this.activeDocument().kind === "historical-file") this.renderEditor();
         },
         historicalFileComparisonChanged: () => {
-        if (this.activeDocument().kind === "historical-file-comparison") this.renderEditor();
+          if (this.activeDocument().kind === "historical-file-comparison") this.renderEditor();
         },
       },
     );
-    this.commitFileRestoreController = new CommitFileRestoreController({
-      prepare: (...args) => bridge.prepareCommitFileRestore(...args),
-      execute: (...args) => bridge.executeCommitFileRestore(...args),
-      listRecoveries: (...args) => bridge.listCommitFileRestoreRecoveries(...args),
-      rollback: (...args) => bridge.rollbackCommitFileRestore(...args),
-      finalize: (...args) => bridge.finalizeCommitFileRestore(...args),
-      refresh: async (repositoryRoot, workspacePath) => {
-        const generation = this.windowSession.generation;
-        await this.refreshWorkspaceAfterReplacement(repositoryRoot, generation);
-        if (this.windowSession.matches(generation, repositoryRoot)) {
-          await this.reloadReplacementFiles([workspacePath]);
-        }
-      },
-      lease: (workspacePath) => this.commitFileRestoreLease(workspacePath),
-      errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
-    });
-    this.commitFileRestoreDialogBinding = new CommitFileRestoreDialogBinding(
+    this.gitHistoryMutationRuntime = new GitHistoryMutationRuntime({
       root,
-      this.commitFileRestoreController,
-      () => this.localization.catalog.history.commitFileContextMenu,
-      () => {
-        const active = activeTextTab(this.editorState.session);
-        if (active && this.commitFileRestoreController.isExecuting(active.document.workspacePath)) {
-          this.renderEditor();
-        } else {
-          this.editorSurface.setReadOnly(
-            this.state.loading || active?.document.readOnly === true,
-          );
-        }
+      branch: {
+        gateway: {
+          prepare: (repositoryRoot, request) =>
+            bridge.prepareBranchMutation(repositoryRoot, request),
+          execute: (plan) => this.executeReviewedBranchMutation(plan),
+          errorMessage: (error) =>
+            localizedOperationError(error, this.localization.catalog.errors),
+        },
+        copy: () => this.localization.catalog.history.branchMutation,
       },
-    );
+      fileRestore: {
+        gateway: {
+          prepare: (...args) => bridge.prepareCommitFileRestore(...args),
+          execute: (...args) => bridge.executeCommitFileRestore(...args),
+          listRecoveries: (...args) => bridge.listCommitFileRestoreRecoveries(...args),
+          rollback: (...args) => bridge.rollbackCommitFileRestore(...args),
+          finalize: (...args) => bridge.finalizeCommitFileRestore(...args),
+          refresh: async (repositoryRoot, workspacePath) => {
+            const generation = this.windowSession.generation;
+            await this.refreshWorkspaceAfterReplacement(repositoryRoot, generation);
+            if (this.windowSession.matches(generation, repositoryRoot)) {
+              await this.reloadReplacementFiles([workspacePath]);
+            }
+          },
+          lease: (workspacePath) => this.commitFileRestoreLease(workspacePath),
+          errorMessage: (error) =>
+            localizedOperationError(error, this.localization.catalog.errors),
+        },
+        copy: () => this.localization.catalog.history.commitFileContextMenu,
+        changed: () => {
+          const active = activeTextTab(this.editorState.session);
+          if (
+            active &&
+            this.gitHistoryMutationRuntime.fileRestore.isExecuting(
+              active.document.workspacePath,
+            )
+          ) {
+            this.renderEditor();
+          } else {
+            this.editorSurface.setReadOnly(
+              this.state.loading || active?.document.readOnly === true,
+            );
+          }
+        },
+      },
+    });
     this.branchesController = new GitBranchesController({
       current: () => {
         const snapshot = this.windowSession.repository.state.snapshot;
@@ -585,7 +596,7 @@ export class AsterlynApp {
       },
       checkout: async (branch) => {
         const root = this.windowSession.repository.state.snapshot?.root;
-        if (root) this.branchMutationController.open(root, "switch", branch);
+        if (root) this.gitHistoryMutationRuntime.branch.open(root, "switch", branch);
       },
       create: async (name) => {
         const snapshot = this.windowSession.repository.state.snapshot;
@@ -593,8 +604,8 @@ export class AsterlynApp {
           branch.repositoryId === "." && branch.kind === "local" && branch.current
         );
         if (snapshot && current) {
-          this.branchMutationController.open(snapshot.root, "create", current, name);
-          await this.branchMutationController.review();
+          this.gitHistoryMutationRuntime.branch.open(snapshot.root, "create", current, name);
+          await this.gitHistoryMutationRuntime.branch.review();
         }
       },
     });
@@ -621,7 +632,7 @@ export class AsterlynApp {
       {
         pushChanged: (change) => this.handleRemoteControllerChange(change),
         authenticationChanged: () => {
-        if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog();
+          if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog();
         },
       },
     );
@@ -673,16 +684,6 @@ export class AsterlynApp {
       copy: () => this.localization.catalog.gitOperations,
       changed: (change) => this.handleGitOperationControllerChange(change),
     });
-    this.branchMutationController = new BranchMutationController({
-      prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
-      execute: (plan) => this.executeReviewedBranchMutation(plan),
-      errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
-    });
-    this.branchMutationDialogBinding = new BranchMutationDialogBinding(
-      root,
-      this.branchMutationController,
-      () => this.localization.catalog.history.branchMutation,
-    );
     const contextFeedback = {
       blocked: (reason: string) => this.setStatus(reason, "warning"),
       status: (message: string) => this.setStatus(message, "success"),
@@ -739,7 +740,7 @@ export class AsterlynApp {
           openMutation: (kind, branch, suggestedName) => {
             const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
             if (repositoryRoot) {
-              this.branchMutationController.open(repositoryRoot, kind, branch, suggestedName);
+              this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName);
             }
           },
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
@@ -775,7 +776,7 @@ export class AsterlynApp {
           },
           openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
           openBranchFromCommit: (target) => {
-            this.branchMutationController.open(
+            this.gitHistoryMutationRuntime.branch.open(
               target.workspaceRoot,
               "create",
               {
@@ -1572,8 +1573,7 @@ export class AsterlynApp {
     }
     if (this.historyFilterState.historyDialog) this.renderHistoryDialog();
     if (this.gitOperationState.dialog) this.gitOperationRuntime.render();
-    this.branchMutationDialogBinding.refreshCopy();
-    this.commitFileRestoreDialogBinding.refreshCopy();
+    this.gitHistoryMutationRuntime.refreshCopy();
     this.recoveryDialog?.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
@@ -1722,13 +1722,10 @@ export class AsterlynApp {
     this.workspaceReplacementController.dispose();
     this.repositoryIntegration.dispose();
     this.historyReadRuntime.dispose();
-    this.commitFileRestoreDialogBinding.dispose();
-    this.commitFileRestoreController.dispose();
+    this.gitHistoryMutationRuntime.dispose();
     this.remoteRuntime.dispose();
     this.changesRuntime.dispose();
     this.filesEditorRuntime.dispose();
-    this.branchMutationDialogBinding.dispose();
-    this.branchMutationController.dispose();
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.settingsPresentationRuntime.dispose();
@@ -2030,7 +2027,7 @@ export class AsterlynApp {
       return false;
     }
     this.workspaceMutations.cancel();
-    this.commitFileRestoreController.reset();
+    this.gitHistoryMutationRuntime.fileRestore.reset();
     this.workspaceTrashRuntime.controller.reset();
     this.projectFilesOperationRuntime.controller.reset();
     this.contextMenuHost.close();
@@ -2104,7 +2101,7 @@ export class AsterlynApp {
       }
       void this.loadProjectFiles(opened.root, generation);
       void this.loadReplacementRecoveries(opened.root, generation);
-      if (snapshot) void this.commitFileRestoreController.loadRecoveries(opened.root, true);
+      if (snapshot) void this.gitHistoryMutationRuntime.fileRestore.loadRecoveries(opened.root, true);
       pendingRoot = snapshot?.root ?? null;
     } catch (error) {
       if (generation !== this.windowSession.generation) return false;
@@ -3872,8 +3869,7 @@ export class AsterlynApp {
     this.renderBottomTool();
     this.renderEditor();
     this.renderStatus(snapshot);
-    this.branchMutationDialogBinding.render();
-    this.commitFileRestoreDialogBinding.render();
+    this.gitHistoryMutationRuntime.render();
     this.gitOperationRuntime.render();
   }
 
@@ -5572,7 +5568,7 @@ export class AsterlynApp {
       );
       return;
     }
-    void this.commitFileRestoreController.open(target, lease);
+    void this.gitHistoryMutationRuntime.fileRestore.open(target, lease);
   }
 
   private commitFileRestoreBlockReason(workspacePath: string): string | null {
@@ -5835,7 +5831,7 @@ export class AsterlynApp {
     this.editorSurface.setReadOnly(
       this.state.loading || activeTab?.document.readOnly === true ||
         (activeTab
-          ? this.commitFileRestoreController.isExecuting(activeTab.document.workspacePath)
+          ? this.gitHistoryMutationRuntime.fileRestore.isExecuting(activeTab.document.workspacePath)
           : false) ||
         document.kind === "historical-file",
     );
@@ -8495,7 +8491,7 @@ export class AsterlynApp {
     this.editorSurface.setReadOnly(
       loading || active?.document.readOnly === true ||
         Boolean(active &&
-          this.commitFileRestoreController.isExecuting(active.document.workspacePath)),
+          this.gitHistoryMutationRuntime.fileRestore.isExecuting(active.document.workspacePath)),
     );
     this.root.classList.toggle("is-busy", loading);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);

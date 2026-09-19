@@ -227,6 +227,11 @@ system appearance, native appearance, and UI reactions as explicit injected port
 the last manually retained release handles from `AsterlynApp`; `src/app.ts` is 8,812 lines with a
 matching ceiling.
 
+Git History's two reviewed write workflows now share a feature mutation runtime. It owns branch
+mutation and historical-file restore controllers together with both dialog bindings, rendering,
+localization refresh, and disposal. `AsterlynApp` retains only the gateways and cross-feature
+reconciliation callbacks; `src/app.ts` is 8,808 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
