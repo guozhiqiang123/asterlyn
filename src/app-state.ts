@@ -18,18 +18,10 @@ import {
   createWorkspaceReplacementState,
   type WorkspaceReplacementState,
 } from "./workbench/workspace-replacement.ts";
-import {
-  createWorkspaceSearchControls,
-  createWorkspaceSearchState,
-  type WorkspaceSearchControls,
-  type WorkspaceSearchState,
-} from "./workbench/workspace-search.ts";
 
 export interface AppState extends HistoryFilterState {
   gitDetail: "branch" | "commit" | "comparison" | "folder";
   commandSurface: CommandSurfaceState;
-  workspaceSearch: WorkspaceSearchState;
-  workspaceSearchControls: WorkspaceSearchControls;
   workspaceReplacement: WorkspaceReplacementState;
   replacementText: string;
   replacementDialog: "preview" | "recovery" | null;
@@ -64,8 +56,6 @@ export function createAppState(commitFileView: CommitFileView): AppState {
   return {
     gitDetail: "commit",
     commandSurface: createCommandSurfaceState(),
-    workspaceSearch: createWorkspaceSearchState(),
-    workspaceSearchControls: createWorkspaceSearchControls(),
     workspaceReplacement: createWorkspaceReplacementState(),
     replacementText: "",
     replacementDialog: null,

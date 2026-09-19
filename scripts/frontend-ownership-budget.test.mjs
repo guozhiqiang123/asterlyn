@@ -69,6 +69,17 @@ test("window-wide bindings have explicit listener and observer disposal", async 
   assert.match(chrome, /releaseCloseRequest\?\.\(\)/);
 });
 
+test("workspace search state has one feature owner", async () => {
+  const appState = await readFile(path.join(repositoryRoot, "src/app-state.ts"), "utf8");
+  const controller = await readFile(
+    path.join(repositoryRoot, "src/features/files-editor/workspace-search-controller.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(appState, /workspaceSearch/);
+  assert.match(controller, /class WorkspaceSearchController/);
+  assert.match(controller, /private value: WorkspaceSearchControllerState/);
+});
+
 async function typescriptFiles(roots) {
   const files = [];
   for (const root of roots) {

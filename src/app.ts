@@ -333,15 +333,8 @@ import {
   type NavigationMode,
 } from "./workbench/navigation";
 import { evaluateSearchNavigation } from "./workbench/search-navigation";
-import {
-  beginWorkspaceSearch,
-  completeWorkspaceSearch,
-  failWorkspaceSearch,
-  invalidateWorkspaceSearch,
-  sameWorkspaceSearchOptions,
-  workspaceSearchOptions,
-  type WorkspaceSearchControls,
-} from "./workbench/workspace-search";
+import type { WorkspaceSearchControls } from "./workbench/workspace-search";
+import { WorkspaceSearchController } from "./features/files-editor/workspace-search-controller";
 import {
   beginReplacementApply,
   beginReplacementPreview,
@@ -517,6 +510,9 @@ export class AsterlynApp {
       const root = this.windowSession.workspace.state.root;
       return root ? { root, generation: this.windowSession.generation } : null;
     },
+  );
+  private readonly workspaceSearchController = new WorkspaceSearchController(
+    this.workspaceOperations,
   );
   private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
   private readonly repositoryIntegration: RepositoryIntegrationCoordinator;
@@ -1854,6 +1850,7 @@ export class AsterlynApp {
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.workspaceMutations.dispose();
+    this.workspaceSearchController.dispose();
     this.repositoryIntegration.dispose();
     this.releaseHistoryController();
     this.historyController.dispose();
@@ -2187,9 +2184,8 @@ export class AsterlynApp {
     this.workspaceTrash.reset();
     this.projectFilesOperations.reset();
     this.contextMenuHost.close();
-    this.cancelActiveWorkspaceSearch();
+    this.workspaceSearchController.invalidate();
     this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
     this.state.workspaceReplacement = createWorkspaceReplacementState();
     this.state.replacementDialog = null;
     this.state.replacementRecoveryBusy = null;
@@ -2284,9 +2280,8 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot || this.state.loading) return;
-    this.cancelActiveWorkspaceSearch();
+    this.workspaceSearchController.invalidate();
     this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
     this.state.workspaceReplacement = createWorkspaceReplacementState();
     this.state.replacementDialog = null;
     this.state.replacementRecoveryBusy = null;
@@ -2341,15 +2336,14 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (mode !== "commands" && !workspaceRoot) return;
     if (this.state.commandSurface.mode === "workspace" && mode !== "workspace") {
-      this.cancelActiveWorkspaceSearch();
-      this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+      this.workspaceSearchController.invalidate();
     }
     if (!this.state.commandSurface.mode) {
       this.commandSurfaceReturnFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     }
     const retainedQuery =
-      mode === "workspace" ? (this.state.workspaceSearch.request?.query ?? "") : "";
+      mode === "workspace" ? (this.workspaceSearchController.state.search.request?.query ?? "") : "";
     this.state.commandSurface = openCommandSurface(
       this.state.commandSurface,
       mode,
@@ -2362,8 +2356,7 @@ export class AsterlynApp {
   }
 
   private dismissCommandSurface(): void {
-    this.cancelActiveWorkspaceSearch();
-    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.workspaceSearchController.invalidate();
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.renderCommandSurface();
     const target = this.commandSurfaceReturnFocus;
@@ -2406,8 +2399,8 @@ export class AsterlynApp {
       filesLoading: this.filesState.loading,
       files: this.commandSurfaceFiles,
       commands: this.commandSurfaceCommands,
-      workspaceSearch: this.state.workspaceSearch,
-      workspaceSearchControls: this.state.workspaceSearchControls,
+      workspaceSearch: this.workspaceSearchController.state.search,
+      workspaceSearchControls: this.workspaceSearchController.state.controls,
       searchRequestIsCurrent: this.workspaceSearchRequestIsCurrent(),
       replacementText: this.state.replacementText,
       replacementRecoveryCount: this.state.workspaceReplacement.recoveries.length,
@@ -2427,10 +2420,9 @@ export class AsterlynApp {
     input.addEventListener("input", (event) => {
       if (
         this.state.commandSurface.mode === "workspace" &&
-        this.state.workspaceSearch.request?.query !== input.value
+        this.workspaceSearchController.state.search.request?.query !== input.value
       ) {
-        this.cancelActiveWorkspaceSearch();
-        this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+        this.workspaceSearchController.invalidate();
         this.invalidateWorkspaceReplacementPreview();
       }
       this.state.commandSurface = updateCommandSurfaceQuery(
@@ -2483,9 +2475,10 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#workspace-search-mode")
       ?.addEventListener("click", () => {
-        const mode = this.state.workspaceSearchControls.mode === "literal" ? "regex" : "literal";
+        const controls = this.workspaceSearchController.state.controls;
+        const mode = controls.mode === "literal" ? "regex" : "literal";
         this.updateWorkspaceSearchControls(
-          { ...this.state.workspaceSearchControls, mode },
+          { ...controls, mode },
           "workspace-search-mode",
         );
       });
@@ -2495,7 +2488,7 @@ export class AsterlynApp {
         const target = event.currentTarget as HTMLInputElement;
         this.updateWorkspaceSearchControls(
           {
-            ...this.state.workspaceSearchControls,
+            ...this.workspaceSearchController.state.controls,
             [field === "include" ? "includeText" : "excludeText"]: target.value,
           },
           id,
@@ -2509,7 +2502,7 @@ export class AsterlynApp {
         const target = event.currentTarget as HTMLSelectElement;
         this.updateWorkspaceSearchControls(
           {
-            ...this.state.workspaceSearchControls,
+            ...this.workspaceSearchController.state.controls,
             contextLines: Number(target.value),
           },
           "workspace-search-context",
@@ -2644,10 +2637,8 @@ export class AsterlynApp {
     focusId: string,
     caret?: number,
   ): void {
-    this.cancelActiveWorkspaceSearch();
     this.invalidateWorkspaceReplacementPreview();
-    this.state.workspaceSearchControls = controls;
-    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.workspaceSearchController.updateControls(controls);
     this.renderCommandSurface();
     queueMicrotask(() => {
       const target = this.root.querySelector<HTMLElement>(`#${focusId}`);
@@ -2699,22 +2690,14 @@ export class AsterlynApp {
   }
 
   private workspaceSearchHasCurrentResults(): boolean {
-    return (
-      this.state.workspaceSearch.status === "ready" &&
-      this.workspaceSearchRequestIsCurrent() &&
-      this.state.workspaceSearch.report !== null
+    return this.workspaceSearchController.hasCurrentResults(
+      this.state.commandSurface.query,
     );
   }
 
   private workspaceSearchRequestIsCurrent(): boolean {
-    const request = this.state.workspaceSearch.request;
-    return Boolean(
-      request &&
-      request.query === this.state.commandSurface.query &&
-      sameWorkspaceSearchOptions(
-        request.options,
-        workspaceSearchOptions(this.state.workspaceSearchControls),
-      ),
+    return this.workspaceSearchController.requestIsCurrent(
+      this.state.commandSurface.query,
     );
   }
 
@@ -2735,7 +2718,7 @@ export class AsterlynApp {
       return;
     }
     if (mode === "workspace") {
-      const match = this.state.workspaceSearch.report?.matches[index];
+      const match = this.workspaceSearchController.state.search.report?.matches[index];
       if (match) await this.openWorkspaceSearchMatch(match);
     }
   }
@@ -2814,44 +2797,15 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     const query = this.state.commandSurface.query;
     if (!workspaceRoot || query.trim().length === 0) return;
-    this.cancelActiveWorkspaceSearch();
-    const options = workspaceSearchOptions(this.state.workspaceSearchControls);
-    const operation = this.workspaceOperations.startSearch(
+    const completion = this.workspaceSearchController.run(
       { root: workspaceRoot, generation: this.windowSession.generation },
       query,
-      options,
+      (error) => localizedOperationError(error, this.localization.catalog.errors),
     );
-    const started = beginWorkspaceSearch(
-      this.state.workspaceSearch,
-      this.windowSession.generation,
-      workspaceRoot,
-      operation.operationId,
-      query,
-      options,
-    );
-    this.state.workspaceSearch = started.state;
     this.renderCommandSurface(true);
-    const completion = await operation.completion;
-    if (completion.status === "stale") return;
-    if (completion.status === "success") {
-      this.state.workspaceSearch = completeWorkspaceSearch(
-        this.state.workspaceSearch,
-        started.request,
-        completion.value,
-      );
+    if (await completion) {
       this.renderCommandSurface(true);
-    } else {
-      this.state.workspaceSearch = failWorkspaceSearch(
-        this.state.workspaceSearch,
-        started.request,
-        localizedOperationError(completion.error, this.localization.catalog.errors),
-      );
-      if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface(true);
     }
-  }
-
-  private cancelActiveWorkspaceSearch(): void {
-    this.workspaceOperations.cancelSearch();
   }
 
   private invalidateWorkspaceReplacementPreview(): void {
@@ -2879,8 +2833,8 @@ export class AsterlynApp {
 
   private async previewWorkspaceReplacement(): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const searchRequest = this.state.workspaceSearch.request;
-    const report = this.state.workspaceSearch.report;
+    const searchRequest = this.workspaceSearchController.state.search.request;
+    const report = this.workspaceSearchController.state.search.report;
     if (
       !workspaceRoot ||
       !searchRequest ||
@@ -3115,8 +3069,7 @@ export class AsterlynApp {
   }
 
   private refreshWorkspaceSearchAfterReplacement(): void {
-    this.cancelActiveWorkspaceSearch();
-    this.state.workspaceSearch = invalidateWorkspaceSearch(this.state.workspaceSearch);
+    this.workspaceSearchController.invalidate();
     if (
       this.state.commandSurface.mode === "workspace" &&
       this.state.commandSurface.query.trim().length > 0
@@ -3274,7 +3227,10 @@ export class AsterlynApp {
 
   private async openWorkspaceSearchMatch(match: WorkspaceTextSearchMatch): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    if (!workspaceRoot || workspaceRoot !== this.state.workspaceSearch.request?.repositoryRoot) {
+    if (
+      !workspaceRoot ||
+      workspaceRoot !== this.workspaceSearchController.state.search.request?.repositoryRoot
+    ) {
       this.setStatus(this.localization.catalog.editor.wrongWorkspace, "warning");
       return;
     }
