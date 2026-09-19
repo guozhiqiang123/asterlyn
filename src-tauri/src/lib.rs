@@ -12,10 +12,8 @@ use asterlyn_git::{
 use asterlyn_terminal::TerminalSessions;
 use asterlyn_workspace::{
     BinaryFileSnapshot, ReplacementApplyResult, ReplacementRecoverySummary, SaveTextFileResult,
-    SearchOptions, TextFileSnapshot, Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity,
-    WorkspaceEntryInventory, WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationLimits,
-    WorkspaceMutationOperation, WorkspaceMutationOutcome, WorkspaceMutationPlan,
-    WorkspaceMutationRecoverySummary,
+    SearchOptions, TextFileSnapshot, Workspace, WorkspaceCollisionPolicy, WorkspaceError,
+    WorkspaceMutationOperation, WorkspaceMutationOutcome, WorkspaceMutationRecoverySummary,
 };
 #[cfg(test)]
 use asterlyn_workspace::{SearchCancellationToken, SearchMode};
@@ -38,11 +36,12 @@ use adapters::image_preview::{
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
     PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
-    StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator, WorkspaceReplacementPreview,
-    WorkspaceReplacementRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
-    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
-    authorize_replacement_selection, exact_git_repository, load_project_catalog,
-    prepare_authorized_replacement, read_session_text_file, reauthorize_session_file_for_read,
+    WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
+    WorkspaceReplacementPreview, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
+    WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    authorize_replacement_selection, exact_git_repository, execute_workspace_mutation_plan,
+    inspect_workspace_entry_inventory, load_project_catalog, prepare_authorized_replacement,
+    prepare_workspace_mutation_plan, read_session_text_file, reauthorize_session_file_for_read,
     save_session_text_file, search_authorized_workspace,
 };
 #[cfg(test)]
@@ -57,95 +56,6 @@ const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
 const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
 const PROJECT_WINDOW_MIN_WIDTH: f64 = 920.0;
 const PROJECT_WINDOW_MIN_HEIGHT: f64 = 600.0;
-
-pub const WORKSPACE_MUTATION_LIMITS: WorkspaceMutationLimits = WorkspaceMutationLimits {
-    max_entries: 20_000,
-    max_total_bytes: 512 * 1024 * 1024,
-    max_depth: 64,
-    max_path_bytes: 4_096,
-};
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceMutationPreview {
-    plan_id: String,
-    operation: WorkspaceMutationOperation,
-    collision_policy: WorkspaceCollisionPolicy,
-    source: Option<WorkspaceEntryIdentity>,
-    entry_count: usize,
-    total_bytes: u64,
-    hidden_entry_count: usize,
-    fingerprint: Option<String>,
-    blockers: Vec<WorkspaceMutationBlocker>,
-}
-
-impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
-    fn from(plan: &WorkspaceMutationPlan) -> Self {
-        Self {
-            plan_id: plan.plan_id.clone(),
-            operation: plan.operation.clone(),
-            collision_policy: plan.collision_policy,
-            source: plan
-                .inventory
-                .as_ref()
-                .map(|inventory| inventory.source.clone()),
-            entry_count: plan
-                .inventory
-                .as_ref()
-                .map_or(0, |inventory| inventory.entries.len()),
-            total_bytes: plan
-                .inventory
-                .as_ref()
-                .map_or(0, |inventory| inventory.total_bytes),
-            hidden_entry_count: plan.inventory.as_ref().map_or(0, |inventory| {
-                inventory
-                    .entries
-                    .iter()
-                    .filter(|entry| entry.hidden)
-                    .count()
-            }),
-            fingerprint: plan
-                .inventory
-                .as_ref()
-                .map(|inventory| inventory.fingerprint.clone()),
-            blockers: plan.blockers.clone(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceEntryInspection {
-    source: WorkspaceEntryIdentity,
-    entry_count: usize,
-    total_bytes: u64,
-    hidden_entry_count: usize,
-    symlink_paths: Vec<String>,
-    nested_repository_paths: Vec<String>,
-    multiple_link_paths: Vec<String>,
-    truncated: bool,
-    fingerprint: String,
-}
-
-impl From<WorkspaceEntryInventory> for WorkspaceEntryInspection {
-    fn from(inventory: WorkspaceEntryInventory) -> Self {
-        Self {
-            source: inventory.source,
-            entry_count: inventory.entries.len(),
-            total_bytes: inventory.total_bytes,
-            hidden_entry_count: inventory
-                .entries
-                .iter()
-                .filter(|entry| entry.hidden)
-                .count(),
-            symlink_paths: inventory.symlink_paths,
-            nested_repository_paths: inventory.nested_repository_paths,
-            multiple_link_paths: inventory.multiple_link_paths,
-            truncated: inventory.truncated,
-            fingerprint: inventory.fingerprint,
-        }
-    }
-}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

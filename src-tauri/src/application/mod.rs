@@ -23,7 +23,11 @@ pub(crate) use workspace_catalog::{
 #[cfg(test)]
 pub(crate) use workspace_document::{read_authorized_text_file, save_authorized_text_file};
 pub(crate) use workspace_document::{read_session_text_file, save_session_text_file};
-pub(crate) use workspace_mutation::{StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator};
+pub(crate) use workspace_mutation::{
+    WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
+    execute_workspace_mutation_plan, inspect_workspace_entry_inventory,
+    prepare_workspace_mutation_plan,
+};
 pub(crate) use workspace_replacement::{
     WorkspaceReplacementPreview, authorize_replacement_selection, prepare_authorized_replacement,
 };

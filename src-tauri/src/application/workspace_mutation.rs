@@ -3,15 +3,195 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use asterlyn_workspace::{
-    WorkspaceError, WorkspaceMutationCancellationToken, WorkspaceMutationPlan,
+    Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory,
+    WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationCancellationToken,
+    WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationOutcome,
+    WorkspaceMutationPlan,
 };
 
 use super::WorkspaceWriteRegistry;
 
+const WORKSPACE_MUTATION_LIMITS: WorkspaceMutationLimits = WorkspaceMutationLimits {
+    max_entries: 20_000,
+    max_total_bytes: 512 * 1024 * 1024,
+    max_depth: 64,
+    max_path_bytes: 4_096,
+};
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceMutationPreview {
+    plan_id: String,
+    operation: WorkspaceMutationOperation,
+    collision_policy: WorkspaceCollisionPolicy,
+    source: Option<WorkspaceEntryIdentity>,
+    entry_count: usize,
+    total_bytes: u64,
+    hidden_entry_count: usize,
+    fingerprint: Option<String>,
+    blockers: Vec<WorkspaceMutationBlocker>,
+}
+
+impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
+    fn from(plan: &WorkspaceMutationPlan) -> Self {
+        Self {
+            plan_id: plan.plan_id.clone(),
+            operation: plan.operation.clone(),
+            collision_policy: plan.collision_policy,
+            source: plan
+                .inventory
+                .as_ref()
+                .map(|inventory| inventory.source.clone()),
+            entry_count: plan
+                .inventory
+                .as_ref()
+                .map_or(0, |inventory| inventory.entries.len()),
+            total_bytes: plan
+                .inventory
+                .as_ref()
+                .map_or(0, |inventory| inventory.total_bytes),
+            hidden_entry_count: plan.inventory.as_ref().map_or(0, |inventory| {
+                inventory
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.hidden)
+                    .count()
+            }),
+            fingerprint: plan
+                .inventory
+                .as_ref()
+                .map(|inventory| inventory.fingerprint.clone()),
+            blockers: plan.blockers.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceEntryInspection {
+    source: WorkspaceEntryIdentity,
+    entry_count: usize,
+    total_bytes: u64,
+    hidden_entry_count: usize,
+    symlink_paths: Vec<String>,
+    nested_repository_paths: Vec<String>,
+    multiple_link_paths: Vec<String>,
+    truncated: bool,
+    fingerprint: String,
+}
+
+impl From<WorkspaceEntryInventory> for WorkspaceEntryInspection {
+    fn from(inventory: WorkspaceEntryInventory) -> Self {
+        Self {
+            source: inventory.source,
+            entry_count: inventory.entries.len(),
+            total_bytes: inventory.total_bytes,
+            hidden_entry_count: inventory
+                .entries
+                .iter()
+                .filter(|entry| entry.hidden)
+                .count(),
+            symlink_paths: inventory.symlink_paths,
+            nested_repository_paths: inventory.nested_repository_paths,
+            multiple_link_paths: inventory.multiple_link_paths,
+            truncated: inventory.truncated,
+            fingerprint: inventory.fingerprint,
+        }
+    }
+}
+
+pub(crate) fn inspect_workspace_entry_inventory(
+    root: &Path,
+    workspace_path: &str,
+) -> Result<WorkspaceEntryInspection, WorkspaceError> {
+    Workspace::open(root)?
+        .inspect_entry(workspace_path, WORKSPACE_MUTATION_LIMITS)
+        .map(WorkspaceEntryInspection::from)
+}
+
+pub(crate) fn prepare_workspace_mutation_plan(
+    root: &Path,
+    plan_id: &str,
+    operation: WorkspaceMutationOperation,
+    collision_policy: WorkspaceCollisionPolicy,
+) -> Result<
+    (
+        WorkspaceMutationPreview,
+        Option<StoredWorkspaceMutationPlan>,
+    ),
+    WorkspaceError,
+> {
+    let workspace = Workspace::open(root)?;
+    let plan = match operation {
+        WorkspaceMutationOperation::CreateFile { destination } => {
+            workspace.plan_create_file(plan_id, &destination, collision_policy)
+        }
+        WorkspaceMutationOperation::Copy {
+            source,
+            destination,
+        } => workspace.plan_copy(
+            plan_id,
+            &source,
+            &destination,
+            collision_policy,
+            WORKSPACE_MUTATION_LIMITS,
+        ),
+        WorkspaceMutationOperation::Move {
+            source,
+            destination,
+        } => workspace.plan_move(
+            plan_id,
+            &source,
+            &destination,
+            collision_policy,
+            WORKSPACE_MUTATION_LIMITS,
+        ),
+        WorkspaceMutationOperation::Trash { source } => {
+            workspace.plan_trash(plan_id, &source, WORKSPACE_MUTATION_LIMITS)
+        }
+    }?;
+    let preview = WorkspaceMutationPreview::from(&plan);
+    let stored = plan.executable().then_some(StoredWorkspaceMutationPlan {
+        root: workspace.root().to_path_buf(),
+        plan,
+    });
+    Ok((preview, stored))
+}
+
+pub(crate) fn execute_workspace_mutation_plan<F>(
+    root: &Path,
+    recovery_root: &Path,
+    execution: WorkspaceMutationExecution,
+    trash: F,
+) -> Result<WorkspaceMutationOutcome, WorkspaceError>
+where
+    F: FnOnce(&Path) -> Result<(), WorkspaceError>,
+{
+    let _guard = execution
+        .write_lock
+        .lock()
+        .map_err(|_| WorkspaceError::Io {
+            operation: "serialize workspace writes".to_string(),
+            message: "workspace-write lock was poisoned".to_string(),
+        })?;
+    let workspace = Workspace::open(root)?;
+    match &execution.plan.operation {
+        WorkspaceMutationOperation::Trash { .. } => workspace.execute_trash_plan_with(
+            recovery_root,
+            &execution.plan,
+            &execution.cancellation,
+            trash,
+        ),
+        _ => {
+            workspace.execute_mutation_plan(recovery_root, &execution.plan, &execution.cancellation)
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct StoredWorkspaceMutationPlan {
-    pub(crate) root: PathBuf,
-    pub(crate) plan: WorkspaceMutationPlan,
+    root: PathBuf,
+    plan: WorkspaceMutationPlan,
 }
 
 struct ActiveWorkspaceMutationPlan {
@@ -35,9 +215,15 @@ struct WorkspaceMutationCoordinatorState {
 }
 
 pub(crate) struct WorkspaceMutationExecution {
-    pub(crate) plan: WorkspaceMutationPlan,
-    pub(crate) cancellation: WorkspaceMutationCancellationToken,
-    pub(crate) write_lock: Arc<Mutex<()>>,
+    plan: WorkspaceMutationPlan,
+    cancellation: WorkspaceMutationCancellationToken,
+    write_lock: Arc<Mutex<()>>,
+}
+
+impl WorkspaceMutationExecution {
+    pub(crate) fn cancellation(&self) -> WorkspaceMutationCancellationToken {
+        self.cancellation.clone()
+    }
 }
 
 pub(crate) struct WorkspaceMutationCoordinator {
@@ -272,7 +458,46 @@ fn validate_plan_id(plan_id: &str) -> Result<(), WorkspaceError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asterlyn_workspace::{Workspace, WorkspaceCollisionPolicy};
+
+    #[test]
+    fn application_service_plans_and_executes_without_tauri() {
+        let root = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        let (preview, stored) = prepare_workspace_mutation_plan(
+            root.path(),
+            "create-file",
+            WorkspaceMutationOperation::CreateFile {
+                destination: "created.txt".to_string(),
+            },
+            WorkspaceCollisionPolicy::Cancel,
+        )
+        .unwrap();
+        assert_eq!(preview.plan_id, "create-file");
+        assert!(preview.blockers.is_empty());
+
+        let stored = stored.expect("executable plan");
+        let outcome = execute_workspace_mutation_plan(
+            root.path(),
+            recovery.path(),
+            WorkspaceMutationExecution {
+                plan: stored.plan,
+                cancellation: WorkspaceMutationCancellationToken::new(),
+                write_lock: Arc::new(Mutex::new(())),
+            },
+            |_| {
+                Err(WorkspaceError::InvalidMutation {
+                    message: "create must not use the trash adapter".to_string(),
+                })
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcome.status,
+            asterlyn_workspace::WorkspaceMutationStatus::Completed
+        );
+        assert!(root.path().join("created.txt").is_file());
+    }
 
     fn stored(root: &Path, id: &str, destination: &str) -> StoredWorkspaceMutationPlan {
         let workspace = Workspace::open(root).unwrap();

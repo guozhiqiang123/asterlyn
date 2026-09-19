@@ -337,6 +337,13 @@ Read-only rejection, fresh identity authorization, and workspace I/O form one ap
 commands supply the active-session identity and retain only transport scheduling and write-lock
 coordination.
 
+Workspace entry inspection plus create/copy/move/trash planning and execution now belong to the
+existing `application/workspace_mutation.rs` coordinator boundary. Mutation limits, preview DTOs,
+write serialization, cancellation, and operation dispatch are Tauri-independent; the desktop edge
+injects only its system-trash adapter and recovery location. A new application-level test executes
+the full create plan without constructing Tauri, bringing the desktop suite to 53 passing tests
+with the same two watcher tests reserved for native acceptance.
+
 Exit gate: application behavior is testable without constructing Tauri; command modules perform
 transport validation and dispatch only; protocol generation and all native tests pass.
 

@@ -43,11 +43,10 @@ pub(crate) async fn inspect_workspace_entry(
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<WorkspaceEntryInspection, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let inventory = run_workspace_blocking("inspect workspace entry", move || {
-        Workspace::open(root)?.inspect_entry(&workspace_path, WORKSPACE_MUTATION_LIMITS)
+    run_workspace_blocking("inspect workspace entry", move || {
+        inspect_workspace_entry_inventory(&root, &workspace_path)
     })
-    .await?;
-    Ok(inventory.into())
+    .await
 }
 
 #[tauri::command]
@@ -66,43 +65,11 @@ pub(crate) async fn plan_workspace_mutation(
     let task_root = root.clone();
     let task_plan_id = plan_id.clone();
     let result = run_workspace_blocking("plan workspace mutation", move || {
-        let workspace = Workspace::open(&task_root)?;
-        match operation {
-            WorkspaceMutationOperation::CreateFile { destination } => {
-                workspace.plan_create_file(&task_plan_id, &destination, collision_policy)
-            }
-            WorkspaceMutationOperation::Copy {
-                source,
-                destination,
-            } => workspace.plan_copy(
-                &task_plan_id,
-                &source,
-                &destination,
-                collision_policy,
-                WORKSPACE_MUTATION_LIMITS,
-            ),
-            WorkspaceMutationOperation::Move {
-                source,
-                destination,
-            } => workspace.plan_move(
-                &task_plan_id,
-                &source,
-                &destination,
-                collision_policy,
-                WORKSPACE_MUTATION_LIMITS,
-            ),
-            WorkspaceMutationOperation::Trash { source } => {
-                workspace.plan_trash(&task_plan_id, &source, WORKSPACE_MUTATION_LIMITS)
-            }
-        }
+        prepare_workspace_mutation_plan(&task_root, &task_plan_id, operation, collision_policy)
     })
     .await;
     match result {
-        Ok(plan) => {
-            let preview = WorkspaceMutationPreview::from(&plan);
-            let stored = plan
-                .executable()
-                .then_some(StoredWorkspaceMutationPlan { root, plan });
+        Ok((preview, stored)) => {
             mutations.finish_plan(
                 &window_label,
                 &repository_root,
@@ -134,34 +101,14 @@ pub(crate) async fn execute_workspace_mutation(
     let window_label = window.label().to_string();
     let root = active_workspaces.resolve(&window_label, &repository_root)?;
     let execution = mutations.start_execution(&window_label, &repository_root, &root, &plan_id)?;
+    let cancellation = execution.cancellation();
     let recovery_root = workspace_mutation_recovery_root(&app)?;
-    let task_plan = execution.plan.clone();
-    let task_cancellation = execution.cancellation.clone();
-    let write_lock = execution.write_lock.clone();
     let task_root = root.clone();
     let result = run_workspace_blocking("execute workspace mutation", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
-        let workspace = Workspace::open(task_root)?;
-        match &task_plan.operation {
-            WorkspaceMutationOperation::Trash { .. } => workspace.execute_trash_plan_with(
-                &recovery_root,
-                &task_plan,
-                &task_cancellation,
-                move_to_system_trash,
-            ),
-            _ => workspace.execute_mutation_plan(&recovery_root, &task_plan, &task_cancellation),
-        }
+        execute_workspace_mutation_plan(&task_root, &recovery_root, execution, move_to_system_trash)
     })
     .await;
-    mutations.finish_execution(
-        &window_label,
-        &repository_root,
-        &plan_id,
-        &execution.cancellation,
-    )?;
+    mutations.finish_execution(&window_label, &repository_root, &plan_id, &cancellation)?;
     result
 }
 
