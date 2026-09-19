@@ -289,6 +289,11 @@ export const EN_US: LocaleCatalog = {
   editor: {
     conflict: "Conflict", saving: "Saving", unsaved: "Unsaved", saved: "Saved", close: "Close",
     closeFile: (name) => `Close ${name}`, preview: "Preview", diff: "Diff", imagePreview: "Image preview", diffPreview: "Diff preview",
+    historical: "Historical", historicalPreview: "Historical file", historicalReadOnly: "Read-only historical version",
+    loadingHistoricalFile: "Loading historical file…", historicalFileFailed: "Could not open historical file",
+    historicalComparison: "Historical vs current", loadingHistoricalComparison: "Comparing with the current file…",
+    historicalComparisonFailed: "Could not compare with the current file", currentDiskVersion: "Current file",
+    currentUnsavedVersion: "Current file (unsaved)", historicalComparisonBlameUnavailable: "Git Blame is not available for historical-to-workspace comparisons.",
     closePreview: (label) => `Close ${label} preview`, welcome: "Welcome", markdownMode: "Markdown editor mode",
     source: "Source", sourceTitle: "Edit Markdown source", split: "Split", splitTitle: "Edit source with live preview",
     renderedPreview: "Preview", previewTitle: "Rendered preview (read-only)", diffToolbar: "Diff navigation and presentation",

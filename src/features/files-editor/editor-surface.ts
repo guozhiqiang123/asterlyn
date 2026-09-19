@@ -292,6 +292,76 @@ export class EditorSurface {
     this.mountedEditorKey = key;
   }
 
+  mountReadOnlyText(
+    key: string,
+    documentId: string,
+    version: number,
+    content: string,
+    path: string,
+    preferences: AppPreferences,
+    beforeTransition: () => void,
+  ): void {
+    if (this.mountedEditorKey === key) {
+      this.textEditor.requestMeasure();
+      return;
+    }
+    const body = this.query("#content-body");
+    beforeTransition();
+    this.disposeMarkdownSurface();
+    this.diffEditor.destroy();
+    this.textEditor.detach();
+    body.innerHTML = "";
+    this.resetBodyClasses(body);
+    body.classList.add("text-surface");
+    this.mountedTextTabId = null;
+    this.activeMarkdownMode = null;
+    this.textEditor.mount(
+      body,
+      documentId,
+      version,
+      content,
+      path,
+      preferences,
+      null,
+      this.copy.gitBlameRequiresSavedFile,
+      () => undefined,
+    );
+    this.mountedEditorKey = key;
+  }
+
+  renderReadOnlyImage(
+    key: string,
+    image: ImagePreview,
+    label: string,
+    beforeTransition: () => void,
+  ): void {
+    this.showHtml(
+      key,
+      `<section class="image-preview-surface" aria-label="${escapeHtml(label)}">${imagePreviewCard(image, label, this.copy)}</section>`,
+      beforeTransition,
+    );
+    this.query("#content-body").classList.add("image-surface");
+  }
+
+  renderReadOnlyImageDiff(
+    key: string,
+    diff: ImageDiffPreview,
+    beforeTransition: () => void,
+  ): void {
+    const before = diff.before
+      ? imagePreviewCard(diff.before, this.copy.before, this.copy)
+      : emptyImageSide(this.copy.before, this.copy.fileDidNotExist);
+    const after = diff.after
+      ? imagePreviewCard(diff.after, this.copy.after, this.copy)
+      : emptyImageSide(this.copy.after, this.copy.fileRemoved);
+    this.showHtml(
+      key,
+      `<section class="image-diff-surface" aria-label="${escapeHtml(this.copy.imageDiff)}">${before}${after}</section>`,
+      beforeTransition,
+    );
+    this.query("#content-body").classList.add("image-surface");
+  }
+
   mountMarkdown(
     key: string,
     tab: TextTabState,

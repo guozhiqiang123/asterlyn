@@ -32,6 +32,7 @@ import type {
   CommitDiffResult,
   CommitFileChange,
   CommitFilePreview,
+  CommitFileComparison,
   CommitSelectedResult,
   DiffResult,
   FileChange,
@@ -891,6 +892,80 @@ const demoBridge: DesktopBridge = {
     });
   },
 
+  async compareCommitFileToCurrent(
+    repositoryRoot: string,
+    repositoryId: string,
+    commitOid: string,
+    selected: CommitFileChange,
+    currentContent: string | null,
+    expectedCurrentRevision: string | null,
+  ): Promise<CommitFileComparison> {
+    if (!isTauri) {
+      await demoDelay(110);
+      const historical = await bridge.readCommitFile(
+        repositoryRoot,
+        repositoryId,
+        commitOid,
+        selected,
+      );
+      if (historical.kind === "image" && historical.image) {
+        if (currentContent !== null || expectedCurrentRevision !== null) {
+          throw new Error("Image comparisons cannot use a text editor buffer.");
+        }
+        const current = demoImage(selected.path);
+        return {
+          repositoryId,
+          commitOid,
+          revisionOid: historical.revisionOid,
+          path: selected.path,
+          sourcePath: historical.sourcePath,
+          blobOid: historical.blobOid,
+          fileMode: historical.fileMode,
+          currentRevision: "e".repeat(64),
+          currentSource: "disk",
+          currentByteLength: current.byteLength,
+          kind: "image",
+          patch: null,
+          image: { path: selected.path, before: historical.image, after: current },
+          truncated: false,
+        };
+      }
+      const file = demoTextFiles.get(selected.path);
+      if (!file || historical.content === null) {
+        throw new Error("Select a current text file from the active project.");
+      }
+      const revision = demoTextRevision(selected.path, file);
+      if (expectedCurrentRevision !== null && expectedCurrentRevision !== revision) {
+        throw new Error("The current file changed after the editor buffer was opened.");
+      }
+      const after = currentContent ?? file.content;
+      return {
+        repositoryId,
+        commitOid,
+        revisionOid: historical.revisionOid,
+        path: selected.path,
+        sourcePath: historical.sourcePath,
+        blobOid: historical.blobOid,
+        fileMode: historical.fileMode,
+        currentRevision: "e".repeat(64),
+        currentSource: currentContent === null ? "disk" : "buffer",
+        currentByteLength: new TextEncoder().encode(after).length,
+        kind: "text",
+        patch: demoTextComparisonPatch(selected.path, historical.content, after),
+        image: null,
+        truncated: false,
+      };
+    }
+    return invoke<CommitFileComparison>("compare_commit_file_to_current", {
+      repositoryRoot,
+      repositoryId,
+      commitOid,
+      selected,
+      currentContent,
+      expectedCurrentRevision,
+    });
+  },
+
   async readCommitComparisonDiff(
     repositoryRoot: string,
     repositoryId: string,
@@ -1668,6 +1743,13 @@ function demoTextRevision(
   file: { content: string; utf8Bom: boolean; revision: number },
 ): string {
   return `demo:${path}:${file.revision}:${file.utf8Bom ? "bom" : "plain"}`;
+}
+
+function demoTextComparisonPatch(path: string, before: string, after: string): string {
+  if (before === after) return "";
+  const removed = before.replace(/\r\n?/gu, "\n").split("\n").map((line) => `-${line}`).join("\n");
+  const added = after.replace(/\r\n?/gu, "\n").split("\n").map((line) => `+${line}`).join("\n");
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n${removed}\n${added}\n`;
 }
 
 function reconcileDemoTextChange(

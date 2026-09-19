@@ -196,6 +196,48 @@ pub(crate) async fn read_commit_file(
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn compare_commit_file_to_current(
+    repository_root: String,
+    repository_id: String,
+    commit_oid: String,
+    selected: CommitFileChange,
+    current_content: Option<String>,
+    expected_current_revision: Option<String>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<CommitFileComparison, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    let catalogued = active_workspaces
+        .authorize_catalogued_file(window.label(), &root, &repository_id, &selected.path)
+        .map_err(comparison_workspace_error)?;
+    run_blocking("compare historical file to current", move || {
+        let authorized = reauthorize_session_file_for_read(&root, &catalogued)
+            .map_err(comparison_workspace_error)?;
+        let current: BinaryFileSnapshot = Workspace::open(&root)
+            .and_then(|workspace| {
+                workspace.read_binary_file(&authorized.workspace_path, IMAGE_PREVIEW_LIMIT_BYTES)
+            })
+            .map_err(comparison_workspace_error)?;
+        let version = GitRepository::open(&root)?.repository_commit_file_version(
+            &repository_id,
+            &commit_oid,
+            &selected,
+            IMAGE_PREVIEW_LIMIT_BYTES,
+        )?;
+        compare_commit_file(version, current, current_content, expected_current_revision)
+    })
+    .await
+}
+
+fn comparison_workspace_error(error: WorkspaceError) -> GitError {
+    GitError::InvalidInput {
+        field: "current file comparison".to_string(),
+        message: error.to_string(),
+    }
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_commit_comparison_diff(
     repository_root: String,
     repository_id: String,

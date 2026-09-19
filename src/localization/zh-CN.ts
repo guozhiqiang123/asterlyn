@@ -167,6 +167,11 @@ export const ZH_CN = {
   editor: {
     conflict: "冲突", saving: "正在保存", unsaved: "未保存", saved: "已保存", close: "关闭",
     closeFile: (name) => `关闭 ${name}`, preview: "预览", diff: "差异", imagePreview: "图像预览", diffPreview: "差异预览",
+    historical: "历史版本", historicalPreview: "历史文件", historicalReadOnly: "只读历史版本",
+    loadingHistoricalFile: "正在加载历史文件…", historicalFileFailed: "无法打开历史文件",
+    historicalComparison: "历史版本与当前文件", loadingHistoricalComparison: "正在与当前文件比较…",
+    historicalComparisonFailed: "无法与当前文件比较", currentDiskVersion: "当前文件",
+    currentUnsavedVersion: "当前文件（未保存）", historicalComparisonBlameUnavailable: "历史版本与工作区比较暂不支持 Git Blame。",
     closePreview: (label) => `关闭${label}`, welcome: "欢迎", markdownMode: "Markdown 编辑模式",
     source: "源码", sourceTitle: "编辑 Markdown 源码", split: "拆分", splitTitle: "编辑源码并实时预览",
     renderedPreview: "预览", previewTitle: "渲染预览（只读）", diffToolbar: "差异导航与显示",

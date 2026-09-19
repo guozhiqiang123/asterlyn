@@ -3,6 +3,7 @@ mod model;
 mod operation;
 mod parser;
 mod repository;
+mod text_diff;
 
 pub use error::{GitError, RemoteFailureKind};
 pub use model::{
@@ -19,3 +20,4 @@ pub use model::{
     SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 pub use repository::{CancellationToken, GitRepository};
+pub use text_diff::{BoundedTextDiff, bounded_text_diff};

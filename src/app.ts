@@ -66,6 +66,8 @@ import {
   HistoryComparisonController,
   type HistoryComparisonChange,
 } from "./features/git-history/history-comparison-controller.ts";
+import { HistoricalFileController } from "./features/git-history/historical-file-controller.ts";
+import { HistoricalFileComparisonController } from "./features/git-history/historical-file-comparison-controller.ts";
 import {
   CommitDetailContextBinding,
   resolveCommitDetailContextTarget,
@@ -220,6 +222,8 @@ import {
   editorDocumentKey,
   editorDocumentContentKey,
   type EditorDocument,
+  type HistoricalFileComparisonDocument,
+  type HistoricalFileDocument,
   type ProjectFileDocument,
   type ProjectImageDocument,
 } from "./workbench/editor-document";
@@ -438,6 +442,10 @@ export class AsterlynApp {
   private readonly releaseHistoryController: () => void;
   private readonly historyComparisonController: HistoryComparisonController;
   private readonly releaseHistoryComparisonController: () => void;
+  private readonly historicalFileController: HistoricalFileController;
+  private readonly releaseHistoricalFileController: () => void;
+  private readonly historicalFileComparisonController: HistoricalFileComparisonController;
+  private readonly releaseHistoricalFileComparisonController: () => void;
   private readonly commitFolderDiffController = new CommitFolderDiffController();
   private readonly commitFolderContextActions: CommitFolderContextActions;
   private readonly commitDetailContextBinding: CommitDetailContextBinding;
@@ -594,6 +602,19 @@ export class AsterlynApp {
     this.releaseHistoryComparisonController = this.historyComparisonController.subscribe(
       (change) => this.handleHistoryComparisonChange(change),
     );
+    this.historicalFileController = new HistoricalFileController({
+      readCommitFile: (...args) => bridge.readCommitFile(...args),
+    });
+    this.releaseHistoricalFileController = this.historicalFileController.subscribe(() => {
+      if (this.activeDocument().kind === "historical-file") this.renderEditor();
+    });
+    this.historicalFileComparisonController = new HistoricalFileComparisonController({
+      compareCommitFileToCurrent: (...args) => bridge.compareCommitFileToCurrent(...args),
+    });
+    this.releaseHistoricalFileComparisonController =
+      this.historicalFileComparisonController.subscribe(() => {
+        if (this.activeDocument().kind === "historical-file-comparison") this.renderEditor();
+      });
     this.branchesController = new GitBranchesController({
       current: () => {
         const snapshot = this.windowSession.repository.state.snapshot;
@@ -1762,6 +1783,10 @@ export class AsterlynApp {
     this.historyController.dispose();
     this.releaseHistoryComparisonController();
     this.historyComparisonController.dispose();
+    this.releaseHistoricalFileController();
+    this.historicalFileController.dispose();
+    this.releaseHistoricalFileComparisonController();
+    this.historicalFileComparisonController.dispose();
     this.releaseRemoteController();
     this.remoteController.dispose();
     this.releaseRemoteAuthenticationController();
@@ -2129,6 +2154,8 @@ export class AsterlynApp {
       this.closeHistoryDialog();
       this.resetHistoryFilters();
       this.historyComparisonController.clear();
+      this.historicalFileController.clear();
+      this.historicalFileComparisonController.clear();
       this.clearComparisonDiffInspection();
       this.commitFolderDiffController.clear();
       this.state.gitDetail = "commit";
@@ -5949,13 +5976,15 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot) return;
-    this.editorSurface.retain(this.editorState.session.textTabs.map((tab) => tab.id));
     const document = this.activeDocument();
+    const retainedEditorKeys = this.editorState.session.textTabs.map((tab) => tab.id);
+    if (document.kind === "historical-file") retainedEditorKeys.push(editorDocumentKey(document));
+    this.editorSurface.retain(retainedEditorKeys);
     const activeTab = document.kind === "project-file"
       ? activeTextTab(this.editorState.session)
       : null;
     this.editorSurface.setReadOnly(
-      this.state.loading || activeTab?.document.readOnly === true,
+      this.state.loading || activeTab?.document.readOnly === true || document.kind === "historical-file",
     );
     const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
@@ -5980,7 +6009,9 @@ export class AsterlynApp {
     const showContextHeader =
       document.kind === "working-diff" ||
       document.kind === "commit-diff" ||
-      document.kind === "commit-comparison-diff";
+      document.kind === "commit-comparison-diff" ||
+      document.kind === "historical-file" ||
+      document.kind === "historical-file-comparison";
     editorPanel.classList.toggle("show-context-header", showContextHeader);
     if (!showContextHeader) header.innerHTML = "";
     if (revealActiveTab) this.revealActiveEditorTab();
@@ -6047,6 +6078,16 @@ export class AsterlynApp {
           this.mountTextEditor(key, tab);
         }
       }
+      return;
+    }
+
+    if (document.kind === "historical-file") {
+      this.renderHistoricalFile(document);
+      return;
+    }
+
+    if (document.kind === "historical-file-comparison") {
+      this.renderHistoricalFileComparison(document);
       return;
     }
 
@@ -6198,6 +6239,188 @@ export class AsterlynApp {
     }
   }
 
+  private renderHistoricalFile(document: HistoricalFileDocument): void {
+    const copy = this.localization.catalog.editor;
+    const state = this.historicalFileController.state;
+    const matches = state.document !== null &&
+      editorDocumentKey(state.document) === editorDocumentKey(document);
+    this.query("#content-header").innerHTML = `
+      ${renderContentHeading(basename(document.path), document.path)}
+      <div class="header-actions"><span class="scope-pill">${escapeHtml(copy.historicalReadOnly)}</span><code class="oid">${escapeHtml(document.commitOid.slice(0, 8))}</code></div>
+    `;
+    if (!matches || state.status === "loading") {
+      this.showEditorHtml(
+        editorDocumentContentKey(document, `historical-loading:${state.version}`),
+        renderEditorLoadingBlock(copy.loadingHistoricalFile),
+      );
+      return;
+    }
+    if (state.status === "error") {
+      this.showEditorHtml(
+        editorDocumentContentKey(document, `historical-error:${state.version}:${state.error}`),
+        renderEditorRetryState(
+          copy.historicalFileFailed,
+          state.error,
+          "retry-historical-file",
+          "history",
+          copy,
+        ),
+      );
+      this.query("#retry-historical-file").addEventListener("click", () => {
+        this.openHistoricalFile(document);
+      });
+      return;
+    }
+    const preview = state.preview;
+    if (preview.kind === "image" && preview.image) {
+      this.editorSurface.renderReadOnlyImage(
+        editorDocumentContentKey(document, `historical-image:${preview.blobOid}`),
+        preview.image,
+        copy.historicalPreview,
+        () => this.captureMountedTextEditor(),
+      );
+      return;
+    }
+    if (preview.kind === "text" && preview.content !== null) {
+      this.editorSurface.mountReadOnlyText(
+        editorDocumentContentKey(document, `historical-text:${preview.blobOid}`),
+        editorDocumentKey(document),
+        state.version,
+        preview.content,
+        document.path,
+        this.settingsState.preferences,
+        () => this.captureMountedTextEditor(),
+      );
+    }
+  }
+
+  private openHistoricalFile(document: HistoricalFileDocument): void {
+    this.captureMountedTextEditor();
+    this.editorController.activatePreview({ ...document });
+    this.renderEditor();
+    void this.historicalFileController.open(document);
+  }
+
+  private renderHistoricalFileComparison(document: HistoricalFileComparisonDocument): void {
+    const copy = this.localization.catalog.editor;
+    const state = this.historicalFileComparisonController.state;
+    const matches = state.document !== null &&
+      editorDocumentKey(state.document) === editorDocumentKey(document);
+    const currentLabel = document.currentSource === "buffer"
+      ? copy.currentUnsavedVersion
+      : copy.currentDiskVersion;
+    this.query("#content-header").innerHTML = `
+      ${renderContentHeading(basename(document.path), document.path)}
+      <div class="header-actions"><span class="scope-pill">${escapeHtml(currentLabel)}</span><code class="oid">${escapeHtml(document.commitOid.slice(0, 8))}</code></div>
+    `;
+    if (!matches || state.status === "loading") {
+      this.showEditorHtml(
+        editorDocumentContentKey(document, `historical-comparison-loading:${state.version}`),
+        renderEditorLoadingBlock(copy.loadingHistoricalComparison),
+      );
+      return;
+    }
+    if (state.status === "error") {
+      this.showEditorHtml(
+        editorDocumentContentKey(document, `historical-comparison-error:${state.version}:${state.error}`),
+        renderEditorRetryState(
+          copy.historicalComparisonFailed,
+          state.error,
+          "retry-historical-comparison",
+          "history",
+          copy,
+        ),
+      );
+      this.query("#retry-historical-comparison").addEventListener("click", () => {
+        this.openHistoricalComparison(document);
+      });
+      return;
+    }
+    const comparison = state.comparison;
+    if (comparison.kind === "image" && comparison.image) {
+      this.editorSurface.renderReadOnlyImageDiff(
+        editorDocumentContentKey(
+          document,
+          `historical-comparison-image:${comparison.blobOid}:${comparison.currentRevision}`,
+        ),
+        comparison.image,
+        () => this.captureMountedTextEditor(),
+      );
+      return;
+    }
+    if (comparison.kind === "text" && comparison.patch !== null) {
+      this.mountEditorDiff(
+        editorDocumentContentKey(
+          document,
+          `historical-comparison-text:${comparison.blobOid}:${comparison.currentRevision}:${state.version}`,
+        ),
+        comparison.patch || copy.noTextualDiff,
+        document.path,
+        this.unavailableDiffBlame(copy.historicalComparisonBlameUnavailable),
+      );
+    }
+  }
+
+  private openHistoricalComparison(
+    source: HistoricalFileDocument | HistoricalFileComparisonDocument,
+  ): void {
+    this.captureMountedTextEditor();
+    const file = this.filesState.files.find((candidate) =>
+      candidate.repositoryId === source.repositoryId && candidate.path === source.path
+    );
+    if (!file) {
+      this.setStatus(this.localization.catalog.editor.diffFileMissing, "warning");
+      return;
+    }
+    const currentDocument: ProjectFileDocument = {
+      kind: "project-file",
+      repositoryRoot: source.repositoryRoot,
+      repositoryId: file.repositoryId,
+      path: file.path,
+      workspacePath: file.workspacePath,
+      readOnly: file.readOnly === true,
+    };
+    const tab = textTab(this.editorState.session, editorDocumentKey(currentDocument));
+    if (tab?.saveRequest || tab?.status === "loading") {
+      this.setStatus(this.localization.catalog.editor.waitForFileOperation, "warning");
+      return;
+    }
+    const dirty = Boolean(tab && tab.status === "ready" && isTextTabDirty(tab));
+    if (dirty && !tab?.revision) {
+      this.setStatus(this.localization.catalog.editor.waitForLoad, "warning");
+      return;
+    }
+    const document: HistoricalFileComparisonDocument = {
+      kind: "historical-file-comparison",
+      repositoryRoot: source.repositoryRoot,
+      repositoryId: source.repositoryId,
+      commitOid: source.commitOid,
+      path: source.path,
+      originalPath: source.originalPath,
+      status: source.status,
+      currentSource: dirty ? "buffer" : "disk",
+    };
+    const captured = dirty && tab ? {
+      id: tab.id,
+      editVersion: tab.editVersion,
+      revision: tab.revision!,
+      content: tab.content,
+    } : null;
+    const buffer = captured ? {
+      content: captured.content,
+      expectedRevision: captured.revision,
+      current: () => {
+        const current = textTab(this.editorState.session, captured.id);
+        return current?.status === "ready" && current.saveRequest === null &&
+          current.revision === captured.revision && current.editVersion === captured.editVersion &&
+          current.content === captured.content;
+      },
+    } : null;
+    this.editorController.activatePreview(document);
+    this.renderEditor();
+    void this.historicalFileComparisonController.open(document, buffer);
+  }
+
   private showEditorHtml(key: string, html: string): void {
     this.editorSurface.showHtml(key, html, () => this.captureMountedTextEditor());
   }
@@ -6218,7 +6441,9 @@ export class AsterlynApp {
   }
 
   private renderImageDiff(
-    document: Exclude<EditorDocument, { kind: "welcome" | "project-file" | "project-image" }>,
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
     retry: () => void,
   ): void {
     this.editorSurface.renderImageDiff(

@@ -336,6 +336,17 @@ export interface EditorCopy {
   diff: string;
   imagePreview: string;
   diffPreview: string;
+  historical: string;
+  historicalPreview: string;
+  historicalReadOnly: string;
+  loadingHistoricalFile: string;
+  historicalFileFailed: string;
+  historicalComparison: string;
+  loadingHistoricalComparison: string;
+  historicalComparisonFailed: string;
+  currentDiskVersion: string;
+  currentUnsavedVersion: string;
+  historicalComparisonBlameUnavailable: string;
   closePreview(label: string): string;
   welcome: string;
   markdownMode: string;

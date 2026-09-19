@@ -13,12 +13,13 @@ use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
-    ReplacementApplyResult, ReplacementFilePreview, ReplacementLimits, ReplacementRecoverySummary,
-    SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken, SearchCandidate,
-    SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason, TextFileSnapshot,
-    Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory,
-    WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
-    WorkspaceMutationOutcome, WorkspaceMutationPlan, WorkspaceMutationRecoverySummary,
+    BinaryFileSnapshot, ReplacementApplyResult, ReplacementFilePreview, ReplacementLimits,
+    ReplacementRecoverySummary, SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken,
+    SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions, SearchSkipReason,
+    TextFileSnapshot, Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity,
+    WorkspaceEntryInventory, WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationLimits,
+    WorkspaceMutationOperation, WorkspaceMutationOutcome, WorkspaceMutationPlan,
+    WorkspaceMutationRecoverySummary,
 };
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -28,6 +29,7 @@ mod adapters;
 mod application;
 mod commands;
 
+use adapters::commit_file_comparison::{CommitFileComparison, compare_commit_file};
 use adapters::commit_file_preview::{CommitFilePreview, commit_file_preview};
 #[cfg(test)]
 use adapters::image_preview::inspect_image;
@@ -872,6 +874,7 @@ pub fn run() {
             read_commit_details,
             read_commit_comparison_details,
             read_commit_file,
+            compare_commit_file_to_current,
             read_git_blame,
             read_commit_diff,
             read_commit_comparison_diff,

@@ -22,6 +22,9 @@ test("historical file reads remain wired through the native command boundary", a
   assert.match(commands, /async fn read_commit_file/u);
   assert.match(runtime, /read_commit_file,/u);
   assert.match(adapter, /"read_commit_file"/u);
+  assert.match(commands, /async fn compare_commit_file_to_current/u);
+  assert.match(runtime, /compare_commit_file_to_current,/u);
+  assert.match(adapter, /"compare_commit_file_to_current"/u);
 });
 
 test("desktop response validation rejects malformed command payloads", () => {
@@ -163,6 +166,26 @@ test("desktop response validation accepts representative valid payloads", () => 
     image: null,
   };
   assert.deepEqual(validateDesktopResult("read_commit_file", historicalText), historicalText);
+  const historicalComparison = {
+    repositoryId: ".",
+    commitOid: "1".repeat(40),
+    revisionOid: "2".repeat(40),
+    path: "src/app.ts",
+    sourcePath: "src/app.ts",
+    blobOid: "3".repeat(40),
+    fileMode: "100644",
+    currentRevision: "4".repeat(64),
+    currentSource: "buffer",
+    currentByteLength: 9,
+    kind: "text",
+    patch: "diff --git a/src/app.ts b/src/app.ts\n",
+    image: null,
+    truncated: false,
+  };
+  assert.deepEqual(
+    validateDesktopResult("compare_commit_file_to_current", historicalComparison),
+    historicalComparison,
+  );
   assert.deepEqual(
     validateDesktopResult("read_git_blame", {
       repositoryId: ".",
@@ -287,6 +310,25 @@ test("desktop response validation rejects malformed results", () => {
       image: null,
     }),
     /full object IDs/,
+  );
+  assert.throws(
+    () => validateDesktopResult("compare_commit_file_to_current", {
+      repositoryId: ".",
+      commitOid: "1".repeat(40),
+      revisionOid: "2".repeat(40),
+      path: "src/app.ts",
+      sourcePath: "src/app.ts",
+      blobOid: "3".repeat(40),
+      fileMode: "100644",
+      currentRevision: "not-a-revision",
+      currentSource: "disk",
+      currentByteLength: 9,
+      kind: "text",
+      patch: "diff",
+      image: null,
+      truncated: false,
+    }),
+    /currentRevision must be a full workspace revision/,
   );
 });
 

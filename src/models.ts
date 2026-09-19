@@ -179,6 +179,23 @@ export interface CommitFilePreview {
   image: ImagePreview | null;
 }
 
+export interface CommitFileComparison {
+  repositoryId: string;
+  commitOid: string;
+  revisionOid: string;
+  path: string;
+  sourcePath: string;
+  blobOid: string;
+  fileMode: string;
+  currentRevision: string;
+  currentSource: "disk" | "buffer";
+  currentByteLength: number;
+  kind: "text" | "image";
+  patch: string | null;
+  image: ImageDiffPreview | null;
+  truncated: boolean;
+}
+
 export interface CommitDiffResult {
   repositoryId: string;
   oid: string;

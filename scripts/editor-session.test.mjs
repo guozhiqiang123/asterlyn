@@ -63,6 +63,23 @@ test("text tabs deduplicate while one diff preview is replaced", () => {
   assert.equal(session.preview.kind, "commit-diff");
 });
 
+test("a historical file remains a replaceable preview rather than an editable tab", () => {
+  const document = {
+    kind: "historical-file",
+    repositoryRoot: "/repo",
+    repositoryId: ".",
+    commitOid: "a".repeat(40),
+    path: "src/app.ts",
+    originalPath: null,
+    status: "modified",
+  };
+  const session = activatePreview(createEditorSession(), document);
+
+  assert.equal(session.preview.kind, "historical-file");
+  assert.equal(session.textTabs.length, 0);
+  assert.equal(session.active.kind, "preview");
+});
+
 test("Markdown presentation mode belongs to one text tab", () => {
   let session = loaded(createEditorSession(), "README.md");
   session = loaded(session, "notes.md");
