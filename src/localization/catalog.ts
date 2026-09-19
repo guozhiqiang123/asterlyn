@@ -853,6 +853,7 @@ export interface HistoryCopy {
   commitContextMenu: HistoryCommitContextMenuCopy;
   rangeContextMenu: HistoryCommitRangeContextMenuCopy;
   commitFolderContextMenu: HistoryCommitFolderContextMenuCopy;
+  commitFileContextMenu: HistoryCommitFileContextMenuCopy;
   rangeSelectionLimit: string;
   rangeSelectionBarrier: string;
   comparisonTitle: string;
@@ -1126,6 +1127,53 @@ export interface HistoryCommitFolderContextMenuCopy {
   projectedRangeDescription(count: number, formattedCount: string): string;
   commit: string;
   comparisonBase: string;
+}
+
+export interface HistoryCommitFileContextMenuCopy {
+  ariaLabel(path: string): string;
+  showDiff: string;
+  openHistorical: string;
+  compareCurrent: string;
+  openCurrent: string;
+  restore: string;
+  historyUpToCommit: string;
+  copyPath: string;
+  fileName: string;
+  relativePath: string;
+  absolutePath: string;
+  copiedFileName: string;
+  copiedRelativePath: string;
+  copiedAbsolutePath: string;
+  clipboardUnavailable: string;
+  currentFileUnavailable: string;
+  saveBeforeRestore: string;
+  waitForEditor: string;
+  restoreBusy: string;
+  targetChanged: string;
+  restoreEyebrow: string;
+  restoreTitle: string;
+  recoveryTitle: string;
+  restoreDescription: string;
+  appliedDescription: string;
+  recoveryDescription: string;
+  preparing: string;
+  target: string;
+  source: string;
+  action: string;
+  size: string;
+  mode: string;
+  byteChange(before: number | null, after: number): string;
+  workingTreeOnly: string;
+  editorChanged: string;
+  restoreActions: Record<"create" | "overwrite" | "unchanged", string>;
+  recoveryStates: Record<"original" | "restored" | "conflict" | "unavailable", string>;
+  noRecoveries: string;
+  restoreNow: string;
+  undo: string;
+  keep: string;
+  working: string;
+  cancel: string;
+  close: string;
 }
 
 export interface HistoryCommitRangePolicyCopy {

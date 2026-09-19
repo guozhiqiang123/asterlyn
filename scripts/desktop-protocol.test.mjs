@@ -14,8 +14,9 @@ test("generated desktop command types match the versioned protocol schema", asyn
 });
 
 test("historical file reads remain wired through the native command boundary", async () => {
-  const [commands, runtime, adapter] = await Promise.all([
+  const [commands, restoreCommands, runtime, adapter] = await Promise.all([
     readFile(new URL("../src-tauri/src/commands/git_reads.rs", import.meta.url), "utf8"),
+    readFile(new URL("../src-tauri/src/commands/commit_file_restore.rs", import.meta.url), "utf8"),
     readFile(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8"),
     readFile(new URL("../src/adapters/tauri/tauri-git-read-bridge.ts", import.meta.url), "utf8"),
   ]);
@@ -25,6 +26,47 @@ test("historical file reads remain wired through the native command boundary", a
   assert.match(commands, /async fn compare_commit_file_to_current/u);
   assert.match(runtime, /compare_commit_file_to_current,/u);
   assert.match(adapter, /"compare_commit_file_to_current"/u);
+  for (const command of [
+    "prepare_commit_file_restore",
+    "execute_commit_file_restore",
+    "list_commit_file_restore_recoveries",
+    "rollback_commit_file_restore",
+    "finalize_commit_file_restore",
+  ]) {
+    assert.match(restoreCommands, new RegExp(`fn ${command}`, "u"));
+    assert.match(runtime, new RegExp(`${command},`, "u"));
+    assert.match(adapter, new RegExp(`"${command}"`, "u"));
+  }
+});
+
+test("historical file restore payloads validate reviewed and recovery identities", () => {
+  const restore = {
+    planId: "restore-1", workspacePath: "src/app.ts", action: "overwrite",
+    expectedRevision: "revision", currentMode: 420, restoredMode: 420,
+    currentByteLength: 10, restoredByteLength: 12, repositoryId: ".",
+    commitOid: "a".repeat(40), revisionOid: "a".repeat(40), sourcePath: "src/app.ts",
+    blobOid: "b".repeat(40), fileMode: "100644",
+  };
+  assert.deepEqual(validateDesktopResult("prepare_commit_file_restore", restore), restore);
+  assert.throws(
+    () => validateDesktopResult("prepare_commit_file_restore", { ...restore, action: "delete" }),
+    /supported restore action/u,
+  );
+  const applied = {
+    recoveryId: "restore-1", workspacePath: "src/app.ts",
+    status: "applied", fileState: "restored",
+  };
+  assert.deepEqual(validateDesktopResult("execute_commit_file_restore", applied), applied);
+  assert.deepEqual(
+    validateDesktopResult("list_commit_file_restore_recoveries", [applied]),
+    [applied],
+  );
+  assert.throws(
+    () => validateDesktopResult("rollback_commit_file_restore", {
+      ...applied, fileState: "unknown",
+    }),
+    /fileState must be supported/u,
+  );
 });
 
 test("desktop response validation rejects malformed command payloads", () => {

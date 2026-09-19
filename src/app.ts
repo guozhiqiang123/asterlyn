@@ -72,10 +72,15 @@ import {
   CommitDetailContextBinding,
   resolveCommitDetailContextTarget,
   type CommitDetailDirectoryContextTarget,
+  type CommitDetailFileContextTarget,
 } from "./features/git-history/commit-detail-context-binding.ts";
 import { CommitFolderContextActions } from "./features/git-history/commit-folder-context-actions.ts";
 import { commitFolderContextPolicy } from "./features/git-history/commit-folder-context-policy.ts";
 import { CommitFolderDiffController } from "./features/git-history/commit-folder-diff-controller.ts";
+import { CommitFileContextActions } from "./features/git-history/commit-file-context-actions.ts";
+import { commitFileContextPolicy } from "./features/git-history/commit-file-context-policy.ts";
+import { CommitFileRestoreController } from "./features/git-history/commit-file-restore-controller.ts";
+import { CommitFileRestoreDialogBinding } from "./features/git-history/commit-file-restore-dialog-binding.ts";
 import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
@@ -448,6 +453,9 @@ export class AsterlynApp {
   private readonly releaseHistoricalFileComparisonController: () => void;
   private readonly commitFolderDiffController = new CommitFolderDiffController();
   private readonly commitFolderContextActions: CommitFolderContextActions;
+  private readonly commitFileContextActions: CommitFileContextActions;
+  private readonly commitFileRestoreController: CommitFileRestoreController;
+  private readonly commitFileRestoreDialogBinding: CommitFileRestoreDialogBinding;
   private readonly commitDetailContextBinding: CommitDetailContextBinding;
   private readonly branchesController: GitBranchesController;
   private readonly branchContextActions: BranchContextActions;
@@ -615,6 +623,37 @@ export class AsterlynApp {
       this.historicalFileComparisonController.subscribe(() => {
         if (this.activeDocument().kind === "historical-file-comparison") this.renderEditor();
       });
+    this.commitFileRestoreController = new CommitFileRestoreController({
+      prepare: (...args) => bridge.prepareCommitFileRestore(...args),
+      execute: (...args) => bridge.executeCommitFileRestore(...args),
+      listRecoveries: (...args) => bridge.listCommitFileRestoreRecoveries(...args),
+      rollback: (...args) => bridge.rollbackCommitFileRestore(...args),
+      finalize: (...args) => bridge.finalizeCommitFileRestore(...args),
+      refresh: async (repositoryRoot, workspacePath) => {
+        const generation = this.windowSession.generation;
+        await this.refreshWorkspaceAfterReplacement(repositoryRoot, generation);
+        if (this.windowSession.matches(generation, repositoryRoot)) {
+          await this.reloadReplacementFiles([workspacePath]);
+        }
+      },
+      lease: (workspacePath) => this.commitFileRestoreLease(workspacePath),
+      errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+    });
+    this.commitFileRestoreDialogBinding = new CommitFileRestoreDialogBinding(
+      root,
+      this.commitFileRestoreController,
+      () => this.localization.catalog.history.commitFileContextMenu,
+      () => {
+        const active = activeTextTab(this.editorState.session);
+        if (active && this.commitFileRestoreController.isExecuting(active.document.workspacePath)) {
+          this.renderEditor();
+        } else {
+          this.editorSurface.setReadOnly(
+            this.state.loading || active?.document.readOnly === true,
+          );
+        }
+      },
+    );
     this.branchesController = new GitBranchesController({
       current: () => {
         const snapshot = this.windowSession.repository.state.snapshot;
@@ -887,6 +926,40 @@ export class AsterlynApp {
       },
       () => this.localization.catalog.history,
     );
+    this.commitFileContextActions = new CommitFileContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isCommitFileContextTargetCurrent(target),
+        policy: (target) => {
+          this.captureMountedTextEditor();
+          const currentFile = this.filesState.files.some((file) =>
+            file.repositoryId === target.repositoryId && file.path === target.path && !file.readOnly
+          );
+          return commitFileContextPolicy({
+            currentFileAvailable: currentFile,
+            currentFileUnavailableReason:
+              this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
+            restoreBlockedReason: this.commitFileRestoreBlockReason(target.workspacePath),
+            busy: this.state.loading || this.projectFilesOperations.busy ||
+              this.state.replacementDialog !== null,
+            busyReason: this.localization.catalog.history.commitFileContextMenu.restoreBusy,
+          });
+        },
+        highlight: (target, highlighted) =>
+          this.markCommitFileContextTarget(target.path, highlighted),
+        showDiff: (target) => this.openCommitFileContextDiff(target),
+        openHistorical: (target) => this.openCommitFileContextHistorical(target),
+        compareCurrent: (target) => this.openCommitFileContextComparison(target),
+        openCurrent: (target) => void this.openCommitFileContextCurrent(target),
+        restore: (target) => this.openCommitFileRestore(target),
+        installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.history,
+    );
     this.commitDetailContextBinding = new CommitDetailContextBinding(
       root,
       () => ({
@@ -901,7 +974,10 @@ export class AsterlynApp {
             ...request,
             target: request.target as CommitDetailDirectoryContextTarget,
           })
-        : false,
+        : this.commitFileContextActions.open({
+            ...request,
+            target: request.target as CommitDetailFileContextTarget,
+          }),
     );
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
@@ -1627,6 +1703,7 @@ export class AsterlynApp {
     if (this.state.historyDialog) this.renderHistoryDialog();
     if (this.gitOperationState.dialog) this.gitOperationDialogBinding.render();
     this.branchMutationDialogBinding.refreshCopy();
+    this.commitFileRestoreDialogBinding.refreshCopy();
     this.recoveryDialog?.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
@@ -1787,6 +1864,8 @@ export class AsterlynApp {
     this.historicalFileController.dispose();
     this.releaseHistoricalFileComparisonController();
     this.historicalFileComparisonController.dispose();
+    this.commitFileRestoreDialogBinding.dispose();
+    this.commitFileRestoreController.dispose();
     this.releaseRemoteController();
     this.remoteController.dispose();
     this.releaseRemoteAuthenticationController();
@@ -2105,6 +2184,7 @@ export class AsterlynApp {
       return false;
     }
     this.workspaceMutations.cancel();
+    this.commitFileRestoreController.reset();
     this.workspaceTrash.reset();
     this.projectFilesOperations.reset();
     this.contextMenuHost.close();
@@ -2184,6 +2264,7 @@ export class AsterlynApp {
       }
       void this.loadProjectFiles(opened.root, generation);
       void this.loadReplacementRecoveries(opened.root, generation);
+      if (snapshot) void this.commitFileRestoreController.loadRecoveries(opened.root, true);
       pendingRoot = snapshot?.root ?? null;
     } catch (error) {
       if (generation !== this.windowSession.generation) return false;
@@ -4092,6 +4173,7 @@ export class AsterlynApp {
     this.renderEditor();
     this.renderStatus(snapshot);
     this.branchMutationDialogBinding.render();
+    this.commitFileRestoreDialogBinding.render();
     this.gitOperationDialogBinding.render();
   }
 
@@ -5757,6 +5839,149 @@ export class AsterlynApp {
     );
   }
 
+  private isCommitFileContextTargetCurrent(
+    target: CommitDetailFileContextTarget,
+  ): boolean {
+    if (!this.windowSession.matches(target.workspaceGeneration, target.workspaceRoot)) return false;
+    const current = resolveCommitDetailContextTarget(
+      this.historyState,
+      this.windowSession.generation,
+      "file",
+      target.path,
+      this.windowSession.repository.state.snapshot,
+      this.windowSession.repository.state.revision,
+      this.state.commitFileView,
+    );
+    return Boolean(
+      current && current.kind === "file" && current.file &&
+      current.repositoryRevision === target.repositoryRevision &&
+      current.historyGeneration === target.historyGeneration &&
+      current.repositoryId === target.repositoryId &&
+      current.oid === target.oid &&
+      current.parentOid === target.parentOid &&
+      current.workspacePath === target.workspacePath &&
+      sameCommitFileChanges([current.file], [target.file]),
+    );
+  }
+
+  private markCommitFileContextTarget(path: string, highlighted: boolean): void {
+    this.root.querySelectorAll<HTMLElement>("[data-commit-file]").forEach((row) => {
+      row.classList.toggle("context-target", highlighted && row.dataset.commitFile === path);
+    });
+  }
+
+  private openCommitFileContextDiff(target: CommitDetailFileContextTarget): void {
+    if (!this.isCommitFileContextTargetCurrent(target)) {
+      this.setStatus(
+        this.localization.catalog.history.commitFileContextMenu.targetChanged,
+        "warning",
+      );
+      return;
+    }
+    this.selectCommitFile(target.path, false);
+  }
+
+  private historicalDocumentForTarget(
+    target: CommitDetailFileContextTarget,
+  ): HistoricalFileDocument {
+    return {
+      kind: "historical-file",
+      repositoryRoot: target.workspaceRoot,
+      repositoryId: target.repositoryId,
+      commitOid: target.oid,
+      path: target.file.path,
+      originalPath: target.file.originalPath,
+      status: target.file.status,
+    };
+  }
+
+  private openCommitFileContextHistorical(target: CommitDetailFileContextTarget): void {
+    if (!this.isCommitFileContextTargetCurrent(target)) return;
+    this.openHistoricalFile(this.historicalDocumentForTarget(target));
+  }
+
+  private openCommitFileContextComparison(target: CommitDetailFileContextTarget): void {
+    if (!this.isCommitFileContextTargetCurrent(target)) return;
+    this.openHistoricalComparison(this.historicalDocumentForTarget(target));
+  }
+
+  private async openCommitFileContextCurrent(
+    target: CommitDetailFileContextTarget,
+  ): Promise<void> {
+    if (!this.isCommitFileContextTargetCurrent(target)) return;
+    const file = this.filesState.files.find((candidate) =>
+      candidate.repositoryId === target.repositoryId && candidate.path === target.path &&
+      !candidate.readOnly
+    );
+    if (!file) {
+      this.setStatus(
+        this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
+        "warning",
+      );
+      return;
+    }
+    await this.openProjectFile(target.workspaceRoot, file);
+  }
+
+  private openCommitFileRestore(target: CommitDetailFileContextTarget): void {
+    if (!this.isCommitFileContextTargetCurrent(target)) return;
+    this.captureMountedTextEditor();
+    const lease = this.commitFileRestoreLease(target.workspacePath);
+    if (!lease) {
+      this.setStatus(
+        this.commitFileRestoreBlockReason(target.workspacePath) ??
+          this.localization.catalog.history.commitFileContextMenu.editorChanged,
+        "warning",
+      );
+      return;
+    }
+    void this.commitFileRestoreController.open(target, lease);
+  }
+
+  private commitFileRestoreBlockReason(workspacePath: string): string | null {
+    const tabs = this.editorState.session.textTabs.filter(
+      (tab) => tab.document.workspacePath === workspacePath,
+    );
+    if (tabs.some((tab) => tab.status !== "ready" || tab.saveRequest !== null)) {
+      return this.localization.catalog.history.commitFileContextMenu.waitForEditor;
+    }
+    if (tabs.some(isTextTabDirty)) {
+      return this.localization.catalog.history.commitFileContextMenu.saveBeforeRestore;
+    }
+    return null;
+  }
+
+  private commitFileRestoreLease(workspacePath: string): { current(): boolean } | null {
+    this.captureMountedTextEditor();
+    if (this.commitFileRestoreBlockReason(workspacePath)) return null;
+    const captured = this.editorState.session.textTabs
+      .filter((tab) => tab.document.workspacePath === workspacePath)
+      .map((tab) => ({
+        id: tab.id,
+        loadEpoch: tab.loadEpoch,
+        revision: tab.revision,
+        editVersion: tab.editVersion,
+        persistedContent: tab.persistedContent,
+      }));
+    return {
+      current: () => {
+        const current = this.editorState.session.textTabs.filter(
+          (tab) => tab.document.workspacePath === workspacePath,
+        );
+        return current.length === captured.length && current.every((tab, index) => {
+          const expected = captured[index];
+          return Boolean(
+            expected && tab.id === expected.id && tab.status === "ready" &&
+            tab.saveRequest === null && !isTextTabDirty(tab) &&
+            tab.loadEpoch === expected.loadEpoch && tab.revision === expected.revision &&
+            tab.editVersion === expected.editVersion &&
+            tab.persistedContent === expected.persistedContent,
+          );
+        });
+      },
+    };
+  }
+
   private markCommitFolderContextTarget(path: string, highlighted: boolean): void {
     this.root.querySelectorAll<HTMLElement>("[data-commit-file-directory] > summary")
       .forEach((summary) => {
@@ -5984,7 +6209,11 @@ export class AsterlynApp {
       ? activeTextTab(this.editorState.session)
       : null;
     this.editorSurface.setReadOnly(
-      this.state.loading || activeTab?.document.readOnly === true || document.kind === "historical-file",
+      this.state.loading || activeTab?.document.readOnly === true ||
+        (activeTab
+          ? this.commitFileRestoreController.isExecuting(activeTab.document.workspacePath)
+          : false) ||
+        document.kind === "historical-file",
     );
     const editorPanel = this.query("#editor-panel");
     const header = this.query("#content-header");
@@ -8673,8 +8902,11 @@ export class AsterlynApp {
 
   private setLoading(loading: boolean, message: string): void {
     this.state.loading = loading;
+    const active = activeTextTab(this.editorState.session);
     this.editorSurface.setReadOnly(
-      loading || activeTextTab(this.editorState.session)?.document.readOnly === true,
+      loading || active?.document.readOnly === true ||
+        Boolean(active &&
+          this.commitFileRestoreController.isExecuting(active.document.workspacePath)),
     );
     this.root.classList.toggle("is-busy", loading);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);

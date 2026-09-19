@@ -196,6 +196,41 @@ export interface CommitFileComparison {
   truncated: boolean;
 }
 
+export type FileRestoreAction = "create" | "overwrite" | "unchanged";
+export type FileRestoreRecoveryStatus = "applied" | "unchanged" | "rolledBack" | "needsRecovery";
+export type FileRestoreFileState = "original" | "restored" | "conflict" | "unavailable";
+
+export interface CommitFileRestorePreview {
+  planId: string;
+  workspacePath: string;
+  action: FileRestoreAction;
+  expectedRevision: string | null;
+  currentMode: number;
+  restoredMode: number;
+  currentByteLength: number | null;
+  restoredByteLength: number;
+  repositoryId: string;
+  commitOid: string;
+  revisionOid: string;
+  sourcePath: string;
+  blobOid: string;
+  fileMode: string;
+}
+
+export interface FileRestoreRecoverySummary {
+  recoveryId: string;
+  workspacePath: string;
+  status: FileRestoreRecoveryStatus;
+  fileState: FileRestoreFileState;
+}
+
+export interface FileRestoreApplyResult {
+  recoveryId: string | null;
+  workspacePath: string;
+  status: FileRestoreRecoveryStatus;
+  fileState: FileRestoreFileState;
+}
+
 export interface CommitDiffResult {
   repositoryId: string;
   oid: string;

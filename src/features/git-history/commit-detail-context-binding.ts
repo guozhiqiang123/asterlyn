@@ -23,6 +23,11 @@ export type CommitDetailDirectoryContextTarget = CommitDetailContextTarget & {
   readonly file: null;
 };
 
+export type CommitDetailFileContextTarget = CommitDetailContextTarget & {
+  readonly kind: "file";
+  readonly file: CommitFileChange;
+};
+
 export class CommitDetailContextBinding {
   private readonly binding: DelegatedContextBinding<CommitDetailContextTarget>;
 

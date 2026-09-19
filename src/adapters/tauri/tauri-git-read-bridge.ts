@@ -5,7 +5,10 @@ import type {
   CommitDiffResult,
   CommitFilePreview,
   CommitFileComparison,
+  CommitFileRestorePreview,
   DiffResult,
+  FileRestoreApplyResult,
+  FileRestoreRecoverySummary,
   GitBlameResult,
   HistoryPage,
   ImageDiffPreview,
@@ -77,6 +80,33 @@ export const tauriGitReadBridge: GitReadBridge = {
     currentContent,
     expectedCurrentRevision,
   }),
+  prepareCommitFileRestore: (repositoryRoot, planId, repositoryId, commitOid, selected) =>
+    invokeDesktopCommand<CommitFileRestorePreview>("prepare_commit_file_restore", {
+      repositoryRoot,
+      planId,
+      repositoryId,
+      commitOid,
+      selected,
+    }),
+  executeCommitFileRestore: (repositoryRoot, planId) =>
+    invokeDesktopCommand<FileRestoreApplyResult>("execute_commit_file_restore", {
+      repositoryRoot,
+      planId,
+    }),
+  listCommitFileRestoreRecoveries: (repositoryRoot) =>
+    invokeDesktopCommand<FileRestoreRecoverySummary[]>("list_commit_file_restore_recoveries", {
+      repositoryRoot,
+    }),
+  rollbackCommitFileRestore: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<FileRestoreApplyResult>("rollback_commit_file_restore", {
+      repositoryRoot,
+      recoveryId,
+    }),
+  finalizeCommitFileRestore: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<void>("finalize_commit_file_restore", {
+      repositoryRoot,
+      recoveryId,
+    }),
   readGitBlame: (repositoryRoot, repositoryId, path, commitOid, parent) =>
     invokeDesktopCommand<GitBlameResult>("read_git_blame", {
       repositoryRoot,

@@ -48,6 +48,11 @@ export interface DesktopCommandMap {
   read_commit_comparison_details: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; }; result: Model.CommitComparisonDetails };
   read_commit_file: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; selected: Model.CommitFileChange; }; result: Model.CommitFilePreview };
   compare_commit_file_to_current: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; selected: Model.CommitFileChange; currentContent: string | null; expectedCurrentRevision: string | null; }; result: Model.CommitFileComparison };
+  prepare_commit_file_restore: { args: { repositoryRoot: string; planId: string; repositoryId: string; commitOid: string; selected: Model.CommitFileChange; }; result: Model.CommitFileRestorePreview };
+  execute_commit_file_restore: { args: { repositoryRoot: string; planId: string; }; result: Model.FileRestoreApplyResult };
+  list_commit_file_restore_recoveries: { args: { repositoryRoot: string; }; result: Array<Model.FileRestoreRecoverySummary> };
+  rollback_commit_file_restore: { args: { repositoryRoot: string; recoveryId: string; }; result: Model.FileRestoreApplyResult };
+  finalize_commit_file_restore: { args: { repositoryRoot: string; recoveryId: string; }; result: void };
   read_git_blame: { args: { repositoryRoot: string; repositoryId: string; path: string; commitOid: string | null; parent: boolean; }; result: Model.GitBlameResult };
   read_commit_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
   read_commit_comparison_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitComparisonDiffResult };
@@ -129,6 +134,11 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_commit_comparison_details: "commitComparisonDetails",
   read_commit_file: "commitFilePreview",
   compare_commit_file_to_current: "commitFileComparison",
+  prepare_commit_file_restore: "commitFileRestorePreview",
+  execute_commit_file_restore: "fileRestoreApplyResult",
+  list_commit_file_restore_recoveries: "fileRestoreRecoveryList",
+  rollback_commit_file_restore: "fileRestoreApplyResult",
+  finalize_commit_file_restore: "void",
   read_git_blame: "gitBlameResult",
   read_commit_diff: "commitDiffResult",
   read_commit_comparison_diff: "commitComparisonDiffResult",

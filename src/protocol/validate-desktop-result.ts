@@ -5,6 +5,7 @@ import type {
 import { DESKTOP_RESULT_VALIDATORS } from "./generated-desktop-protocol.ts";
 import { assertCommitFilePreview } from "./validate-commit-file-preview.ts";
 import { assertCommitFileComparison } from "./validate-commit-file-comparison.ts";
+import { assertCommitFileRestorePreview, assertFileRestoreApplyResult, assertFileRestoreRecoveryList } from "./validate-file-restore.ts";
 
 type TransportRecord = Record<string, unknown>;
 
@@ -463,6 +464,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       assertCommitFileComparison(value, command);
       break;
     }
+    case "commitFileRestorePreview":
+      assertCommitFileRestorePreview(value, command); break;
+    case "fileRestoreApplyResult":
+      assertFileRestoreApplyResult(value, command); break;
+    case "fileRestoreRecoveryList":
+      assertFileRestoreRecoveryList(value, command); break;
     case "commitComparisonDiffResult": {
       const result = record(value, command);
       strings(result, command, "repositoryId", "beforeOid", "afterOid", "path", "patch");

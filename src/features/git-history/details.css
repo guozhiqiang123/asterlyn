@@ -175,6 +175,12 @@
   background: var(--bg-hover);
 }
 
+.commit-file-row.context-target {
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .commit-file-row.selected {
   background: var(--selection-bg);
 }

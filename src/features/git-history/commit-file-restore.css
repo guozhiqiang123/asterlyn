@@ -1,0 +1,98 @@
+.commit-file-restore-dialog {
+  width: min(700px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+}
+
+.commit-file-restore-dialog > p,
+.commit-file-restore-review > p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.commit-file-restore-loading {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+}
+
+.commit-file-restore-review {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.commit-file-restore-review dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.commit-file-restore-review dl > div {
+  display: grid;
+  grid-template-columns: minmax(110px, .35fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.commit-file-restore-review dt {
+  color: var(--text-muted);
+}
+
+.commit-file-restore-review dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.commit-file-restore-error {
+  padding: 9px 11px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.commit-file-restore-recoveries {
+  display: grid;
+  gap: 7px;
+  max-height: min(320px, 42vh);
+  overflow: auto;
+}
+
+.commit-file-restore-recoveries article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.commit-file-restore-recoveries article > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.commit-file-restore-recoveries strong {
+  overflow-wrap: anywhere;
+}
+
+.commit-file-restore-recoveries span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.commit-file-restore-recoveries article > div:last-child {
+  display: flex;
+  gap: 6px;
+}

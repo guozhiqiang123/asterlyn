@@ -33,9 +33,12 @@ import type {
   CommitFileChange,
   CommitFilePreview,
   CommitFileComparison,
+  CommitFileRestorePreview,
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  FileRestoreApplyResult,
+  FileRestoreRecoverySummary,
   RestoreChangesPlan,
   GitWorktreeRecovery,
   GitConflictContent,
@@ -98,6 +101,8 @@ const cancelledDemoSearches = new Set<string>();
 const cancelledDemoReplacements = new Set<string>();
 const demoReplacementPlans = new Map<string, DemoReplacementPlan>();
 const demoReplacementRecoveries = new Map<string, DemoReplacementRecovery>();
+const demoCommitFileRestorePlans = new Map<string, DemoCommitFileRestorePlan>();
+const demoCommitFileRestoreRecoveries = new Map<string, DemoCommitFileRestoreRecovery>();
 const demoTerminalListeners = new Set<(event: TerminalEvent) => void>();
 let demoTerminalSession: TerminalStarted | null = null;
 let demoTerminalSequence = 0;
@@ -144,6 +149,16 @@ interface DemoReplacementPlan {
 
 interface DemoReplacementRecovery extends DemoReplacementPlan {
   selectedPaths: string[];
+}
+
+interface DemoCommitFileRestorePlan {
+  preview: CommitFileRestorePreview;
+  restoredContent: string | null;
+  original: { content: string; utf8Bom: boolean; revision: number } | null;
+}
+
+interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
+  repositoryRoot: string;
 }
 
 const demoBridge: DesktopBridge = {
@@ -964,6 +979,163 @@ const demoBridge: DesktopBridge = {
       currentContent,
       expectedCurrentRevision,
     });
+  },
+
+  async prepareCommitFileRestore(
+    repositoryRoot: string,
+    planId: string,
+    repositoryId: string,
+    commitOid: string,
+    selected: CommitFileChange,
+  ): Promise<CommitFileRestorePreview> {
+    if (!isTauri) {
+      await demoDelay(100);
+      const historical = await demoBridge.readCommitFile(
+        repositoryRoot,
+        repositoryId,
+        commitOid,
+        selected,
+      );
+      const current = demoTextFiles.get(selected.path) ?? null;
+      const action = current === null
+        ? "create"
+        : historical.content === current.content
+          ? "unchanged"
+          : "overwrite";
+      const preview: CommitFileRestorePreview = {
+        planId,
+        workspacePath: selected.path,
+        action,
+        expectedRevision: current ? demoTextRevision(selected.path, current) : null,
+        currentMode: current ? 0o644 : 0o644,
+        restoredMode: historical.fileMode === "100755" ? 0o755 : 0o644,
+        currentByteLength: current ? new TextEncoder().encode(current.content).length : null,
+        restoredByteLength: historical.byteLength,
+        repositoryId,
+        commitOid,
+        revisionOid: historical.revisionOid,
+        sourcePath: historical.sourcePath,
+        blobOid: historical.blobOid,
+        fileMode: historical.fileMode,
+      };
+      demoCommitFileRestorePlans.set(planId, {
+        preview,
+        restoredContent: historical.content,
+        original: current ? { ...current } : null,
+      });
+      return structuredClone(preview);
+    }
+    return invoke<CommitFileRestorePreview>("prepare_commit_file_restore", {
+      repositoryRoot,
+      planId,
+      repositoryId,
+      commitOid,
+      selected,
+    });
+  },
+
+  async executeCommitFileRestore(
+    repositoryRoot: string,
+    planId: string,
+  ): Promise<FileRestoreApplyResult> {
+    if (!isTauri) {
+      await demoDelay(120);
+      const plan = demoCommitFileRestorePlans.get(planId);
+      if (!plan) throw new Error("The historical-file restore plan is stale.");
+      demoCommitFileRestorePlans.delete(planId);
+      if (plan.preview.action === "unchanged") {
+        return {
+          recoveryId: null,
+          workspacePath: plan.preview.workspacePath,
+          status: "unchanged",
+          fileState: "restored",
+        };
+      }
+      if (plan.restoredContent !== null) {
+        demoTextFiles.set(plan.preview.workspacePath, {
+          content: plan.restoredContent,
+          utf8Bom: false,
+          revision: (plan.original?.revision ?? 0) + 1,
+        });
+      }
+      demoCommitFileRestoreRecoveries.set(planId, { ...plan, repositoryRoot });
+      return {
+        recoveryId: planId,
+        workspacePath: plan.preview.workspacePath,
+        status: "applied",
+        fileState: "restored",
+      };
+    }
+    return invoke<FileRestoreApplyResult>("execute_commit_file_restore", {
+      repositoryRoot,
+      planId,
+    });
+  },
+
+  async listCommitFileRestoreRecoveries(
+    repositoryRoot: string,
+  ): Promise<FileRestoreRecoverySummary[]> {
+    if (!isTauri) {
+      return Array.from(demoCommitFileRestoreRecoveries).flatMap(([recoveryId, recovery]) =>
+        recovery.repositoryRoot === repositoryRoot
+          ? [{
+              recoveryId,
+              workspacePath: recovery.preview.workspacePath,
+              status: "applied" as const,
+              fileState: "restored" as const,
+            }]
+          : []
+      );
+    }
+    return invoke<FileRestoreRecoverySummary[]>("list_commit_file_restore_recoveries", {
+      repositoryRoot,
+    });
+  },
+
+  async rollbackCommitFileRestore(
+    repositoryRoot: string,
+    recoveryId: string,
+  ): Promise<FileRestoreApplyResult> {
+    if (!isTauri) {
+      const recovery = demoCommitFileRestoreRecoveries.get(recoveryId);
+      if (!recovery || recovery.repositoryRoot !== repositoryRoot) {
+        throw new Error("The historical-file recovery is unavailable.");
+      }
+      const current = demoTextFiles.get(recovery.preview.workspacePath) ?? null;
+      if (recovery.restoredContent !== null && current?.content !== recovery.restoredContent) {
+        return {
+          recoveryId,
+          workspacePath: recovery.preview.workspacePath,
+          status: "needsRecovery",
+          fileState: "conflict",
+        };
+      }
+      if (recovery.original) demoTextFiles.set(recovery.preview.workspacePath, { ...recovery.original });
+      else demoTextFiles.delete(recovery.preview.workspacePath);
+      demoCommitFileRestoreRecoveries.delete(recoveryId);
+      return {
+        recoveryId: null,
+        workspacePath: recovery.preview.workspacePath,
+        status: "rolledBack",
+        fileState: "original",
+      };
+    }
+    return invoke<FileRestoreApplyResult>("rollback_commit_file_restore", {
+      repositoryRoot,
+      recoveryId,
+    });
+  },
+
+  async finalizeCommitFileRestore(repositoryRoot: string, recoveryId: string): Promise<void> {
+    if (!isTauri) {
+      const recovery = demoCommitFileRestoreRecoveries.get(recoveryId);
+      if (!recovery || recovery.repositoryRoot !== repositoryRoot) {
+        throw new Error("The historical-file recovery is unavailable.");
+      }
+      demoCommitFileRestoreRecoveries.delete(recoveryId);
+      return;
+    }
+    return invoke<void>("finalize_commit_file_restore", { repositoryRoot, recoveryId });
   },
 
   async readCommitComparisonDiff(

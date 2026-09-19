@@ -8,9 +8,12 @@ import type {
   CommitFileChange,
   CommitFilePreview,
   CommitFileComparison,
+  CommitFileRestorePreview,
   CommitSelectedResult,
   DiffResult,
   FileChange,
+  FileRestoreApplyResult,
+  FileRestoreRecoverySummary,
   GitBlameResult,
   RestoreChangesPlan,
   GitWorktreeRecovery,
@@ -197,6 +200,25 @@ export interface GitReadBridge {
     currentContent: string | null,
     expectedCurrentRevision: string | null,
   ): Promise<CommitFileComparison>;
+  prepareCommitFileRestore(
+    repositoryRoot: string,
+    planId: string,
+    repositoryId: string,
+    commitOid: string,
+    selected: CommitFileChange,
+  ): Promise<CommitFileRestorePreview>;
+  executeCommitFileRestore(
+    repositoryRoot: string,
+    planId: string,
+  ): Promise<FileRestoreApplyResult>;
+  listCommitFileRestoreRecoveries(
+    repositoryRoot: string,
+  ): Promise<FileRestoreRecoverySummary[]>;
+  rollbackCommitFileRestore(
+    repositoryRoot: string,
+    recoveryId: string,
+  ): Promise<FileRestoreApplyResult>;
+  finalizeCommitFileRestore(repositoryRoot: string, recoveryId: string): Promise<void>;
   readGitBlame(
     repositoryRoot: string,
     repositoryId: string,
