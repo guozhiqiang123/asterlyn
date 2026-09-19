@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   revealTabInStrip,
   scrollTabStrip,
-} from "../src/workbench/tab-strip.ts";
+} from "../src/presentation/tab-strip.ts";
 
 test("vertical wheels move an overflowing editor tab strip horizontally", () => {
   const strip = { clientWidth: 300, scrollLeft: 40, scrollWidth: 900 };

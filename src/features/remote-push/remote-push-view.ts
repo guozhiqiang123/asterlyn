@@ -13,8 +13,8 @@ import { remotePolicy } from "../../remote-policy.ts";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
-} from "../../workbench/git-presentation.ts";
-import { isImagePreviewPath } from "../../workbench/image-preview.ts";
+} from "../../presentation/git-presentation.ts";
+import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,

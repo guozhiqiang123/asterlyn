@@ -2,7 +2,7 @@ import type {
   CommitComparisonDiffResult,
   CommitDiffResult,
 } from "../../models.ts";
-import type { CommitFileView } from "../../workbench/git-presentation.ts";
+import type { CommitFileView } from "../../presentation/git-presentation.ts";
 
 const COMMIT_FILE_VIEW_KEY = "asterlyn.commitFileView.v1";
 

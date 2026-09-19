@@ -8,7 +8,7 @@ import {
   matchingLogicalBranches,
   projectCommitGraph,
   uniqueLogicalBranches,
-} from "../src/workbench/git-presentation.ts";
+} from "../src/presentation/git-presentation.ts";
 
 test("commit decorations become truthful semantic references", () => {
   assert.deepEqual(

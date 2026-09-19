@@ -1,6 +1,6 @@
 import type { CommitFileChange, RepositorySnapshot } from "../../models.ts";
 import type { CommitFileIdentity } from "../../application/workbench-navigation.ts";
-import type { CommitFileView } from "../../workbench/git-presentation.ts";
+import type { CommitFileView } from "../../presentation/git-presentation.ts";
 import type { GitHistoryDetailsState } from "./history-details-controller.ts";
 import { commitKey } from "../../workbench/history-identity.ts";
 import {

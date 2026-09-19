@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   isCurrentImageRequest,
   isImagePreviewPath,
-} from "../src/workbench/image-preview.ts";
+} from "../src/presentation/image-preview.ts";
 
 test("image preview routing covers the supported static formats", () => {
   for (const path of [

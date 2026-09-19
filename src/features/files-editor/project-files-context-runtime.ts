@@ -1,7 +1,7 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
 import type { ProjectFilesCopy } from "../../localization/catalog.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
-import type { ProjectTreeNode } from "../../workbench/project-tree.ts";
+import type { ProjectTreeNode } from "../../presentation/project-tree.ts";
 import {
   ProjectFilesContextActions,
   type ProjectFilesContextRuntime,

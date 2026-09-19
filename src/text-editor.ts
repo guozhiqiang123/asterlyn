@@ -19,7 +19,7 @@ import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme"
 import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
 import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
-import { linkVerticalScrollProportionally } from "./workbench/linked-scroll";
+import { linkVerticalScrollProportionally } from "./presentation/linked-scroll";
 import type { AppPreferences } from "./preferences";
 import {
   applyExactTextChanges,

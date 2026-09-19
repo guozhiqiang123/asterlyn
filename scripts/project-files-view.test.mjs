@@ -9,7 +9,7 @@ import {
 } from "../src/features/files-editor/project-files-view.ts";
 import { renderWorkspaceTrashDialog } from "../src/features/workspace-trash/workspace-trash-dialog-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
-import { buildProjectTree } from "../src/workbench/project-tree.ts";
+import { buildProjectTree } from "../src/presentation/project-tree.ts";
 
 test("expanded project trees are flattened in visible hierarchy order", () => {
   const tree = buildProjectTree(["src/a.ts", "src/deep/b.ts", "README.md"]);

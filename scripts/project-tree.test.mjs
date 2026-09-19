@@ -8,7 +8,7 @@ import {
   findProjectTreeNode,
   projectTreeEntries,
   reconcileProjectTreeState,
-} from "../src/workbench/project-tree.ts";
+} from "../src/presentation/project-tree.ts";
 
 test("project tree groups paths and sorts directories before files", () => {
   const tree = buildProjectTree([

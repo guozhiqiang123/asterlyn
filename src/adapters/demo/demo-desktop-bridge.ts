@@ -89,7 +89,7 @@ import {
   type WindowChromeMode,
 } from "../../protocol/window-chrome.ts";
 import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-bridge";
-import { isImagePreviewPath } from "../../workbench/image-preview.ts";
+import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);

@@ -218,7 +218,7 @@ import {
   WORKBENCH_LAYOUT_DEFAULTS,
   WORKBENCH_LIMITS,
 } from "./shell/layout-state";
-import { attachSplitter } from "./workbench/splitter";
+import { attachSplitter } from "./presentation/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
 import {
   nextPushCommitSelection,
@@ -231,8 +231,8 @@ import {
   rememberMarkdownMode,
   saveMarkdownModePreferences,
 } from "./workbench/markdown-mode-preferences";
-import { revealTabInStrip } from "./workbench/tab-strip";
-import { isImagePreviewPath } from "./workbench/image-preview";
+import { revealTabInStrip } from "./presentation/tab-strip";
+import { isImagePreviewPath } from "./presentation/image-preview";
 import type {
   DiffGitBlameSources,
   GitBlameAvailability,
@@ -285,7 +285,7 @@ import {
 import {
   findProjectTreeNode,
   type ProjectTreeNode,
-} from "./workbench/project-tree";
+} from "./presentation/project-tree";
 import {
   changeGroup,
   includedChanges,
@@ -305,7 +305,7 @@ import type { WorkspaceSearchControls } from "./workbench/workspace-search";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
-} from "./workbench/git-presentation";
+} from "./presentation/git-presentation";
 import type {
   BranchMutationPlan,
   BranchSummary,

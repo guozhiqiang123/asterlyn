@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   linkScrollElements,
   linkVerticalScrollProportionally,
-} from "../src/workbench/linked-scroll.ts";
+} from "../src/presentation/linked-scroll.ts";
 
 class FakeScroller {
   scrollTop = 0;

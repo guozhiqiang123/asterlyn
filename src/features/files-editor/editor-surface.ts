@@ -1,6 +1,6 @@
 import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { ImageDiffPreview, ImagePreview } from "../../models.ts";
-import { attachSplitter } from "../../workbench/splitter.ts";
+import { attachSplitter } from "../../presentation/splitter.ts";
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../editor-document.ts";
 import {
   textTab,

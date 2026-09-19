@@ -30,8 +30,8 @@ import {
   type DiffPresentation,
   type SourceDiffRow,
 } from "./diff-presentation";
-import { attachSplitter } from "./workbench/splitter";
-import { linkScrollElements } from "./workbench/linked-scroll";
+import { attachSplitter } from "./presentation/splitter";
+import { linkScrollElements } from "./presentation/linked-scroll";
 import {
   splitChangeBlocks,
   unifiedChangeBlocks,

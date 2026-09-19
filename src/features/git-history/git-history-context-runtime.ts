@@ -2,7 +2,7 @@ import type { TextClipboardPort } from "../../application/text-clipboard.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
 import type { RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
-import type { CommitFileView } from "../../workbench/git-presentation.ts";
+import type { CommitFileView } from "../../presentation/git-presentation.ts";
 import { BranchContextActions, type BranchContextRuntime } from "./branch-context-actions.ts";
 import { BranchContextBinding } from "./branch-context-binding.ts";
 import {

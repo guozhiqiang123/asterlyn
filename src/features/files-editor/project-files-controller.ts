@@ -13,7 +13,7 @@ import {
   reconcileProjectTreeState,
   type ProjectTreeNode,
   type ProjectTreeSelection,
-} from "../../workbench/project-tree.ts";
+} from "../../presentation/project-tree.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 

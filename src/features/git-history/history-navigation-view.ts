@@ -12,7 +12,7 @@ import type {
 import {
   groupRemoteBranches,
   uniqueLogicalBranches,
-} from "../../workbench/git-presentation.ts";
+} from "../../presentation/git-presentation.ts";
 import {
   branchKey,
   historyPathKey,

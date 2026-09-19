@@ -3,7 +3,7 @@ import type { WorkspaceEntryIdentity } from "../../application/workbench-navigat
 import {
   findProjectTreeNode,
   type ProjectTreeNode,
-} from "../../workbench/project-tree.ts";
+} from "../../presentation/project-tree.ts";
 import type { ProjectFilesState } from "./project-files-controller.ts";
 import {
   DelegatedContextBinding,

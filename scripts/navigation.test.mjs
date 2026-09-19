@@ -34,7 +34,7 @@ function memoryStorage(initial = {}) {
 
 test("quick open favors basename matches and supports ordered subsequences", () => {
   const files = [
-    file("src/workbench/project-tree.ts"),
+    file("src/presentation/project-tree.ts"),
     file("src/app.ts"),
     file("scripts/app.test.mjs"),
     file("docs/application.md"),
@@ -43,7 +43,7 @@ test("quick open favors basename matches and supports ordered subsequences", () 
     rankProjectFiles(files, "app").map((item) => item.workspacePath),
     ["src/app.ts", "scripts/app.test.mjs", "docs/application.md"],
   );
-  assert.equal(rankProjectFiles(files, "prtree")[0]?.workspacePath, "src/workbench/project-tree.ts");
+  assert.equal(rankProjectFiles(files, "prtree")[0]?.workspacePath, "src/presentation/project-tree.ts");
 });
 
 test("persistent quick-open index retains better late matches within the bounded result set", () => {

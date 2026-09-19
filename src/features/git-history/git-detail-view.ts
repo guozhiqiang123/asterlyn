@@ -15,7 +15,7 @@ import {
   commitReferences,
   type CommitFileTreeNode,
   type CommitFileView,
-} from "../../workbench/git-presentation.ts";
+} from "../../presentation/git-presentation.ts";
 import type { CommitDetailDirectoryContextTarget } from "./commit-detail-context-binding.ts";
 
 export interface CommitDetailViewModel {

@@ -16,7 +16,7 @@ import {
 import {
   createLatestFrameQueue,
   resizeValue,
-} from "../src/workbench/splitter.ts";
+} from "../src/presentation/splitter.ts";
 
 test("left and bottom tools toggle independently", () => {
   const filesClosed = reduceWorkbenchLayout(WORKBENCH_LAYOUT_DEFAULTS, {

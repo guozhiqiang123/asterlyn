@@ -9,7 +9,7 @@ import {
   groupRemoteBranches,
   matchingLogicalBranches,
   uniqueLogicalBranches,
-} from "../../workbench/git-presentation.ts";
+} from "../../presentation/git-presentation.ts";
 
 export interface BranchNavigationViewModel {
   readonly snapshot: RepositorySnapshot;

@@ -11,7 +11,7 @@ import {
   type CommitGraphRow,
   type CommitGraphSegment,
   type CommitReference,
-} from "../../workbench/git-presentation.ts";
+} from "../../presentation/git-presentation.ts";
 import {
   collapseLinearHistory,
   type HistoryDisplayEntry,

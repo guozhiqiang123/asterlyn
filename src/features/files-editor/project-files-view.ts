@@ -1,7 +1,7 @@
 import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
 import type { ProjectFilesState } from "./project-files-controller.ts";
-import { findProjectTreeNode, type ProjectTreeNode } from "../../workbench/project-tree.ts";
+import { findProjectTreeNode, type ProjectTreeNode } from "../../presentation/project-tree.ts";
 import type { ProjectFilesCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 import type {

@@ -270,6 +270,11 @@ Startup repository restoration now belongs to Application, and the bounded recen
 belongs to Shared. Both are dependency-free utilities at their final inward layer, so feature
 controllers consume them without passing through the transitional namespace.
 
+The shared presentation batch now lives under `src/presentation`: Git projections, image-preview
+identity, linked scrolling, project-tree projection, splitters, and tab-strip behavior. Commit keys
+used by the Git projection were first lifted into the root History contract, preventing shared
+presentation from depending on the Git History feature.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

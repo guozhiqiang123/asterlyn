@@ -1,5 +1,5 @@
 import type { BranchSummary, CommitFileChange, CommitSummary } from "../models";
-import { commitKey, parentCommitKey } from "./history-identity.ts";
+import { commitKey, parentCommitKey } from "../history-query.ts";
 
 export type CommitFileView = "tree" | "flat";
 export type CommitReferenceKind = "head" | "local" | "remote" | "tag" | "other";
