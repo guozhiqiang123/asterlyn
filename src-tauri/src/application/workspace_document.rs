@@ -8,6 +8,7 @@ use asterlyn_workspace::{
 #[cfg(test)]
 use super::workspace_catalog::authorize_project_file;
 use super::workspace_catalog::{reauthorize_session_file, reauthorize_session_file_for_read};
+use super::workspace_session::WorkspaceWriteRegistry;
 
 pub(crate) fn read_session_text_file(
     root: &Path,
@@ -25,7 +26,13 @@ pub(crate) fn save_session_text_file(
     content: String,
     utf8_bom: bool,
     request_id: String,
+    writes: &WorkspaceWriteRegistry,
 ) -> Result<SaveTextFileResult, WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "serialize workspace writes".to_string(),
+        message: "workspace-write lock was poisoned".to_string(),
+    })?;
     if catalogued.read_only {
         return Err(WorkspaceError::NotAuthorized {
             message: "the selected project file is read-only".to_string(),
@@ -70,5 +77,6 @@ pub(crate) fn save_authorized_text_file(
         content,
         utf8_bom,
         request_id,
+        &WorkspaceWriteRegistry::default(),
     )
 }

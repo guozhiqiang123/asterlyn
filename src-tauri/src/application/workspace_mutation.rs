@@ -188,6 +188,13 @@ where
     }
 }
 
+pub(crate) fn load_workspace_mutation_recoveries(
+    root: &Path,
+    recovery_root: &Path,
+) -> Result<Vec<asterlyn_workspace::WorkspaceMutationRecoverySummary>, WorkspaceError> {
+    Workspace::open(root)?.list_mutation_recoveries(recovery_root)
+}
+
 #[derive(Clone)]
 pub(crate) struct StoredWorkspaceMutationPlan {
     root: PathBuf,

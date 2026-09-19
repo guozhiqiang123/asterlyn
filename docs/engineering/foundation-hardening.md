@@ -340,8 +340,12 @@ service rather than reaching through to the workspace crate.
 
 Authorized text reads and optimistic saves now live in `application/workspace_document.rs`.
 Read-only rejection, fresh identity authorization, and workspace I/O form one application service;
-commands supply the active-session identity and retain only transport scheduling and write-lock
-coordination.
+commands supply the active-session identity and retain only transport scheduling.
+
+Text-save serialization now also belongs to that document service. Workspace-entry reveal resolves
+and validates the target through the catalog service before invoking the platform adapter, and
+mutation-recovery enumeration dispatches through the mutation service. The workspace command
+module no longer calls the concrete `Workspace` implementation directly.
 
 Workspace entry inspection plus create/copy/move/trash planning and execution now belong to the
 existing `application/workspace_mutation.rs` coordinator boundary. Mutation limits, preview DTOs,

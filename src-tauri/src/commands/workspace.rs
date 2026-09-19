@@ -31,7 +31,7 @@ pub(crate) fn reveal_workspace_entry(
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RevealWorkspaceEntryResult, WorkspaceError> {
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
-    let target = Workspace::open(root)?.resolve_existing_entry(&workspace_path, kind)?;
+    let target = resolve_workspace_entry(&root, &workspace_path, kind)?;
     reveal_in_system_file_manager(&target, kind)
 }
 
@@ -132,7 +132,7 @@ pub(crate) async fn list_workspace_mutation_recoveries(
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
     let recovery_root = workspace_mutation_recovery_root(&app)?;
     run_workspace_blocking("list workspace mutation recoveries", move || {
-        Workspace::open(root)?.list_mutation_recoveries(&recovery_root)
+        load_workspace_mutation_recoveries(&root, &recovery_root)
     })
     .await
 }
@@ -368,12 +368,8 @@ pub(crate) async fn save_text_file(
         &repository_id,
         &path,
     )?;
-    let write_lock = writes.lock_for(root.to_string_lossy().to_string())?;
+    let writes = writes.inner().clone();
     run_workspace_blocking("save text file", move || {
-        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
-            operation: "serialize workspace writes".to_string(),
-            message: "workspace-write lock was poisoned".to_string(),
-        })?;
         save_session_text_file(
             &root,
             &authorized,
@@ -381,6 +377,7 @@ pub(crate) async fn save_text_file(
             content,
             utf8_bom,
             request_id,
+            &writes,
         )
     })
     .await

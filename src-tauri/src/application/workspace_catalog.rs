@@ -1,7 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use asterlyn_git::{GitRepository, ProjectFile, ProjectFileList};
-use asterlyn_workspace::{Workspace, WorkspaceError};
+use asterlyn_workspace::{Workspace, WorkspaceEntryKind, WorkspaceError};
 
 pub(crate) const PROJECT_FILE_LIMIT: usize = 100_000;
 
@@ -29,6 +29,14 @@ pub(crate) fn exact_git_repository(root: &Path) -> Result<Option<GitRepository>,
 
 pub(crate) fn load_project_catalog(root: &Path) -> Result<ProjectFileList, WorkspaceError> {
     load_project_catalog_with_ignored(root, true)
+}
+
+pub(crate) fn resolve_workspace_entry(
+    root: &Path,
+    workspace_path: &str,
+    kind: WorkspaceEntryKind,
+) -> Result<PathBuf, WorkspaceError> {
+    Workspace::open(root)?.resolve_existing_entry(workspace_path, kind)
 }
 
 pub(crate) fn load_authorized_project_catalog(
