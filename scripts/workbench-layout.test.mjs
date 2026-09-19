@@ -8,7 +8,7 @@ import {
   loadWorkbenchLayout,
   reduceWorkbenchLayout,
   saveWorkbenchLayout,
-} from "../src/workbench/layout-state.ts";
+} from "../src/shell/layout-state.ts";
 import {
   editorDocumentContentKey,
   editorDocumentKey,

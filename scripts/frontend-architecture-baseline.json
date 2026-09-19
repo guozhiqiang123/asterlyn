@@ -26,7 +26,6 @@
   "dependencyDebt": [],
   "applicationDomDebt": {},
   "workbenchOwnership": {
-    "src/workbench/activity-order.ts": { "owner": "shell", "target": "src/shell/activity-order.ts", "migrationPhase": "FH4" },
     "src/workbench/change-presentation.ts": { "owner": "changes-commit", "target": "src/features/changes-commit/change-presentation.ts", "migrationPhase": "FH4" },
     "src/workbench/diff-navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/diff-navigation.ts", "migrationPhase": "FH4" },
     "src/workbench/editor-cache-remap.ts": { "owner": "files-editor", "target": "src/features/files-editor/editor-cache-remap.ts", "migrationPhase": "FH4" },
@@ -43,7 +42,6 @@
     "src/workbench/history-query.ts": { "owner": "product-contract", "target": "src/history-query.ts", "migrationPhase": "FH4" },
     "src/workbench/history-root-selection.ts": { "owner": "git-history", "target": "src/features/git-history/history-root-selection.ts", "migrationPhase": "FH4" },
     "src/workbench/image-preview.ts": { "owner": "shared-presentation", "target": "src/presentation/image-preview.ts", "migrationPhase": "FH4" },
-    "src/workbench/layout-state.ts": { "owner": "shell", "target": "src/shell/layout-state.ts", "migrationPhase": "FH4" },
     "src/workbench/linked-scroll.ts": { "owner": "shared-presentation", "target": "src/presentation/linked-scroll.ts", "migrationPhase": "FH4" },
     "src/workbench/markdown-format.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-format.ts", "migrationPhase": "FH4" },
     "src/workbench/markdown-mode-preferences.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-mode-preferences.ts", "migrationPhase": "FH4" },
@@ -60,7 +58,6 @@
     "src/workbench/startup-repository.ts": { "owner": "application", "target": "src/application/startup-repository.ts", "migrationPhase": "FH4" },
     "src/workbench/tab-strip.ts": { "owner": "shared-presentation", "target": "src/presentation/tab-strip.ts", "migrationPhase": "FH4" },
     "src/workbench/text-content.ts": { "owner": "files-editor", "target": "src/features/files-editor/text-content.ts", "migrationPhase": "FH4" },
-    "src/workbench/window-chrome.ts": { "owner": "shell", "target": "src/shell/window-chrome.ts", "migrationPhase": "FH4" },
     "src/workbench/workspace-replacement.ts": { "owner": "files-editor", "target": "src/features/files-editor/workspace-replacement.ts", "migrationPhase": "FH4" },
     "src/workbench/workspace-search.ts": { "owner": "files-editor", "target": "src/features/files-editor/workspace-search.ts", "migrationPhase": "FH4" }
   }

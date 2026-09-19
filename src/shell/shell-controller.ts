@@ -5,7 +5,7 @@ import {
   saveActivityOrder,
   type ActivityDropPosition,
   type ActivityTool,
-} from "../workbench/activity-order.ts";
+} from "./activity-order.ts";
 import {
   clampWorkbenchLayout,
   loadWorkbenchLayout,
@@ -13,7 +13,7 @@ import {
   saveWorkbenchLayout,
   type WorkbenchLayout,
   type WorkbenchLayoutAction,
-} from "../workbench/layout-state.ts";
+} from "./layout-state.ts";
 import type { WindowChromeMode } from "../protocol/window-chrome.ts";
 
 export interface ShellState {

@@ -3,7 +3,7 @@ import {
   moveActivityToolByOffset,
   type ActivityDropPosition,
   type ActivityTool,
-} from "../workbench/activity-order.ts";
+} from "./activity-order.ts";
 
 export interface ActivityRailCallbacks {
   readonly order: () => readonly ActivityTool[];

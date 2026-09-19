@@ -6,7 +6,7 @@ import {
   primaryShortcut,
   showCustomWindowControls,
   windowChromeClass,
-} from "../src/workbench/window-chrome.ts";
+} from "../src/shell/window-chrome.ts";
 
 test("native macOS chrome keeps system controls and hides custom controls", () => {
   const mode = parseWindowChromeMode("macos-native");

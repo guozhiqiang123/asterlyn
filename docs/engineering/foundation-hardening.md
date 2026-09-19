@@ -252,6 +252,11 @@ presentation, logical range selection, bounded folder Diff state, and the branch
 constructed and reset together; the composition root no longer instantiates those controllers or
 retains aliases to their state objects. `src/app.ts` is 8,781 lines with a matching ceiling.
 
+The first transitional `workbench` ownership batch is complete: activity ordering, layout state,
+and window-chrome presentation now live under `src/shell`, with callers and focused tests importing
+their final owner directly. The ownership baseline removes each module as soon as it reaches its
+recorded destination.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

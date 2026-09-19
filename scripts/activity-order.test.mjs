@@ -9,7 +9,7 @@ import {
   moveActivityToolByOffset,
   normalizeActivityOrder,
   saveActivityOrder,
-} from "../src/workbench/activity-order.ts";
+} from "../src/shell/activity-order.ts";
 
 test("activity order normalization keeps every known tool exactly once", () => {
   assert.deepEqual(normalizeActivityOrder(["changes", "changes", "files", "unknown"]), [

@@ -1,8 +1,8 @@
 import { BRAND } from "../brand.ts";
 import { icon } from "../icons.ts";
 import { renderSelectControl } from "../shared/select-control.ts";
-import type { ActivityTool } from "../workbench/activity-order.ts";
-import { primaryShortcut, showCustomWindowControls, windowChromeClass } from "../workbench/window-chrome.ts";
+import type { ActivityTool } from "./activity-order.ts";
+import { primaryShortcut, showCustomWindowControls, windowChromeClass } from "./window-chrome.ts";
 import type { ShellState } from "./shell-controller.ts";
 import type { LocaleCatalog, ShellCopy } from "../localization/catalog.ts";
 import { EN_US } from "../localization/en-US.ts";

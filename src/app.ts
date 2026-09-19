@@ -180,7 +180,7 @@ import { renderShellView } from "./shell/shell-view";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
-import { primaryShortcut } from "./workbench/window-chrome";
+import { primaryShortcut } from "./shell/window-chrome";
 import { WindowSession } from "./application/window-session";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
 import { RepositoryIntegrationCoordinator } from "./application/repository-integration-coordinator";
@@ -217,13 +217,13 @@ import {
 import {
   WORKBENCH_LAYOUT_DEFAULTS,
   WORKBENCH_LIMITS,
-} from "./workbench/layout-state";
+} from "./shell/layout-state";
 import { attachSplitter } from "./workbench/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
 import {
   nextPushCommitSelection,
 } from "./workbench/push-review";
-import type { ActivityTool } from "./workbench/activity-order";
+import type { ActivityTool } from "./shell/activity-order";
 import { isMarkdownPath } from "./workbench/markdown-format";
 import {
   loadMarkdownModePreferences,
