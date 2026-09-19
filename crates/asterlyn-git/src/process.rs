@@ -14,7 +14,15 @@ const DIAGNOSTIC_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 #[derive(Clone, Copy)]
 enum GitProcessProfile {
     Standard,
+    Operation,
     Remote,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum GitStdin {
+    Inherit,
+    Null,
+    Piped,
 }
 
 /// Constructs Git subprocesses with one stable, non-interactive process policy.
@@ -42,6 +50,13 @@ impl<'a> GitRunner<'a> {
         }
     }
 
+    pub(crate) fn operation(repository_root: &'a Path) -> Self {
+        Self {
+            repository_root,
+            profile: GitProcessProfile::Operation,
+        }
+    }
+
     pub(crate) fn command(&self) -> Command {
         let mut command = Command::new("git");
         command
@@ -55,8 +70,14 @@ impl<'a> GitRunner<'a> {
             .env("GIT_OPTIONAL_LOCKS", "0")
             .env("GIT_TERMINAL_PROMPT", "0");
 
-        if matches!(self.profile, GitProcessProfile::Remote) {
-            harden_remote_command(&mut command);
+        match self.profile {
+            GitProcessProfile::Standard => {}
+            GitProcessProfile::Operation => {
+                command
+                    .env("GIT_EDITOR", "true")
+                    .env("GIT_SEQUENCE_EDITOR", "true");
+            }
+            GitProcessProfile::Remote => harden_remote_command(&mut command),
         }
         command
     }
@@ -66,20 +87,32 @@ impl<'a> GitRunner<'a> {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let child = self.spawn_piped(args)?;
+        let child = self.spawn(args, GitStdin::Inherit)?;
         match self.profile {
-            GitProcessProfile::Standard => wait_with_bounded_output(child),
+            GitProcessProfile::Standard | GitProcessProfile::Operation => {
+                wait_with_bounded_output(child)
+            }
             GitProcessProfile::Remote => wait_with_remote_output(child),
         }
     }
 
-    pub(crate) fn spawn_piped<I, S>(&self, args: I) -> std::io::Result<Child>
+    pub(crate) fn spawn<I, S>(&self, args: I, stdin: GitStdin) -> std::io::Result<Child>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        self.command()
-            .args(args)
+        let mut command = self.command();
+        command.args(args);
+        match stdin {
+            GitStdin::Inherit => {}
+            GitStdin::Null => {
+                command.stdin(Stdio::null());
+            }
+            GitStdin::Piped => {
+                command.stdin(Stdio::piped());
+            }
+        }
+        command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -336,6 +369,19 @@ mod tests {
         }
         assert!(!should_remove_remote_environment(OsStr::new("GIT_DIR")));
         assert!(!should_remove_remote_environment(OsStr::new("PATH")));
+    }
+
+    #[test]
+    fn operation_runner_disables_editor_prompts() {
+        let command = GitRunner::operation(Path::new("repo")).command();
+        assert_eq!(
+            environment_value(&command, "GIT_EDITOR"),
+            Some(Some("true"))
+        );
+        assert_eq!(
+            environment_value(&command, "GIT_SEQUENCE_EDITOR"),
+            Some(Some("true"))
+        );
     }
 
     #[test]

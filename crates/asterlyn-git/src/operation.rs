@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::Output;
 
 use crate::CancellationToken;
 use crate::GitRepository;
@@ -12,6 +12,7 @@ use crate::model::{
     GitConflictContent, GitConflictFile, GitOperationAction, GitOperationKind, GitOperationPhase,
     GitOperationPlan, GitOperationProgress, GitOperationSnapshot,
 };
+use crate::process::{GitRunner, GitStdin};
 
 const MAX_OPERATION_TARGETS: usize = 100;
 const MAX_OPERATION_MESSAGE_BYTES: usize = 64 * 1024;
@@ -1188,27 +1189,15 @@ fn run_operation_command(
     arguments: &[OsString],
     stdin: Option<&[u8]>,
 ) -> Result<Output, GitError> {
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(root)
-        .arg("--no-pager")
-        .args(arguments)
-        .env("LC_ALL", "C")
-        .env("LANG", "C")
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_EDITOR", "true")
-        .env("GIT_SEQUENCE_EDITOR", "true")
-        .stdin(if stdin.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
+    let mut child = GitRunner::operation(root)
+        .spawn(
+            arguments,
+            if stdin.is_some() {
+                GitStdin::Piped
+            } else {
+                GitStdin::Null
+            },
+        )
         .map_err(|error| io_error("run Git operation", error))?;
     if let Some(bytes) = stdin {
         child
@@ -1450,6 +1439,8 @@ fn command_failed(operation: &str, output: Output) -> GitError {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use super::*;
     use tempfile::TempDir;
 

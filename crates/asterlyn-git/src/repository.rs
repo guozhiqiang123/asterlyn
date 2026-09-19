@@ -25,7 +25,7 @@ use crate::model::{
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
-    GitRunner, join_limited_stream, join_stream, read_stream, read_stream_bounded,
+    GitRunner, GitStdin, join_limited_stream, join_stream, read_stream, read_stream_bounded,
     read_stream_limited_with_signal, wait_with_bounded_output, wait_with_remote_output,
 };
 
@@ -2250,12 +2250,8 @@ impl GitRepository {
             });
         }
 
-        let mut child = base_command(&self.root)
-            .args(["commit", "--file=-", "--cleanup=strip"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+        let mut child = GitRunner::new(&self.root)
+            .spawn(["commit", "--file=-", "--cleanup=strip"], GitStdin::Piped)
             .map_err(|error| GitError::Io {
                 operation: "create commit".to_string(),
                 message: error.to_string(),
@@ -2324,18 +2320,21 @@ impl GitRepository {
         }
 
         let commit_result = (|| {
-            let mut command = base_command(&self.root);
-            command
-                .arg("--literal-pathspecs")
-                .args(["commit", "--only", "--file=-", "--cleanup=strip", "--"])
-                .args(&pathspecs)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-            let mut child = command.spawn().map_err(|error| GitError::Io {
-                operation: "create selected commit".to_string(),
-                message: error.to_string(),
-            })?;
+            let mut args = vec![
+                OsString::from("--literal-pathspecs"),
+                OsString::from("commit"),
+                OsString::from("--only"),
+                OsString::from("--file=-"),
+                OsString::from("--cleanup=strip"),
+                OsString::from("--"),
+            ];
+            args.extend(pathspecs.iter().cloned());
+            let mut child = GitRunner::new(&self.root)
+                .spawn(args, GitStdin::Piped)
+                .map_err(|error| GitError::Io {
+                    operation: "create selected commit".to_string(),
+                    message: error.to_string(),
+                })?;
             child
                 .stdin
                 .take()
@@ -4242,7 +4241,7 @@ impl GitRepository {
         limit: usize,
     ) -> Result<(Vec<String>, bool), GitError> {
         let mut child = GitRunner::new(&self.root)
-            .spawn_piped(args)
+            .spawn(args, GitStdin::Inherit)
             .map_err(|error| GitError::Io {
                 operation: "list bounded catalog".into(),
                 message: error.to_string(),
@@ -4280,7 +4279,7 @@ impl GitRepository {
         stdout_limit: usize,
     ) -> Result<(Output, bool), GitError> {
         let mut child = GitRunner::new(&self.root)
-            .spawn_piped(args)
+            .spawn(args, GitStdin::Inherit)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
@@ -4439,7 +4438,7 @@ impl GitRepository {
         }
 
         let mut child = GitRunner::new(&self.root)
-            .spawn_piped(args)
+            .spawn(args, GitStdin::Inherit)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
@@ -4737,10 +4736,6 @@ where
     S: AsRef<OsStr>,
 {
     GitRunner::new(path).output(args)
-}
-
-fn base_command(path: &Path) -> Command {
-    GitRunner::new(path).command()
 }
 
 fn remote_command(path: &Path) -> Command {

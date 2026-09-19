@@ -401,6 +401,12 @@ creation and pipe setup to the runner. Their record-aware consumption, overflow 
 cancellation/error mapping remain at the repository boundary for the next orchestration slice;
 existing catalog budget and pre-emptive cancellation tests characterize those semantics.
 
+Local mutations, commit input, and multi-step cherry-pick/revert/merge/rebase/squash commands now
+start through the same boundary. The operation profile centrally disables editor and sequence-editor
+prompts, while callers retain their existing exact-object leases, cleanup, conflict reconstruction,
+and uncertain-success verification. Its policy is characterized directly and the existing reviewed
+operation and concurrent-history tests continue to cover behavior.
+
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
 source of truth.
