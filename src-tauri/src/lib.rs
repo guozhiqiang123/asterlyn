@@ -48,9 +48,10 @@ use application::{
 };
 #[cfg(test)]
 use application::{
-    GitMutationRegistry, PROJECT_FILE_LIMIT, RemoteOperationRegistry, WORKSPACE_SEARCH_LIMITS,
-    read_authorized_text_file, save_authorized_text_file,
+    GitMutationRegistry, PROJECT_FILE_LIMIT, RemoteOperationRegistry, read_authorized_text_file,
+    save_authorized_text_file,
 };
+pub use application::{WORKSPACE_REPLACEMENT_LIMITS, WORKSPACE_SEARCH_LIMITS};
 use commands::*;
 
 const COMMIT_LIMIT: usize = 150;

@@ -33,12 +33,12 @@ pub(crate) use workspace_mutation::{
     execute_workspace_mutation_plan, inspect_workspace_entry_inventory,
     load_workspace_mutation_recoveries, prepare_workspace_mutation_plan,
 };
+pub use workspace_replacement::WORKSPACE_REPLACEMENT_LIMITS;
 pub(crate) use workspace_replacement::{
     WorkspaceReplacementPreview, apply_authorized_replacement, finalize_replacement,
     list_replacement_recoveries, prepare_authorized_replacement, rollback_replacement,
 };
-#[cfg(test)]
-pub(crate) use workspace_search::WORKSPACE_SEARCH_LIMITS;
+pub use workspace_search::WORKSPACE_SEARCH_LIMITS;
 pub(crate) use workspace_search::{WorkspaceTextSearchReport, search_authorized_workspace};
 pub(crate) use workspace_session::{
     ActiveWorkspaces, GitMutationRegistry, PendingRepositoryWindowReservation,

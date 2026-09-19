@@ -12,7 +12,7 @@ use super::workspace_catalog::load_authorized_project_catalog;
 use super::workspace_search::WORKSPACE_SEARCH_LIMITS;
 use super::workspace_session::WorkspaceWriteRegistry;
 
-const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
+pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
     max_files: 200,
     max_plan_bytes: 64 * 1024 * 1024,
     max_replacement_bytes: 16 * 1024,

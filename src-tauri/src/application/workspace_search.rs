@@ -9,7 +9,7 @@ use super::workspace_catalog::load_authorized_project_catalog;
 
 const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 5_000;
 
-pub(crate) const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
+pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
     max_candidates: WORKSPACE_SEARCH_CANDIDATE_LIMIT,
     max_total_bytes: 64 * 1024 * 1024,
     max_matches: 500,
