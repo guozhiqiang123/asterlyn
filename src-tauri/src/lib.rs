@@ -13,9 +13,8 @@ use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
 use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
-    BinaryFileSnapshot, ReplacementApplyResult, ReplacementFilePreview, ReplacementLimits,
-    ReplacementRecoverySummary, SaveTextFileRequest, SaveTextFileResult, SearchCancellationToken,
-    SearchCandidate, SearchCoverageReason, SearchOptions, TextFileSnapshot, Workspace,
+    BinaryFileSnapshot, ReplacementApplyResult, ReplacementRecoverySummary, SaveTextFileRequest,
+    SaveTextFileResult, SearchCancellationToken, SearchOptions, TextFileSnapshot, Workspace,
     WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory, WorkspaceError,
     WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
     WorkspaceMutationOutcome, WorkspaceMutationPlan, WorkspaceMutationRecoverySummary,
@@ -37,17 +36,19 @@ use adapters::image_preview::{
     encode_image_preview,
 };
 use application::{
-    ActiveWorkspaces, AuthorizedReplacementFile, CommitFileRestoreRegistry,
-    GitOperationCoordinator, PROJECT_FILE_LIMIT, PendingRepositoryWindowReservation,
-    PendingRepositoryWindows, ScanRegistry, StoredReplacementPlan, StoredWorkspaceMutationPlan,
-    WORKSPACE_SEARCH_LIMITS, WorkspaceMutationCoordinator, WorkspaceReplacementRegistry,
-    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
-    WorkspaceWatchStatus, WorkspaceWriteRegistry, exact_git_repository,
-    load_authorized_project_catalog, load_project_catalog, reauthorize_session_file,
-    reauthorize_session_file_for_read, search_authorized_workspace,
+    ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator, PROJECT_FILE_LIMIT,
+    PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
+    StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator, WorkspaceReplacementPreview,
+    WorkspaceReplacementRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
+    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    authorize_replacement_selection, exact_git_repository, load_project_catalog,
+    prepare_authorized_replacement, reauthorize_session_file, reauthorize_session_file_for_read,
+    search_authorized_workspace,
 };
 #[cfg(test)]
-use application::{GitMutationRegistry, RemoteOperationRegistry, authorize_project_file};
+use application::{
+    GitMutationRegistry, RemoteOperationRegistry, WORKSPACE_SEARCH_LIMITS, authorize_project_file,
+};
 use commands::*;
 
 const COMMIT_LIMIT: usize = 150;
@@ -55,13 +56,6 @@ const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
 const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
 const PROJECT_WINDOW_MIN_WIDTH: f64 = 920.0;
 const PROJECT_WINDOW_MIN_HEIGHT: f64 = 600.0;
-
-pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
-    max_files: 200,
-    max_plan_bytes: 64 * 1024 * 1024,
-    max_replacement_bytes: 16 * 1024,
-    max_preview_utf16: 320,
-};
 
 pub const WORKSPACE_MUTATION_LIMITS: WorkspaceMutationLimits = WorkspaceMutationLimits {
     max_entries: 20_000,
@@ -228,28 +222,6 @@ struct RepositorySliceProject {
     repository: Option<RepositorySliceSnapshot>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceReplacementPreview {
-    plan_id: String,
-    files: Vec<WorkspaceReplacementFilePreview>,
-    total_matches: usize,
-    skipped_count: usize,
-    coverage_reasons: Vec<SearchCoverageReason>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceReplacementFilePreview {
-    repository_id: String,
-    path: String,
-    workspace_path: String,
-    match_count: usize,
-    byte_delta: i64,
-    before_preview: String,
-    after_preview: String,
-}
-
 fn window_chrome_mode_for(is_macos: bool) -> &'static str {
     if is_macos {
         "macos-native"
@@ -279,123 +251,6 @@ fn build_project_window(
     let builder = builder.decorations(false);
 
     builder.build()
-}
-
-fn prepare_authorized_replacement(
-    root: &Path,
-    plan_id: &str,
-    query: &str,
-    replacement: &str,
-    options: &SearchOptions,
-    cancellation: &SearchCancellationToken,
-) -> Result<(StoredReplacementPlan, WorkspaceReplacementPreview), WorkspaceError> {
-    let catalog = load_authorized_project_catalog(root)?;
-    if cancellation.is_cancelled() {
-        return Err(WorkspaceError::Cancelled {
-            message: "workspace replacement preview was cancelled".to_string(),
-        });
-    }
-    let candidates: Vec<_> = catalog
-        .files
-        .iter()
-        .map(|file| SearchCandidate {
-            workspace_path: file.workspace_path.clone(),
-        })
-        .collect();
-    let plan = Workspace::open(root)?.plan_text_replacement(
-        plan_id,
-        &candidates,
-        catalog.truncated,
-        query,
-        replacement,
-        options,
-        cancellation,
-        WORKSPACE_SEARCH_LIMITS,
-        WORKSPACE_REPLACEMENT_LIMITS,
-    )?;
-    let mut authorized_files = Vec::new();
-    let mut preview_files = Vec::new();
-    for preview in &plan.preview().files {
-        let file = catalog
-            .files
-            .iter()
-            .find(|file| file.workspace_path == preview.workspace_path)
-            .ok_or_else(|| WorkspaceError::NotAuthorized {
-                message: "replacement preview returned an unauthorized file".to_string(),
-            })?;
-        authorized_files.push(AuthorizedReplacementFile {
-            repository_id: file.repository_id.clone(),
-            path: file.path.clone(),
-            workspace_path: file.workspace_path.clone(),
-        });
-        preview_files.push(map_replacement_preview(file, preview));
-    }
-    let preview = WorkspaceReplacementPreview {
-        plan_id: plan.plan_id().to_string(),
-        files: preview_files,
-        total_matches: plan.preview().total_matches,
-        skipped_count: plan.preview().skipped_count,
-        coverage_reasons: plan.preview().coverage_reasons.clone(),
-    };
-    Ok((
-        StoredReplacementPlan {
-            root: Workspace::open(root)?.root().to_path_buf(),
-            plan,
-            files: authorized_files,
-        },
-        preview,
-    ))
-}
-
-fn map_replacement_preview(
-    file: &asterlyn_git::ProjectFile,
-    preview: &ReplacementFilePreview,
-) -> WorkspaceReplacementFilePreview {
-    WorkspaceReplacementFilePreview {
-        repository_id: file.repository_id.clone(),
-        path: file.path.clone(),
-        workspace_path: file.workspace_path.clone(),
-        match_count: preview.match_count,
-        byte_delta: preview.byte_delta,
-        before_preview: preview.before_preview.clone(),
-        after_preview: preview.after_preview.clone(),
-    }
-}
-
-fn authorize_replacement_selection(
-    root: &Path,
-    stored: &StoredReplacementPlan,
-    selected_paths: &[String],
-) -> Result<(), WorkspaceError> {
-    let selected: HashSet<_> = selected_paths.iter().map(String::as_str).collect();
-    if selected.is_empty() || selected.len() != selected_paths.len() {
-        return Err(WorkspaceError::InvalidReplacement {
-            message: "select one or more unique previewed files".to_string(),
-        });
-    }
-    let current = load_authorized_project_catalog(root)?;
-    for selected_path in selected {
-        let planned = stored
-            .files
-            .iter()
-            .find(|file| file.workspace_path == selected_path)
-            .ok_or_else(|| WorkspaceError::InvalidReplacement {
-                message: "replacement selection is outside the reviewed plan".to_string(),
-            })?;
-        if !current.files.iter().any(|file| {
-            file.repository_id == planned.repository_id
-                && file.path == planned.path
-                && file.workspace_path == planned.workspace_path
-        }) {
-            return Err(WorkspaceError::NotAuthorized {
-                message: format!(
-                    "{} is no longer an authorized project file",
-                    planned.workspace_path
-                ),
-            });
-        }
-    }
-    Ok(())
 }
 
 fn replacement_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, WorkspaceError> {

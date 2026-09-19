@@ -327,6 +327,11 @@ with the bounded search policy and transport-neutral response types. The command
 active-workspace resolution, cancellation registration, blocking dispatch, and exact completion;
 the existing fresh-authorization and query-mapping characterization tests remain green.
 
+Workspace Replacement planning now lives in `application/workspace_replacement.rs`. It owns the
+bounded replacement policy, preview mapping, reviewed file identities, and the fresh-catalog check
+performed immediately before application. Tauri-specific recovery-path lookup, write-lock
+acquisition, and background dispatch remain at the composed desktop edge.
+
 Exit gate: application behavior is testable without constructing Tauri; command modules perform
 transport validation and dispatch only; protocol generation and all native tests pass.
 
