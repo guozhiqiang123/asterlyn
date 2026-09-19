@@ -35,6 +35,38 @@ pub use search::{
 pub const DEFAULT_TEXT_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedText {
+    pub content: String,
+    pub utf8_bom: bool,
+    pub byte_length: usize,
+}
+
+pub fn decode_utf8_text(bytes: &[u8], limit_bytes: usize) -> Result<DecodedText, WorkspaceError> {
+    if limit_bytes == 0 || bytes.len() > limit_bytes {
+        return Err(WorkspaceError::FileTooLarge { limit_bytes });
+    }
+    if bytes.contains(&0) {
+        return Err(WorkspaceError::BinaryFile {
+            message: "files containing NUL bytes are treated as binary".to_string(),
+        });
+    }
+    let utf8_bom = bytes.starts_with(UTF8_BOM);
+    let text_bytes = if utf8_bom {
+        &bytes[UTF8_BOM.len()..]
+    } else {
+        bytes
+    };
+    let content = std::str::from_utf8(text_bytes).map_err(|_| WorkspaceError::InvalidEncoding {
+        message: "the first editor slice supports UTF-8 text only".to_string(),
+    })?;
+    Ok(DecodedText {
+        content: content.to_string(),
+        utf8_bom,
+        byte_length: bytes.len(),
+    })
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TextFileSnapshot {
@@ -489,26 +521,13 @@ fn decode_snapshot(
     bytes: Vec<u8>,
     metadata: &Metadata,
 ) -> Result<TextFileSnapshot, WorkspaceError> {
-    if bytes.contains(&0) {
-        return Err(WorkspaceError::BinaryFile {
-            message: "files containing NUL bytes are treated as binary".to_string(),
-        });
-    }
-    let utf8_bom = bytes.starts_with(UTF8_BOM);
-    let text_bytes = if utf8_bom {
-        &bytes[UTF8_BOM.len()..]
-    } else {
-        &bytes
-    };
-    let content = std::str::from_utf8(text_bytes).map_err(|_| WorkspaceError::InvalidEncoding {
-        message: "the first editor slice supports UTF-8 text only".to_string(),
-    })?;
+    let decoded = decode_utf8_text(&bytes, bytes.len())?;
     Ok(TextFileSnapshot {
         workspace_path: workspace_path.to_string(),
-        content: content.to_string(),
-        utf8_bom,
+        content: decoded.content,
+        utf8_bom: decoded.utf8_bom,
         revision: revision(&bytes, metadata),
-        byte_length: bytes.len(),
+        byte_length: decoded.byte_length,
     })
 }
 
@@ -600,6 +619,26 @@ mod tests {
         fs::write(directory.path().join(name), bytes).expect("fixture file");
         let workspace = Workspace::open(directory.path()).expect("workspace opens");
         (directory, workspace)
+    }
+
+    #[test]
+    fn decodes_bounded_utf8_bytes_without_filesystem_metadata() {
+        let decoded = decode_utf8_text(b"\xef\xbb\xbfhello\r\n", 32).expect("UTF-8 decodes");
+        assert_eq!(decoded.content, "hello\r\n");
+        assert!(decoded.utf8_bom);
+        assert_eq!(decoded.byte_length, 10);
+        assert!(matches!(
+            decode_utf8_text(b"too large", 4),
+            Err(WorkspaceError::FileTooLarge { .. })
+        ));
+        assert!(matches!(
+            decode_utf8_text(b"binary\0", 32),
+            Err(WorkspaceError::BinaryFile { .. })
+        ));
+        assert!(matches!(
+            decode_utf8_text(&[0xff], 32),
+            Err(WorkspaceError::InvalidEncoding { .. })
+        ));
     }
 
     #[test]

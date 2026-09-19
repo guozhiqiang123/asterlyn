@@ -164,6 +164,21 @@ export interface CommitFileChange {
   status: ChangeKind;
 }
 
+export interface CommitFilePreview {
+  repositoryId: string;
+  commitOid: string;
+  revisionOid: string;
+  path: string;
+  sourcePath: string;
+  blobOid: string;
+  fileMode: string;
+  byteLength: number;
+  kind: "text" | "image";
+  content: string | null;
+  utf8Bom: boolean | null;
+  image: ImagePreview | null;
+}
+
 export interface CommitDiffResult {
   repositoryId: string;
   oid: string;

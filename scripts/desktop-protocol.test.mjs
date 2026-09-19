@@ -13,6 +13,17 @@ test("generated desktop command types match the versioned protocol schema", asyn
   assert.equal(generated, await generateDesktopProtocol());
 });
 
+test("historical file reads remain wired through the native command boundary", async () => {
+  const [commands, runtime, adapter] = await Promise.all([
+    readFile(new URL("../src-tauri/src/commands/git_reads.rs", import.meta.url), "utf8"),
+    readFile(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8"),
+    readFile(new URL("../src/adapters/tauri/tauri-git-read-bridge.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(commands, /async fn read_commit_file/u);
+  assert.match(runtime, /read_commit_file,/u);
+  assert.match(adapter, /"read_commit_file"/u);
+});
+
 test("desktop response validation rejects malformed command payloads", () => {
   assert.throws(
     () => validateDesktopResult("open_project", { root: "/repo" }),
@@ -137,6 +148,21 @@ test("desktop response validation accepts representative valid payloads", () => 
     }).path,
     "src/app.ts",
   );
+  const historicalText = {
+    repositoryId: ".",
+    commitOid: "1".repeat(40),
+    revisionOid: "2".repeat(40),
+    path: "src/app.ts",
+    sourcePath: "src/app.ts",
+    blobOid: "3".repeat(40),
+    fileMode: "100644",
+    byteLength: 7,
+    kind: "text",
+    content: "source\n",
+    utf8Bom: false,
+    image: null,
+  };
+  assert.deepEqual(validateDesktopResult("read_commit_file", historicalText), historicalText);
   assert.deepEqual(
     validateDesktopResult("read_git_blame", {
       repositoryId: ".",
@@ -244,6 +270,23 @@ test("desktop response validation rejects malformed results", () => {
       previewToken: "reviewed-plan",
     }),
     /supported branch mutation kind/,
+  );
+  assert.throws(
+    () => validateDesktopResult("read_commit_file", {
+      repositoryId: ".",
+      commitOid: "1".repeat(40),
+      revisionOid: "2".repeat(40),
+      path: "src/app.ts",
+      sourcePath: "src/app.ts",
+      blobOid: "short",
+      fileMode: "120000",
+      byteLength: 7,
+      kind: "text",
+      content: "source\n",
+      utf8Bom: false,
+      image: null,
+    }),
+    /full object IDs/,
   );
 });
 

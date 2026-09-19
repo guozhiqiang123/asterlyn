@@ -46,6 +46,7 @@ export interface DesktopCommandMap {
   save_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; expectedRevision: string; content: string; utf8Bom: boolean; requestId: string; }; result: Model.SaveTextFileResult };
   read_commit_details: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; }; result: Model.CommitDetails };
   read_commit_comparison_details: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; }; result: Model.CommitComparisonDetails };
+  read_commit_file: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; selected: Model.CommitFileChange; }; result: Model.CommitFilePreview };
   read_git_blame: { args: { repositoryRoot: string; repositoryId: string; path: string; commitOid: string | null; parent: boolean; }; result: Model.GitBlameResult };
   read_commit_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
   read_commit_comparison_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitComparisonDiffResult };
@@ -125,6 +126,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   save_text_file: "saveTextFileResult",
   read_commit_details: "commitDetails",
   read_commit_comparison_details: "commitComparisonDetails",
+  read_commit_file: "commitFilePreview",
   read_git_blame: "gitBlameResult",
   read_commit_diff: "commitDiffResult",
   read_commit_comparison_diff: "commitComparisonDiffResult",

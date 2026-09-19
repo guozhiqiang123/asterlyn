@@ -5,6 +5,8 @@ import type {
   CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
+  CommitFileChange,
+  CommitFilePreview,
   CommitSelectedResult,
   DiffResult,
   FileChange,
@@ -180,6 +182,12 @@ export interface GitReadBridge {
     beforeOid: string,
     afterOid: string,
   ): Promise<CommitComparisonDetails>;
+  readCommitFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    commitOid: string,
+    selected: CommitFileChange,
+  ): Promise<CommitFilePreview>;
   readGitBlame(
     repositoryRoot: string,
     repositoryId: string,

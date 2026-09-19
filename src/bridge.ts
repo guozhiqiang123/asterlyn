@@ -31,6 +31,7 @@ import type {
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
+  CommitFilePreview,
   CommitSelectedResult,
   DiffResult,
   FileChange,
@@ -84,6 +85,7 @@ import {
   type WindowChromeMode,
 } from "./workbench/window-chrome";
 import type { DesktopBridge, DirectoryChoice } from "./protocol/desktop-bridge";
+import { isImagePreviewPath } from "./workbench/image-preview.ts";
 
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
@@ -837,6 +839,55 @@ const demoBridge: DesktopBridge = {
       path,
       originalPath,
       expandedUnchanged,
+    });
+  },
+
+  async readCommitFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    commitOid: string,
+    selected: CommitFileChange,
+  ): Promise<CommitFilePreview> {
+    if (!isTauri) {
+      await demoDelay(90);
+      const details = demoCommitDetails(commitOid);
+      const current = details.files.find((file) =>
+        file.path === selected.path &&
+        file.originalPath === selected.originalPath &&
+        file.status === selected.status
+      );
+      if (!current) throw new Error("Select an exact file from the current commit details.");
+      const revisionOid = selected.status === "deleted"
+        ? details.parentOid ?? commitOid
+        : commitOid;
+      const sourcePath = selected.status === "deleted"
+        ? selected.originalPath ?? selected.path
+        : selected.path;
+      const image = isImagePreviewPath(selected.path) ? demoImage(selected.path) : null;
+      const content = image
+        ? null
+        : demoTextFiles.get(selected.path)?.content ??
+          `// Historical ${selected.path} at ${revisionOid.slice(0, 10)}\n`;
+      return {
+        repositoryId,
+        commitOid,
+        revisionOid,
+        path: selected.path,
+        sourcePath,
+        blobOid: "d".repeat(40),
+        fileMode: "100644",
+        byteLength: image?.byteLength ?? new TextEncoder().encode(content ?? "").length,
+        kind: image ? "image" : "text",
+        content,
+        utf8Bom: image ? null : false,
+        image,
+      };
+    }
+    return invoke<CommitFilePreview>("read_commit_file", {
+      repositoryRoot,
+      repositoryId,
+      commitOid,
+      selected,
     });
   },
 

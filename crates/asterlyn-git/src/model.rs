@@ -462,6 +462,18 @@ pub struct CommitFileChange {
     pub status: ChangeKind,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitFileVersion {
+    pub repository_id: String,
+    pub commit_oid: String,
+    pub revision_oid: String,
+    pub path: String,
+    pub source_path: String,
+    pub blob_oid: String,
+    pub file_mode: String,
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitDiffResult {

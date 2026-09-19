@@ -173,6 +173,28 @@ pub(crate) async fn read_commit_diff(
 }
 
 #[tauri::command]
+pub(crate) async fn read_commit_file(
+    repository_root: String,
+    repository_id: String,
+    commit_oid: String,
+    selected: CommitFileChange,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<CommitFilePreview, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read historical commit file", move || {
+        let version = GitRepository::open(root)?.repository_commit_file_version(
+            &repository_id,
+            &commit_oid,
+            &selected,
+            IMAGE_PREVIEW_LIMIT_BYTES,
+        )?;
+        commit_file_preview(version)
+    })
+    .await
+}
+
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_commit_comparison_diff(
     repository_root: String,

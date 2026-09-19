@@ -3,6 +3,7 @@ import type {
   DesktopCommandName,
 } from "./generated-desktop-protocol";
 import { DESKTOP_RESULT_VALIDATORS } from "./generated-desktop-protocol.ts";
+import { assertCommitFilePreview } from "./validate-commit-file-preview.ts";
 
 type TransportRecord = Record<string, unknown>;
 
@@ -451,6 +452,10 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       const result = record(value, command);
       strings(result, command, "repositoryId", "oid", "path", "patch");
       booleans(result, command, "binary", "truncated");
+      break;
+    }
+    case "commitFilePreview": {
+      assertCommitFilePreview(value, command);
       break;
     }
     case "commitComparisonDiffResult": {

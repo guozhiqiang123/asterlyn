@@ -89,6 +89,16 @@ pub(crate) fn encode_image_preview(path: &str, bytes: Vec<u8>) -> Result<ImagePr
     })
 }
 
+pub(crate) fn has_supported_image_signature(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+        || bytes.starts_with(b"\xff\xd8")
+        || bytes.starts_with(b"GIF87a")
+        || bytes.starts_with(b"GIF89a")
+        || (bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP")
+        || bytes.starts_with(b"BM")
+        || bytes.starts_with(b"\0\0\x01\0")
+}
+
 pub(crate) fn inspect_image(bytes: &[u8]) -> Result<(&'static str, u32, u32), String> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.len() >= 24 {
         if png_has_animation(bytes)? {

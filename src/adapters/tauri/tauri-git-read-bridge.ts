@@ -3,6 +3,7 @@ import type {
   CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
+  CommitFilePreview,
   DiffResult,
   GitBlameResult,
   HistoryPage,
@@ -52,6 +53,13 @@ export const tauriGitReadBridge: GitReadBridge = {
       repositoryId,
       beforeOid,
       afterOid,
+    }),
+  readCommitFile: (repositoryRoot, repositoryId, commitOid, selected) =>
+    invokeDesktopCommand<CommitFilePreview>("read_commit_file", {
+      repositoryRoot,
+      repositoryId,
+      commitOid,
+      selected,
     }),
   readGitBlame: (repositoryRoot, repositoryId, path, commitOid, parent) =>
     invokeDesktopCommand<GitBlameResult>("read_git_blame", {

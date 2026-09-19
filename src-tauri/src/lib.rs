@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 
 use asterlyn_git::{
     BranchMutationPlan, BranchMutationRequest, CommitComparisonDetails, CommitComparisonDiffResult,
-    CommitDetails, CommitDiffResult, DiffResult, FileChange, GitBlameResult, GitConflictContent,
-    GitError, GitOperationAction, GitOperationKind, GitOperationPlan, GitOperationSnapshot,
-    GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview,
-    PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan, RepositorySliceSnapshot,
-    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange, GitBlameResult,
+    GitConflictContent, GitError, GitOperationAction, GitOperationKind, GitOperationPlan,
+    GitOperationSnapshot, GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList,
+    PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan,
+    RepositorySliceSnapshot, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
 #[cfg(test)]
@@ -28,6 +28,7 @@ mod adapters;
 mod application;
 mod commands;
 
+use adapters::commit_file_preview::{CommitFilePreview, commit_file_preview};
 #[cfg(test)]
 use adapters::image_preview::inspect_image;
 use adapters::image_preview::{
@@ -870,6 +871,7 @@ pub fn run() {
             read_local_image_diff,
             read_commit_details,
             read_commit_comparison_details,
+            read_commit_file,
             read_git_blame,
             read_commit_diff,
             read_commit_comparison_diff,

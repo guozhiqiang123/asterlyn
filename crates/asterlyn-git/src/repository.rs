@@ -18,11 +18,11 @@ use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
     BranchMutationSourceKind, ChangeKind, CommitComparisonDetails, CommitComparisonDiffResult,
-    CommitComparisonRelation, CommitDetails, CommitDiffResult, CommitFileChange, CommitSummary,
-    DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind, HistoryOrder,
-    HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile,
-    ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode, PushTagSummary,
-    RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
+    CommitComparisonRelation, CommitDetails, CommitDiffResult, CommitFileChange, CommitFileVersion,
+    CommitSummary, DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind,
+    HistoryOrder, HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind,
+    ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode,
+    PushTagSummary, RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
     RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
     UntrackedScan, UntrackedState,
 };
@@ -36,6 +36,7 @@ const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 // complete file while the existing byte limit remains the authoritative output bound.
 const EXPANDED_DIFF_CONTEXT_LINES: usize = 1_000_000;
 const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
+const TREE_ENTRY_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
@@ -110,6 +111,14 @@ pub struct GitRepository {
 struct DiscoveredGitRoot {
     descriptor: GitRootDescriptor,
     repository: GitRepository,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RevisionFile {
+    source_path: String,
+    blob_oid: String,
+    file_mode: String,
+    bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1453,6 +1462,80 @@ impl GitRepository {
         Ok(details)
     }
 
+    pub fn commit_file_version(
+        &self,
+        commit_oid: &str,
+        selected: &CommitFileChange,
+        limit_bytes: usize,
+    ) -> Result<CommitFileVersion, GitError> {
+        validate_object_id(commit_oid)?;
+        validate_relative_path(&selected.path)?;
+        if let Some(original_path) = selected.original_path.as_deref() {
+            validate_relative_path(original_path)?;
+        }
+        if limit_bytes == 0 {
+            return Err(GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "the content limit must be greater than zero".to_string(),
+            });
+        }
+        let details = self.commit_details(commit_oid)?;
+        let current = details
+            .files
+            .iter()
+            .find(|candidate| *candidate == selected)
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "select an exact file from the current commit details".to_string(),
+            })?;
+        let (revision_oid, source_path) = if current.status == ChangeKind::Deleted {
+            let parent = details.parent_oid.ok_or_else(|| GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "a root commit has no pre-commit file version".to_string(),
+            })?;
+            (
+                parent,
+                current
+                    .original_path
+                    .clone()
+                    .unwrap_or_else(|| current.path.clone()),
+            )
+        } else {
+            (details.oid.clone(), current.path.clone())
+        };
+        let file = self
+            .read_file_at_revision(&revision_oid, &source_path, limit_bytes)?
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "the selected historical file version no longer resolves".to_string(),
+            })?;
+        Ok(CommitFileVersion {
+            repository_id: ".".to_string(),
+            commit_oid: details.oid,
+            revision_oid,
+            path: current.path.clone(),
+            source_path: file.source_path,
+            blob_oid: file.blob_oid,
+            file_mode: file.file_mode,
+            bytes: file.bytes,
+        })
+    }
+
+    pub fn repository_commit_file_version(
+        &self,
+        repository_id: &str,
+        commit_oid: &str,
+        selected: &CommitFileChange,
+        limit_bytes: usize,
+    ) -> Result<CommitFileVersion, GitError> {
+        let root = self.resolve_history_root(repository_id)?;
+        let mut version = root
+            .repository
+            .commit_file_version(commit_oid, selected, limit_bytes)?;
+        version.repository_id = root.descriptor.id;
+        Ok(version)
+    }
+
     pub fn commit_comparison_details(
         &self,
         before_oid: &str,
@@ -1867,10 +1950,27 @@ impl GitRepository {
         revision: &str,
         path: &str,
     ) -> Result<Option<Vec<u8>>, GitError> {
+        Ok(self
+            .read_file_at_revision(revision, path, MAX_BINARY_PREVIEW_BYTES)?
+            .map(|file| file.bytes))
+    }
+
+    fn read_file_at_revision(
+        &self,
+        revision: &str,
+        path: &str,
+        limit_bytes: usize,
+    ) -> Result<Option<RevisionFile>, GitError> {
         validate_object_id(revision)?;
         validate_relative_path(path)?;
-        let listing = self.run_read_owned(
-            "resolve image blob",
+        if limit_bytes == 0 {
+            return Err(GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "the content limit must be greater than zero".to_string(),
+            });
+        }
+        let (listing, listing_truncated) = self.run_read_owned_bounded(
+            "resolve historical file",
             vec![
                 OsString::from("--literal-pathspecs"),
                 OsString::from("ls-tree"),
@@ -1879,7 +1979,14 @@ impl GitRepository {
                 OsString::from("--"),
                 OsString::from(path),
             ],
+            TREE_ENTRY_OUTPUT_LIMIT_BYTES,
         )?;
+        if listing_truncated {
+            return Err(GitError::InvalidInput {
+                field: "commit file".to_string(),
+                message: "the historical tree entry exceeded the path output limit".to_string(),
+            });
+        }
         let mut records = listing
             .stdout
             .split(|byte| *byte == 0)
@@ -1889,7 +1996,7 @@ impl GitRepository {
         };
         if records.next().is_some() {
             return Err(GitError::Parse {
-                context: "image blob".to_string(),
+                context: "historical file".to_string(),
                 message: "the selected path resolved to multiple tree entries".to_string(),
             });
         }
@@ -1897,76 +2004,90 @@ impl GitRepository {
             .iter()
             .position(|byte| *byte == b'\t')
             .ok_or_else(|| GitError::Parse {
-                context: "image blob".to_string(),
+                context: "historical file".to_string(),
                 message: "the tree entry had no path separator".to_string(),
             })?;
         let listed_path = std::str::from_utf8(&record[tab + 1..]).map_err(|_| GitError::Parse {
-            context: "image blob".to_string(),
-            message: "non-UTF-8 image paths are not supported".to_string(),
+            context: "historical file".to_string(),
+            message: "non-UTF-8 historical paths are not supported".to_string(),
         })?;
         if listed_path != path {
             return Err(GitError::InvalidInput {
-                field: "image path".to_string(),
+                field: "commit file".to_string(),
                 message: "the selected path did not resolve exactly".to_string(),
             });
         }
         let header = std::str::from_utf8(&record[..tab]).map_err(|_| GitError::Parse {
-            context: "image blob".to_string(),
+            context: "historical file".to_string(),
             message: "the tree entry header was not UTF-8".to_string(),
         })?;
         let mut fields = header.split_ascii_whitespace();
-        let _mode = fields.next();
+        let mode = fields.next();
         let kind = fields.next();
         let object = fields.next();
-        if kind != Some("blob") || fields.next().is_some() {
+        if !matches!(mode, Some("100644" | "100755"))
+            || kind != Some("blob")
+            || fields.next().is_some()
+        {
             return Err(GitError::InvalidInput {
-                field: "image path".to_string(),
-                message: "the selected revision entry is not a regular file".to_string(),
+                field: "commit file".to_string(),
+                message: "the selected revision entry is not a supported regular file".to_string(),
             });
         }
         let object = object.ok_or_else(|| GitError::Parse {
-            context: "image blob".to_string(),
+            context: "historical file".to_string(),
             message: "the tree entry had no object id".to_string(),
         })?;
         validate_object_id(object)?;
-        let size = self.run_read_owned(
-            "measure image blob",
+        let (size, size_truncated) = self.run_read_owned_bounded(
+            "measure historical file",
             vec![
                 OsString::from("cat-file"),
                 OsString::from("-s"),
                 OsString::from(object),
             ],
+            128,
         )?;
+        if size_truncated {
+            return Err(GitError::Parse {
+                context: "historical file".to_string(),
+                message: "Git returned an overlong blob size".to_string(),
+            });
+        }
         let size = String::from_utf8_lossy(&size.stdout)
             .trim()
             .parse::<usize>()
             .map_err(|_| GitError::Parse {
-                context: "image blob".to_string(),
+                context: "historical file".to_string(),
                 message: "Git returned an invalid blob size".to_string(),
             })?;
-        if size > MAX_BINARY_PREVIEW_BYTES {
+        if size > limit_bytes {
             return Err(GitError::InvalidInput {
-                field: "image file".to_string(),
-                message: format!(
-                    "image preview is limited to {MAX_BINARY_PREVIEW_BYTES} bytes per side"
-                ),
+                field: "commit file".to_string(),
+                message: format!("historical file reads are limited to {limit_bytes} bytes"),
             });
         }
-        let output = self.run_read_owned(
-            "read image blob",
+        let (output, output_truncated) = self.run_read_owned_bounded(
+            "read historical file",
             vec![
                 OsString::from("cat-file"),
                 OsString::from("blob"),
                 OsString::from(object),
             ],
+            limit_bytes.saturating_add(1),
         )?;
-        if output.stdout.len() != size || output.stdout.len() > MAX_BINARY_PREVIEW_BYTES {
+        if output_truncated || output.stdout.len() != size || output.stdout.len() > limit_bytes {
             return Err(GitError::Io {
-                operation: "read image blob".to_string(),
-                message: "the image blob changed size while it was read".to_string(),
+                operation: "read historical file".to_string(),
+                message: "the blob size did not match the exact bounded read".to_string(),
             });
         }
-        Ok(Some(output.stdout))
+        Ok(Some(RevisionFile {
+            source_path: path.to_string(),
+            blob_oid: object.to_string(),
+            file_mode: mode.expect("validated file mode").to_string(),
+            bytes: output.stdout,
+        }))
     }
 
     fn read_binary_from_worktree(&self, path: &str) -> Result<Option<Vec<u8>>, GitError> {
@@ -7256,6 +7377,98 @@ mod tests {
         }
         assert!(matches!(
             parse_bounded_commit_files(output, false, "commit file list", "the file list"),
+            Err(GitError::InvalidInput { .. })
+        ));
+    }
+
+    #[test]
+    fn reads_exact_post_commit_and_deleted_pre_commit_file_versions() {
+        let directory = fixture();
+        fs::write(directory.path().join("kept.txt"), "before\n").expect("kept fixture");
+        fs::write(directory.path().join("removed.txt"), "removed\n").expect("removed fixture");
+        fs::write(directory.path().join("old.txt"), "renamed\n").expect("rename fixture");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        repository
+            .stage(&[
+                "kept.txt".to_string(),
+                "removed.txt".to_string(),
+                "old.txt".to_string(),
+            ])
+            .expect("root files stage");
+        let root_oid = repository.commit("Root").expect("root commit");
+
+        fs::write(directory.path().join("kept.txt"), "after\n").expect("kept edit");
+        fs::remove_file(directory.path().join("removed.txt")).expect("remove fixture");
+        fs::rename(
+            directory.path().join("old.txt"),
+            directory.path().join("new.txt"),
+        )
+        .expect("rename fixture");
+        repository
+            .stage(&[
+                "kept.txt".to_string(),
+                "removed.txt".to_string(),
+                "old.txt".to_string(),
+                "new.txt".to_string(),
+            ])
+            .expect("changed files stage");
+        let commit_oid = repository.commit("Change").expect("change commit");
+        let details = repository
+            .commit_details(&commit_oid)
+            .expect("details load");
+
+        let kept = details
+            .files
+            .iter()
+            .find(|file| file.path == "kept.txt")
+            .expect("kept change");
+        let kept_version = repository
+            .commit_file_version(&commit_oid, kept, MAX_BINARY_PREVIEW_BYTES)
+            .expect("post-commit file version");
+        assert_eq!(kept_version.commit_oid, commit_oid);
+        assert_eq!(kept_version.revision_oid, commit_oid);
+        assert_eq!(kept_version.source_path, "kept.txt");
+        assert_eq!(kept_version.file_mode, "100644");
+        assert_eq!(kept_version.bytes, b"after\n");
+
+        let removed = details
+            .files
+            .iter()
+            .find(|file| file.path == "removed.txt")
+            .expect("removed change");
+        let removed_version = repository
+            .commit_file_version(&commit_oid, removed, MAX_BINARY_PREVIEW_BYTES)
+            .expect("pre-commit deleted file version");
+        assert_eq!(removed_version.revision_oid, root_oid);
+        assert_eq!(removed_version.source_path, "removed.txt");
+        assert_eq!(removed_version.bytes, b"removed\n");
+
+        let renamed = details
+            .files
+            .iter()
+            .find(|file| file.path == "new.txt")
+            .expect("renamed change");
+        let renamed_version = repository
+            .commit_file_version(&commit_oid, renamed, MAX_BINARY_PREVIEW_BYTES)
+            .expect("renamed post-commit file version");
+        assert_eq!(renamed_version.revision_oid, commit_oid);
+        assert_eq!(renamed_version.source_path, "new.txt");
+        assert_eq!(renamed_version.bytes, b"renamed\n");
+
+        assert!(matches!(
+            repository.commit_file_version(&commit_oid, kept, 4),
+            Err(GitError::InvalidInput { .. })
+        ));
+        assert!(matches!(
+            repository.commit_file_version(
+                &commit_oid,
+                &CommitFileChange {
+                    path: kept.path.clone(),
+                    original_path: kept.original_path.clone(),
+                    status: ChangeKind::Added,
+                },
+                MAX_BINARY_PREVIEW_BYTES,
+            ),
             Err(GitError::InvalidInput { .. })
         ));
     }
