@@ -55,6 +55,12 @@ import {
 } from "./features/git-history/history-context-binding.ts";
 import { HistoryCommitContextActions } from "./features/git-history/history-commit-context-actions.ts";
 import {
+  historyCommitRangeTargetIsCurrent,
+  resolveHistoryCommitRangeTarget,
+  type HistoryCommitRangeTarget,
+} from "./features/git-history/history-range-context.ts";
+import { HistoryCommitRangeContextActions } from "./features/git-history/history-range-context-actions.ts";
+import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
@@ -420,6 +426,7 @@ export class AsterlynApp {
   private readonly branchMutationController: BranchMutationController;
   private readonly branchMutationDialogBinding: BranchMutationDialogBinding;
   private readonly historyCommitContextActions: HistoryCommitContextActions;
+  private readonly historyCommitRangeContextActions: HistoryCommitRangeContextActions;
   private readonly historyContextBinding: HistoryContextBinding;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
@@ -768,6 +775,38 @@ export class AsterlynApp {
       },
       () => this.localization.catalog.history,
     );
+    this.historyCommitRangeContextActions = new HistoryCommitRangeContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isHistoryCommitRangeTargetCurrent(target),
+        policyOptions: () => {
+          const snapshot = this.windowSession.repository.state.snapshot;
+          const safety = snapshot ? this.branchSafety(snapshot) : {
+            ready: false,
+            message: this.localization.catalog.history.rangeContextMenu.cleanRequired,
+          };
+          const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
+          return {
+            busy: this.state.loading || Boolean(snapshot?.operation),
+            clean: safety.ready && !unsaved,
+            cleanReason: unsaved
+              ? this.localization.catalog.gitOperations.saveBeforeReview
+              : safety.message,
+            localBranch: Boolean(
+              snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
+            ),
+            headOid: snapshot?.branch.oid ?? null,
+            historyCommits: this.historyState.history.commits,
+          };
+        },
+        openGitOperation: (kind, targets) => this.openGitOperation(kind, [...targets]),
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.history,
+    );
     this.historyContextBinding = new HistoryContextBinding(
       root,
       () => ({
@@ -775,7 +814,7 @@ export class AsterlynApp {
         workspaceGeneration: this.windowSession.generation,
         repositoryRevision: this.windowSession.repository.state.revision,
       }),
-      (request) => this.historyCommitContextActions.open(request),
+      (request) => this.openHistoryContextActions(request),
     );
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
@@ -5507,6 +5546,28 @@ export class AsterlynApp {
       this.windowSession.generation,
       this.windowSession.repository.state.revision,
     );
+  }
+
+  private isHistoryCommitRangeTargetCurrent(target: HistoryCommitRangeTarget): boolean {
+    return historyCommitRangeTargetIsCurrent(
+      target,
+      this.historyRangeSelection.selection,
+      this.historyState,
+      this.windowSession.generation,
+      this.windowSession.repository.state.revision,
+    );
+  }
+
+  private openHistoryContextActions(
+    request: Parameters<HistoryCommitContextActions["open"]>[0],
+  ): boolean {
+    const selection = this.historyRangeSelection.contextTarget(request.target.key);
+    const range = resolveHistoryCommitRangeTarget(request.target, selection);
+    if (range) {
+      this.markHistoryCommitContextTarget(request.target.key);
+      return this.historyCommitRangeContextActions.open({ ...request, target: range });
+    }
+    return this.historyCommitContextActions.open(request);
   }
 
   private markHistoryCommitContextTarget(key: string): void {

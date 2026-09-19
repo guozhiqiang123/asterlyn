@@ -912,14 +912,17 @@ Cherry-pick、Revert 和 Squash 共用一次只读的多提交选择分析，但
 - 当前分支 first-parent base 到 `HEAD`、最多 1,000 个提交的 bounded Squash 和精确旧 `HEAD` lease；
 - 单提交首父 Diff、提交文件树和共享文本/图片 Diff 展示边界。
 
-当前项目尚缺：
+本草稿初审时列出的以下缺口，已由 CM4 的范围选择与范围动作检查点补齐：
 
 - History 范围选择、锚点/活动端点、键盘扩展、虚拟列表选区投影和 H1/H2 菜单切换；
 - 对选择对象执行同根、直接 first-parent 链、完整区间、merge commit 和当前分支可达性分析的类型化预检；
 - 从范围选择生成精确 Cherry-pick 顺序并预填现有计划；
 - 多提交 Revert 的计划、执行顺序、进度、Continue/Skip/Abort 和协议；
-- 任意两个提交树之间的文件范围和单文件 Diff；
 - 验证显式选区恰好对应现有 bounded Squash 的 base-to-`HEAD` 完整范围。
+
+以下能力仍待后续检查点补齐：
+
+- 任意两个提交树之间的文件范围和单文件 Diff。
 
 ### 验收草稿
 

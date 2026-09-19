@@ -449,6 +449,29 @@ impl GitRepository {
                         });
                     }
                 }
+                if target_oids.len() > 1 {
+                    for pair in target_oids.windows(2) {
+                        let parent = self.resolve_optional_commit(&format!("{}^1", pair[0]))?;
+                        if parent.as_deref() != Some(pair[1].as_str()) {
+                            return Err(GitError::UnsafeOperation {
+                                operation: "prepare revert".to_string(),
+                                message: "multiple Revert targets must be a newest-to-oldest direct first-parent segment".to_string(),
+                                blockers: Vec::new(),
+                            });
+                        }
+                    }
+                    if !self.is_bounded_first_parent_ancestor(
+                        &target_oids[0],
+                        &start_head_oid,
+                        MAX_SQUASH_COMMITS,
+                    )? {
+                        return Err(GitError::UnsafeOperation {
+                            operation: "prepare revert".to_string(),
+                            message: "multiple Revert targets must belong to the current branch's first-parent history".to_string(),
+                            blockers: Vec::new(),
+                        });
+                    }
+                }
                 target_oids.len()
             }
             GitOperationKind::Bisect => unreachable!(),
@@ -722,6 +745,29 @@ impl GitRepository {
                 blockers: Vec::new(),
             })?;
         Ok(distance)
+    }
+
+    fn is_bounded_first_parent_ancestor(
+        &self,
+        ancestor: &str,
+        head: &str,
+        limit: usize,
+    ) -> Result<bool, GitError> {
+        let output = run_checked(
+            self.root(),
+            "inspect operation first-parent history",
+            &[
+                OsString::from("rev-list"),
+                OsString::from("--first-parent"),
+                OsString::from(format!("--max-count={}", limit + 1)),
+                OsString::from("--end-of-options"),
+                OsString::from(head),
+            ],
+            None,
+        )?;
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .any(|oid| oid == ancestor))
     }
 
     fn operation_conflicts(&self) -> Result<Vec<GitConflictFile>, GitError> {
@@ -1666,6 +1712,30 @@ mod tests {
             git_stdout(&fixture, &["log", "-2", "--format=%s"]),
             "Revert \"commit 1\"\nRevert \"commit 2\""
         );
+    }
+
+    #[test]
+    fn multi_revert_rejects_gaps_and_commits_outside_the_current_first_parent() {
+        let fixture = linear_fixture();
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let error = repository
+            .prepare_reverts(&[oid(&fixture, "HEAD"), oid(&fixture, "HEAD~2")])
+            .expect_err("a missing middle commit must be rejected");
+        assert!(error.to_string().contains("direct first-parent segment"));
+
+        git(&fixture, &["switch", "-c", "side", "HEAD~2"]);
+        fs::write(fixture.path().join("side-1.txt"), "one\n").unwrap();
+        commit_all(&fixture, "side one");
+        fs::write(fixture.path().join("side-2.txt"), "two\n").unwrap();
+        commit_all(&fixture, "side two");
+        let side_new = oid(&fixture, "HEAD");
+        let side_old = oid(&fixture, "HEAD~1");
+        git(&fixture, &["switch", "main"]);
+        let repository = GitRepository::open(fixture.path()).expect("reopen repository");
+        let error = repository
+            .prepare_reverts(&[side_new, side_old])
+            .expect_err("another branch's segment must be rejected");
+        assert!(error.to_string().contains("current branch's first-parent"));
     }
 
     #[test]

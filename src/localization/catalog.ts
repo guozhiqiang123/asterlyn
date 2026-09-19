@@ -840,6 +840,7 @@ export interface HistoryCopy {
   branchContextMenu: BranchContextMenuCopy;
   branchMutation: BranchMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
+  rangeContextMenu: HistoryCommitRangeContextMenuCopy;
   rangeSelectionLimit: string;
   rangeSelectionBarrier: string;
   noRefs: string;
@@ -1067,6 +1068,30 @@ export interface HistoryCommitContextMenuCopy {
   localBranchRequired: string;
   mergeMainlineRequired: string;
   targetChanged: string;
+}
+
+export interface HistoryCommitRangeContextMenuCopy extends HistoryCommitRangePolicyCopy {
+  ariaLabel(count: number): string;
+  copyCommitIds: string;
+  cherryPickSelected: string;
+  revertSelected: string;
+  squashSelected: string;
+  copiedCommitIds(count: number): string;
+  clipboardUnavailable: string;
+  targetChanged: string;
+}
+
+export interface HistoryCommitRangePolicyCopy {
+  busy: string;
+  cleanRequired: string;
+  localBranchRequired: string;
+  sameRootRequired: string;
+  topLevelRequired: string;
+  linearRequired: string;
+  mergeRequired: string;
+  currentBranchRequired: string;
+  headSuffixRequired: string;
+  rootBaseRequired: string;
 }
 
 export interface LocaleCatalog {

@@ -471,10 +471,11 @@ construction free of native work.
 
 ### CM4 — History range and commit-detail menus
 
-Status: **History range-selection and reviewed multi-Revert foundations locally accepted; H2 actions
-and H3/H4 providers remain in progress**. Evidence:
+Status: **History range selection, reviewed multi-Revert, and the non-comparison H2 actions locally
+accepted; exact two-commit comparison and H3/H4 providers remain in progress**. Evidence:
 [`CM4 History range-selection acceptance`](../benchmarks/2026-09-15-context-action-cm4-selection.md).
 [`CM4 reviewed multi-Revert acceptance`](../benchmarks/2026-09-19-context-action-cm4-multi-revert.md).
+[`CM4 History range-action acceptance`](../benchmarks/2026-09-19-context-action-cm4-range-actions.md).
 
 Add range selection/topology, range Diff, historical blob documents, commit-anchored History, and
 historical restore as separately accepted capabilities. H2, H3, and H4 providers expose only the
