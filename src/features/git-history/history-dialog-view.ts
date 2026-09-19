@@ -2,7 +2,7 @@ import { icon } from "../../icons.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type { HistoryPath, HistoryRef, ProjectFile, RepositorySnapshot } from "../../models.ts";
 import { buildProjectTree, type ProjectTreeNode } from "../../presentation/project-tree.ts";
-import { branchKey, historyPathKey } from "../../workbench/history-identity.ts";
+import { branchKey, historyPathKey } from "./history-identity.ts";
 
 export type HistoryDialogKind = "branches" | "paths-text" | "paths-tree";
 

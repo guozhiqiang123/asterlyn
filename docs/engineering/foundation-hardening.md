@@ -281,6 +281,11 @@ next to the controller and view that consume it.
 Remote Push now owns its review file projection, commit-selection transition, and confirmation
 availability rules next to the remote controller and view.
 
+Git History now owns all seven of its remaining transitional models: collapse projection, feature
+identity facade, paging, path selection, persisted ref preferences, repository-root selection, and
+ref-history request state. Their internal imports are feature-local and their product contracts
+still point inward to `models.ts` and `history-query.ts`.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

@@ -3,8 +3,8 @@ import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/loca
 import type { BranchSummary, RepositorySnapshot } from "../../models.ts";
 import {
   branchKey,
-} from "../../workbench/history-identity.ts";
-import { effectiveHistoryRootIds } from "../../workbench/history-root-selection.ts";
+} from "./history-identity.ts";
+import { effectiveHistoryRootIds } from "./history-root-selection.ts";
 import {
   groupRemoteBranches,
   matchingLogicalBranches,

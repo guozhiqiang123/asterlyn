@@ -1,5 +1,5 @@
 import type { BranchSummary, RepositorySnapshot } from "../../models.ts";
-import { branchKey } from "../../workbench/history-identity.ts";
+import { branchKey } from "./history-identity.ts";
 import { matchingLogicalBranches } from "../../presentation/git-presentation.ts";
 
 export interface GitBranchesState {

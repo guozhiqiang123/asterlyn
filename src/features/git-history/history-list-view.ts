@@ -15,8 +15,8 @@ import {
 import {
   collapseLinearHistory,
   type HistoryDisplayEntry,
-} from "../../workbench/history-collapse.ts";
-import { commitKey } from "../../workbench/history-identity.ts";
+} from "./history-collapse.ts";
+import { commitKey } from "./history-identity.ts";
 import type { HistorySelectionEntry } from "./history-range-selection.ts";
 
 export const HISTORY_ROW_LIMIT = 3_000;

@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   effectiveHistoryRootIds,
   toggleHistoryRootSelection,
-} from "../src/workbench/history-root-selection.ts";
+} from "../src/features/git-history/history-root-selection.ts";
 
 const roots = [".", "superboost", "vaLib"];
 

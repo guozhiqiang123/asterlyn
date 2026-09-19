@@ -1,4 +1,4 @@
-import type { CommitSummary, HistoryPage } from "../models";
+import type { CommitSummary, HistoryPage } from "../../models";
 import { commitKey } from "./history-identity.ts";
 
 export interface HistoryWindow {

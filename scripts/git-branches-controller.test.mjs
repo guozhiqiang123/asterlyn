@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GitBranchesController } from "../src/features/git-history/git-branches-controller.ts";
-import { branchKey } from "../src/workbench/history-identity.ts";
+import { branchKey } from "../src/features/git-history/history-identity.ts";
 
 function branch(repositoryId, kind, fullName, current = false) {
   return {

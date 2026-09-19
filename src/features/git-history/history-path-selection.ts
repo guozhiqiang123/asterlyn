@@ -1,4 +1,4 @@
-import type { HistoryPath, ProjectFile } from "../models";
+import type { HistoryPath, ProjectFile } from "../../models";
 import { historyPathKey } from "./history-identity.ts";
 
 export interface HistoryPathCandidate extends HistoryPath {

@@ -6,7 +6,7 @@ import {
   saveHistoryRefPreferences,
   toggleFavoriteRef,
   touchRecentRef,
-} from "../src/workbench/history-preferences.ts";
+} from "../src/features/git-history/history-preferences.ts";
 
 test("history ref preferences are isolated per repository and discard missing refs", () => {
   const storage = memoryStorage();

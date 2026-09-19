@@ -1,4 +1,4 @@
-import type { CommitSummary } from "../models";
+import type { CommitSummary } from "../../models";
 import { commitKey, parentCommitKey } from "./history-identity.ts";
 
 export type HistoryDisplayEntry =

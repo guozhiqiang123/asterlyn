@@ -7,7 +7,7 @@ import {
   historyRenderWindow,
   renderHistoryList,
 } from "../src/features/git-history/history-list-view.ts";
-import { commitKey } from "../src/workbench/history-identity.ts";
+import { commitKey } from "../src/features/git-history/history-identity.ts";
 
 test("history list projects selected commits, graph metadata, references, and roots", () => {
   const commits = [commit("tip", ["root"], ["HEAD -> main"]), commit("root", [], [])];

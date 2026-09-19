@@ -11,7 +11,7 @@ import { resolveBranchContextTarget } from "../src/features/git-history/branch-c
 import { resolveHistoryCommitContextTarget } from "../src/features/git-history/history-context-binding.ts";
 import { resolveCommitDetailContextTarget } from "../src/features/git-history/commit-detail-context-binding.ts";
 import { buildProjectTree } from "../src/presentation/project-tree.ts";
-import { branchKey, commitKey } from "../src/workbench/history-identity.ts";
+import { branchKey, commitKey } from "../src/features/git-history/history-identity.ts";
 
 const file = {
   repositoryId: ".",

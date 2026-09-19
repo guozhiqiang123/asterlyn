@@ -17,7 +17,7 @@ import {
   branchKey,
   historyPathKey,
   historyRefKey,
-} from "../../workbench/history-identity.ts";
+} from "./history-identity.ts";
 import {
   historyAuthorChoices,
   type HistoryDatePreset,
@@ -25,8 +25,8 @@ import {
 import {
   historyPathCandidates,
   historyPathWorkspaceLabel,
-} from "../../workbench/history-path-selection.ts";
-import { effectiveHistoryRootIds } from "../../workbench/history-root-selection.ts";
+} from "./history-path-selection.ts";
+import { effectiveHistoryRootIds } from "./history-root-selection.ts";
 import { matchingBranches, type BranchNavigationViewModel } from "./branch-navigation-view.ts";
 import type { HistoryFilterMenu } from "./history-filter-controller.ts";
 import { renderHistoryList, type HistoryListPresentation } from "./history-list-view.ts";

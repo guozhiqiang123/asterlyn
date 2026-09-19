@@ -1,7 +1,7 @@
 import type { BranchSummary, RepositorySnapshot } from "../../models.ts";
 import type { WorkspaceTargetIdentity } from "../../application/workbench-navigation.ts";
-import { branchKey } from "../../workbench/history-identity.ts";
-import { effectiveHistoryRootIds } from "../../workbench/history-root-selection.ts";
+import { branchKey } from "./history-identity.ts";
+import { effectiveHistoryRootIds } from "./history-root-selection.ts";
 import { matchingLogicalBranches } from "../../presentation/git-presentation.ts";
 import {
   DelegatedContextBinding,

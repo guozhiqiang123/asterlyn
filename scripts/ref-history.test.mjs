@@ -6,7 +6,7 @@ import {
   emptyRefHistory,
   failRefHistory,
   installSnapshotHistory,
-} from "../src/workbench/ref-history.ts";
+} from "../src/features/git-history/ref-history.ts";
 import { defaultHistoryQuery } from "../src/history-query.ts";
 
 const commit = (oid) => ({

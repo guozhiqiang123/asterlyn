@@ -1,4 +1,4 @@
-import type { HistoryRef } from "../models";
+import type { HistoryRef } from "../../models";
 import { historyRefKey } from "./history-identity.ts";
 
 const HISTORY_REFS_KEY_PREFIX = "asterlyn.historyRefs.v2.";

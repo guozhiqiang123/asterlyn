@@ -278,10 +278,10 @@ import {
   branchKey,
   commitKey,
   historyPathKey,
-} from "./workbench/history-identity";
+} from "./features/git-history/history-identity";
 import {
   historyPathCandidates,
-} from "./workbench/history-path-selection";
+} from "./features/git-history/history-path-selection";
 import {
   findProjectTreeNode,
   type ProjectTreeNode,

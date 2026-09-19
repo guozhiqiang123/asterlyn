@@ -12,20 +12,20 @@ import {
   normalizeHistoryQuery,
   type HistoryDatePreset,
 } from "../../history-query.ts";
-import { branchKey, historyPathKey, historyRefKey } from "../../workbench/history-identity.ts";
+import { branchKey, historyPathKey, historyRefKey } from "./history-identity.ts";
 import {
   loadHistoryRefPreferences,
   saveHistoryRefPreferences,
   toggleFavoriteRef,
   touchRecentRef,
-} from "../../workbench/history-preferences.ts";
+} from "./history-preferences.ts";
 import {
   historyPathCandidates,
   historyPathWorkspaceLabel,
   resolveHistoryPathText,
   type HistoryPathMessages,
-} from "../../workbench/history-path-selection.ts";
-import { toggleHistoryRootSelection } from "../../workbench/history-root-selection.ts";
+} from "./history-path-selection.ts";
+import { toggleHistoryRootSelection } from "./history-root-selection.ts";
 
 export type HistoryFilterMenu = "branch" | "user" | "date" | "paths" | "graph";
 export type HistoryFilterDialog = "branches" | "paths-text" | "paths-tree";

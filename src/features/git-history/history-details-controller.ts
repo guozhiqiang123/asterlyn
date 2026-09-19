@@ -12,17 +12,17 @@ import {
   installSnapshotHistory,
   type RefHistoryRequest,
   type RefHistoryState,
-} from "../../workbench/ref-history.ts";
+} from "./ref-history.ts";
 import {
   historyQueryKey,
   normalizeHistoryQuery,
 } from "../../history-query.ts";
-import { commitKey } from "../../workbench/history-identity.ts";
+import { commitKey } from "./history-identity.ts";
 import {
   appendHistoryPage,
   matchesHistoryPageRequest,
   replaceHistoryPage,
-} from "../../workbench/history-paging.ts";
+} from "./history-paging.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 
 export const HISTORY_PAGE_SIZE = 150;

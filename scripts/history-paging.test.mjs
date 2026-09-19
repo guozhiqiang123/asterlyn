@@ -5,7 +5,7 @@ import {
   appendHistoryPage,
   matchesHistoryPageRequest,
   replaceHistoryPage,
-} from "../src/workbench/history-paging.ts";
+} from "../src/features/git-history/history-paging.ts";
 
 test("append paging deduplicates root-qualified commits and advances server offset", () => {
   const current = [commit(".", "a"), commit(".", "b")];

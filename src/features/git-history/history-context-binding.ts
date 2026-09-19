@@ -1,6 +1,6 @@
 import type { CommitSummary } from "../../models.ts";
 import type { CommitIdentity } from "../../application/workbench-navigation.ts";
-import { commitKey } from "../../workbench/history-identity.ts";
+import { commitKey } from "./history-identity.ts";
 import type { GitHistoryDetailsState } from "./history-details-controller.ts";
 import {
   DelegatedContextBinding,

@@ -5,7 +5,7 @@ import {
   historyPathCandidates,
   historyPathWorkspaceLabel,
   resolveHistoryPathText,
-} from "../src/workbench/history-path-selection.ts";
+} from "../src/features/git-history/history-path-selection.ts";
 
 const files = [
   { repositoryId: ".", path: "src/app.ts", workspacePath: "src/app.ts" },

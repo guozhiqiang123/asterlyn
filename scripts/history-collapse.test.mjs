@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { collapseLinearHistory } from "../src/workbench/history-collapse.ts";
-import { commitKey } from "../src/workbench/history-identity.ts";
+import { collapseLinearHistory } from "../src/features/git-history/history-collapse.ts";
+import { commitKey } from "../src/features/git-history/history-identity.ts";
 
 test("linear history collapses interior commits and rewires only the graph projection", () => {
   const commits = linearCommits(6);
