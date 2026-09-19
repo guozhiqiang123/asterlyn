@@ -166,26 +166,6 @@ fn build_project_window(
     builder.build()
 }
 
-fn replacement_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, WorkspaceError> {
-    app.path()
-        .app_local_data_dir()
-        .map(|path| path.join("replacement-recovery-v1"))
-        .map_err(|error| WorkspaceError::Io {
-            operation: "resolve replacement recovery location".to_string(),
-            message: error.to_string(),
-        })
-}
-
-fn workspace_mutation_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, WorkspaceError> {
-    app.path()
-        .app_local_data_dir()
-        .map(|path| path.join("workspace-mutation-recovery-v1"))
-        .map_err(|error| WorkspaceError::Io {
-            operation: "resolve workspace mutation recovery location".to_string(),
-            message: error.to_string(),
-        })
-}
-
 async fn run_blocking<T, F>(operation: &str, task: F) -> Result<T, GitError>
 where
     T: Send + 'static,

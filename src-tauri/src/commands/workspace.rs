@@ -1,4 +1,7 @@
 use super::super::*;
+use crate::adapters::recovery_paths::{
+    replacement_recovery_root, workspace_mutation_recovery_root,
+};
 use crate::adapters::system_file_manager::{
     RevealWorkspaceEntryResult, reveal_workspace_entry as reveal_in_system_file_manager,
 };

@@ -347,6 +347,10 @@ and validates the target through the catalog service before invoking the platfor
 mutation-recovery enumeration dispatches through the mutation service. The workspace command
 module no longer calls the concrete `Workspace` implementation directly.
 
+Tauri application-data directory lookup for replacement and mutation recovery now lives in the
+`adapters/recovery_paths.rs` platform boundary. The crate root no longer owns recovery filesystem
+policy; commands compose the resulting platform path with the application services.
+
 Workspace entry inspection plus create/copy/move/trash planning and execution now belong to the
 existing `application/workspace_mutation.rs` coordinator boundary. Mutation limits, preview DTOs,
 write serialization, cancellation, and operation dispatch are Tauri-independent; the desktop edge
