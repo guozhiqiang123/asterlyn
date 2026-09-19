@@ -1,4 +1,3 @@
-import type { GitWorktreeRecoveryDialog } from "./features/git-operations/git-worktree-recovery-dialog.ts";
 import { bridge } from "./bridge";
 import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
 import { WorkspaceTrashRuntime } from "./features/workspace-trash/workspace-trash-runtime.ts";
@@ -410,7 +409,6 @@ export class AsterlynApp {
   >;
   private readonly projectFilesOperationRuntime: ProjectFilesOperationRuntime;
   private readonly gitOperationRuntime: GitOperationRuntime;
-  private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private editorTabsMarkup = "";
   private readonly settingsPresentationRuntime: SettingsPresentationRuntime;
   private readonly shellController: ShellController;
@@ -683,6 +681,33 @@ export class AsterlynApp {
       },
       copy: () => this.localization.catalog.gitOperations,
       changed: (change) => this.handleGitOperationControllerChange(change),
+      recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
+          list: (root) => bridge.listGitWorktreeRecoveries(root),
+          undo: async (root, recovery) => {
+            if (this.state.loading || this.windowSession.workspace.state.root !== root) {
+              throw new Error(this.localization.catalog.recovery.waitForOperation);
+            }
+            this.captureMountedTextEditor();
+            const dirtyRecovery = dirtyTextTabs(this.editorState.session).some((tab) =>
+              recovery.paths.includes(tab.document.workspacePath)
+            );
+            if (dirtyRecovery) throw new Error(this.localization.catalog.recovery.saveBeforeRestore);
+            const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
+            this.setLoading(true, this.localization.catalog.recovery.restoring);
+            try {
+              const outcome = await bridge.undoGitWorktreeRecovery(root, recovery.id);
+              if (!this.windowSession.matches(generation, root)) return;
+              this.repositoryIntegration.applyMutation(outcome, "gitMutation");
+              await this.filesEditorRuntime.editor.reconcileExternalPaths(recovery.paths);
+              this.renderWorkspace();
+              this.setStatus(this.localization.catalog.recovery.restored, "success");
+            } finally {
+              this.windowSession.completeTransition(generation);
+              if (this.windowSession.matches(generation, root))
+                this.setLoading(false, this.localization.catalog.common.ready);
+            }
+          },
+        }, copy: () => this.localization.catalog.recovery },
     });
     const contextFeedback = {
       blocked: (reason: string) => this.setStatus(reason, "warning"),
@@ -1572,9 +1597,8 @@ export class AsterlynApp {
       this.renderWorkspaceReplacementDialog();
     }
     if (this.historyFilterState.historyDialog) this.renderHistoryDialog();
-    if (this.gitOperationState.dialog) this.gitOperationRuntime.render();
+    this.gitOperationRuntime.refreshCopy();
     this.gitHistoryMutationRuntime.refreshCopy();
-    this.recoveryDialog?.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     if (this.remoteState.dialog) this.renderRemoteDialog();
@@ -1715,7 +1739,6 @@ export class AsterlynApp {
     this.workspaceTrashRuntime.dispose();
     this.projectFilesOperationRuntime.dispose();
     this.contextMenuHost.dispose();
-    this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
     this.workspaceMutations.dispose();
     this.workspaceSearchController.dispose();
@@ -8120,30 +8143,7 @@ export class AsterlynApp {
   private async openGitRecoveries(): Promise<void> {
     const root = this.windowSession.repository.state.snapshot?.root;
     if (!root || this.state.loading) return;
-    const { GitWorktreeRecoveryDialog } = await import("./features/git-operations/git-worktree-recovery-dialog.ts");
-    this.recoveryDialog ??= new GitWorktreeRecoveryDialog({
-      activeRoot: () => this.windowSession.workspace.state.root,
-      list: (root) => bridge.listGitWorktreeRecoveries(root),
-      undo: async (root, recovery) => {
-        if (this.state.loading || this.windowSession.workspace.state.root !== root) throw new Error(this.localization.catalog.recovery.waitForOperation);
-        this.captureMountedTextEditor();
-        if (dirtyTextTabs(this.editorState.session).some((tab) => recovery.paths.includes(tab.document.workspacePath))) throw new Error(this.localization.catalog.recovery.saveBeforeRestore);
-        const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
-        this.setLoading(true, this.localization.catalog.recovery.restoring);
-        try {
-          const outcome = await bridge.undoGitWorktreeRecovery(root, recovery.id);
-          if (!this.windowSession.matches(generation, root)) return;
-          this.repositoryIntegration.applyMutation(outcome, "gitMutation");
-          await this.filesEditorRuntime.editor.reconcileExternalPaths(recovery.paths);
-          this.renderWorkspace();
-          this.setStatus(this.localization.catalog.recovery.restored, "success");
-        } finally {
-          this.windowSession.completeTransition(generation);
-          if (this.windowSession.matches(generation, root)) this.setLoading(false, this.localization.catalog.common.ready);
-        }
-      },
-    }, () => this.localization.catalog.recovery);
-    if (this.windowSession.workspace.state.root === root) await this.recoveryDialog.open(root);
+    await this.gitOperationRuntime.openRecoveries(root);
   }
 
   private openGitOperation(

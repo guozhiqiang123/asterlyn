@@ -2,7 +2,7 @@ import type { GitWorktreeRecovery } from "../../models.ts";
 import type { RecoveryCopy } from "../../localization/catalog.ts";
 import { DEFAULT_LOCALIZATION } from "../../localization/localization.ts";
 
-interface RecoveryActions {
+export interface GitWorktreeRecoveryActions {
   activeRoot(): string | null;
   list(root: string): Promise<GitWorktreeRecovery[]>;
   undo(root: string, recovery: GitWorktreeRecovery): Promise<void>;
@@ -10,14 +10,19 @@ interface RecoveryActions {
 
 /** A native modal keeps focus inside the recovery review, including during an asynchronous undo. */
 export class GitWorktreeRecoveryDialog {
+  private readonly actions: GitWorktreeRecoveryActions;
+  private readonly copy: () => RecoveryCopy;
   private dialog: HTMLDialogElement | null = null;
   private generation = 0;
   private busy = false;
 
   constructor(
-    private readonly actions: RecoveryActions,
-    private readonly copy: () => RecoveryCopy = () => DEFAULT_LOCALIZATION.catalog.recovery,
-  ) {}
+    actions: GitWorktreeRecoveryActions,
+    copy: () => RecoveryCopy = () => DEFAULT_LOCALIZATION.catalog.recovery,
+  ) {
+    this.actions = actions;
+    this.copy = copy;
+  }
 
   async open(root: string): Promise<void> {
     this.dispose();

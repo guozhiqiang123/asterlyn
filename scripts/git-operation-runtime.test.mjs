@@ -27,3 +27,32 @@ test("Git operation runtime owns controller notification and disposal", () => {
   runtime.controller.installSnapshot(null);
   assert.deepEqual(changes, ["snapshot"]);
 });
+
+test("Git operation runtime rejects late recovery-dialog activation after disposal", async () => {
+  const runtime = new GitOperationRuntime({
+    root: { querySelector: () => null },
+    gateway: {},
+    initialCopy: EN_US.gitOperations,
+    copy: () => EN_US.gitOperations,
+    actions: {
+      prepare: () => {},
+      execute: () => {},
+      resolve: () => {},
+      reportError: () => {},
+    },
+    changed: () => {},
+    recovery: {
+      actions: {
+        activeRoot: () => "/repo",
+        list: async () => [],
+        undo: async () => {},
+      },
+      copy: () => ({}),
+    },
+  });
+
+  const opening = runtime.openRecoveries("/repo");
+  runtime.dispose();
+  await opening;
+  assert.equal(runtime.controller.state.dialog, null);
+});

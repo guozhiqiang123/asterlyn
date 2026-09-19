@@ -1,5 +1,5 @@
 import type { GitOperationKind } from "../../models.ts";
-import type { GitOperationCopy } from "../../localization/catalog.ts";
+import type { GitOperationCopy, RecoveryCopy } from "../../localization/catalog.ts";
 import {
   GitOperationController,
   type GitOperationChange,
@@ -9,6 +9,10 @@ import {
   GitOperationDialogBinding,
   type GitOperationDialogActions,
 } from "./git-operation-dialog-binding.ts";
+import type {
+  GitWorktreeRecoveryActions,
+  GitWorktreeRecoveryDialog,
+} from "./git-worktree-recovery-dialog.ts";
 
 export interface GitOperationRuntimeOptions {
   readonly root: HTMLElement;
@@ -17,6 +21,10 @@ export interface GitOperationRuntimeOptions {
   readonly copy: () => GitOperationCopy;
   readonly actions: GitOperationDialogActions;
   readonly changed: (change: GitOperationChange) => void;
+  readonly recovery?: {
+    readonly actions: GitWorktreeRecoveryActions;
+    readonly copy: () => RecoveryCopy;
+  };
 }
 
 /** Owns the reviewed Git-operation controller, lazy dialog boundary, and lifecycle. */
@@ -25,10 +33,13 @@ export class GitOperationRuntime {
 
   private readonly binding: GitOperationDialogBinding;
   private readonly release: () => void;
+  private readonly recovery: GitOperationRuntimeOptions["recovery"];
+  private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private disposed = false;
 
   constructor(options: GitOperationRuntimeOptions) {
     this.controller = new GitOperationController(options.gateway, options.initialCopy);
+    this.recovery = options.recovery;
     this.binding = new GitOperationDialogBinding(
       options.root,
       this.controller,
@@ -61,11 +72,27 @@ export class GitOperationRuntime {
     this.controller.setMessages(messages);
   }
 
+  async openRecoveries(root: string): Promise<void> {
+    const recovery = this.recovery;
+    if (this.disposed || !recovery) return;
+    const { GitWorktreeRecoveryDialog } = await import("./git-worktree-recovery-dialog.ts");
+    if (this.disposed) return;
+    this.recoveryDialog ??= new GitWorktreeRecoveryDialog(recovery.actions, recovery.copy);
+    await this.recoveryDialog.open(root);
+  }
+
+  refreshCopy(): void {
+    if (this.controller.state.dialog) this.binding.render();
+    this.recoveryDialog?.refreshCopy();
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.release();
     this.binding.dispose();
+    this.recoveryDialog?.dispose();
+    this.recoveryDialog = null;
     this.controller.dispose();
   }
 }

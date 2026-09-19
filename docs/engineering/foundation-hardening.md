@@ -232,6 +232,11 @@ mutation and historical-file restore controllers together with both dialog bindi
 localization refresh, and disposal. `AsterlynApp` retains only the gateways and cross-feature
 reconciliation callbacks; `src/app.ts` is 8,808 lines with a matching ceiling.
 
+The lazily loaded Git worktree-recovery review is now owned by `GitOperationRuntime` as well. Its
+late-import guard, localization refresh, and disposal share the feature lifecycle, while the
+workspace/editor reconciliation required by Undo remains an injected composition callback. The
+`src/app.ts` ceiling remains 8,808 lines.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
