@@ -1,7 +1,7 @@
 # Context-action system design and implementation plan
 
-- **Status:** CA0, CA1, R5, CM1, CM2, and CM3 locally accepted; CM4 not started
-- **Date:** 2026-09-15
+- **Status:** CA0, CA1, R5, CM1, CM2, CM3, and CM4 locally accepted
+- **Date:** 2026-09-19
 - **Behavior input:** [`Context-menu surface drafts`](../design/context-menu-drafts.md)
 - **Architecture decision:** [`ADR-0013`](../architecture/decisions/0013-feature-owned-context-actions.md)
 
@@ -471,15 +471,22 @@ construction free of native work.
 
 ### CM4 — History range and commit-detail menus
 
-Status: **History range selection, reviewed multi-Revert, and the non-comparison H2 actions locally
-accepted; exact two-commit comparison and H3/H4 providers remain in progress**. Evidence:
+Status: **locally accepted on 2026-09-19**. Evidence:
 [`CM4 History range-selection acceptance`](../benchmarks/2026-09-15-context-action-cm4-selection.md).
 [`CM4 reviewed multi-Revert acceptance`](../benchmarks/2026-09-19-context-action-cm4-multi-revert.md).
 [`CM4 History range-action acceptance`](../benchmarks/2026-09-19-context-action-cm4-range-actions.md).
+[`CM4 exact comparison foundation`](../benchmarks/2026-09-19-context-action-cm4-comparison-foundation.md).
+[`CM4 two-commit comparison acceptance`](../benchmarks/2026-09-19-context-action-cm4-comparison.md).
+[`CM4 exact History start foundation`](../benchmarks/2026-09-19-context-action-cm4-history-start.md).
+[`CM4 commit-folder context actions`](../benchmarks/2026-09-19-context-action-cm4-commit-folders.md).
+[`CM4 exact historical file foundation`](../benchmarks/2026-09-19-context-action-cm4-file-version-foundation.md).
+[`CM4 historical file inspection`](../benchmarks/2026-09-19-context-action-cm4-file-inspection.md).
+[`CM4 commit-file context actions and reviewed restore`](../benchmarks/2026-09-19-context-action-cm4-file-restore.md).
 
-Add range selection/topology, range Diff, historical blob documents, commit-anchored History, and
-historical restore as separately accepted capabilities. H2, H3, and H4 providers expose only the
-items whose application services have passed their gates.
+Range selection/topology, comparison, historical blob documents, commit-anchored History, folder
+actions, and reviewed historical restore landed as separately accepted capabilities. H2, H3, and
+H4 providers expose only those accepted services; the shared host still owns no History selection,
+Git object, workspace path, or recovery state.
 
 ### CA2 — Optional adjacent-menu convergence
 
