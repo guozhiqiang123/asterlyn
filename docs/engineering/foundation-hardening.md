@@ -210,6 +210,11 @@ binding, subscription, and disposal. Files and Changes still provide explicit ta
 completion ports, but the composition root no longer sequences the workflow's internal lifecycle.
 `src/app.ts` is 8,844 lines with a matching ceiling.
 
+Files mutations now have a dedicated operation runtime as well. It owns the mutation controller,
+window-local file clipboard subscriptions, inline/dialog binding, and disposal; the composition
+root supplies only the workspace, Trash, reconciliation, feedback, and rendering ports.
+`src/app.ts` is 8,834 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

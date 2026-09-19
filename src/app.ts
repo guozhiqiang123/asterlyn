@@ -136,10 +136,7 @@ import {
   projectFilesContextPolicy,
   projectFilesHistoryIntent,
 } from "./features/files-editor/project-files-context-policy.ts";
-import {
-  ProjectFilesOperationController,
-} from "./features/files-editor/project-files-operation-controller.ts";
-import { ProjectFilesOperationBinding } from "./features/files-editor/project-files-operation-binding.ts";
+import { ProjectFilesOperationRuntime } from "./features/files-editor/project-files-operation-runtime.ts";
 import { createBrowserTextClipboardAdapter } from "./adapters/browser/browser-text-clipboard-adapter.ts";
 import { localizedOperationError } from "./localization/error-message";
 import {
@@ -419,10 +416,7 @@ export class AsterlynApp {
   private readonly workspaceTrashRuntime: WorkspaceTrashRuntime<
     ProjectFilesContextTarget | ChangesContextTarget
   >;
-  private readonly projectFilesOperations: ProjectFilesOperationController;
-  private readonly projectFilesOperationBinding: ProjectFilesOperationBinding;
-  private readonly releaseProjectFilesOperations: () => void;
-  private readonly releaseProjectFilesClipboard: () => void;
+  private readonly projectFilesOperationRuntime: ProjectFilesOperationRuntime;
   private readonly gitOperationController: GitOperationController;
   private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private editorTabsMarkup = "";
@@ -864,7 +858,7 @@ export class AsterlynApp {
               currentFileUnavailableReason:
                 this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
               restoreBlockedReason: this.commitFileRestoreBlockReason(target.workspacePath),
-              busy: this.state.loading || this.projectFilesOperations.busy ||
+              busy: this.state.loading || this.projectFilesOperationRuntime.controller.busy ||
                 this.workspaceReplacementController.state.dialog !== null,
               busyReason: this.localization.catalog.history.commitFileContextMenu.restoreBusy,
             });
@@ -978,7 +972,7 @@ export class AsterlynApp {
           if ("change" in target) {
             this.completeChangesTrash(target, outcome);
           } else {
-            this.projectFilesOperations.clearClipboardAtOrBelow(target.workspacePath);
+            this.projectFilesOperationRuntime.controller.clearClipboardAtOrBelow(target.workspacePath);
             this.completeProjectFilesTrash(target, outcome);
           }
         },
@@ -1014,18 +1008,22 @@ export class AsterlynApp {
           : element.dataset.projectNode === target.workspacePath
       )) ?? null,
       changed: () => {
-      if (this.shellState.layout.leftTool === "files" || this.shellState.layout.leftTool === "changes") {
-        this.renderLeftTool();
-      }
+        if (
+          this.shellState.layout.leftTool === "files" ||
+          this.shellState.layout.leftTool === "changes"
+        ) {
+          this.renderLeftTool();
+        }
       },
     });
-    this.projectFilesOperations = new ProjectFilesOperationController(
-      {
+    this.projectFilesOperationRuntime = new ProjectFilesOperationRuntime({
+      root,
+      gateway: {
         inspectWorkspaceEntry: (repositoryRoot, workspacePath) =>
           bridge.inspectWorkspaceEntry(repositoryRoot, workspacePath),
       },
-      this.workspaceMutations,
-      {
+      mutations: this.workspaceMutations,
+      runtime: {
         currentIdentity: () => {
           const root = this.windowSession.workspace.state.root;
           return root ? { root, generation: this.windowSession.generation } : null;
@@ -1038,7 +1036,7 @@ export class AsterlynApp {
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
-      () => {
+      messages: () => {
         const labels = this.localization.catalog.projectFiles.contextMenu;
         return {
           invalidName: labels.invalidName,
@@ -1053,22 +1051,17 @@ export class AsterlynApp {
           pasted: labels.pastedEntry,
         };
       },
-      {
+      trash: {
         busy: () => this.workspaceTrashRuntime.controller.busy,
         request: (target) => this.workspaceTrashRuntime.controller.request(target),
       },
-    );
-    this.projectFilesOperationBinding = new ProjectFilesOperationBinding(
-      root,
-      this.projectFilesOperations,
-      () => this.localization.catalog.projectFiles,
-    );
-    this.releaseProjectFilesOperations = this.projectFilesOperations.subscribe(() => {
-      if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
-      this.projectFilesOperationBinding.renderDialog();
-    });
-    this.releaseProjectFilesClipboard = this.projectFilesOperations.clipboard.subscribe(() => {
-      if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+      copy: () => this.localization.catalog.projectFiles,
+      changed: () => {
+        if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+      },
+      clipboardChanged: () => {
+        if (this.shellState.layout.leftTool === "files") this.renderLeftTool();
+      },
     });
     this.projectFilesContextRuntime = new ProjectFilesContextSurfaceRuntime({
       root,
@@ -1091,9 +1084,9 @@ export class AsterlynApp {
           return projectFilesContextPolicy(target, {
             snapshot: this.windowSession.repository.state.snapshot,
             files: this.filesState.files,
-            mutationBusy: this.projectFilesOperations.busy,
+            mutationBusy: this.projectFilesOperationRuntime.controller.busy,
             mutationAvailable: !bridge.isDemo,
-            clipboardAvailable: Boolean(this.projectFilesOperations.clipboard.current(
+            clipboardAvailable: Boolean(this.projectFilesOperationRuntime.controller.clipboard.current(
               target.workspaceRoot,
               target.workspaceGeneration,
             )),
@@ -1112,11 +1105,11 @@ export class AsterlynApp {
           if (target.kind === "directory") {
             this.filesEditorRuntime.files.setDirectoryExpanded(target.workspacePath, true);
           }
-          this.projectFilesOperations.beginCreate(target);
+          this.projectFilesOperationRuntime.controller.beginCreate(target);
         },
-        cut: (target) => this.projectFilesOperations.capture("cut", target),
-        copy: (target) => this.projectFilesOperations.capture("copy", target),
-        paste: (target) => this.projectFilesOperations.paste(target),
+        cut: (target) => this.projectFilesOperationRuntime.controller.capture("cut", target),
+        copy: (target) => this.projectFilesOperationRuntime.controller.capture("copy", target),
+        paste: (target) => this.projectFilesOperationRuntime.controller.paste(target),
         reveal: async (target) => {
           const result = await bridge.revealWorkspaceEntry(
             target.workspaceRoot,
@@ -1130,7 +1123,7 @@ export class AsterlynApp {
           );
         },
         rename: (target) => {
-          this.projectFilesOperations.beginRename(target);
+          this.projectFilesOperationRuntime.controller.beginRename(target);
         },
         historyIntent: (target) => projectFilesHistoryIntent(
           target,
@@ -1138,7 +1131,7 @@ export class AsterlynApp {
           this.filesState.files,
         ),
         installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
-        trash: (target) => this.projectFilesOperations.requestTrash(target),
+        trash: (target) => this.projectFilesOperationRuntime.controller.requestTrash(target),
         blocked: (reason) => this.setStatus(reason, "warning"),
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
@@ -1739,10 +1732,7 @@ export class AsterlynApp {
     this.gitHistoryContextRuntime.dispose();
     this.projectFilesContextRuntime.dispose();
     this.workspaceTrashRuntime.dispose();
-    this.projectFilesOperationBinding.dispose();
-    this.releaseProjectFilesOperations();
-    this.releaseProjectFilesClipboard();
-    this.projectFilesOperations.dispose();
+    this.projectFilesOperationRuntime.dispose();
     this.contextMenuHost.dispose();
     this.recoveryDialog?.dispose();
     this.workspaceWatch.dispose();
@@ -2066,7 +2056,7 @@ export class AsterlynApp {
     this.workspaceMutations.cancel();
     this.commitFileRestoreController.reset();
     this.workspaceTrashRuntime.controller.reset();
-    this.projectFilesOperations.reset();
+    this.projectFilesOperationRuntime.controller.reset();
     this.contextMenuHost.close();
     this.workspaceSearchController.invalidate();
     this.workspaceReplacementController.reset();
@@ -4103,12 +4093,12 @@ export class AsterlynApp {
       scrollTop,
       body.clientHeight,
       this.localization.catalog.projectFiles,
-      this.projectFilesOperations.state,
-      this.projectFilesOperations.clipboard.current(
+      this.projectFilesOperationRuntime.controller.state,
+      this.projectFilesOperationRuntime.controller.clipboard.current(
         workspaceRoot,
         this.windowSession.generation,
       )?.mode === "cut"
-        ? this.projectFilesOperations.clipboard.current(
+        ? this.projectFilesOperationRuntime.controller.clipboard.current(
           workspaceRoot,
           this.windowSession.generation,
         )?.workspacePath ?? null
@@ -4116,7 +4106,7 @@ export class AsterlynApp {
     );
     body.onscroll = () => this.handleProjectTreeScroll(body);
     this.bindProjectEvents();
-    this.projectFilesOperationBinding.bindInline();
+    this.projectFilesOperationRuntime.bindInline();
     if (preserveScroll) {
       body.scrollTop = scrollTop;
       body.scrollLeft = scrollLeft;
