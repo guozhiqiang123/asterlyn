@@ -1062,6 +1062,63 @@ impl GitRepository {
             })
     }
 
+    /// Authorizes an exact working-tree target without requiring it to exist in the bounded file
+    /// catalog. This is intended for reviewed operations that can recreate a tracked historical
+    /// path. The workspace transaction layer remains responsible for rejecting links, non-regular
+    /// files, missing parent directories, and concurrent filesystem changes.
+    pub fn authorize_project_file_target(
+        &self,
+        repository_id: &str,
+        path: &str,
+    ) -> Result<ProjectFile, GitError> {
+        validate_relative_path(path)?;
+        let root = self.resolve_history_root(repository_id)?;
+        let ignored = run_git_output(
+            root.repository.root(),
+            [
+                OsStr::new("check-ignore"),
+                OsStr::new("--quiet"),
+                OsStr::new("--"),
+                OsStr::new(path),
+            ],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "authorize project-file target".to_string(),
+            message: error.to_string(),
+        })?;
+        match ignored.status.code() {
+            Some(0) => {
+                return Err(GitError::InvalidInput {
+                    field: "project file".to_string(),
+                    message: "the selected historical path is ignored by the current repository"
+                        .to_string(),
+                });
+            }
+            Some(1) => {}
+            status => {
+                return Err(GitError::CommandFailed {
+                    operation: "authorize project-file target".to_string(),
+                    status,
+                    message: sanitize_stderr(
+                        &ignored.stderr,
+                        "Git could not evaluate the current ignore policy",
+                    ),
+                });
+            }
+        }
+        let workspace_path = if root.descriptor.id == "." {
+            path.to_string()
+        } else {
+            format!("{}/{path}", root.descriptor.id)
+        };
+        Ok(ProjectFile {
+            repository_id: root.descriptor.id,
+            path: path.to_string(),
+            workspace_path,
+            read_only: false,
+        })
+    }
+
     /// Revalidates one file identity without rebuilding the complete project catalog.
     ///
     /// The caller must first obtain `file` from this repository's bounded project catalog. This
@@ -6494,6 +6551,17 @@ mod tests {
             repository.authorize_project_file(".", "../outside", 10),
             Err(GitError::InvalidInput { .. })
         ));
+        assert_eq!(
+            repository
+                .authorize_project_file_target(".", "missing.txt")
+                .expect("a non-ignored missing target is authorized")
+                .workspace_path,
+            "missing.txt"
+        );
+        assert!(matches!(
+            repository.authorize_project_file_target(".", "ignored.txt"),
+            Err(GitError::InvalidInput { .. })
+        ));
 
         let ignored = complete
             .files
@@ -6647,6 +6715,13 @@ mod tests {
                 .expect("child file is freshly authorized")
                 .workspace_path,
             "modules/library/shared.txt"
+        );
+        assert_eq!(
+            repository
+                .authorize_project_file_target("modules/library", "missing.txt")
+                .expect("child target is rooted in the initialized nested repository")
+                .workspace_path,
+            "modules/library/missing.txt"
         );
         assert!(matches!(
             repository.repository_commit_details("../source", &child_oid),

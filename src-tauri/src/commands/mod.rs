@@ -1,3 +1,4 @@
+mod commit_file_restore;
 mod git_operations;
 mod git_recovery;
 pub(crate) use git_recovery::{
@@ -10,6 +11,10 @@ mod terminal;
 mod workspace;
 mod workspace_watch;
 
+pub(crate) use commit_file_restore::{
+    execute_commit_file_restore, finalize_commit_file_restore, list_commit_file_restore_recoveries,
+    prepare_commit_file_restore, rollback_commit_file_restore,
+};
 pub(crate) use git_operations::{
     cancel_remote_operation, commit_changes, configure_remote_ssh, create_branch,
     execute_branch_mutation, execute_git_operation, fetch_remote, prepare_branch_mutation,

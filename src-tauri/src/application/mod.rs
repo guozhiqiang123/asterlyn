@@ -1,3 +1,4 @@
+mod commit_file_restore;
 mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
@@ -6,6 +7,7 @@ mod workspace_mutation;
 mod workspace_session;
 mod workspace_watch;
 
+pub(crate) use commit_file_restore::{CommitFileRestoreRegistry, StoredCommitFileRestorePlan};
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use search_session::{

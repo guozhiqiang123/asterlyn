@@ -38,9 +38,9 @@ use adapters::image_preview::{
     encode_image_preview,
 };
 use application::{
-    ActiveWorkspaces, AuthorizedReplacementFile, GitOperationCoordinator,
-    PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
-    StoredReplacementPlan, StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator,
+    ActiveWorkspaces, AuthorizedReplacementFile, CommitFileRestoreRegistry,
+    GitOperationCoordinator, PendingRepositoryWindowReservation, PendingRepositoryWindows,
+    ScanRegistry, StoredReplacementPlan, StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator,
     WorkspaceReplacementRegistry, WorkspaceSearchRegistry, WorkspaceWatchService,
     WorkspaceWatchStatus, WorkspaceWriteRegistry,
 };
@@ -791,6 +791,7 @@ where
 pub fn run() {
     let writes = WorkspaceWriteRegistry::default();
     let workspace_mutations = WorkspaceMutationCoordinator::new(writes.clone());
+    let commit_file_restores = CommitFileRestoreRegistry::new(writes.clone());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
@@ -801,6 +802,7 @@ pub fn run() {
         .manage(WorkspaceSearchRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
         .manage(workspace_mutations)
+        .manage(commit_file_restores)
         .manage(WorkspaceWatchService::default())
         .manage(TerminalSessions::default())
         .setup(|app| {
@@ -825,6 +827,9 @@ pub fn run() {
                     .remove_window(window.label());
                 window
                     .state::<WorkspaceMutationCoordinator>()
+                    .remove_window(window.label());
+                window
+                    .state::<CommitFileRestoreRegistry>()
                     .remove_window(window.label());
                 window
                     .state::<TerminalSessions>()
@@ -875,6 +880,11 @@ pub fn run() {
             read_commit_comparison_details,
             read_commit_file,
             compare_commit_file_to_current,
+            prepare_commit_file_restore,
+            execute_commit_file_restore,
+            list_commit_file_restore_recoveries,
+            rollback_commit_file_restore,
+            finalize_commit_file_restore,
             read_git_blame,
             read_commit_diff,
             read_commit_comparison_diff,
