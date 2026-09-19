@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RecentValueCache } from "../src/workbench/recent-value-cache.ts";
+import { RecentValueCache } from "../src/shared/recent-value-cache.ts";
 
 test("recent value cache promotes reads and evicts the least-recent entry", () => {
   const cache = new RecentValueCache(2);

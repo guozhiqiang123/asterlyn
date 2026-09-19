@@ -266,6 +266,10 @@ Settings now owns its preference store and browser synchronization port next to 
 consumes them. Composition depends on that explicit Settings port rather than a generic transitional
 `workbench` location.
 
+Startup repository restoration now belongs to Application, and the bounded recent-value cache now
+belongs to Shared. Both are dependency-free utilities at their final inward layer, so feature
+controllers consume them without passing through the transitional namespace.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

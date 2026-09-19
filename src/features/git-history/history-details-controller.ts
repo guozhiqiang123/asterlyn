@@ -23,7 +23,7 @@ import {
   matchesHistoryPageRequest,
   replaceHistoryPage,
 } from "../../workbench/history-paging.ts";
-import { RecentValueCache } from "../../workbench/recent-value-cache.ts";
+import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 
 export const HISTORY_PAGE_SIZE = 150;
 export const HISTORY_SCROLL_THRESHOLD = 72;

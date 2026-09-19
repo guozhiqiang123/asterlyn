@@ -267,7 +267,7 @@ import {
   loadRecentRepositories,
   restoreRecentRepository,
   touchRecentRepository,
-} from "./workbench/startup-repository";
+} from "./application/startup-repository";
 import {
   filterHistoryText,
   historyDateSince,

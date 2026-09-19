@@ -10,7 +10,7 @@ import {
   loadRecentRepositories,
   restoreRecentRepository,
   touchRecentRepository,
-} from "../src/workbench/startup-repository.ts";
+} from "../src/application/startup-repository.ts";
 
 function memoryStorage(recent = null) {
   const values = new Map(recent === null ? [] : [[RECENT_REPOSITORY_KEY, recent]]);
