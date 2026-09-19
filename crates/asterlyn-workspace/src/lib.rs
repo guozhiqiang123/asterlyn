@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 
 mod durable_file;
 mod entry_mutation;
+mod file_restore;
 mod mutation_execution;
 mod replacement;
 mod search;
@@ -15,6 +16,10 @@ pub use entry_mutation::{
     WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory,
     WorkspaceEntryInventoryItem, WorkspaceEntryKind, WorkspaceMutationBlocker,
     WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationPlan,
+};
+pub use file_restore::{
+    FileRestoreAction, FileRestoreApplyResult, FileRestoreFileState, FileRestorePreview,
+    FileRestoreRecoveryStatus, FileRestoreRecoverySummary, PreparedFileRestore,
 };
 pub use mutation_execution::{
     WorkspaceMutationCancellationToken, WorkspaceMutationInvalidation, WorkspaceMutationOutcome,

@@ -14,6 +14,7 @@ pub struct FileVersion {
     pub mode: u32,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileSnapshot {
     pub version: FileVersion,
     pub bytes: Option<Vec<u8>>,
