@@ -103,6 +103,25 @@ test("history filter and dialog state has one feature owner", async () => {
   assert.match(controller, /get state\(\): HistoryFilterViewState/);
 });
 
+test("history detail presentation state has one feature owner", async () => {
+  const appState = await readFile(path.join(repositoryRoot, "src/app-state.ts"), "utf8");
+  const controller = await readFile(
+    path.join(
+      repositoryRoot,
+      "src/features/git-history/history-detail-presentation-controller.ts",
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    appState,
+    /gitDetail|commitFileView|commitPatch|comparisonPatch|collapsedCommitFileDirectories/,
+  );
+  assert.match(controller, /class HistoryDetailPresentationController/);
+  assert.match(controller, /private readonly value: MutableHistoryDetailPresentationState/);
+  assert.match(controller, /commitPatchGeneration/);
+  assert.match(controller, /comparisonPatchGeneration/);
+});
+
 async function typescriptFiles(roots) {
   const files = [];
   for (const root of roots) {

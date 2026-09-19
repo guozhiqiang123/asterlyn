@@ -172,7 +172,11 @@ path validation, preference state, and normalized query routing now have one pri
 `HistoryFilterController` state owner. `AppState` stores none of those three feature slices;
 architecture tests prevent their ownership from returning to the composition root. After the
 History slice, `src/app.ts` is 9,033 lines and its non-growing ownership ceiling has been lowered to
-match.
+match. Commit-detail mode, file-tree disclosure, persisted file view, and commit/comparison Diff
+request generations and results now have one `HistoryDetailPresentationController` owner. The
+controller rejects stale Diff completions and `AppState` no longer contains Git History detail
+presentation state. After this slice, `src/app.ts` is 8,980 lines and its ceiling has again been
+lowered to match.
 
 Extract vertical slices in this order:
 
