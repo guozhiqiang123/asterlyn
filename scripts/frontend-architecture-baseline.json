@@ -35,21 +35,6 @@
       "burnDownPhase": "FH3"
     },
     {
-      "from": "src/application/workspace-mutation-coordinator.ts",
-      "to": "src/features/files-editor/editor-session-controller.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
-      "from": "src/application/workspace-watch-coordinator.ts",
-      "to": "src/features/files-editor/editor-session-controller.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
-      "from": "src/application/workspace-watch-coordinator.ts",
-      "to": "src/features/files-editor/project-files-controller.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
       "from": "src/protocol/desktop-bridge.ts",
       "to": "src/workbench/window-chrome.ts",
       "burnDownPhase": "FH3"

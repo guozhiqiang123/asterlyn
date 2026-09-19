@@ -5,12 +5,12 @@ import type {
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
 } from "../models.ts";
+import type { EditorPathMutationRequest } from "../workbench/editor-session.ts";
 import type {
   EditorPathMigrationLease,
   EditorPathMigrationPreparation,
   EditorPathRuntimeChange,
-} from "../features/files-editor/editor-session-controller.ts";
-import type { EditorPathMutationRequest } from "../workbench/editor-session.ts";
+} from "./editor-session-port.ts";
 import type { WorkspaceOperationIdentity } from "./workspace-operation-coordinator.ts";
 
 export type WorkspaceMutationIdentity = WorkspaceOperationIdentity;

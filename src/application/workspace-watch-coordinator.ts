@@ -4,8 +4,6 @@ import type {
   WorkspaceWatchInvalidation,
 } from "../models.ts";
 import type { WorkspaceWatchBridge } from "../protocol/workspace-watch.ts";
-import type { EditorSessionController } from "../features/files-editor/editor-session-controller.ts";
-import type { ProjectFilesController } from "../features/files-editor/project-files-controller.ts";
 import {
   createSessionInvalidation,
   invalidates,
@@ -43,6 +41,16 @@ export interface WorkspaceWatchCoordinatorActions {
   messages?(): WorkspaceWatchMessages;
 }
 
+export interface WorkspaceWatchFilesPort {
+  refresh(): Promise<boolean>;
+}
+
+export interface WorkspaceWatchEditorPort {
+  subscribe(listener: (change: { tabsChanged?: boolean }) => void): () => void;
+  workspacePaths(): string[];
+  reconcileExternalPaths(workspacePaths: Iterable<string>): Promise<void>;
+}
+
 export interface WorkspaceWatchMessages {
   watchUnavailable(detail?: string): string;
   watchStartFailed(detail: string): string;
@@ -61,8 +69,8 @@ const DEFAULT_MESSAGES: WorkspaceWatchMessages = {
 export class WorkspaceWatchCoordinator {
   private readonly bridge: WorkspaceWatchBridge;
   private readonly session: WindowSession;
-  private readonly files: ProjectFilesController;
-  private readonly editor: EditorSessionController;
+  private readonly files: WorkspaceWatchFilesPort;
+  private readonly editor: WorkspaceWatchEditorPort;
   private readonly actions: WorkspaceWatchCoordinatorActions;
   private identity: { root: string; generation: number } | null = null;
   private pending: SessionInvalidation | null = null;
@@ -92,8 +100,8 @@ export class WorkspaceWatchCoordinator {
   constructor(
     bridge: WorkspaceWatchBridge,
     session: WindowSession,
-    files: ProjectFilesController,
-    editor: EditorSessionController,
+    files: WorkspaceWatchFilesPort,
+    editor: WorkspaceWatchEditorPort,
     actions: WorkspaceWatchCoordinatorActions,
     focusTarget: EventTarget | null = typeof window === "undefined" ? null : window,
     now: () => number = () => Date.now(),

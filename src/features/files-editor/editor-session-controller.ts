@@ -4,6 +4,11 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
 } from "../../models.ts";
+import type {
+  EditorPathMigrationLease,
+  EditorPathMigrationPreparation,
+  EditorPathRuntimeChange,
+} from "../../application/editor-session-port.ts";
 import {
   editorDocumentKey,
   type EditorDocument,
@@ -36,10 +41,7 @@ import {
   setTextTabMarkdownMode,
   textTab,
   type EditorSession,
-  type EditorPathMutationBlocker,
-  type EditorPathMutationLease,
   type EditorPathMutationRequest,
-  type EditorRuntimeTabRemap,
   type MarkdownEditorMode,
   type TextTabState,
 } from "../../workbench/editor-session.ts";
@@ -120,23 +122,6 @@ export type ImageLoadResult =
 export interface ImageLoadRequest {
   version: number;
   completion: Promise<ImageLoadResult>;
-}
-
-export interface EditorPathMigrationLease {
-  id: number;
-  workspaceRoot: string;
-  workspaceGeneration: number;
-  editor: EditorPathMutationLease;
-}
-
-export type EditorPathMigrationPreparation =
-  | { status: "ready"; lease: EditorPathMigrationLease }
-  | { status: "blocked"; reason: EditorPathMutationBlocker }
-  | { status: "stale" };
-
-export interface EditorPathRuntimeChange {
-  remaps: readonly EditorRuntimeTabRemap[];
-  disposedTabIds: readonly string[];
 }
 
 type Listener = (change: EditorSessionChange) => void;

@@ -135,6 +135,11 @@ native and demo bridge contract tests pass; no product behavior or protocol comm
 
 ### FH3 — Close frontend dependency inversions
 
+Progress: workspace watch and mutation coordinators now depend on application-owned Files/Editor
+ports and path-migration contracts rather than concrete feature controllers. Remaining debt is the
+History-filter state edge, protocol chrome type placement, shared Trash presentation placement, and
+application timer/focus runtime access.
+
 1. Move History filter state contracts out of feature presentation modules into a feature-owned
    controller/facade exposed through an application port.
 2. Replace `WorkspaceWatchCoordinator` and `WorkspaceMutationCoordinator` imports of concrete Files
