@@ -122,10 +122,10 @@ import { renderGitOperationBanner } from "./features/git-operations/git-operatio
 import { GitOperationDialogBinding } from "./features/git-operations/git-operation-dialog-binding";
 import { TerminalPanel } from "./features/terminal/terminal-panel";
 import {
-  ProjectFilesController,
   type ProjectFilesChange,
   type ProjectFilesState,
 } from "./features/files-editor/project-files-controller";
+import { FilesEditorRuntime } from "./features/files-editor/files-editor-runtime.ts";
 import {
   resolveProjectFilesContextTarget,
   type ProjectFilesContextTarget,
@@ -173,7 +173,6 @@ import {
   renderProjectToolbar,
 } from "./features/files-editor/project-files-view";
 import {
-  EditorSessionController,
   type EditorSessionChange,
   type EditorSessionState,
 } from "./features/files-editor/editor-session-controller";
@@ -416,8 +415,7 @@ export class AsterlynApp {
   private readonly remoteRuntime: RemoteRuntime;
   private readonly changesRuntime: ChangesRuntime;
   private readonly changesContextRuntime: ChangesContextSurfaceRuntime;
-  private readonly filesController: ProjectFilesController;
-  private readonly releaseFilesController: () => void;
+  private readonly filesEditorRuntime: FilesEditorRuntime;
   private readonly projectFilesContextRuntime: ProjectFilesContextSurfaceRuntime;
   private readonly workspaceTrash: WorkspaceTrashController<
     ProjectFilesContextTarget | ChangesContextTarget
@@ -430,8 +428,6 @@ export class AsterlynApp {
   private readonly projectFilesOperationBinding: ProjectFilesOperationBinding;
   private readonly releaseProjectFilesOperations: () => void;
   private readonly releaseProjectFilesClipboard: () => void;
-  private readonly editorController: EditorSessionController;
-  private readonly releaseEditorController: () => void;
   private readonly gitOperationController: GitOperationController;
   private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private editorTabsMarkup = "";
@@ -666,19 +662,22 @@ export class AsterlynApp {
       messages: initialCatalog.changes,
       changed: (change) => this.handleChangesControllerChange(change),
     });
-    this.filesController = new ProjectFilesController({
-      listProjectFiles: (root) => bridge.listProjectFiles(root),
-    }, initialCatalog.editor);
-    this.releaseFilesController = this.filesController.subscribe((change) =>
-      this.handleProjectFilesChange(change),
-    );
-    this.editorController = new EditorSessionController({
-      readTextFile: (...args) => bridge.readTextFile(...args),
-      saveTextFile: (...args) => bridge.saveTextFile(...args),
-      readImageFile: (...args) => bridge.readImageFile(...args),
-    }, initialCatalog.editor);
-    this.releaseEditorController = this.editorController.subscribe((change) =>
-      this.handleEditorSessionChange(change),
+    this.filesEditorRuntime = new FilesEditorRuntime(
+      {
+        files: {
+          listProjectFiles: (root) => bridge.listProjectFiles(root),
+        },
+        editor: {
+          readTextFile: (...args) => bridge.readTextFile(...args),
+          saveTextFile: (...args) => bridge.saveTextFile(...args),
+          readImageFile: (...args) => bridge.readImageFile(...args),
+        },
+      },
+      initialCatalog.editor,
+      {
+        filesChanged: (change) => this.handleProjectFilesChange(change),
+        editorChanged: (change) => this.handleEditorSessionChange(change),
+      },
     );
     this.gitOperationController = new GitOperationController({
       prepareGitOperation: (...args) => bridge.prepareGitOperation(...args),
@@ -891,7 +890,7 @@ export class AsterlynApp {
       {
         remote: this.remoteRuntime.push,
         changes: this.changesRuntime.controller,
-        files: this.filesController,
+        files: this.filesEditorRuntime.files,
         history: this.historyReadRuntime.details,
         operations: this.gitOperationController,
       },
@@ -954,7 +953,7 @@ export class AsterlynApp {
     );
     this.workspaceMutations = new WorkspaceMutationCoordinator(
       bridge,
-      this.editorController,
+      this.filesEditorRuntime.editor,
       ({ remaps, disposedTabIds }) =>
         this.editorSurface.applyTextPathMutation(remaps, disposedTabIds),
       {
@@ -1092,7 +1091,7 @@ export class AsterlynApp {
       actions: {
         current: (target) => this.isProjectFilesContextTargetCurrent(target),
         select: (target) => {
-          const selected = this.filesController.select(target.workspacePath, target.kind);
+          const selected = this.filesEditorRuntime.files.select(target.workspacePath, target.kind);
           if (selected) this.markProjectTreeSelection(target.workspacePath);
           return selected;
         },
@@ -1120,7 +1119,7 @@ export class AsterlynApp {
         },
         createFile: (target) => {
           if (target.kind === "directory") {
-            this.filesController.setDirectoryExpanded(target.workspacePath, true);
+            this.filesEditorRuntime.files.setDirectoryExpanded(target.workspacePath, true);
           }
           this.projectFilesOperations.beginCreate(target);
         },
@@ -1177,7 +1176,7 @@ export class AsterlynApp {
         policyOptions: (target) => {
           const snapshot = this.windowSession.repository.state.snapshot;
           const labels = this.localization.catalog.changes.contextMenu;
-          const source = this.filesController.fileForWorkspacePath(target.workspacePath);
+          const source = this.filesEditorRuntime.files.fileForWorkspacePath(target.workspacePath);
           return {
             sourceAvailable: Boolean(source && !source.readOnly),
             conflictAvailable: Boolean(
@@ -1206,8 +1205,8 @@ export class AsterlynApp {
     this.workspaceWatch = new WorkspaceWatchCoordinator(
       workspaceWatchBridge,
       this.windowSession,
-      this.filesController,
-      this.editorController,
+      this.filesEditorRuntime.files,
+      this.filesEditorRuntime.editor,
       {
         reconcileRepository: (project, lease, cause) =>
           this.repositoryIntegration.reconcileWatchedRepository(project, lease, cause),
@@ -1345,11 +1344,11 @@ export class AsterlynApp {
   }
 
   private get filesState(): ProjectFilesState {
-    return this.filesController.state;
+    return this.filesEditorRuntime.files.state;
   }
 
   private get editorState(): EditorSessionState {
-    return this.editorController.state;
+    return this.filesEditorRuntime.editor.state;
   }
 
   private get settingsState(): SettingsState {
@@ -1573,8 +1572,8 @@ export class AsterlynApp {
       this.localization = createLocalization(catalog);
       this.terminalPanel.setCopy(catalog.terminal);
       this.editorSurface.setCopy(catalog.editor);
-      this.filesController.setMessages(catalog.editor);
-      this.editorController.setMessages(catalog.editor);
+      this.filesEditorRuntime.files.setMessages(catalog.editor);
+      this.filesEditorRuntime.editor.setMessages(catalog.editor);
       this.changesRuntime.controller.setMessages(catalog.changes);
       this.historyReadRuntime.details.setMessages(catalog.history);
       this.remoteRuntime.push.setMessages(catalog.remote, catalog.errors);
@@ -1767,10 +1766,7 @@ export class AsterlynApp {
     this.commitFileRestoreController.dispose();
     this.remoteRuntime.dispose();
     this.changesRuntime.dispose();
-    this.releaseFilesController();
-    this.filesController.dispose();
-    this.releaseEditorController();
-    this.editorController.dispose();
+    this.filesEditorRuntime.dispose();
     this.releaseGitOperationController();
     this.branchMutationDialogBinding.dispose();
     this.branchMutationController.dispose();
@@ -2114,7 +2110,7 @@ export class AsterlynApp {
         this.imageSurface = null;
       }
       this.windowSession.repository.consumeInvalidation();
-      this.editorController.installWorkspace(opened.root);
+      this.filesEditorRuntime.editor.installWorkspace(opened.root);
       this.changesRuntime.controller.installSnapshot(snapshot, {
         clearInclusion: true,
         clearDisclosure: true,
@@ -2128,7 +2124,7 @@ export class AsterlynApp {
       this.clearComparisonDiffInspection();
       this.commitFolderDiffController.clear();
       this.historyDetailPresentation.resetWorkspace();
-      this.filesController.installWorkspace(opened.root, snapshot?.changes ?? []);
+      this.filesEditorRuntime.files.installWorkspace(opened.root, snapshot?.changes ?? []);
       this.branchesController.setSelectedBranch(null);
       if (snapshot) {
         this.installSnapshotHistory(snapshot, true);
@@ -3015,7 +3011,7 @@ export class AsterlynApp {
   }
 
   private async reloadReplacementFiles(workspacePaths: string[]): Promise<void> {
-    await this.editorController.reloadPaths(workspacePaths);
+    await this.filesEditorRuntime.editor.reloadPaths(workspacePaths);
     this.renderEditor();
   }
 
@@ -3599,7 +3595,7 @@ export class AsterlynApp {
         const next = this.repositoryIntegration.acceptRemoteOutcome(result.outcome);
         if (kind === "pull") {
           this.captureMountedTextEditor();
-          await this.editorController.reconcileExternalPaths([]);
+          await this.filesEditorRuntime.editor.reconcileExternalPaths([]);
           if (!this.windowSession.matches(generation, snapshot.root)) return false;
           this.renderLeftTool();
           this.renderEditor();
@@ -4238,7 +4234,7 @@ export class AsterlynApp {
       this.windowSession.workspace.state.root !== repositoryRoot ||
       this.filesState.root !== repositoryRoot
     ) return;
-    await this.filesController.refresh();
+    await this.filesEditorRuntime.files.refresh();
     if (
       repositoryGeneration === this.windowSession.generation &&
       this.windowSession.workspace.state.root === repositoryRoot
@@ -4246,7 +4242,7 @@ export class AsterlynApp {
   }
 
   private projectTree(): ProjectTreeNode[] {
-    return this.filesController.tree();
+    return this.filesEditorRuntime.files.tree();
   }
 
   private isProjectFilesContextTargetCurrent(target: ProjectFilesContextTarget): boolean {
@@ -4312,12 +4308,12 @@ export class AsterlynApp {
     if (!destination) return;
     const node = findProjectTreeNode(this.projectTree(), destination);
     if (node) {
-      this.filesController.select(destination, node.kind);
+      this.filesEditorRuntime.files.select(destination, node.kind);
       this.markProjectTreeSelection(destination);
     }
     if (action !== "create") return;
     const root = this.windowSession.workspace.state.root;
-    const file = this.filesController.fileForWorkspacePath(destination);
+    const file = this.filesEditorRuntime.files.fileForWorkspacePath(destination);
     if (root && file) void this.openProjectFile(root, file);
   }
 
@@ -4328,7 +4324,7 @@ export class AsterlynApp {
     const rows = projectTreeRows(this.projectTree(), this.filesState.expandedDirectories);
     const next = rows.find((row) => row.node.path.localeCompare(target.workspacePath) > 0)
       ?? rows.at(-1);
-    if (next) this.filesController.select(next.node.path, next.node.kind);
+    if (next) this.filesEditorRuntime.files.select(next.node.path, next.node.kind);
   }
 
   private completeChangesTrash(
@@ -4397,7 +4393,7 @@ export class AsterlynApp {
         const toggle = (): void => {
           const path = row.dataset.projectDirectory;
           if (!path) return;
-          this.filesController.select(path, "directory");
+          this.filesEditorRuntime.files.select(path, "directory");
           this.toggleProjectDirectory(path);
         };
         row.addEventListener("click", toggle);
@@ -4412,7 +4408,7 @@ export class AsterlynApp {
         const path = row.dataset.projectFile;
         const currentRoot = this.windowSession.workspace.state.root;
         if (!path || !currentRoot) return;
-        this.filesController.select(path, "file");
+        this.filesEditorRuntime.files.select(path, "file");
         this.markProjectTreeSelection(path);
         const file = this.filesState.files.find(
           (candidate) => candidate.workspacePath === path,
@@ -4424,7 +4420,7 @@ export class AsterlynApp {
 
   private toggleProjectDirectory(path: string): void {
     const expanded = this.filesState.expandedDirectories.has(path);
-    if (!this.filesController.setDirectoryExpanded(path, !expanded)) return;
+    if (!this.filesEditorRuntime.files.setDirectoryExpanded(path, !expanded)) return;
     this.renderLeftTool();
     queueMicrotask(() => {
       Array.from(
@@ -4473,7 +4469,7 @@ export class AsterlynApp {
     if (!workspaceRoot) return;
     const activePath = this.activeProjectWorkspacePath(workspaceRoot);
     if (!activePath) return;
-    if (!this.filesController.revealFile(activePath)) {
+    if (!this.filesEditorRuntime.files.revealFile(activePath)) {
       this.setStatus(this.localization.catalog.editor.outsideProjectTree, "warning");
       return;
     }
@@ -4510,7 +4506,7 @@ export class AsterlynApp {
   private setSelectedProjectFolderExpanded(expanded: boolean): void {
     const selection = this.filesState.selection;
     if (!selection || selection.kind !== "directory" || !this.windowSession.workspace.state.root) return;
-    if (!this.filesController.setSelectedSubtreeExpanded(expanded)) return;
+    if (!this.filesEditorRuntime.files.setSelectedSubtreeExpanded(expanded)) return;
     this.renderLeftTool();
     queueMicrotask(() => {
       const target = Array.from(
@@ -4558,7 +4554,7 @@ export class AsterlynApp {
     const markdownMode = isMarkdownPath(document.path)
       ? markdownModeForDocument(this.markdownModePreferences, documentKey)
       : "source";
-    const opened = await this.editorController.openText(
+    const opened = await this.filesEditorRuntime.editor.openText(
       repositoryRoot,
       file,
       markdownMode,
@@ -4570,7 +4566,7 @@ export class AsterlynApp {
         ? this.activeProjectWorkspacePath(currentRoot)
         : null;
       if (activePath) {
-        this.filesController.select(activePath, "file");
+        this.filesEditorRuntime.files.select(activePath, "file");
         this.markProjectTreeSelection(activePath);
       }
       this.setStatus(
@@ -4603,13 +4599,13 @@ export class AsterlynApp {
       workspacePath: file.workspacePath,
     };
     const key = editorDocumentKey(document);
-    this.editorController.activatePreview(document);
+    this.filesEditorRuntime.editor.activatePreview(document);
     if (this.imageSurface?.key === key && this.imageSurface.status === "ready") {
       this.renderLeftTool();
       this.renderEditor();
       return;
     }
-    const request = this.editorController.beginImageLoad(document);
+    const request = this.filesEditorRuntime.editor.beginImageLoad(document);
     this.imageSurface = {
       key,
       version: request.version,
@@ -5694,7 +5690,7 @@ export class AsterlynApp {
 
   private revealCommitFolderInFiles(target: CommitDetailDirectoryContextTarget): void {
     if (!this.isCommitFolderContextTargetCurrent(target) ||
-      !this.filesController.revealDirectory(target.workspacePath)) {
+      !this.filesEditorRuntime.files.revealDirectory(target.workspacePath)) {
       this.setStatus(
         this.localization.catalog.history.commitFolderContextMenu.currentDirectoryUnavailable,
         "warning",
@@ -5940,7 +5936,7 @@ export class AsterlynApp {
       const copy = this.localization.catalog.editor;
       const tab = activeTextTab(this.editorState.session);
       if (!tab) {
-        this.editorController.activateWelcome();
+        this.filesEditorRuntime.editor.activateWelcome();
         this.renderEditor();
         return;
       }
@@ -6089,7 +6085,7 @@ export class AsterlynApp {
     }
 
     if (!snapshot) {
-      this.editorController.closePreview();
+      this.filesEditorRuntime.editor.closePreview();
       this.renderEditor();
       return;
     }
@@ -6198,7 +6194,7 @@ export class AsterlynApp {
 
   private openHistoricalFile(document: HistoricalFileDocument): void {
     this.captureMountedTextEditor();
-    this.editorController.activatePreview({ ...document });
+    this.filesEditorRuntime.editor.activatePreview({ ...document });
     this.renderEditor();
     void this.historyReadRuntime.historicalFile.open(document);
   }
@@ -6318,7 +6314,7 @@ export class AsterlynApp {
           current.content === captured.content;
       },
     } : null;
-    this.editorController.activatePreview(document);
+    this.filesEditorRuntime.editor.activatePreview(document);
     this.renderEditor();
     void this.historyReadRuntime.historicalFileComparison.open(document, buffer);
   }
@@ -6611,7 +6607,7 @@ export class AsterlynApp {
   private handleEditorContentChange(tabId: string, content: string): void {
     const previous = textTab(this.editorState.session, tabId);
     const wasDirty = previous ? isTextTabDirty(previous) : false;
-    this.editorController.markEdited(tabId, content);
+    this.filesEditorRuntime.editor.markEdited(tabId, content);
     const current = textTab(this.editorState.session, tabId);
     if (
       previous &&
@@ -6639,7 +6635,7 @@ export class AsterlynApp {
           const mode = button.dataset.markdownMode as MarkdownEditorMode;
           if (!active || active.markdownMode === mode) return;
           this.captureMountedTextEditor();
-          this.editorController.setMarkdownMode(active.id, mode);
+          this.filesEditorRuntime.editor.setMarkdownMode(active.id, mode);
           this.markdownModePreferences = rememberMarkdownMode(
             this.markdownModePreferences,
             active.id,
@@ -6690,7 +6686,7 @@ export class AsterlynApp {
         if (!preview) return;
         this.shellController.closeEditorTabMenu();
         this.captureMountedTextEditor();
-        this.editorController.reactivatePreview();
+        this.filesEditorRuntime.editor.reactivatePreview();
         this.renderLeftTool();
         this.renderEditor();
         this.revealActiveEditorTab();
@@ -6728,7 +6724,7 @@ export class AsterlynApp {
 
   private activateEditorTextTab(tab: TextTabState, forceReveal = false): void {
     this.captureMountedTextEditor();
-    this.editorController.activateText(tab.id);
+    this.filesEditorRuntime.editor.activateText(tab.id);
     this.renderEditor();
     if (forceReveal) this.revealActiveEditorTab();
   }
@@ -6757,7 +6753,7 @@ export class AsterlynApp {
         const preview = this.editorState.session.preview;
         if (!preview) return;
         this.captureMountedTextEditor();
-        this.editorController.reactivatePreview();
+        this.filesEditorRuntime.editor.reactivatePreview();
         this.renderLeftTool();
         this.renderEditor();
       },
@@ -6766,7 +6762,7 @@ export class AsterlynApp {
       .querySelector<HTMLButtonElement>("[data-close-editor-preview]")
       ?.addEventListener("click", () => {
         this.captureMountedTextEditor();
-        this.editorController.closePreview();
+        this.filesEditorRuntime.editor.closePreview();
         this.imageSurface = null;
         this.renderEditor();
       });
@@ -6776,19 +6772,19 @@ export class AsterlynApp {
   private captureMountedTextEditor(): void {
     this.editorSurface.capture(
       this.editorState.session,
-      (tabId, content) => this.editorController.captureText(tabId, content),
+      (tabId, content) => this.filesEditorRuntime.editor.captureText(tabId, content),
     );
   }
 
   private async saveTextTab(tabId: string): Promise<boolean> {
     this.editorSurface.capture(
       this.editorState.session,
-      (mountedTabId, content) => this.editorController.captureText(mountedTabId, content),
+      (mountedTabId, content) => this.filesEditorRuntime.editor.captureText(mountedTabId, content),
       tabId,
     );
     const tab = textTab(this.editorState.session, tabId);
     if (!tab) return true;
-    const result = await this.editorController.saveText(tabId, tab.content);
+    const result = await this.filesEditorRuntime.editor.saveText(tabId, tab.content);
     if (result.status === "clean") return true;
     if (result.status === "busy") {
       this.setStatus(this.localization.catalog.editor.waitForFileOperation, "warning");
@@ -6826,7 +6822,7 @@ export class AsterlynApp {
       );
       if (!save || !(await this.saveTextTab(tabId))) return;
     }
-    if (this.editorController.closeText(tabId)) {
+    if (this.filesEditorRuntime.editor.closeText(tabId)) {
       this.editorSurface.disposeTextTab(tabId);
       this.renderLeftTool();
       this.renderEditor();
@@ -6849,14 +6845,14 @@ export class AsterlynApp {
   }
 
   private activeDocument(): EditorDocument {
-    return this.editorController.activeDocument();
+    return this.filesEditorRuntime.editor.activeDocument();
   }
 
   private activateDiffPreview(
     document: Exclude<EditorDocument, { kind: "welcome" | "project-file" }>,
   ): void {
     this.captureMountedTextEditor();
-    this.editorController.activatePreview(document);
+    this.filesEditorRuntime.editor.activatePreview(document);
   }
 
   private diffControls(
@@ -7631,7 +7627,7 @@ export class AsterlynApp {
     this.historyDetailPresentation.clearComparisonPatch();
     if (this.imageSurface?.key.startsWith("comparison\0")) this.imageSurface = null;
     if (this.activeDocument().kind === "commit-comparison-diff") {
-      this.editorController.closePreview();
+      this.filesEditorRuntime.editor.closePreview();
       if (this.root.querySelector("#editor-content")) this.renderEditor();
     }
   }
@@ -7820,7 +7816,7 @@ export class AsterlynApp {
       this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
       return;
     }
-    const file = this.filesController.fileForWorkspacePath(target.workspacePath);
+    const file = this.filesEditorRuntime.files.fileForWorkspacePath(target.workspacePath);
     if (!file || file.readOnly) {
       this.setStatus(this.localization.catalog.changes.contextMenu.sourceUnavailable, "warning");
       return;
@@ -8185,7 +8181,7 @@ export class AsterlynApp {
           const outcome = await bridge.undoGitWorktreeRecovery(root, recovery.id);
           if (!this.windowSession.matches(generation, root)) return;
           this.repositoryIntegration.applyMutation(outcome, "gitMutation");
-          await this.editorController.reconcileExternalPaths(recovery.paths);
+          await this.filesEditorRuntime.editor.reconcileExternalPaths(recovery.paths);
           this.renderWorkspace();
           this.setStatus(this.localization.catalog.recovery.restored, "success");
         } finally {
@@ -8296,7 +8292,7 @@ export class AsterlynApp {
               result.outcome,
               { clearInclusion: true, focusConflicts: true },
             );
-        await this.editorController.reloadPaths(
+        await this.filesEditorRuntime.editor.reloadPaths(
           this.editorState.session.textTabs.map((tab) => tab.document.workspacePath),
         );
         if (generation !== this.windowSession.generation) return;
@@ -8459,7 +8455,7 @@ export class AsterlynApp {
         clearSelection: true,
       });
       this.captureMountedTextEditor();
-      await this.editorController.reconcileExternalPaths([]);
+      await this.filesEditorRuntime.editor.reconcileExternalPaths([]);
       if (!this.windowSession.matches(generation, snapshot.root)) return false;
       this.renderWorkspace();
       this.loadVisibleCommitDetails();
@@ -8513,7 +8509,7 @@ export class AsterlynApp {
       this.loadSelectedDiff();
       return;
     }
-    this.editorController.closePreview();
+    this.filesEditorRuntime.editor.closePreview();
     this.clearWorkingDiff();
   }
 

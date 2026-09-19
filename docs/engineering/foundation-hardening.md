@@ -201,6 +201,10 @@ matching ceiling.
 The Changes controller now has the same feature runtime lifecycle, including exclusive ownership
 of its subscription and disposal. `src/app.ts` is 8,859 lines with a matching ceiling.
 
+Files and Editor core controllers now share a `FilesEditorRuntime`; the feature owns both gateway
+controllers, their subscriptions, and their disposal while publishing typed change notifications
+to window composition. `src/app.ts` is 8,855 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
