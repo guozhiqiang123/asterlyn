@@ -306,7 +306,6 @@ import {
 } from "./workbench/navigation";
 import { evaluateSearchNavigation } from "./workbench/search-navigation";
 import type { WorkspaceSearchControls } from "./workbench/workspace-search";
-import { CommandSurfaceController } from "./features/files-editor/command-surface-controller.ts";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
@@ -362,8 +361,6 @@ export class AsterlynApp {
     window.localStorage,
   );
   private readonly historyDetailState = this.historyDetailPresentation.state;
-  private readonly commandSurfaceController = new CommandSurfaceController();
-  private readonly commandSurfaceState = this.commandSurfaceController.state;
   private editorFontRequestGeneration = 0;
   private editorFontStatus: {
     id: EditorFontId | null;
@@ -1219,7 +1216,7 @@ export class AsterlynApp {
         this.filesEditorRuntime.replacement.state.replacement.status !== "applying" &&
         !this.filesEditorRuntime.replacement.state.recoveryBusy
       ),
-      commandSurfaceOpen: () => this.commandSurfaceState.mode !== null,
+      commandSurfaceOpen: () => this.filesEditorRuntime.commands.state.mode !== null,
       historyFilterOpen: () => this.historyFilterState.historyFilterMenu !== null,
       historyToolOpen: () => this.shellState.layout.bottomTool === "branches",
       activeReadyTextTab: () => {
@@ -1384,7 +1381,7 @@ export class AsterlynApp {
     ) this.renderLeftTool();
     if (
       navigationCatalogChanged &&
-      (this.commandSurfaceState.mode === "files" || this.commandSurfaceState.mode === "recent")
+      (this.filesEditorRuntime.commands.state.mode === "files" || this.filesEditorRuntime.commands.state.mode === "recent")
     ) {
       this.renderCommandSurface(true);
     }
@@ -1585,7 +1582,7 @@ export class AsterlynApp {
     if (this.windowSession.workspace.state.root) this.renderEditor();
     if (this.shellState.layout.leftTool) this.renderLeftTool();
     this.relocalizeBottomTool();
-    if (this.commandSurfaceState.mode) this.renderCommandSurface();
+    if (this.filesEditorRuntime.commands.state.mode) this.renderCommandSurface();
     if (this.filesEditorRuntime.replacement.state.dialog) {
       this.renderWorkspaceReplacementDialog();
     }
@@ -1759,7 +1756,7 @@ export class AsterlynApp {
     if (this.remoteState.dialog && !this.remoteState.operation) {
       this.closeRemoteDialog(false);
     }
-    if (this.commandSurfaceState.mode) this.dismissCommandSurface();
+    if (this.filesEditorRuntime.commands.state.mode) this.dismissCommandSurface();
     this.closeHistoryDialog();
     this.shellController.showPage("settings");
     this.query("#workspace").classList.add("settings-mode");
@@ -2047,7 +2044,7 @@ export class AsterlynApp {
     this.contextMenuHost.close();
     this.filesEditorRuntime.search.invalidate();
     this.filesEditorRuntime.replacement.reset();
-    this.commandSurfaceController.close();
+    this.filesEditorRuntime.commands.close();
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
     if (this.remoteState.dialog && !this.remoteState.operation) {
@@ -2138,7 +2135,7 @@ export class AsterlynApp {
     if (!workspaceRoot || this.state.loading) return;
     this.filesEditorRuntime.search.invalidate();
     this.filesEditorRuntime.replacement.reset();
-    this.commandSurfaceController.close();
+    this.filesEditorRuntime.commands.close();
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
     const transition = this.windowSession.openProject(
@@ -2188,16 +2185,16 @@ export class AsterlynApp {
   private openCommandSurface(mode: NavigationMode): void {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (mode !== "commands" && !workspaceRoot) return;
-    if (this.commandSurfaceState.mode === "workspace" && mode !== "workspace") {
+    if (this.filesEditorRuntime.commands.state.mode === "workspace" && mode !== "workspace") {
       this.filesEditorRuntime.search.invalidate();
     }
-    if (!this.commandSurfaceState.mode) {
+    if (!this.filesEditorRuntime.commands.state.mode) {
       this.commandSurfaceReturnFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     }
     const retainedQuery =
       mode === "workspace" ? (this.filesEditorRuntime.search.state.search.request?.query ?? "") : "";
-    this.commandSurfaceController.open(mode, retainedQuery);
+    this.filesEditorRuntime.commands.open(mode, retainedQuery);
     this.renderCommandSurface(true);
     if (mode === "recent" && workspaceRoot && !this.filesState.loading) {
       void this.loadProjectFiles(workspaceRoot);
@@ -2206,7 +2203,7 @@ export class AsterlynApp {
 
   private dismissCommandSurface(): void {
     this.filesEditorRuntime.search.invalidate();
-    this.commandSurfaceController.close();
+    this.filesEditorRuntime.commands.close();
     this.renderCommandSurface();
     const target = this.commandSurfaceReturnFocus;
     this.commandSurfaceReturnFocus = null;
@@ -2216,7 +2213,7 @@ export class AsterlynApp {
   private renderCommandSurface(focusInput = false): void {
     this.cancelScheduledCommandSurfaceResults();
     const host = this.query("#command-surface");
-    const mode = this.commandSurfaceState.mode;
+    const mode = this.filesEditorRuntime.commands.state.mode;
     host.classList.toggle("hidden", mode === null);
     if (!mode) {
       host.innerHTML = "";
@@ -2225,9 +2222,9 @@ export class AsterlynApp {
     this.refreshCommandSurfaceProjection();
     let model = this.commandSurfaceViewModel();
     const resultCount = commandSurfaceViewResultCount(model);
-    this.commandSurfaceController.clampSelection(resultCount);
+    this.filesEditorRuntime.commands.clampSelection(resultCount);
     model = this.commandSurfaceViewModel();
-    const selected = this.commandSurfaceState.selectedIndex;
+    const selected = this.filesEditorRuntime.commands.state.selectedIndex;
     host.innerHTML = renderCommandSurfaceView(model);
     this.bindCommandSurfaceEvents();
     if (focusInput) this.focusCommandSurfaceInput();
@@ -2240,7 +2237,7 @@ export class AsterlynApp {
 
   private commandSurfaceViewModel(): CommandSurfaceViewModel {
     return {
-      commandSurface: this.commandSurfaceState,
+      commandSurface: this.filesEditorRuntime.commands.state,
       workspaceOpen: this.windowSession.workspace.state.root !== null,
       filesLoading: this.filesState.loading,
       files: this.commandSurfaceFiles,
@@ -2258,7 +2255,7 @@ export class AsterlynApp {
   private bindCommandSurfaceEvents(): void {
     const input = this.query<HTMLInputElement>("#command-surface-input");
     const presentQuery = () => {
-      if (this.commandSurfaceState.mode === "workspace") {
+      if (this.filesEditorRuntime.commands.state.mode === "workspace") {
         this.renderCommandSurface(true);
       } else {
         this.scheduleCommandSurfaceResults();
@@ -2266,18 +2263,18 @@ export class AsterlynApp {
     };
     input.addEventListener("input", (event) => {
       if (
-        this.commandSurfaceState.mode === "workspace" &&
+        this.filesEditorRuntime.commands.state.mode === "workspace" &&
         this.filesEditorRuntime.search.state.search.request?.query !== input.value
       ) {
         this.filesEditorRuntime.search.invalidate();
         this.invalidateWorkspaceReplacementPreview();
       }
-      this.commandSurfaceController.updateQuery(input.value);
+      this.filesEditorRuntime.commands.updateQuery(input.value);
       if (event instanceof InputEvent && event.isComposing) return;
       presentQuery();
     });
     input.addEventListener("compositionend", () => {
-      this.commandSurfaceController.updateQuery(input.value);
+      this.filesEditorRuntime.commands.updateQuery(input.value);
       presentQuery();
     });
     input.addEventListener("keydown", (event) => {
@@ -2285,8 +2282,8 @@ export class AsterlynApp {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         this.flushScheduledCommandSurfaceResults();
-        const previous = this.commandSurfaceState.selectedIndex;
-        this.commandSurfaceController.moveSelection(
+        const previous = this.filesEditorRuntime.commands.state.selectedIndex;
+        this.filesEditorRuntime.commands.moveSelection(
           event.key === "ArrowDown" ? 1 : -1,
           this.commandSurfaceResultCount(),
         );
@@ -2296,7 +2293,7 @@ export class AsterlynApp {
       if (event.key === "Enter") {
         event.preventDefault();
         this.flushScheduledCommandSurfaceResults();
-        if (this.commandSurfaceState.mode === "workspace" && !this.workspaceSearchHasCurrentResults()) {
+        if (this.filesEditorRuntime.commands.state.mode === "workspace" && !this.workspaceSearchHasCurrentResults()) {
           void this.runWorkspaceSearch();
         } else {
           void this.activateCommandSurfaceSelection();
@@ -2371,16 +2368,16 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-command-result]").forEach((button) => {
       button.addEventListener("mousemove", () => {
         const index = Number(button.dataset.commandResult);
-        if (Number.isInteger(index) && this.commandSurfaceState.selectedIndex !== index) {
-          const previous = this.commandSurfaceState.selectedIndex;
-          this.commandSurfaceController.select(index);
+        if (Number.isInteger(index) && this.filesEditorRuntime.commands.state.selectedIndex !== index) {
+          const previous = this.filesEditorRuntime.commands.state.selectedIndex;
+          this.filesEditorRuntime.commands.select(index);
           this.syncCommandSurfaceSelection(previous, false);
         }
       });
       button.addEventListener("click", () => {
         const index = Number(button.dataset.commandResult);
         if (!Number.isInteger(index)) return;
-        this.commandSurfaceController.select(index);
+        this.filesEditorRuntime.commands.select(index);
         void this.activateCommandSurfaceSelection();
       });
     });
@@ -2408,24 +2405,24 @@ export class AsterlynApp {
   }
 
   private renderCommandSurfaceResults(): void {
-    const mode = this.commandSurfaceState.mode;
+    const mode = this.filesEditorRuntime.commands.state.mode;
     if (!mode) return;
     const results = this.root.querySelector<HTMLElement>("#command-surface-results");
     const input = this.root.querySelector<HTMLInputElement>("#command-surface-input");
     if (!results || !input) return;
     this.refreshCommandSurfaceProjection();
     let model = this.commandSurfaceViewModel();
-    this.commandSurfaceController.clampSelection(commandSurfaceViewResultCount(model));
+    this.filesEditorRuntime.commands.clampSelection(commandSurfaceViewResultCount(model));
     model = this.commandSurfaceViewModel();
     results.innerHTML = renderCommandSurfaceResultsView(
       mode,
-      this.commandSurfaceState.selectedIndex,
+      this.filesEditorRuntime.commands.state.selectedIndex,
       model,
     );
     input.setAttribute(
       "aria-activedescendant",
       commandSurfaceViewResultCount(model) > 0
-        ? `command-result-${this.commandSurfaceState.selectedIndex}`
+        ? `command-result-${this.filesEditorRuntime.commands.state.selectedIndex}`
         : "",
     );
     this.bindCommandSurfaceResultEvents();
@@ -2433,7 +2430,7 @@ export class AsterlynApp {
   }
 
   private syncCommandSurfaceSelection(previous: number, reveal = true): void {
-    const selected = this.commandSurfaceState.selectedIndex;
+    const selected = this.filesEditorRuntime.commands.state.selectedIndex;
     const previousRow = this.root.querySelector<HTMLElement>(`#command-result-${previous}`);
     const selectedRow = this.root.querySelector<HTMLElement>(`#command-result-${selected}`);
     if (previousRow !== selectedRow) {
@@ -2449,7 +2446,7 @@ export class AsterlynApp {
   }
 
   private revealCommandSurfaceSelection(): void {
-    const selected = this.commandSurfaceState.selectedIndex;
+    const selected = this.filesEditorRuntime.commands.state.selectedIndex;
     queueMicrotask(() => {
       this.root
         .querySelector<HTMLElement>(`#command-result-${selected}`)
@@ -2458,7 +2455,7 @@ export class AsterlynApp {
   }
 
   private refreshCommandSurfaceProjection(): void {
-    const mode = this.commandSurfaceState.mode;
+    const mode = this.filesEditorRuntime.commands.state.mode;
     this.commandSurfaceFiles = [];
     this.commandSurfaceCommands = [];
     if (mode === "commands") {
@@ -2505,8 +2502,8 @@ export class AsterlynApp {
       index,
     );
     return mode === "recent"
-      ? new ProjectFileSearchIndex(recent).rank(this.commandSurfaceState.query)
-      : index.rank(this.commandSurfaceState.query, recent);
+      ? new ProjectFileSearchIndex(recent).rank(this.filesEditorRuntime.commands.state.query)
+      : index.rank(this.filesEditorRuntime.commands.state.query, recent);
   }
 
   private projectFileSearchIndex(): ProjectFileSearchIndex {
@@ -2519,7 +2516,7 @@ export class AsterlynApp {
   }
 
   private visibleNavigationCommands(): NavigationCommand[] {
-    return rankCommands(this.navigationCommands(), this.commandSurfaceState.query);
+    return rankCommands(this.navigationCommands(), this.filesEditorRuntime.commands.state.query);
   }
 
   private commandSurfaceResultCount(): number {
@@ -2528,19 +2525,19 @@ export class AsterlynApp {
 
   private workspaceSearchHasCurrentResults(): boolean {
     return this.filesEditorRuntime.search.hasCurrentResults(
-      this.commandSurfaceState.query,
+      this.filesEditorRuntime.commands.state.query,
     );
   }
 
   private workspaceSearchRequestIsCurrent(): boolean {
     return this.filesEditorRuntime.search.requestIsCurrent(
-      this.commandSurfaceState.query,
+      this.filesEditorRuntime.commands.state.query,
     );
   }
 
   private async activateCommandSurfaceSelection(): Promise<void> {
-    const mode = this.commandSurfaceState.mode;
-    const index = this.commandSurfaceState.selectedIndex;
+    const mode = this.filesEditorRuntime.commands.state.mode;
+    const index = this.filesEditorRuntime.commands.state.selectedIndex;
     if (mode === "files" || mode === "recent") {
       const file = this.commandSurfaceFiles[index];
       const workspaceRoot = this.windowSession.workspace.state.root;
@@ -2632,7 +2629,7 @@ export class AsterlynApp {
 
   private async runWorkspaceSearch(): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const query = this.commandSurfaceState.query;
+    const query = this.filesEditorRuntime.commands.state.query;
     if (!workspaceRoot || query.trim().length === 0) return;
     const completion = this.filesEditorRuntime.search.run(
       { root: workspaceRoot, generation: this.windowSession.generation },
@@ -2817,7 +2814,7 @@ export class AsterlynApp {
           "warning",
         );
       }
-      if (this.commandSurfaceState.mode === "workspace") this.renderCommandSurface();
+      if (this.filesEditorRuntime.commands.state.mode === "workspace") this.renderCommandSurface();
       if (this.filesEditorRuntime.replacement.state.dialog === "recovery") {
         this.renderWorkspaceReplacementDialog();
       }
@@ -2830,8 +2827,8 @@ export class AsterlynApp {
   private refreshWorkspaceSearchAfterReplacement(): void {
     this.filesEditorRuntime.search.invalidate();
     if (
-      this.commandSurfaceState.mode === "workspace" &&
-      this.commandSurfaceState.query.trim().length > 0
+      this.filesEditorRuntime.commands.state.mode === "workspace" &&
+      this.filesEditorRuntime.commands.state.query.trim().length > 0
     ) {
       void this.runWorkspaceSearch();
     } else {

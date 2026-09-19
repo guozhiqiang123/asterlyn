@@ -1,4 +1,5 @@
 import type { EditorCopy } from "../../localization/catalog.ts";
+import { CommandSurfaceController } from "./command-surface-controller.ts";
 import {
   EditorSessionController,
   type EditorSessionChange,
@@ -35,6 +36,7 @@ export class FilesEditorRuntime {
   readonly editor: EditorSessionController;
   readonly search: WorkspaceSearchController;
   readonly replacement: WorkspaceReplacementController;
+  readonly commands: CommandSurfaceController;
 
   private readonly releases: readonly (() => void)[];
   private disposed = false;
@@ -48,6 +50,7 @@ export class FilesEditorRuntime {
     this.editor = new EditorSessionController(gateways.editor, messages);
     this.search = new WorkspaceSearchController(gateways.workspace);
     this.replacement = new WorkspaceReplacementController(gateways.workspace);
+    this.commands = new CommandSurfaceController();
     this.releases = [
       this.files.subscribe((change) => notifications.filesChanged(change)),
       this.editor.subscribe((change) => notifications.editorChanged(change)),

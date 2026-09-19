@@ -4,7 +4,7 @@ import test from "node:test";
 import { FilesEditorRuntime } from "../src/features/files-editor/files-editor-runtime.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 
-test("Files and Editor runtime owns file, editor, search, and replacement lifecycles", () => {
+test("Files and Editor runtime owns file, editor, search, replacement, and command state", () => {
   const notifications = [];
   let searchCancellations = 0;
   let replacementCancellations = 0;
@@ -34,6 +34,12 @@ test("Files and Editor runtime owns file, editor, search, and replacement lifecy
 
   runtime.files.installWorkspace("/repo");
   runtime.editor.installWorkspace("/repo");
+  runtime.commands.open("workspace", "needle");
+  assert.deepEqual(runtime.commands.state, {
+    mode: "workspace",
+    query: "needle",
+    selectedIndex: 0,
+  });
   void runtime.replacement.preview(
     { root: "/repo", generation: 1 },
     {

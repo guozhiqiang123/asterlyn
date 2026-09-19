@@ -242,6 +242,11 @@ lifecycle. All four Files/Editor state owners share the same workspace-operation
 composition root no longer disposes feature controllers individually. `src/app.ts` is 8,799 lines
 with a matching ceiling.
 
+The command surface state now belongs to the same Files/Editor runtime. Composition reads the
+controller's current state instead of retaining the initial state object, which prevents command
+mode, query, and selection from becoming stale after immutable state transitions. `src/app.ts` is
+8,796 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
