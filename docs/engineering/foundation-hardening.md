@@ -205,6 +205,11 @@ Files and Editor core controllers now share a `FilesEditorRuntime`; the feature 
 controllers, their subscriptions, and their disposal while publishing typed change notifications
 to window composition. `src/app.ts` is 8,855 lines with a matching ceiling.
 
+The shared workspace Trash workflow now has a feature runtime that owns its controller, dialog
+binding, subscription, and disposal. Files and Changes still provide explicit target validation and
+completion ports, but the composition root no longer sequences the workflow's internal lifecycle.
+`src/app.ts` is 8,844 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

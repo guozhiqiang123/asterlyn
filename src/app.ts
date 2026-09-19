@@ -1,8 +1,7 @@
 import type { GitWorktreeRecoveryDialog } from "./features/git-operations/git-worktree-recovery-dialog.ts";
 import { bridge } from "./bridge";
 import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
-import { WorkspaceTrashController } from "./application/workspace-trash-controller.ts";
-import { WorkspaceTrashDialogBinding } from "./features/workspace-trash/workspace-trash-dialog-binding.ts";
+import { WorkspaceTrashRuntime } from "./features/workspace-trash/workspace-trash-runtime.ts";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
 import {
@@ -417,13 +416,9 @@ export class AsterlynApp {
   private readonly changesContextRuntime: ChangesContextSurfaceRuntime;
   private readonly filesEditorRuntime: FilesEditorRuntime;
   private readonly projectFilesContextRuntime: ProjectFilesContextSurfaceRuntime;
-  private readonly workspaceTrash: WorkspaceTrashController<
+  private readonly workspaceTrashRuntime: WorkspaceTrashRuntime<
     ProjectFilesContextTarget | ChangesContextTarget
   >;
-  private readonly workspaceTrashBinding: WorkspaceTrashDialogBinding<
-    ProjectFilesContextTarget | ChangesContextTarget
-  >;
-  private readonly releaseWorkspaceTrash: () => void;
   private readonly projectFilesOperations: ProjectFilesOperationController;
   private readonly projectFilesOperationBinding: ProjectFilesOperationBinding;
   private readonly releaseProjectFilesOperations: () => void;
@@ -968,9 +963,10 @@ export class AsterlynApp {
         settle: (lease) => this.windowSession.completeTransition(lease.generation),
       },
     );
-    this.workspaceTrash = new WorkspaceTrashController(
-      this.workspaceMutations,
-      {
+    this.workspaceTrashRuntime = new WorkspaceTrashRuntime({
+      root,
+      mutations: this.workspaceMutations,
+      runtime: {
         currentIdentity: () => {
           const root = this.windowSession.workspace.state.root;
           return root ? { root, generation: this.windowSession.generation } : null;
@@ -989,7 +985,7 @@ export class AsterlynApp {
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
-      () => {
+      messages: () => {
         const labels = this.localization.catalog.projectFiles.contextMenu;
         return {
           targetChanged: labels.sourceChanged,
@@ -998,11 +994,7 @@ export class AsterlynApp {
           trashed: labels.trashedEntry,
         };
       },
-    );
-    this.workspaceTrashBinding = new WorkspaceTrashDialogBinding(
-      root,
-      this.workspaceTrash,
-      () => {
+      copy: () => {
         const labels = this.localization.catalog.projectFiles.contextMenu;
         return {
           eyebrow: labels.trash,
@@ -1014,19 +1006,18 @@ export class AsterlynApp {
           folderDetail: labels.trashFolderDetail,
         };
       },
-      (target) => Array.from(this.root.querySelectorAll<HTMLElement>(
+      focusTarget: (target) => Array.from(this.root.querySelectorAll<HTMLElement>(
         "change" in target ? "[data-change-path]" : "[data-project-node]",
       )).find((element) => (
         "change" in target
           ? element.dataset.changePath === target.path
           : element.dataset.projectNode === target.workspacePath
       )) ?? null,
-    );
-    this.releaseWorkspaceTrash = this.workspaceTrash.subscribe(() => {
+      changed: () => {
       if (this.shellState.layout.leftTool === "files" || this.shellState.layout.leftTool === "changes") {
         this.renderLeftTool();
       }
-      this.workspaceTrashBinding.render();
+      },
     });
     this.projectFilesOperations = new ProjectFilesOperationController(
       {
@@ -1063,8 +1054,8 @@ export class AsterlynApp {
         };
       },
       {
-        busy: () => this.workspaceTrash.busy,
-        request: (target) => this.workspaceTrash.request(target),
+        busy: () => this.workspaceTrashRuntime.controller.busy,
+        request: (target) => this.workspaceTrashRuntime.controller.request(target),
       },
     );
     this.projectFilesOperationBinding = new ProjectFilesOperationBinding(
@@ -1184,7 +1175,7 @@ export class AsterlynApp {
               snapshot?.operation?.conflicts.some((conflict) => conflict.path === target.path)
             ),
             mutationBusy: this.state.loading || this.changesState.mutation !== null ||
-              this.workspaceTrash.busy,
+              this.workspaceTrashRuntime.controller.busy,
             trashAvailable: !bridge.isDemo,
             reasons: labels,
           };
@@ -1194,7 +1185,7 @@ export class AsterlynApp {
         jumpToSource: (target) => this.openChangesContextSource(target),
         resolveConflict: (target) => this.gitOperationDialogBinding.openConflict(target.path),
         restore: (target) => this.restoreChangesContextTarget(target),
-        trash: (target) => this.workspaceTrash.request(target),
+        trash: (target) => this.workspaceTrashRuntime.controller.request(target),
         installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
         blocked: (reason) => this.setStatus(reason, "warning"),
         status: (message) => this.setStatus(message, "success"),
@@ -1747,9 +1738,7 @@ export class AsterlynApp {
     this.changesContextRuntime.dispose();
     this.gitHistoryContextRuntime.dispose();
     this.projectFilesContextRuntime.dispose();
-    this.workspaceTrashBinding.dispose();
-    this.releaseWorkspaceTrash();
-    this.workspaceTrash.dispose();
+    this.workspaceTrashRuntime.dispose();
     this.projectFilesOperationBinding.dispose();
     this.releaseProjectFilesOperations();
     this.releaseProjectFilesClipboard();
@@ -2076,7 +2065,7 @@ export class AsterlynApp {
     }
     this.workspaceMutations.cancel();
     this.commitFileRestoreController.reset();
-    this.workspaceTrash.reset();
+    this.workspaceTrashRuntime.controller.reset();
     this.projectFilesOperations.reset();
     this.contextMenuHost.close();
     this.workspaceSearchController.invalidate();
