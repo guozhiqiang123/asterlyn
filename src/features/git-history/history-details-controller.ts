@@ -689,6 +689,7 @@ function emptyQuery(): HistoryQuery {
   return {
     repositoryIds: [],
     refs: [],
+    startCommit: null,
     authorEmails: [],
     currentAuthor: false,
     sinceEpoch: null,

@@ -39,7 +39,8 @@ function target(overrides = {}) {
 
 test("Files history resolves exact file and directory Git identities", () => {
   assert.deepEqual(projectFilesHistoryIntent(target(), snapshot(), files)?.query, {
-    repositoryIds: ["."], refs: [], authorEmails: [], currentAuthor: false, sinceEpoch: null,
+    repositoryIds: ["."], refs: [], startCommit: null,
+    authorEmails: [], currentAuthor: false, sinceEpoch: null,
     paths: [{ repositoryId: ".", path: "src/app.ts" }], firstParent: false,
     excludeMerges: false, order: "topological",
   });

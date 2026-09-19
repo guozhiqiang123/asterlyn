@@ -56,6 +56,19 @@ test("history query identity includes roots and root-qualified paths", () => {
   );
 });
 
+test("history query identity normalizes an exact starting commit", () => {
+  const first = {
+    ...defaultHistoryQuery(),
+    startCommit: { repositoryId: " module ", oid: "A".repeat(40) },
+  };
+  const second = {
+    ...defaultHistoryQuery(),
+    startCommit: { repositoryId: "module", oid: "a".repeat(40) },
+  };
+  assert.equal(historyQueryKey(first), historyQueryKey(second));
+  assert.equal(isSnapshotHistoryQuery(first), false);
+});
+
 test("text filtering supports case and regular expression modes", () => {
   assert.deepEqual(
     filterHistoryText(commits, "fix parser", {

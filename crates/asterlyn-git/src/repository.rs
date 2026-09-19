@@ -655,6 +655,13 @@ impl GitRepository {
             if !selected_roots.is_empty() && !selected_roots.contains(repository_id) {
                 continue;
             }
+            if query
+                .start_commit
+                .as_ref()
+                .is_some_and(|start| start.repository_id != repository_id)
+            {
+                continue;
+            }
             let refs: Vec<&HistoryRef> = query
                 .refs
                 .iter()
@@ -671,7 +678,10 @@ impl GitRepository {
                 continue;
             }
 
-            let selectors = if query.refs.is_empty() {
+            let selectors = if let Some(start) = &query.start_commit {
+                root.repository.first_parent(&start.oid)?;
+                vec![start.oid.clone()]
+            } else if query.refs.is_empty() {
                 root.repository.history_tip_oids()?
             } else {
                 let mut oids = Vec::with_capacity(refs.len());
@@ -4473,6 +4483,12 @@ fn validate_query_roots(query: &HistoryQuery, roots: &[DiscoveredGitRoot]) -> Re
                 .iter()
                 .map(|reference| reference.repository_id.as_str()),
         )
+        .chain(
+            query
+                .start_commit
+                .iter()
+                .map(|start| start.repository_id.as_str()),
+        )
         .chain(query.paths.iter().map(|path| path.repository_id.as_str()));
     if requested.into_iter().any(|id| !available.contains(id)) {
         return Err(GitError::InvalidInput {
@@ -5255,6 +5271,34 @@ fn validate_history_query(query: &HistoryQuery) -> Result<(), GitError> {
     for reference in &query.refs {
         validate_repository_id(&reference.repository_id)?;
         validate_history_ref(&reference.full_name)?;
+    }
+    if let Some(start) = &query.start_commit {
+        validate_repository_id(&start.repository_id)?;
+        validate_object_id(&start.oid)?;
+        if !query.refs.is_empty() {
+            return Err(GitError::InvalidInput {
+                field: "history start commit".to_string(),
+                message: "cannot be combined with selected refs".to_string(),
+            });
+        }
+        if !query.repository_ids.is_empty()
+            && (query.repository_ids.len() != 1 || query.repository_ids[0] != start.repository_id)
+        {
+            return Err(GitError::InvalidInput {
+                field: "history start commit".to_string(),
+                message: "must use the same single repository root as the query".to_string(),
+            });
+        }
+        if query
+            .paths
+            .iter()
+            .any(|path| path.repository_id != start.repository_id)
+        {
+            return Err(GitError::InvalidInput {
+                field: "history start commit".to_string(),
+                message: "must use paths from the same repository root".to_string(),
+            });
+        }
     }
     if query.author_emails.len() > 64 {
         return Err(GitError::InvalidInput {
@@ -6071,6 +6115,26 @@ mod tests {
         assert!(path_history.iter().any(|commit| commit.oid == side));
         assert!(!path_history.iter().any(|commit| commit.oid == main));
 
+        let exact_start = repository
+            .query_commit_history(
+                &HistoryQuery {
+                    repository_ids: vec![".".to_string()],
+                    start_commit: Some(crate::model::HistoryCommitStart {
+                        repository_id: ".".to_string(),
+                        oid: main.clone(),
+                    }),
+                    paths: vec![history_path("base.txt")],
+                    ..HistoryQuery::default()
+                },
+                50,
+            )
+            .expect("exact-start history loads");
+        assert_eq!(
+            exact_start.first().map(|commit| commit.oid.as_str()),
+            Some(root.as_str())
+        );
+        assert!(!exact_start.iter().any(|commit| commit.oid == merge_oid));
+
         let first_parent = repository
             .query_commit_history(
                 &HistoryQuery {
@@ -6148,6 +6212,14 @@ mod tests {
             },
             HistoryQuery {
                 since_epoch: Some(0),
+                ..HistoryQuery::default()
+            },
+            HistoryQuery {
+                refs: vec![history_ref("refs/heads/main")],
+                start_commit: Some(crate::model::HistoryCommitStart {
+                    repository_id: ".".to_string(),
+                    oid: "a".repeat(40),
+                }),
                 ..HistoryQuery::default()
             },
         ];

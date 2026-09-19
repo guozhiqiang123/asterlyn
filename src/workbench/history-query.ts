@@ -18,6 +18,7 @@ export function defaultHistoryQuery(): HistoryQuery {
   return {
     repositoryIds: [],
     refs: [],
+    startCommit: null,
     authorEmails: [],
     currentAuthor: false,
     sinceEpoch: null,
@@ -29,6 +30,14 @@ export function defaultHistoryQuery(): HistoryQuery {
 }
 
 export function normalizeHistoryQuery(query: HistoryQuery): HistoryQuery {
+  const startCommit = query.startCommit &&
+      query.startCommit.repositoryId.trim() &&
+      /^[0-9a-f]{40}$/iu.test(query.startCommit.oid.trim())
+    ? {
+        repositoryId: query.startCommit.repositoryId.trim(),
+        oid: query.startCommit.oid.trim().toLowerCase(),
+      }
+    : null;
   return {
     repositoryIds: normalizedValues(query.repositoryIds),
     refs: normalizedSelections(
@@ -40,6 +49,7 @@ export function normalizeHistoryQuery(query: HistoryQuery): HistoryQuery {
         .filter((reference) => reference.repositoryId && reference.fullName),
       historyRefKey,
     ),
+    startCommit,
     authorEmails: normalizedValues(query.authorEmails),
     currentAuthor: query.currentAuthor,
     sinceEpoch:
@@ -69,6 +79,7 @@ export function isSnapshotHistoryQuery(query: HistoryQuery): boolean {
   const normalized = normalizeHistoryQuery(query);
   return (
     normalized.refs.length === 0 &&
+    normalized.startCommit === null &&
     normalized.repositoryIds.length === 0 &&
     normalized.authorEmails.length === 0 &&
     !normalized.currentAuthor &&

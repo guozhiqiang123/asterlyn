@@ -6,6 +6,7 @@ import { demoQueryHistory, demoSnapshot } from "../src/demo.ts";
 const query = (overrides = {}) => ({
   repositoryIds: [],
   refs: [],
+  startCommit: null,
   authorEmails: [],
   currentAuthor: false,
   sinceEpoch: null,
@@ -53,6 +54,16 @@ test("demo history exercises multi-ref, author, path, and traversal controls", (
     ).length,
     5,
   );
+});
+
+test("demo history can start at one exact commit", () => {
+  const start = demoSnapshot.commits[2];
+  const commits = demoQueryHistory(demoSnapshot, query({
+    repositoryIds: ["."],
+    startCommit: { repositoryId: ".", oid: start.oid },
+  }));
+  assert.equal(commits[0].oid, start.oid);
+  assert.equal(commits.some((commit) => commit.oid === demoSnapshot.commits[0].oid), false);
 });
 
 function ref(fullName) {

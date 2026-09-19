@@ -384,6 +384,7 @@ pub enum HistoryOrder {
 pub struct HistoryQuery {
     pub repository_ids: Vec<String>,
     pub refs: Vec<HistoryRef>,
+    pub start_commit: Option<HistoryCommitStart>,
     pub author_emails: Vec<String>,
     pub current_author: bool,
     pub since_epoch: Option<i64>,
@@ -391,6 +392,13 @@ pub struct HistoryQuery {
     pub first_parent: bool,
     pub exclude_merges: bool,
     pub order: HistoryOrder,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryCommitStart {
+    pub repository_id: String,
+    pub oid: String,
 }
 
 #[derive(

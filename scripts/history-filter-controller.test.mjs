@@ -30,6 +30,7 @@ test("history filter controller installs an exact cross-feature query", () => {
   controller.install({
     repositoryIds: ["."],
     refs: [],
+    startCommit: { repositoryId: ".", oid: "a".repeat(40) },
     authorEmails: ["developer@example.com"],
     currentAuthor: false,
     sinceEpoch: null,
@@ -40,6 +41,10 @@ test("history filter controller installs an exact cross-feature query", () => {
   });
   assert.deepEqual(controller.query().paths, [{ repositoryId: ".", path: "src" }]);
   assert.deepEqual(controller.query().repositoryIds, ["."]);
+  assert.deepEqual(controller.query().startCommit, {
+    repositoryId: ".",
+    oid: "a".repeat(40),
+  });
   assert.equal(state.historyCollapseLinear, true);
 });
 

@@ -107,6 +107,7 @@ export type HistoryOrder = "topological" | "date";
 export interface HistoryQuery {
   repositoryIds: string[];
   refs: HistoryRef[];
+  startCommit: HistoryCommitStart | null;
   authorEmails: string[];
   currentAuthor: boolean;
   sinceEpoch: number | null;
@@ -114,6 +115,11 @@ export interface HistoryQuery {
   firstParent: boolean;
   excludeMerges: boolean;
   order: HistoryOrder;
+}
+
+export interface HistoryCommitStart {
+  repositoryId: string;
+  oid: string;
 }
 
 export interface HistoryRef {

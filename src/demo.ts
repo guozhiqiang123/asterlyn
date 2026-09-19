@@ -418,10 +418,15 @@ export function demoQueryHistory(
   query: HistoryQuery,
 ): CommitSummary[] {
   if (query.repositoryIds.length > 0 && !query.repositoryIds.includes(".")) return [];
+  if (query.startCommit && query.startCommit.repositoryId !== ".") return [];
+  if (query.startCommit && query.refs.length > 0) {
+    throw new Error("An exact History start cannot be combined with selected refs.");
+  }
   const refs = query.refs.filter((reference) => reference.repositoryId === ".");
   if (query.refs.length > 0 && refs.length === 0) return [];
-  const tips =
-    refs.length === 0
+  const tips = query.startCommit
+    ? [query.startCommit.oid]
+    : refs.length === 0
       ? snapshot.branches.map((branch) => branch.oid)
       : refs.map(({ fullName }) => {
           const reference = snapshot.branches.find(
@@ -446,7 +451,9 @@ export function demoQueryHistory(
       demoCommitDetails(commit.oid).files.some(
         (file) =>
           paths.some(
-            (path) => file.path === path.path || file.originalPath === path.path,
+            (path) =>
+              file.path === path.path || file.path.startsWith(`${path.path}/`) ||
+              file.originalPath === path.path || file.originalPath?.startsWith(`${path.path}/`),
           ),
       ),
     );

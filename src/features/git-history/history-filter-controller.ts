@@ -1,4 +1,11 @@
-import type { BranchSummary, HistoryPath, HistoryQuery, HistoryRef, RepositorySnapshot } from "../../models.ts";
+import type {
+  BranchSummary,
+  HistoryCommitStart,
+  HistoryPath,
+  HistoryQuery,
+  HistoryRef,
+  RepositorySnapshot,
+} from "../../models.ts";
 import {
   defaultHistoryQuery,
   normalizeHistoryQuery,
@@ -14,6 +21,7 @@ import {
 
 export interface HistoryFilterState {
   historyRefs: Map<string, HistoryRef>;
+  historyStartCommit: HistoryCommitStart | null;
   historyAuthorEmails: Set<string>;
   historyCurrentAuthor: boolean;
   historyDatePreset: HistoryDatePreset;
@@ -49,6 +57,7 @@ export class HistoryFilterController {
   install(input: HistoryQuery): void {
     const query = normalizeHistoryQuery(input);
     this.state.historyRefs = keyedRefs(query.refs);
+    this.state.historyStartCommit = query.startCommit;
     this.state.historyAuthorEmails = new Set(query.authorEmails);
     this.state.historyCurrentAuthor = query.currentAuthor;
     this.state.historyDatePreset = "all";
@@ -69,6 +78,10 @@ export class HistoryFilterController {
     this.state.historyRepositoryIds = new Set(
       Array.from(this.state.historyRepositoryIds).filter((id) => repositoryIds.has(id)),
     );
+    if (this.state.historyStartCommit &&
+      !repositoryIds.has(this.state.historyStartCommit.repositoryId)) {
+      this.state.historyStartCommit = null;
+    }
     this.state.historyPaths = new Map(
       Array.from(this.state.historyPaths).filter(([, path]) =>
         repositoryIds.has(path.repositoryId)),
@@ -109,6 +122,7 @@ export class HistoryFilterController {
     return normalizeHistoryQuery({
       repositoryIds: Array.from(this.state.historyRepositoryIds),
       refs: Array.from(this.state.historyRefs.values()),
+      startCommit: this.state.historyStartCommit,
       authorEmails: Array.from(this.state.historyAuthorEmails),
       currentAuthor: this.state.historyCurrentAuthor,
       sinceEpoch: this.state.historySinceEpoch,
@@ -135,6 +149,7 @@ export function createHistoryFilterState(): HistoryFilterState {
   const query = defaultHistoryQuery();
   return {
     historyRefs: keyedRefs(query.refs),
+    historyStartCommit: query.startCommit,
     historyAuthorEmails: new Set(query.authorEmails),
     historyCurrentAuthor: query.currentAuthor,
     historyDatePreset: "all",
