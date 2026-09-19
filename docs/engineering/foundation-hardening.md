@@ -275,6 +275,9 @@ identity, linked scrolling, project-tree projection, splitters, and tab-strip be
 used by the Git projection were first lifted into the root History contract, preventing shared
 presentation from depending on the Git History feature.
 
+Changes/Commit now owns its change grouping, effective-status, inclusion, and tree-projection model
+next to the controller and view that consume it.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

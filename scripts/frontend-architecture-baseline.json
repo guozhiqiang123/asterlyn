@@ -26,7 +26,6 @@
   "dependencyDebt": [],
   "applicationDomDebt": {},
   "workbenchOwnership": {
-    "src/workbench/change-presentation.ts": { "owner": "changes-commit", "target": "src/features/changes-commit/change-presentation.ts", "migrationPhase": "FH4" },
     "src/workbench/diff-navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/diff-navigation.ts", "migrationPhase": "FH4" },
     "src/workbench/editor-cache-remap.ts": { "owner": "files-editor", "target": "src/features/files-editor/editor-cache-remap.ts", "migrationPhase": "FH4" },
     "src/workbench/editor-gutter.ts": { "owner": "files-editor", "target": "src/features/files-editor/editor-gutter.ts", "migrationPhase": "FH4" },

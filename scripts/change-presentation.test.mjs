@@ -8,7 +8,7 @@ import {
   effectiveChangeKind,
   includedChanges,
   reconcileExcludedChangePaths,
-} from "../src/workbench/change-presentation.ts";
+} from "../src/features/changes-commit/change-presentation.ts";
 
 function change(path, indexStatus = "unmodified", worktreeStatus = "modified") {
   return {

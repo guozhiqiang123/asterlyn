@@ -291,7 +291,7 @@ import {
   includedChanges,
   type ChangeFileView,
   type ChangeGroupId,
-} from "./workbench/change-presentation";
+} from "./features/changes-commit/change-presentation";
 import {
   loadRecentFilesFromIndex,
   ProjectFileSearchIndex,

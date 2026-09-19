@@ -12,7 +12,7 @@ import {
   includedChanges,
   reconcileExcludedChangePaths,
   type ChangeFileView,
-} from "../../workbench/change-presentation.ts";
+} from "./change-presentation.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import type { ChangesCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";

@@ -1,4 +1,4 @@
-import type { ChangeKind, FileChange } from "../models";
+import type { ChangeKind, FileChange } from "../../models";
 
 export type ChangeFileView = "tree" | "flat";
 export type ChangeGroupId = "changes" | "unversioned";

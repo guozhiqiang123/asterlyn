@@ -1,5 +1,5 @@
 import type { ChangesCopy } from "../../localization/catalog.ts";
-import type { ChangeFileView } from "../../workbench/change-presentation.ts";
+import type { ChangeFileView } from "./change-presentation.ts";
 import {
   ChangesCommitController,
   type ChangesCommitChange,

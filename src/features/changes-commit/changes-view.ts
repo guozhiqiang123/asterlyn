@@ -8,7 +8,7 @@ import {
   effectiveChangeKind,
   type ChangeFileTreeNode,
   type ChangeGroupId,
-} from "../../workbench/change-presentation.ts";
+} from "./change-presentation.ts";
 import type { ChangesCommitState } from "./changes-commit-controller.ts";
 import type { ChangesCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
