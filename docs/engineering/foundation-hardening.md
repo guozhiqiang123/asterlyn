@@ -332,6 +332,11 @@ bounded replacement policy, preview mapping, reviewed file identities, and the f
 performed immediately before application. Tauri-specific recovery-path lookup, write-lock
 acquisition, and background dispatch remain at the composed desktop edge.
 
+Authorized text reads and optimistic saves now live in `application/workspace_document.rs`.
+Read-only rejection, fresh identity authorization, and workspace I/O form one application service;
+commands supply the active-session identity and retain only transport scheduling and write-lock
+coordination.
+
 Exit gate: application behavior is testable without constructing Tauri; command modules perform
 transport validation and dispatch only; protocol generation and all native tests pass.
 

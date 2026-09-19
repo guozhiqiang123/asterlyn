@@ -5,20 +5,20 @@ use asterlyn_git::{
     BranchMutationPlan, BranchMutationRequest, CommitComparisonDetails, CommitComparisonDiffResult,
     CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange, GitBlameResult,
     GitConflictContent, GitError, GitOperationAction, GitOperationKind, GitOperationPlan,
-    GitOperationSnapshot, GitRepository, HistoryPage, HistoryQuery, ProjectFile, ProjectFileList,
-    PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan,
+    GitOperationSnapshot, GitRepository, HistoryPage, HistoryQuery, ProjectFileList, PushMode,
+    PushPreview, PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan,
     RepositorySliceSnapshot, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
-#[cfg(test)]
-use asterlyn_workspace::SearchMode;
 use asterlyn_workspace::{
-    BinaryFileSnapshot, ReplacementApplyResult, ReplacementRecoverySummary, SaveTextFileRequest,
-    SaveTextFileResult, SearchCancellationToken, SearchOptions, TextFileSnapshot, Workspace,
-    WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory, WorkspaceError,
-    WorkspaceMutationBlocker, WorkspaceMutationLimits, WorkspaceMutationOperation,
-    WorkspaceMutationOutcome, WorkspaceMutationPlan, WorkspaceMutationRecoverySummary,
+    BinaryFileSnapshot, ReplacementApplyResult, ReplacementRecoverySummary, SaveTextFileResult,
+    SearchOptions, TextFileSnapshot, Workspace, WorkspaceCollisionPolicy, WorkspaceEntryIdentity,
+    WorkspaceEntryInventory, WorkspaceError, WorkspaceMutationBlocker, WorkspaceMutationLimits,
+    WorkspaceMutationOperation, WorkspaceMutationOutcome, WorkspaceMutationPlan,
+    WorkspaceMutationRecoverySummary,
 };
+#[cfg(test)]
+use asterlyn_workspace::{SearchCancellationToken, SearchMode};
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -36,18 +36,19 @@ use adapters::image_preview::{
     encode_image_preview,
 };
 use application::{
-    ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator, PROJECT_FILE_LIMIT,
+    ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
     PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
     StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator, WorkspaceReplacementPreview,
     WorkspaceReplacementRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
     WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
     authorize_replacement_selection, exact_git_repository, load_project_catalog,
-    prepare_authorized_replacement, reauthorize_session_file, reauthorize_session_file_for_read,
-    search_authorized_workspace,
+    prepare_authorized_replacement, read_session_text_file, reauthorize_session_file_for_read,
+    save_session_text_file, search_authorized_workspace,
 };
 #[cfg(test)]
 use application::{
-    GitMutationRegistry, RemoteOperationRegistry, WORKSPACE_SEARCH_LIMITS, authorize_project_file,
+    GitMutationRegistry, PROJECT_FILE_LIMIT, RemoteOperationRegistry, WORKSPACE_SEARCH_LIMITS,
+    read_authorized_text_file, save_authorized_text_file,
 };
 use commands::*;
 
@@ -271,70 +272,6 @@ fn workspace_mutation_recovery_root(app: &tauri::AppHandle) -> Result<PathBuf, W
             operation: "resolve workspace mutation recovery location".to_string(),
             message: error.to_string(),
         })
-}
-
-#[cfg(test)]
-fn read_authorized_text_file(
-    root: &Path,
-    repository_id: &str,
-    path: &str,
-) -> Result<TextFileSnapshot, WorkspaceError> {
-    let authorized = authorize_project_file(root, repository_id, path)?;
-    read_session_text_file(root, &authorized)
-}
-
-fn read_session_text_file(
-    root: &Path,
-    catalogued: &ProjectFile,
-) -> Result<TextFileSnapshot, WorkspaceError> {
-    let authorized = reauthorize_session_file_for_read(root, catalogued)?;
-    Workspace::open(root)?.read_text_file(&authorized.workspace_path)
-}
-
-#[cfg(test)]
-#[allow(clippy::too_many_arguments)]
-fn save_authorized_text_file(
-    root: &Path,
-    repository_id: &str,
-    path: &str,
-    expected_revision: String,
-    content: String,
-    utf8_bom: bool,
-    request_id: String,
-) -> Result<SaveTextFileResult, WorkspaceError> {
-    let authorized = authorize_project_file(root, repository_id, path)?;
-    save_session_text_file(
-        root,
-        &authorized,
-        expected_revision,
-        content,
-        utf8_bom,
-        request_id,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn save_session_text_file(
-    root: &Path,
-    catalogued: &ProjectFile,
-    expected_revision: String,
-    content: String,
-    utf8_bom: bool,
-    request_id: String,
-) -> Result<SaveTextFileResult, WorkspaceError> {
-    if catalogued.read_only {
-        return Err(WorkspaceError::NotAuthorized {
-            message: "the selected project file is read-only".to_string(),
-        });
-    }
-    let authorized = reauthorize_session_file(root, catalogued)?;
-    Workspace::open(root)?.save_text_file(&SaveTextFileRequest {
-        workspace_path: authorized.workspace_path,
-        expected_revision,
-        content,
-        utf8_bom,
-        request_id,
-    })
 }
 
 async fn run_blocking<T, F>(operation: &str, task: F) -> Result<T, GitError>

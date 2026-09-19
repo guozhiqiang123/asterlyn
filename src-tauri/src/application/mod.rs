@@ -4,6 +4,7 @@ pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
 mod search_session;
 mod workspace_catalog;
+mod workspace_document;
 mod workspace_mutation;
 mod workspace_replacement;
 mod workspace_search;
@@ -15,11 +16,13 @@ pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
 #[cfg(test)]
-pub(crate) use workspace_catalog::authorize_project_file;
+pub(crate) use workspace_catalog::PROJECT_FILE_LIMIT;
 pub(crate) use workspace_catalog::{
-    PROJECT_FILE_LIMIT, exact_git_repository, load_project_catalog, reauthorize_session_file,
-    reauthorize_session_file_for_read,
+    exact_git_repository, load_project_catalog, reauthorize_session_file_for_read,
 };
+#[cfg(test)]
+pub(crate) use workspace_document::{read_authorized_text_file, save_authorized_text_file};
+pub(crate) use workspace_document::{read_session_text_file, save_session_text_file};
 pub(crate) use workspace_mutation::{StoredWorkspaceMutationPlan, WorkspaceMutationCoordinator};
 pub(crate) use workspace_replacement::{
     WorkspaceReplacementPreview, authorize_replacement_selection, prepare_authorized_replacement,
