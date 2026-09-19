@@ -15,7 +15,7 @@ import {
   type EditorDocument,
   type ProjectFileDocument,
   type ProjectImageDocument,
-} from "../../workbench/editor-document.ts";
+} from "../../editor-document.ts";
 import {
   activatePreview,
   activateTextTab,

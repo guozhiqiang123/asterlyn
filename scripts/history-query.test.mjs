@@ -8,7 +8,7 @@ import {
   historyDateSince,
   historyQueryKey,
   isSnapshotHistoryQuery,
-} from "../src/workbench/history-query.ts";
+} from "../src/history-query.ts";
 
 const commits = [
   commit("a".repeat(40), "Fix Parser", "Ada", "ada@example.invalid"),

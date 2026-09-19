@@ -21,7 +21,7 @@ import {
 import {
   historyAuthorChoices,
   type HistoryDatePreset,
-} from "../../workbench/history-query.ts";
+} from "../../history-query.ts";
 import {
   historyPathCandidates,
   historyPathWorkspaceLabel,

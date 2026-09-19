@@ -1,4 +1,4 @@
-import type { ChangeKind, ChangeSelection } from "../models";
+import type { ChangeKind, ChangeSelection } from "./models";
 
 export interface ProjectFileDocument {
   kind: "project-file";

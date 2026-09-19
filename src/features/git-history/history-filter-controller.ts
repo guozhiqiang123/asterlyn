@@ -11,7 +11,7 @@ import {
   defaultHistoryQuery,
   normalizeHistoryQuery,
   type HistoryDatePreset,
-} from "../../workbench/history-query.ts";
+} from "../../history-query.ts";
 import { branchKey, historyPathKey, historyRefKey } from "../../workbench/history-identity.ts";
 import {
   loadHistoryRefPreferences,

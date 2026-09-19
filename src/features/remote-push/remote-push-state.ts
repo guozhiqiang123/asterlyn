@@ -11,7 +11,7 @@ import type {
 import type {
   AppPreferences,
   RemoteUpdateStrategyPreference,
-} from "../../workbench/preferences.ts";
+} from "../../preferences.ts";
 
 export interface PushDiffState {
   repositoryId: string | null;

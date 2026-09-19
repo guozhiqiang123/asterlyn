@@ -8,7 +8,7 @@ import {
   unifiedChangeBlocks,
   unifiedChangeStartLines,
 } from "../src/workbench/diff-navigation.ts";
-import { editorDocumentKey } from "../src/workbench/editor-document.ts";
+import { editorDocumentKey } from "../src/editor-document.ts";
 import { readFile } from "node:fs/promises";
 
 test("unified Diff navigation groups adjacent removed and added lines", () => {

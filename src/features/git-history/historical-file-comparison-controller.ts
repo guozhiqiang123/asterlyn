@@ -2,7 +2,7 @@ import type { CommitFileChange, CommitFileComparison } from "../../models.ts";
 import {
   editorDocumentKey,
   type HistoricalFileComparisonDocument,
-} from "../../workbench/editor-document.ts";
+} from "../../editor-document.ts";
 
 export interface HistoricalFileComparisonGateway {
   compareCommitFileToCurrent(

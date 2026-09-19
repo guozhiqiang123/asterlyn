@@ -20,7 +20,7 @@ import { ZH_CN } from "../src/localization/zh-CN.ts";
 import { createLocalization } from "../src/localization/localization.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
-import { DEFAULT_APP_PREFERENCES } from "../src/workbench/preferences.ts";
+import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
 
 test("locale catalogs retain the same typed runtime shape", () => {
   assert.deepEqual(catalogShape(ZH_CN), catalogShape(EN_US));

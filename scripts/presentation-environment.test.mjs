@@ -7,7 +7,7 @@ import {
   resolveEffectiveTheme,
   resolvePresentationSnapshot,
 } from "../src/presentation/presentation-environment.ts";
-import { DEFAULT_APP_PREFERENCES } from "../src/workbench/preferences.ts";
+import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
 import { PreferenceStore } from "../src/workbench/preference-store.ts";
 
 test("system locale maps only supported Simplified Chinese locales", () => {

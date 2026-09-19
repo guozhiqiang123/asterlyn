@@ -257,6 +257,11 @@ and window-chrome presentation now live under `src/shell`, with callers and focu
 their final owner directly. The ownership baseline removes each module as soon as it reaches its
 recorded destination.
 
+Editor-document, History-query, and preference contracts now live at the product root, while the
+font loader/catalog lives under Settings. Font identities and History query selection keys were
+lifted into the inward contracts before the move, so the root contracts do not depend back on a
+feature merely to validate persisted data or normalize a query.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

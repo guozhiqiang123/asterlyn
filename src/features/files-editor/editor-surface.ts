@@ -1,14 +1,14 @@
 import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { ImageDiffPreview, ImagePreview } from "../../models.ts";
 import { attachSplitter } from "../../workbench/splitter.ts";
-import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../workbench/editor-document.ts";
+import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../editor-document.ts";
 import {
   textTab,
   type EditorSession,
   type TextTabState,
 } from "../../workbench/editor-session.ts";
 import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
-import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "../../workbench/markdown-format.ts";

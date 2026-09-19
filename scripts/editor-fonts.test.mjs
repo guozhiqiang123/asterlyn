@@ -8,7 +8,7 @@ import {
   editorFontFamilyStack,
   editorFontOptionLabel,
   isEditorFontId,
-} from "../src/workbench/editor-fonts.ts";
+} from "../src/features/settings/editor-fonts.ts";
 
 test("editor font catalog bundles one default and pins every optional asset", () => {
   assert.equal(DEFAULT_EDITOR_FONT_ID, "jetbrains-mono");

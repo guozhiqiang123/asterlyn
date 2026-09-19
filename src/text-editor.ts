@@ -20,7 +20,7 @@ import { gitBlameContextSession } from "./features/files-editor/editor-gutter-co
 import type { EffectiveTheme } from "./presentation/presentation-environment";
 import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 import { linkVerticalScrollProportionally } from "./workbench/linked-scroll";
-import type { AppPreferences } from "./workbench/preferences";
+import type { AppPreferences } from "./preferences";
 import {
   applyExactTextChanges,
   decodeExactText,

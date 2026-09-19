@@ -12,7 +12,7 @@ import {
 import {
   editorDocumentContentKey,
   editorDocumentKey,
-} from "../src/workbench/editor-document.ts";
+} from "../src/editor-document.ts";
 import {
   createLatestFrameQueue,
   resizeValue,

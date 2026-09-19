@@ -1,5 +1,5 @@
 import type { CommitSummary, HistoryQuery } from "../models";
-import { historyQueryKey, normalizeHistoryQuery } from "./history-query.ts";
+import { historyQueryKey, normalizeHistoryQuery } from "../history-query.ts";
 
 export type RefHistorySource =
   | { kind: "snapshot" }

@@ -2,7 +2,7 @@ import type { CommitFileChange, CommitFilePreview } from "../../models.ts";
 import {
   editorDocumentKey,
   type HistoricalFileDocument,
-} from "../../workbench/editor-document.ts";
+} from "../../editor-document.ts";
 
 export interface HistoricalFileGateway {
   readCommitFile(

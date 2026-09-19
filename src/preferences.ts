@@ -1,9 +1,20 @@
-import type { DiffLayout } from "../diff-presentation";
-import {
+import type { DiffLayout } from "./diff-presentation";
+
+export const DEFAULT_EDITOR_FONT_ID = "jetbrains-mono" as const;
+
+export const EDITOR_FONT_IDS = [
   DEFAULT_EDITOR_FONT_ID,
-  isEditorFontId,
-  type EditorFontId,
-} from "./editor-fonts.ts";
+  "cascadia-code",
+  "fira-code",
+  "source-code-pro",
+  "ibm-plex-mono",
+] as const;
+
+export type EditorFontId = (typeof EDITOR_FONT_IDS)[number];
+
+export function isEditorFontId(value: unknown): value is EditorFontId {
+  return typeof value === "string" && EDITOR_FONT_IDS.includes(value as EditorFontId);
+}
 
 export const APP_PREFERENCES_KEY = "asterlyn.preferences.v1";
 export const UI_FONT_SIZES = [10, 11, 12, 13, 14] as const;

@@ -5,7 +5,7 @@ import {
   editorFontOptionLabel,
   type EditorFontId,
   type EditorFontLoadSource,
-} from "../../workbench/editor-fonts.ts";
+} from "../../features/settings/editor-fonts.ts";
 import {
   EDITOR_FONT_SIZES,
   EDITOR_INDENT_SIZES,
@@ -14,7 +14,7 @@ import {
   EDITOR_TAB_SIZES,
   UI_FONT_SIZES,
   type AppPreferences,
-} from "../../workbench/preferences.ts";
+} from "../../preferences.ts";
 import type { SettingsSection, SettingsState } from "./settings-controller.ts";
 import type { SettingsCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";

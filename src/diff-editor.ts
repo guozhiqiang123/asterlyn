@@ -59,7 +59,7 @@ import {
 import {
   DEFAULT_APP_PREFERENCES,
   type AppPreferences,
-} from "./workbench/preferences";
+} from "./preferences";
 
 const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
   const builder = new RangeSetBuilder<Decoration>();

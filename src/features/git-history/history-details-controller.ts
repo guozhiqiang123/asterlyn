@@ -16,7 +16,7 @@ import {
 import {
   historyQueryKey,
   normalizeHistoryQuery,
-} from "../../workbench/history-query.ts";
+} from "../../history-query.ts";
 import { commitKey } from "../../workbench/history-identity.ts";
 import {
   appendHistoryPage,

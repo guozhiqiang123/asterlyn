@@ -1,6 +1,6 @@
 import {
   type AppPreferences,
-} from "../../workbench/preferences.ts";
+} from "../../preferences.ts";
 import {
   PreferenceStore,
   createSilentPreferenceSync,

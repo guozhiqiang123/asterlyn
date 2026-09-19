@@ -1,15 +1,10 @@
-import type { BranchSummary, CommitSummary, HistoryPath, HistoryRef } from "../models";
+import type { BranchSummary, CommitSummary } from "../models";
+import { historyRefKey } from "../history-query.ts";
 
-export function historyRefKey(reference: HistoryRef): string {
-  return `${encodeURIComponent(reference.repositoryId)}:${encodeURIComponent(reference.fullName)}`;
-}
+export { historyPathKey, historyRefKey } from "../history-query.ts";
 
 export function branchKey(branch: Pick<BranchSummary, "repositoryId" | "fullName">): string {
   return historyRefKey(branch);
-}
-
-export function historyPathKey(path: HistoryPath): string {
-  return `${encodeURIComponent(path.repositoryId)}:${encodeURIComponent(path.path)}`;
 }
 
 export function commitKey(commit: Pick<CommitSummary, "repositoryId" | "oid">): string {

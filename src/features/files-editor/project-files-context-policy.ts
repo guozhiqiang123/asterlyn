@@ -1,7 +1,7 @@
 import type { HistoryQueryIntent } from "../../application/workbench-navigation.ts";
 import type { ProjectFile, RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuAvailability } from "../../shared/context-menu/context-menu-model.ts";
-import { defaultHistoryQuery } from "../../workbench/history-query.ts";
+import { defaultHistoryQuery } from "../../history-query.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 
 export interface ProjectFilesContextPolicyReasons {

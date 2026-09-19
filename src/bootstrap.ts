@@ -4,7 +4,7 @@ import {
   createBrowserSystemPresentationPort,
   resolvePresentationSnapshot,
 } from "./presentation/presentation-environment.ts";
-import { loadAppPreferences } from "./workbench/preferences.ts";
+import { loadAppPreferences } from "./preferences.ts";
 import { loadLocale } from "./localization/locale-loader.ts";
 
 const preferences = loadAppPreferences(window.localStorage);

@@ -205,7 +205,7 @@ import {
   type HistoricalFileDocument,
   type ProjectFileDocument,
   type ProjectImageDocument,
-} from "./workbench/editor-document";
+} from "./editor-document";
 import {
   activeTextTab,
   dirtyTextTabs,
@@ -245,13 +245,13 @@ import {
   isEditorFontId,
   type EditorFontId,
   type EditorFontLoadSource,
-} from "./workbench/editor-fonts";
+} from "./features/settings/editor-fonts";
 import {
   isLocalePreference,
   isRemoteUpdateStrategyPreference,
   isThemePreference,
   type AppPreferences,
-} from "./workbench/preferences";
+} from "./preferences";
 import { createBrowserPreferenceSync } from "./workbench/preference-store";
 import {
   createBrowserSystemPresentationPort,
@@ -273,7 +273,7 @@ import {
   historyDateSince,
   isSnapshotHistoryQuery,
   type HistoryDatePreset,
-} from "./workbench/history-query";
+} from "./history-query";
 import {
   branchKey,
   commitKey,

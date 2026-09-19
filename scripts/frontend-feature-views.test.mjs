@@ -29,7 +29,7 @@ import { renderSettingsNavigation, renderSettingsSection } from "../src/features
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
 import { createCommandSurfaceState, openCommandSurface } from "../src/workbench/navigation.ts";
-import { DEFAULT_APP_PREFERENCES } from "../src/workbench/preferences.ts";
+import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
 import { createWorkspaceReplacementState } from "../src/workbench/workspace-replacement.ts";
 import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/workbench/workspace-search.ts";
 

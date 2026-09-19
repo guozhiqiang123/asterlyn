@@ -1,14 +1,10 @@
-export const DEFAULT_EDITOR_FONT_ID = "jetbrains-mono" as const;
-
-export const EDITOR_FONT_IDS = [
+import {
   DEFAULT_EDITOR_FONT_ID,
-  "cascadia-code",
-  "fira-code",
-  "source-code-pro",
-  "ibm-plex-mono",
-] as const;
+  type EditorFontId,
+} from "../../preferences.ts";
 
-export type EditorFontId = (typeof EDITOR_FONT_IDS)[number];
+export { DEFAULT_EDITOR_FONT_ID, EDITOR_FONT_IDS, isEditorFontId } from "../../preferences.ts";
+export type { EditorFontId } from "../../preferences.ts";
 
 interface DownloadableFontAsset {
   url: string;
@@ -223,10 +219,6 @@ export class EditorFontLoader {
 
 export function editorFont(id: EditorFontId): EditorFontDefinition {
   return EDITOR_FONTS.find((definition) => definition.id === id) ?? EDITOR_FONTS[0]!;
-}
-
-export function isEditorFontId(value: unknown): value is EditorFontId {
-  return typeof value === "string" && EDITOR_FONT_IDS.includes(value as EditorFontId);
 }
 
 export function editorFontFamilyStack(id: EditorFontId): string {

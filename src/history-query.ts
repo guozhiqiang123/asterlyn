@@ -1,5 +1,4 @@
-import type { CommitSummary, HistoryPath, HistoryQuery, HistoryRef } from "../models";
-import { historyPathKey, historyRefKey } from "./history-identity.ts";
+import type { CommitSummary, HistoryPath, HistoryQuery, HistoryRef } from "./models";
 
 export type HistoryDatePreset = "all" | "day" | "week";
 
@@ -12,6 +11,14 @@ export interface HistoryAuthorChoice {
 export interface HistoryTextResult {
   commits: CommitSummary[];
   error: string | null;
+}
+
+export function historyRefKey(reference: HistoryRef): string {
+  return `${encodeURIComponent(reference.repositoryId)}:${encodeURIComponent(reference.fullName)}`;
+}
+
+export function historyPathKey(path: HistoryPath): string {
+  return `${encodeURIComponent(path.repositoryId)}:${encodeURIComponent(path.path)}`;
 }
 
 export function defaultHistoryQuery(): HistoryQuery {

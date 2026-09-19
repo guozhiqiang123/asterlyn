@@ -2,7 +2,7 @@ import type {
   AppPreferences,
   LocalePreference,
   ThemePreference,
-} from "../workbench/preferences.ts";
+} from "../preferences.ts";
 
 export type EffectiveLocale = "en-US" | "zh-CN";
 export type EffectiveTheme = "dark" | "light";

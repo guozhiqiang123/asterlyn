@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   GitHistoryDetailsController,
 } from "../src/features/git-history/history-details-controller.ts";
-import { defaultHistoryQuery } from "../src/workbench/history-query.ts";
+import { defaultHistoryQuery } from "../src/history-query.ts";
 import { commitKey } from "../src/workbench/history-identity.ts";
 
 test("latest history query owns completion and rejects stale responses", async () => {

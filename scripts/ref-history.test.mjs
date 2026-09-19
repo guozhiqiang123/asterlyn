@@ -7,7 +7,7 @@ import {
   failRefHistory,
   installSnapshotHistory,
 } from "../src/workbench/ref-history.ts";
-import { defaultHistoryQuery } from "../src/workbench/history-query.ts";
+import { defaultHistoryQuery } from "../src/history-query.ts";
 
 const commit = (oid) => ({
   repositoryId: ".",

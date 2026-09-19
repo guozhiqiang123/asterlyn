@@ -15,7 +15,7 @@ import {
   type CommitFileTreeNode,
 } from "../../workbench/git-presentation.ts";
 import { isImagePreviewPath } from "../../workbench/image-preview.ts";
-import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,
   pushConfirmationAvailability,

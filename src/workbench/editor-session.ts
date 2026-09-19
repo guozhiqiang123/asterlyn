@@ -19,7 +19,7 @@ import {
   type EditorDocument,
   type ProjectFileDocument,
   type ProjectImageDocument,
-} from "./editor-document.ts";
+} from "../editor-document.ts";
 
 export const TEXT_TAB_LIMIT = 20;
 

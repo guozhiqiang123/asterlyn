@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { GitHistoryReadRuntime } from "../src/features/git-history/git-history-read-runtime.ts";
-import { defaultHistoryQuery } from "../src/workbench/history-query.ts";
+import { defaultHistoryQuery } from "../src/history-query.ts";
 
 test("Git History read runtime owns controller notifications and disposal", async () => {
   const notifications = [];

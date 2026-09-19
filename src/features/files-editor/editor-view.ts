@@ -1,14 +1,14 @@
 import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
 import type { ImagePreview } from "../../models.ts";
-import { editorDocumentKey, type EditorDocument } from "../../workbench/editor-document.ts";
+import { editorDocumentKey, type EditorDocument } from "../../editor-document.ts";
 import {
   isTextTabDirty,
   type EditorSession,
   type MarkdownEditorMode,
   type TextTabState,
 } from "../../workbench/editor-session.ts";
-import type { AppPreferences } from "../../workbench/preferences.ts";
+import type { AppPreferences } from "../../preferences.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 

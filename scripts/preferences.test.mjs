@@ -7,7 +7,7 @@ import {
   loadAppPreferences,
   saveAppPreferences,
   updateAppPreferences,
-} from "../src/workbench/preferences.ts";
+} from "../src/preferences.ts";
 
 function memoryStorage(value = null) {
   const values = new Map(value === null ? [] : [[APP_PREFERENCES_KEY, value]]);
