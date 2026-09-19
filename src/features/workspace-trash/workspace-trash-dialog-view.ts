@@ -1,7 +1,7 @@
 import type {
   WorkspaceTrashState,
   WorkspaceTrashTarget,
-} from "../application/workspace-trash-controller.ts";
+} from "../../application/workspace-trash-controller.ts";
 
 export interface WorkspaceTrashDialogCopy {
   readonly eyebrow: string;

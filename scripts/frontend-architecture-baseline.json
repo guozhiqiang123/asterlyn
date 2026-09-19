@@ -23,18 +23,7 @@
       "burnDownPhase": "reviewed localization data"
     }
   },
-  "dependencyDebt": [
-    {
-      "from": "src/shared/workspace-trash-dialog-binding.ts",
-      "to": "src/application/workspace-trash-controller.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
-      "from": "src/shared/workspace-trash-dialog-view.ts",
-      "to": "src/application/workspace-trash-controller.ts",
-      "burnDownPhase": "FH3"
-    }
-  ],
+  "dependencyDebt": [],
   "applicationDomDebt": {
     "src/application/window-session.ts": "FH3",
     "src/application/workspace-watch-coordinator.ts": "FH3"

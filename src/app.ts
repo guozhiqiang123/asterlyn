@@ -2,7 +2,7 @@ import type { GitWorktreeRecoveryDialog } from "./features/git-operations/git-wo
 import { bridge } from "./bridge";
 import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
 import { WorkspaceTrashController } from "./application/workspace-trash-controller.ts";
-import { WorkspaceTrashDialogBinding } from "./shared/workspace-trash-dialog-binding.ts";
+import { WorkspaceTrashDialogBinding } from "./features/workspace-trash/workspace-trash-dialog-binding.ts";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
 import {

@@ -7,7 +7,7 @@ import {
   projectTreeRows,
   renderProjectNavigation,
 } from "../src/features/files-editor/project-files-view.ts";
-import { renderWorkspaceTrashDialog } from "../src/shared/workspace-trash-dialog-view.ts";
+import { renderWorkspaceTrashDialog } from "../src/features/workspace-trash/workspace-trash-dialog-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { buildProjectTree } from "../src/workbench/project-tree.ts";
 

@@ -1,7 +1,7 @@
 import {
   WorkspaceTrashController,
   type WorkspaceTrashTarget,
-} from "../application/workspace-trash-controller.ts";
+} from "../../application/workspace-trash-controller.ts";
 import {
   renderWorkspaceTrashDialog,
   type WorkspaceTrashDialogCopy,
