@@ -198,6 +198,9 @@ subscriptions, and their coordinated disposal behind separate typed gateways. Th
 no longer retains release handles for either controller; `src/app.ts` is 8,863 lines with a
 matching ceiling.
 
+The Changes controller now has the same feature runtime lifecycle, including exclusive ownership
+of its subscription and disposal. `src/app.ts` is 8,859 lines with a matching ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
