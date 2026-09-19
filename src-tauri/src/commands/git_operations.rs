@@ -469,7 +469,7 @@ pub(crate) async fn prepare_git_operation(
                     single_target(&target_refs)?,
                     message.as_deref().unwrap_or_default(),
                 ),
-                GitOperationKind::Revert => repository.prepare_revert(single_target(&target_refs)?),
+                GitOperationKind::Revert => repository.prepare_reverts(&target_refs),
                 GitOperationKind::Bisect => Err(GitError::InvalidInput {
                     field: "operation kind".to_string(),
                     message: "Asterlyn cannot start this operation kind".to_string(),

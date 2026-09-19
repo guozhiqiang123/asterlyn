@@ -30,8 +30,23 @@ impl GitRepository {
         let current_head_oid = self.resolve_optional_commit("HEAD")?;
         let head_ref = self.symbolic_head_optional()?;
         let target_oids = operation_targets(self.git_directory(), kind);
-        let progress = operation_progress(self.git_directory(), kind);
-        let allowed_actions = allowed_actions(kind, conflicts.is_empty());
+        let completed_reverts = if kind == GitOperationKind::Revert {
+            match (
+                read_oid_file(&self.git_directory().join("sequencer/head")),
+                current_head_oid.as_deref(),
+            ) {
+                (Some(start), Some(current)) => self.first_parent_distance(&start, current)?,
+                _ => 0,
+            }
+        } else {
+            0
+        };
+        let progress = operation_progress(self.git_directory(), kind, completed_reverts);
+        let allowed_actions = allowed_actions(
+            kind,
+            conflicts.is_empty(),
+            progress.total.is_some_and(|total| total > 1),
+        );
         Ok(Some(GitOperationSnapshot {
             kind,
             phase: if conflicts.is_empty() {
@@ -65,7 +80,11 @@ impl GitRepository {
     }
 
     pub fn prepare_revert(&self, target_ref: &str) -> Result<GitOperationPlan, GitError> {
-        self.prepare_operation(GitOperationKind::Revert, &[target_ref.to_string()], None)
+        self.prepare_reverts(&[target_ref.to_string()])
+    }
+
+    pub fn prepare_reverts(&self, target_refs: &[String]) -> Result<GitOperationPlan, GitError> {
+        self.prepare_operation(GitOperationKind::Revert, target_refs, None)
     }
 
     pub fn prepare_squash(
@@ -111,7 +130,7 @@ impl GitRepository {
                 single_target(plan)?,
                 plan.message.as_deref().unwrap_or_default(),
             )?,
-            GitOperationKind::Revert => self.prepare_revert(single_target(plan)?)?,
+            GitOperationKind::Revert => self.prepare_reverts(&plan.target_refs)?,
             GitOperationKind::Bisect => {
                 return Err(GitError::InvalidInput {
                     field: "operation plan".to_string(),
@@ -418,22 +437,19 @@ impl GitRepository {
                 count
             }
             GitOperationKind::Revert => {
-                if target_refs.len() != 1 {
-                    return Err(GitError::InvalidInput {
-                        field: "operation targets".to_string(),
-                        message: "revert requires exactly one commit".to_string(),
-                    });
+                for oid in &target_oids {
+                    let parents = self.commit_parent_count(oid)?;
+                    if parents > 1 {
+                        return Err(GitError::UnsafeOperation {
+                            operation: "prepare revert".to_string(),
+                            message:
+                                "reverting a merge commit requires an explicit mainline parent"
+                                    .to_string(),
+                            blockers: Vec::new(),
+                        });
+                    }
                 }
-                let parents = self.commit_parent_count(&target_oids[0])?;
-                if parents > 1 {
-                    return Err(GitError::UnsafeOperation {
-                        operation: "prepare revert".to_string(),
-                        message: "reverting a merge commit requires an explicit mainline parent"
-                            .to_string(),
-                        blockers: Vec::new(),
-                    });
-                }
-                1
+                target_oids.len()
             }
             GitOperationKind::Bisect => unreachable!(),
         };
@@ -867,7 +883,11 @@ fn detect_operation_kind(git_dir: &Path) -> Option<GitOperationKind> {
     .map(|(_, kind)| kind)
 }
 
-fn allowed_actions(kind: GitOperationKind, conflicts_resolved: bool) -> Vec<GitOperationAction> {
+fn allowed_actions(
+    kind: GitOperationKind,
+    conflicts_resolved: bool,
+    multi_step: bool,
+) -> Vec<GitOperationAction> {
     let mut actions = Vec::new();
     if matches!(
         kind,
@@ -883,6 +903,9 @@ fn allowed_actions(kind: GitOperationKind, conflicts_resolved: bool) -> Vec<GitO
         kind,
         GitOperationKind::CherryPick | GitOperationKind::Rebase
     ) {
+        actions.push(GitOperationAction::Skip);
+    }
+    if kind == GitOperationKind::Revert && multi_step {
         actions.push(GitOperationAction::Skip);
     }
     if matches!(
@@ -968,7 +991,11 @@ fn operation_targets(git_dir: &Path, kind: GitOperationKind) -> Vec<String> {
     Vec::new()
 }
 
-fn operation_progress(git_dir: &Path, kind: GitOperationKind) -> GitOperationProgress {
+fn operation_progress(
+    git_dir: &Path,
+    kind: GitOperationKind,
+    completed_reverts: usize,
+) -> GitOperationProgress {
     if kind == GitOperationKind::Rebase {
         for directory in ["rebase-merge", "rebase-apply"] {
             let root = git_dir.join(directory);
@@ -985,12 +1012,20 @@ fn operation_progress(git_dir: &Path, kind: GitOperationKind) -> GitOperationPro
             }
         }
     }
-    if kind == GitOperationKind::CherryPick {
+    if matches!(
+        kind,
+        GitOperationKind::CherryPick | GitOperationKind::Revert
+    ) {
         let done = count_todo_lines(&git_dir.join("sequencer/done"));
         let remaining = count_todo_lines(&git_dir.join("sequencer/todo"));
-        let total = done + remaining;
+        let completed = if kind == GitOperationKind::Revert {
+            completed_reverts
+        } else {
+            done
+        };
+        let total = completed + remaining;
         return GitOperationProgress {
-            current: (total > 0).then_some((done + 1).min(total) as u32),
+            current: (total > 0).then_some((completed + 1).min(total) as u32),
             total: (total > 0).then_some(total as u32),
             detail: None,
         };
@@ -1301,7 +1336,7 @@ fn operation_summary(kind: GitOperationKind, targets: &[String], count: usize) -
             )
         }
         GitOperationKind::Squash => format!("Squash {count} commits after {}", targets[0]),
-        GitOperationKind::Revert => format!("Revert {} as a new commit", targets[0]),
+        GitOperationKind::Revert => format!("Revert {count} reviewed commit(s) as new commits"),
         GitOperationKind::Bisect => kind.label().to_string(),
     }
 }
@@ -1604,6 +1639,81 @@ mod tests {
         assert_ne!(oid(&fixture, "HEAD"), original_head);
         assert!(!fixture.path().join("file-1.txt").exists());
         assert!(git_stdout(&fixture, &["status", "--porcelain"]).is_empty());
+    }
+
+    #[test]
+    fn revert_applies_multiple_exact_commits_in_reviewed_order() {
+        let fixture = linear_fixture();
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let newest = oid(&fixture, "HEAD");
+        let older = oid(&fixture, "HEAD~1");
+        let plan = repository
+            .prepare_reverts(&[newest.clone(), older.clone()])
+            .expect("prepare reviewed reverts");
+        assert_eq!(plan.target_oids, vec![newest, older]);
+        assert_eq!(plan.commit_count, 2);
+
+        assert!(
+            repository
+                .execute_operation_plan(&plan)
+                .expect("execute reviewed reverts")
+                .is_none()
+        );
+        assert!(!fixture.path().join("file-2.txt").exists());
+        assert!(!fixture.path().join("file-1.txt").exists());
+        assert!(fixture.path().join("file-0.txt").exists());
+        assert_eq!(
+            git_stdout(&fixture, &["log", "-2", "--format=%s"]),
+            "Revert \"commit 1\"\nRevert \"commit 2\""
+        );
+    }
+
+    #[test]
+    fn multi_revert_conflict_is_restart_safe_and_can_skip_current_target() {
+        let fixture = initialized_fixture();
+        fs::write(fixture.path().join("shared.txt"), "base\n").unwrap();
+        commit_all(&fixture, "base");
+        fs::write(fixture.path().join("shared.txt"), "target\n").unwrap();
+        commit_all(&fixture, "older target");
+        let older = oid(&fixture, "HEAD");
+        fs::write(fixture.path().join("second.txt"), "second\n").unwrap();
+        commit_all(&fixture, "newer target");
+        let newer = oid(&fixture, "HEAD");
+        fs::write(fixture.path().join("shared.txt"), "later\n").unwrap();
+        commit_all(&fixture, "later change");
+
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let plan = repository
+            .prepare_reverts(&[newer, older])
+            .expect("prepare reviewed reverts");
+        let active = repository
+            .execute_operation_plan(&plan)
+            .expect("execute reviewed reverts")
+            .expect("second revert should conflict");
+        assert_eq!(active.kind, GitOperationKind::Revert);
+        assert_eq!(active.progress.total, Some(2));
+        assert!(active.allowed_actions.contains(&GitOperationAction::Skip));
+
+        let reopened = GitRepository::open(fixture.path()).expect("reopen repository");
+        assert!(
+            reopened
+                .operation_snapshot()
+                .unwrap()
+                .unwrap()
+                .allowed_actions
+                .contains(&GitOperationAction::Skip)
+        );
+        assert!(
+            reopened
+                .run_operation_action(GitOperationAction::Skip)
+                .expect("skip current revert")
+                .is_none()
+        );
+        assert!(!fixture.path().join("second.txt").exists());
+        assert_eq!(
+            fs::read_to_string(fixture.path().join("shared.txt")).unwrap(),
+            "later\n"
+        );
     }
 
     #[test]
