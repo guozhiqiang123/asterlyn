@@ -27,10 +27,12 @@ import {
   renderCommitFolderDetail,
 } from "./features/git-history/git-detail-view";
 import {
-  GitHistoryDetailsController,
   type GitHistoryDetailsState,
   type HistoryDetailsChange,
 } from "./features/git-history/history-details-controller";
+import {
+  GitHistoryReadRuntime,
+} from "./features/git-history/git-history-read-runtime.ts";
 import { HistoryDetailPresentationController } from "./features/git-history/history-detail-presentation-controller.ts";
 import {
   HistoryFilterController,
@@ -65,11 +67,8 @@ import {
 } from "./features/git-history/history-range-context.ts";
 import { HistoryCommitRangeContextActions } from "./features/git-history/history-range-context-actions.ts";
 import {
-  HistoryComparisonController,
   type HistoryComparisonChange,
 } from "./features/git-history/history-comparison-controller.ts";
-import { HistoricalFileController } from "./features/git-history/historical-file-controller.ts";
-import { HistoricalFileComparisonController } from "./features/git-history/historical-file-comparison-controller.ts";
 import {
   CommitDetailContextBinding,
   resolveCommitDetailContextTarget,
@@ -414,15 +413,8 @@ export class AsterlynApp {
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private comparisonDetailFocus: "swap" | "retry" | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
-  private readonly historyController: GitHistoryDetailsController;
+  private readonly historyReadRuntime: GitHistoryReadRuntime;
   private readonly historyRangeSelection = new HistoryRangeSelectionController();
-  private readonly releaseHistoryController: () => void;
-  private readonly historyComparisonController: HistoryComparisonController;
-  private readonly releaseHistoryComparisonController: () => void;
-  private readonly historicalFileController: HistoricalFileController;
-  private readonly releaseHistoricalFileController: () => void;
-  private readonly historicalFileComparisonController: HistoricalFileComparisonController;
-  private readonly releaseHistoricalFileComparisonController: () => void;
   private readonly commitFolderDiffController = new CommitFolderDiffController();
   private readonly commitFolderContextActions: CommitFolderContextActions;
   private readonly commitFileContextActions: CommitFileContextActions;
@@ -570,37 +562,36 @@ export class AsterlynApp {
       status: (message, kind) => this.setStatus(message, kind),
       error: (error) => this.showError(error),
     });
-    this.historyController = new GitHistoryDetailsController(
+    this.historyReadRuntime = new GitHistoryReadRuntime(
       {
-        readHistoryPage: (repositoryRoot, query, offset, limit) =>
-          bridge.readHistoryPage(repositoryRoot, query, offset, limit),
-        readCommitDetails: (repositoryRoot, repositoryId, oid) =>
-          bridge.readCommitDetails(repositoryRoot, repositoryId, oid),
+        details: {
+          readHistoryPage: (repositoryRoot, query, offset, limit) =>
+            bridge.readHistoryPage(repositoryRoot, query, offset, limit),
+          readCommitDetails: (repositoryRoot, repositoryId, oid) =>
+            bridge.readCommitDetails(repositoryRoot, repositoryId, oid),
+        },
+        comparison: {
+          readCommitComparisonDetails: (...args) => bridge.readCommitComparisonDetails(...args),
+        },
+        historicalFile: {
+          readCommitFile: (...args) => bridge.readCommitFile(...args),
+        },
+        historicalFileComparison: {
+          compareCommitFileToCurrent: (...args) => bridge.compareCommitFileToCurrent(...args),
+        },
       },
       { rowLimit: HISTORY_ROW_LIMIT, messages: initialCatalog.history },
-    );
-    this.releaseHistoryController = this.historyController.subscribe((change) =>
-      this.handleHistoryControllerChange(change),
-    );
-    this.historyComparisonController = new HistoryComparisonController({
-      readCommitComparisonDetails: (...args) => bridge.readCommitComparisonDetails(...args),
-    });
-    this.releaseHistoryComparisonController = this.historyComparisonController.subscribe(
-      (change) => this.handleHistoryComparisonChange(change),
-    );
-    this.historicalFileController = new HistoricalFileController({
-      readCommitFile: (...args) => bridge.readCommitFile(...args),
-    });
-    this.releaseHistoricalFileController = this.historicalFileController.subscribe(() => {
-      if (this.activeDocument().kind === "historical-file") this.renderEditor();
-    });
-    this.historicalFileComparisonController = new HistoricalFileComparisonController({
-      compareCommitFileToCurrent: (...args) => bridge.compareCommitFileToCurrent(...args),
-    });
-    this.releaseHistoricalFileComparisonController =
-      this.historicalFileComparisonController.subscribe(() => {
+      {
+        detailsChanged: (change) => this.handleHistoryControllerChange(change),
+        comparisonChanged: (change) => this.handleHistoryComparisonChange(change),
+        historicalFileChanged: () => {
+          if (this.activeDocument().kind === "historical-file") this.renderEditor();
+        },
+        historicalFileComparisonChanged: () => {
         if (this.activeDocument().kind === "historical-file-comparison") this.renderEditor();
-      });
+        },
+      },
+    );
     this.commitFileRestoreController = new CommitFileRestoreController({
       prepare: (...args) => bridge.prepareCommitFileRestore(...args),
       execute: (...args) => bridge.executeCommitFileRestore(...args),
@@ -963,7 +954,7 @@ export class AsterlynApp {
         remote: this.remoteController,
         changes: this.changesController,
         files: this.filesController,
-        history: this.historyController,
+        history: this.historyReadRuntime.details,
         operations: this.gitOperationController,
       },
       {
@@ -978,7 +969,7 @@ export class AsterlynApp {
           if (isSnapshotHistoryQuery(query)) {
             this.installSnapshotHistory(snapshot, false, true);
           } else {
-            this.historyController.loadQuery(snapshot.root, query);
+            this.historyReadRuntime.details.loadQuery(snapshot.root, query);
           }
         },
         reconcileWorkingDocument: (snapshot, reloadIfValid) =>
@@ -1410,7 +1401,7 @@ export class AsterlynApp {
   }
 
   private get historyState(): GitHistoryDetailsState {
-    return this.historyController.state;
+    return this.historyReadRuntime.details.state;
   }
 
   private get remoteState(): RemotePushState {
@@ -1577,7 +1568,7 @@ export class AsterlynApp {
   private handleHistoryComparisonChange(change: HistoryComparisonChange): void {
     if (change.reason === "load-start") this.clearComparisonDiffInspection();
     if (change.reason === "file-selection") {
-      const path = this.historyComparisonController.state.selectedFile;
+      const path = this.historyReadRuntime.comparison.state.selectedFile;
       if (path) this.updateComparisonFileSelection(path);
       return;
     }
@@ -1653,7 +1644,7 @@ export class AsterlynApp {
       this.filesController.setMessages(catalog.editor);
       this.editorController.setMessages(catalog.editor);
       this.changesController.setMessages(catalog.changes);
-      this.historyController.setMessages(catalog.history);
+      this.historyReadRuntime.details.setMessages(catalog.history);
       this.remoteController.setMessages(catalog.remote, catalog.errors);
       this.remoteAuthenticationController.setMessages(catalog.remote, catalog.errors);
       this.gitOperationController.setMessages(catalog.gitOperations);
@@ -1841,14 +1832,7 @@ export class AsterlynApp {
     this.workspaceSearchController.dispose();
     this.workspaceReplacementController.dispose();
     this.repositoryIntegration.dispose();
-    this.releaseHistoryController();
-    this.historyController.dispose();
-    this.releaseHistoryComparisonController();
-    this.historyComparisonController.dispose();
-    this.releaseHistoricalFileController();
-    this.historicalFileController.dispose();
-    this.releaseHistoricalFileComparisonController();
-    this.historicalFileComparisonController.dispose();
+    this.historyReadRuntime.dispose();
     this.commitFileRestoreDialogBinding.dispose();
     this.commitFileRestoreController.dispose();
     this.releaseRemoteController();
@@ -2212,9 +2196,9 @@ export class AsterlynApp {
       });
       this.historyFilters.resetWorkspace();
       this.closeHistoryDialogHost();
-      this.historyComparisonController.clear();
-      this.historicalFileController.clear();
-      this.historicalFileComparisonController.clear();
+      this.historyReadRuntime.comparison.clear();
+      this.historyReadRuntime.historicalFile.clear();
+      this.historyReadRuntime.historicalFileComparison.clear();
       this.clearComparisonDiffInspection();
       this.commitFolderDiffController.clear();
       this.historyDetailPresentation.resetWorkspace();
@@ -2224,7 +2208,7 @@ export class AsterlynApp {
         this.installSnapshotHistory(snapshot, true);
         this.loadHistoryPreferences(snapshot);
       } else {
-        this.historyController.clear();
+        this.historyReadRuntime.details.clear();
         this.shellController.setLayout({
           ...this.shellState.layout,
           leftTool: "files",
@@ -4303,7 +4287,7 @@ export class AsterlynApp {
         if (firstKey) this.focusHistoryCommit(firstKey);
       },
       retryPaging: () => {
-        this.historyController.retryPaging();
+        this.historyReadRuntime.details.retryPaging();
       },
       scroll: (host) => this.handleHistoryScroll(host),
     });
@@ -4449,7 +4433,7 @@ export class AsterlynApp {
     this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "branches" }, true);
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
-    this.historyController.loadQuery(snapshot.root, this.activeHistoryQuery());
+    this.historyReadRuntime.details.loadQuery(snapshot.root, this.activeHistoryQuery());
     this.renderBottomTool();
     queueMicrotask(() => this.root.querySelector<HTMLElement>("#history-results")?.focus());
   }
@@ -5498,7 +5482,7 @@ export class AsterlynApp {
   }
 
   private handleHistoryScroll(results: HTMLElement): void {
-    this.historyController.handleScroll({
+    this.historyReadRuntime.details.handleScroll({
       scrollTop: results.scrollTop,
       scrollHeight: results.scrollHeight,
       clientHeight: results.clientHeight,
@@ -5526,12 +5510,12 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
     if (this.historyDetailState.gitDetail === "comparison") {
-      this.historyComparisonController.clear();
+      this.historyReadRuntime.comparison.clear();
       this.clearComparisonDiffInspection();
     }
     if (this.historyDetailState.gitDetail === "folder") this.commitFolderDiffController.clear();
     this.historyDetailPresentation.show("commit");
-    if (!this.historyController.selectCommit(snapshot.root, key, true)) return;
+    if (!this.historyReadRuntime.details.selectCommit(snapshot.root, key, true)) return;
     this.updateHistoryCommitSelection(key);
     this.renderGitDetailPane();
     if (restoreFocus) this.focusHistoryCommit(key);
@@ -5579,7 +5563,7 @@ export class AsterlynApp {
     this.commitFolderDiffController.clear();
     this.historyDetailPresentation.expandDirectories();
     this.historyDetailPresentation.show("comparison");
-    this.historyComparisonController.open({
+    this.historyReadRuntime.comparison.open({
       workspaceRoot: target.workspaceRoot,
       workspaceGeneration: target.workspaceGeneration,
       repositoryRevision: target.repositoryRevision,
@@ -5774,7 +5758,7 @@ export class AsterlynApp {
       );
       return;
     }
-    this.historyComparisonController.clear();
+    this.historyReadRuntime.comparison.clear();
     this.clearComparisonDiffInspection();
     this.commitFolderDiffController.open(target);
     this.historyDetailPresentation.expandDirectories();
@@ -6245,7 +6229,7 @@ export class AsterlynApp {
 
   private renderHistoricalFile(document: HistoricalFileDocument): void {
     const copy = this.localization.catalog.editor;
-    const state = this.historicalFileController.state;
+    const state = this.historyReadRuntime.historicalFile.state;
     const matches = state.document !== null &&
       editorDocumentKey(state.document) === editorDocumentKey(document);
     this.query("#content-header").innerHTML = `
@@ -6302,12 +6286,12 @@ export class AsterlynApp {
     this.captureMountedTextEditor();
     this.editorController.activatePreview({ ...document });
     this.renderEditor();
-    void this.historicalFileController.open(document);
+    void this.historyReadRuntime.historicalFile.open(document);
   }
 
   private renderHistoricalFileComparison(document: HistoricalFileComparisonDocument): void {
     const copy = this.localization.catalog.editor;
-    const state = this.historicalFileComparisonController.state;
+    const state = this.historyReadRuntime.historicalFileComparison.state;
     const matches = state.document !== null &&
       editorDocumentKey(state.document) === editorDocumentKey(document);
     const currentLabel = document.currentSource === "buffer"
@@ -6422,7 +6406,7 @@ export class AsterlynApp {
     } : null;
     this.editorController.activatePreview(document);
     this.renderEditor();
-    void this.historicalFileComparisonController.open(document, buffer);
+    void this.historyReadRuntime.historicalFileComparison.open(document, buffer);
   }
 
   private showEditorHtml(key: string, html: string): void {
@@ -6558,7 +6542,7 @@ export class AsterlynApp {
       );
     }
     if (document.kind === "commit-comparison-diff") {
-      const file = this.historyComparisonController.state.details?.files.find(
+      const file = this.historyReadRuntime.comparison.state.details?.files.find(
         (candidate) => candidate.path === document.path,
       ) ?? { path: document.path, originalPath: null, status: "modified" as const };
       return this.comparisonDiffBlameSources(document, file);
@@ -7034,7 +7018,7 @@ export class AsterlynApp {
       ? this.windowSession.repository.state.snapshot?.changes.map((change) => change.path) ?? []
       : document.kind === "commit-diff"
         ? this.commitDiffFileRange(document).map((file) => file.path)
-        : this.historyComparisonController.state.details?.files.map((file) => file.path) ?? [];
+        : this.historyReadRuntime.comparison.state.details?.files.map((file) => file.path) ?? [];
     const current = document.kind === "working-diff" ? document.selection.path : document.path;
     return adjacentDiffItem(paths, current, direction);
   }
@@ -7220,7 +7204,7 @@ export class AsterlynApp {
       this.shellState.layout.bottomTool === "branches" &&
       this.historyDetailState.gitDetail === "commit"
     ) {
-      this.historyController.ensureSelectedDetails(snapshot.root);
+      this.historyReadRuntime.details.ensureSelectedDetails(snapshot.root);
     }
   }
 
@@ -7407,7 +7391,7 @@ export class AsterlynApp {
     this.root.querySelector<HTMLButtonElement>("#comparison-file-collapse-all")?.addEventListener(
       "click",
       () => {
-        const details = this.historyComparisonController.state.details;
+        const details = this.historyReadRuntime.comparison.state.details;
         if (!details) return;
         this.historyDetailPresentation.collapseDirectories([
           ".",
@@ -7422,14 +7406,14 @@ export class AsterlynApp {
       () => {
         this.comparisonDetailFocus = "swap";
         this.historyDetailPresentation.expandDirectories();
-        this.historyComparisonController.swap();
+        this.historyReadRuntime.comparison.swap();
       },
     );
     this.root.querySelector<HTMLButtonElement>("#retry-commit-comparison")?.addEventListener(
       "click",
       () => {
         this.comparisonDetailFocus = "retry";
-        this.historyComparisonController.retry();
+        this.historyReadRuntime.comparison.retry();
       },
     );
     const splitter = this.root.querySelector<HTMLElement>("#commit-summary-splitter");
@@ -7529,7 +7513,7 @@ export class AsterlynApp {
       !target.descendants.some((file) => file.path === path)
     ) return;
     const file = this.commitFolderDiffController.selectFile(path);
-    if (!file || !this.historyController.selectFile(path)) return;
+    if (!file || !this.historyReadRuntime.details.selectFile(path)) return;
     this.activateDiffPreview({
       kind: "commit-diff",
       repositoryRoot: snapshot.root,
@@ -7576,8 +7560,8 @@ export class AsterlynApp {
 
   private selectComparisonFile(path: string, restoreFocus: boolean): void {
     const snapshot = this.windowSession.repository.state.snapshot;
-    const details = this.historyComparisonController.state.details;
-    const file = this.historyComparisonController.selectFile(path);
+    const details = this.historyReadRuntime.comparison.state.details;
+    const file = this.historyReadRuntime.comparison.selectFile(path);
     if (!snapshot || !details || !file) return;
     this.historyDetailPresentation.show("comparison");
     this.activateDiffPreview({
@@ -7595,7 +7579,7 @@ export class AsterlynApp {
 
   private async loadSelectedComparisonDiff(restoreFocus = false): Promise<void> {
     const snapshot = this.windowSession.repository.state.snapshot;
-    const comparison = this.historyComparisonController.state;
+    const comparison = this.historyReadRuntime.comparison.state;
     const details = comparison.details;
     const file = details?.files.find((candidate) => candidate.path === comparison.selectedFile);
     const document = this.activeDocument();
@@ -7638,8 +7622,8 @@ export class AsterlynApp {
         const active = this.activeDocument();
         if (
           !this.historyDetailPresentation.comparisonPatchIsCurrent(generation) ||
-          this.historyComparisonController.state.details !== details ||
-          this.historyComparisonController.state.selectedFile !== file.path ||
+          this.historyReadRuntime.comparison.state.details !== details ||
+          this.historyReadRuntime.comparison.state.selectedFile !== file.path ||
           active.kind !== "commit-comparison-diff" ||
           editorDocumentKey(active) !== imageKey ||
           diff.path !== file.path
@@ -7669,8 +7653,8 @@ export class AsterlynApp {
       const active = this.activeDocument();
       if (
         !this.historyDetailPresentation.comparisonPatchIsCurrent(generation) ||
-        this.historyComparisonController.state.details !== details ||
-        this.historyComparisonController.state.selectedFile !== file.path ||
+        this.historyReadRuntime.comparison.state.details !== details ||
+        this.historyReadRuntime.comparison.state.selectedFile !== file.path ||
         active.kind !== "commit-comparison-diff" ||
         active.repositoryId !== details.repositoryId ||
         active.beforeOid !== details.beforeOid ||
@@ -7689,8 +7673,8 @@ export class AsterlynApp {
       const active = this.activeDocument();
       if (
         !this.historyDetailPresentation.comparisonPatchIsCurrent(generation) ||
-        this.historyComparisonController.state.details !== details ||
-        this.historyComparisonController.state.selectedFile !== file.path ||
+        this.historyReadRuntime.comparison.state.details !== details ||
+        this.historyReadRuntime.comparison.state.selectedFile !== file.path ||
         active.kind !== "commit-comparison-diff" ||
         active.repositoryId !== details.repositoryId ||
         active.beforeOid !== details.beforeOid ||
@@ -7771,7 +7755,7 @@ export class AsterlynApp {
     if (!snapshot || !details || !details.files.some((file) => file.path === path)) {
       return;
     }
-    if (!this.historyController.selectFile(path)) return;
+    if (!this.historyReadRuntime.details.selectFile(path)) return;
     this.historyDetailPresentation.show("commit");
     this.activateDiffPreview({
       kind: "commit-diff",
@@ -7823,7 +7807,7 @@ export class AsterlynApp {
     preserveFilters = false,
   ): void {
     if (!preserveFilters) this.resetHistoryFilters();
-    this.historyController.installSnapshot(
+    this.historyReadRuntime.details.installSnapshot(
       snapshot.root,
       snapshot.commits,
       this.activeHistoryQuery(),
@@ -7881,7 +7865,7 @@ export class AsterlynApp {
       this.loadVisibleCommitDetails();
       return;
     }
-    this.historyController.loadQuery(snapshot.root, query);
+    this.historyReadRuntime.details.loadQuery(snapshot.root, query);
     this.renderHistoryPane();
     this.renderGitDetailPane();
   }
@@ -8107,7 +8091,7 @@ export class AsterlynApp {
 
   private renderGitDetail(snapshot: RepositorySnapshot): string {
     if (this.historyDetailState.gitDetail === "comparison") {
-      const comparison = this.historyComparisonController.state;
+      const comparison = this.historyReadRuntime.comparison.state;
       const request = comparison.request;
       if (!request) return inspectorPlaceholder(this.localization);
       return renderCommitComparisonDetail({
@@ -8229,7 +8213,7 @@ export class AsterlynApp {
       .querySelector<HTMLButtonElement>("#retry-commit-details")
       ?.addEventListener("click", () => {
         const root = this.windowSession.repository.state.snapshot?.root;
-        if (root) this.historyController.retryDetails(root);
+        if (root) this.historyReadRuntime.details.retryDetails(root);
       });
     const splitter = this.root.querySelector<HTMLElement>("#commit-summary-splitter");
     const layout = this.root.querySelector<HTMLElement>(".commit-detail-layout");

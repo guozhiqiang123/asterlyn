@@ -179,7 +179,11 @@ presentation state. After this slice, `src/app.ts` is 8,980 lines and its ceilin
 lowered to match. Quick-open mode, query, and selection now have one
 `CommandSurfaceController` owner in `files-editor`; the remaining `AppState` contains only the
 window-wide loading and error status. After that slice, `src/app.ts` is 8,961 lines with a matching
-non-growing ceiling.
+non-growing ceiling. Git History's details, comparison, historical-file, and historical-file
+comparison controllers now share one feature-owned read runtime. That runtime owns their
+subscriptions and disposal behind explicit gateway and notification ports; `AsterlynApp` no longer
+manages four parallel lifecycles. After this first composition slice, `src/app.ts` is 8,945 lines
+with a matching ceiling.
 
 Extract vertical slices in this order:
 
