@@ -709,7 +709,7 @@ mod tests {
             workspace
                 .resolve_existing_entry("folder/file.txt", WorkspaceEntryKind::File)
                 .unwrap(),
-            directory.path().join("folder/file.txt")
+            workspace.root().join("folder/file.txt")
         );
         assert!(matches!(
             workspace.resolve_existing_entry("folder/file.txt", WorkspaceEntryKind::Directory),

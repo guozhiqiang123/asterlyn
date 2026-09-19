@@ -926,12 +926,38 @@ fn io_skip_reason(error: &std::io::Error) -> SearchSkipReason {
 
 fn io_message_skip_reason(message: &str) -> SearchSkipReason {
     let lower = message.to_ascii_lowercase();
-    if lower.contains("not found") || lower.contains("no such file") {
+    if lower.contains("not found")
+        || lower.contains("no such file")
+        || raw_os_error_skip_reason(&lower) == Some(SearchSkipReason::NotFound)
+    {
         SearchSkipReason::NotFound
-    } else if lower.contains("permission denied") || lower.contains("access is denied") {
+    } else if lower.contains("permission denied")
+        || lower.contains("access is denied")
+        || raw_os_error_skip_reason(&lower) == Some(SearchSkipReason::PermissionDenied)
+    {
         SearchSkipReason::PermissionDenied
     } else {
         SearchSkipReason::Io
+    }
+}
+
+fn raw_os_error_skip_reason(message: &str) -> Option<SearchSkipReason> {
+    let code = message
+        .strip_suffix(')')?
+        .rsplit_once("(os error ")?
+        .1
+        .parse::<i32>()
+        .ok()?;
+    match code {
+        // ENOENT and ERROR_FILE_NOT_FOUND share the same numeric value.
+        2 => Some(SearchSkipReason::NotFound),
+        #[cfg(windows)]
+        3 => Some(SearchSkipReason::NotFound),
+        #[cfg(windows)]
+        5 => Some(SearchSkipReason::PermissionDenied),
+        #[cfg(unix)]
+        1 | 13 => Some(SearchSkipReason::PermissionDenied),
+        _ => None,
     }
 }
 
@@ -955,6 +981,34 @@ fn push_coverage(report: &mut WorkspaceSearchReport, reason: SearchCoverageReaso
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn classifies_stable_raw_os_error_codes_without_localized_message_text() {
+        assert_eq!(
+            io_message_skip_reason("localized message (os error 2)"),
+            SearchSkipReason::NotFound
+        );
+
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                io_message_skip_reason("localized message (os error 3)"),
+                SearchSkipReason::NotFound
+            );
+            assert_eq!(
+                io_message_skip_reason("localized message (os error 5)"),
+                SearchSkipReason::PermissionDenied
+            );
+        }
+
+        #[cfg(unix)]
+        {
+            assert_eq!(
+                io_message_skip_reason("localized message (os error 13)"),
+                SearchSkipReason::PermissionDenied
+            );
+        }
+    }
 
     fn limits() -> SearchLimits {
         SearchLimits {
