@@ -351,6 +351,14 @@ Tauri application-data directory lookup for replacement and mutation recovery no
 `adapters/recovery_paths.rs` platform boundary. The crate root no longer owns recovery filesystem
 policy; commands compose the resulting platform path with the application services.
 
+Historical commit-file restoration is now a complete application service rather than a registry
+with command-owned policy. Preparation, Git identity revalidation, serialized execution, recovery
+operations, preview mapping, and supported-mode validation live together in
+`application/commit_file_restore.rs`; its Tauri recovery-directory lookup joins the shared recovery
+path adapter. The command module now resolves the active Git session and dispatches only. A new
+Tauri-free service test prepares and executes a reviewed historical-file restore against a real Git
+fixture, bringing the desktop suite to 54 passing tests plus the two native watcher acceptances.
+
 Workspace entry inspection plus create/copy/move/trash planning and execution now belong to the
 existing `application/workspace_mutation.rs` coordinator boundary. Mutation limits, preview DTOs,
 write serialization, cancellation, and operation dispatch are Tauri-independent; the desktop edge

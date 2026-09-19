@@ -11,7 +11,11 @@ mod workspace_search;
 mod workspace_session;
 mod workspace_watch;
 
-pub(crate) use commit_file_restore::{CommitFileRestoreRegistry, StoredCommitFileRestorePlan};
+pub(crate) use commit_file_restore::{
+    CommitFileRestorePreview, CommitFileRestoreRegistry, execute_commit_file_restore_plan,
+    finalize_commit_file_restore, list_commit_file_restore_recoveries,
+    prepare_commit_file_restore_plan, rollback_commit_file_restore,
+};
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
