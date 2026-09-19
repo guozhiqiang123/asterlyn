@@ -219,7 +219,7 @@ import {
   type WorkspaceMutationReconciliationResult,
 } from "./application/workspace-mutation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
-import { createAppState, type AppState } from "./application/app-state";
+import { createAppState, type AppState } from "./app-state";
 import { WorkspaceWatchCoordinator } from "./application/workspace-watch-coordinator";
 import { workspaceWatchBridge } from "./workspace-watch-bridge";
 import type { DiffLayout, DiffPresentation } from "./diff-presentation";

@@ -1,29 +1,29 @@
-import type { HistoryFilterMenu } from "../features/git-history/history-navigation-view.ts";
+import type { HistoryFilterMenu } from "./features/git-history/history-navigation-view.ts";
 import {
   createHistoryFilterState,
   type HistoryFilterState,
-} from "../features/git-history/history-filter-controller.ts";
+} from "./features/git-history/history-filter-controller.ts";
 import type {
   CommitComparisonDiffResult,
   CommitDiffResult,
   HistoryPath,
   HistoryRef,
-} from "../models.ts";
-import type { CommitFileView } from "../workbench/git-presentation.ts";
+} from "./models.ts";
+import type { CommitFileView } from "./workbench/git-presentation.ts";
 import {
   createCommandSurfaceState,
   type CommandSurfaceState,
-} from "../workbench/navigation.ts";
+} from "./workbench/navigation.ts";
 import {
   createWorkspaceReplacementState,
   type WorkspaceReplacementState,
-} from "../workbench/workspace-replacement.ts";
+} from "./workbench/workspace-replacement.ts";
 import {
   createWorkspaceSearchControls,
   createWorkspaceSearchState,
   type WorkspaceSearchControls,
   type WorkspaceSearchState,
-} from "../workbench/workspace-search.ts";
+} from "./workbench/workspace-search.ts";
 
 export interface AppState extends HistoryFilterState {
   gitDetail: "branch" | "commit" | "comparison" | "folder";

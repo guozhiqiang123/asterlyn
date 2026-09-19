@@ -25,16 +25,6 @@
   },
   "dependencyDebt": [
     {
-      "from": "src/application/app-state.ts",
-      "to": "src/features/git-history/history-filter-controller.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
-      "from": "src/application/app-state.ts",
-      "to": "src/features/git-history/history-navigation-view.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
       "from": "src/protocol/desktop-bridge.ts",
       "to": "src/workbench/window-chrome.ts",
       "burnDownPhase": "FH3"
