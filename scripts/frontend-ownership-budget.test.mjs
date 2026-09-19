@@ -80,6 +80,17 @@ test("workspace search state has one feature owner", async () => {
   assert.match(controller, /private value: WorkspaceSearchControllerState/);
 });
 
+test("workspace replacement state has one feature owner", async () => {
+  const appState = await readFile(path.join(repositoryRoot, "src/app-state.ts"), "utf8");
+  const controller = await readFile(
+    path.join(repositoryRoot, "src/features/files-editor/workspace-replacement-controller.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(appState, /workspaceReplacement|replacementDialog|replacementRecoveryBusy/);
+  assert.match(controller, /class WorkspaceReplacementController/);
+  assert.match(controller, /private value: WorkspaceReplacementControllerState/);
+});
+
 async function typescriptFiles(roots) {
   const files = [];
   for (const root of roots) {

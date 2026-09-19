@@ -164,9 +164,11 @@ cross-import free; all cross-feature calls pass through typed ports.
 ### FH4 — Complete feature-owned state and shrink the composition root
 
 Progress: Files Search controls, request identity, result/error state, cancellation, and stale
-completion acceptance now have one `WorkspaceSearchController` owner in `files-editor`. The mixed
-`AppState` no longer stores Search state, and the architecture test prevents that ownership from
-returning to the composition root.
+completion acceptance now have one `WorkspaceSearchController` owner in `files-editor`. Replacement
+text, preview/apply state, file selection, recovery inventory/dialog state, and operation busy
+identity likewise have one `WorkspaceReplacementController` owner. The mixed `AppState` no longer
+stores Search or Replacement state, and architecture tests prevent that ownership from returning
+to the composition root.
 
 Extract vertical slices in this order:
 

@@ -335,18 +335,7 @@ import {
 import { evaluateSearchNavigation } from "./workbench/search-navigation";
 import type { WorkspaceSearchControls } from "./workbench/workspace-search";
 import { WorkspaceSearchController } from "./features/files-editor/workspace-search-controller";
-import {
-  beginReplacementApply,
-  beginReplacementPreview,
-  closeReplacementPreview,
-  completeReplacementApply,
-  completeReplacementPreview,
-  createWorkspaceReplacementState,
-  failReplacement,
-  selectAllReplacementFiles,
-  setReplacementRecoveries,
-  toggleReplacementFile,
-} from "./workbench/workspace-replacement";
+import { WorkspaceReplacementController } from "./features/files-editor/workspace-replacement-controller";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
@@ -367,7 +356,6 @@ import type {
   ProjectFile,
   PushMode,
   PushTagMode,
-  ReplacementApplyResult,
   RepositoryMutationOutcome,
   RepositorySnapshot,
   WorkspaceMutationOutcome,
@@ -512,6 +500,9 @@ export class AsterlynApp {
     },
   );
   private readonly workspaceSearchController = new WorkspaceSearchController(
+    this.workspaceOperations,
+  );
+  private readonly workspaceReplacementController = new WorkspaceReplacementController(
     this.workspaceOperations,
   );
   private readonly repositoryOperations = new RepositoryOperationCoordinator(this.windowSession);
@@ -935,7 +926,7 @@ export class AsterlynApp {
               this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
             restoreBlockedReason: this.commitFileRestoreBlockReason(target.workspacePath),
             busy: this.state.loading || this.projectFilesOperations.busy ||
-              this.state.replacementDialog !== null,
+              this.workspaceReplacementController.state.dialog !== null,
             busyReason: this.localization.catalog.history.commitFileContextMenu.restoreBusy,
           });
         },
@@ -1025,7 +1016,8 @@ export class AsterlynApp {
           });
           void this.loadSelectedDiff();
         },
-        replacementRecoveryCount: () => this.state.workspaceReplacement.recoveries.length,
+        replacementRecoveryCount: () =>
+          this.workspaceReplacementController.state.replacement.recoveries.length,
         setStatus: (message, kind) => this.setStatus(message, kind),
         reportError: (error) => this.showError(error),
         messages: () => ({
@@ -1320,9 +1312,9 @@ export class AsterlynApp {
       remoteActionsMenuOpen: () => this.shellState.remoteActionsMenuOpen,
       settingsOpen: () => this.shellState.page === "settings",
       replacementClosable: () => Boolean(
-        this.state.replacementDialog &&
-        this.state.workspaceReplacement.status !== "applying" &&
-        !this.state.replacementRecoveryBusy
+        this.workspaceReplacementController.state.dialog &&
+        this.workspaceReplacementController.state.replacement.status !== "applying" &&
+        !this.workspaceReplacementController.state.recoveryBusy
       ),
       commandSurfaceOpen: () => this.state.commandSurface.mode !== null,
       historyFilterOpen: () => this.state.historyFilterMenu !== null,
@@ -1694,7 +1686,9 @@ export class AsterlynApp {
     if (this.shellState.layout.leftTool) this.renderLeftTool();
     this.relocalizeBottomTool();
     if (this.state.commandSurface.mode) this.renderCommandSurface();
-    if (this.state.replacementDialog) this.renderWorkspaceReplacementDialog();
+    if (this.workspaceReplacementController.state.dialog) {
+      this.renderWorkspaceReplacementDialog();
+    }
     if (this.state.historyDialog) this.renderHistoryDialog();
     if (this.gitOperationState.dialog) this.gitOperationDialogBinding.render();
     this.branchMutationDialogBinding.refreshCopy();
@@ -1851,6 +1845,7 @@ export class AsterlynApp {
     this.workspaceWatch.dispose();
     this.workspaceMutations.dispose();
     this.workspaceSearchController.dispose();
+    this.workspaceReplacementController.dispose();
     this.repositoryIntegration.dispose();
     this.releaseHistoryController();
     this.historyController.dispose();
@@ -2185,10 +2180,7 @@ export class AsterlynApp {
     this.projectFilesOperations.reset();
     this.contextMenuHost.close();
     this.workspaceSearchController.invalidate();
-    this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceReplacement = createWorkspaceReplacementState();
-    this.state.replacementDialog = null;
-    this.state.replacementRecoveryBusy = null;
+    this.workspaceReplacementController.reset();
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
@@ -2281,10 +2273,7 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot || this.state.loading) return;
     this.workspaceSearchController.invalidate();
-    this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceReplacement = createWorkspaceReplacementState();
-    this.state.replacementDialog = null;
-    this.state.replacementRecoveryBusy = null;
+    this.workspaceReplacementController.reset();
     this.state.commandSurface = closeCommandSurface(this.state.commandSurface);
     this.commandSurfaceReturnFocus = null;
     this.renderCommandSurface();
@@ -2402,8 +2391,9 @@ export class AsterlynApp {
       workspaceSearch: this.workspaceSearchController.state.search,
       workspaceSearchControls: this.workspaceSearchController.state.controls,
       searchRequestIsCurrent: this.workspaceSearchRequestIsCurrent(),
-      replacementText: this.state.replacementText,
-      replacementRecoveryCount: this.state.workspaceReplacement.recoveries.length,
+      replacementText: this.workspaceReplacementController.state.text,
+      replacementRecoveryCount:
+        this.workspaceReplacementController.state.replacement.recoveries.length,
       copy: this.localization.catalog.navigation,
     };
   }
@@ -2512,7 +2502,7 @@ export class AsterlynApp {
       .querySelector<HTMLInputElement>("#workspace-replacement-text")
       ?.addEventListener("input", (event) => {
         const target = event.currentTarget as HTMLInputElement;
-        this.state.replacementText = target.value;
+        this.workspaceReplacementController.setText(target.value);
         this.invalidateWorkspaceReplacementPreview();
       });
     this.root
@@ -2521,7 +2511,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#workspace-recovery-open")
       ?.addEventListener("click", () => {
-        this.state.replacementDialog = "recovery";
+        this.workspaceReplacementController.openRecoveries();
         this.renderWorkspaceReplacementDialog();
       });
     this.bindCommandSurfaceResultEvents();
@@ -2809,26 +2799,9 @@ export class AsterlynApp {
   }
 
   private invalidateWorkspaceReplacementPreview(): void {
-    if (this.state.workspaceReplacement.status === "applying") return;
-    this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceReplacement = closeReplacementPreview(this.state.workspaceReplacement);
-    if (this.state.replacementDialog === "preview") {
-      this.state.replacementDialog = null;
-      this.renderWorkspaceReplacementDialog();
-    }
-  }
-
-  private cancelActiveWorkspaceReplacement(): void {
-    const replacement = this.state.workspaceReplacement;
-    if (
-      (replacement.status !== "previewing" &&
-        replacement.status !== "ready" &&
-        replacement.status !== "applying") ||
-      !replacement.request
-    ) {
-      return;
-    }
-    this.workspaceOperations.cancelReplacement();
+    const dialog = this.workspaceReplacementController.state.dialog;
+    if (!this.workspaceReplacementController.invalidatePreview()) return;
+    if (dialog === "preview") this.renderWorkspaceReplacementDialog();
   }
 
   private async previewWorkspaceReplacement(): Promise<void> {
@@ -2844,47 +2817,19 @@ export class AsterlynApp {
     ) {
       return;
     }
-    this.cancelActiveWorkspaceReplacement();
-    const operation = this.workspaceOperations.startReplacementPreview(
+    const completion = this.workspaceReplacementController.preview(
       { root: workspaceRoot, generation: this.windowSession.generation },
-      searchRequest.query,
-      this.state.replacementText,
-      searchRequest.options,
+      searchRequest,
+      (error) => localizedOperationError(error, this.localization.catalog.errors),
     );
-    const started = beginReplacementPreview(
-      this.state.workspaceReplacement,
-      this.windowSession.generation,
-      workspaceRoot,
-      operation.operationId,
-      searchRequest.query,
-      this.state.replacementText,
-      searchRequest.options,
-    );
-    this.state.workspaceReplacement = started.state;
-    this.state.replacementDialog = "preview";
     this.renderWorkspaceReplacementDialog();
-    const completion = await operation.completion;
-    if (completion.status === "stale") return;
-    if (completion.status === "success") {
-      this.state.workspaceReplacement = completeReplacementPreview(
-        this.state.workspaceReplacement,
-        started.request,
-        completion.value,
-      );
-      this.renderWorkspaceReplacementDialog();
-    } else {
-      this.state.workspaceReplacement = failReplacement(
-        this.state.workspaceReplacement,
-        started.request,
-        localizedOperationError(completion.error, this.localization.catalog.errors),
-      );
-      this.renderWorkspaceReplacementDialog();
-    }
+    if (await completion) this.renderWorkspaceReplacementDialog();
   }
 
   private renderWorkspaceReplacementDialog(): void {
     const host = this.query("#workspace-replacement-dialog");
-    const mode = this.state.replacementDialog;
+    const replacementState = this.workspaceReplacementController.state;
+    const mode = replacementState.dialog;
     host.classList.toggle("hidden", mode === null);
     const blockedOpenPaths = new Set(
       this.editorState.session.textTabs
@@ -2893,8 +2838,8 @@ export class AsterlynApp {
     );
     host.innerHTML = renderWorkspaceReplacementDialogView({
       dialog: mode,
-      replacement: this.state.workspaceReplacement,
-      recoveryBusy: this.state.replacementRecoveryBusy,
+      replacement: replacementState.replacement,
+      recoveryBusy: replacementState.recoveryBusy,
       blockedOpenPaths,
       copy: this.localization.catalog.replacement,
     });
@@ -2910,8 +2855,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLInputElement>("#replacement-select-all")
       ?.addEventListener("change", (event) => {
-        this.state.workspaceReplacement = selectAllReplacementFiles(
-          this.state.workspaceReplacement,
+        this.workspaceReplacementController.selectAll(
           (event.currentTarget as HTMLInputElement).checked,
         );
         this.renderWorkspaceReplacementDialog();
@@ -2920,10 +2864,7 @@ export class AsterlynApp {
       checkbox.addEventListener("change", () => {
         const path = checkbox.dataset.replacementFile;
         if (!path) return;
-        this.state.workspaceReplacement = toggleReplacementFile(
-          this.state.workspaceReplacement,
-          path,
-        );
+        this.workspaceReplacementController.toggleFile(path);
         this.renderWorkspaceReplacementDialog();
       });
     });
@@ -2945,72 +2886,56 @@ export class AsterlynApp {
   }
 
   private closeWorkspaceReplacementDialog(): void {
-    this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceReplacement = closeReplacementPreview(this.state.workspaceReplacement);
-    this.state.replacementDialog = null;
+    this.workspaceReplacementController.closeDialog();
     this.renderWorkspaceReplacementDialog();
   }
 
   private requestWorkspaceReplacementCancellation(): void {
-    if (this.state.workspaceReplacement.status === "previewing") {
-      this.closeWorkspaceReplacementDialog();
-      return;
-    }
-    if (this.state.workspaceReplacement.status !== "applying") return;
-    this.cancelActiveWorkspaceReplacement();
-    this.state.workspaceReplacement = {
-      ...this.state.workspaceReplacement,
-      error: this.localization.catalog.replacement.cancellationRequested,
-    };
-    this.renderWorkspaceReplacementDialog();
+    const outcome = this.workspaceReplacementController.requestCancellation(
+      this.localization.catalog.replacement.cancellationRequested,
+    );
+    if (outcome !== "ignored") this.renderWorkspaceReplacementDialog();
   }
 
   private async applyWorkspaceReplacement(): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const request = this.state.workspaceReplacement.request;
-    const preview = this.state.workspaceReplacement.preview;
-    if (!workspaceRoot || !request || !preview || this.state.workspaceReplacement.status !== "ready") return;
+    const replacement = this.workspaceReplacementController.state.replacement;
+    const request = replacement.request;
+    const preview = replacement.preview;
+    if (!workspaceRoot || !request || !preview || replacement.status !== "ready") return;
     this.captureMountedTextEditor();
-    const selectedPaths = [...this.state.workspaceReplacement.selectedPaths];
+    const selectedPaths = [...replacement.selectedPaths];
     const blocked = this.editorState.session.textTabs.filter(
       (tab) =>
         selectedPaths.includes(tab.document.workspacePath) &&
         (tab.status !== "ready" || isTextTabDirty(tab) || tab.saveRequest !== null),
     );
     if (blocked.length > 0) {
-      this.state.workspaceReplacement = {
-        ...this.state.workspaceReplacement,
-        error: this.localization.catalog.replacement.blockedPaths(blocked.map((tab) => tab.document.workspacePath).join(", ")),
-      };
+      this.workspaceReplacementController.setError(
+        this.localization.catalog.replacement.blockedPaths(
+          blocked.map((tab) => tab.document.workspacePath).join(", "),
+        ),
+      );
       this.setStatus(this.localization.catalog.replacement.blockedStatus, "warning");
       this.renderWorkspaceReplacementDialog();
       return;
     }
-    this.state.workspaceReplacement = beginReplacementApply(this.state.workspaceReplacement);
+    const completion = this.workspaceReplacementController.apply(
+      workspaceRoot,
+      (error) => localizedOperationError(error, this.localization.catalog.errors),
+    );
     this.renderWorkspaceReplacementDialog();
-    try {
-      const completion = await this.workspaceOperations.applyReplacement(
-        { root: workspaceRoot, generation: request.repositoryGeneration },
-        preview.planId,
-        selectedPaths,
-      );
-      if (completion.status === "stale") return;
-      if (completion.status === "failure") throw completion.error;
-      const result = completion.value;
-      this.state.workspaceReplacement = completeReplacementApply(
-        this.state.workspaceReplacement,
-        request,
-        result,
-      );
+    const outcome = await completion;
+    if (outcome.status === "stale") return;
+    if (outcome.status === "success") {
+      const { result } = outcome;
       await this.reloadReplacementFiles(selectedPaths);
       await this.refreshWorkspaceAfterReplacement(workspaceRoot, request.repositoryGeneration);
       this.refreshWorkspaceSearchAfterReplacement();
       await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
       if (result.status === "rolledBack") {
-        this.state.replacementDialog = null;
         this.setStatus(this.localization.catalog.replacement.stoppedAndRestored, "success");
       } else {
-        this.state.replacementDialog = "recovery";
         this.setStatus(
           result.status === "applied"
             ? this.localization.catalog.replacement.appliedWithRecovery
@@ -3019,36 +2944,26 @@ export class AsterlynApp {
         );
       }
       this.renderWorkspaceReplacementDialog();
-    } catch (error) {
-      this.state.workspaceReplacement = failReplacement(
-        this.state.workspaceReplacement,
-        request,
-        localizedOperationError(error, this.localization.catalog.errors),
-      );
-      await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
-      if (this.state.workspaceReplacement.recoveries.length > 0) {
-        this.state.replacementDialog = "recovery";
-      }
-      this.renderWorkspaceReplacementDialog();
-      this.showError(error);
+      return;
     }
+    await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
+    this.workspaceReplacementController.openRecoveryAfterFailure();
+    this.renderWorkspaceReplacementDialog();
+    this.showError(outcome.error);
   }
 
   private async loadReplacementRecoveries(
     repositoryRoot: string,
     generation = this.windowSession.generation,
   ): Promise<void> {
-    this.state.workspaceReplacement = {
-      ...this.state.workspaceReplacement,
-      recoveriesLoading: true,
-    };
-    try {
-      const recoveries = await this.workspaceOperations.listRecoveries(repositoryRoot);
-      if (generation !== this.windowSession.generation || this.windowSession.workspace.state.root !== repositoryRoot) return;
-      this.state.workspaceReplacement = setReplacementRecoveries(
-        this.state.workspaceReplacement,
-        recoveries,
-      );
+    const outcome = await this.workspaceReplacementController.loadRecoveries(
+      repositoryRoot,
+      () => generation === this.windowSession.generation &&
+        this.windowSession.workspace.state.root === repositoryRoot,
+    );
+    if (outcome.status === "stale") return;
+    if (outcome.status === "success") {
+      const { recoveries } = outcome;
       if (recoveries.length > 0 && !this.state.loading) {
         this.setStatus(
           this.localization.catalog.replacement.recoveryCount(recoveries.length),
@@ -3056,16 +2971,13 @@ export class AsterlynApp {
         );
       }
       if (this.state.commandSurface.mode === "workspace") this.renderCommandSurface();
-      if (this.state.replacementDialog === "recovery") this.renderWorkspaceReplacementDialog();
-    } catch (error) {
-      if (generation !== this.windowSession.generation) return;
-      this.state.workspaceReplacement = {
-        ...this.state.workspaceReplacement,
-        recoveriesLoading: false,
-      };
-      this.setStatus(this.localization.catalog.replacement.inspectionFailed, "warning");
-      this.showError(error);
+      if (this.workspaceReplacementController.state.dialog === "recovery") {
+        this.renderWorkspaceReplacementDialog();
+      }
+      return;
     }
+    this.setStatus(this.localization.catalog.replacement.inspectionFailed, "warning");
+    this.showError(outcome.error);
   }
 
   private refreshWorkspaceSearchAfterReplacement(): void {
@@ -3085,10 +2997,11 @@ export class AsterlynApp {
     action: "keep" | "rollback",
   ): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;
-    const recovery = this.state.workspaceReplacement.recoveries.find(
+    const replacementState = this.workspaceReplacementController.state;
+    const recovery = replacementState.replacement.recoveries.find(
       (candidate) => candidate.recoveryId === recoveryId,
     );
-    if (!workspaceRoot || !recovery || this.state.replacementRecoveryBusy) return;
+    if (!workspaceRoot || !recovery || replacementState.recoveryBusy) return;
     this.captureMountedTextEditor();
     const paths = recovery.files.map((file) => file.workspacePath);
     const blocked = this.editorState.session.textTabs.filter(
@@ -3103,46 +3016,42 @@ export class AsterlynApp {
       );
       return;
     }
-    this.state.replacementRecoveryBusy = { id: recoveryId, action };
+    const completion = this.workspaceReplacementController.resolveRecovery(
+      workspaceRoot,
+      recoveryId,
+      action,
+    );
     this.renderWorkspaceReplacementDialog();
-    try {
-      let rollbackResult: ReplacementApplyResult | null = null;
-      if (action === "keep") {
-        await this.workspaceOperations.finalize(workspaceRoot, recoveryId);
-      } else {
-        rollbackResult = await this.workspaceOperations.rollback(workspaceRoot, recoveryId);
-        await this.reloadReplacementFiles(paths);
-      }
-      this.state.replacementRecoveryBusy = null;
+    const outcome = await completion;
+    if (outcome.status === "stale") return;
+    if (outcome.status === "success") {
+      if (action === "rollback") await this.reloadReplacementFiles(paths);
       if (action === "rollback") {
         await this.refreshWorkspaceAfterReplacement(workspaceRoot, this.windowSession.generation);
         this.refreshWorkspaceSearchAfterReplacement();
       }
       if (this.windowSession.workspace.state.root !== workspaceRoot) return;
       await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
-      const unresolved = this.state.workspaceReplacement.recoveries.length;
+      const unresolved = this.workspaceReplacementController.reconcileRecoveryDialog();
       if (unresolved > 0) {
-        this.state.replacementDialog = "recovery";
         this.setStatus(
-          rollbackResult?.status === "needsRecovery"
+          outcome.result?.status === "needsRecovery"
             ? this.localization.catalog.replacement.externalChangesPreserved
             : this.localization.catalog.replacement.recoveryCount(unresolved),
           "warning",
         );
       } else {
-        this.state.replacementDialog = null;
         this.setStatus(
           action === "keep" ? this.localization.catalog.replacement.changesKept : this.localization.catalog.replacement.originalsRestored,
           "success",
         );
       }
       this.renderWorkspaceReplacementDialog();
-    } catch (error) {
-      this.state.replacementRecoveryBusy = null;
-      await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
-      this.renderWorkspaceReplacementDialog();
-      this.showError(error);
+      return;
     }
+    await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
+    this.renderWorkspaceReplacementDialog();
+    this.showError(outcome.error);
   }
 
   private async refreshWorkspaceAfterReplacement(
