@@ -16,7 +16,9 @@ The quality job checks TypeScript, builds the frontend, runs all script tests, c
 installs the Linux desktop development libraries, and tests/lints the complete Cargo workspace.
 Native watcher tests are explicitly run with `--ignored`; being ignored in the default unit suite
 must not remove them from CI acceptance. Workspace and desktop application tests are required in
-addition to Git-core tests.
+addition to Git-core tests. The Windows packaging job also runs `asterlyn-workspace` tests natively
+before bundling, including the stable Win32 opened-file identity checks used by reviewed workspace
+mutations.
 
 ## Trust boundary
 

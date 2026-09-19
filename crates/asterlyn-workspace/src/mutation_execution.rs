@@ -8,7 +8,8 @@ use std::sync::{
 
 use crate::{
     Workspace, WorkspaceEntryInventory, WorkspaceEntryKind, WorkspaceError,
-    WorkspaceMutationOperation, WorkspaceMutationPlan, sync_directory, validate_relative_path,
+    WorkspaceMutationOperation, WorkspaceMutationPlan, file_identity::opened_file_matches_path,
+    sync_directory, validate_relative_path,
 };
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -827,7 +828,9 @@ fn copy_file_noclobber(source: &Path, destination: &Path, mode: u32) -> Result<(
     let opened_metadata = input
         .metadata()
         .map_err(|error| execution_io("inspect opened copied file", error))?;
-    if !same_copy_source_identity(&source_metadata, &opened_metadata) {
+    if !opened_file_matches_path(source, &source_metadata, &input, &opened_metadata)
+        .map_err(|error| execution_io("verify opened copied file identity", error))?
+    {
         return Err(WorkspaceError::Conflict {
             current_revision: "identity-changed-before-copy".into(),
         });
@@ -881,24 +884,6 @@ fn open_copy_source_without_links(path: &Path) -> Result<File, WorkspaceError> {
 #[cfg(not(any(unix, windows)))]
 fn open_copy_source_without_links(path: &Path) -> Result<File, WorkspaceError> {
     File::open(path).map_err(|error| execution_io("open copied file", error))
-}
-
-#[cfg(unix)]
-fn same_copy_source_identity(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    left.dev() == right.dev() && left.ino() == right.ino()
-}
-
-#[cfg(windows)]
-fn same_copy_source_identity(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    left.volume_serial_number() == right.volume_serial_number()
-        && left.file_index() == right.file_index()
-}
-
-#[cfg(not(any(unix, windows)))]
-fn same_copy_source_identity(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    left.len() == right.len() && left.permissions().readonly() == right.permissions().readonly()
 }
 
 fn sync_tree_directories(root: &Path) -> Result<(), WorkspaceError> {

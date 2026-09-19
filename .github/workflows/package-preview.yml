@@ -142,6 +142,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Test Windows workspace core
+        if: matrix.platform == 'windows-latest'
+        run: cargo test --locked -p asterlyn-workspace
+
       - name: Build native preview artifacts
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:

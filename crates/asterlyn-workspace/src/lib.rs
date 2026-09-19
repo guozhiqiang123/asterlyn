@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 
 mod durable_file;
 mod entry_mutation;
+mod file_identity;
 mod file_restore;
 mod mutation_execution;
 mod replacement;

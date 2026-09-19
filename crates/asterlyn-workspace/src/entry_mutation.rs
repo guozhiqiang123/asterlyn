@@ -4,7 +4,9 @@ use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::{Workspace, WorkspaceError, validate_relative_path};
+use crate::{
+    Workspace, WorkspaceError, file_identity::opened_file_matches_path, validate_relative_path,
+};
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -570,7 +572,9 @@ fn hash_file(
 ) -> Result<String, WorkspaceError> {
     let mut file = open_file_without_links(path)?;
     let opened_metadata = file.metadata().map_err(inventory_io)?;
-    if !same_metadata_identity(expected_metadata, &opened_metadata) {
+    if !opened_file_matches_path(path, expected_metadata, &file, &opened_metadata)
+        .map_err(inventory_io)?
+    {
         return Err(WorkspaceError::Conflict {
             current_revision: "identity-changed-during-inventory".into(),
         });
@@ -620,24 +624,6 @@ fn open_file_without_links(path: &Path) -> Result<fs::File, WorkspaceError> {
 #[cfg(not(any(unix, windows)))]
 fn open_file_without_links(path: &Path) -> Result<fs::File, WorkspaceError> {
     fs::File::open(path).map_err(inventory_io)
-}
-
-#[cfg(unix)]
-fn same_metadata_identity(left: &Metadata, right: &Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    left.dev() == right.dev() && left.ino() == right.ino()
-}
-
-#[cfg(windows)]
-fn same_metadata_identity(left: &Metadata, right: &Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    left.volume_serial_number() == right.volume_serial_number()
-        && left.file_index() == right.file_index()
-}
-
-#[cfg(not(any(unix, windows)))]
-fn same_metadata_identity(left: &Metadata, right: &Metadata) -> bool {
-    left.len() == right.len() && left.permissions().readonly() == right.permissions().readonly()
 }
 
 fn directory_revision(metadata: &Metadata) -> String {
