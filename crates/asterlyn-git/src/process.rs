@@ -4,12 +4,16 @@ use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::Duration;
 
 use crate::error::GitError;
 
 const STANDARD_OUTPUT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 const DIAGNOSTIC_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
+const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 #[derive(Clone, Copy)]
 enum GitProcessProfile {
@@ -23,6 +27,34 @@ pub(crate) enum GitStdin {
     Inherit,
     Null,
     Piped,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+
+    pub fn refers_to(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.cancelled, &other.cancelled)
+    }
+}
+
+pub(crate) enum CancellableOutput {
+    Completed(Output),
+    Cancelled,
 }
 
 /// Constructs Git subprocesses with one stable, non-interactive process policy.
@@ -120,6 +152,83 @@ impl<'a> GitRunner<'a> {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
+    }
+
+    pub(crate) fn cancellable_output<I, S>(
+        &self,
+        args: I,
+        stdin: GitStdin,
+        cancellation: &CancellationToken,
+    ) -> std::io::Result<CancellableOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        if cancellation.is_cancelled() {
+            return Ok(CancellableOutput::Cancelled);
+        }
+
+        let mut child = self.spawn(args, stdin)?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
+        let bounded = matches!(self.profile, GitProcessProfile::Remote);
+        let stdout_reader = thread::spawn(move || {
+            if bounded {
+                read_stream_bounded(stdout)
+            } else {
+                read_stream(stdout)
+            }
+        });
+        let stderr_reader = thread::spawn(move || {
+            if bounded {
+                read_stream_bounded(stderr)
+            } else {
+                read_stream(stderr)
+            }
+        });
+
+        let status = loop {
+            if !matches!(self.profile, GitProcessProfile::Remote) && cancellation.is_cancelled() {
+                terminate_child(&mut child, false);
+                let _ = join_output_reader(stdout_reader, "stdout");
+                let _ = join_output_reader(stderr_reader, "stderr");
+                return Ok(CancellableOutput::Cancelled);
+            }
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if cancellation.is_cancelled() => {
+                    terminate_child(
+                        &mut child,
+                        matches!(self.profile, GitProcessProfile::Remote),
+                    );
+                    let _ = join_output_reader(stdout_reader, "stdout");
+                    let _ = join_output_reader(stderr_reader, "stderr");
+                    return Ok(CancellableOutput::Cancelled);
+                }
+                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
+                Err(error) => {
+                    terminate_child(
+                        &mut child,
+                        matches!(self.profile, GitProcessProfile::Remote),
+                    );
+                    let _ = join_output_reader(stdout_reader, "stdout");
+                    let _ = join_output_reader(stderr_reader, "stderr");
+                    return Err(error);
+                }
+            }
+        };
+
+        Ok(CancellableOutput::Completed(Output {
+            status,
+            stdout: join_output_reader(stdout_reader, "stdout")?,
+            stderr: join_output_reader(stderr_reader, "stderr")?,
+        }))
     }
 }
 
@@ -243,6 +352,15 @@ pub(crate) fn terminate_process_tree(child: &mut Child) {
     let _ = child.wait();
 }
 
+fn terminate_child(child: &mut Child, process_tree: bool) {
+    if process_tree {
+        terminate_process_tree(child);
+    } else {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 pub(crate) fn read_stream(stream: impl Read) -> std::io::Result<Vec<u8>> {
     let (bytes, truncated) = read_stream_limited(stream, STANDARD_OUTPUT_LIMIT_BYTES)?;
     if truncated {
@@ -320,12 +438,25 @@ pub(crate) fn join_limited_stream(
         })
 }
 
+fn join_output_reader(
+    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    stream: &str,
+) -> std::io::Result<Vec<u8>> {
+    reader
+        .join()
+        .map_err(|_| std::io::Error::other(format!("Git {stream} reader stopped unexpectedly")))?
+        .map_err(|error| std::io::Error::other(format!("could not read Git {stream}: {error}")))
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
-    use super::{GitRunner, read_stream_limited, should_remove_remote_environment};
+    use super::{
+        CancellableOutput, CancellationToken, GitRunner, GitStdin, read_stream_limited,
+        should_remove_remote_environment,
+    };
 
     #[test]
     fn standard_runner_has_stable_non_interactive_policy() {
@@ -429,6 +560,16 @@ mod tests {
         let (bytes, truncated) = read_stream_limited(&b"0123456789"[..], 4).unwrap();
         assert_eq!(bytes, b"0123");
         assert!(truncated);
+    }
+
+    #[test]
+    fn pre_cancelled_execution_does_not_start_git() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let outcome = GitRunner::new(Path::new("a root that need not exist"))
+            .cancellable_output(["status"], GitStdin::Null, &cancellation)
+            .unwrap();
+        assert!(matches!(outcome, CancellableOutput::Cancelled));
     }
 
     fn environment_value<'a>(

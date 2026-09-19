@@ -20,5 +20,6 @@ pub use model::{
     RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
     SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
-pub use repository::{CancellationToken, GitRepository};
+pub use process::CancellationToken;
+pub use repository::GitRepository;
 pub use text_diff::{BoundedTextDiff, bounded_text_diff};

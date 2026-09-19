@@ -4,10 +4,8 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use std::sync::Arc;
 #[cfg(test)]
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -25,8 +23,8 @@ use crate::model::{
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
-    GitRunner, GitStdin, join_limited_stream, join_stream, read_stream, read_stream_bounded,
-    read_stream_limited_with_signal, terminate_process_tree,
+    CancellableOutput, CancellationToken, GitRunner, GitStdin, join_limited_stream, join_stream,
+    read_stream_bounded, read_stream_limited_with_signal,
 };
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -119,29 +117,6 @@ struct RevisionFile {
     blob_oid: String,
     file_mode: String,
     bytes: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CancellationToken {
-    cancelled: Arc<AtomicBool>,
-}
-
-impl CancellationToken {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Release);
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::Acquire)
-    }
-
-    pub fn refers_to(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.cancelled, &other.cancelled)
-    }
 }
 
 impl GitRepository {
@@ -4351,63 +4326,22 @@ impl GitRepository {
         repository_state_may_have_changed: bool,
         remote_state_may_have_changed: bool,
     ) -> Result<Output, GitError> {
-        if cancellation.is_cancelled() {
-            return Err(remote_cancelled(
-                operation,
-                repository_state_may_have_changed,
-                remote_state_may_have_changed,
-            ));
-        }
-
-        let mut child = GitRunner::remote(&self.root)
-            .spawn(args, GitStdin::Inherit)
+        let runner = GitRunner::remote(&self.root);
+        let output = runner
+            .cancellable_output(args, GitStdin::Inherit, cancellation)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
             })?;
-        let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
-            operation: operation.to_string(),
-            message: "Git stdout was not available".to_string(),
-        })?;
-        let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
-            operation: operation.to_string(),
-            message: "Git stderr was not available".to_string(),
-        })?;
-        let stdout_reader = thread::spawn(move || read_stream_bounded(stdout));
-        let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
-
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) if cancellation.is_cancelled() => {
-                    terminate_process_tree(&mut child);
-                    let _ = join_stream(stdout_reader, operation, "stdout");
-                    let _ = join_stream(stderr_reader, operation, "stderr");
-                    return Err(remote_cancelled(
-                        operation,
-                        repository_state_may_have_changed,
-                        remote_state_may_have_changed,
-                    ));
-                }
-                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
-                Err(error) => {
-                    terminate_process_tree(&mut child);
-                    let _ = join_stream(stdout_reader, operation, "stdout");
-                    let _ = join_stream(stderr_reader, operation, "stderr");
-                    return Err(GitError::Io {
-                        operation: operation.to_string(),
-                        message: error.to_string(),
-                    });
-                }
+        let output = match output {
+            CancellableOutput::Completed(output) => output,
+            CancellableOutput::Cancelled => {
+                return Err(remote_cancelled(
+                    operation,
+                    repository_state_may_have_changed,
+                    remote_state_may_have_changed,
+                ));
             }
-        };
-
-        let stdout = join_stream(stdout_reader, operation, "stdout")?;
-        let stderr = join_stream(stderr_reader, operation, "stderr")?;
-        let output = Output {
-            status,
-            stdout,
-            stderr,
         };
         if output.status.success() {
             Ok(output)
@@ -4426,62 +4360,18 @@ impl GitRepository {
         args: [&str; N],
         cancellation: &CancellationToken,
     ) -> Result<Output, GitError> {
-        if cancellation.is_cancelled() {
-            return Err(GitError::Cancelled {
-                operation: operation.to_string(),
-            });
-        }
-
-        let mut child = GitRunner::new(&self.root)
-            .spawn(args, GitStdin::Inherit)
+        let runner = GitRunner::new(&self.root);
+        match runner
+            .cancellable_output(args, GitStdin::Inherit, cancellation)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
-            })?;
-        let stdout = child.stdout.take().ok_or_else(|| GitError::Io {
-            operation: operation.to_string(),
-            message: "Git stdout was not available".to_string(),
-        })?;
-        let stderr = child.stderr.take().ok_or_else(|| GitError::Io {
-            operation: operation.to_string(),
-            message: "Git stderr was not available".to_string(),
-        })?;
-        let stdout_reader = thread::spawn(move || read_stream(stdout));
-        let stderr_reader = thread::spawn(move || read_stream(stderr));
-
-        let status = loop {
-            if cancellation.is_cancelled() {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = join_stream(stdout_reader, operation, "stdout");
-                let _ = join_stream(stderr_reader, operation, "stderr");
-                return Err(GitError::Cancelled {
-                    operation: operation.to_string(),
-                });
-            }
-            let wait_result = child.try_wait();
-            match wait_result {
-                Ok(Some(status)) => break status,
-                Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    let _ = join_stream(stdout_reader, operation, "stdout");
-                    let _ = join_stream(stderr_reader, operation, "stderr");
-                    return Err(GitError::Io {
-                        operation: operation.to_string(),
-                        message: error.to_string(),
-                    });
-                }
-            }
-        };
-
-        let output = Output {
-            status,
-            stdout: join_stream(stdout_reader, operation, "stdout")?,
-            stderr: join_stream(stderr_reader, operation, "stderr")?,
-        };
-        ensure_success(operation, output)
+            })? {
+            CancellableOutput::Completed(output) => ensure_success(operation, output),
+            CancellableOutput::Cancelled => Err(GitError::Cancelled {
+                operation: operation.to_string(),
+            }),
+        }
     }
 
     fn first_parent(&self, oid: &str) -> Result<Option<String>, GitError> {

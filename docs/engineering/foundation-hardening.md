@@ -422,6 +422,13 @@ The raw command builder and profile-specific wait functions are private as well:
 runner profile, request a bounded child, and return it to the same profile for collection, preventing
 future code from silently mixing ordinary and remote output policy.
 
+Cancellation identity, polling, output draining, direct-child termination, and remote process-tree
+termination now form one runner lifecycle. The repository maps the runner's completed/cancelled
+outcome to ordinary cancellation or the operation-specific uncertain-state flags, rather than
+owning subprocess waiting itself. A process-level pre-cancellation test proves that no Git child is
+started after cancellation, while the existing untracked-scan and remote-operation tests cover
+in-flight behavior.
+
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
 source of truth.
