@@ -183,7 +183,11 @@ non-growing ceiling. Git History's details, comparison, historical-file, and his
 comparison controllers now share one feature-owned read runtime. That runtime owns their
 subscriptions and disposal behind explicit gateway and notification ports; `AsterlynApp` no longer
 manages four parallel lifecycles. After this first composition slice, `src/app.ts` is 8,945 lines
-with a matching ceiling.
+with a matching ceiling. Git History's branch, commit, range, commit-file, and commit-folder context
+menus now share one feature-owned DOM runtime as well. It owns the three delegated binding pairs,
+routes single and range commit targets, shares the clipboard port, and disposes as one unit while
+the composition root supplies only explicit state and action ports. After this slice, `src/app.ts`
+is 8,879 lines with a matching ceiling.
 
 Extract vertical slices in this order:
 

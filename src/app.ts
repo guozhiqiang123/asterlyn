@@ -47,41 +47,33 @@ import {
 } from "./features/git-history/branch-navigation-view";
 import { GitBranchesController } from "./features/git-history/git-branches-controller.ts";
 import {
-  BranchContextBinding,
   branchContextTargetIsCurrent,
   type BranchContextTarget,
 } from "./features/git-history/branch-context-binding.ts";
-import { BranchContextActions } from "./features/git-history/branch-context-actions.ts";
 import { BranchMutationController } from "./features/git-history/branch-mutation-controller.ts";
 import { BranchMutationDialogBinding } from "./features/git-history/branch-mutation-dialog-binding.ts";
 import {
-  HistoryContextBinding,
   historyCommitContextTargetIsCurrent,
   type HistoryCommitContextTarget,
 } from "./features/git-history/history-context-binding.ts";
-import { HistoryCommitContextActions } from "./features/git-history/history-commit-context-actions.ts";
 import {
   historyCommitRangeTargetIsCurrent,
-  resolveHistoryCommitRangeTarget,
   type HistoryCommitRangeTarget,
 } from "./features/git-history/history-range-context.ts";
-import { HistoryCommitRangeContextActions } from "./features/git-history/history-range-context-actions.ts";
 import {
   type HistoryComparisonChange,
 } from "./features/git-history/history-comparison-controller.ts";
 import {
-  CommitDetailContextBinding,
   resolveCommitDetailContextTarget,
   type CommitDetailDirectoryContextTarget,
   type CommitDetailFileContextTarget,
 } from "./features/git-history/commit-detail-context-binding.ts";
-import { CommitFolderContextActions } from "./features/git-history/commit-folder-context-actions.ts";
 import { commitFolderContextPolicy } from "./features/git-history/commit-folder-context-policy.ts";
 import { CommitFolderDiffController } from "./features/git-history/commit-folder-diff-controller.ts";
-import { CommitFileContextActions } from "./features/git-history/commit-file-context-actions.ts";
 import { commitFileContextPolicy } from "./features/git-history/commit-file-context-policy.ts";
 import { CommitFileRestoreController } from "./features/git-history/commit-file-restore-controller.ts";
 import { CommitFileRestoreDialogBinding } from "./features/git-history/commit-file-restore-dialog-binding.ts";
+import { GitHistoryContextRuntime } from "./features/git-history/git-history-context-runtime.ts";
 import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
@@ -416,19 +408,12 @@ export class AsterlynApp {
   private readonly historyReadRuntime: GitHistoryReadRuntime;
   private readonly historyRangeSelection = new HistoryRangeSelectionController();
   private readonly commitFolderDiffController = new CommitFolderDiffController();
-  private readonly commitFolderContextActions: CommitFolderContextActions;
-  private readonly commitFileContextActions: CommitFileContextActions;
   private readonly commitFileRestoreController: CommitFileRestoreController;
   private readonly commitFileRestoreDialogBinding: CommitFileRestoreDialogBinding;
-  private readonly commitDetailContextBinding: CommitDetailContextBinding;
   private readonly branchesController: GitBranchesController;
-  private readonly branchContextActions: BranchContextActions;
-  private readonly branchContextBinding: BranchContextBinding;
   private readonly branchMutationController: BranchMutationController;
   private readonly branchMutationDialogBinding: BranchMutationDialogBinding;
-  private readonly historyCommitContextActions: HistoryCommitContextActions;
-  private readonly historyCommitRangeContextActions: HistoryCommitRangeContextActions;
-  private readonly historyContextBinding: HistoryContextBinding;
+  private readonly gitHistoryContextRuntime: GitHistoryContextRuntime;
   private readonly remoteController: RemotePushController;
   private readonly releaseRemoteController: () => void;
   private readonly remoteAuthenticationController: RemoteAuthenticationController;
@@ -736,218 +721,181 @@ export class AsterlynApp {
       this.branchMutationController,
       () => this.localization.catalog.history.branchMutation,
     );
-    this.branchContextActions = new BranchContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
-        current: (target) => this.isBranchContextTargetCurrent(target),
-        select: (target) => this.markBranchContextTarget(target.key),
-        snapshot: () => this.windowSession.repository.state.snapshot,
-        policyOptions: () => {
-          const snapshot = this.windowSession.repository.state.snapshot;
-          const safety = snapshot ? this.branchSafety(snapshot) : {
-            ready: false,
-            message: this.localization.catalog.history.branchContextMenu.cleanRequired,
-          };
-          return {
-            busy: this.state.loading || Boolean(snapshot?.operation),
-            clean: safety.ready,
-            cleanReason: safety.message,
-            updateBlocked: this.remoteActionBlockedReason("pull"),
-            pushBlocked: this.remoteActionBlockedReason("push"),
-          };
-        },
-        showHistory: (target) => this.showBranchContextHistory(target),
-        openMutation: (kind, branch, suggestedName) => {
-          const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
-          if (repositoryRoot) {
-            this.branchMutationController.open(repositoryRoot, kind, branch, suggestedName);
-          }
-        },
-        openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
-        openRemoteAction: (kind, returnFocus) =>
-          this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
-        blocked: (reason) => this.setStatus(reason, "warning"),
-        status: (message) => this.setStatus(message, "success"),
-        error: (error) => this.showError(error),
-      },
-      () => this.localization.catalog.history,
-    );
-    this.branchContextBinding = new BranchContextBinding(
+    const contextFeedback = {
+      blocked: (reason: string) => this.setStatus(reason, "warning"),
+      status: (message: string) => this.setStatus(message, "success"),
+      error: (error: unknown) => this.showError(error),
+    };
+    this.gitHistoryContextRuntime = new GitHistoryContextRuntime({
       root,
-      () => ({
-        snapshot: this.windowSession.repository.state.snapshot,
-        workspaceGeneration: this.windowSession.generation,
-        repositoryRevision: this.windowSession.repository.state.revision,
-        selectedRepositoryIds: this.historyFilterState.historyRepositoryIds,
-      }),
-      (request) => this.branchContextActions.open(request),
-    );
-    this.historyCommitContextActions = new HistoryCommitContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
-        current: (target) => this.isHistoryCommitContextTargetCurrent(target),
-        select: (target) => {
-          if (!this.isHistoryCommitContextTargetCurrent(target)) return false;
-          this.selectCommit(target.key);
-          this.markHistoryCommitContextTarget(target.key);
-          return this.historyState.selectedCommit === target.key;
-        },
-        policyOptions: () => {
-          const snapshot = this.windowSession.repository.state.snapshot;
-          const safety = snapshot ? this.branchSafety(snapshot) : {
-            ready: false,
-            message: this.localization.catalog.history.commitContextMenu.cleanRequired,
-          };
-          const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
-          return {
-            busy: this.state.loading || Boolean(snapshot?.operation),
-            clean: safety.ready && !unsaved,
-            cleanReason: unsaved
-              ? this.localization.catalog.gitOperations.saveBeforeReview
-              : safety.message,
-            localBranch: Boolean(
-              snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
-            ),
-          };
-        },
-        openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
-        openBranchFromCommit: (target) => {
-          this.branchMutationController.open(
-            target.workspaceRoot,
-            "create",
-            {
-              repositoryId: target.repositoryId,
-              fullName: target.oid,
-              name: target.commit.shortOid,
-              oid: target.oid,
-            },
-          );
-        },
-        blocked: (reason) => this.setStatus(reason, "warning"),
-        status: (message) => this.setStatus(message, "success"),
-        error: (error) => this.showError(error),
+      host: this.contextMenuHost,
+      clipboard: createBrowserTextClipboardAdapter(window.navigator),
+      copy: () => this.localization.catalog.history,
+      sources: {
+        branch: () => ({
+          snapshot: this.windowSession.repository.state.snapshot,
+          workspaceGeneration: this.windowSession.generation,
+          repositoryRevision: this.windowSession.repository.state.revision,
+          selectedRepositoryIds: this.historyFilterState.historyRepositoryIds,
+        }),
+        history: () => ({
+          state: this.historyState,
+          workspaceGeneration: this.windowSession.generation,
+          repositoryRevision: this.windowSession.repository.state.revision,
+        }),
+        detail: () => ({
+          state: this.historyState,
+          workspaceGeneration: this.windowSession.generation,
+          repositoryRevision: this.windowSession.repository.state.revision,
+          snapshot: this.windowSession.repository.state.snapshot,
+          fileView: this.historyDetailState.commitFileView,
+        }),
+        rangeSelection: (key) => this.historyRangeSelection.contextTarget(key),
+        markHistoryTarget: (key) => this.markHistoryCommitContextTarget(key),
       },
-      () => this.localization.catalog.history,
-    );
-    this.historyCommitRangeContextActions = new HistoryCommitRangeContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
-        current: (target) => this.isHistoryCommitRangeTargetCurrent(target),
-        policyOptions: () => {
-          const snapshot = this.windowSession.repository.state.snapshot;
-          const safety = snapshot ? this.branchSafety(snapshot) : {
-            ready: false,
-            message: this.localization.catalog.history.rangeContextMenu.cleanRequired,
-          };
-          const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
-          return {
-            busy: this.state.loading || Boolean(snapshot?.operation),
-            clean: safety.ready && !unsaved,
-            cleanReason: unsaved
-              ? this.localization.catalog.gitOperations.saveBeforeReview
-              : safety.message,
-            localBranch: Boolean(
-              snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
-            ),
-            headOid: snapshot?.branch.oid ?? null,
-            historyCommits: this.historyState.history.commits,
-          };
+      ports: {
+        branch: {
+          ...contextFeedback,
+          current: (target) => this.isBranchContextTargetCurrent(target),
+          select: (target) => this.markBranchContextTarget(target.key),
+          snapshot: () => this.windowSession.repository.state.snapshot,
+          policyOptions: () => {
+            const snapshot = this.windowSession.repository.state.snapshot;
+            const safety = snapshot ? this.branchSafety(snapshot) : {
+              ready: false,
+              message: this.localization.catalog.history.branchContextMenu.cleanRequired,
+            };
+            return {
+              busy: this.state.loading || Boolean(snapshot?.operation),
+              clean: safety.ready,
+              cleanReason: safety.message,
+              updateBlocked: this.remoteActionBlockedReason("pull"),
+              pushBlocked: this.remoteActionBlockedReason("push"),
+            };
+          },
+          showHistory: (target) => this.showBranchContextHistory(target),
+          openMutation: (kind, branch, suggestedName) => {
+            const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
+            if (repositoryRoot) {
+              this.branchMutationController.open(repositoryRoot, kind, branch, suggestedName);
+            }
+          },
+          openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
+          openRemoteAction: (kind, returnFocus) =>
+            this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
         },
-        openGitOperation: (kind, targets) => this.openGitOperation(kind, [...targets]),
-        openComparison: (target) => this.openHistoryComparison(target),
-        blocked: (reason) => this.setStatus(reason, "warning"),
-        status: (message) => this.setStatus(message, "success"),
-        error: (error) => this.showError(error),
-      },
-      () => this.localization.catalog.history,
-    );
-    this.historyContextBinding = new HistoryContextBinding(
-      root,
-      () => ({
-        state: this.historyState,
-        workspaceGeneration: this.windowSession.generation,
-        repositoryRevision: this.windowSession.repository.state.revision,
-      }),
-      (request) => this.openHistoryContextActions(request),
-    );
-    this.commitFolderContextActions = new CommitFolderContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
-        current: (target) => this.isCommitFolderContextTargetCurrent(target),
-        policy: (target) => {
-          const node = findProjectTreeNode(this.projectTree(), target.workspacePath);
-          return commitFolderContextPolicy(
-            node?.kind === "directory",
-            this.localization.catalog.history.commitFolderContextMenu.currentDirectoryUnavailable,
-          );
+        commit: {
+          ...contextFeedback,
+          current: (target) => this.isHistoryCommitContextTargetCurrent(target),
+          select: (target) => {
+            if (!this.isHistoryCommitContextTargetCurrent(target)) return false;
+            this.selectCommit(target.key);
+            this.markHistoryCommitContextTarget(target.key);
+            return this.historyState.selectedCommit === target.key;
+          },
+          policyOptions: () => {
+            const snapshot = this.windowSession.repository.state.snapshot;
+            const safety = snapshot ? this.branchSafety(snapshot) : {
+              ready: false,
+              message: this.localization.catalog.history.commitContextMenu.cleanRequired,
+            };
+            const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
+            return {
+              busy: this.state.loading || Boolean(snapshot?.operation),
+              clean: safety.ready && !unsaved,
+              cleanReason: unsaved
+                ? this.localization.catalog.gitOperations.saveBeforeReview
+                : safety.message,
+              localBranch: Boolean(
+                snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
+              ),
+            };
+          },
+          openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
+          openBranchFromCommit: (target) => {
+            this.branchMutationController.open(
+              target.workspaceRoot,
+              "create",
+              {
+                repositoryId: target.repositoryId,
+                fullName: target.oid,
+                name: target.commit.shortOid,
+                oid: target.oid,
+              },
+            );
+          },
         },
-        highlight: (target, highlighted) => this.markCommitFolderContextTarget(target.path, highlighted),
-        showChanges: (target) => this.openCommitFolderChanges(target),
-        revealCurrentDirectory: (target) => this.revealCommitFolderInFiles(target),
-        installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
-        blocked: (reason) => this.setStatus(reason, "warning"),
-        status: (message) => this.setStatus(message, "success"),
-        error: (error) => this.showError(error),
-      },
-      () => this.localization.catalog.history,
-    );
-    this.commitFileContextActions = new CommitFileContextActions(
-      this.contextMenuHost,
-      createBrowserTextClipboardAdapter(window.navigator),
-      {
-        current: (target) => this.isCommitFileContextTargetCurrent(target),
-        policy: (target) => {
-          this.captureMountedTextEditor();
-          const currentFile = this.filesState.files.some((file) =>
-            file.repositoryId === target.repositoryId && file.path === target.path && !file.readOnly
-          );
-          return commitFileContextPolicy({
-            currentFileAvailable: currentFile,
-            currentFileUnavailableReason:
-              this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
-            restoreBlockedReason: this.commitFileRestoreBlockReason(target.workspacePath),
-            busy: this.state.loading || this.projectFilesOperations.busy ||
-              this.workspaceReplacementController.state.dialog !== null,
-            busyReason: this.localization.catalog.history.commitFileContextMenu.restoreBusy,
-          });
+        range: {
+          ...contextFeedback,
+          current: (target) => this.isHistoryCommitRangeTargetCurrent(target),
+          policyOptions: () => {
+            const snapshot = this.windowSession.repository.state.snapshot;
+            const safety = snapshot ? this.branchSafety(snapshot) : {
+              ready: false,
+              message: this.localization.catalog.history.rangeContextMenu.cleanRequired,
+            };
+            const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
+            return {
+              busy: this.state.loading || Boolean(snapshot?.operation),
+              clean: safety.ready && !unsaved,
+              cleanReason: unsaved
+                ? this.localization.catalog.gitOperations.saveBeforeReview
+                : safety.message,
+              localBranch: Boolean(
+                snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
+              ),
+              headOid: snapshot?.branch.oid ?? null,
+              historyCommits: this.historyState.history.commits,
+            };
+          },
+          openGitOperation: (kind, targets) => this.openGitOperation(kind, [...targets]),
+          openComparison: (target) => this.openHistoryComparison(target),
         },
-        highlight: (target, highlighted) =>
-          this.markCommitFileContextTarget(target.path, highlighted),
-        showDiff: (target) => this.openCommitFileContextDiff(target),
-        openHistorical: (target) => this.openCommitFileContextHistorical(target),
-        compareCurrent: (target) => this.openCommitFileContextComparison(target),
-        openCurrent: (target) => void this.openCommitFileContextCurrent(target),
-        restore: (target) => this.openCommitFileRestore(target),
-        installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
-        blocked: (reason) => this.setStatus(reason, "warning"),
-        status: (message) => this.setStatus(message, "success"),
-        error: (error) => this.showError(error),
+        folder: {
+          ...contextFeedback,
+          current: (target) => this.isCommitFolderContextTargetCurrent(target),
+          policy: (target) => {
+            const node = findProjectTreeNode(this.projectTree(), target.workspacePath);
+            return commitFolderContextPolicy(
+              node?.kind === "directory",
+              this.localization.catalog.history.commitFolderContextMenu.currentDirectoryUnavailable,
+            );
+          },
+          highlight: (target, highlighted) =>
+            this.markCommitFolderContextTarget(target.path, highlighted),
+          showChanges: (target) => this.openCommitFolderChanges(target),
+          revealCurrentDirectory: (target) => this.revealCommitFolderInFiles(target),
+          installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
+        },
+        file: {
+          ...contextFeedback,
+          current: (target) => this.isCommitFileContextTargetCurrent(target),
+          policy: (target) => {
+            this.captureMountedTextEditor();
+            const currentFile = this.filesState.files.some((file) =>
+              file.repositoryId === target.repositoryId && file.path === target.path && !file.readOnly
+            );
+            return commitFileContextPolicy({
+              currentFileAvailable: currentFile,
+              currentFileUnavailableReason:
+                this.localization.catalog.history.commitFileContextMenu.currentFileUnavailable,
+              restoreBlockedReason: this.commitFileRestoreBlockReason(target.workspacePath),
+              busy: this.state.loading || this.projectFilesOperations.busy ||
+                this.workspaceReplacementController.state.dialog !== null,
+              busyReason: this.localization.catalog.history.commitFileContextMenu.restoreBusy,
+            });
+          },
+          highlight: (target, highlighted) =>
+            this.markCommitFileContextTarget(target.path, highlighted),
+          showDiff: (target) => this.openCommitFileContextDiff(target),
+          openHistorical: (target) => this.openCommitFileContextHistorical(target),
+          compareCurrent: (target) => this.openCommitFileContextComparison(target),
+          openCurrent: (target) => void this.openCommitFileContextCurrent(target),
+          restore: (target) => this.openCommitFileRestore(target),
+          installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
+        },
       },
-      () => this.localization.catalog.history,
-    );
-    this.commitDetailContextBinding = new CommitDetailContextBinding(
-      root,
-      () => ({
-        state: this.historyState,
-        workspaceGeneration: this.windowSession.generation,
-        repositoryRevision: this.windowSession.repository.state.revision,
-        snapshot: this.windowSession.repository.state.snapshot,
-        fileView: this.historyDetailState.commitFileView,
-      }),
-      (request) => request.target.kind === "directory"
-        ? this.commitFolderContextActions.open({
-            ...request,
-            target: request.target as CommitDetailDirectoryContextTarget,
-          })
-        : this.commitFileContextActions.open({
-            ...request,
-            target: request.target as CommitDetailFileContextTarget,
-          }),
-    );
+    });
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
       {
@@ -1814,9 +1762,7 @@ export class AsterlynApp {
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
     this.changesContextBinding.dispose();
-    this.branchContextBinding.dispose();
-    this.historyContextBinding.dispose();
-    this.commitDetailContextBinding.dispose();
+    this.gitHistoryContextRuntime.dispose();
     this.projectFilesContextBinding.dispose();
     this.workspaceTrashBinding.dispose();
     this.releaseWorkspaceTrash();
@@ -5790,18 +5736,6 @@ export class AsterlynApp {
         .find((row) => row.dataset.projectNode === target.workspacePath)
         ?.focus();
     });
-  }
-
-  private openHistoryContextActions(
-    request: Parameters<HistoryCommitContextActions["open"]>[0],
-  ): boolean {
-    const selection = this.historyRangeSelection.contextTarget(request.target.key);
-    const range = resolveHistoryCommitRangeTarget(request.target, selection);
-    if (range) {
-      this.markHistoryCommitContextTarget(request.target.key);
-      return this.historyCommitRangeContextActions.open({ ...request, target: range });
-    }
-    return this.historyCommitContextActions.open(request);
   }
 
   private markHistoryCommitContextTarget(key: string): void {
