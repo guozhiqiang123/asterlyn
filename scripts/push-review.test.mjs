@@ -5,7 +5,7 @@ import {
   filesForPushReview,
   nextPushCommitSelection,
   pushConfirmationAvailability,
-} from "../src/workbench/push-review.ts";
+} from "../src/features/remote-push/push-review.ts";
 
 const aggregate = [
   { path: "src/one.ts", originalPath: null, status: "modified" },

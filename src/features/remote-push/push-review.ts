@@ -1,4 +1,4 @@
-import type { CommitDetails, CommitFileChange } from "../models";
+import type { CommitDetails, CommitFileChange } from "../../models";
 
 export interface PushConfirmationAvailabilityInput {
   operationActive: boolean;

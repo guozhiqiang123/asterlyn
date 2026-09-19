@@ -8,7 +8,7 @@ import type {
   RepositorySnapshot,
 } from "../../models.ts";
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
-import { filesForPushReview } from "../../workbench/push-review.ts";
+import { filesForPushReview } from "./push-review.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";

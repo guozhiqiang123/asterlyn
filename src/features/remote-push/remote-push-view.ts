@@ -19,7 +19,7 @@ import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,
   pushConfirmationAvailability,
-} from "../../workbench/push-review.ts";
+} from "./push-review.ts";
 import type { RemoteAuthenticationState } from "./remote-authentication-controller.ts";
 import {
   isRemoteUpdateStrategyAvailable,

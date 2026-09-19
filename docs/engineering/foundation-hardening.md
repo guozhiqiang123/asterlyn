@@ -278,6 +278,9 @@ presentation from depending on the Git History feature.
 Changes/Commit now owns its change grouping, effective-status, inclusion, and tree-projection model
 next to the controller and view that consume it.
 
+Remote Push now owns its review file projection, commit-selection transition, and confirmation
+availability rules next to the remote controller and view.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;

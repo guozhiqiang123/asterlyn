@@ -222,7 +222,7 @@ import { attachSplitter } from "./presentation/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./workbench/diff-navigation";
 import {
   nextPushCommitSelection,
-} from "./workbench/push-review";
+} from "./features/remote-push/push-review";
 import type { ActivityTool } from "./shell/activity-order";
 import { isMarkdownPath } from "./workbench/markdown-format";
 import {

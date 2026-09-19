@@ -40,7 +40,6 @@
     "src/workbench/markdown-mode-preferences.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-mode-preferences.ts", "migrationPhase": "FH4" },
     "src/workbench/markdown-preview.ts": { "owner": "files-editor", "target": "src/features/files-editor/markdown-preview.ts", "migrationPhase": "FH4" },
     "src/workbench/navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/navigation.ts", "migrationPhase": "FH4" },
-    "src/workbench/push-review.ts": { "owner": "remote-push", "target": "src/features/remote-push/push-review.ts", "migrationPhase": "FH4" },
     "src/workbench/ref-history.ts": { "owner": "git-history", "target": "src/features/git-history/ref-history.ts", "migrationPhase": "FH4" },
     "src/workbench/search-navigation.ts": { "owner": "files-editor", "target": "src/features/files-editor/search-navigation.ts", "migrationPhase": "FH4" },
     "src/workbench/text-content.ts": { "owner": "files-editor", "target": "src/features/files-editor/text-content.ts", "migrationPhase": "FH4" },
