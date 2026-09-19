@@ -11,9 +11,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-
 use crate::error::{GitError, RemoteFailureKind};
 use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
@@ -27,6 +24,10 @@ use crate::model::{
     UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
+use crate::process::{
+    GitRunner, join_limited_stream, join_stream, read_stream, read_stream_bounded,
+    read_stream_limited_with_signal, wait_with_bounded_output, wait_with_remote_output,
+};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
@@ -37,7 +38,6 @@ const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const EXPANDED_DIFF_CONTEXT_LINES: usize = 1_000_000;
 const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const TREE_ENTRY_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
-const REMOTE_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
 const MAX_PUSH_PREVIEW_WINDOW: usize = 1_000;
@@ -4680,83 +4680,6 @@ fn validate_query_roots(query: &HistoryQuery, roots: &[DiscoveredGitRoot]) -> Re
     Ok(())
 }
 
-fn read_stream(stream: impl Read) -> std::io::Result<Vec<u8>> {
-    let (bytes, truncated) = read_stream_limited(stream, 64 * 1024 * 1024)?;
-    if truncated {
-        return Err(std::io::Error::other(
-            "Git output exceeded the 64 MiB limit; verify repository state before retrying a mutation",
-        ));
-    }
-    Ok(bytes)
-}
-
-fn read_stream_bounded(mut stream: impl Read) -> std::io::Result<Vec<u8>> {
-    read_stream_limited(&mut stream, REMOTE_OUTPUT_LIMIT_BYTES).map(|(bytes, _)| bytes)
-}
-
-fn read_stream_limited(stream: impl Read, limit: usize) -> std::io::Result<(Vec<u8>, bool)> {
-    read_stream_limited_with_signal(stream, limit, None)
-}
-
-fn read_stream_limited_with_signal(
-    mut stream: impl Read,
-    limit: usize,
-    limit_reached: Option<std::sync::mpsc::SyncSender<()>>,
-) -> std::io::Result<(Vec<u8>, bool)> {
-    let mut retained = Vec::new();
-    let mut truncated = false;
-    let mut buffer = [0_u8; 8 * 1024];
-    loop {
-        let count = stream.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        let remaining = limit.saturating_sub(retained.len());
-        retained.extend_from_slice(&buffer[..count.min(remaining)]);
-        if count > remaining && !truncated {
-            truncated = true;
-            if let Some(sender) = limit_reached.as_ref() {
-                let _ = sender.try_send(());
-            }
-        }
-    }
-    Ok((retained, truncated))
-}
-
-fn join_stream(
-    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
-    operation: &str,
-    stream: &str,
-) -> Result<Vec<u8>, GitError> {
-    reader
-        .join()
-        .map_err(|_| GitError::Io {
-            operation: operation.to_string(),
-            message: format!("Git {stream} reader stopped unexpectedly"),
-        })?
-        .map_err(|error| GitError::Io {
-            operation: operation.to_string(),
-            message: format!("could not read Git {stream}: {error}"),
-        })
-}
-
-fn join_limited_stream(
-    reader: thread::JoinHandle<std::io::Result<(Vec<u8>, bool)>>,
-    operation: &str,
-    stream: &str,
-) -> Result<(Vec<u8>, bool), GitError> {
-    reader
-        .join()
-        .map_err(|_| GitError::Io {
-            operation: operation.to_string(),
-            message: format!("Git {stream} reader stopped unexpectedly"),
-        })?
-        .map_err(|error| GitError::Io {
-            operation: operation.to_string(),
-            message: format!("could not read Git {stream}: {error}"),
-        })
-}
-
 fn run_from<const N: usize>(
     path: &Path,
     operation: &str,
@@ -4822,110 +4745,15 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let child = base_command(path)
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    wait_with_bounded_output(child)
-}
-
-pub(crate) fn wait_with_bounded_output(mut child: Child) -> std::io::Result<Output> {
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
-    let stdout_reader = thread::spawn(move || read_stream(stdout));
-    let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
-    let status = child.wait();
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| std::io::Error::other("Git stdout reader failed"))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| std::io::Error::other("Git stderr reader failed"))?;
-    Ok(Output {
-        status: status?,
-        stdout: stdout?,
-        stderr: stderr?,
-    })
+    GitRunner::new(path).output(args)
 }
 
 fn base_command(path: &Path) -> Command {
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(path)
-        .arg("--no-pager")
-        .env("LC_ALL", "C")
-        .env("LANG", "C")
-        // Background reads must not refresh the index and trigger our own watcher.
-        // Git still takes all locks required by explicit mutations.
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0");
-    command
+    GitRunner::new(path).command()
 }
 
 fn remote_command(path: &Path) -> Command {
-    let mut command = base_command(path);
-    command
-        .arg("-c")
-        .arg("credential.interactive=never")
-        .arg("-c")
-        .arg("core.askPass=")
-        .env("GCM_INTERACTIVE", "Never")
-        .env("SSH_ASKPASS_REQUIRE", "never")
-        .env_remove("GIT_ASKPASS")
-        .env_remove("SSH_ASKPASS")
-        .env_remove("GIT_CONFIG_PARAMETERS")
-        .stdin(Stdio::null());
-    for (key, _) in std::env::vars_os() {
-        let name = key.to_string_lossy();
-        if name.starts_with("GIT_TRACE")
-            || name == "GIT_CURL_VERBOSE"
-            || name == "GIT_CONFIG_COUNT"
-            || name == "GIT_CONFIG_GLOBAL"
-            || name == "GIT_CONFIG_SYSTEM"
-            || name == "GIT_CONFIG_NOSYSTEM"
-            || name == "GIT_EXEC_PATH"
-            || name.starts_with("GIT_CONFIG_KEY_")
-            || name.starts_with("GIT_CONFIG_VALUE_")
-        {
-            command.env_remove(key);
-        }
-    }
-    #[cfg(unix)]
-    command.process_group(0);
-    command
-}
-
-fn wait_with_remote_output(mut child: Child) -> std::io::Result<Output> {
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| std::io::Error::other("Git stdout was unavailable"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| std::io::Error::other("Git stderr was unavailable"))?;
-    let stdout_reader = thread::spawn(move || read_stream_bounded(stdout));
-    let stderr_reader = thread::spawn(move || read_stream_bounded(stderr));
-    let status = child.wait();
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| std::io::Error::other("Git stdout reader failed"))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| std::io::Error::other("Git stderr reader failed"))?;
-    Ok(Output {
-        status: status?,
-        stdout: stdout?,
-        stderr: stderr?,
-    })
+    GitRunner::remote(path).command()
 }
 
 fn terminate_process_tree(child: &mut Child) {

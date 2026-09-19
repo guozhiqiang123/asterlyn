@@ -2,6 +2,7 @@ mod error;
 mod model;
 mod operation;
 mod parser;
+mod process;
 mod repository;
 mod text_diff;
 

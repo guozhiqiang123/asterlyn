@@ -382,9 +382,19 @@ transport validation and dispatch only; protocol generation and all native tests
 
 ### FH6 — Establish one Git process policy
 
+Status: in progress.
+
 Characterize read, mutation, remote, cancellation, overflow, Windows process-tree, and uncertain
 outcome behavior. Introduce a product-neutral runner inside `asterlyn-git`, migrate callers by
 behavioral group, and only then split repository reads/operations where cohesion improves.
+
+Progress: `asterlyn-git::process` is now the single owner of ordinary and remote Git executable
+construction, stable locale/non-interactive environment, inherited remote-environment hardening,
+and the shared 64 MiB/64 KiB output policies. Repository callers still own their existing
+operation-specific arguments, cancellation loops, and error interpretation through temporary thin
+adapters, so this slice changes no Git behavior. Policy tests characterize command arguments,
+credential hardening, configuration/trace injection filtering, and bounded stream retention; all
+91 crate tests and strict crate Clippy pass.
 
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
