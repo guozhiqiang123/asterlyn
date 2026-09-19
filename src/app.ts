@@ -112,13 +112,12 @@ import {
   ChangesContextSurfaceRuntime,
 } from "./features/changes-commit/changes-context-runtime.ts";
 import {
-  GitOperationController,
   type GitOperationChange,
   type GitOperationResult,
   type GitOperationState,
 } from "./features/git-operations/git-operation-controller";
 import { renderGitOperationBanner } from "./features/git-operations/git-operation-banner";
-import { GitOperationDialogBinding } from "./features/git-operations/git-operation-dialog-binding";
+import { GitOperationRuntime } from "./features/git-operations/git-operation-runtime.ts";
 import { TerminalPanel } from "./features/terminal/terminal-panel";
 import {
   type ProjectFilesChange,
@@ -417,11 +416,9 @@ export class AsterlynApp {
     ProjectFilesContextTarget | ChangesContextTarget
   >;
   private readonly projectFilesOperationRuntime: ProjectFilesOperationRuntime;
-  private readonly gitOperationController: GitOperationController;
+  private readonly gitOperationRuntime: GitOperationRuntime;
   private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private editorTabsMarkup = "";
-  private readonly gitOperationDialogBinding: GitOperationDialogBinding;
-  private readonly releaseGitOperationController: () => void;
   private readonly settingsController: SettingsController;
   private readonly releaseSettingsController: () => void;
   private readonly presentationEnvironment: PresentationEnvironment;
@@ -668,27 +665,25 @@ export class AsterlynApp {
         editorChanged: (change) => this.handleEditorSessionChange(change),
       },
     );
-    this.gitOperationController = new GitOperationController({
-      prepareGitOperation: (...args) => bridge.prepareGitOperation(...args),
-      executeGitOperation: (...args) => bridge.executeGitOperation(...args),
-      runGitOperationAction: (...args) => bridge.runGitOperationAction(...args),
-      readConflictContent: (...args) => bridge.readConflictContent(...args),
-      resolveConflict: (...args) => bridge.resolveConflict(...args),
-    }, initialCatalog.gitOperations);
-    this.gitOperationDialogBinding = new GitOperationDialogBinding(
+    this.gitOperationRuntime = new GitOperationRuntime({
       root,
-      this.gitOperationController,
-      {
+      gateway: {
+        prepareGitOperation: (...args) => bridge.prepareGitOperation(...args),
+        executeGitOperation: (...args) => bridge.executeGitOperation(...args),
+        runGitOperationAction: (...args) => bridge.runGitOperationAction(...args),
+        readConflictContent: (...args) => bridge.readConflictContent(...args),
+        resolveConflict: (...args) => bridge.resolveConflict(...args),
+      },
+      initialCopy: initialCatalog.gitOperations,
+      actions: {
         prepare: () => void this.prepareGitOperation(),
         execute: () => void this.executeGitOperation(),
         resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
         reportError: (error) => this.showError(error),
       },
-      () => this.localization.catalog.gitOperations,
-    );
-    this.releaseGitOperationController = this.gitOperationController.subscribe((change) =>
-      this.handleGitOperationControllerChange(change),
-    );
+      copy: () => this.localization.catalog.gitOperations,
+      changed: (change) => this.handleGitOperationControllerChange(change),
+    });
     this.branchMutationController = new BranchMutationController({
       prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
       execute: (plan) => this.executeReviewedBranchMutation(plan),
@@ -881,7 +876,7 @@ export class AsterlynApp {
         changes: this.changesRuntime.controller,
         files: this.filesEditorRuntime.files,
         history: this.historyReadRuntime.details,
-        operations: this.gitOperationController,
+        operations: this.gitOperationRuntime.controller,
       },
       {
         clearBranchSelection: () => {
@@ -1176,7 +1171,7 @@ export class AsterlynApp {
         setIncluded: (target, included) => this.setChangePathsIncluded([target.path], included),
         showDiff: (target) => this.openChangesContextDiff(target),
         jumpToSource: (target) => this.openChangesContextSource(target),
-        resolveConflict: (target) => this.gitOperationDialogBinding.openConflict(target.path),
+        resolveConflict: (target) => this.gitOperationRuntime.openConflict(target.path),
         restore: (target) => this.restoreChangesContextTarget(target),
         trash: (target) => this.workspaceTrashRuntime.controller.request(target),
         installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
@@ -1223,7 +1218,7 @@ export class AsterlynApp {
         const tab = activeTextTab(this.editorState.session);
         return tab?.status === "ready" ? tab.id : null;
       },
-      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationController.hasUnsavedConflict()),
+      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationRuntime.controller.hasUnsavedConflict()),
       toggleRepositoryMenu: () => {
         this.shellController.toggleRepositoryMenu();
         this.renderRepositoryMenu();
@@ -1282,7 +1277,7 @@ export class AsterlynApp {
       closePushDiff: () => this.closePushDiff(),
       openGitOperation: () => this.openGitOperation(),
       openGitRecoveries: () => void this.openGitRecoveries(),
-      closeGitOperation: () => this.gitOperationDialogBinding.close(),
+      closeGitOperation: () => this.gitOperationRuntime.close(),
       closeRepositoryMenu: (restoreFocus) => {
         this.shellController.closeRepositoryMenu();
         this.renderRepositoryMenu();
@@ -1308,7 +1303,7 @@ export class AsterlynApp {
     });
     this.windowChromeBinding = new WindowChromeBinding(root, {
       captureEditor: () => this.captureMountedTextEditor(),
-      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationController.hasUnsavedConflict()),
+      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationRuntime.controller.hasUnsavedConflict()),
       confirmClose: () => this.saveDirtyTabsBefore(this.localization.catalog.common.actions.closeApp),
       reportError: (error) => this.showError(error),
       labels: () => this.localShellCopy(),
@@ -1340,7 +1335,7 @@ export class AsterlynApp {
   }
 
   private get gitOperationState(): GitOperationState {
-    return this.gitOperationController.state;
+    return this.gitOperationRuntime.controller.state;
   }
 
   private get shellState(): ShellState {
@@ -1410,9 +1405,6 @@ export class AsterlynApp {
   }
 
   private handleGitOperationControllerChange(change: GitOperationChange): void {
-    if (change.dialogChanged && this.root.querySelector("#git-operation-dialog")) {
-      this.gitOperationDialogBinding.render();
-    }
     if (change.operationChanged) {
       const snapshot = this.windowSession.repository.state.snapshot;
       if (snapshot) this.renderStatus(snapshot);
@@ -1562,7 +1554,7 @@ export class AsterlynApp {
       this.historyReadRuntime.details.setMessages(catalog.history);
       this.remoteRuntime.push.setMessages(catalog.remote, catalog.errors);
       this.remoteRuntime.authentication.setMessages(catalog.remote, catalog.errors);
-      this.gitOperationController.setMessages(catalog.gitOperations);
+      this.gitOperationRuntime.setMessages(catalog.gitOperations);
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setBlameCopy(catalog.editor);
@@ -1590,7 +1582,7 @@ export class AsterlynApp {
       this.renderWorkspaceReplacementDialog();
     }
     if (this.historyFilterState.historyDialog) this.renderHistoryDialog();
-    if (this.gitOperationState.dialog) this.gitOperationDialogBinding.render();
+    if (this.gitOperationState.dialog) this.gitOperationRuntime.render();
     this.branchMutationDialogBinding.refreshCopy();
     this.commitFileRestoreDialogBinding.refreshCopy();
     this.recoveryDialog?.refreshCopy();
@@ -1746,11 +1738,9 @@ export class AsterlynApp {
     this.remoteRuntime.dispose();
     this.changesRuntime.dispose();
     this.filesEditorRuntime.dispose();
-    this.releaseGitOperationController();
     this.branchMutationDialogBinding.dispose();
     this.branchMutationController.dispose();
-    this.gitOperationDialogBinding.dispose();
-    this.gitOperationController.dispose();
+    this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.releaseSettingsController();
     this.settingsController.dispose();
@@ -3491,8 +3481,8 @@ export class AsterlynApp {
       return;
     }
     const target = `refs/remotes/${remote}/${upstream.slice("refs/heads/".length)}`;
-    this.gitOperationController.openSetup(strategy, [target]);
-    await this.gitOperationController.prepare();
+    this.gitOperationRuntime.controller.openSetup(strategy, [target]);
+    await this.gitOperationRuntime.controller.prepare();
   }
 
   private async confirmRemotePush(): Promise<void> {
@@ -3898,7 +3888,7 @@ export class AsterlynApp {
     this.renderStatus(snapshot);
     this.branchMutationDialogBinding.render();
     this.commitFileRestoreDialogBinding.render();
-    this.gitOperationDialogBinding.render();
+    this.gitOperationRuntime.render();
   }
 
   private renderTopbar(
@@ -4932,7 +4922,7 @@ export class AsterlynApp {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         const path = button.dataset.resolveConflict;
-        if (path) this.gitOperationDialogBinding.openConflict(path);
+        if (path) this.gitOperationRuntime.openConflict(path);
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-git-operation-action]").forEach((button) => {
@@ -6809,7 +6799,9 @@ export class AsterlynApp {
   }
 
   private async saveDirtyTabsBefore(action: string): Promise<boolean> {
-    if (this.gitOperationController.hasUnsavedConflict() && !this.gitOperationDialogBinding.close()) return false;
+    if (this.gitOperationRuntime.controller.hasUnsavedConflict() && !this.gitOperationRuntime.close()) {
+      return false;
+    }
     this.captureMountedTextEditor();
     const dirty = dirtyTextTabs(this.editorState.session);
     if (dirty.length === 0) return true;
@@ -8193,13 +8185,13 @@ export class AsterlynApp {
       );
       return;
     }
-    this.gitOperationDialogBinding.openSetup(kind, targets);
+    this.gitOperationRuntime.openSetup(kind, targets);
   }
 
   private async prepareGitOperation(): Promise<void> {
     if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.reviewGitOperation))) return;
     await this.refresh();
-    await this.gitOperationController.prepare();
+    await this.gitOperationRuntime.controller.prepare();
   }
 
   private async executeGitOperation(): Promise<void> {
@@ -8212,7 +8204,7 @@ export class AsterlynApp {
     await this.runGitOperationMutation(
       this.localization.catalog.gitOperations.inProgress(this.localization.catalog.gitOperations.names[kind]),
       this.localization.catalog.gitOperations.completed(this.localization.catalog.gitOperations.names[kind]),
-      () => this.gitOperationController.execute(),
+      () => this.gitOperationRuntime.controller.execute(),
     );
   }
 
@@ -8229,7 +8221,7 @@ export class AsterlynApp {
         : action === "skip"
           ? this.localization.catalog.gitOperations.skippedCommit
           : this.localization.catalog.gitOperations.continued,
-      () => this.gitOperationController.runAction(action),
+      () => this.gitOperationRuntime.controller.runAction(action),
     );
   }
 
@@ -8239,7 +8231,7 @@ export class AsterlynApp {
     await this.runGitOperationMutation(
       this.localization.catalog.gitOperations.resolvingPath(path),
       this.localization.catalog.gitOperations.resolvedAndStaged(path),
-      () => this.gitOperationController.resolveConflict(deleteFile),
+      () => this.gitOperationRuntime.controller.resolveConflict(deleteFile),
     );
   }
 

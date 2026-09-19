@@ -15,6 +15,10 @@ export interface GitOperationDialogActions {
 
 /** Owns the lazy Git-operation dialog DOM and its complete listener/focus lifecycle. */
 export class GitOperationDialogBinding {
+  private readonly root: HTMLElement;
+  private readonly controller: GitOperationController;
+  private readonly actions: GitOperationDialogActions;
+  private readonly copy: () => GitOperationCopy;
   private dialogModule: Promise<
     typeof import("./git-operation-dialog-entry.ts")
   > | null = null;
@@ -23,11 +27,16 @@ export class GitOperationDialogBinding {
   private disposed = false;
 
   constructor(
-    private readonly root: HTMLElement,
-    private readonly controller: GitOperationController,
-    private readonly actions: GitOperationDialogActions,
-    private readonly copy: () => GitOperationCopy = () => DEFAULT_LOCALIZATION.catalog.gitOperations,
-  ) {}
+    root: HTMLElement,
+    controller: GitOperationController,
+    actions: GitOperationDialogActions,
+    copy: () => GitOperationCopy = () => DEFAULT_LOCALIZATION.catalog.gitOperations,
+  ) {
+    this.root = root;
+    this.controller = controller;
+    this.actions = actions;
+    this.copy = copy;
+  }
 
   openSetup(kind: GitOperationKind, targets: string[], message = ""): void {
     this.captureReturnFocus();

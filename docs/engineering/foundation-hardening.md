@@ -215,6 +215,12 @@ window-local file clipboard subscriptions, inline/dialog binding, and disposal; 
 root supplies only the workspace, Trash, reconciliation, feedback, and rendering ports.
 `src/app.ts` is 8,834 lines with a matching ceiling.
 
+Reviewed Git operations now use the same lifecycle boundary. `GitOperationRuntime` owns the
+controller, lazy dialog binding, subscription, focus-aware open/close surface, localization update,
+and disposal. Mutation orchestration remains an explicit composition callback rather than moving
+application coordination into presentation code. `src/app.ts` is 8,826 lines with a matching
+ceiling.
+
 Extract vertical slices in this order:
 
 1. Search request/control/result state and scoped rendering;
