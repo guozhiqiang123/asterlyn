@@ -396,6 +396,11 @@ adapters, so this slice changes no Git behavior. Policy tests characterize comma
 credential hardening, configuration/trace injection filtering, and bounded stream retention; all
 91 crate tests and strict crate Clippy pass.
 
+The bounded catalog, byte-limited read, and cancellable read paths now also delegate process
+creation and pipe setup to the runner. Their record-aware consumption, overflow termination, and
+cancellation/error mapping remain at the repository boundary for the next orchestration slice;
+existing catalog budget and pre-emptive cancellation tests characterize those semantics.
+
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
 source of truth.

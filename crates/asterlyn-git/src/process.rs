@@ -66,16 +66,23 @@ impl<'a> GitRunner<'a> {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let child = self
-            .command()
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+        let child = self.spawn_piped(args)?;
         match self.profile {
             GitProcessProfile::Standard => wait_with_bounded_output(child),
             GitProcessProfile::Remote => wait_with_remote_output(child),
         }
+    }
+
+    pub(crate) fn spawn_piped<I, S>(&self, args: I) -> std::io::Result<Child>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.command()
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
     }
 }
 

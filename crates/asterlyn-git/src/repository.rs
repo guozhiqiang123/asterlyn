@@ -4241,11 +4241,8 @@ impl GitRepository {
         args: &[&str],
         limit: usize,
     ) -> Result<(Vec<String>, bool), GitError> {
-        let mut child = base_command(&self.root)
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+        let mut child = GitRunner::new(&self.root)
+            .spawn_piped(args)
             .map_err(|error| GitError::Io {
                 operation: "list bounded catalog".into(),
                 message: error.to_string(),
@@ -4282,11 +4279,8 @@ impl GitRepository {
         args: Vec<OsString>,
         stdout_limit: usize,
     ) -> Result<(Output, bool), GitError> {
-        let mut child = base_command(&self.root)
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+        let mut child = GitRunner::new(&self.root)
+            .spawn_piped(args)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
@@ -4444,11 +4438,8 @@ impl GitRepository {
             });
         }
 
-        let mut child = base_command(&self.root)
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+        let mut child = GitRunner::new(&self.root)
+            .spawn_piped(args)
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),
