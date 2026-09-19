@@ -7,10 +7,10 @@
       "maximumLines": 9242,
       "burnDownPhase": "FH4"
     },
-    "src/bridge.ts": {
-      "owner": "runtime bridge transition",
+    "src/adapters/demo/demo-desktop-bridge.ts": {
+      "owner": "deterministic browser demo adapter",
       "maximumLines": 2375,
-      "burnDownPhase": "FH2"
+      "burnDownPhase": "reviewed demo fixture; split by capability before adding behavior"
     },
     "src/localization/catalog.ts": {
       "owner": "localization schema",

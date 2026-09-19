@@ -118,6 +118,13 @@ explicit, and an exception cannot grow silently.
 
 ### FH2 — Separate native production from the browser demo
 
+Status: **locally accepted on 2026-09-19.** The native bridge remains static, the deterministic
+browser bridge is a conditional dynamic module, and the build fails when the application chunk is
+over 500,000 bytes or contains demo modules. Capability-owned feature chunks bring the application
+chunk below the limit; they are still static startup dependencies, so aggregate startup transfer
+remains an FH4 optimization measure rather than being misreported as eliminated. Evidence:
+[`FH2 startup-boundary acceptance`](../benchmarks/2026-09-19-foundation-hardening-fh2.md).
+
 Move the deterministic demo bridge behind a browser-only dynamic boundary. Keep the Tauri bridge
 static for native startup, preserve the `DesktopBridge` contract, and keep demo behavior covered by
 the existing script/browser tests. Set the generated main-chunk hard limit to 500,000 bytes after

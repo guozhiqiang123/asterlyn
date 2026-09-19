@@ -64,6 +64,10 @@ Performance budgets are guardrails. They may change only through a documented de
 - The main production frontend chunk should remain below 500 kB uncompressed. A temporary breach
   is accepted during the migration only when the build records the warning and the next extraction
   keeps optional feature code behind a lazy boundary.
+- The production build enforces that limit against the generated chunk containing `src/app.ts` and
+  rejects browser-demo modules in that chunk. Capability-owned static chunks are reported
+  separately from truly lazy chunks; splitting a file does not justify claiming reduced aggregate
+  startup transfer without a measured request graph.
 
 ## Compatibility
 
