@@ -5,6 +5,7 @@ import { renderBranchNavigation } from "../src/features/git-history/branch-navig
 import {
   renderCommitComparisonDetail,
   renderCommitDetail,
+  renderCommitFolderDetail,
 } from "../src/features/git-history/git-detail-view.ts";
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
 import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
@@ -245,6 +246,7 @@ test("history navigation owns filter menus and list host presentation", () => {
     caseSensitive: false,
     regularExpression: false,
     refs: new Map(),
+    startCommit: { repositoryId: ".", oid: "a".repeat(40) },
     authorEmails: new Set(),
     currentAuthor: false,
     datePreset: "all",
@@ -264,6 +266,7 @@ test("history navigation owns filter menus and list host presentation", () => {
   assert.match(html, /history-filter-popover-date/);
   assert.match(html, /Last 24 hours/);
   assert.match(html, /No commits match these filters/);
+  assert.match(html, /Up to aaaaaaaaaa/);
 });
 
 test("history dialogs and commit details render without the application shell", () => {
@@ -315,6 +318,21 @@ test("history dialogs and commit details render without the application shell", 
     fileView: "tree",
     collapsedDirectories: new Set(),
   });
+  const folder = renderCommitFolderDetail({
+    target: {
+      workspaceRoot: "/repo", workspaceGeneration: 1, repositoryRevision: 2,
+      workspacePath: "src", repositoryId: ".", oid: "2".repeat(40),
+      parentOid: "1".repeat(40), path: "src", kind: "directory", file: null,
+      descendants: [
+        { path: "src/main.ts", originalPath: null, status: "modified" },
+        { path: "src/nested/new.ts", originalPath: null, status: "added" },
+      ],
+      historyGeneration: 3,
+    },
+    selectedFile: "src/main.ts",
+    fileView: "tree",
+    collapsedDirectories: new Set(),
+  });
 
   assert.match(dialog, /Select Branches or Tags/);
   assert.match(dialog, /data-history-dialog-ref/);
@@ -325,6 +343,9 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(comparison, /data-comparison-file="src\/compare\.ts"/);
   assert.match(comparison, /Swap Before and After/);
   assert.match(comparison, /divergent histories/);
+  assert.match(folder, /Folder changes/);
+  assert.match(folder, /data-commit-folder-file="src\/main\.ts"/);
+  assert.match(folder, /2 changed files projected under this folder/);
 });
 
 test("workspace navigation and replacement previews are feature-owned", () => {

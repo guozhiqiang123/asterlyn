@@ -29,8 +29,8 @@ use crate::model::{
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
-const COMMIT_COMPARISON_FILE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
-const MAX_COMMIT_COMPARISON_FILES: usize = 20_000;
+const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_COMMIT_FILE_CHANGES: usize = 20_000;
 const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 // Git has no "all context" switch. A deliberately unreachable practical line count requests the
 // complete file while the existing byte limit remains the authoritative output bound.
@@ -1395,8 +1395,8 @@ impl GitRepository {
     pub fn commit_details(&self, oid: &str) -> Result<CommitDetails, GitError> {
         validate_object_id(oid)?;
         let parent_oid = self.first_parent(oid)?;
-        let output = if let Some(parent) = &parent_oid {
-            self.run_read_owned(
+        let (output, truncated) = if let Some(parent) = &parent_oid {
+            self.run_read_owned_bounded(
                 "read commit file list",
                 vec![
                     OsString::from("diff"),
@@ -1408,9 +1408,10 @@ impl GitRepository {
                     OsString::from(parent),
                     OsString::from(oid),
                 ],
+                COMMIT_FILE_LIST_LIMIT_BYTES + 1,
             )?
         } else {
-            self.run_read_owned(
+            self.run_read_owned_bounded(
                 "read root commit file list",
                 vec![
                     OsString::from("diff-tree"),
@@ -1423,14 +1424,21 @@ impl GitRepository {
                     OsString::from("-C"),
                     OsString::from(oid),
                 ],
+                COMMIT_FILE_LIST_LIMIT_BYTES + 1,
             )?
         };
+        let files = parse_bounded_commit_files(
+            output,
+            truncated,
+            "commit file list",
+            "the changed-file list",
+        )?;
 
         Ok(CommitDetails {
             repository_id: ".".to_string(),
             oid: oid.to_string(),
             parent_oid,
-            files: parse_commit_files(&output.stdout)?,
+            files,
         })
     }
 
@@ -1472,19 +1480,14 @@ impl GitRepository {
                 OsString::from(before_oid),
                 OsString::from(after_oid),
             ],
-            COMMIT_COMPARISON_FILE_LIMIT_BYTES + 1,
+            COMMIT_FILE_LIST_LIMIT_BYTES + 1,
         )?;
-        if truncated || output.stdout.len() > COMMIT_COMPARISON_FILE_LIMIT_BYTES {
-            return Err(commit_comparison_limit_error(
-                "the changed-file list exceeded the 16 MiB read limit",
-            ));
-        }
-        let files = parse_commit_files(&output.stdout)?;
-        if files.len() > MAX_COMMIT_COMPARISON_FILES {
-            return Err(commit_comparison_limit_error(
-                "the comparison contains more than 20,000 changed files",
-            ));
-        }
+        let files = parse_bounded_commit_files(
+            output,
+            truncated,
+            "commit comparison",
+            "the comparison changed-file list",
+        )?;
         Ok(CommitComparisonDetails {
             repository_id: ".".to_string(),
             before_oid: before_oid.to_string(),
@@ -5182,9 +5185,31 @@ fn validate_distinct_commit_ids(before_oid: &str, after_oid: &str) -> Result<(),
     Ok(())
 }
 
-fn commit_comparison_limit_error(message: &str) -> GitError {
+fn parse_bounded_commit_files(
+    output: Output,
+    truncated: bool,
+    field: &str,
+    description: &str,
+) -> Result<Vec<CommitFileChange>, GitError> {
+    if truncated || output.stdout.len() > COMMIT_FILE_LIST_LIMIT_BYTES {
+        return Err(commit_file_list_limit_error(
+            field,
+            &format!("{description} exceeded the 16 MiB read limit"),
+        ));
+    }
+    let files = parse_commit_files(&output.stdout)?;
+    if files.len() > MAX_COMMIT_FILE_CHANGES {
+        return Err(commit_file_list_limit_error(
+            field,
+            &format!("{description} contains more than 20,000 files"),
+        ));
+    }
+    Ok(files)
+}
+
+fn commit_file_list_limit_error(field: &str, message: &str) -> GitError {
     GitError::InvalidInput {
-        field: "commit comparison".to_string(),
+        field: field.to_string(),
         message: message.to_string(),
     }
 }
@@ -7204,6 +7229,35 @@ mod tests {
             .expect("rename patch loads");
         assert!(patch.patch.contains("rename from old-name.txt"));
         assert!(patch.patch.contains("rename to new-name.txt"));
+    }
+
+    #[test]
+    fn rejects_partial_or_oversized_commit_file_lists() {
+        let output = Command::new("git")
+            .arg("--version")
+            .output()
+            .expect("git output fixture");
+        assert!(matches!(
+            parse_bounded_commit_files(output, true, "commit file list", "the file list"),
+            Err(GitError::InvalidInput { .. })
+        ));
+
+        let mut output = Command::new("git")
+            .arg("--version")
+            .output()
+            .expect("git output fixture");
+        output.stdout = Vec::with_capacity((MAX_COMMIT_FILE_CHANGES + 1) * 18);
+        for index in 0..=MAX_COMMIT_FILE_CHANGES {
+            output.stdout.extend_from_slice(b"M\0");
+            output
+                .stdout
+                .extend_from_slice(format!("file-{index:05}.txt").as_bytes());
+            output.stdout.push(0);
+        }
+        assert!(matches!(
+            parse_bounded_commit_files(output, false, "commit file list", "the file list"),
+            Err(GitError::InvalidInput { .. })
+        ));
     }
 
     #[test]

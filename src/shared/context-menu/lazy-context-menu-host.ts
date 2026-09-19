@@ -20,28 +20,42 @@ export class LazyContextMenuHost implements ContextMenuPort {
         this.pending = null;
         if (pending?.session.isCurrent()) {
           this.delegate.open(pending.anchor, pending.session);
+        } else {
+          pending?.session.dismissed?.();
         }
       })
-      .catch(console.error);
+      .catch((error) => {
+        this.pending?.session.dismissed?.();
+        this.pending = null;
+        console.error(error);
+      });
   }
 
   open(anchor: ContextMenuAnchor, session: ContextMenuSession): void {
-    if (this.disposed || !session.isCurrent()) return;
+    if (this.disposed || !session.isCurrent()) {
+      session.dismissed?.();
+      return;
+    }
     if (this.delegate) {
       this.delegate.open(anchor, session);
       return;
     }
+    this.pending?.session.dismissed?.();
     this.pending = { anchor, session };
   }
 
   close(ownerId?: string): void {
-    if (!ownerId || this.pending?.session.ownerId === ownerId) this.pending = null;
+    if (!ownerId || this.pending?.session.ownerId === ownerId) {
+      this.pending?.session.dismissed?.();
+      this.pending = null;
+    }
     this.delegate?.close(ownerId);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.pending?.session.dismissed?.();
     this.pending = null;
     this.delegate?.dispose();
     this.delegate = null;

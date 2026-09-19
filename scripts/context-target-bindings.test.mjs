@@ -138,18 +138,40 @@ test("feature target resolvers reject stale display labels and retain exact iden
 
 test("History and commit-detail targets bind object, query generation and exact path", () => {
   const state = historyState();
+  state.details.files.push({ path: "src/nested/feature.ts", originalPath: null, status: "added" });
+  const snapshot = repositorySnapshot();
   const history = resolveHistoryCommitContextTarget(state, 5, 12, commitKey(commit));
   assert.equal(history?.oid, commit.oid);
   assert.equal(history?.historyGeneration, 9);
   assert.equal(history?.repositoryRevision, 12);
   assert.equal(resolveHistoryCommitContextTarget(state, 5, 12, commit.shortOid), null);
 
-  const fileTarget = resolveCommitDetailContextTarget(state, 5, "file", "src/app.ts");
+  const fileTarget = resolveCommitDetailContextTarget(
+    state, 5, "file", "src/app.ts", snapshot, 12, "tree",
+  );
   assert.equal(fileTarget?.kind, "file");
   assert.equal(fileTarget?.file?.status, "modified");
-  assert.equal(resolveCommitDetailContextTarget(state, 5, "directory", "src")?.path, "src");
-  assert.equal(resolveCommitDetailContextTarget(state, 5, "directory", "missing"), null);
-  assert.equal(resolveCommitDetailContextTarget({ ...state, selectedCommit: null }, 5, "file", "src/app.ts"), null);
+  assert.equal(fileTarget?.parentOid, commit.parents[0]);
+  assert.equal(fileTarget?.workspacePath, "src/app.ts");
+  const directory = resolveCommitDetailContextTarget(
+    state, 5, "directory", "src", snapshot, 12, "tree",
+  );
+  assert.equal(directory?.path, "src");
+  assert.deepEqual(directory?.descendants.map((item) => item.path), [
+    "src/app.ts", "src/nested/feature.ts",
+  ]);
+  assert.equal(resolveCommitDetailContextTarget(
+    state, 5, "directory", ".", snapshot, 12, "tree",
+  ), null);
+  assert.equal(resolveCommitDetailContextTarget(
+    state, 5, "directory", "src", snapshot, 12, "flat",
+  ), null);
+  assert.equal(resolveCommitDetailContextTarget(
+    state, 5, "directory", "missing", snapshot, 12, "tree",
+  ), null);
+  assert.equal(resolveCommitDetailContextTarget(
+    { ...state, selectedCommit: null }, 5, "file", "src/app.ts", snapshot, 12, "tree",
+  ), null);
 });
 
 test("delegated binding recognizes desktop keyboard invocation and derives a row anchor", () => {

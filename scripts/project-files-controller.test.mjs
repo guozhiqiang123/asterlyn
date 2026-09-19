@@ -149,6 +149,10 @@ test("reveal expands ancestors and rejects paths outside the catalog", async () 
   assert.deepEqual(controller.state.selection, { path: "src/deep/a.ts", kind: "file" });
   assert.equal(controller.state.expandedDirectories.has("src"), true);
   assert.equal(controller.state.expandedDirectories.has("src/deep"), true);
+  assert.equal(controller.revealDirectory("src/deep/a.ts"), false);
+  assert.equal(controller.revealDirectory("src/deep"), true);
+  assert.deepEqual(controller.state.selection, { path: "src/deep", kind: "directory" });
+  assert.equal(controller.state.expandedDirectories.has("src"), true);
 });
 
 function catalog(root, paths) {

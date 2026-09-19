@@ -55,7 +55,10 @@ export class ContextMenuHost implements ContextMenuPort {
   }
 
   open(anchor: ContextMenuAnchor, session: ContextMenuSession): void {
-    if (this.disposed || !session.isCurrent()) return;
+    if (this.disposed || !session.isCurrent()) {
+      session.dismissed?.();
+      return;
+    }
     assertContextMenuModel(session.model);
     this.closeActive(undefined, false);
 
@@ -98,6 +101,11 @@ export class ContextMenuHost implements ContextMenuPort {
     active.listeners.abort();
     if (active.typeaheadTimer !== null) this.window.clearTimeout(active.typeaheadTimer);
     active.layer.remove();
+    try {
+      active.session.dismissed?.();
+    } catch (error) {
+      console.error(error);
+    }
     if (!restoreFocus) return;
     try {
       active.session.restoreFocus();

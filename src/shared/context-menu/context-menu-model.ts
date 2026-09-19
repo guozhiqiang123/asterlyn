@@ -52,6 +52,7 @@ export interface ContextMenuSession {
   isCurrent(): boolean;
   invoke(actionId: string): void | Promise<void>;
   blocked(reason: string): void;
+  dismissed?(): void;
   restoreFocus(): void;
 }
 

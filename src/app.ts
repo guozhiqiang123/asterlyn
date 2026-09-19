@@ -24,6 +24,7 @@ import {
   renderBranchDetail,
   renderCommitComparisonDetail,
   renderCommitDetail,
+  renderCommitFolderDetail,
 } from "./features/git-history/git-detail-view";
 import {
   GitHistoryDetailsController,
@@ -65,6 +66,14 @@ import {
   HistoryComparisonController,
   type HistoryComparisonChange,
 } from "./features/git-history/history-comparison-controller.ts";
+import {
+  CommitDetailContextBinding,
+  resolveCommitDetailContextTarget,
+  type CommitDetailDirectoryContextTarget,
+} from "./features/git-history/commit-detail-context-binding.ts";
+import { CommitFolderContextActions } from "./features/git-history/commit-folder-context-actions.ts";
+import { commitFolderContextPolicy } from "./features/git-history/commit-folder-context-policy.ts";
+import { CommitFolderDiffController } from "./features/git-history/commit-folder-diff-controller.ts";
 import {
   RemotePushController,
   isRemoteUpdateStrategyAvailable,
@@ -429,6 +438,9 @@ export class AsterlynApp {
   private readonly releaseHistoryController: () => void;
   private readonly historyComparisonController: HistoryComparisonController;
   private readonly releaseHistoryComparisonController: () => void;
+  private readonly commitFolderDiffController = new CommitFolderDiffController();
+  private readonly commitFolderContextActions: CommitFolderContextActions;
+  private readonly commitDetailContextBinding: CommitDetailContextBinding;
   private readonly branchesController: GitBranchesController;
   private readonly branchContextActions: BranchContextActions;
   private readonly branchContextBinding: BranchContextBinding;
@@ -831,6 +843,44 @@ export class AsterlynApp {
         repositoryRevision: this.windowSession.repository.state.revision,
       }),
       (request) => this.openHistoryContextActions(request),
+    );
+    this.commitFolderContextActions = new CommitFolderContextActions(
+      this.contextMenuHost,
+      createBrowserTextClipboardAdapter(window.navigator),
+      {
+        current: (target) => this.isCommitFolderContextTargetCurrent(target),
+        policy: (target) => {
+          const node = findProjectTreeNode(this.projectTree(), target.workspacePath);
+          return commitFolderContextPolicy(
+            node?.kind === "directory",
+            this.localization.catalog.history.commitFolderContextMenu.currentDirectoryUnavailable,
+          );
+        },
+        highlight: (target, highlighted) => this.markCommitFolderContextTarget(target.path, highlighted),
+        showChanges: (target) => this.openCommitFolderChanges(target),
+        revealCurrentDirectory: (target) => this.revealCommitFolderInFiles(target),
+        installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
+        blocked: (reason) => this.setStatus(reason, "warning"),
+        status: (message) => this.setStatus(message, "success"),
+        error: (error) => this.showError(error),
+      },
+      () => this.localization.catalog.history,
+    );
+    this.commitDetailContextBinding = new CommitDetailContextBinding(
+      root,
+      () => ({
+        state: this.historyState,
+        workspaceGeneration: this.windowSession.generation,
+        repositoryRevision: this.windowSession.repository.state.revision,
+        snapshot: this.windowSession.repository.state.snapshot,
+        fileView: this.state.commitFileView,
+      }),
+      (request) => request.target.kind === "directory"
+        ? this.commitFolderContextActions.open({
+            ...request,
+            target: request.target as CommitDetailDirectoryContextTarget,
+          })
+        : false,
     );
     this.repositoryIntegration = new RepositoryIntegrationCoordinator(
       this.windowSession,
@@ -1403,6 +1453,20 @@ export class AsterlynApp {
   }
 
   private handleHistoryControllerChange(change: HistoryDetailsChange): void {
+    if (this.state.gitDetail === "folder" && change.reason !== "file-selection") {
+      const folder = this.commitFolderDiffController.state.target;
+      const details = this.historyState.details;
+      if (
+        !folder ||
+        !details ||
+        details.repositoryId !== folder.repositoryId ||
+        details.oid !== folder.oid ||
+        details.parentOid !== folder.parentOid
+      ) {
+        this.commitFolderDiffController.clear();
+        this.state.gitDetail = "commit";
+      }
+    }
     if (change.selectionChanged) this.clearCommitDiffInspection();
     if (change.reason === "file-selection") {
       const path = this.historyState.selectedFile;
@@ -1680,6 +1744,7 @@ export class AsterlynApp {
     this.changesContextBinding.dispose();
     this.branchContextBinding.dispose();
     this.historyContextBinding.dispose();
+    this.commitDetailContextBinding.dispose();
     this.projectFilesContextBinding.dispose();
     this.workspaceTrashBinding.dispose();
     this.releaseWorkspaceTrash();
@@ -2065,6 +2130,7 @@ export class AsterlynApp {
       this.resetHistoryFilters();
       this.historyComparisonController.clear();
       this.clearComparisonDiffInspection();
+      this.commitFolderDiffController.clear();
       this.state.gitDetail = "commit";
       this.filesController.installWorkspace(opened.root, snapshot?.changes ?? []);
       this.branchesController.setSelectedBranch(null);
@@ -4426,6 +4492,8 @@ export class AsterlynApp {
         !snapshot.repositoryRoots.some((root) => root.id === path.repositoryId)
       )
     ) return;
+    this.commitFolderDiffController.clear();
+    this.state.gitDetail = "commit";
     this.historyFilters.install(intent.query);
     this.recordRecentHistoryPath(intent.query.paths[0]!);
     this.state.historyQuery = "";
@@ -4436,6 +4504,7 @@ export class AsterlynApp {
     this.renderActivityRail();
     this.historyController.loadQuery(snapshot.root, this.activeHistoryQuery());
     this.renderBottomTool();
+    queueMicrotask(() => this.root.querySelector<HTMLElement>("#history-results")?.focus());
   }
 
   private bindProjectEvents(): void {
@@ -4780,6 +4849,7 @@ export class AsterlynApp {
       caseSensitive: this.state.historyCaseSensitive,
       regularExpression: this.state.historyRegularExpression,
       refs: this.state.historyRefs,
+      startCommit: this.state.historyStartCommit,
       authorEmails: this.state.historyAuthorEmails,
       currentAuthor: this.state.historyCurrentAuthor,
       datePreset: this.state.historyDatePreset,
@@ -4799,6 +4869,7 @@ export class AsterlynApp {
   }
 
   private installBranchHistoryScope(branches: readonly BranchSummary[]): void {
+    this.state.historyStartCommit = null;
     const references = branches.map(historyReference);
     this.state.historyRefs = new Map(
       references.map((reference) => [historyRefKey(reference), reference]),
@@ -5297,11 +5368,13 @@ export class AsterlynApp {
       });
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-clear-users]")?.addEventListener("click", () => {
+      this.state.historyStartCommit = null;
       this.state.historyCurrentAuthor = false;
       this.state.historyAuthorEmails.clear();
       this.applyHistoryQuery();
     });
     this.root.querySelector<HTMLButtonElement>("[data-history-me]")?.addEventListener("click", () => {
+      this.state.historyStartCommit = null;
       this.state.historyCurrentAuthor = !this.state.historyCurrentAuthor;
       this.applyHistoryQuery();
     });
@@ -5309,6 +5382,7 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const email = button.dataset.historyAuthor;
         if (!email) return;
+        this.state.historyStartCommit = null;
         const authors = new Set(this.state.historyAuthorEmails);
         if (authors.has(email)) authors.delete(email);
         else authors.add(email);
@@ -5320,6 +5394,7 @@ export class AsterlynApp {
       button.addEventListener("click", () => {
         const preset = button.dataset.historyDate as HistoryDatePreset | undefined;
         if (!preset) return;
+        this.state.historyStartCommit = null;
         this.state.historyDatePreset = preset;
         this.state.historySinceEpoch = historyDateSince(preset);
         this.applyHistoryQuery();
@@ -5327,6 +5402,7 @@ export class AsterlynApp {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-order]").forEach((button) => {
       button.addEventListener("click", () => {
+        this.state.historyStartCommit = null;
         this.state.historyOrder = button.dataset.historyOrder === "date" ? "date" : "topological";
         this.applyHistoryQuery();
       });
@@ -5336,6 +5412,7 @@ export class AsterlynApp {
         const repositoryId = checkbox.dataset.historyRoot;
         const snapshot = this.windowSession.repository.state.snapshot;
         if (!repositoryId || !snapshot) return;
+        this.state.historyStartCommit = null;
         this.state.historyRepositoryIds = toggleHistoryRootSelection(
           snapshot.repositoryRoots.map((root) => root.id),
           this.state.historyRepositoryIds,
@@ -5350,6 +5427,7 @@ export class AsterlynApp {
         const key = button.dataset.historyQuickPath;
         const path = key ? this.pathForKey(key) : null;
         if (!key || !path) return;
+        this.state.historyStartCommit = null;
         this.state.historyPaths = new Map([[key, path]]);
         this.recordRecentHistoryPath(path);
         this.state.historyFilterMenu = null;
@@ -5358,6 +5436,7 @@ export class AsterlynApp {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-graph-option]").forEach((button) => {
       button.addEventListener("click", () => {
+        this.state.historyStartCommit = null;
         if (button.dataset.historyGraphOption === "first-parent") {
           this.state.historyFirstParent = !this.state.historyFirstParent;
         } else {
@@ -5471,6 +5550,7 @@ export class AsterlynApp {
   private applyHistoryDialog(): void {
     const kind = this.state.historyDialog;
     if (!kind) return;
+    this.state.historyStartCommit = null;
     if (kind === "branches") {
       this.state.historyRefs = new Map(this.state.historyRefDraft);
       const selected = Array.from(this.state.historyRefs.entries());
@@ -5564,6 +5644,7 @@ export class AsterlynApp {
       this.historyComparisonController.clear();
       this.clearComparisonDiffInspection();
     }
+    if (this.state.gitDetail === "folder") this.commitFolderDiffController.clear();
     this.state.gitDetail = "commit";
     if (!this.historyController.selectCommit(snapshot.root, key, true)) return;
     this.updateHistoryCommitSelection(key);
@@ -5610,6 +5691,7 @@ export class AsterlynApp {
     const active = target.commits.find((commit) => commitKey(commit) === target.activeKey);
     if (!anchor || !active || anchor.repositoryId !== active.repositoryId) return;
     this.clearComparisonDiffInspection();
+    this.commitFolderDiffController.clear();
     this.state.collapsedCommitFileDirectories.clear();
     this.state.gitDetail = "comparison";
     this.historyComparisonController.open({
@@ -5621,6 +5703,81 @@ export class AsterlynApp {
       activeOid: active.oid,
     });
     this.renderGitDetailPane();
+  }
+
+  private isCommitFolderContextTargetCurrent(
+    target: CommitDetailDirectoryContextTarget,
+  ): boolean {
+    if (!this.windowSession.matches(target.workspaceGeneration, target.workspaceRoot)) return false;
+    const current = resolveCommitDetailContextTarget(
+      this.historyState,
+      this.windowSession.generation,
+      "directory",
+      target.path,
+      this.windowSession.repository.state.snapshot,
+      this.windowSession.repository.state.revision,
+      this.state.commitFileView,
+    );
+    return Boolean(
+      current &&
+      current.repositoryRevision === target.repositoryRevision &&
+      current.historyGeneration === target.historyGeneration &&
+      current.repositoryId === target.repositoryId &&
+      current.oid === target.oid &&
+      current.parentOid === target.parentOid &&
+      current.workspacePath === target.workspacePath &&
+      sameCommitFileChanges(current.descendants, target.descendants),
+    );
+  }
+
+  private markCommitFolderContextTarget(path: string, highlighted: boolean): void {
+    this.root.querySelectorAll<HTMLElement>("[data-commit-file-directory] > summary")
+      .forEach((summary) => {
+        const selected = highlighted && summary.parentElement?.dataset.commitFileDirectory === path;
+        summary.classList.toggle("context-target", selected);
+      });
+  }
+
+  private openCommitFolderChanges(target: CommitDetailDirectoryContextTarget): void {
+    if (!this.isCommitFolderContextTargetCurrent(target)) {
+      this.setStatus(
+        this.localization.catalog.history.commitFolderContextMenu.targetChanged,
+        "warning",
+      );
+      return;
+    }
+    this.historyComparisonController.clear();
+    this.clearComparisonDiffInspection();
+    this.commitFolderDiffController.open(target);
+    this.state.collapsedCommitFileDirectories.clear();
+    this.state.gitDetail = "folder";
+    this.renderGitDetailPane();
+  }
+
+  private revealCommitFolderInFiles(target: CommitDetailDirectoryContextTarget): void {
+    if (!this.isCommitFolderContextTargetCurrent(target) ||
+      !this.filesController.revealDirectory(target.workspacePath)) {
+      this.setStatus(
+        this.localization.catalog.history.commitFolderContextMenu.currentDirectoryUnavailable,
+        "warning",
+      );
+      return;
+    }
+    this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" }, true);
+    this.applyWorkbenchLayout(true);
+    this.renderActivityRail();
+    const targetIndex = projectTreeRows(
+      this.projectTree(),
+      this.filesState.expandedDirectories,
+    ).findIndex(({ node }) => node.path === target.workspacePath);
+    this.renderLeftTool();
+    const body = this.root.querySelector<HTMLElement>("#navigator-body");
+    if (body && targetIndex >= 0) body.scrollTop = targetIndex * PROJECT_TREE_ROW_HEIGHT;
+    queueMicrotask(() => {
+      Array.from(this.root.querySelectorAll<HTMLElement>("[data-project-node]"))
+        .find((row) => row.dataset.projectNode === target.workspacePath)
+        ?.focus();
+    });
   }
 
   private openHistoryContextActions(
@@ -5739,6 +5896,7 @@ export class AsterlynApp {
       this.state.historyRefs,
     );
     if (!intent) return;
+    this.state.historyStartCommit = null;
     if (intent.kind === "clear") {
       this.state.historyRefs.clear();
       this.state.gitDetail = "commit";
@@ -6646,7 +6804,7 @@ export class AsterlynApp {
     const paths = document.kind === "working-diff"
       ? this.windowSession.repository.state.snapshot?.changes.map((change) => change.path) ?? []
       : document.kind === "commit-diff"
-        ? this.historyState.details?.files.map((file) => file.path) ?? []
+        ? this.commitDiffFileRange(document).map((file) => file.path)
         : this.historyComparisonController.state.details?.files.map((file) => file.path) ?? [];
     const current = document.kind === "working-diff" ? document.selection.path : document.path;
     return adjacentDiffItem(paths, current, direction);
@@ -6665,7 +6823,8 @@ export class AsterlynApp {
       return;
     }
     if (document.kind === "commit-diff") {
-      this.selectCommitFile(path, false);
+      if (this.state.gitDetail === "folder") this.selectCommitFolderFile(path, false);
+      else this.selectCommitFile(path, false);
       return;
     }
     if (document.kind === "commit-comparison-diff") {
@@ -6684,6 +6843,18 @@ export class AsterlynApp {
     if (this.shellState.layout.leftTool === "changes") this.renderLeftTool();
     this.renderEditor();
     this.loadSelectedDiff();
+  }
+
+  private commitDiffFileRange(
+    document: Extract<EditorDocument, { kind: "commit-diff" }>,
+  ): readonly CommitFileChange[] {
+    const folder = this.commitFolderDiffController.state.target;
+    if (
+      this.state.gitDetail === "folder" &&
+      folder?.repositoryId === document.repositoryId &&
+      folder.oid === document.oid
+    ) return folder.descendants;
+    return this.historyState.details?.files ?? [];
   }
 
   private diffProjectFile(
@@ -7064,6 +7235,129 @@ export class AsterlynApp {
     }
   }
 
+  private bindCommitFolderDetailEvents(snapshot: RepositorySnapshot): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-commit-folder-file]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const path = row.dataset.commitFolderFile;
+        if (path) this.selectCommitFolderFile(path, false);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        const rows = Array.from(
+          this.root.querySelectorAll<HTMLButtonElement>("[data-commit-folder-file]"),
+        );
+        const current = rows.indexOf(row);
+        if (current < 0) return;
+        event.preventDefault();
+        const next = event.key === "Home"
+          ? rows[0]
+          : event.key === "End"
+            ? rows.at(-1)
+            : rows[current + (event.key === "ArrowDown" ? 1 : -1)];
+        const path = next?.dataset.commitFolderFile;
+        if (path) this.selectCommitFolderFile(path, true);
+      });
+    });
+    this.root
+      .querySelectorAll<HTMLDetailsElement>("[data-commit-folder-file-directory]")
+      .forEach((details) => {
+        details.addEventListener("toggle", () => {
+          const path = details.dataset.commitFolderFileDirectory;
+          if (!path) return;
+          const renderedExpanded = details.dataset.commitFolderFileRenderedExpanded === "true";
+          if (details.open) this.state.collapsedCommitFileDirectories.delete(path);
+          else this.state.collapsedCommitFileDirectories.add(path);
+          if (details.open !== renderedExpanded) this.renderGitDetailPane(snapshot);
+        });
+      });
+    this.root.querySelector<HTMLButtonElement>("#commit-folder-file-view-toggle")
+      ?.addEventListener("click", () => {
+        this.state.commitFileView = this.state.commitFileView === "tree" ? "flat" : "tree";
+        saveCommitFileView(window.localStorage, this.state.commitFileView);
+        this.renderGitDetailPane(snapshot);
+        this.root.querySelector<HTMLButtonElement>("#commit-folder-file-view-toggle")?.focus();
+      });
+    this.root.querySelector<HTMLButtonElement>("#commit-folder-expand-all")
+      ?.addEventListener("click", () => {
+        this.state.collapsedCommitFileDirectories.clear();
+        this.renderGitDetailPane(snapshot);
+        this.root.querySelector<HTMLButtonElement>("#commit-folder-expand-all")?.focus();
+      });
+    this.root.querySelector<HTMLButtonElement>("#commit-folder-collapse-all")
+      ?.addEventListener("click", () => {
+        const target = this.commitFolderDiffController.state.target;
+        if (!target) return;
+        this.state.collapsedCommitFileDirectories = new Set([
+          target.path,
+          ...commitFileDirectoryPaths(buildCommitFileTree([...target.descendants])),
+        ]);
+        this.renderGitDetailPane(snapshot);
+        this.root.querySelector<HTMLButtonElement>("#commit-folder-collapse-all")?.focus();
+      });
+    this.bindCommitDetailSplitter();
+  }
+
+  private selectCommitFolderFile(path: string, restoreFocus: boolean): void {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const target = this.commitFolderDiffController.state.target;
+    const details = this.historyState.details;
+    if (
+      !snapshot ||
+      !target ||
+      !details ||
+      details.repositoryId !== target.repositoryId ||
+      details.oid !== target.oid ||
+      !target.descendants.some((file) => file.path === path)
+    ) return;
+    const file = this.commitFolderDiffController.selectFile(path);
+    if (!file || !this.historyController.selectFile(path)) return;
+    this.activateDiffPreview({
+      kind: "commit-diff",
+      repositoryRoot: snapshot.root,
+      repositoryId: target.repositoryId,
+      oid: target.oid,
+      path,
+    });
+    this.state.commitPatch = null;
+    this.state.commitPatchLoading = true;
+    this.state.commitPatchError = null;
+    this.updateCommitFolderFileSelection(path);
+    if (restoreFocus) this.focusCommitFile(path);
+    void this.loadSelectedCommitDiff(restoreFocus);
+  }
+
+  private updateCommitFolderFileSelection(path: string): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-commit-folder-file]").forEach((row) => {
+      const selected = row.dataset.commitFolderFile === path;
+      row.classList.toggle("selected", selected);
+      row.setAttribute("aria-pressed", String(selected));
+    });
+  }
+
+  private bindCommitDetailSplitter(): void {
+    const splitter = this.root.querySelector<HTMLElement>("#commit-summary-splitter");
+    const layout = this.root.querySelector<HTMLElement>(".commit-detail-layout");
+    if (!splitter || !layout) return;
+    this.commitDetailSplitterDisposer = attachSplitter(splitter, {
+      orientation: "horizontal",
+      direction: -1,
+      getValue: () => this.shellState.layout.commitSummaryHeight,
+      getRange: () => ({
+        minimum: WORKBENCH_LIMITS.commitSummaryMin,
+        maximum: Math.max(
+          WORKBENCH_LIMITS.commitSummaryMin,
+          layout.clientHeight - WORKBENCH_LIMITS.commitFilesMin - WORKBENCH_LIMITS.separatorSize,
+        ),
+      }),
+      onChange: (value) => this.resizeWorkbench("commitSummaryHeight", value),
+      onCommit: () => this.persistWorkbenchLayout(),
+      onReset: () => this.resizeWorkbench(
+        "commitSummaryHeight",
+        WORKBENCH_LAYOUT_DEFAULTS.commitSummaryHeight,
+      ),
+    });
+  }
+
   private selectComparisonFile(path: string, restoreFocus: boolean): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     const details = this.historyComparisonController.state.details;
@@ -7302,9 +7596,11 @@ export class AsterlynApp {
   }
 
   private focusCommitFile(path: string): void {
-    const rows = this.root.querySelectorAll<HTMLButtonElement>("[data-commit-file]");
+    const rows = this.root.querySelectorAll<HTMLButtonElement>(
+      "[data-commit-file], [data-commit-folder-file]",
+    );
     Array.from(rows)
-      .find((row) => row.dataset.commitFile === path)
+      .find((row) => row.dataset.commitFile === path || row.dataset.commitFolderFile === path)
       ?.focus();
   }
 
@@ -7634,6 +7930,18 @@ export class AsterlynApp {
         localization: this.localization,
       });
     }
+    if (this.state.gitDetail === "folder") {
+      const folder = this.commitFolderDiffController.state;
+      return folder.target
+        ? renderCommitFolderDetail({
+            target: folder.target,
+            selectedFile: folder.selectedFile,
+            fileView: this.state.commitFileView,
+            collapsedDirectories: this.state.collapsedCommitFileDirectories,
+            localization: this.localization,
+          })
+        : inspectorPlaceholder(this.localization);
+    }
     if (this.state.gitDetail === "branch") {
       const branch = this.branchesController.selected(snapshot);
       return branch
@@ -7674,6 +7982,10 @@ export class AsterlynApp {
     this.bindGitOperationStartActions();
     if (this.state.gitDetail === "comparison") {
       this.bindComparisonDetailEvents(snapshot);
+      return;
+    }
+    if (this.state.gitDetail === "folder") {
+      this.bindCommitFolderDetailEvents(snapshot);
       return;
     }
     if (this.state.gitDetail === "branch") {
@@ -8371,6 +8683,21 @@ function commitFileDirectoryPaths(nodes: readonly CommitFileTreeNode[]): string[
     paths.push(node.path, ...commitFileDirectoryPaths(node.children));
   }
   return paths;
+}
+
+function sameCommitFileChanges(
+  left: readonly CommitFileChange[],
+  right: readonly CommitFileChange[],
+): boolean {
+  return left.length === right.length && left.every((file, index) => {
+    const candidate = right[index];
+    return Boolean(
+      candidate &&
+      file.path === candidate.path &&
+      file.originalPath === candidate.originalPath &&
+      file.status === candidate.status,
+    );
+  });
 }
 
 function loadCommitFileView(storage: Pick<Storage, "getItem">): CommitFileView {

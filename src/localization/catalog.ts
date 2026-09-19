@@ -841,6 +841,7 @@ export interface HistoryCopy {
   branchMutation: BranchMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
   rangeContextMenu: HistoryCommitRangeContextMenuCopy;
+  commitFolderContextMenu: HistoryCommitFolderContextMenuCopy;
   rangeSelectionLimit: string;
   rangeSelectionBarrier: string;
   comparisonTitle: string;
@@ -865,6 +866,8 @@ export interface HistoryCopy {
   roots(count: number): string;
   allRefs: string;
   allRefsTitle: string;
+  upToCommit(shortOid: string): string;
+  historyStartsAt(shortOid: string, repositoryId: string): string;
   branchCount(count: number): string;
   textOrHash: string;
   filterCommitHistory: string;
@@ -1091,6 +1094,27 @@ export interface HistoryCommitRangeContextMenuCopy extends HistoryCommitRangePol
   copiedCommitIds(count: number): string;
   clipboardUnavailable: string;
   targetChanged: string;
+}
+
+export interface HistoryCommitFolderContextMenuCopy {
+  ariaLabel(path: string): string;
+  showChanges: string;
+  revealInFiles: string;
+  historyUpToCommit: string;
+  copyPath: string;
+  folderName: string;
+  relativePath: string;
+  absolutePath: string;
+  copiedFolderName: string;
+  copiedRelativePath: string;
+  copiedAbsolutePath: string;
+  clipboardUnavailable: string;
+  currentDirectoryUnavailable: string;
+  targetChanged: string;
+  folderChanges: string;
+  projectedRangeDescription(count: number, formattedCount: string): string;
+  commit: string;
+  comparisonBase: string;
 }
 
 export interface HistoryCommitRangePolicyCopy {

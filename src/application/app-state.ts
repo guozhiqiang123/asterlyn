@@ -26,7 +26,7 @@ import {
 } from "../workbench/workspace-search.ts";
 
 export interface AppState extends HistoryFilterState {
-  gitDetail: "branch" | "commit" | "comparison";
+  gitDetail: "branch" | "commit" | "comparison" | "folder";
   commandSurface: CommandSurfaceState;
   workspaceSearch: WorkspaceSearchState;
   workspaceSearchControls: WorkspaceSearchControls;

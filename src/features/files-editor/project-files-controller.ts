@@ -252,6 +252,21 @@ export class ProjectFilesController {
     return true;
   }
 
+  revealDirectory(path: string): boolean {
+    const node = findProjectTreeNode(this.tree(), path);
+    if (!node || node.kind !== "directory") return false;
+    for (const directory of ancestorProjectDirectories(path)) {
+      this.state.expandedDirectories.add(directory);
+    }
+    this.state.selection = { path, kind: "directory" };
+    this.emit({
+      reason: "selection",
+      selectionChanged: true,
+      disclosureChanged: true,
+    });
+    return true;
+  }
+
   setSelectedSubtreeExpanded(expanded: boolean): boolean {
     const selection = this.state.selection;
     if (!selection || selection.kind !== "directory") return false;

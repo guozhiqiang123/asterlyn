@@ -2,6 +2,7 @@ import { icon } from "../../icons.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type {
   BranchSummary,
+  HistoryCommitStart,
   HistoryPath,
   HistoryQuery,
   HistoryRef,
@@ -42,6 +43,7 @@ export interface HistoryNavigationViewModel {
   readonly caseSensitive: boolean;
   readonly regularExpression: boolean;
   readonly refs: ReadonlyMap<string, HistoryRef>;
+  readonly startCommit: HistoryCommitStart | null;
   readonly authorEmails: ReadonlySet<string>;
   readonly currentAuthor: boolean;
   readonly datePreset: HistoryDatePreset;
@@ -68,11 +70,19 @@ export interface HistoryScopePresentation {
 export function renderHistoryNavigation(model: HistoryNavigationViewModel): string {
   const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
   const scope = historyScope(model);
-  return `<div class="history-navigation"><div class="history-toolbar"><div class="history-search-control"><label class="history-filter" for="history-filter">${icon("search", 14)}<input id="history-filter" type="search" value="${escapeAttribute(model.query)}" placeholder="${escapeAttribute(copy.textOrHash)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.filterCommitHistory)}" aria-keyshortcuts="Control+F Meta+F" /></label><button class="history-mode-button ${model.regularExpression ? "active" : ""}" type="button" data-history-text-mode="regex" aria-pressed="${model.regularExpression}" title="${escapeAttribute(copy.useRegularExpression)}">.*</button><button class="history-mode-button ${model.caseSensitive ? "active" : ""}" type="button" data-history-text-mode="case" aria-pressed="${model.caseSensitive}" title="${escapeAttribute(copy.matchCase)}">Cc</button></div><div class="history-filter-strip" aria-label="${escapeAttribute(copy.queryFilters)}">${historyFilterButton(model, "branch", scope.label, model.refs.size > 0, scope.title)}${historyFilterButton(model, "user", historyUserLabel(model), model.currentAuthor || model.authorEmails.size > 0, copy.filterByAuthor)}${historyFilterButton(model, "date", historyDateLabel(model), model.datePreset !== "all", copy.filterByDate)}${historyFilterButton(model, "paths", historyPathLabel(model), model.paths.size > 0 || model.repositoryIds.size > 0, copy.filterByPathsOrRoots)}${historyFilterButton(model, "graph", "", model.order !== "topological" || model.firstParent || model.excludeMerges, copy.graphOptions, "sort")}</div><span class="compact-count" id="history-count">0</span><span class="history-refresh-status" id="history-refresh-status" role="status"></span>${renderHistoryFilterPopover(model)}</div><div class="history-results" id="history-results" tabindex="-1" aria-live="polite">${renderHistoryList(model.presentation)}</div></div>`;
+  return `<div class="history-navigation"><div class="history-toolbar"><div class="history-search-control"><label class="history-filter" for="history-filter">${icon("search", 14)}<input id="history-filter" type="search" value="${escapeAttribute(model.query)}" placeholder="${escapeAttribute(copy.textOrHash)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.filterCommitHistory)}" aria-keyshortcuts="Control+F Meta+F" /></label><button class="history-mode-button ${model.regularExpression ? "active" : ""}" type="button" data-history-text-mode="regex" aria-pressed="${model.regularExpression}" title="${escapeAttribute(copy.useRegularExpression)}">.*</button><button class="history-mode-button ${model.caseSensitive ? "active" : ""}" type="button" data-history-text-mode="case" aria-pressed="${model.caseSensitive}" title="${escapeAttribute(copy.matchCase)}">Cc</button></div><div class="history-filter-strip" aria-label="${escapeAttribute(copy.queryFilters)}">${historyFilterButton(model, "branch", scope.label, model.refs.size > 0 || model.startCommit !== null, scope.title)}${historyFilterButton(model, "user", historyUserLabel(model), model.currentAuthor || model.authorEmails.size > 0, copy.filterByAuthor)}${historyFilterButton(model, "date", historyDateLabel(model), model.datePreset !== "all", copy.filterByDate)}${historyFilterButton(model, "paths", historyPathLabel(model), model.paths.size > 0 || model.repositoryIds.size > 0, copy.filterByPathsOrRoots)}${historyFilterButton(model, "graph", "", model.order !== "topological" || model.firstParent || model.excludeMerges, copy.graphOptions, "sort")}</div><span class="compact-count" id="history-count">0</span><span class="history-refresh-status" id="history-refresh-status" role="status"></span>${renderHistoryFilterPopover(model)}</div><div class="history-results" id="history-results" tabindex="-1" aria-live="polite">${renderHistoryList(model.presentation)}</div></div>`;
 }
 
 export function historyScope(model: HistoryNavigationViewModel): HistoryScopePresentation {
   const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
+  if (model.startCommit) {
+    const short = model.startCommit.oid.slice(0, 10);
+    return {
+      icon: "head",
+      label: copy.upToCommit(short),
+      title: copy.historyStartsAt(short, model.startCommit.repositoryId),
+    };
+  }
   let refs = Array.from(model.refs.values());
   if (refs.length === 0) {
     return { icon: "branch", label: copy.allRefs, title: copy.allRefsTitle };
