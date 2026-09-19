@@ -1,6 +1,7 @@
 # Foundation hardening plan
 
-- **Status:** Active; capability expansion is paused until the frontend foundation exit gate passes.
+- **Status:** Complete on 2026-09-19; the acceptance gates passed and capability expansion may
+  resume on the hardened boundaries.
 - **Baseline:** 2026-09-19, after context-action CM4 acceptance.
 - **Scope:** Frontend ownership and startup boundaries first, followed by desktop application services
   and the Git process boundary. This is an incremental migration, not a rewrite.
@@ -101,6 +102,8 @@ are part of the repository source of truth.
 
 ### FH1 — Make architectural drift executable
 
+Status: complete on 2026-09-19.
+
 Progress: complete TypeScript/style discovery, non-growing oversized-source ownership, dependency
 direction debt, cross-feature isolation, and application DOM debt are enforced. The startup graph
 and generated bundle hard gate land with FH2 so the accepted limit is green when introduced.
@@ -135,6 +138,8 @@ native and demo bridge contract tests pass; no product behavior or protocol comm
 
 ### FH3 — Close frontend dependency inversions
 
+Status: complete on 2026-09-19.
+
 Progress: workspace watch and mutation coordinators now depend on application-owned Files/Editor
 ports and path-migration contracts rather than concrete feature controllers. The mixed `AppState`
 was moved out of the application-service directory and is explicitly a temporary composition-root
@@ -144,11 +149,11 @@ in `src/protocol`; presentation helpers consume that contract without making pro
 its dialog view/binding instead of placing business presentation in `src/shared`. Application
 timers and window focus are now explicit `RuntimeScheduler` and `WorkspaceFocusPort` dependencies,
 implemented at the browser adapter edge; application services no longer import DOM runtimes. The
-dependency and application-DOM debt lists are empty. Application services no longer import the
-transitional `workbench` layer: editor path-mutation contracts are product-neutral, while tracked
-change merge policy is application-owned. All remaining `workbench` modules have an executable,
-exact owner/destination inventory; new unclassified modules fail the architecture gate. Their
-owner-by-owner moves are part of the FH4 feature extraction rather than mechanical FH3 churn.
+dependency and application-DOM checks now require absolute zero. Application services no longer
+import the transitional `workbench` layer: editor path-mutation contracts are product-neutral,
+while tracked change merge policy is application-owned. All remaining `workbench` modules have an
+executable, exact owner/destination inventory; new unclassified modules fail the architecture gate.
+Their owner-by-owner moves are part of the FH4 feature extraction rather than mechanical FH3 churn.
 
 1. Move History filter state contracts out of feature presentation modules into a feature-owned
    controller/facade exposed through an application port.
@@ -162,6 +167,8 @@ Exit gate: `src/application` has zero feature, shell, adapter, or DOM imports; f
 cross-import free; all cross-feature calls pass through typed ports.
 
 ### FH4 — Complete feature-owned state and shrink the composition root
+
+Status: complete on 2026-09-19.
 
 Progress: Files Search controls, request identity, result/error state, cancellation, and stale
 completion acceptance now have one `WorkspaceSearchController` owner in `files-editor`. Replacement
@@ -289,8 +296,8 @@ still point inward to `models.ts` and `history-query.ts`.
 Files/Editor now owns the final twelve transitional modules: Diff navigation, cache remapping,
 editor gutters and session state, Markdown formatting/mode/preview, navigation and search routing,
 text-content limits, and workspace search/replacement state. `src/workbench` is empty, its ownership
-debt baseline is empty, and the architecture test also handles the directory being absent in a clean
-checkout.
+guard requires absolute zero, and the architecture test also handles the directory being absent in
+a clean checkout.
 
 Extract vertical slices in this order:
 
@@ -452,6 +459,15 @@ the existing security, bounded-output, cancellation, and exact-lease semantics; 
 source of truth.
 
 ### FH7 — Close and resume capability work
+
+Status: complete on 2026-09-19. Full evidence is recorded in
+[`Foundation hardening acceptance`](../benchmarks/2026-09-19-foundation-hardening.md).
+
+All resolved frontend dependency, application-DOM, and transitional-workbench baselines were
+removed; their tests now require zero violations. The complete TypeScript, production build, script,
+Rust workspace, formatting, strict Clippy, protocol-generation, native-smoke, package, latency,
+resource, and representative real-browser checks pass. Windows and macOS native execution remains
+an explicit platform release checkpoint rather than an unverified closure claim.
 
 Run the complete validation matrix, record bundle/source movement and resource evidence, update the
 architecture documents, and remove resolved debt baselines. Context-action or other capability work
