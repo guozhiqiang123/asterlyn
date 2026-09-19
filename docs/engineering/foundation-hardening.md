@@ -434,6 +434,11 @@ Byte-budget enforcement now has the same lifecycle boundary: bounded repository 
 child when stdout crosses its reviewed limit, and return truncation metadata for domain-specific
 interpretation. Repository code no longer owns byte-limit polling or child cleanup.
 
+An executable source-boundary test now scans every production Rust module in `asterlyn-git` and
+fails if Git construction or subprocess spawning appears outside `process.rs`; it also requires the
+boundary itself to retain exactly one auditable construction and spawn point. Test-fixture helpers
+after `#[cfg(test)]` remain free to invoke Git directly.
+
 Exit gate: production Git subprocess creation is confined to the process boundary; tests retain
 the existing security, bounded-output, cancellation, and exact-lease semantics; Git remains the
 source of truth.
