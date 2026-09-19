@@ -57,7 +57,7 @@ import type {
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "../models";
-import type { WindowChromeMode } from "../workbench/window-chrome";
+import type { WindowChromeMode } from "./window-chrome.ts";
 import type { TerminalBridge } from "./terminal.ts";
 
 export type DirectoryChoice =

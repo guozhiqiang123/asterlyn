@@ -4,7 +4,7 @@ import type {
   ProjectWindowOpenResult,
 } from "../../models.ts";
 import type { DesktopShellBridge, DirectoryChoice } from "../../protocol/desktop-bridge.ts";
-import { parseWindowChromeMode } from "../../workbench/window-chrome.ts";
+import { parseWindowChromeMode } from "../../protocol/window-chrome.ts";
 import { invokeDesktopCommand, openDialog } from "./desktop-command-adapter.ts";
 
 export const tauriShellBridge: DesktopShellBridge = {

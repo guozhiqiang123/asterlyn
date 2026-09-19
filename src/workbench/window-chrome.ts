@@ -1,12 +1,11 @@
-export type WindowChromeMode = "macos-native" | "custom-right";
+import type { WindowChromeMode } from "../protocol/window-chrome.ts";
+
+export { parseWindowChromeMode } from "../protocol/window-chrome.ts";
+export type { WindowChromeMode } from "../protocol/window-chrome.ts";
 
 export interface PrimaryShortcut {
   label: string;
   accessible: string;
-}
-
-export function parseWindowChromeMode(value: unknown): WindowChromeMode {
-  return value === "macos-native" ? value : "custom-right";
 }
 
 export function windowChromeClass(mode: WindowChromeMode): string {

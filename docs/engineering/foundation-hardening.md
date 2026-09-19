@@ -138,8 +138,10 @@ native and demo bridge contract tests pass; no product behavior or protocol comm
 Progress: workspace watch and mutation coordinators now depend on application-owned Files/Editor
 ports and path-migration contracts rather than concrete feature controllers. The mixed `AppState`
 was moved out of the application-service directory and is explicitly a temporary composition-root
-state until FH4 removes feature-owned fields. Remaining FH3 debt is protocol chrome type placement,
-shared Trash presentation placement, and application timer/focus runtime access.
+state until FH4 removes feature-owned fields. The window-chrome transport type and parser now live
+in `src/protocol`; presentation helpers consume that contract without making protocol depend on
+`workbench`. Remaining FH3 debt is shared Trash presentation placement and application timer/focus
+runtime access.
 
 1. Move History filter state contracts out of feature presentation modules into a feature-owned
    controller/facade exposed through an application port.

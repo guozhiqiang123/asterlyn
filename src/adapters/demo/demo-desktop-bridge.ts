@@ -87,7 +87,7 @@ import type {
 import {
   parseWindowChromeMode,
   type WindowChromeMode,
-} from "../../workbench/window-chrome";
+} from "../../protocol/window-chrome.ts";
 import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-bridge";
 import { isImagePreviewPath } from "../../workbench/image-preview.ts";
 

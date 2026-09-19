@@ -14,7 +14,7 @@ import {
   type WorkbenchLayout,
   type WorkbenchLayoutAction,
 } from "../workbench/layout-state.ts";
-import type { WindowChromeMode } from "../workbench/window-chrome.ts";
+import type { WindowChromeMode } from "../protocol/window-chrome.ts";
 
 export interface ShellState {
   page: "workbench" | "settings";

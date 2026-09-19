@@ -25,16 +25,6 @@
   },
   "dependencyDebt": [
     {
-      "from": "src/protocol/desktop-bridge.ts",
-      "to": "src/workbench/window-chrome.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
-      "from": "src/protocol/generated-desktop-protocol.ts",
-      "to": "src/workbench/window-chrome.ts",
-      "burnDownPhase": "FH3"
-    },
-    {
       "from": "src/shared/workspace-trash-dialog-binding.ts",
       "to": "src/application/workspace-trash-controller.ts",
       "burnDownPhase": "FH3"
