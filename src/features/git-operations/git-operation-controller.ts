@@ -11,7 +11,7 @@ import type {
 import type { GitOperationCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 
-export type GitOperationDialog = "setup" | "review" | "conflict" | null;
+export type GitOperationDialog = "setup" | "review" | null;
 
 export interface GitOperationState {
   repositoryRoot: string | null;
@@ -63,6 +63,7 @@ export interface GitOperationChange {
   reason: GitOperationChangeReason;
   dialogChanged?: boolean;
   operationChanged?: boolean;
+  conflictChanged?: boolean;
   error?: unknown;
 }
 
@@ -116,6 +117,7 @@ export class GitOperationController {
     const previous = this.state.operation;
     const previousDialog = this.state.dialog;
     const previousError = this.state.error;
+    const previousConflict = this.state.conflict;
     const keepConflictDraft = this.hasUnsavedConflict();
     this.state.repositoryRoot = snapshot?.root ?? null;
     this.state.operation = snapshot?.operation ?? null;
@@ -123,7 +125,7 @@ export class GitOperationController {
       this.generation += 1;
       this.requestSequence += 1;
       this.resetDialog();
-    } else if (!keepConflictDraft && !this.state.operation && previous && this.state.dialog === "conflict") {
+    } else if (!keepConflictDraft && !this.state.operation && previous) {
       this.resetDialog();
     } else if (this.state.operation && this.state.conflict) {
       const remains = this.state.operation.conflicts.some(
@@ -132,7 +134,6 @@ export class GitOperationController {
       if (!remains && !keepConflictDraft) {
         this.state.conflict = null;
         this.state.conflictResult = "";
-        if (this.state.dialog === "conflict") this.state.dialog = null;
       }
     }
     if (!rootChanged && keepConflictDraft && !this.state.operation?.conflicts.some((item) => item.path === this.state.conflict?.path)) {
@@ -142,6 +143,7 @@ export class GitOperationController {
       reason: "snapshot",
       operationChanged: previous !== this.state.operation,
       dialogChanged: rootChanged || previousDialog !== this.state.dialog || previousError !== this.state.error,
+      conflictChanged: previousConflict !== this.state.conflict,
     });
   }
 
@@ -242,22 +244,23 @@ export class GitOperationController {
     const request = ++this.requestSequence;
     this.state.loading = "conflict";
     this.state.error = null;
-    this.state.dialog = "conflict";
+    const dialogChanged = this.state.dialog !== null;
+    this.state.dialog = null;
     this.state.conflict = null;
-    this.emit({ reason: "request-start", dialogChanged: true });
+    this.emit({ reason: "request-start", dialogChanged, conflictChanged: true });
     try {
       const conflict = await this.gateway.readConflictContent(root, path);
       if (!this.matches(generation, request, root)) return false;
       this.state.conflict = conflict;
       this.state.conflictResult = conflict.worktree ?? conflict.ours ?? conflict.theirs ?? "";
       this.state.loading = null;
-      this.emit({ reason: "request-complete", dialogChanged: true });
+      this.emit({ reason: "request-complete", conflictChanged: true });
       return true;
     } catch (error) {
       if (!this.matches(generation, request, root)) return false;
       this.state.loading = null;
       this.state.error = errorMessage(error, this.messages.operationFailed);
-      this.emit({ reason: "request-error", dialogChanged: true, error });
+      this.emit({ reason: "request-error", conflictChanged: true, error });
       return false;
     }
   }
@@ -265,7 +268,7 @@ export class GitOperationController {
   setConflictResult(value: string): void {
     if (!this.state.conflict || this.state.loading) return;
     this.state.conflictResult = value;
-    this.emit({ reason: "draft" });
+    this.emit({ reason: "draft", conflictChanged: true });
   }
 
   async resolveConflict(deleteFile = false): Promise<GitOperationResult> {
@@ -300,24 +303,36 @@ export class GitOperationController {
     const request = ++this.requestSequence;
     this.state.loading = loading;
     this.state.error = null;
-    this.emit({ reason: "request-start", dialogChanged: true });
+    this.emit({
+      reason: "request-start",
+      dialogChanged: loading !== "resolve",
+      conflictChanged: loading === "resolve",
+    });
     try {
       const outcome = await task();
       if (!this.matches(generation, request, root)) return { status: "stale" };
       this.state.loading = null;
       if (loading === "execute") this.state.dialog = null;
       if (loading === "resolve") {
-        this.state.dialog = null;
         this.state.conflict = null;
         this.state.conflictResult = "";
       }
-      this.emit({ reason: "request-complete", dialogChanged: true });
+      this.emit({
+        reason: "request-complete",
+        dialogChanged: loading !== "resolve",
+        conflictChanged: loading === "resolve",
+      });
       return { status: "success", outcome };
     } catch (error) {
       if (!this.matches(generation, request, root)) return { status: "stale" };
       this.state.loading = null;
       this.state.error = errorMessage(error, this.messages.operationFailed);
-      this.emit({ reason: "request-error", dialogChanged: true, error });
+      this.emit({
+        reason: "request-error",
+        dialogChanged: loading !== "resolve",
+        conflictChanged: loading === "resolve",
+        error,
+      });
       return { status: "failure", error };
     }
   }

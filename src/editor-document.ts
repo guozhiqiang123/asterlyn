@@ -38,12 +38,19 @@ export interface HistoricalFileComparisonDocument {
   currentSource: "disk" | "buffer";
 }
 
+export interface ConflictResolutionDocument {
+  kind: "conflict-resolution";
+  repositoryRoot: string;
+  path: string;
+}
+
 export type EditorDocument =
   | { kind: "welcome" }
   | ProjectFileDocument
   | ProjectImageDocument
   | HistoricalFileDocument
   | HistoricalFileComparisonDocument
+  | ConflictResolutionDocument
   | {
       kind: "working-diff";
       repositoryRoot: string;
@@ -77,6 +84,8 @@ export function editorDocumentKey(document: EditorDocument): string {
       return `historical\0${document.repositoryRoot}\0${document.repositoryId}\0${document.commitOid}\0${document.path}\0${document.originalPath ?? ""}\0${document.status}`;
     case "historical-file-comparison":
       return `historical-comparison\0${document.repositoryRoot}\0${document.repositoryId}\0${document.commitOid}\0${document.path}\0${document.originalPath ?? ""}\0${document.status}\0${document.currentSource}`;
+    case "conflict-resolution":
+      return `conflict\0${document.repositoryRoot}\0${document.path}`;
     case "working-diff":
       return `working\0${document.repositoryRoot}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":

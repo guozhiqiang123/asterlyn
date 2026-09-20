@@ -43,11 +43,6 @@ export class GitOperationDialogBinding {
     this.controller.openSetup(kind, targets, message);
   }
 
-  openConflict(path: string): void {
-    this.captureReturnFocus();
-    void this.controller.openConflict(path);
-  }
-
   close(): boolean {
     const dirty = this.controller.hasUnsavedConflict();
     if (dirty && !window.confirm(this.copy().discardConflict)) return false;
@@ -133,16 +128,6 @@ export class GitOperationDialogBinding {
     host.querySelector<HTMLButtonElement>("#git-operation-execute")?.addEventListener(
       "click",
       () => this.actions.execute(),
-    );
-    const result = host.querySelector<HTMLTextAreaElement>("#conflict-result");
-    result?.addEventListener("input", () => this.controller.setConflictResult(result.value));
-    host.querySelector<HTMLButtonElement>("#git-conflict-resolve")?.addEventListener(
-      "click",
-      () => this.actions.resolve(false),
-    );
-    host.querySelector<HTMLButtonElement>("#git-conflict-delete")?.addEventListener(
-      "click",
-      () => this.actions.resolve(true),
     );
     queueMicrotask(() => {
       const preferred = host.querySelector<HTMLElement>(

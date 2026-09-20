@@ -1,6 +1,6 @@
 # ADR-0015: Editable working Diff and in-editor conflict resolution
 
-- **Status:** Accepted for implementation
+- **Status:** Implemented
 - **Date:** 2026-09-20
 
 ## Context
@@ -56,9 +56,10 @@ The conflict editor renders Ours, Result, and Theirs as full CodeMirror document
 are read-only; Result is freely editable and starts from the current worktree conflict result, then
 Ours, then Theirs when no worktree file exists. Base is not a fourth visible pane: it drives
 base-to-ours and base-to-theirs change classification. Center gutters provide directional controls
-that apply one reviewed change region into Result, while whole-side actions remain available for
-added/deleted or otherwise ambiguous files. All panes share syntax, theme, font, whitespace, linked
-scroll, keyboard, and bounded-document policies with the ordinary editor.
+that apply one reviewed change region into Result. Added/deleted, binary, or otherwise ambiguous
+files keep explicit fail-closed handling instead of guessing a merge result. All panes share syntax,
+theme, font, whitespace, linked scroll, keyboard, and bounded-document policies with the ordinary
+editor.
 
 `Save and Stage` sends the complete Result through the existing `resolve_conflict` revision-token
 boundary. The application service publishes recovery data, performs revision-checked atomic
@@ -110,3 +111,5 @@ files, additional editor presentation state, and explicit stale/draft handling a
 refresh. Very large, binary, symlink, submodule, and unsupported-encoding conflicts remain external
 tool workflows rather than silently degraded editors.
 
+Implementation and acceptance evidence is recorded in
+[`2026-09-20 editable Diff and conflict editor`](../../benchmarks/2026-09-20-editable-diff-conflict-editor.md).

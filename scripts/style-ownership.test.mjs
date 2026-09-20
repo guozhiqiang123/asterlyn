@@ -31,6 +31,7 @@ const ownedStyles = [
   ["features/remote-push/remote-authentication.css", "main.ts"],
   ["features/remote-push/remote-management.css", "main.ts"],
   ["features/git-operations/git-operation-controls.css", "main.ts"],
+  ["features/git-operations/conflict-editor.css", "main.ts"],
   [
     "features/git-operations/git-operations.css",
     "features/git-operations/git-operation-dialog-entry.ts",

@@ -477,6 +477,22 @@ test("editor chrome renders tabs, Markdown modes, menu, and Diff controls indepe
   assert.ok(heading.indexOf("<h2>presentation-environment.test.mjs</h2>") < heading.indexOf("<small>scripts/presentation-environment.test.mjs</small>"));
 });
 
+test("conflict resolution is represented as a persistent editor preview", () => {
+  const document = {
+    kind: "conflict-resolution",
+    repositoryRoot: "/workspace/repository",
+    path: "src/shared.ts",
+  };
+  const session = { textTabs: [], preview: document, active: { kind: "preview" } };
+  const tabs = renderEditorTabs({ session, document, statusClass: () => "file-status-conflicted" });
+  const menu = renderEditorTabMenu({ session, open: true, statusClass: () => "file-status-conflicted" });
+
+  assert.match(tabs, /shared\.ts/);
+  assert.match(tabs, /Conflict/);
+  assert.match(tabs, /file-status-conflicted/);
+  assert.match(menu, /Conflict/);
+});
+
 function viewModel(state) {
   return {
     snapshot: repositorySnapshot(),

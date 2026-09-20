@@ -5,21 +5,18 @@
 }
 
 .git-operation-form,
-.git-operation-review,
-.conflict-editor {
+.git-operation-review {
   display: grid;
   gap: 12px;
 }
 
-.git-operation-form label,
-.conflict-editor > label {
+.git-operation-form label {
   color: var(--text);
   font-weight: 600;
 }
 
 .git-operation-form .select-control,
-.git-operation-form textarea,
-.conflict-editor textarea {
+.git-operation-form textarea {
   width: 100%;
 }
 
@@ -27,8 +24,7 @@
   background: var(--bg-deep);
 }
 
-.git-operation-form textarea,
-.conflict-editor textarea {
+.git-operation-form textarea {
   min-height: 56px;
   resize: vertical;
   font-family: var(--editor-font-family);
@@ -100,8 +96,7 @@
   padding: 10px 12px;
 }
 
-.git-operation-review h3,
-.conflict-sides h3 {
+.git-operation-review h3 {
   margin: 0 0 7px;
   font-size: 12px;
 }
@@ -134,64 +129,7 @@
   color: var(--text-muted);
 }
 
-.git-conflict-dialog {
-  width: min(1180px, calc(100vw - 30px));
-  height: min(840px, calc(100vh - 30px));
-  overflow: hidden;
-}
-
-.conflict-editor {
-  min-height: 0;
-  grid-template-rows: minmax(140px, 0.7fr) auto minmax(180px, 1fr) auto auto auto;
-  height: calc(100% - 48px);
-}
-
-.conflict-sides {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--border);
-}
-
-.conflict-sides section {
-  min-width: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  background: var(--bg-deep);
-  padding: 8px;
-}
-
-.conflict-sides pre {
-  min-height: 0;
-  overflow: auto;
-  margin: 0;
-  white-space: pre;
-  font-family: var(--editor-font-family);
-  font-size: var(--editor-font-size);
-  line-height: var(--editor-line-height);
-}
-
-.conflict-editor textarea {
-  min-height: 0;
-  height: 100%;
-  white-space: pre;
-  line-height: var(--editor-line-height);
-}
-
-.conflict-side-missing {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
 @media (max-width: 760px) {
-  .conflict-sides {
-    grid-template-columns: 1fr;
-  }
-
   .git-operation-route {
     grid-template-columns: 1fr;
   }

@@ -10,8 +10,7 @@ import { canReviewGitOperation, type GitOperationState } from "./git-operation-c
 export function renderGitOperationDialog(state: GitOperationState, copy: GitOperationCopy = DEFAULT_LOCALIZATION.catalog.gitOperations): string {
   if (!state.dialog) return "";
   if (state.dialog === "setup") return renderSetup(state, copy);
-  if (state.dialog === "review") return renderReview(state, copy);
-  return renderConflict(state, copy);
+  return renderReview(state, copy);
 }
 
 function renderSetup(state: GitOperationState, copy: GitOperationCopy): string {
@@ -66,50 +65,12 @@ function renderReview(state: GitOperationState, copy: GitOperationCopy): string 
   );
 }
 
-function renderConflict(state: GitOperationState, copy: GitOperationCopy): string {
-  const conflict = state.conflict;
-  const loading = state.loading === "conflict";
-  const resolving = state.loading === "resolve";
-  if (loading || !conflict) {
-    return dialogFrame(
-      copy.openConflict,
-      `<div class="git-operation-loading"><span class="spinner"></span><span>${loading ? escapeHtml(copy.readingConflict) : escapeHtml(state.error ?? copy.conflictUnavailable)}</span></div>`,
-      loading,
-      "",
-      copy,
-    );
-  }
-  const binary = conflict.binary;
-  return dialogFrame(
-    copy.resolve(conflict.path),
-    `<div class="conflict-editor">
-      <div class="conflict-sides" aria-label="${escapeAttribute(copy.conflictInputs)}">
-        ${conflictSide(copy.base, conflict.base, copy)}
-        ${conflictSide(copy.ours, conflict.ours, copy)}
-        ${conflictSide(copy.theirs, conflict.theirs, copy)}
-      </div>
-      <label for="conflict-result">${escapeHtml(copy.resolvedResult)}</label>
-      ${binary ? `<div class="git-operation-warning">${escapeHtml(copy.binaryConflict)}</div>` : `<textarea id="conflict-result" spellcheck="false" aria-label="${escapeAttribute(copy.resolvedFileContent)}" ${resolving ? "disabled" : ""}>${escapeHtml(state.conflictResult)}</textarea>`}
-      <p class="git-operation-note">${escapeHtml(copy.resolveSafetyNote)}</p>
-      ${renderError(state.error, copy)}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-git-operation-close ${resolving ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><span class="dialog-spacer"></span><button class="danger-button" id="git-conflict-delete" type="button" ${resolving ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button><button class="primary-button" id="git-conflict-resolve" type="button" ${resolving || binary ? "disabled" : ""}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button></div>
-    </div>`,
-    resolving,
-    "git-conflict-dialog",
-    copy,
-  );
-}
-
 function dialogFrame(title: string, body: string, busy: boolean, extraClass = "", copy: GitOperationCopy = DEFAULT_LOCALIZATION.catalog.gitOperations): string {
   return `<section class="dialog git-operation-dialog ${extraClass}" role="dialog" aria-modal="true" aria-labelledby="git-operation-title"><div class="dialog-heading"><h2 id="git-operation-title">${escapeHtml(title)}</h2><button class="icon-button" type="button" data-git-operation-close aria-label="${escapeAttribute(copy.closeDialog)}" ${busy ? "disabled" : ""}>${icon("close", 18)}</button></div>${body}</section>`;
 }
 
 function operationOption(kind: GitOperationKind, selected: GitOperationKind, label: string): string {
   return `<option value="${kind}" ${kind === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
-}
-
-function conflictSide(label: string, value: string | null, copy: GitOperationCopy): string {
-  return `<section><h3>${escapeHtml(label)}</h3><pre>${value === null ? `<span class="conflict-side-missing">${escapeHtml(copy.notPresent)}</span>` : escapeHtml(value)}</pre></section>`;
 }
 
 function renderError(error: string | null, copy: GitOperationCopy): string {

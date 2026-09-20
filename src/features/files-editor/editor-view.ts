@@ -56,6 +56,8 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
   const previewPath = preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
   const previewLabel = preview?.kind === "project-image"
     ? copy.preview
+    : preview?.kind === "conflict-resolution"
+      ? copy.conflict
     : preview?.kind === "historical-file"
       ? copy.historical
       : preview?.kind === "historical-file-comparison"
@@ -63,7 +65,7 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
       : copy.diff;
   const previewTab = preview
     ? `<div class="editor-tab preview ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${model.session.active.kind === "preview"}">
-        <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" || preview.kind === "historical-file" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
+        <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" || preview.kind === "historical-file" || preview.kind === "conflict-resolution" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
         <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="${escapeAttribute(copy.closePreview(previewLabel))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
       </div>`
     : "";
@@ -82,6 +84,8 @@ export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
   const previewPath = preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
   const previewLabel = preview?.kind === "project-image"
       ? copy.imagePreview
+      : preview?.kind === "conflict-resolution"
+        ? copy.conflict
       : preview?.kind === "historical-file"
         ? copy.historicalPreview
         : preview?.kind === "historical-file-comparison"
@@ -167,6 +171,8 @@ function previewStatusClass(
 ): string {
   return preview.kind === "working-diff"
     ? statusClass(preview.selection.path)
+    : preview.kind === "conflict-resolution"
+      ? statusClass(preview.path)
     : preview.kind === "project-image"
       ? statusClass(preview.workspacePath)
       : "";

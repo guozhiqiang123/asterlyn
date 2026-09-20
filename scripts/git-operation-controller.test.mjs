@@ -76,6 +76,7 @@ test("a repository replacement rejects a late reviewed plan", async () => {
 
 test("conflict resolution sends the opened revision token and edited result", async () => {
   const calls = [];
+  const changes = [];
   const operation = activeOperation();
   const controller = new GitOperationController(gateway({
     async readConflictContent(root, path) {
@@ -95,6 +96,7 @@ test("conflict resolution sends the opened revision token and edited result", as
       return operationOutcome({ ...operation, conflicts: [] });
     },
   }));
+  controller.subscribe((change) => changes.push(change));
   controller.installSnapshot(snapshot("/repo", operation));
 
   assert.equal(await controller.openConflict("shared.txt"), true);
@@ -104,6 +106,8 @@ test("conflict resolution sends the opened revision token and edited result", as
   assert.equal(result.status, "success");
   assert.deepEqual(calls[0], ["/repo", "shared.txt", "revision-1", "resolved\n"]);
   assert.equal(controller.state.dialog, null);
+  assert.ok(changes.some((change) => change.reason === "request-start" && change.conflictChanged));
+  assert.ok(changes.some((change) => change.reason === "request-complete" && change.conflictChanged));
   controller.dispose();
 });
 
@@ -229,11 +233,11 @@ test("unsaved conflict results survive close attempts and external operation com
   assert.equal(controller.closeDialog(), false);
   assert.equal(controller.state.conflictResult, "my merged text");
   controller.installSnapshot(snapshot("/repo", null));
-  assert.equal(controller.state.dialog, "conflict");
+  assert.equal(controller.state.dialog, null);
   assert.equal(controller.state.conflictResult, "my merged text");
   assert.match(controller.state.error, /preserved/);
   controller.openSetup();
-  assert.equal(controller.state.dialog, "conflict");
+  assert.equal(controller.state.dialog, null);
   assert.equal(controller.closeDialog(true), true);
   assert.equal(controller.state.conflict, null);
 });

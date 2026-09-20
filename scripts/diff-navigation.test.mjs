@@ -90,9 +90,24 @@ test("Diff document identities isolate source kind, side, repository, and revisi
     afterOid: "b".repeat(40),
     path: "src/file.ts",
   });
+  const conflict = editorDocumentKey({
+    kind: "conflict-resolution",
+    repositoryRoot: "/repo",
+    path: "src/file.ts",
+  });
 
-  assert.equal(new Set([working, staged, commit, otherCommit, comparison]).size, 5);
+  assert.equal(new Set([working, staged, commit, otherCommit, comparison, conflict]).size, 6);
   assert.match(comparison, /^comparison\0/);
+  assert.match(conflict, /^conflict\0/);
+});
+
+test("conflict editor keeps Ours and Theirs immutable around one synchronized Result", async () => {
+  const source = await readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8");
+  assert.equal(source.match(/new MergeView\(/g)?.length, 2);
+  assert.match(source, /revertControls: "a-to-b"/);
+  assert.match(source, /revertControls: "b-to-a"/);
+  assert.match(source, /resultSide === "primary"/);
+  assert.match(source, /target\.dispatch\(\{ changes:/);
 });
 
 test("Diff position navigation outlines the complete current change block", async () => {

@@ -23,6 +23,7 @@ import "./features/git-history/git-reset.css";
 import "./features/git-history/commit-file-restore.css";
 import "./features/git-history/details.css";
 import "./features/git-operations/git-operation-controls.css";
+import "./features/git-operations/conflict-editor.css";
 import "./features/remote-push/remote-push.css";
 import "./features/remote-push/remote-authentication.css";
 import "./features/remote-push/remote-management.css";

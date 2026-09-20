@@ -8,11 +8,22 @@ test("the startup graph reaches CodeMirror editors only through dynamic imports"
     new URL("../src/features/files-editor/lazy-editor-runtime.ts", import.meta.url),
     "utf8",
   );
+  const mergeRuntime = await readFile(
+    new URL("../src/features/files-editor/lazy-merge-editor-runtime.ts", import.meta.url),
+    "utf8",
+  );
+  const surface = await readFile(
+    new URL("../src/features/files-editor/editor-surface.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.doesNotMatch(app, /from ["']\.\/text-editor/);
   assert.doesNotMatch(app, /from ["']\.\/diff-editor/);
   assert.match(runtime, /import\(["']\.\.\/\.\.\/text-editor\.ts["']\)/);
   assert.match(runtime, /import\(["']\.\.\/\.\.\/diff-editor\.ts["']\)/);
+  assert.doesNotMatch(surface, /from ["']\.\.\/\.\.\/(?:editable-diff-editor|conflict-editor)\.ts["']/);
+  assert.match(mergeRuntime, /import\(["']\.\.\/\.\.\/editable-diff-editor\.ts["']\)/);
+  assert.match(mergeRuntime, /import\(["']\.\.\/\.\.\/conflict-editor\.ts["']\)/);
 });
 
 test("Markdown preview runtime is absent from the static application graph", async () => {

@@ -213,9 +213,10 @@ import {
 import { attachSplitter } from "./presentation/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./features/files-editor/diff-navigation";
 import {
+  activeProjectWorkspacePath,
   activeEditableTextTab,
   diffProjectFile,
-  mountEditableWorkingDiff,
+  mountEditableWorkingDiff, showsContextHeader,
   workingDiffActive,
   workingDiffExpanded,
   workingDiffTextTab,
@@ -660,6 +661,16 @@ export class AsterlynApp {
       },
       copy: () => this.localization.catalog.gitOperations,
       changed: (change) => this.handleGitOperationControllerChange(change),
+      conflictEditor: {
+        root, editor: this.filesEditorRuntime.editor, surface: this.editorSurface,
+        snapshot: () => this.windowSession.repository.state.snapshot,
+        activeDocument: () => this.activeDocument(),
+        activate: (document) => this.activateDiffPreview(document), renderEditor: () => this.renderEditor(),
+        preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
+        editorCopy: () => this.localization.catalog.editor,
+        status: (message) => this.setStatus(message, "warning"),
+        resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
+      },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
           list: (root) => bridge.listGitWorktreeRecoveries(root),
           undo: async (root, recovery) => {
@@ -911,6 +922,10 @@ export class AsterlynApp {
           leftTool: "changes",
         }, true),
         openWorkingDiff: (repositoryRoot, path) => {
+          if (this.windowSession.repository.state.snapshot?.changes.some((change) => change.path === path && change.conflicted)) {
+            this.gitOperationRuntime.openConflict(path);
+            return;
+          }
           this.activateDiffPreview({
             kind: "working-diff",
             repositoryRoot,
@@ -1225,7 +1240,7 @@ export class AsterlynApp {
       remoteOperationActive: () => this.remoteState.operation !== null,
       pushDiffOpen: () => this.remoteState.pushDiff !== null,
       pushModeMenuOpen: () => this.remoteState.pushModeMenuOpen,
-      gitOperationDialogOpen: () => this.gitOperationState.dialog !== null,
+      gitOperationDialogOpen: () => this.gitOperationState.dialog === "setup" || this.gitOperationState.dialog === "review",
       repositoryMenuOpen: () => this.shellState.repositoryMenuOpen,
       editorTabMenuOpen: () => this.shellState.editorTabMenuOpen,
       settingsOpen: () => this.shellState.page === "settings",
@@ -4080,7 +4095,7 @@ export class AsterlynApp {
     const scrollLeft = body.scrollLeft;
     const tree = this.projectTree();
     body.dataset.navigatorView = "files";
-    const activePath = this.activeProjectWorkspacePath(workspaceRoot);
+    const activePath = activeProjectWorkspacePath(workspaceRoot, this.activeDocument(), this.filesState.files);
     actions.innerHTML = renderProjectToolbar(this.filesState, tree, activePath, this.localization.catalog.projectFiles);
     const projectRows = projectTreeRows(tree, this.filesState.expandedDirectories);
     const window = projectTreeRenderWindow(projectRows.length, scrollTop, body.clientHeight);
@@ -4410,7 +4425,7 @@ export class AsterlynApp {
   private locateCurrentProjectFile(): void {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot) return;
-    const activePath = this.activeProjectWorkspacePath(workspaceRoot);
+    const activePath = activeProjectWorkspacePath(workspaceRoot, this.activeDocument(), this.filesState.files);
     if (!activePath) return;
     if (!this.filesEditorRuntime.files.revealFile(activePath)) {
       this.setStatus(this.localization.catalog.editor.outsideProjectTree, "warning");
@@ -4430,20 +4445,6 @@ export class AsterlynApp {
       target?.scrollIntoView({ block: "center" });
       target?.focus();
     });
-  }
-
-  private activeProjectWorkspacePath(workspaceRoot: string): string | null {
-    const active = this.activeDocument();
-    if (active.kind === "welcome" || active.repositoryRoot !== workspaceRoot) return null;
-    if (active.kind === "project-file" || active.kind === "project-image") {
-      return active.workspacePath;
-    }
-    if (active.kind === "working-diff") return active.selection.path;
-    return (
-      this.filesState.files.find(
-        (file) => file.repositoryId === active.repositoryId && file.path === active.path,
-      )?.workspacePath ?? null
-    );
   }
 
   private setSelectedProjectFolderExpanded(expanded: boolean): void {
@@ -4506,7 +4507,7 @@ export class AsterlynApp {
     if (opened.status === "limit") {
       const currentRoot = this.windowSession.workspace.state.root;
       const activePath = currentRoot
-        ? this.activeProjectWorkspacePath(currentRoot)
+        ? activeProjectWorkspacePath(currentRoot, this.activeDocument(), this.filesState.files)
         : null;
       if (activePath) {
         this.filesEditorRuntime.files.select(activePath, "file");
@@ -5848,12 +5849,7 @@ export class AsterlynApp {
     this.renderEditorContextActions(document);
     this.renderEditorTabMenu();
     this.renderDocumentStatus();
-    const showContextHeader =
-      document.kind === "working-diff" ||
-      document.kind === "commit-diff" ||
-      document.kind === "commit-comparison-diff" ||
-      document.kind === "historical-file" ||
-      document.kind === "historical-file-comparison";
+    const showContextHeader = showsContextHeader(document);
     editorPanel.classList.toggle("show-context-header", showContextHeader);
     if (!showContextHeader) header.innerHTML = "";
     if (revealActiveTab) this.revealActiveEditorTab();
@@ -5920,6 +5916,11 @@ export class AsterlynApp {
           this.mountTextEditor(key, tab);
         }
       }
+      return;
+    }
+
+    if (document.kind === "conflict-resolution") {
+      this.gitOperationRuntime.renderConflict(document);
       return;
     }
 
@@ -6713,6 +6714,7 @@ export class AsterlynApp {
       .querySelector<HTMLButtonElement>("[data-close-editor-preview]")
       ?.addEventListener("click", () => {
         this.captureMountedTextEditor();
+        if (this.activeDocument().kind === "conflict-resolution" && !this.gitOperationRuntime.close()) return;
         this.filesEditorRuntime.editor.closePreview();
         this.imageSurface = null;
         this.renderEditor();
@@ -6721,6 +6723,7 @@ export class AsterlynApp {
   }
 
   private captureMountedTextEditor(): void {
+    this.gitOperationRuntime.captureConflict();
     this.editorSurface.capture(
       this.editorState.session,
       (tabId, content) => this.filesEditorRuntime.editor.captureText(tabId, content),
@@ -8157,6 +8160,7 @@ export class AsterlynApp {
   }
 
   private async resolveGitConflict(deleteFile: boolean): Promise<void> {
+    this.captureMountedTextEditor();
     const path = this.gitOperationState.conflict?.path;
     if (!path) return;
     await this.runGitOperationMutation(

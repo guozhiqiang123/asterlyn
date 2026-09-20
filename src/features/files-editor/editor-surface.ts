@@ -1,5 +1,5 @@
 import type { DiffPresentation } from "../../diff-presentation.ts";
-import type { ImageDiffPreview, ImagePreview } from "../../models.ts";
+import type { GitConflictContent, ImageDiffPreview, ImagePreview } from "../../models.ts";
 import { attachSplitter } from "../../presentation/splitter.ts";
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../editor-document.ts";
 import {
@@ -25,8 +25,8 @@ import {
   markdownPreviewLoadingBlock,
   retryState,
 } from "./editor-view.ts";
-import type { EditorCopy } from "../../localization/catalog.ts";
-import { EditableDiffEditor } from "../../editable-diff-editor.ts";
+import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
+import { LazyConflictEditor, LazyEditableDiffEditor } from "./lazy-merge-editor-runtime.ts";
 
 export type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -41,11 +41,13 @@ type DiffDocument = Extract<
 export class EditorSurface {
   private readonly diffEditor: LazyDiffEditor;
   private readonly textEditor: LazyTextEditor;
-  private readonly editableDiffEditor: EditableDiffEditor;
+  private readonly editableDiffEditor: LazyEditableDiffEditor;
+  private readonly conflictEditor = new LazyConflictEditor();
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private mountedTextLoadEpoch: number | null = null;
   private mountedEditableDiffTabId: string | null = null;
+  private mountedConflictKey: string | null = null;
   private markdownSourcePercent = 50;
   private markdownSplitterDisposer: (() => void) | null = null;
   private markdownScrollDisposer: (() => void) | null = null;
@@ -77,7 +79,7 @@ export class EditorSurface {
       contextMenu,
       "editor.surface.text-blame",
     );
-    this.editableDiffEditor = new EditableDiffEditor(copy);
+    this.editableDiffEditor = new LazyEditableDiffEditor(copy);
   }
 
   setCopy(copy: EditorCopy): void {
@@ -137,7 +139,8 @@ export class EditorSurface {
   }
 
   openFindReplace(): void {
-    if (this.mountedEditableDiffTabId) this.editableDiffEditor.openFindReplace();
+    if (this.root.querySelector(".conflict-editor-surface")) this.conflictEditor.openFindReplace();
+    else if (this.mountedEditableDiffTabId) this.editableDiffEditor.openFindReplace();
     else this.textEditor.openFindReplace();
   }
 
@@ -159,18 +162,21 @@ export class EditorSurface {
     this.textEditor.setPreferences(preferences);
     this.diffEditor.setPreferences(preferences);
     this.editableDiffEditor.setPreferences(preferences);
+    this.conflictEditor.setPreferences(preferences);
   }
 
   setTheme(theme: EffectiveTheme): void {
     this.textEditor.setTheme(theme);
     this.diffEditor.setTheme(theme);
     this.editableDiffEditor.setTheme(theme);
+    this.conflictEditor.setTheme(theme);
   }
 
   setPhrases(phrases: Readonly<Record<string, string>>): void {
     this.textEditor.setPhrases(phrases);
     this.diffEditor.setPhrases(phrases);
     this.editableDiffEditor.setPhrases(phrases);
+    this.conflictEditor.setPhrases(phrases);
   }
 
   setDiffPresentation(presentation: DiffPresentation): void {
@@ -185,6 +191,7 @@ export class EditorSurface {
       this.diffEditor.requestMeasure();
       this.textEditor.requestMeasure();
       this.editableDiffEditor.requestMeasure();
+      this.conflictEditor.requestMeasure();
     });
   }
 
@@ -194,7 +201,7 @@ export class EditorSurface {
     this.disposeMarkdownSurface();
     this.textEditor.detach();
     this.mountedTextTabId = null;
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     this.resetBodyClasses(body);
@@ -285,7 +292,7 @@ export class EditorSurface {
     this.disposeMarkdownSurface();
     this.textEditor.detach();
     this.mountedTextTabId = null;
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     body.innerHTML = "";
@@ -313,7 +320,7 @@ export class EditorSurface {
     this.diffEditor.destroy();
     this.textEditor.dispose(tab.id);
     this.textEditor.detach();
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     const body = this.query("#content-body");
     body.innerHTML = "";
     this.resetBodyClasses(body);
@@ -336,6 +343,44 @@ export class EditorSurface {
     this.mountedEditorKey = key;
   }
 
+  mountConflict(
+    key: string,
+    conflict: GitConflictContent,
+    result: string,
+    preferences: AppPreferences,
+    copy: GitOperationCopy,
+    beforeTransition: () => void,
+    onContentChange: (content: string) => void,
+  ): void {
+    if (this.mountedEditorKey === key && this.mountedConflictKey === key) {
+      this.conflictEditor.requestMeasure();
+      return;
+    }
+    beforeTransition();
+    this.disposeMarkdownSurface();
+    this.diffEditor.destroy();
+    this.textEditor.detach();
+    this.detachSpecializedEditors();
+    const body = this.query("#content-body");
+    body.innerHTML = "";
+    this.resetBodyClasses(body);
+    body.classList.add("conflict-editor-surface");
+    this.mountedTextTabId = null;
+    this.mountedConflictKey = key;
+    this.conflictEditor.mount(body, conflict, result, preferences, copy, onContentChange);
+    this.mountedEditorKey = key;
+  }
+
+  flushConflict(): string | null {
+    if (!this.mountedConflictKey) return null;
+    this.conflictEditor.flushChanges();
+    return this.conflictEditor.content();
+  }
+
+  setConflictReadOnly(readOnly: boolean): void {
+    this.conflictEditor.setResultReadOnly(readOnly);
+  }
+
   mountText(
     key: string,
     tab: TextTabState,
@@ -353,7 +398,7 @@ export class EditorSurface {
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     if (!reuseTextSurface) {
       this.textEditor.detach();
       body.innerHTML = "";
@@ -383,7 +428,7 @@ export class EditorSurface {
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     this.textEditor.detach();
     body.innerHTML = "";
     this.resetBodyClasses(body);
@@ -452,7 +497,7 @@ export class EditorSurface {
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     this.textEditor.detach();
     const body = this.query("#content-body");
     body.innerHTML = "";
@@ -510,7 +555,7 @@ export class EditorSurface {
     this.disposeMarkdownSurface();
     this.textEditor.destroy();
     this.diffEditor.destroy();
-    this.detachEditableDiff();
+    this.detachSpecializedEditors();
     if (this.measureFrame !== null) window.cancelAnimationFrame(this.measureFrame);
     this.measureFrame = null;
     this.mountedEditorKey = null;
@@ -602,13 +647,15 @@ export class EditorSurface {
     this.activeMarkdownMode = null;
   }
 
-  private detachEditableDiff(): void {
+  private detachSpecializedEditors(): void {
     this.editableDiffEditor.destroy();
+    this.conflictEditor.destroy();
     this.mountedEditableDiffTabId = null;
+    this.mountedConflictKey = null;
   }
 
   private resetBodyClasses(body: HTMLElement): void {
-    body.classList.remove("diff-surface", "editable-diff-surface", "text-surface", "markdown-surface", "markdown-source-surface", "markdown-split-surface", "markdown-preview-surface", "image-surface");
+    body.classList.remove("diff-surface", "editable-diff-surface", "conflict-editor-surface", "text-surface", "markdown-surface", "markdown-source-surface", "markdown-split-surface", "markdown-preview-surface", "image-surface");
   }
 
   private localizeMountedSurface(previous: EditorCopy): void {

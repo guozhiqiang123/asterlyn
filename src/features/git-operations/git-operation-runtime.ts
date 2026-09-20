@@ -13,6 +13,8 @@ import type {
   GitWorktreeRecoveryActions,
   GitWorktreeRecoveryDialog,
 } from "./git-worktree-recovery-dialog.ts";
+import { ConflictEditorRuntime, type ConflictEditorRuntimeOptions } from "./conflict-editor-runtime.ts";
+import type { EditorDocument } from "../../editor-document.ts";
 
 export interface GitOperationRuntimeOptions {
   readonly root: HTMLElement;
@@ -21,6 +23,7 @@ export interface GitOperationRuntimeOptions {
   readonly copy: () => GitOperationCopy;
   readonly actions: GitOperationDialogActions;
   readonly changed: (change: GitOperationChange) => void;
+  readonly conflictEditor?: Omit<ConflictEditorRuntimeOptions, "controller">;
   readonly recovery?: {
     readonly actions: GitWorktreeRecoveryActions;
     readonly copy: () => RecoveryCopy;
@@ -34,11 +37,15 @@ export class GitOperationRuntime {
   private readonly binding: GitOperationDialogBinding;
   private readonly release: () => void;
   private readonly recovery: GitOperationRuntimeOptions["recovery"];
+  private readonly conflictEditor: ConflictEditorRuntime | null;
   private recoveryDialog: GitWorktreeRecoveryDialog | null = null;
   private disposed = false;
 
   constructor(options: GitOperationRuntimeOptions) {
     this.controller = new GitOperationController(options.gateway, options.initialCopy);
+    this.conflictEditor = options.conflictEditor
+      ? new ConflictEditorRuntime({ ...options.conflictEditor, controller: this.controller })
+      : null;
     this.recovery = options.recovery;
     this.binding = new GitOperationDialogBinding(
       options.root,
@@ -48,6 +55,7 @@ export class GitOperationRuntime {
     );
     this.release = this.controller.subscribe((change) => {
       if (change.dialogChanged) this.binding.render();
+      this.conflictEditor?.handleChange(change);
       options.changed(change);
     });
   }
@@ -57,7 +65,16 @@ export class GitOperationRuntime {
   }
 
   openConflict(path: string): void {
-    this.binding.openConflict(path);
+    if (this.conflictEditor) void this.conflictEditor.open(path);
+    else void this.controller.openConflict(path);
+  }
+
+  renderConflict(document: EditorDocument): boolean {
+    return this.conflictEditor?.render(document) ?? false;
+  }
+
+  captureConflict(): void {
+    this.conflictEditor?.capture();
   }
 
   close(): boolean {
