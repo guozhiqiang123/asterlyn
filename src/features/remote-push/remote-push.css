@@ -732,6 +732,7 @@
 }
 
 .push-primary-action {
+  border-right: 0;
   border-radius: 5px 0 0 5px;
 }
 
@@ -742,6 +743,7 @@
   border-radius: 0 5px 5px 0;
 }
 
+.push-mode-toggle:disabled { border-left-color: var(--info-border); }
 .push-mode-menu {
   position: absolute;
   right: 0;

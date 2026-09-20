@@ -37,6 +37,7 @@ export interface ShellEventActions {
   readonly remoteDialogOpen: () => boolean;
   readonly remoteOperationActive: () => boolean;
   readonly pushDiffOpen: () => boolean;
+  readonly pushModeMenuOpen: () => boolean;
   readonly gitOperationDialogOpen: () => boolean;
   readonly repositoryMenuOpen: () => boolean;
   readonly editorTabMenuOpen: () => boolean;
@@ -69,6 +70,7 @@ export interface ShellEventActions {
   readonly hideLeftTool: () => void;
   readonly applyLayout: () => void;
   readonly closePushDiff: () => void;
+  readonly closePushModeMenu: () => void;
   readonly openGitOperation: () => void;
   readonly openGitRecoveries: () => void;
   readonly closeGitOperation: () => void;
@@ -190,6 +192,7 @@ export class ShellEventBinding {
     this.resizeObserver.observe(this.query("#workbench"));
     listen(window, "keydown", (event) => this.handleWindowKeydown(event as KeyboardEvent));
     listen(window, "pointerdown", (event) => this.handleWindowPointerdown(event as PointerEvent));
+    listen(window, "click", (event) => this.handleWindowClick(event));
     listen(window, "beforeunload", (event) => {
       this.actions.captureEditor();
       if (this.actions.dirtyTextTabs() === 0) return;
@@ -241,6 +244,7 @@ export class ShellEventBinding {
   private handleEscape(): boolean {
     if (this.actions.pushDiffOpen()) this.actions.closePushDiff();
     else if (this.actions.gitOperationDialogOpen()) this.actions.closeGitOperation();
+    else if (this.actions.pushModeMenuOpen()) this.actions.closePushModeMenu();
     else if (this.actions.remoteDialogOpen() && !this.actions.remoteOperationActive()) this.actions.closeRemoteDialog();
     else if (this.actions.repositoryMenuOpen()) this.actions.closeRepositoryMenu(true);
     else if (this.actions.editorTabMenuOpen()) this.actions.closeEditorTabMenu();
@@ -267,6 +271,13 @@ export class ShellEventBinding {
     }
     if (this.actions.historyFilterOpen() && !event.target.closest(".history-toolbar")) {
       this.actions.closeHistoryFilter();
+    }
+  }
+
+  private handleWindowClick(event: Event): void {
+    if (!(event.target instanceof Element)) return;
+    if (this.actions.pushModeMenuOpen() && !event.target.closest(".push-split-action")) {
+      this.actions.closePushModeMenu();
     }
   }
 

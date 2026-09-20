@@ -133,6 +133,33 @@ test("tag refresh preserves reviewed content and replaces it atomically", async 
   assert.equal(controller.state.pushPreviewRefreshing, false);
 });
 
+test("Push mode menu closes explicitly and cannot open for an empty preview", async () => {
+  const emptyPreview = {
+    ...preview("origin", "empty"),
+    headOid: "same",
+    comparisonBaseOid: "same",
+    commits: [],
+    files: [],
+    totalCommits: 0,
+  };
+  const controller = new RemotePushController(createGateway({
+    previewResponses: [Promise.resolve(emptyPreview)],
+  }));
+  controller.installSnapshot(snapshot());
+  controller.openDialog("push");
+  await settle();
+
+  controller.togglePushModeMenu();
+  assert.equal(controller.state.pushModeMenuOpen, false);
+
+  controller.state.pushPreview = preview("origin", "outgoing");
+  controller.togglePushModeMenu();
+  assert.equal(controller.state.pushModeMenuOpen, true);
+  assert.equal(controller.closePushModeMenu(), true);
+  assert.equal(controller.state.pushModeMenuOpen, false);
+  assert.equal(controller.closePushModeMenu(), false);
+});
+
 test("commit details are cached and stale selections cannot replace the review", async () => {
   const late = deferred();
   const calls = [];

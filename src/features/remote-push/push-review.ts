@@ -1,4 +1,4 @@
-import type { CommitDetails, CommitFileChange } from "../../models";
+import type { CommitDetails, CommitFileChange, PushPreview } from "../../models";
 
 export interface PushConfirmationAvailabilityInput {
   operationActive: boolean;
@@ -29,6 +29,15 @@ export function nextPushCommitSelection(
   activatedCommitOid: string,
 ): string | null {
   return selectedCommitOid === activatedCommitOid ? null : activatedCommitOid;
+}
+
+export function isPushPreviewActionable(preview: PushPreview | null): boolean {
+  return Boolean(preview && (
+    preview.publish ||
+    preview.totalCommits > 0 ||
+    preview.tags.length > 0 ||
+    preview.comparisonBaseOid !== preview.headOid
+  ));
 }
 
 export function pushConfirmationAvailability({

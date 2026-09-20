@@ -203,6 +203,23 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.doesNotMatch(authentication, /account password[^<]*<input/iu);
   assert.doesNotMatch(authentication, /remote-https-auth-form[\s\S]*type="submit" disabled/);
   assert.match(authentication, /push-dialog[^>]*aria-hidden="true" inert/);
+
+  state.pushPreviewLoading = false;
+  state.pushPreview = pushPreview({
+    headOid: "same",
+    comparisonBaseOid: "same",
+    commits: [],
+    files: [],
+    totalCommits: 0,
+  });
+  const emptyPush = renderRemoteDialogContent(viewModel(state));
+  const emptyModeToggle = emptyPush.match(/<button[^>]*id="push-mode-toggle"[^>]*>/)?.[0] ?? "";
+  assert.match(emptyModeToggle, / disabled/);
+
+  state.pushPreview = pushPreview();
+  const outgoingPush = renderRemoteDialogContent(viewModel(state));
+  const outgoingModeToggle = outgoingPush.match(/<button[^>]*id="push-mode-toggle"[^>]*>/)?.[0] ?? "";
+  assert.doesNotMatch(outgoingModeToggle, / disabled/);
 });
 
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
@@ -440,6 +457,43 @@ function viewModel(state) {
     workspaceRoot: "/workspace/repository",
     preferences: DEFAULT_APP_PREFERENCES,
     selectedProjectFileAvailable: false,
+  };
+}
+
+function pushPreview(overrides = {}) {
+  return {
+    remote: "origin",
+    branch: "main",
+    sourceRef: "refs/heads/main",
+    destinationRef: "refs/heads/main",
+    headOid: "head",
+    comparisonBaseOid: "base",
+    publish: false,
+    ordinaryAllowed: true,
+    ordinaryBlockReason: null,
+    forceWithLeaseAllowed: true,
+    forceWithLeaseBlockReason: null,
+    tagMode: "none",
+    tags: [],
+    files: [{ path: "README.md", originalPath: null, status: "modified" }],
+    filesTruncated: false,
+    commits: [{
+      repositoryId: ".",
+      oid: "head",
+      shortOid: "head",
+      parents: ["base"],
+      authorName: "Test",
+      authorEmail: "test@example.invalid",
+      authoredAt: 1,
+      decorations: [],
+      subject: "Outgoing commit",
+    }],
+    offset: 0,
+    totalCommits: 1,
+    hasMore: false,
+    truncated: false,
+    previewToken: "preview",
+    ...overrides,
   };
 }
 

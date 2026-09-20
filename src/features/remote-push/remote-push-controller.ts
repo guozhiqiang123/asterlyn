@@ -8,7 +8,7 @@ import type {
   RepositorySnapshot,
 } from "../../models.ts";
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
-import { filesForPushReview } from "./push-review.ts";
+import { filesForPushReview, isPushPreviewActionable } from "./push-review.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
@@ -197,9 +197,16 @@ export class RemotePushController {
   }
 
   togglePushModeMenu(): void {
-    if (!this.state.pushPreview || this.state.operation) return;
+    if (!isPushPreviewActionable(this.state.pushPreview) || this.state.operation) return;
     this.state.pushModeMenuOpen = !this.state.pushModeMenuOpen;
     this.emit({ reason: "push-options", dialogChanged: true });
+  }
+
+  closePushModeMenu(): boolean {
+    if (!this.state.pushModeMenuOpen) return false;
+    this.state.pushModeMenuOpen = false;
+    this.emit({ reason: "push-options", dialogChanged: true });
+    return true;
   }
 
   setPushMode(mode: PushMode): void {

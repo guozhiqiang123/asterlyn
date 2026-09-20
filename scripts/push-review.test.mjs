@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   filesForPushReview,
+  isPushPreviewActionable,
   nextPushCommitSelection,
   pushConfirmationAvailability,
 } from "../src/features/remote-push/push-review.ts";
@@ -34,6 +35,19 @@ test("activating the selected outgoing commit restores aggregate review", () => 
   assert.equal(nextPushCommitSelection(null, "selected"), "selected");
   assert.equal(nextPushCommitSelection("selected", "selected"), null);
   assert.equal(nextPushCommitSelection("selected", "other"), "other");
+});
+
+test("Push mode selection requires a real outgoing payload or ref difference", () => {
+  const preview = {
+    publish: false,
+    totalCommits: 0,
+    tags: [],
+    comparisonBaseOid: "same",
+    headOid: "same",
+  };
+  assert.equal(isPushPreviewActionable(preview), false);
+  assert.equal(isPushPreviewActionable({ ...preview, comparisonBaseOid: "remote" }), true);
+  assert.equal(isPushPreviewActionable({ ...preview, totalCommits: 1 }), true);
 });
 
 test("tag refresh blocks activation without visually disabling Push", () => {
