@@ -18,10 +18,6 @@
   background: var(--selection-bg);
 }
 
-.history-row.active {
-  box-shadow: inset 2px 0 var(--accent);
-}
-
 .file-name,
 .history-subject,
 .branch-copy > span {

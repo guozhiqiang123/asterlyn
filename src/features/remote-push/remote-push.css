@@ -363,14 +363,13 @@
 }
 
 .push-commit-row.selected {
-  border-color: var(--accent-hover);
-  background: var(--accent);
-  box-shadow: inset 3px 0 0 var(--focus-ring-bright);
-  color: white;
+  border-color: transparent;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .push-commit-row.selected:hover {
-  background: var(--accent);
+  background: var(--selection-bg);
 }
 
 .push-commit-row span {
@@ -432,8 +431,8 @@
 }
 
 .push-file-row.selected {
-  background: var(--selection);
-  color: white;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .push-file-directory > summary {

@@ -705,10 +705,14 @@
   text-align: left;
 }
 
-.command-result:hover,
 .command-result.selected {
   background: var(--selection-bg);
-  color: white;
+  color: var(--selection-text);
+}
+
+.command-result:hover:not(.selected) {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .command-result:disabled {
@@ -745,8 +749,7 @@
   font-size: 8px;
 }
 
-.command-result.selected .command-result-copy small,
-.command-result:hover .command-result-copy small {
+.command-result.selected .command-result-copy small {
   color: var(--info-text);
 }
 
