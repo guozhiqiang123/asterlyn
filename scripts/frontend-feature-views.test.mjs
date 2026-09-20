@@ -19,6 +19,7 @@ import {
   renderEditorTabs,
   renderMarkdownModeControls,
 } from "../src/features/files-editor/editor-view.ts";
+import { renderProjectFilesOperationDialog } from "../src/features/files-editor/project-files-operation-view.ts";
 import {
   renderCommandSurface,
   renderWorkspaceReplacementDialog,
@@ -33,6 +34,7 @@ import { ShellController } from "../src/shell/shell-controller.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
 import { createCommandSurfaceState, openCommandSurface } from "../src/features/files-editor/navigation.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
+import { EN_US } from "../src/localization/en-US.ts";
 import { createWorkspaceReplacementState } from "../src/features/files-editor/workspace-replacement.ts";
 import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/features/files-editor/workspace-search.ts";
 
@@ -152,8 +154,33 @@ test("settings view keeps one selected section and bounded preference controls",
     kind: "idle",
   });
   assert.match(versionControl, /id="setting-remote-update-strategy"/);
+  assert.match(versionControl, /id="setting-new-file-stage-behavior"/);
+  assert.match(versionControl, /value="ask" selected/);
   assert.match(versionControl, /value="rebase" selected/);
   assert.doesNotMatch(versionControl, /id="setting-ask-before-remote-update"[^>]*checked/);
+});
+
+test("new-file staging choice defaults to a safe untracked action and optional memory", () => {
+  const html = renderProjectFilesOperationDialog({
+    inlineEdit: null,
+    busyPath: null,
+    dialog: {
+      kind: "stage-created",
+      target: {
+        workspaceRoot: "/repo", workspaceGeneration: 2, workspacePath: "src", kind: "directory",
+        file: null, status: "unmodified", readOnly: false,
+      },
+      destination: "src/notes.txt",
+      remember: false,
+      error: null,
+      busy: false,
+    },
+  }, EN_US.projectFiles);
+  assert.match(html, /Add the new file to Staged Changes\?/);
+  assert.match(html, /data-project-files-stage-choice="leave"/);
+  assert.match(html, /data-project-files-stage-choice="stage"/);
+  assert.match(html, /data-project-files-stage-remember/);
+  assert.doesNotMatch(html, /data-project-files-stage-remember[^>]*checked/);
 });
 
 test("remote view renders explicit update and reviewed push boundaries", () => {

@@ -1,4 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts";
+import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts";
 
 export const ZH_CN = {
   locale: "zh-CN",
@@ -74,6 +75,10 @@ export const ZH_CN = {
     updateStrategyLabel: "默认更新方式", updateStrategyDescription: "关闭更新确认后直接使用。合并和变基仍需准确对象安全审查。",
     updateStrategyAria: "默认远程更新方式", updateStrategies: { ffOnly: "仅快进", merge: "合并传入更改", rebase: "变基当前分支" }, askBeforeRemoteUpdateLabel: "更新确认",
     askBeforeRemoteUpdateDescription: "每次更新当前分支前，询问要使用哪种整合方式。", askBeforeRemoteUpdate: "每次更新前询问",
+    newFileStageLabel: "新文件暂存",
+    newFileStageDescription: "选择新建文件是否加入 Git 暂存区。勾选“不再提示”后，可在这里恢复询问。",
+    newFileStageAria: "新文件暂存方式",
+    newFileStageBehaviors: { ask: "每次询问", stage: "总是加入暂存区", leaveUntracked: "保持未跟踪" },
     diffLayoutLabel: "差异布局",
     diffLayoutDescription: "选择所有差异预览使用的默认布局。", diffLayoutAria: "默认差异布局", sideBySide: "并排", unified: "统一",
     whitespaceLabel: "空白字符", whitespaceDescription: "在差异窗格中显示空格和制表符。", showWhitespace: "显示空白字符",
@@ -152,6 +157,11 @@ export const ZH_CN = {
       ambiguousHistory: "此文件夹跨越多个 Git 根",
       nameLabel: "名称", choosePasteName: "选择新名称",
       pasteNameDetail: "已有同名条目。请输入其他名称；现有内容不会被替换。",
+      stageCreatedTitle: "将新文件加入暂存区？",
+      stageCreatedDetail: (path) => `${path} 已创建，目前处于未跟踪状态。`,
+      stageCreatedRemember: "不再提示",
+      stageCreated: "加入暂存区",
+      leaveUntracked: "保持未跟踪",
       cancel: "取消", working: "处理中…", confirmTrashTitle: "将此条目移到回收站？",
       confirmTrash: "移到回收站", trashFileDetail: (path) => `${path} 将被移到系统回收站。`,
       trashFolderDetail: (entries, bytes, hidden) => `${entries} 个条目（${bytes} 字节）将被移到系统回收站${hidden ? `，其中包含 ${hidden} 个隐藏条目` : ""}。`,
@@ -161,6 +171,9 @@ export const ZH_CN = {
       trashBlocked: "此条目当前无法安全地移到回收站。",
       destinationExists: "已有同名条目。", operationFailed: "无法完成文件操作。",
       copiedEntry: "已复制文件条目", cutEntry: "已剪切文件条目", createdFile: "已创建文件",
+      stagedCreatedFile: "新文件已加入暂存区",
+      leftCreatedFileUntracked: "新文件保持未跟踪",
+      stageCreatedFileFailed: "文件已创建，但无法加入暂存区。",
       renamedEntry: "已重命名条目", pastedEntry: "已粘贴条目", trashedEntry: "已移到回收站",
     },
   },
@@ -325,42 +338,7 @@ export const ZH_CN = {
       busy: "另一个仓库操作仍在进行中", cleanRequired: "切换分支前请提交或移除所有工作区更改",
       targetChanged: "分支已发生变化，请重新打开菜单",
     },
-    branchMutation: {
-      titles: {
-        switch: "切换分支", create: "创建分支",
-        checkoutRemote: "检出远程分支", rename: "重命名本地分支", delete: "删除本地分支",
-      },
-      descriptions: {
-        switch: "再次检查工作区后，将当前工作树切换到这个精确本地分支。",
-        create: "在所选精确对象处创建并切换到新本地分支，不继承上游。",
-        checkoutRemote: "在所选远程跟踪对象处创建并切换到本地分支，然后设置这个精确上游。",
-        rename: "只重命名所选本地引用，不会重命名远程分支。",
-        delete: "删除已合并且未被任何关联工作树使用的本地分支；可在下方明确选择同时删除其受支持的远程上游。",
-      },
-      actions: {
-        switch: "切换分支", create: "创建并切换", checkoutRemote: "检出",
-        rename: "重命名分支", delete: "删除本地分支",
-      },
-      progress: (kind, source) => `${{
-        switch: "正在切换到", create: "正在从此处创建", checkoutRemote: "正在检出",
-        rename: "正在重命名", delete: "正在删除",
-      }[kind]} ${source}…`,
-      completed: (kind, source, destination, remote) => `${{
-        switch: `已切换到 ${source}`, create: `已创建并切换到 ${destination ?? source}`,
-        checkoutRemote: `已检出 ${destination ?? source}`, rename: `已将 ${source} 重命名为 ${destination ?? source}`,
-        delete: remote ? `已删除本地分支 ${source} 及其在 ${remote} 上的分支` : `已删除本地分支 ${source}`,
-      }[kind]}`,
-      source: "已审查起点", object: "精确对象", destination: "目标",
-      currentHead: "当前 HEAD", upstream: "上游", noUpstream: "无",
-      mergedIntoCurrent: "已确认合并到当前 HEAD", remoteBranch: "远程分支",
-      deleteRemote: "同时删除对应的远程分支", deleteRemoteUnavailable: "此分支没有受支持的远程上游。",
-      deleteLocalAndRemote: "删除本地和远程分支",
-      localOnly: "不会删除远程分支或提交对象。",
-      localAndRemote: "将先用精确 lease 删除最后获取到的远程分支；不会删除提交对象。",
-      branchName: "本地分支名称", branchNameRequired: "请输入本地分支名称。",
-      cancel: "取消",
-      working: "正在应用…", failed: "分支变更未完成。重试前请检查已刷新的仓库状态。",
-    },
+    branchMutation: ZH_CN_BRANCH_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `${subject} 的提交操作`, copyCommitId: "复制提交 ID",
       cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…",

@@ -6,8 +6,10 @@ import { DESKTOP_RESULT_VALIDATORS } from "./generated-desktop-protocol.ts";
 import { assertCommitFilePreview } from "./validate-commit-file-preview.ts";
 import { assertCommitFileComparison } from "./validate-commit-file-comparison.ts";
 import { assertCommitFileRestorePreview, assertFileRestoreApplyResult, assertFileRestoreRecoveryList } from "./validate-file-restore.ts";
-
-type TransportRecord = Record<string, unknown>;
+import {
+  arrays, assert, booleans, isRecord, nullableStrings, numbers, record, strings,
+  type TransportRecord,
+} from "./desktop-result-validation-primitives.ts";
 
 export function validateDesktopResult<Command extends DesktopCommandName>(
   command: Command,
@@ -743,63 +745,4 @@ function assertNonNegativeInteger(
     command,
     `${name} must be a non-negative integer`,
   );
-}
-
-function record(value: unknown, command: DesktopCommandName): TransportRecord {
-  assert(isRecord(value), command, "expected an object");
-  return value;
-}
-
-function strings(
-  value: TransportRecord,
-  command: DesktopCommandName,
-  ...keys: string[]
-): void {
-  for (const key of keys) assert(typeof value[key] === "string", command, `${key} must be a string`);
-}
-
-function nullableStrings(
-  value: TransportRecord,
-  command: DesktopCommandName,
-  ...keys: string[]
-): void {
-  for (const key of keys) {
-    assert(value[key] === null || typeof value[key] === "string", command, `${key} must be a string or null`);
-  }
-}
-
-function arrays(
-  value: TransportRecord,
-  command: DesktopCommandName,
-  ...keys: string[]
-): void {
-  for (const key of keys) assert(Array.isArray(value[key]), command, `${key} must be an array`);
-}
-
-function numbers(
-  value: TransportRecord,
-  command: DesktopCommandName,
-  ...keys: string[]
-): void {
-  for (const key of keys) assert(typeof value[key] === "number", command, `${key} must be a number`);
-}
-
-function booleans(
-  value: TransportRecord,
-  command: DesktopCommandName,
-  ...keys: string[]
-): void {
-  for (const key of keys) assert(typeof value[key] === "boolean", command, `${key} must be a boolean`);
-}
-
-function isRecord(value: unknown): value is TransportRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function assert(
-  condition: boolean,
-  command: DesktopCommandName,
-  message: string,
-): asserts condition {
-  if (!condition) throw new Error(`Invalid response from desktop command ${command}: ${message}.`);
 }

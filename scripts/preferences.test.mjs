@@ -74,6 +74,7 @@ test("preferences update only through bounded choices and round trip by version"
     showWhitespace: true,
     askBeforeRemoteUpdate: false,
     preferredRemoteUpdateStrategy: "rebase",
+    newFileStageBehavior: "stage",
   });
   saveAppPreferences(storage, updated);
   assert.deepEqual(loadAppPreferences(storage), updated);
@@ -99,6 +100,11 @@ test("preferences update only through bounded choices and round trip by version"
     updateAppPreferences(updated, { preferredRemoteUpdateStrategy: "reset" })
       .preferredRemoteUpdateStrategy,
     "rebase",
+  );
+  assert.equal(
+    updateAppPreferences(updated, { newFileStageBehavior: "sometimes" })
+      .newFileStageBehavior,
+    "stage",
   );
 });
 
@@ -139,6 +145,7 @@ test("version two preferences gain the current editor spacing defaults", () => {
     showWhitespace: true,
     askBeforeRemoteUpdate: true,
     preferredRemoteUpdateStrategy: "ffOnly",
+    newFileStageBehavior: "ask",
   });
 });
 
@@ -185,10 +192,11 @@ test("version three untouched typography defaults migrate without replacing cust
     showWhitespace: true,
     askBeforeRemoteUpdate: true,
     preferredRemoteUpdateStrategy: "ffOnly",
+    newFileStageBehavior: "ask",
   });
 });
 
-test("version seven persists bounded presentation, editor, and Update choices", () => {
+test("version eight persists bounded presentation, editor, Update, and staging choices", () => {
   const selected = {
     ...DEFAULT_APP_PREFERENCES,
     editorFontFamily: "cascadia-code",
@@ -224,4 +232,5 @@ test("version six gains safe prompting defaults for current-branch Update", () =
   const loaded = loadAppPreferences(memoryStorage(persisted));
   assert.equal(loaded.askBeforeRemoteUpdate, true);
   assert.equal(loaded.preferredRemoteUpdateStrategy, "ffOnly");
+  assert.equal(loaded.newFileStageBehavior, "ask");
 });

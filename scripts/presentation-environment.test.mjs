@@ -45,20 +45,20 @@ test("preference store applies external storage once without echoing it", () => 
 
   assert.equal(store.update({ theme: "dark" }), true);
   assert.equal(sync.published.length, 1);
-  assert.deepEqual(sync.published[0], { sourceId: "window-a", schemaVersion: 7 });
+  assert.deepEqual(sync.published[0], { sourceId: "window-a", schemaVersion: 8 });
   storage.setItem(
     "asterlyn.preferences.v1",
     JSON.stringify({
-      version: 7,
+      version: 8,
       preferences: { ...store.preferences, locale: "zh-CN" },
     }),
   );
-  sync.signal({ sourceId: "window-b", schemaVersion: 7 });
+  sync.signal({ sourceId: "window-b", schemaVersion: 8 });
 
   assert.equal(store.preferences.locale, "zh-CN");
   assert.deepEqual(changes.map((change) => change.source), ["local", "external"]);
   assert.equal(sync.published.length, 1);
-  sync.signal({ sourceId: "window-b", schemaVersion: 7 });
+  sync.signal({ sourceId: "window-b", schemaVersion: 8 });
   assert.equal(changes.length, 2);
   store.dispose();
 });

@@ -8,7 +8,7 @@ import {
 
 export interface PreferenceSyncSignal {
   readonly sourceId: string;
-  readonly schemaVersion: 7;
+  readonly schemaVersion: 8;
 }
 
 export interface PreferenceSyncPort {
@@ -65,7 +65,7 @@ export class PreferenceStore {
     saveAppPreferences(this.storage, next);
     this.value = next;
     this.emit({ source: "local", previous, preferences: next });
-    this.sync.publish({ sourceId: this.sync.sourceId, schemaVersion: 7 });
+    this.sync.publish({ sourceId: this.sync.sourceId, schemaVersion: 8 });
     return true;
   }
 
@@ -109,7 +109,7 @@ export function createBrowserPreferenceSync(
   const onMessage = (event: MessageEvent<unknown>) => notify(event.data as PreferenceSyncSignal);
   const onStorage = (event: StorageEvent) => {
     if (event.key !== APP_PREFERENCES_KEY || event.storageArea !== host.localStorage) return;
-    notify({ sourceId: "storage", schemaVersion: 7 });
+    notify({ sourceId: "storage", schemaVersion: 8 });
   };
   channel?.addEventListener("message", onMessage);
   host.addEventListener("storage", onStorage);
@@ -148,7 +148,7 @@ function createSourceId(crypto: Crypto): string {
 function isPreferenceSyncSignal(value: unknown): value is PreferenceSyncSignal {
   return typeof value === "object" && value !== null &&
     "sourceId" in value && typeof value.sourceId === "string" &&
-    "schemaVersion" in value && value.schemaVersion === 7;
+    "schemaVersion" in value && value.schemaVersion === 8;
 }
 
 function samePreferences(left: AppPreferences, right: AppPreferences): boolean {

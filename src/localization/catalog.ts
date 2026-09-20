@@ -1,5 +1,7 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
-import type { BranchMutationKind, ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
+import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
+import type { BranchMutationCopy } from "./branch-mutation-copy.ts";
+export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
 
 export interface CommonCopy {
   ready: string;
@@ -171,6 +173,10 @@ export interface SettingsCopy {
   askBeforeRemoteUpdateLabel: string;
   askBeforeRemoteUpdateDescription: string;
   askBeforeRemoteUpdate: string;
+  newFileStageLabel: string;
+  newFileStageDescription: string;
+  newFileStageAria: string;
+  newFileStageBehaviors: Record<"ask" | "stage" | "leaveUntracked", string>;
   diffLayoutLabel: string;
   diffLayoutDescription: string;
   diffLayoutAria: string;
@@ -302,6 +308,11 @@ export interface ProjectFilesCopy {
     nameLabel: string;
     choosePasteName: string;
     pasteNameDetail: string;
+    stageCreatedTitle: string;
+    stageCreatedDetail(path: string): string;
+    stageCreatedRemember: string;
+    stageCreated: string;
+    leaveUntracked: string;
     cancel: string;
     working: string;
     confirmTrashTitle: string;
@@ -317,6 +328,9 @@ export interface ProjectFilesCopy {
     copiedEntry: string;
     cutEntry: string;
     createdFile: string;
+    stagedCreatedFile: string;
+    leftCreatedFileUntracked: string;
+    stageCreatedFileFailed: string;
     renamedEntry: string;
     pastedEntry: string;
     trashedEntry: string;
@@ -1052,32 +1066,6 @@ export interface BranchContextMenuCopy {
   busy: string;
   cleanRequired: string;
   targetChanged: string;
-}
-
-export interface BranchMutationCopy {
-  titles: Record<BranchMutationKind, string>;
-  descriptions: Record<BranchMutationKind, string>;
-  actions: Record<BranchMutationKind, string>;
-  progress(kind: BranchMutationKind, source: string): string;
-  completed(kind: BranchMutationKind, source: string, destination: string | null, remote: string | null): string;
-  source: string;
-  object: string;
-  destination: string;
-  currentHead: string;
-  upstream: string;
-  noUpstream: string;
-  mergedIntoCurrent: string;
-  remoteBranch: string;
-  deleteRemote: string;
-  deleteRemoteUnavailable: string;
-  deleteLocalAndRemote: string;
-  localOnly: string;
-  localAndRemote: string;
-  branchName: string;
-  branchNameRequired: string;
-  cancel: string;
-  working: string;
-  failed: string;
 }
 
 export interface HistoryCommitContextMenuCopy {

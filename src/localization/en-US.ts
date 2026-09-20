@@ -1,4 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts";
+import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts";
 
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
@@ -169,6 +170,10 @@ export const EN_US: LocaleCatalog = {
     askBeforeRemoteUpdateLabel: "Update confirmation",
     askBeforeRemoteUpdateDescription: "Ask which integration method to use before every current-branch Update.",
     askBeforeRemoteUpdate: "Ask before every Update",
+    newFileStageLabel: "New file staging",
+    newFileStageDescription: "Choose whether newly created files are added to Git's staging area. You can restore the prompt here after choosing Don't ask again.",
+    newFileStageAria: "New file staging behavior",
+    newFileStageBehaviors: { ask: "Ask every time", stage: "Always stage", leaveUntracked: "Leave untracked" },
     diffLayoutLabel: "Diff layout",
     diffLayoutDescription: "Choose the default presentation used by every Diff preview.",
     diffLayoutAria: "Default Diff layout",
@@ -272,6 +277,11 @@ export const EN_US: LocaleCatalog = {
       ambiguousHistory: "This folder spans more than one Git root",
       nameLabel: "Name", choosePasteName: "Choose a new name",
       pasteNameDetail: "An entry with this name already exists. Enter a different name; existing content will not be replaced.",
+      stageCreatedTitle: "Add the new file to Staged Changes?",
+      stageCreatedDetail: (path) => `${path} was created and is currently untracked.`,
+      stageCreatedRemember: "Don't ask again",
+      stageCreated: "Add to Staged Changes",
+      leaveUntracked: "Leave Untracked",
       cancel: "Cancel", working: "Working…", confirmTrashTitle: "Move this entry to Trash?",
       confirmTrash: "Move to Trash", trashFileDetail: (path) => `${path} will be moved to the system Trash.`,
       trashFolderDetail: (entries, bytes, hidden) => `${entries} entries (${bytes} bytes) will be moved to the system Trash${hidden ? `, including ${hidden} hidden entries` : ""}.`,
@@ -281,6 +291,9 @@ export const EN_US: LocaleCatalog = {
       trashBlocked: "This entry cannot be moved to Trash safely in its current state.",
       destinationExists: "An entry with this name already exists.", operationFailed: "The file operation could not be completed.",
       copiedEntry: "Copied file entry", cutEntry: "Cut file entry", createdFile: "File created",
+      stagedCreatedFile: "New file added to Staged Changes",
+      leftCreatedFileUntracked: "New file left untracked",
+      stageCreatedFileFailed: "The file was created, but could not be added to Staged Changes.",
       renamedEntry: "Entry renamed", pastedEntry: "Entry pasted", trashedEntry: "Entry moved to Trash",
     },
   },
@@ -467,43 +480,7 @@ export const EN_US: LocaleCatalog = {
       cleanRequired: "Commit or remove all working-tree changes before switching branches",
       targetChanged: "The branch changed; open its menu again",
     },
-    branchMutation: {
-      titles: {
-        switch: "Switch Branch", create: "Create Branch",
-        checkoutRemote: "Check Out Remote Branch", rename: "Rename Local Branch",
-        delete: "Delete Local Branch",
-      },
-      descriptions: {
-        switch: "Switch the current worktree to this exact local branch after checking the worktree again.",
-        create: "Create and switch to a new local branch at the selected exact object. No upstream is inherited.",
-        checkoutRemote: "Create and switch to a local branch at the selected remote-tracking object, then set that exact upstream.",
-        rename: "Rename only the selected local reference. Its remote branch is not renamed.",
-        delete: "Delete this merged, unused local branch. Its supported remote upstream can be selected explicitly below.",
-      },
-      actions: {
-        switch: "Switch Branch", create: "Create and Switch", checkoutRemote: "Check Out",
-        rename: "Rename Branch", delete: "Delete Local Branch",
-      },
-      progress: (kind, source) => `${{
-        switch: "Switching to", create: "Creating from", checkoutRemote: "Checking out",
-        rename: "Renaming", delete: "Deleting",
-      }[kind]} ${source}…`,
-      completed: (kind, source, destination, remote) => `${{
-        switch: `Switched to ${source}`, create: `Created and switched to ${destination ?? source}`,
-        checkoutRemote: `Checked out ${destination ?? source}`, rename: `Renamed ${source} to ${destination ?? source}`,
-        delete: remote ? `Deleted local branch ${source} and its branch on ${remote}` : `Deleted local branch ${source}`,
-      }[kind]}`,
-      source: "Reviewed source", object: "Exact object", destination: "Destination",
-      currentHead: "Current HEAD", upstream: "Upstream", noUpstream: "None",
-      mergedIntoCurrent: "Confirmed merged into current HEAD", remoteBranch: "Remote branch",
-      deleteRemote: "Also delete its remote branch", deleteRemoteUnavailable: "This branch has no supported remote upstream.",
-      deleteLocalAndRemote: "Delete Local and Remote Branches",
-      localOnly: "The remote branch and commit objects are not deleted.",
-      localAndRemote: "The exact last-fetched remote branch will be deleted first with a lease; commit objects are not deleted.",
-      branchName: "Local branch name", branchNameRequired: "Enter a local branch name.",
-      cancel: "Cancel",
-      working: "Applying…", failed: "The branch change did not complete. Review the refreshed repository state before retrying.",
-    },
+    branchMutation: EN_US_BRANCH_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `Commit actions for ${subject}`,
       copyCommitId: "Copy Commit ID", cherryPick: "Cherry-pick…", revertCommit: "Revert Commit…",

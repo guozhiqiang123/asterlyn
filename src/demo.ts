@@ -11,6 +11,7 @@ import type {
   RepositorySnapshot,
   UntrackedScan,
 } from "./models";
+import { demoRemoteDeletionTarget } from "./demo-branch-mutation.ts";
 
 export const demoSnapshot: RepositorySnapshot = {
   root: "/workspace/asterlyn",
@@ -721,27 +722,6 @@ export function demoExecuteBranchMutation(
     unborn: false,
   };
   return next;
-}
-
-function demoRemoteDeletionTarget(
-  snapshot: RepositorySnapshot,
-  upstream: string | null,
-): NonNullable<BranchMutationPlan["remoteDeletion"]> {
-  const [remote, ...branchParts] = upstream?.split("/") ?? [];
-  const branch = branchParts.join("/");
-  const trackingFullName = remote && branch ? `refs/remotes/${remote}/${branch}` : "";
-  const tracking = snapshot.branches.find((candidate) => (
-    candidate.repositoryId === "." && candidate.fullName === trackingFullName
-  ));
-  if (!remote || !branch || !tracking) {
-    throw new Error("The selected local branch has no last-fetched remote upstream to delete.");
-  }
-  return {
-    remote,
-    branchFullName: `refs/heads/${branch}`,
-    trackingFullName,
-    oid: tracking.oid,
-  };
 }
 
 export function demoFetchRemote(

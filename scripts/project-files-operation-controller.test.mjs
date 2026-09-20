@@ -10,7 +10,8 @@ import {
 const messages = {
   invalidName: "invalid name", unsafeSource: "unsafe source", sourceChanged: "source changed",
   destinationExists: "destination exists", operationFailed: "failed", copied: "copied", cut: "cut",
-  created: "created", renamed: "renamed", pasted: "pasted", trashed: "trashed",
+  created: "created", stagedCreated: "staged", leftCreatedUntracked: "left untracked",
+  stageCreatedFailed: "stage failed", renamed: "renamed", pasted: "pasted", trashed: "trashed",
 };
 
 function target(overrides = {}) {
@@ -46,8 +47,11 @@ function outcome(planId, operation) {
   };
 }
 
-function fixture() {
-  const records = { plans: [], executions: [], completed: [], status: [], errors: [], cancels: 0 };
+function fixture({ stagePreference = "ask", canStage = true, stageFails = false } = {}) {
+  const records = {
+    plans: [], executions: [], completed: [], status: [], errors: [], remembered: [], staged: [],
+    cancels: 0,
+  };
   let nextPlan = null;
   const mutations = {
     plan(identity, operation, collisionPolicy, editorRequest = null) {
@@ -72,6 +76,13 @@ function fixture() {
     currentIdentity: () => ({ root: "/workspace", generation: 4 }),
     isTargetCurrent: (candidate) => candidate.workspaceGeneration === 4,
     repositoryLocation: (path) => ({ repositoryId: ".", path }),
+    canStageCreatedFile: () => canStage,
+    newFileStageBehavior: () => stagePreference,
+    rememberNewFileStageBehavior: (behavior) => records.remembered.push(behavior),
+    stageCreatedFile: async (path) => {
+      records.staged.push(path);
+      if (stageFails) throw new Error("git add failed");
+    },
     completed: (...args) => records.completed.push(args),
     status: (message) => records.status.push(message),
     error: (error) => records.errors.push(error instanceof Error ? error.message : String(error)),
@@ -127,6 +138,63 @@ test("create blur cancels an empty name and submits a non-empty name", async () 
     kind: "createFile", destination: "src/notes.txt",
   });
   assert.equal(named.controller.state.inlineEdit, null);
+});
+
+test("new Git files stay untracked until the staging choice is explicit", async () => {
+  const prompted = fixture();
+  prompted.controller.beginCreate(target());
+  prompted.controller.updateInlineValue("prompted.txt");
+  await prompted.controller.submitInline();
+  assert.equal(prompted.controller.state.dialog.kind, "stage-created");
+  assert.equal(prompted.controller.state.dialog.remember, false);
+  assert.deepEqual(prompted.records.staged, []);
+
+  prompted.controller.updateStageCreatedRemember(true);
+  await prompted.controller.resolveCreatedFileStaging(false);
+  assert.deepEqual(prompted.records.remembered, ["leaveUntracked"]);
+  assert.deepEqual(prompted.records.staged, []);
+  assert.equal(prompted.controller.state.dialog, null);
+
+  const staged = fixture();
+  staged.controller.beginCreate(target());
+  staged.controller.updateInlineValue("staged.txt");
+  await staged.controller.submitInline();
+  staged.controller.updateStageCreatedRemember(true);
+  await staged.controller.resolveCreatedFileStaging(true);
+  assert.deepEqual(staged.records.staged, ["src/staged.txt"]);
+  assert.deepEqual(staged.records.remembered, ["stage"]);
+  assert.equal(staged.controller.state.dialog, null);
+});
+
+test("remembered staging behavior skips the prompt without staging ordinary folders", async () => {
+  const automatic = fixture({ stagePreference: "stage" });
+  automatic.controller.beginCreate(target());
+  automatic.controller.updateInlineValue("automatic.txt");
+  await automatic.controller.submitInline();
+  assert.deepEqual(automatic.records.staged, ["src/automatic.txt"]);
+  assert.equal(automatic.controller.state.dialog, null);
+
+  const ordinary = fixture({ stagePreference: "stage", canStage: false });
+  ordinary.controller.beginCreate(target());
+  ordinary.controller.updateInlineValue("ordinary.txt");
+  await ordinary.controller.submitInline();
+  assert.deepEqual(ordinary.records.staged, []);
+  assert.equal(ordinary.controller.state.dialog, null);
+});
+
+test("failed staging keeps the file and prompt without remembering an automatic write", async () => {
+  const failed = fixture({ stageFails: true });
+  failed.controller.beginCreate(target());
+  failed.controller.updateInlineValue("still-untracked.txt");
+  await failed.controller.submitInline();
+  failed.controller.updateStageCreatedRemember(true);
+  await failed.controller.resolveCreatedFileStaging(true);
+
+  assert.equal(failed.records.completed.length, 1, "file creation already completed");
+  assert.deepEqual(failed.records.staged, ["src/still-untracked.txt"]);
+  assert.deepEqual(failed.records.remembered, []);
+  assert.equal(failed.controller.state.dialog.kind, "stage-created");
+  assert.equal(failed.controller.state.dialog.error, "stage failed");
 });
 
 test("copy/paste binds the plan to the captured recursive fingerprint", async () => {
@@ -192,6 +260,10 @@ test("a plan is cancelled and local busy state is cleared when the workspace cha
       currentIdentity: () => identity,
       isTargetCurrent: (candidate) => candidate.workspaceGeneration === identity.generation,
       repositoryLocation: (path) => ({ repositoryId: ".", path }),
+      canStageCreatedFile: () => false,
+      newFileStageBehavior: () => "ask",
+      rememberNewFileStageBehavior() {},
+      async stageCreatedFile() {},
       completed() {}, status() {}, error() {},
     },
     () => messages,

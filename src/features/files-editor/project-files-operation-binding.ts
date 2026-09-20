@@ -83,6 +83,19 @@ export class ProjectFilesOperationBinding {
     host.querySelectorAll<HTMLButtonElement>("[data-project-files-dialog-close]").forEach(
       (button) => button.addEventListener("click", () => this.controller.closeDialog()),
     );
+    host.querySelector<HTMLInputElement>("[data-project-files-stage-remember]")
+      ?.addEventListener("change", (event) => {
+        this.controller.updateStageCreatedRemember(
+          (event.currentTarget as HTMLInputElement).checked,
+        );
+      });
+    host.querySelectorAll<HTMLButtonElement>("[data-project-files-stage-choice]").forEach(
+      (button) => button.addEventListener("click", () => {
+        void this.controller.resolveCreatedFileStaging(
+          button.dataset.projectFilesStageChoice === "stage",
+        );
+      }),
+    );
     const input = host.querySelector<HTMLInputElement>("#project-files-paste-name");
     input?.addEventListener("input", () => this.controller.updateDialogValue(input.value));
     host.querySelector<HTMLFormElement>("#project-files-paste-name-form")?.addEventListener(
@@ -108,7 +121,9 @@ export class ProjectFilesOperationBinding {
     };
     queueMicrotask(() => {
       if (!host.contains(document.activeElement)) {
-        (input ?? host.querySelector<HTMLElement>("button:not([disabled])"))?.focus();
+        (input ?? host.querySelector<HTMLElement>(
+          '[data-project-files-stage-choice="leave"]:not([disabled]), button:not([disabled])',
+        ))?.focus();
       }
       input?.select();
     });

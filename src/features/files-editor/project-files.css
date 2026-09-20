@@ -162,6 +162,17 @@
   width: 100%;
 }
 
+.project-files-dialog-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+}
+
+.project-files-dialog-choice input {
+  width: auto;
+}
+
 .project-files-dialog-error {
   color: var(--red);
 }

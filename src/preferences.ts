@@ -27,6 +27,7 @@ export const EDITOR_TAB_SIZES = [2, 4, 8] as const;
 export type LocalePreference = "system" | "en-US" | "zh-CN";
 export type ThemePreference = "system" | "dark" | "light";
 export type RemoteUpdateStrategyPreference = "ffOnly" | "merge" | "rebase";
+export type NewFileStagePreference = "ask" | "stage" | "leaveUntracked";
 
 export interface AppPreferences {
   locale: LocalePreference;
@@ -42,6 +43,7 @@ export interface AppPreferences {
   showWhitespace: boolean;
   askBeforeRemoteUpdate: boolean;
   preferredRemoteUpdateStrategy: RemoteUpdateStrategyPreference;
+  newFileStageBehavior: NewFileStagePreference;
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
@@ -58,6 +60,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   showWhitespace: false,
   askBeforeRemoteUpdate: true,
   preferredRemoteUpdateStrategy: "ffOnly",
+  newFileStageBehavior: "ask",
 };
 
 const LEGACY_PRESENTATION_PREFERENCES = {
@@ -85,7 +88,8 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         value.version !== 4 &&
         value.version !== 5 &&
         value.version !== 6 &&
-        value.version !== 7) ||
+        value.version !== 7 &&
+        value.version !== 8) ||
       !isRecord(value.preferences)
     ) {
       return migrationSafeDefaults();
@@ -170,6 +174,9 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         )
         ? preferences.preferredRemoteUpdateStrategy
         : "ffOnly",
+      newFileStageBehavior: isNewFileStagePreference(preferences.newFileStageBehavior)
+        ? preferences.newFileStageBehavior
+        : "ask",
     };
   } catch {
     return migrationSafeDefaults();
@@ -182,7 +189,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 7, preferences }),
+    JSON.stringify({ version: 8, preferences }),
   );
 }
 
@@ -240,6 +247,9 @@ export function updateAppPreferences(
       )
       ? candidate.preferredRemoteUpdateStrategy
       : current.preferredRemoteUpdateStrategy,
+    newFileStageBehavior: isNewFileStagePreference(candidate.newFileStageBehavior)
+      ? candidate.newFileStageBehavior
+      : current.newFileStageBehavior,
   };
 }
 
@@ -255,6 +265,10 @@ export function isRemoteUpdateStrategyPreference(
   value: unknown,
 ): value is RemoteUpdateStrategyPreference {
   return value === "ffOnly" || value === "merge" || value === "rebase";
+}
+
+export function isNewFileStagePreference(value: unknown): value is NewFileStagePreference {
+  return value === "ask" || value === "stage" || value === "leaveUntracked";
 }
 
 function migrationSafeDefaults(): AppPreferences {

@@ -1,6 +1,9 @@
 import { bridge } from "./bridge";
 import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
 import { WorkspaceTrashRuntime } from "./features/workspace-trash/workspace-trash-runtime.ts";
+import {
+  createCreatedFileStagingRuntime, resolveProjectFilesRepositoryLocation,
+} from "./features/files-editor/project-file-staging.ts";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
 import {
@@ -251,6 +254,7 @@ import {
 } from "./features/settings/editor-fonts";
 import {
   isLocalePreference,
+  isNewFileStagePreference,
   isRemoteUpdateStrategyPreference,
   isThemePreference,
   type AppPreferences,
@@ -1009,6 +1013,23 @@ export class AsterlynApp {
         }
       },
     });
+    const createdFileStaging = createCreatedFileStagingRuntime({
+      workspaceRoot: () => this.windowSession.workspace.state.root,
+      snapshot: () => this.windowSession.repository.state.snapshot,
+      beginTransition: () => this.windowSession.beginTransition({ reconciliationBarrier: true }),
+      matches: (generation, repositoryRoot) => this.windowSession.matches(generation, repositoryRoot),
+      completeTransition: (generation) => this.windowSession.completeTransition(generation),
+      stagePaths: (repositoryRoot, paths) => bridge.stagePaths(repositoryRoot, paths),
+      install: (outcome) => {
+        const next = this.repositoryIntegration.applyWorkingTreeMutation(outcome);
+        this.renderWorkspace();
+        return next.root;
+      },
+      scanUntracked: (repositoryRoot, generation) => {
+        void this.windowSession.scanUntracked(repositoryRoot, generation, true, "gitMutation");
+      },
+      failureMessage: () => this.localization.catalog.projectFiles.contextMenu.stageCreatedFileFailed,
+    });
     this.projectFilesOperationRuntime = new ProjectFilesOperationRuntime({
       root,
       gateway: {
@@ -1022,8 +1043,16 @@ export class AsterlynApp {
           return root ? { root, generation: this.windowSession.generation } : null;
         },
         isTargetCurrent: (target) => this.isProjectFilesContextTargetCurrent(target),
-        repositoryLocation: (workspacePath) =>
-          this.projectFilesRepositoryLocation(workspacePath),
+        repositoryLocation: (workspacePath) => resolveProjectFilesRepositoryLocation(
+          workspacePath,
+          this.windowSession.workspace.state.root,
+          this.windowSession.repository.state.snapshot,
+        ),
+        canStageCreatedFile: (workspacePath) => createdFileStaging.canStage(workspacePath),
+        newFileStageBehavior: () => this.settingsState.preferences.newFileStageBehavior,
+        rememberNewFileStageBehavior: (behavior) =>
+          this.updatePreferences({ newFileStageBehavior: behavior }),
+        stageCreatedFile: (workspacePath) => createdFileStaging.stage(workspacePath),
         completed: (action, target, destination, outcome) =>
           this.completeProjectFilesOperation(action, target, destination, outcome),
         status: (message) => this.setStatus(message, "success"),
@@ -1040,6 +1069,9 @@ export class AsterlynApp {
           copied: labels.copiedEntry,
           cut: labels.cutEntry,
           created: labels.createdFile,
+          stagedCreated: labels.stagedCreatedFile,
+          leftCreatedUntracked: labels.leftCreatedFileUntracked,
+          stageCreatedFailed: labels.stageCreatedFileFailed,
           renamed: labels.renamedEntry,
           pasted: labels.pastedEntry,
         };
@@ -1854,6 +1886,17 @@ export class AsterlynApp {
           { askBeforeRemoteUpdate: target.checked },
           target.id,
         );
+      });
+    this.root
+      .querySelector<HTMLSelectElement>("#setting-new-file-stage-behavior")
+      ?.addEventListener("change", (event) => {
+        const behavior = (event.currentTarget as HTMLSelectElement).value;
+        if (isNewFileStagePreference(behavior)) {
+          this.updatePreferences(
+            { newFileStageBehavior: behavior },
+            "setting-new-file-stage-behavior",
+          );
+        }
       });
     this.root
       .querySelector<HTMLInputElement>("#setting-show-whitespace")
@@ -4204,31 +4247,6 @@ export class AsterlynApp {
       this.windowSession.repository.state.snapshot,
       this.windowSession.generation,
     );
-  }
-
-  private projectFilesRepositoryLocation(
-    workspacePath: string,
-  ): { repositoryId: string; path: string } | null {
-    const root = this.windowSession.workspace.state.root;
-    if (!root) return null;
-    const normalized = workspacePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
-    const snapshot = this.windowSession.repository.state.snapshot;
-    if (!snapshot) return { repositoryId: "workspace", path: normalized };
-    const candidates = snapshot.repositoryRoots.filter((candidate) => {
-      const relative = candidate.relativePath === "."
-        ? ""
-        : candidate.relativePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
-      return !relative || normalized === relative || normalized.startsWith(`${relative}/`);
-    }).sort((left, right) => right.relativePath.length - left.relativePath.length);
-    const repository = candidates[0];
-    if (!repository) return null;
-    const relative = repository.relativePath === "."
-      ? ""
-      : repository.relativePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
-    const path = relative
-      ? normalized.slice(relative.length).replace(/^\/+/, "")
-      : normalized;
-    return { repositoryId: repository.id, path: path || "." };
   }
 
   private completeProjectFilesOperation(

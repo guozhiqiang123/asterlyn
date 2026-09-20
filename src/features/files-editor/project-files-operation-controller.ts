@@ -9,6 +9,7 @@ import type {
   WorkspaceMutationPlanResult,
 } from "../../application/workspace-mutation-coordinator.ts";
 import type { EditorPathMutationRequest } from "../../editor-path-mutation.ts";
+import type { NewFileStagePreference } from "../../preferences.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 import {
   WorkspaceFileClipboard,
@@ -36,6 +37,14 @@ export type ProjectFilesOperationDialog =
       value: string;
       error: string | null;
       busy: boolean;
+    }
+  | {
+      readonly kind: "stage-created";
+      readonly target: ProjectFilesContextTarget;
+      readonly destination: string;
+      remember: boolean;
+      error: string | null;
+      busy: boolean;
     };
 
 export interface ProjectFilesOperationState {
@@ -53,6 +62,9 @@ export interface ProjectFilesOperationMessages {
   readonly copied: string;
   readonly cut: string;
   readonly created: string;
+  readonly stagedCreated: string;
+  readonly leftCreatedUntracked: string;
+  readonly stageCreatedFailed: string;
   readonly renamed: string;
   readonly pasted: string;
 }
@@ -84,6 +96,10 @@ export interface ProjectFilesOperationRuntime {
   currentIdentity(): WorkspaceMutationIdentity | null;
   isTargetCurrent(target: ProjectFilesContextTarget): boolean;
   repositoryLocation(workspacePath: string): { repositoryId: string; path: string } | null;
+  canStageCreatedFile(workspacePath: string): boolean;
+  newFileStageBehavior(): NewFileStagePreference;
+  rememberNewFileStageBehavior(behavior: NewFileStagePreference): void;
+  stageCreatedFile(workspacePath: string): Promise<void>;
   completed(
     action: "create" | "rename" | "paste",
     target: ProjectFilesContextTarget,
@@ -258,6 +274,9 @@ export class ProjectFilesOperationController {
     this.emit();
     this.runtime.completed(edit.kind, targetFromEdit(identity, edit), destination, outcome);
     this.runtime.status(edit.kind === "create" ? this.messages().created : this.messages().renamed);
+    if (edit.kind === "create") {
+      await this.handleCreatedFileStaging(targetFromEdit(identity, edit), destination);
+    }
   }
 
   async capture(mode: WorkspaceFileClipboardMode, target: ProjectFilesContextTarget): Promise<void> {
@@ -385,6 +404,41 @@ export class ProjectFilesOperationController {
     dialog.error = null;
   }
 
+  updateStageCreatedRemember(remember: boolean): void {
+    const dialog = this.value.dialog;
+    if (!dialog || dialog.kind !== "stage-created" || dialog.busy) return;
+    dialog.remember = remember;
+  }
+
+  async resolveCreatedFileStaging(stage: boolean): Promise<void> {
+    const dialog = this.value.dialog;
+    if (!dialog || dialog.kind !== "stage-created" || dialog.busy) return;
+    if (!stage) {
+      if (dialog.remember) this.runtime.rememberNewFileStageBehavior("leaveUntracked");
+      this.value = { ...this.value, dialog: null };
+      this.emit();
+      this.runtime.status(this.messages().leftCreatedUntracked);
+      return;
+    }
+    dialog.busy = true;
+    dialog.error = null;
+    this.emit();
+    try {
+      await this.runtime.stageCreatedFile(dialog.destination);
+      if (dialog.remember) this.runtime.rememberNewFileStageBehavior("stage");
+      if (this.value.dialog === dialog) {
+        this.value = { ...this.value, dialog: null };
+        this.emit();
+      }
+      this.runtime.status(this.messages().stagedCreated);
+    } catch {
+      if (this.value.dialog !== dialog) return;
+      dialog.busy = false;
+      dialog.error = this.messages().stageCreatedFailed;
+      this.emit();
+    }
+  }
+
   closeDialog(): void {
     if (!this.value.dialog || this.value.dialog.busy) return;
     this.value = { ...this.value, dialog: null, busyPath: null };
@@ -422,6 +476,43 @@ export class ProjectFilesOperationController {
       dialog: { kind: "paste-name", target, value, error, busy: false },
     };
     this.emit();
+  }
+
+  private async handleCreatedFileStaging(
+    target: ProjectFilesContextTarget,
+    destination: string,
+  ): Promise<void> {
+    if (!this.runtime.canStageCreatedFile(destination)) return;
+    const behavior = this.runtime.newFileStageBehavior();
+    if (behavior === "leaveUntracked") return;
+    if (behavior === "ask") {
+      this.value = {
+        ...this.value,
+        dialog: {
+          kind: "stage-created",
+          target,
+          destination,
+          remember: false,
+          error: null,
+          busy: false,
+        },
+      };
+      this.emit();
+      return;
+    }
+    this.value = { ...this.value, busyPath: destination };
+    this.emit();
+    try {
+      await this.runtime.stageCreatedFile(destination);
+      this.runtime.status(this.messages().stagedCreated);
+    } catch (error) {
+      this.runtime.error(error);
+    } finally {
+      if (this.value.busyPath === destination) {
+        this.value = { ...this.value, busyPath: null };
+        this.emit();
+      }
+    }
   }
 
   private closeDialogWithoutCancel(): void {

@@ -67,7 +67,7 @@ export function renderSettingsSection(
       return settingsGroup(
         copy.versionControlTitle,
         copy.versionControlDescription,
-        `${settingsRow(copy.updateStrategyLabel, copy.updateStrategyDescription, remoteUpdateStrategySelect(preferences, copy))}${settingsRow(copy.askBeforeRemoteUpdateLabel, copy.askBeforeRemoteUpdateDescription, `<label class="setting-toggle"><input id="setting-ask-before-remote-update" type="checkbox" ${preferences.askBeforeRemoteUpdate ? "checked" : ""} /><span>${escapeHtml(copy.askBeforeRemoteUpdate)}</span></label>`)}${settingsRow(copy.diffLayoutLabel, copy.diffLayoutDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.diffLayoutAria)}"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">${escapeHtml(copy.sideBySide)}</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">${escapeHtml(copy.unified)}</button></div>`)}${settingsRow(copy.whitespaceLabel, copy.whitespaceDescription, `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>${escapeHtml(copy.showWhitespace)}</span></label>`)}`,
+        `${settingsRow(copy.updateStrategyLabel, copy.updateStrategyDescription, remoteUpdateStrategySelect(preferences, copy))}${settingsRow(copy.askBeforeRemoteUpdateLabel, copy.askBeforeRemoteUpdateDescription, `<label class="setting-toggle"><input id="setting-ask-before-remote-update" type="checkbox" ${preferences.askBeforeRemoteUpdate ? "checked" : ""} /><span>${escapeHtml(copy.askBeforeRemoteUpdate)}</span></label>`)}${settingsRow(copy.newFileStageLabel, copy.newFileStageDescription, newFileStageBehaviorSelect(preferences, copy))}${settingsRow(copy.diffLayoutLabel, copy.diffLayoutDescription, `<div class="setting-segmented" role="group" aria-label="${escapeAttribute(copy.diffLayoutAria)}"><button type="button" data-setting-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}">${escapeHtml(copy.sideBySide)}</button><button type="button" data-setting-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}">${escapeHtml(copy.unified)}</button></div>`)}${settingsRow(copy.whitespaceLabel, copy.whitespaceDescription, `<label class="setting-toggle"><input id="setting-show-whitespace" type="checkbox" ${preferences.showWhitespace ? "checked" : ""} /><span>${escapeHtml(copy.showWhitespace)}</span></label>`)}`,
       );
     case "code":
       return settingsGroup(
@@ -124,6 +124,14 @@ function remoteUpdateStrategySelect(
 ): string {
   const strategies = ["ffOnly", "merge", "rebase"] as const;
   return renderSelectControl(`<select id="setting-remote-update-strategy" aria-label="${escapeAttribute(copy.updateStrategyAria)}">${strategies.map((strategy) => `<option value="${strategy}" ${preferences.preferredRemoteUpdateStrategy === strategy ? "selected" : ""}>${escapeHtml(copy.updateStrategies[strategy])}</option>`).join("")}</select>`);
+}
+
+function newFileStageBehaviorSelect(
+  preferences: AppPreferences,
+  copy: SettingsCopy,
+): string {
+  const behaviors = ["ask", "stage", "leaveUntracked"] as const;
+  return renderSelectControl(`<select id="setting-new-file-stage-behavior" aria-label="${escapeAttribute(copy.newFileStageAria)}">${behaviors.map((behavior) => `<option value="${behavior}" ${preferences.newFileStageBehavior === behavior ? "selected" : ""}>${escapeHtml(copy.newFileStageBehaviors[behavior])}</option>`).join("")}</select>`);
 }
 
 function settingsSelect(

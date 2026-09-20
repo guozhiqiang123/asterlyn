@@ -8,6 +8,15 @@ export function renderProjectFilesOperationDialog(
   const dialog = state.dialog;
   if (!dialog) return "";
   const labels = copy.contextMenu;
+  if (dialog.kind === "stage-created") {
+    return `<section class="dialog project-files-dialog" role="dialog" aria-modal="true" aria-labelledby="project-files-dialog-title" aria-describedby="project-files-stage-detail">
+    <div class="dialog-heading"><h2 id="project-files-dialog-title">${escapeHtml(labels.stageCreatedTitle)}</h2><button class="icon-button" data-project-files-dialog-close type="button" aria-label="${escapeAttribute(labels.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>
+    <p id="project-files-stage-detail">${escapeHtml(labels.stageCreatedDetail(dialog.destination))}</p>
+    <label class="project-files-dialog-choice"><input data-project-files-stage-remember type="checkbox" ${dialog.remember ? "checked" : ""} ${dialog.busy ? "disabled" : ""} /><span>${escapeHtml(labels.stageCreatedRemember)}</span></label>
+    ${dialog.error ? `<small class="project-files-dialog-error" role="alert">${escapeHtml(dialog.error)}</small>` : ""}
+    <div class="dialog-actions"><button class="secondary-button" data-project-files-stage-choice="leave" type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(labels.leaveUntracked)}</button><button class="primary-button" data-project-files-stage-choice="stage" type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? labels.working : labels.stageCreated)}</button></div>
+  </section>`;
+  }
   return `<section class="dialog project-files-dialog" role="dialog" aria-modal="true" aria-labelledby="project-files-dialog-title">
     <div class="dialog-heading"><h2 id="project-files-dialog-title">${escapeHtml(labels.choosePasteName)}</h2><button class="icon-button" data-project-files-dialog-close type="button" aria-label="${escapeAttribute(labels.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>
     <p>${escapeHtml(labels.pasteNameDetail)}</p>
