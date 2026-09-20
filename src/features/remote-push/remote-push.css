@@ -370,7 +370,7 @@
 }
 
 .push-commit-row.selected:hover {
-  background: var(--accent-hover);
+  background: var(--accent);
 }
 
 .push-commit-row span {
@@ -427,7 +427,7 @@
   font-size: 9px;
 }
 
-.push-file-row:hover {
+.push-file-row:hover:not(.selected) {
   background: var(--bg-hover);
 }
 

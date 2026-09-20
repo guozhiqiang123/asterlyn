@@ -58,7 +58,7 @@
   text-align: left;
 }
 
-.settings-navigation-item:hover {
+.settings-navigation-item:hover:not(.selected) {
   background: var(--bg-hover);
 }
 

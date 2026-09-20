@@ -19,6 +19,24 @@ test("ordinary and shift selection keep an ordered logical range", () => {
   assert.equal(result.limitedBy, null);
 });
 
+test("control selection toggles arbitrary commits and keeps them in visible order", () => {
+  const controller = new HistoryRangeSelectionController();
+  const entries = ["new", "middle", "old"].map(entry);
+  controller.reconcile("query-1", entries);
+  controller.select(".:new", false);
+  controller.select(".:old", false, true);
+  assert.deepEqual(
+    controller.selection.commits.map((commit) => commit.oid),
+    ["new", "old"],
+  );
+  assert.equal(controller.selection.activeKey, ".:old");
+
+  controller.select(".:new", false, true);
+  assert.deepEqual(controller.selection.commits.map((commit) => commit.oid), ["old"]);
+  assert.equal(controller.selection.anchorKey, ".:old");
+  assert.equal(controller.selection.activeKey, ".:old");
+});
+
 test("collapsed rows and the 100-commit cap bound range extension", () => {
   const controller = new HistoryRangeSelectionController();
   controller.reconcile("query-1", [entry("a"), { kind: "barrier", id: "gap" }, entry("b")]);
@@ -44,6 +62,16 @@ test("pagination preserves exact ranges while a query scope change clears them",
   controller.select(".:b", true);
   assert.equal(controller.reconcile("query-1", [...initial, entry("d")]).commits.length, 2);
   assert.equal(controller.reconcile("query-2", initial), null);
+});
+
+test("same-scope reconciliation preserves non-contiguous control selections", () => {
+  const controller = new HistoryRangeSelectionController();
+  const initial = [entry("a"), entry("b"), entry("c")];
+  controller.reconcile("query-1", initial);
+  controller.select(".:a", false);
+  controller.select(".:c", false, true);
+  const reconciled = controller.reconcile("query-1", [...initial, entry("d")]);
+  assert.deepEqual(reconciled.commits.map((commit) => commit.oid), ["a", "c"]);
 });
 
 test("virtual-list HTML projects every logical selected row and one active endpoint", () => {

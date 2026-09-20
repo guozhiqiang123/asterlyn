@@ -387,9 +387,9 @@
   user-select: none;
 }
 
-.change-row:hover,
-.history-row:hover,
-.branch-row:hover {
+.change-row:hover:not(.selected):not(.primary),
+.history-row:hover:not(.selected),
+.branch-row:hover:not(.selected) {
   background: var(--bg-hover);
 }
 

@@ -48,7 +48,7 @@ export interface HistoryListPresentation {
 }
 
 export interface HistoryListActions {
-  selectCommit(key: string, restoreFocus: boolean, extend: boolean): void;
+  selectCommit(key: string, restoreFocus: boolean, extend: boolean, toggle: boolean): void;
   expandLinearHistory(firstKey: string | null): void;
   retryPaging(): void;
   scroll(host: HTMLElement): void;
@@ -150,7 +150,15 @@ export class GitHistoryListView {
     }
     const row = target.closest<HTMLButtonElement>("[data-commit-key]");
     const key = row?.dataset.commitKey;
-    if (key) this.actions?.selectCommit(key, false, event instanceof MouseEvent && event.shiftKey);
+    if (key) {
+      const pointer = event instanceof MouseEvent ? event : null;
+      this.actions?.selectCommit(
+        key,
+        false,
+        pointer?.shiftKey ?? false,
+        Boolean(pointer?.ctrlKey || pointer?.metaKey),
+      );
+    }
   };
 
   private readonly handleKeydown = (event: KeyboardEvent): void => {
@@ -172,7 +180,7 @@ export class GitHistoryListView {
           ? [...entries].reverse().find((entry) => entry.kind === "commit")
           : entries[current + (event.key === "ArrowDown" ? 1 : -1)];
     const key = destinationEntry?.kind === "commit" ? commitKey(destinationEntry.commit) : null;
-    if (key) this.actions?.selectCommit(key, true, event.shiftKey);
+    if (key) this.actions?.selectCommit(key, true, event.shiftKey, false);
   };
 
   private readonly handleScroll = (): void => {

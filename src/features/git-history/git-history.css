@@ -18,10 +18,6 @@
   background: var(--selection-bg);
 }
 
-.history-row.selected:not(.active) {
-  background: color-mix(in srgb, var(--selection-bg) 68%, transparent);
-}
-
 .history-row.active {
   box-shadow: inset 2px 0 var(--accent);
 }
@@ -53,7 +49,7 @@
   color: var(--info-text);
 }
 
-.history-row:hover .commit-graph-node {
+.history-row:hover:not(.selected) .commit-graph-node {
   fill: var(--bg-hover);
 }
 

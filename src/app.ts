@@ -4148,8 +4148,8 @@ export class AsterlynApp {
     this.query("#history-navigation-body").innerHTML =
       this.renderHistoryNavigation();
     this.historyListView.mount(this.query("#history-results"), {
-      selectCommit: (key, restoreFocus, extend) =>
-        this.selectHistoryCommit(key, restoreFocus, extend),
+      selectCommit: (key, restoreFocus, extend, toggle) =>
+        this.selectHistoryCommit(key, restoreFocus, extend, toggle),
       expandLinearHistory: (firstKey) => {
         this.gitHistoryPresentationRuntime.filters.expandLinearHistory();
         this.renderHistoryPane();
@@ -4747,7 +4747,8 @@ export class AsterlynApp {
 
   private historySelectionScopeKey(): string {
     return JSON.stringify([
-      this.historyState.history.generation,
+      this.historyState.history.root,
+      this.historyState.history.source,
       this.gitHistoryPresentationRuntime.filterState.historyQuery,
       this.gitHistoryPresentationRuntime.filterState.historyCaseSensitive,
       this.gitHistoryPresentationRuntime.filterState.historyRegularExpression,
@@ -5381,9 +5382,14 @@ export class AsterlynApp {
     if (restoreFocus) this.focusHistoryCommit(key);
   }
 
-  private selectHistoryCommit(key: string, restoreFocus: boolean, extend: boolean): void {
+  private selectHistoryCommit(
+    key: string,
+    restoreFocus: boolean,
+    extend: boolean,
+    toggle: boolean,
+  ): void {
     this.historyListPresentation();
-    const result = this.gitHistoryPresentationRuntime.rangeSelection.select(key, extend);
+    const result = this.gitHistoryPresentationRuntime.rangeSelection.select(key, extend, toggle);
     const activeKey = result.selection?.activeKey ?? key;
     this.selectCommit(activeKey, restoreFocus);
     this.updateHistoryCommitSelection(activeKey);

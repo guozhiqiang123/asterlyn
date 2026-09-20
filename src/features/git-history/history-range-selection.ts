@@ -39,23 +39,29 @@ export class HistoryRangeSelectionController {
     }
     this.entries = cloneEntries(entries);
     if (!this.value) return null;
-    const rebuilt = rangeBetween(this.entries, this.value.anchorKey, this.value.activeKey);
-    if (!rebuilt || rebuilt.commits.length !== this.value.commits.length) {
+    const selectedKeys = new Set(this.value.commits.map(commitIdentity));
+    const commits = this.entries.flatMap((entry) =>
+      entry.kind === "commit" && selectedKeys.has(entry.key) ? [cloneCommit(entry.commit)] : []
+    );
+    if (!commits.length) {
       this.value = null;
       return null;
     }
-    const expected = this.value.commits.map(commitIdentity);
-    if (rebuilt.commits.some((commit, index) => commitIdentity(commit) !== expected[index])) {
-      this.value = null;
-      return null;
-    }
-    this.value = { ...rebuilt, scopeKey: this.scopeKey };
+    const survivingKeys = new Set(commits.map(commitIdentity));
+    const anchorKey = survivingKeys.has(this.value.anchorKey)
+      ? this.value.anchorKey
+      : commitIdentity(commits[0]!);
+    const activeKey = survivingKeys.has(this.value.activeKey)
+      ? this.value.activeKey
+      : commitIdentity(commits.at(-1)!);
+    this.value = selection(this.scopeKey, anchorKey, activeKey, commits);
     return this.value;
   }
 
-  select(key: string, extend: boolean): HistoryRangeSelectionResult {
+  select(key: string, extend: boolean, toggle = false): HistoryRangeSelectionResult {
     const selected = entryForKey(this.entries, key);
     if (!selected) return { selection: this.value, limitedBy: null };
+    if (toggle && this.value) return this.toggle(selected);
     if (!extend || !this.value) {
       this.value = selection(this.scopeKey, key, key, [selected.commit]);
       return { selection: this.value, limitedBy: null };
@@ -72,6 +78,34 @@ export class HistoryRangeSelectionController {
       bounded.commits,
     );
     return { selection: this.value, limitedBy: bounded.limitedBy };
+  }
+
+  private toggle(
+    selected: Extract<HistorySelectionEntry, { kind: "commit" }>,
+  ): HistoryRangeSelectionResult {
+    const selectedKeys = new Set(this.value!.commits.map(commitIdentity));
+    if (selectedKeys.has(selected.key)) {
+      if (selectedKeys.size === 1) return { selection: this.value, limitedBy: null };
+      selectedKeys.delete(selected.key);
+    } else {
+      if (selectedKeys.size === HISTORY_RANGE_LIMIT) {
+        return { selection: this.value, limitedBy: "limit" };
+      }
+      selectedKeys.add(selected.key);
+    }
+    const commits = this.entries.flatMap((entry) =>
+      entry.kind === "commit" && selectedKeys.has(entry.key) ? [entry.commit] : []
+    );
+    const anchorKey = selectedKeys.has(this.value!.anchorKey)
+      ? this.value!.anchorKey
+      : commitIdentity(commits[0]!);
+    const activeKey = selectedKeys.has(selected.key)
+      ? selected.key
+      : selectedKeys.has(this.value!.activeKey)
+        ? this.value!.activeKey
+        : commitIdentity(commits.at(-1)!);
+    this.value = selection(this.scopeKey, anchorKey, activeKey, commits);
+    return { selection: this.value, limitedBy: null };
   }
 
   contextTarget(key: string): HistoryRangeSelection | null {
@@ -114,17 +148,6 @@ function boundedRange(
   }
   commits.sort((left, right) => entryIndex(entries, left) - entryIndex(entries, right));
   return { commits, activeKey, limitedBy };
-}
-
-function rangeBetween(
-  entries: readonly HistorySelectionEntry[],
-  anchorKey: string,
-  activeKey: string,
-): { anchorKey: string; activeKey: string; commits: CommitSummary[] } | null {
-  const bounded = boundedRange(entries, anchorKey, activeKey);
-  return bounded && !bounded.limitedBy
-    ? { anchorKey, activeKey, commits: bounded.commits }
-    : null;
 }
 
 function entryForKey(
