@@ -1070,9 +1070,6 @@ export interface BranchMutationCopy {
   localOnly: string;
   branchName: string;
   branchNameRequired: string;
-  review: string;
-  reviewing: string;
-  back: string;
   cancel: string;
   working: string;
   failed: string;

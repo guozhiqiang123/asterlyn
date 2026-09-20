@@ -583,7 +583,7 @@ export class AsterlynApp {
         );
         if (snapshot && current) {
           this.gitHistoryMutationRuntime.branch.open(snapshot.root, "create", current, name);
-          await this.gitHistoryMutationRuntime.branch.review();
+          await this.gitHistoryMutationRuntime.branch.submit();
         }
       },
     });

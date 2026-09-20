@@ -327,7 +327,7 @@ export const ZH_CN = {
     },
     branchMutation: {
       titles: {
-        switch: "审查分支切换", create: "从已审查对象创建分支",
+        switch: "切换分支", create: "创建分支",
         checkoutRemote: "检出远程分支", rename: "重命名本地分支", delete: "删除本地分支",
       },
       descriptions: {
@@ -354,7 +354,7 @@ export const ZH_CN = {
       currentHead: "当前 HEAD", upstream: "上游", noUpstream: "无",
       mergedIntoCurrent: "已确认合并到当前 HEAD", localOnly: "不会删除远程分支或提交对象。",
       branchName: "本地分支名称", branchNameRequired: "请输入本地分支名称。",
-      review: "审查", reviewing: "正在审查…", back: "返回", cancel: "取消",
+      cancel: "取消",
       working: "正在应用…", failed: "分支变更未完成。重试前请检查已刷新的仓库状态。",
     },
     commitContextMenu: {

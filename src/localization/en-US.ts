@@ -469,7 +469,7 @@ export const EN_US: LocaleCatalog = {
     },
     branchMutation: {
       titles: {
-        switch: "Review Branch Switch", create: "Create Branch from Reviewed Object",
+        switch: "Switch Branch", create: "Create Branch",
         checkoutRemote: "Check Out Remote Branch", rename: "Rename Local Branch",
         delete: "Delete Local Branch",
       },
@@ -497,7 +497,7 @@ export const EN_US: LocaleCatalog = {
       currentHead: "Current HEAD", upstream: "Upstream", noUpstream: "None",
       mergedIntoCurrent: "Confirmed merged into current HEAD", localOnly: "The remote branch and commit objects are not deleted.",
       branchName: "Local branch name", branchNameRequired: "Enter a local branch name.",
-      review: "Review", reviewing: "Reviewing…", back: "Back", cancel: "Cancel",
+      cancel: "Cancel",
       working: "Applying…", failed: "The branch change did not complete. Review the refreshed repository state before retrying.",
     },
     commitContextMenu: {

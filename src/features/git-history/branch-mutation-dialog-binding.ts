@@ -44,15 +44,15 @@ export class BranchMutationDialogBinding {
       button.addEventListener("click", () => this.controller.close())
     );
     host.querySelector<HTMLInputElement>("#branch-mutation-name")?.addEventListener("input", (event) => {
-      this.controller.updateValue((event.currentTarget as HTMLInputElement).value);
+      const input = event.currentTarget as HTMLInputElement;
+      this.controller.updateValue(input.value);
+      input.setAttribute("aria-invalid", "false");
+      host.querySelector(".branch-mutation-error")?.remove();
     });
-    host.querySelector<HTMLFormElement>("#branch-mutation-review-form")?.addEventListener("submit", (event) => {
+    host.querySelector<HTMLFormElement>("#branch-mutation-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this.controller.review();
+      void this.controller.submit();
     });
-    host.querySelector<HTMLButtonElement>("[data-branch-mutation-back]")?.addEventListener(
-      "click", () => this.controller.back(),
-    );
     host.querySelector<HTMLButtonElement>("#branch-mutation-execute")?.addEventListener(
       "click", () => void this.controller.execute(),
     );

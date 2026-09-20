@@ -18,22 +18,24 @@ function plan(request) {
   };
 }
 
-test("named mutations review the exact captured ref before execution", async () => {
+test("named non-destructive mutations prepare and execute in one submission", async () => {
   const calls = [];
   const controller = new BranchMutationController({
     async prepare(root, request) { calls.push(["prepare", root, { ...request }]); return plan(request); },
     async execute(value) { calls.push(["execute", value.previewToken]); return true; },
     errorMessage: String,
   });
+  let renders = 0;
+  controller.subscribe(() => renders += 1);
   controller.open("/repo", "create", branch);
+  const rendersAfterOpen = renders;
   controller.updateValue("feature/menu");
-  await controller.review();
-  assert.equal(controller.state.dialog.plan.sourceOid, branch.oid);
+  assert.equal(renders, rendersAfterOpen, "typing must not replace the focused input");
+  await controller.submit();
+  assert.equal(controller.state.dialog, null);
   assert.deepEqual(calls[0], ["prepare", "/repo", {
     kind: "create", sourceFullName: branch.fullName, sourceOid: branch.oid, newName: "feature/menu",
   }]);
-  await controller.execute();
-  assert.equal(controller.state.dialog, null);
   assert.deepEqual(calls[1], ["execute", "token"]);
 });
 
@@ -51,4 +53,17 @@ test("delete begins review immediately and a failed execution keeps the reviewed
   await controller.execute();
   assert.equal(controller.state.dialog.error, "branch-mutation-failed");
   assert.equal(controller.state.dialog.plan.previewToken, "token");
+});
+
+test("switch prepares and executes directly without a confirmation state", async () => {
+  const calls = [];
+  const controller = new BranchMutationController({
+    async prepare(_root, request) { calls.push("prepare"); return plan(request); },
+    async execute() { calls.push("execute"); return true; },
+    errorMessage: String,
+  });
+  controller.open("/repo", "switch", branch);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, ["prepare", "execute"]);
+  assert.equal(controller.state.dialog, null);
 });

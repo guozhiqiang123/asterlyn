@@ -74,7 +74,7 @@ export class BranchMutationController {
     };
     this.value = { dialog };
     this.emit();
-    if (!mutationNeedsName(kind)) void this.review();
+    if (!mutationNeedsName(kind)) void this.submit();
   }
 
   updateValue(value: string): void {
@@ -82,10 +82,9 @@ export class BranchMutationController {
     if (!dialog || dialog.busy || dialog.plan) return;
     dialog.value = value;
     dialog.error = null;
-    this.emit();
   }
 
-  async review(): Promise<void> {
+  async submit(): Promise<void> {
     const dialog = this.value.dialog;
     if (!dialog || dialog.busy) return;
     const name = mutationNeedsName(dialog.request.kind) ? dialog.value.trim() : null;
@@ -101,24 +100,20 @@ export class BranchMutationController {
     try {
       const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
       if (this.value.dialog !== dialog) return;
-      dialog.plan = plan;
+      if (dialog.request.kind === "delete") {
+        dialog.plan = plan;
+      } else if (await this.gateway.execute(plan)) {
+        this.value = { dialog: null };
+      } else {
+        dialog.error = "branch-mutation-failed";
+      }
     } catch (error) {
       if (this.value.dialog !== dialog) return;
       dialog.error = this.gateway.errorMessage(error);
     } finally {
-      if (this.value.dialog === dialog) {
-        dialog.busy = false;
-        this.emit();
-      }
+      if (this.value.dialog === dialog) dialog.busy = false;
+      this.emit();
     }
-  }
-
-  back(): void {
-    const dialog = this.value.dialog;
-    if (!dialog || dialog.busy || !dialog.plan || !mutationNeedsName(dialog.request.kind)) return;
-    dialog.plan = null;
-    dialog.error = null;
-    this.emit();
   }
 
   async execute(): Promise<void> {
