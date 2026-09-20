@@ -3,6 +3,7 @@ import type { HistoryCopy } from "../../localization/catalog.ts";
 import type { RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import type { CommitFileView } from "../../presentation/git-presentation.ts";
+import { TopbarBranchMenuBinding } from "./topbar-branch-menu.ts";
 import { BranchContextActions, type BranchContextRuntime } from "./branch-context-actions.ts";
 import { BranchContextBinding } from "./branch-context-binding.ts";
 import {
@@ -69,6 +70,7 @@ export interface GitHistoryContextRuntimeOptions {
   readonly copy: () => HistoryCopy;
   readonly sources: GitHistoryContextSources;
   readonly ports: GitHistoryContextPorts;
+  readonly manageRemotes: () => void;
 }
 
 /** Owns every delegated context-menu binding on the Git History DOM boundary. */
@@ -88,6 +90,7 @@ export class GitHistoryContextRuntime {
 
     this.bindings = [
       new BranchContextBinding(root, sources.branch, (request) => branchActions.open(request)),
+      new TopbarBranchMenuBinding(root, host, branchActions, sources.branch, copy, options.manageRemotes),
       new HistoryContextBinding(root, sources.history, (request) => {
         const range = resolveHistoryCommitRangeTarget(
           request.target,
@@ -109,6 +112,10 @@ export class GitHistoryContextRuntime {
             })
       ),
     ];
+  }
+
+  renderTopbarBranch(snapshot: RepositorySnapshot | null): void {
+    (this.bindings.find((binding) => binding instanceof TopbarBranchMenuBinding) as TopbarBranchMenuBinding | undefined)?.render(snapshot);
   }
 
   dispose(): void {

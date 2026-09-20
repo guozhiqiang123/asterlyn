@@ -28,6 +28,7 @@ export interface HistoryCommitContextRuntime {
   policyOptions(target: HistoryCommitContextTarget): Omit<HistoryCommitContextPolicyOptions, "reasons">;
   openGitOperation(kind: "cherryPick" | "revert", oid: string): void;
   openBranchFromCommit(target: HistoryCommitContextTarget): void;
+  openReset(target: HistoryCommitContextTarget): void;
   blocked(reason: string): void;
   status(message: string): void;
   error(error: unknown): void;
@@ -94,6 +95,9 @@ export class HistoryCommitContextActions {
       case `${OWNER_ID}.revert`:
         this.runtime.openGitOperation("revert", target.oid);
         return;
+      case `${OWNER_ID}.reset`:
+        this.runtime.openReset(target);
+        return;
       case `${OWNER_ID}.create-branch`:
         this.runtime.openBranchFromCommit(target);
         return;
@@ -123,6 +127,7 @@ export function historyCommitContextMenuModel(
       { kind: "separator" },
       command("cherry-pick", labels.cherryPick, policy.cherryPick),
       command("revert", labels.revertCommit, policy.revert),
+      ...(policy.reset ? [command("reset", labels.resetToHere, policy.reset)] : []),
       { kind: "separator" },
       command("create-branch", labels.newBranchFromCommit, policy.create),
     );

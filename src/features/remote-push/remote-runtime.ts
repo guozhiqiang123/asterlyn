@@ -1,4 +1,5 @@
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
+import type { RemoteManagementCopy } from "../../localization/git-reviewed-copy.ts";
 import {
   RemoteAuthenticationController,
   type RemoteAuthenticationGateway,
@@ -8,10 +9,13 @@ import {
   type RemotePushChange,
   type RemotePushGateway,
 } from "./remote-push-controller.ts";
+import { RemoteManagementBinding } from "./remote-management-binding.ts";
+import { RemoteManagementController, type RemoteManagementGateway } from "./remote-management-controller.ts";
 
 export interface RemoteRuntimeGateways {
   readonly push: RemotePushGateway;
   readonly authentication: RemoteAuthenticationGateway;
+  readonly management?: RemoteManagementGateway;
 }
 
 export interface RemoteRuntimeNotifications {
@@ -28,14 +32,18 @@ export interface RemoteRuntimeMessages {
 export class RemoteRuntime {
   readonly push: RemotePushController;
   readonly authentication: RemoteAuthenticationController;
+  readonly management: RemoteManagementController | null;
 
   private readonly releases: readonly (() => void)[];
+  private readonly managementBinding: RemoteManagementBinding | null;
   private disposed = false;
 
   constructor(
     gateways: RemoteRuntimeGateways,
     messages: RemoteRuntimeMessages,
     notifications: RemoteRuntimeNotifications,
+    root?: HTMLElement,
+    managementCopy: () => RemoteManagementCopy = () => messages.remote.management,
   ) {
     this.push = new RemotePushController(gateways.push, {
       messages: messages.remote,
@@ -46,11 +54,17 @@ export class RemoteRuntime {
       messages.remote,
       messages.errors,
     );
+    this.management = gateways.management ? new RemoteManagementController(gateways.management) : null;
+    this.managementBinding = this.management && root
+      ? new RemoteManagementBinding(root, this.management, managementCopy)
+      : null;
     this.releases = [
       this.push.subscribe((change) => notifications.pushChanged(change)),
       this.authentication.subscribe(() => notifications.authenticationChanged()),
     ];
   }
+
+  refreshCopy(): void { this.managementBinding?.refreshCopy(); }
 
   dispose(): void {
     if (this.disposed) return;
@@ -58,5 +72,7 @@ export class RemoteRuntime {
     for (const release of this.releases) release();
     this.push.dispose();
     this.authentication.dispose();
+    this.managementBinding?.dispose();
+    this.management?.dispose();
   }
 }

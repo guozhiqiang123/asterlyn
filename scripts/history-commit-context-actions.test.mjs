@@ -54,6 +54,19 @@ test("merge commits explain mainline limits and nested commits remain copy-only"
   assert.deepEqual(ids(model), ["git-history.commit-context-actions.copy-commit-id"]);
 });
 
+test("Reset to Here appears only for a non-HEAD commit reachable from the current branch", () => {
+  const selected = target();
+  const head = { ...commit(), oid: "c".repeat(40), shortOid: "cccccccc", parents: [selected.oid] };
+  const policy = historyCommitContextPolicy(selected, {
+    ...options, headOid: head.oid, historyCommits: [head, selected.commit],
+  });
+  const model = historyCommitContextMenuModel(selected, policy, EN_US.history);
+  assert.ok(ids(model).includes("git-history.commit-context-actions.reset"));
+  assert.equal(historyCommitContextPolicy(target(head), {
+    ...options, headOid: head.oid, historyCommits: [head, selected.commit],
+  }).reset, null);
+});
+
 test("provider selects without executing and routes exact IDs into existing review flows", async () => {
   const selected = target();
   const events = [];
@@ -66,6 +79,7 @@ test("provider selects without executing and routes exact IDs into existing revi
       policyOptions: () => ({ ...options }),
       openGitOperation: (kind, oid) => events.push(["operation", kind, oid]),
       openBranchFromCommit: (value) => events.push(["branch", value.oid]),
+      openReset: (value) => events.push(["reset", value.oid]),
       blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]),
       error: (error) => events.push(["error", error]),

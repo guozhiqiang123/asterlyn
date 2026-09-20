@@ -676,6 +676,7 @@ export interface RecoveryCopy {
 }
 
 export interface RemoteCopy {
+  management: RemoteManagementCopy;
   unsupported: string;
   noRemote: string;
   noBranch: string;
@@ -860,6 +861,8 @@ export interface ErrorCopy {
 }
 
 export interface HistoryCopy {
+  topbarBranchMenu: TopbarBranchMenuCopy;
+  reset: GitResetCopy;
   branchContextMenu: BranchContextMenuCopy;
   branchMutation: BranchMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
@@ -1073,6 +1076,7 @@ export interface HistoryCommitContextMenuCopy {
   copyCommitId: string;
   cherryPick: string;
   revertCommit: string;
+  resetToHere: string;
   newBranchFromCommit: string;
   copiedCommitId: string;
   clipboardUnavailable: string;
@@ -1194,3 +1198,4 @@ export interface LocaleCatalog {
   readonly editorPhrases: Readonly<Record<string, string>>;
   readonly documentDescription: string;
 }
+import type { GitResetCopy, RemoteManagementCopy, TopbarBranchMenuCopy } from "./git-reviewed-copy.ts";

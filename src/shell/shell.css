@@ -67,6 +67,33 @@
   color: var(--text-muted);
 }
 
+.current-branch-menu {
+  display: flex;
+  flex: 0 1 220px;
+  min-width: 92px;
+  max-width: 220px;
+  height: 34px;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: transparent;
+  font: inherit;
+}
+
+.current-branch-menu:not(:disabled):hover,
+.current-branch-menu[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-menu);
+}
+
+.current-branch-menu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-branch-menu .icon:last-child { flex: 0 0 auto; margin-left: auto; }
+
 .repository-menu {
   position: absolute;
   z-index: 80;

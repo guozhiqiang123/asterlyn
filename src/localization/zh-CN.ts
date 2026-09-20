@@ -1,5 +1,6 @@
 import type { LocaleCatalog } from "./catalog.ts";
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts";
+import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 
 export const ZH_CN = {
   locale: "zh-CN",
@@ -327,6 +328,8 @@ export const ZH_CN = {
     operationFailed: "无法完成 Git 操作。",
   },
   history: {
+    topbarBranchMenu: ZH_TOPBAR_BRANCH_COPY,
+    reset: ZH_GIT_RESET_COPY,
     branchContextMenu: {
       ariaLabel: (name) => `${name} 的分支操作`, viewHistory: "查看分支历史",
       switchTo: (name) => `切换到 ${name}`, checkoutRemote: "检出为本地分支…",
@@ -341,7 +344,7 @@ export const ZH_CN = {
     branchMutation: ZH_CN_BRANCH_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `${subject} 的提交操作`, copyCommitId: "复制提交 ID",
-      cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…",
+      cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…", resetToHere: ZH_GIT_RESET_COPY.menuItem,
       newBranchFromCommit: "从此提交新建分支…", copiedCommitId: "已复制完整提交 ID",
       clipboardUnavailable: "系统剪贴板不可用", busy: "另一个仓库操作仍在进行中",
       cleanRequired: "应用此提交前请提交或移除所有工作区更改",
@@ -501,6 +504,7 @@ export const ZH_CN = {
     restoring: "正在恢复本地更改…", restored: "已恢复本地更改",
   },
   remote: {
+    management: ZH_REMOTE_MANAGEMENT_COPY,
     unsupported: "不支持", noRemote: "没有远程仓库", noBranch: "没有分支", noCheckedOutBranch: "没有已检出的分支", noUpstream: "没有上游",
     selectedRemoteScope: (remote) => `已选远程仓库：${remote}。获取会刷新该远程仓库的所有标准分支跟踪引用；更新和推送仅作用于当前检出的分支。`,
     unavailable: (detail) => `不可用：${detail}`,

@@ -37,6 +37,7 @@ test("Git History context runtime owns one disposable delegated binding set", ()
 
   assert.deepEqual(installed.map(({ type }) => type), [
     "contextmenu", "keydown",
+    "click",
     "contextmenu", "keydown",
     "contextmenu", "keydown",
   ]);

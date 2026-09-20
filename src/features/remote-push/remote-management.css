@@ -1,0 +1,18 @@
+.remote-management-dialog { width: min(560px, calc(100vw - 32px)); }
+.remote-management-tools { display: flex; border: 1px solid var(--border); border-bottom: 0; }
+.remote-management-tools button { width: 34px; height: 30px; color: var(--text); background: transparent; border: 0; font: inherit; }
+.remote-management-tools button:hover:not(:disabled) { background: var(--bg-hover); }
+.remote-management-table { min-height: 150px; border: 1px solid var(--border); background: var(--surface-inset); }
+.remote-management-columns, .remote-management-row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; padding: 7px 10px; }
+.remote-management-columns { color: var(--text-soft); border-bottom: 1px solid var(--border); }
+.remote-management-row { width: 100%; color: var(--text); background: transparent; border: 0; text-align: left; font: inherit; }
+.remote-management-row:hover { background: var(--bg-hover); }
+.remote-management-row.selected { color: var(--selection-text); background: var(--selection-bg); }
+.remote-management-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-management-empty { padding: 28px 10px; color: var(--text-muted); text-align: center; }
+.remote-definition-dialog form { display: grid; gap: 12px; }
+.remote-definition-dialog label:not(.remote-fetch-option) { display: grid; grid-template-columns: 72px 1fr; gap: 10px; align-items: center; }
+.remote-definition-dialog input[type="text"], .remote-definition-dialog input:not([type]) { min-width: 0; }
+.remote-fetch-option { display: flex; gap: 8px; align-items: center; }
+.remote-management-error { color: var(--danger-text); }
+.remote-delete-name { display: block; padding: 10px; background: var(--surface-inset); border: 1px solid var(--border); }

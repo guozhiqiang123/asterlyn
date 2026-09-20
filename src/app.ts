@@ -30,13 +30,9 @@ import {
   type GitHistoryDetailsState,
   type HistoryDetailsChange,
 } from "./features/git-history/history-details-controller";
-import {
-  GitHistoryReadRuntime,
-} from "./features/git-history/git-history-read-runtime.ts";
+import { GitHistoryReadRuntime } from "./features/git-history/git-history-read-runtime.ts";
 import { routeHistoryDetailsChange } from "./features/git-history/history-change-router.ts";
-import {
-  type HistoryFilterDialog,
-} from "./features/git-history/history-filter-controller";
+import type { HistoryFilterDialog } from "./features/git-history/history-filter-controller";
 import {
   filteredBranches as filteredBranchesForView,
   logicalBranches as logicalBranchesForView,
@@ -57,9 +53,7 @@ import {
   historyCommitRangeTargetIsCurrent,
   type HistoryCommitRangeTarget,
 } from "./features/git-history/history-range-context.ts";
-import {
-  type HistoryComparisonChange,
-} from "./features/git-history/history-comparison-controller.ts";
+import type { HistoryComparisonChange } from "./features/git-history/history-comparison-controller.ts";
 import {
   resolveCommitDetailContextTarget,
   type CommitDetailDirectoryContextTarget,
@@ -78,20 +72,16 @@ import {
   type RemoteUpdateStrategy,
   type UpdateDialogOptions,
 } from "./features/remote-push/remote-push-controller";
-import {
-  type RemoteAuthenticationResult,
-} from "./features/remote-push/remote-authentication-controller";
-import { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
+import type { RemoteAuthenticationResult } from "./features/remote-push/remote-authentication-controller";
+import type { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
+import { createRemoteRuntime } from "./features/remote-push/create-remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import {
   pushReviewFiles,
   renderRemoteDialogContent,
   renderRemoteToolbarView,
 } from "./features/remote-push/remote-push-view";
-import {
-  type ChangesCommitChange,
-  type ChangesCommitState,
-} from "./features/changes-commit/changes-commit-controller";
+import type { ChangesCommitChange, ChangesCommitState } from "./features/changes-commit/changes-commit-controller";
 import { ChangesRuntime } from "./features/changes-commit/changes-runtime.ts";
 import {
   CHANGE_TREE_ROW_HEIGHT,
@@ -108,11 +98,7 @@ import {
 import {
   ChangesContextSurfaceRuntime,
 } from "./features/changes-commit/changes-context-runtime.ts";
-import {
-  type GitOperationChange,
-  type GitOperationResult,
-  type GitOperationState,
-} from "./features/git-operations/git-operation-controller";
+import type { GitOperationChange, GitOperationResult, GitOperationState } from "./features/git-operations/git-operation-controller";
 import { renderGitOperationBanner } from "./features/git-operations/git-operation-banner";
 import { GitOperationRuntime } from "./features/git-operations/git-operation-runtime.ts";
 import { TerminalPanel } from "./features/terminal/terminal-panel";
@@ -321,13 +307,14 @@ import type {
   CommitSummary,
   FileChange,
   GitOperationAction,
-  GitOperationKind,
+  GitOperationKind, GitResetMode, GitResetPlan,
   HistoryPath,
   HistoryQuery,
   HistoryRef,
   ProjectFile,
   PushMode,
   PushTagMode,
+  RemoteMutationPlan,
   RepositoryMutationOutcome,
   RepositorySnapshot,
   WorkspaceMutationOutcome,
@@ -530,6 +517,11 @@ export class AsterlynApp {
         },
         copy: () => this.localization.catalog.history.branchMutation,
       },
+      reset: { gateway: {
+        prepare: (...args) => bridge.prepareGitReset(...args),
+        execute: (plan, mode) => this.executeReviewedGitReset(plan, mode),
+        errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      }, copy: () => this.localization.catalog.history.reset },
       fileRestore: {
         gateway: {
           prepare: (...args) => bridge.prepareCommitFileRestore(...args),
@@ -592,32 +584,19 @@ export class AsterlynApp {
         }
       },
     });
-    this.remoteRuntime = new RemoteRuntime(
-      {
-        push: {
-          readPushPreview: (...args) => bridge.readPushPreview(...args),
-          readCommitDetails: (...args) => bridge.readCommitDetails(...args),
-          readPushFileCommit: (...args) => bridge.readPushFileCommit(...args),
-          readCommitDiff: (...args) => bridge.readCommitDiff(...args),
-          readCommitImageDiff: (...args) => bridge.readCommitImageDiff(...args),
-          fetchRemote: (...args) => bridge.fetchRemote(...args),
-          pullCurrent: (...args) => bridge.pullCurrent(...args),
-          pushCurrent: (...args) => bridge.pushCurrent(...args),
-          cancelRemoteOperation: (...args) => bridge.cancelRemoteOperation(...args),
-        },
-        authentication: {
-          readRemoteAuthentication: (...args) => bridge.readRemoteAuthentication(...args),
-          storeRemoteHttpsCredential: (...args) => bridge.storeRemoteHttpsCredential(...args),
-          configureRemoteSsh: (...args) => bridge.configureRemoteSsh(...args),
-        },
-      },
+    this.remoteRuntime = createRemoteRuntime(root, bridge,
       { remote: initialCatalog.remote, errors: initialCatalog.errors },
       {
-        pushChanged: (change) => this.handleRemoteControllerChange(change),
-        authenticationChanged: () => {
-          if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog();
-        },
+        snapshot: () => this.windowSession.repository.state.snapshot,
+        prepare: (...args) => bridge.prepareRemoteMutation(...args),
+        execute: (plan) => this.executeReviewedRemoteMutation(plan),
+        fetch: (remoteRoot, remote) => this.fetchConfiguredRemote(remoteRoot, remote),
+        errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       },
+      {
+        pushChanged: (change) => this.handleRemoteControllerChange(change),
+        authenticationChanged: () => { if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog(); },
+      }, () => this.localization.catalog.remote.management,
     );
     this.changesRuntime = new ChangesRuntime({
       root,
@@ -710,6 +689,7 @@ export class AsterlynApp {
       host: this.contextMenuHost,
       clipboard: createBrowserTextClipboardAdapter(window.navigator),
       copy: () => this.localization.catalog.history,
+      manageRemotes: () => { this.remoteRuntime.management?.open(); },
       sources: {
         branch: () => ({
           snapshot: this.windowSession.repository.state.snapshot,
@@ -788,6 +768,8 @@ export class AsterlynApp {
               localBranch: Boolean(
                 snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
               ),
+              headOid: snapshot?.branch.oid ?? null,
+              historyCommits: this.historyState.history.commits,
             };
           },
           openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
@@ -803,6 +785,8 @@ export class AsterlynApp {
               },
             );
           },
+          openReset: (target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot,
+            oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }),
         },
         range: {
           ...contextFeedback,
@@ -1593,7 +1577,7 @@ export class AsterlynApp {
     }
     if (this.gitHistoryPresentationRuntime.filterState.historyDialog) this.renderHistoryDialog();
     this.gitOperationRuntime.refreshCopy();
-    this.gitHistoryMutationRuntime.refreshCopy();
+    this.gitHistoryMutationRuntime.refreshCopy(); this.remoteRuntime.refreshCopy();
     this.changesRuntime.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
@@ -8356,6 +8340,21 @@ export class AsterlynApp {
     );
   }
 
+  private async executeReviewedRemoteMutation(plan: RemoteMutationPlan): Promise<boolean> {
+    const copy = this.localization.catalog.remote.management;
+    return this.runBranchMutation(copy.working, copy.changed, (root) => bridge.executeRemoteMutation(root, plan));
+  }
+
+  private async executeReviewedGitReset(plan: GitResetPlan, mode: GitResetMode): Promise<boolean> {
+    const copy = this.localization.catalog.history.reset;
+    return this.runBranchMutation(copy.working, copy.reset, (root) => bridge.executeGitReset(root, plan, mode));
+  }
+
+  private async fetchConfiguredRemote(root: string, remote: string): Promise<boolean> {
+    const copy = this.localization.catalog.remote;
+    return this.runBranchMutation(copy.operationInProgress(copy.actionNames.fetch), copy.operationCompleted(copy.actionNames.fetch), () => bridge.fetchRemote(root, remote, `remote-management-${++this.branchMutationSequence}`));
+  }
+
   private async runBranchMutation(
     loadingMessage: string,
     successMessage: string,
@@ -8440,6 +8439,7 @@ export class AsterlynApp {
   }
 
   private renderStatus(snapshot: RepositorySnapshot | null): void {
+    this.gitHistoryContextRuntime.renderTopbarBranch(snapshot);
     const copy = this.localShellCopy();
     if (!snapshot) {
       this.query("#branch-status").innerHTML = `${icon("folder", 14)}<span>${escapeHtml(copy.folder)}</span><span class="sync-status">${escapeHtml(copy.gitUnavailable)}</span>`;

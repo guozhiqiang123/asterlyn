@@ -23,10 +23,12 @@ const ownedStyles = [
   ["features/git-history/history.css", "main.ts"],
   ["features/git-history/branches.css", "main.ts"],
   ["features/git-history/branch-mutation.css", "main.ts"],
+  ["features/git-history/git-reset.css", "main.ts"],
   ["features/git-history/commit-file-restore.css", "main.ts"],
   ["features/git-history/details.css", "main.ts"],
   ["features/remote-push/remote-push.css", "main.ts"],
   ["features/remote-push/remote-authentication.css", "main.ts"],
+  ["features/remote-push/remote-management.css", "main.ts"],
   ["features/git-operations/git-operation-controls.css", "main.ts"],
   [
     "features/git-operations/git-operations.css",

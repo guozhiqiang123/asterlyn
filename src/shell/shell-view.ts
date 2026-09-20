@@ -13,12 +13,13 @@ export interface ShellViewModel {
   gitAvailable: boolean;
   demo: boolean;
   windowControlsAvailable: boolean;
-  localization?: Pick<LocaleCatalog, "shell" | "common">;
+  localization?: Pick<LocaleCatalog, "shell" | "common" | "history">;
 }
 
 export function renderShellView(model: ShellViewModel): string {
   const copy = model.localization?.shell ?? EN_US.shell;
   const common = model.localization?.common ?? EN_US.common;
+  const branchCopy = model.localization?.history.topbarBranchMenu ?? EN_US.history.topbarBranchMenu;
   const searchShortcut = primaryShortcut(model.shell.windowChromeMode, "P");
   return `<main class="app-shell ${windowChromeClass(model.shell.windowChromeMode)}">
     <header class="topbar" data-tauri-drag-region>
@@ -26,6 +27,7 @@ export function renderShellView(model: ShellViewModel): string {
         <button class="repository-switcher" id="repository-switcher" type="button" aria-label="${escapeHtml(copy.projectMenu)}" aria-haspopup="menu" aria-controls="repository-menu" aria-expanded="false" title="${escapeHtml(copy.openProject)}"><span class="repository-name" id="repository-name">${escapeHtml(copy.noProject)}</span>${icon("chevron-down", 13)}</button>
         <div class="repository-menu hidden" id="repository-menu" role="menu" aria-label="${escapeHtml(copy.projectMenu)}"></div>
       </div>
+      <button class="current-branch-menu" id="current-branch-menu" type="button" aria-label="${escapeHtml(branchCopy.ariaLabel)}" aria-haspopup="menu" title="${escapeHtml(branchCopy.ariaLabel)}" disabled>${icon("branch", 15)}<span id="current-branch-name">${escapeHtml(branchCopy.noBranch)}</span>${icon("chevron-down", 13)}</button>
       <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)} (${escapeHtml(searchShortcut.accessible)})">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd>${escapeHtml(searchShortcut.label)}</kbd></button>
       <div class="topbar-actions" data-tauri-drag-region>
         <span class="demo-badge ${model.demo ? "" : "hidden"}">${escapeHtml(copy.browserDemo)}</span>

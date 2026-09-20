@@ -1,0 +1,10 @@
+.git-reset-dialog { width: min(680px, calc(100vw - 32px)); }
+.git-reset-description p { margin: 4px 0; }
+.git-reset-dialog fieldset { display: grid; gap: 7px; margin: 14px 0; padding: 0; border: 0; }
+.git-reset-option { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 7px; border-radius: 5px; }
+.git-reset-option:hover, .git-reset-option.selected { background: var(--bg-hover); }
+.git-reset-option input { margin-top: 2px; }
+.git-reset-option span { display: grid; gap: 4px; }
+.git-reset-option small { display: grid; gap: 3px; color: var(--text-muted); }
+.git-reset-option em { color: var(--danger-text); font-style: normal; }
+.git-reset-error { color: var(--danger-text); }
