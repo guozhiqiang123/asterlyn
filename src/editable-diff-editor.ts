@@ -16,6 +16,7 @@ import {
 } from "@codemirror/view";
 import { EditorLanguageLoader } from "./editor-language.ts";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme.ts";
+import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
 import {
   applyExactTextChanges,
@@ -42,6 +43,7 @@ interface ViewBinding {
   phrases: Compartment;
   whitespace: Compartment;
   changeIndicators: EditorChangeIndicators | null;
+  comparisonSide: "a" | "b" | null;
 }
 
 /**
@@ -229,9 +231,24 @@ export class EditableDiffEditor {
     const right = this.binding();
     this.mergeView = new MergeView({
       parent,
-      a: { doc: this.baseContent, extensions: this.extensions(left, false) },
-      b: { doc: this.exactContent.text, extensions: this.extensions(right, true) },
+      a: {
+        doc: this.baseContent,
+        extensions: this.extensions(left, false, "after", {
+          reference: this.exactContent.text,
+          documentSide: "a",
+          overview: false,
+        }),
+      },
+      b: {
+        doc: this.exactContent.text,
+        extensions: this.extensions(right, true, "before", {
+          reference: this.baseContent,
+          documentSide: "b",
+          overview: true,
+        }),
+      },
       orientation: "a-b",
+      gutter: false,
       revertControls: "a-to-b",
       renderRevertControl: () => this.revertButton(),
       collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
@@ -252,12 +269,33 @@ export class EditableDiffEditor {
       phrases: new Compartment(),
       whitespace: new Compartment(),
       changeIndicators: null,
+      comparisonSide: null,
     };
   }
 
-  private extensions(binding: ViewBinding, editable: boolean): Extension[] {
+  private extensions(
+    binding: ViewBinding,
+    editable: boolean,
+    gutterSide?: DiffGutterSide,
+    comparison?: {
+      reference: string;
+      documentSide: "a" | "b";
+      overview: boolean;
+    },
+  ): Extension[] {
     const preferences = this.preferences!;
-    if (editable) {
+    if (comparison) {
+      binding.changeIndicators = createEditorChangeIndicators(
+        comparison.reference,
+        editorChangeIndicatorCopy(this.copy),
+        {
+          gutterSide,
+          overview: comparison.overview,
+          documentSide: comparison.documentSide,
+        },
+      );
+      binding.comparisonSide = comparison.documentSide;
+    } else if (editable) {
       binding.changeIndicators = createEditorChangeIndicators(
         this.baseContent,
         editorChangeIndicatorCopy(this.copy),
@@ -275,8 +313,8 @@ export class EditableDiffEditor {
         : []),
       EditorState.readOnly.of(!editable),
       EditorView.editable.of(editable),
-      lineNumbers(),
-      editable ? binding.changeIndicators!.extension : [],
+      gutterSide ? diffLineNumberGutter(gutterSide) : lineNumbers(),
+      binding.changeIndicators?.extension ?? [],
       history(),
       drawSelection(),
       highlightActiveLine(),
@@ -296,6 +334,11 @@ export class EditableDiffEditor {
     });
     this.exactContent = applyExactTextChanges(this.exactContent, changes);
     this.serializedContent = null;
+    for (const binding of this.bindings) {
+      if (binding.comparisonSide === "a" && binding.changeIndicators) {
+        binding.changeIndicators.setBaseline(binding.view, update.state.doc.toString());
+      }
+    }
     this.changePending = true;
     if (this.changeFrame !== null) return;
     this.changeFrame = window.requestAnimationFrame(() => {

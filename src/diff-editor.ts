@@ -13,7 +13,7 @@ import {
   EditorView,
   GutterMarker,
   drawSelection,
-  gutterLineClass,
+  gutter,
   highlightActiveLine,
   highlightActiveLineGutter,
   highlightTrailingWhitespace,
@@ -90,17 +90,6 @@ const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) =
   }
   return builder.finish();
 });
-
-class SourceDiffGutterMarker extends GutterMarker {
-  constructor(readonly elementClass: string) {
-    super();
-  }
-}
-
-const sourceAddedGutterMarker = new SourceDiffGutterMarker("cm-source-added-gutter");
-const sourceRemovedGutterMarker = new SourceDiffGutterMarker("cm-source-removed-gutter");
-const sourceSpacerGutterMarker = new SourceDiffGutterMarker("cm-source-spacer-gutter");
-const sourceOmittedGutterMarker = new SourceDiffGutterMarker("cm-source-omitted-gutter");
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -348,12 +337,9 @@ export class DiffEditor {
     const pane = window.document.createElement("section");
     pane.className = `diff-pane diff-pane-${side}`;
     pane.setAttribute("aria-label", `${label} side of patch`);
-    const heading = window.document.createElement("div");
-    heading.className = "diff-pane-label";
-    heading.textContent = label;
     const host = window.document.createElement("div");
     host.className = "diff-editor-host";
-    pane.append(heading, host);
+    pane.append(host);
     parent.append(pane);
     return host;
   }
@@ -405,8 +391,9 @@ export class DiffEditor {
         lineNumberGutter(
           openBlameMenu,
           (lineNumber) => rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
+          side === "old" ? "after" : "before",
         ),
-        sourceGutterDecorations(rows, side),
+        sourceChangeGutter(rows, side),
         sourceLineDecorations(rows, side),
       );
     } else {
@@ -662,32 +649,49 @@ function sourceLineDecorations(
   });
 }
 
-function sourceGutterDecorations(
+function sourceChangeGutter(
   rows: SourceDiffRow[],
   side: "old" | "new",
 ): Extension {
-  return gutterLineClass.compute(["doc"], (state) => {
-    const builder = new RangeSetBuilder<GutterMarker>();
-    for (const [index, row] of rows.entries()) {
-      if (index >= state.doc.lines) break;
-      const marker = row.kind === "omitted"
-        ? sourceOmittedGutterMarker
-        : row[side].lineNumber === null
-          ? sourceSpacerGutterMarker
-          : side === "old"
-            ? row.kind === "removed" || row.kind === "modified"
-              ? sourceRemovedGutterMarker
-              : null
-            : row.kind === "added" || row.kind === "modified"
-              ? sourceAddedGutterMarker
-              : null;
-      if (marker) {
-        const position = state.doc.line(index + 1).from;
-        builder.add(position, position, marker);
-      }
-    }
-    return builder.finish();
+  return gutter({
+    class: "cm-change-indicator-gutter cm-source-change-indicator-gutter",
+    side: side === "old" ? "after" : "before",
+    initialSpacer: () => new SourceChangeGutterMarker(null),
+    lineMarker: (view, line) => {
+      const row = rows[view.state.doc.lineAt(line.from).number - 1];
+      if (!row || row[side].lineNumber === null) return null;
+      const kind = row.kind === "modified"
+        ? "modified"
+        : side === "old" && row.kind === "removed"
+          ? "deleted"
+          : side === "new" && row.kind === "added"
+            ? "added"
+            : null;
+      return kind ? new SourceChangeGutterMarker(kind) : null;
+    },
   });
+}
+
+class SourceChangeGutterMarker extends GutterMarker {
+  readonly elementClass: string;
+
+  constructor(private readonly kind: "added" | "modified" | "deleted" | null) {
+    super();
+    this.elementClass = kind
+      ? `cm-change-gutter-element cm-change-${kind}`
+      : "cm-change-gutter-element";
+  }
+
+  eq(other: SourceChangeGutterMarker): boolean {
+    return other.kind === this.kind;
+  }
+
+  toDOM(): Node {
+    const marker = document.createElement("span");
+    marker.className = "cm-change-gutter-marker";
+    marker.textContent = this.kind === "deleted" ? "−" : "";
+    return marker;
+  }
 }
 
 function sourceLineClass(row: SourceDiffRow, side: "old" | "new"): string {

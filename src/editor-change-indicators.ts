@@ -35,6 +35,10 @@ export interface EditorChangeIndicators {
 
 export interface EditorChangeIndicatorOptions {
   readonly gutter?: boolean;
+  readonly gutterSide?: "before" | "after";
+  readonly overview?: boolean;
+  /** Which side of the comparison is represented by the editor document. */
+  readonly documentSide?: "a" | "b";
 }
 
 export function editorChangeIndicatorCopy(copy: EditorCopy): EditorChangeIndicatorCopy {
@@ -66,15 +70,23 @@ export function createEditorChangeIndicators(
 ): EditorChangeIndicators {
   const updateIndicator = StateEffect.define<IndicatorUpdate>();
   const baseline = text(initialBaseline);
+  const documentSide = options.documentSide ?? "b";
   const field = StateField.define<IndicatorState>({
     create: (state) => ({
       baseline,
-      chunks: Chunk.build(baseline, state.doc, DIFF_CONFIG),
+      chunks: documentSide === "a"
+        ? Chunk.build(state.doc, baseline, DIFF_CONFIG)
+        : Chunk.build(baseline, state.doc, DIFF_CONFIG),
       copy: initialCopy,
     }),
     update: (value, transaction) => {
       let next = transaction.docChanged
-        ? { ...value, chunks: Chunk.updateB(value.chunks, value.baseline, transaction.newDoc, transaction.changes, DIFF_CONFIG) }
+        ? {
+            ...value,
+            chunks: documentSide === "a"
+              ? Chunk.updateA(value.chunks, transaction.newDoc, value.baseline, transaction.changes, DIFF_CONFIG)
+              : Chunk.updateB(value.chunks, value.baseline, transaction.newDoc, transaction.changes, DIFF_CONFIG),
+          }
         : value;
       for (const effect of transaction.effects) {
         if (!effect.is(updateIndicator)) continue;
@@ -82,7 +94,9 @@ export function createEditorChangeIndicators(
           next = {
             ...next,
             baseline: effect.value.baseline,
-            chunks: Chunk.build(effect.value.baseline, transaction.newDoc, DIFF_CONFIG),
+            chunks: documentSide === "a"
+              ? Chunk.build(transaction.newDoc, effect.value.baseline, DIFF_CONFIG)
+              : Chunk.build(effect.value.baseline, transaction.newDoc, DIFF_CONFIG),
           };
         } else {
           next = { ...next, copy: effect.value.copy };
@@ -95,14 +109,18 @@ export function createEditorChangeIndicators(
     field,
     options.gutter === false ? [] : gutter({
       class: "cm-change-indicator-gutter",
+      side: options.gutterSide ?? "before",
       initialSpacer: () => new ChangeGutterSpacer(),
       lineMarker: (view, line) => {
-        const block = blockAtLine(indicatorBlocks(view.state, field), view.state.doc.lineAt(line.from).number);
+        const block = blockAtLine(
+          indicatorBlocks(view.state, field, documentSide),
+          view.state.doc.lineAt(line.from).number,
+        );
         return block ? new ChangeGutterMarker(block.kind, view.state.field(field).copy) : null;
       },
       lineMarkerChange: indicatorChanged(updateIndicator),
     }),
-    ViewPlugin.fromClass(class {
+    options.overview === false ? [] : ViewPlugin.fromClass(class {
       private readonly ruler: HTMLDivElement;
       private readonly view: EditorView;
 
@@ -126,7 +144,7 @@ export function createEditorChangeIndicators(
       private render(): void {
         const state = this.view.state.field(field);
         this.ruler.setAttribute("aria-label", state.copy.overview);
-        const blocks = blocksFromChunks(state.chunks, this.view.state.doc);
+        const blocks = blocksFromChunks(state.chunks, this.view.state.doc, documentSide);
         const lineRange = Math.max(1, this.view.state.doc.lines - 1);
         this.ruler.replaceChildren(...blocks.map((block) => {
           const marker = document.createElement("button");
@@ -164,9 +182,15 @@ export function createEditorChangeIndicators(
 export function editorChangeIndicatorBlocks(
   baseline: string,
   current: string,
+  documentSide: "a" | "b" = "b",
 ): readonly EditorChangeIndicatorBlock[] {
-  const currentText = text(current);
-  return blocksFromChunks(Chunk.build(text(baseline), currentText, DIFF_CONFIG), currentText);
+  const before = text(baseline);
+  const after = text(current);
+  return blocksFromChunks(
+    Chunk.build(before, after, DIFF_CONFIG),
+    documentSide === "a" ? before : after,
+    documentSide,
+  );
 }
 
 function indicatorChanged(effect: StateEffectType<IndicatorUpdate>) {
@@ -178,19 +202,24 @@ function indicatorChanged(effect: StateEffectType<IndicatorUpdate>) {
 function indicatorBlocks(
   state: EditorState,
   field: StateField<IndicatorState>,
+  documentSide: "a" | "b",
 ): readonly EditorChangeIndicatorBlock[] {
-  return blocksFromChunks(state.field(field).chunks, state.doc);
+  return blocksFromChunks(state.field(field).chunks, state.doc, documentSide);
 }
 
-function blocksFromChunks(chunks: readonly Chunk[], current: Text): readonly EditorChangeIndicatorBlock[] {
+function blocksFromChunks(
+  chunks: readonly Chunk[],
+  current: Text,
+  documentSide: "a" | "b" = "b",
+): readonly EditorChangeIndicatorBlock[] {
   return chunks.map((chunk) => {
     const kind = chunk.fromB === chunk.toB
       ? "deleted"
       : chunk.fromA === chunk.toA
         ? "added"
         : "modified";
-    const from = Math.min(chunk.fromB, current.length);
-    const to = Math.min(chunk.endB, current.length);
+    const from = Math.min(documentSide === "a" ? chunk.fromA : chunk.fromB, current.length);
+    const to = Math.min(documentSide === "a" ? chunk.endA : chunk.endB, current.length);
     const lineFrom = current.lineAt(from).number;
     const lineTo = current.lineAt(Math.max(from, to)).number;
     return { kind, from, to, lineFrom, lineTo };

@@ -22,6 +22,17 @@ test("change indicator input normalizes CRLF baselines", () => {
   assert.deepEqual(editorChangeIndicatorBlocks("one\r\ntwo\r\n", "one\ntwo\n"), []);
 });
 
+test("before-side indicators anchor removals in the left document", () => {
+  assert.deepEqual(
+    editorChangeIndicatorBlocks("one\nremoved\ntwo\n", "one\ntwo\n", "a").map(project),
+    [{ kind: "deleted", lineFrom: 2, lineTo: 2 }],
+  );
+  assert.deepEqual(
+    editorChangeIndicatorBlocks("one\ntwo\n", "one\ninserted\ntwo\n", "a").map(project),
+    [{ kind: "added", lineFrom: 2, lineTo: 2 }],
+  );
+});
+
 function project(block) {
   return { kind: block.kind, lineFrom: block.lineFrom, lineTo: block.lineTo };
 }

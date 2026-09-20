@@ -1,4 +1,4 @@
-import type { Extension } from "@codemirror/state";
+import type { EditorState, Extension } from "@codemirror/state";
 import {
   EditorView,
   GutterMarker,
@@ -57,10 +57,22 @@ export interface GitBlameCopy {
 type SourceLineMapper = (documentLine: number) => number | null;
 type OpenEditorContextMenu = (event: MouseEvent, view: EditorView) => void;
 
+export type DiffGutterSide = "before" | "after";
+
+type LineNumberFormatter = (lineNumber: number, state: EditorState) => string;
+
 export function lineNumberGutter(
   openMenu: OpenEditorContextMenu,
   formatNumber?: (lineNumber: number) => string,
+  side: DiffGutterSide = "before",
 ): Extension {
+  if (side === "after") {
+    return diffLineNumberGutter(
+      side,
+      formatNumber ? (lineNumber) => formatNumber(lineNumber) : undefined,
+      openMenu,
+    );
+  }
   return lineNumbers({
     ...(formatNumber ? { formatNumber } : {}),
     domEventHandlers: {
@@ -69,6 +81,43 @@ export function lineNumberGutter(
         return true;
       },
     },
+  });
+}
+
+/**
+ * A line-number gutter that may live after the editor content. CodeMirror's
+ * built-in lineNumbers helper is intentionally fixed to the `before` side;
+ * split Diff layouts must use the public gutter `side` contract instead of
+ * reordering sticky gutter DOM with CSS.
+ */
+export function diffLineNumberGutter(
+  side: DiffGutterSide,
+  formatNumber: LineNumberFormatter = (lineNumber) => lineNumber.toString(),
+  openMenu?: OpenEditorContextMenu,
+): Extension {
+  return gutter({
+    class: `cm-lineNumbers cm-diff-lineNumbers cm-diff-lineNumbers-${side}`,
+    side,
+    lineMarker: (view, line) => new DiffLineNumberMarker(
+      formatNumber(view.state.doc.lineAt(line.from).number, view.state),
+    ),
+    initialSpacer: (view) => new DiffLineNumberMarker(
+      formatNumber(maxLineNumber(view.state.doc.lines), view.state),
+    ),
+    updateSpacer: (spacer, update) => {
+      const number = formatNumber(maxLineNumber(update.state.doc.lines), update.state);
+      return spacer instanceof DiffLineNumberMarker && spacer.number === number
+        ? spacer
+        : new DiffLineNumberMarker(number);
+    },
+    ...(openMenu ? {
+      domEventHandlers: {
+        contextmenu: (view, _line, event) => {
+          requestContextMenu(event as MouseEvent, view, openMenu);
+          return true;
+        },
+      },
+    } : {}),
   });
 }
 
@@ -183,6 +232,26 @@ class GitBlameMarker extends GutterMarker {
     );
     return marker;
   }
+}
+
+class DiffLineNumberMarker extends GutterMarker {
+  constructor(readonly number: string) {
+    super();
+  }
+
+  eq(other: DiffLineNumberMarker): boolean {
+    return other.number === this.number;
+  }
+
+  toDOM(): Node {
+    return document.createTextNode(this.number);
+  }
+}
+
+function maxLineNumber(lines: number): number {
+  let maximum = 9;
+  while (maximum < lines) maximum = maximum * 10 + 9;
+  return maximum;
 }
 
 function blameTone(oid: string): number {
