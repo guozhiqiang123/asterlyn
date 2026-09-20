@@ -30,6 +30,10 @@ depends only on narrow editor/session ports rather than importing another featur
   when the indexed conflict changes externally.
 - Conflicted paths cannot be excluded as ordinary commit inputs; they stay in the Conflicts group
   until Git reports no unresolved stages.
+- The editable Diff uses CodeMirror Merge as its single line-gutter marker owner while retaining the
+  shared overview ruler. This avoids adjacent, differently classified gutter colors for the same
+  change. Expanding unchanged lines now changes the merge editor's collapse configuration and mount
+  identity, so the control takes effect immediately without reusing a collapsed editor instance.
 
 ## Browser interaction and accessibility evidence
 

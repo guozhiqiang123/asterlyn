@@ -308,6 +308,7 @@ export class EditorSurface {
     tab: TextTabState,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    expandedUnchanged: boolean,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
@@ -335,6 +336,7 @@ export class EditorSurface {
       tab.document.path,
       preferences,
       presentation,
+      expandedUnchanged,
       (content) => {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
         onContentChange(tab.id, content);

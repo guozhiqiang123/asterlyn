@@ -80,6 +80,7 @@ export function mountEditableWorkingDiff(options: {
   tab: TextTabState | null;
   preferences: AppPreferences;
   presentation: DiffPresentation;
+  expandedUnchanged: boolean;
   beforeTransition: () => void;
   onContentChange: (tabId: string, content: string) => void;
 }): boolean {
@@ -88,11 +89,15 @@ export function mountEditableWorkingDiff(options: {
     return false;
   }
   surface.mountEditableDiff(
-    editorDocumentContentKey(document, `editable:${state.workingPatchVersion}:${tab.loadEpoch}`),
+    editorDocumentContentKey(
+      document,
+      `editable:${state.workingPatchVersion}:${tab.loadEpoch}:${options.expandedUnchanged ? "expanded" : "collapsed"}`,
+    ),
     state.workingDiffBase.content,
     tab,
     options.preferences,
     options.presentation,
+    options.expandedUnchanged,
     options.beforeTransition,
     options.onContentChange,
   );

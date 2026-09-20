@@ -9,6 +9,7 @@ import {
   unifiedChangeStartLines,
 } from "../src/features/files-editor/diff-navigation.ts";
 import { editorDocumentKey } from "../src/editor-document.ts";
+import { mountEditableWorkingDiff } from "../src/features/files-editor/working-diff-integration.ts";
 import { readFile } from "node:fs/promises";
 
 test("unified Diff navigation groups adjacent removed and added lines", () => {
@@ -99,6 +100,48 @@ test("Diff document identities isolate source kind, side, repository, and revisi
   assert.equal(new Set([working, staged, commit, otherCommit, comparison, conflict]).size, 6);
   assert.match(comparison, /^comparison\0/);
   assert.match(conflict, /^conflict\0/);
+});
+
+test("editable working Diff keeps expanded state in its mount identity and runtime", () => {
+  const calls = [];
+  const document = {
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "src/file.ts", staged: false },
+  };
+  const tab = {
+    id: "file-tab",
+    loadEpoch: 7,
+    status: "ready",
+    content: "after\n",
+    document: { path: "src/file.ts" },
+  };
+  const mounted = mountEditableWorkingDiff({
+    surface: { mountEditableDiff(...args) { calls.push(args); } },
+    document,
+    state: {
+      workingPatch: { patch: "diff", binary: false },
+      workingDiffBase: { content: "before\n" },
+      workingPatchVersion: 3,
+    },
+    tab,
+    preferences: {},
+    presentation: { layout: "split", showWhitespace: false },
+    expandedUnchanged: true,
+    beforeTransition() {},
+    onContentChange() {},
+  });
+
+  assert.equal(mounted, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][0], /\0editable:3:7:expanded$/);
+  assert.equal(calls[0][5], true);
+});
+
+test("editable Diff uses one gutter marker system and can disable unchanged collapsing", async () => {
+  const source = await readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8");
+  assert.match(source, /collapseUnchanged: this\.expandedUnchanged \? undefined/);
+  assert.match(source, /\{ gutter: false \}/);
 });
 
 test("conflict editor keeps Ours and Theirs immutable around one synchronized Result", async () => {

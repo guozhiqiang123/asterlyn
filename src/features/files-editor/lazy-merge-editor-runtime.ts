@@ -13,6 +13,7 @@ interface EditableDiffMount {
   path: string;
   preferences: AppPreferences;
   presentation: DiffPresentation;
+  expandedUnchanged: boolean;
   onChange: (content: string) => void;
 }
 
@@ -48,9 +49,19 @@ export class LazyEditableDiffEditor {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    expandedUnchanged: boolean,
     onChange: (content: string) => void,
   ): void {
-    const mount = { parent, baseContent, currentContent, path, preferences, presentation, onChange };
+    const mount = {
+      parent,
+      baseContent,
+      currentContent,
+      path,
+      preferences,
+      presentation,
+      expandedUnchanged,
+      onChange,
+    };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
@@ -138,6 +149,7 @@ export class LazyEditableDiffEditor {
       mount.path,
       this.preferences ?? mount.preferences,
       this.presentation,
+      mount.expandedUnchanged,
       mount.onChange,
     );
   }

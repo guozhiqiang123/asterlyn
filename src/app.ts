@@ -5992,7 +5992,7 @@ export class AsterlynApp {
       const editable = mountEditableWorkingDiff({
         surface: this.editorSurface, document, state: this.changesState,
         tab: workingDiffTextTab(this.editorState.session, document, this.filesState.files),
-        preferences: this.settingsState.preferences, presentation: this.diffPresentation(),
+        preferences: this.settingsState.preferences, presentation: this.diffPresentation(), expandedUnchanged: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
         beforeTransition: () => this.captureMountedTextEditor(),
         onContentChange: (tabId, content) => this.handleEditorContentChange(tabId, content),
       });

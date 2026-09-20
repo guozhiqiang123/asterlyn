@@ -33,6 +33,10 @@ export interface EditorChangeIndicators {
   setCopy(view: EditorView, copy: EditorChangeIndicatorCopy): void;
 }
 
+export interface EditorChangeIndicatorOptions {
+  readonly gutter?: boolean;
+}
+
 export function editorChangeIndicatorCopy(copy: EditorCopy): EditorChangeIndicatorCopy {
   return {
     overview: copy.diffNavigation,
@@ -58,6 +62,7 @@ const DIFF_CONFIG = { scanLimit: 1_000, timeout: 250 } as const;
 export function createEditorChangeIndicators(
   initialBaseline: string,
   initialCopy: EditorChangeIndicatorCopy,
+  options: EditorChangeIndicatorOptions = {},
 ): EditorChangeIndicators {
   const updateIndicator = StateEffect.define<IndicatorUpdate>();
   const baseline = text(initialBaseline);
@@ -88,7 +93,7 @@ export function createEditorChangeIndicators(
   });
   const extension = [
     field,
-    gutter({
+    options.gutter === false ? [] : gutter({
       class: "cm-change-indicator-gutter",
       initialSpacer: () => new ChangeGutterSpacer(),
       lineMarker: (view, line) => {

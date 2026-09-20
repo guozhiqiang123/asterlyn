@@ -61,6 +61,7 @@ export class EditableDiffEditor {
   private baseContent = "";
   private path = "";
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
+  private expandedUnchanged = false;
   private preferences: AppPreferences | null = null;
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
@@ -80,6 +81,7 @@ export class EditableDiffEditor {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    expandedUnchanged: boolean,
     onChange: (content: string) => void,
   ): void {
     this.destroy();
@@ -90,6 +92,7 @@ export class EditableDiffEditor {
     this.path = path;
     this.preferences = { ...preferences };
     this.presentation = { ...presentation };
+    this.expandedUnchanged = expandedUnchanged;
     this.onChange = onChange;
     this.render();
     this.loadLanguage();
@@ -208,7 +211,7 @@ export class EditableDiffEditor {
           ...this.extensions(binding, true),
           unifiedMergeView({
             original: this.baseContent,
-            collapseUnchanged: { margin: 3, minSize: 8 },
+            collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
             diffConfig: { scanLimit: 1_000, timeout: 250 },
             mergeControls: (type, action) => type === "reject"
               ? this.revertButton(action)
@@ -231,7 +234,7 @@ export class EditableDiffEditor {
       orientation: "a-b",
       revertControls: "a-to-b",
       renderRevertControl: () => this.revertButton(),
-      collapseUnchanged: { margin: 3, minSize: 8 },
+      collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
       diffConfig: { scanLimit: 1_000, timeout: 250 },
     });
     left.view = this.mergeView.a;
@@ -258,6 +261,7 @@ export class EditableDiffEditor {
       binding.changeIndicators = createEditorChangeIndicators(
         this.baseContent,
         editorChangeIndicatorCopy(this.copy),
+        { gutter: false },
       );
     }
     return [
