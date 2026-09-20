@@ -34,8 +34,8 @@ const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const EXPANDED_DIFF_CONTEXT_LINES: usize = 1_000_000;
 const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const TREE_ENTRY_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
-const MAX_HISTORY_WINDOW: usize = 3_000;
-const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
+const MAX_HISTORY_SESSION: usize = 100_000;
+const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_SESSION;
 const MAX_OUTGOING_COMMITS: usize = 100_000;
 const MAX_PUSH_PREVIEW_WINDOW: usize = 1_000;
 const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
@@ -589,7 +589,7 @@ impl GitRepository {
         query: &HistoryQuery,
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
-        let commit_limit = commit_limit.clamp(1, MAX_HISTORY_WINDOW);
+        let commit_limit = commit_limit.clamp(1, MAX_HISTORY_SESSION);
         Ok(self
             .query_commit_history_page(query, 0, commit_limit)?
             .commits)
@@ -602,10 +602,10 @@ impl GitRepository {
         page_size: usize,
     ) -> Result<HistoryPage, GitError> {
         validate_history_query(query)?;
-        if offset > MAX_HISTORY_WINDOW {
+        if offset > MAX_HISTORY_SESSION {
             return Err(GitError::InvalidInput {
                 field: "history offset".to_string(),
-                message: format!("must not exceed {MAX_HISTORY_WINDOW}"),
+                message: format!("must not exceed {MAX_HISTORY_SESSION}"),
             });
         }
         if page_size == 0 || page_size > MAX_HISTORY_PAGE_SIZE {
@@ -614,36 +614,48 @@ impl GitRepository {
                 message: format!("must be between 1 and {MAX_HISTORY_PAGE_SIZE}"),
             });
         }
-        if offset == MAX_HISTORY_WINDOW {
+        if offset == MAX_HISTORY_SESSION {
             return Ok(HistoryPage {
                 commits: Vec::new(),
                 offset,
                 has_more: false,
             });
         }
-        let page_size = page_size.min(MAX_HISTORY_WINDOW - offset);
+        let page_size = page_size.min(MAX_HISTORY_SESSION - offset);
         let requested = offset
             .saturating_add(page_size)
             .saturating_add(1)
-            .min(MAX_HISTORY_WINDOW + 1);
+            .min(MAX_HISTORY_SESSION + 1);
         let roots = self.discovered_roots()?;
         validate_query_roots(query, &roots)?;
         let selected_roots: HashSet<&str> =
             query.repository_ids.iter().map(String::as_str).collect();
+        let eligible_roots: Vec<_> = roots
+            .into_iter()
+            .filter(|root| {
+                let repository_id = root.descriptor.id.as_str();
+                (selected_roots.is_empty() || selected_roots.contains(repository_id))
+                    && query
+                        .start_commit
+                        .as_ref()
+                        .is_none_or(|start| start.repository_id == repository_id)
+                    && (query.refs.is_empty()
+                        || query
+                            .refs
+                            .iter()
+                            .any(|reference| reference.repository_id == repository_id))
+                    && (query.paths.is_empty()
+                        || query
+                            .paths
+                            .iter()
+                            .any(|path| path.repository_id == repository_id))
+            })
+            .collect();
+        let single_root = eligible_roots.len() == 1;
         let mut histories = Vec::new();
 
-        for root in roots {
+        for root in eligible_roots {
             let repository_id = root.descriptor.id.as_str();
-            if !selected_roots.is_empty() && !selected_roots.contains(repository_id) {
-                continue;
-            }
-            if query
-                .start_commit
-                .as_ref()
-                .is_some_and(|start| start.repository_id != repository_id)
-            {
-                continue;
-            }
             let refs: Vec<&HistoryRef> = query
                 .refs
                 .iter()
@@ -654,12 +666,6 @@ impl GitRepository {
                 .iter()
                 .filter(|path| path.repository_id == repository_id)
                 .collect();
-            if (!query.refs.is_empty() && refs.is_empty())
-                || (!query.paths.is_empty() && paths.is_empty())
-            {
-                continue;
-            }
-
             let selectors = if let Some(start) = &query.start_commit {
                 root.repository.first_parent(&start.oid)?;
                 vec![start.oid.clone()]
@@ -687,19 +693,39 @@ impl GitRepository {
             }
             let path_values: Vec<String> =
                 paths.into_iter().map(|path| path.path.clone()).collect();
+            let root_offset = if single_root { offset } else { 0 };
+            let root_limit = if single_root {
+                page_size.saturating_add(1)
+            } else {
+                requested
+            };
             let mut commits = root.repository.run_commit_history_query(
                 "query commit history",
                 selectors.iter().map(OsString::from).collect(),
                 query,
                 &path_values,
-                requested,
+                root_offset,
+                root_limit,
             )?;
             scope_commits(&mut commits, repository_id);
             histories.push(commits);
         }
-        let merged = merge_root_histories(histories, requested);
-        let has_more = offset + page_size < MAX_HISTORY_WINDOW && merged.len() > offset + page_size;
-        let commits = merged.into_iter().skip(offset).take(page_size).collect();
+        let page_offset = if single_root { 0 } else { offset };
+        let merged = merge_root_histories(
+            histories,
+            if single_root {
+                page_size + 1
+            } else {
+                requested
+            },
+        );
+        let has_more =
+            offset + page_size < MAX_HISTORY_SESSION && merged.len() > page_offset + page_size;
+        let commits = merged
+            .into_iter()
+            .skip(page_offset)
+            .take(page_size)
+            .collect();
         Ok(HistoryPage {
             commits,
             offset,
@@ -749,6 +775,7 @@ impl GitRepository {
             selectors,
             &HistoryQuery::default(),
             &[],
+            0,
             commit_limit,
         )
     }
@@ -759,9 +786,10 @@ impl GitRepository {
         selectors: Vec<OsString>,
         query: &HistoryQuery,
         paths: &[String],
+        offset: usize,
         commit_limit: usize,
     ) -> Result<Vec<CommitSummary>, GitError> {
-        let limit = commit_limit.clamp(1, MAX_HISTORY_WINDOW + 1).to_string();
+        let limit = commit_limit.clamp(1, MAX_HISTORY_SESSION + 1).to_string();
         let mut arguments = vec![
             OsString::from("--literal-pathspecs"),
             OsString::from("log"),
@@ -773,6 +801,12 @@ impl GitRepository {
             OsString::from(format!("--max-count={limit}")),
             OsString::from("--format=%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e"),
         ];
+        if offset > 0 {
+            arguments.push(OsString::from(format!(
+                "--skip={}",
+                offset.min(MAX_HISTORY_SESSION)
+            )));
+        }
         if query.first_parent {
             arguments.push(OsString::from("--first-parent"));
         }
@@ -4489,7 +4523,7 @@ fn merge_root_histories(
     histories: Vec<Vec<CommitSummary>>,
     commit_limit: usize,
 ) -> Vec<CommitSummary> {
-    let limit = commit_limit.clamp(1, MAX_HISTORY_WINDOW + 1);
+    let limit = commit_limit.clamp(1, MAX_HISTORY_SESSION + 1);
     let mut positions = vec![0_usize; histories.len()];
     let mut merged = Vec::with_capacity(limit);
     while merged.len() < limit {
@@ -6126,7 +6160,15 @@ mod tests {
             .collect();
         assert_eq!(oids.len(), 7);
 
-        for (offset, limit) in [(3_001, 3), (0, 0), (0, 3_001)] {
+        assert!(
+            repository
+                .query_commit_history_page(&query, 3_001, 3)
+                .expect("offsets beyond the legacy window remain valid")
+                .commits
+                .is_empty()
+        );
+
+        for (offset, limit) in [(100_001, 3), (0, 0), (0, 100_001)] {
             assert!(matches!(
                 repository.query_commit_history_page(&query, offset, limit),
                 Err(GitError::InvalidInput { .. })

@@ -19,7 +19,7 @@ import {
 import { commitKey } from "./history-identity.ts";
 import type { HistorySelectionEntry } from "./history-range-selection.ts";
 
-export const HISTORY_ROW_LIMIT = 3_000;
+export const HISTORY_ROW_LIMIT = 100_000;
 export const HISTORY_MOUNT_LIMIT = 200;
 const HISTORY_ROW_HEIGHT = 28;
 const HISTORY_OVERSCAN_ROWS = 36;

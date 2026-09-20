@@ -45,7 +45,8 @@ test("history list preserves paging and terminal status semantics", () => {
   );
   assert.match(
     renderHistoryList({
-      ...presentation(Array.from({ length: HISTORY_ROW_LIMIT }, (_, index) => commit(`c${index}`, [], []))),
+      ...presentation(commits),
+      loadedCommits: new Array(HISTORY_ROW_LIMIT),
       commits: [commits[0]],
     }),
     /session limit/,
@@ -70,7 +71,7 @@ test("history list distinguishes query loading, backend failure, and text mismat
 
 test("large history windows mount no more than the row budget", () => {
   const commits = Array.from(
-    { length: HISTORY_ROW_LIMIT },
+    { length: 5_000 },
     (_, index) => commit(`c${index}`, [], []),
   );
   const window = historyRenderWindow(commits.length, 28 * 1_800, 840);
