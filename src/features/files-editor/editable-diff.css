@@ -1,0 +1,49 @@
+.content-body.editable-diff-surface .cm-mergeView,
+.content-body.editable-diff-surface .cm-mergeViewEditors,
+.content-body.editable-diff-surface .cm-mergeViewEditor,
+.content-body.editable-diff-surface > .cm-editor {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.content-body.editable-diff-surface .cm-mergeView {
+  overflow: hidden;
+}
+
+.content-body.editable-diff-surface .cm-mergeViewEditors {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+}
+
+.content-body.editable-diff-surface .cm-merge-revert {
+  position: relative;
+  z-index: 2;
+  width: 30px;
+  border-inline: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.content-body.editable-diff-surface .editable-diff-revert {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: inherit;
+}
+
+.content-body.editable-diff-surface .editable-diff-revert:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.content-body.editable-diff-surface .cm-merge-a .cm-gutters {
+  order: 2;
+  border-right: 0;
+  border-left: 1px solid var(--border);
+}

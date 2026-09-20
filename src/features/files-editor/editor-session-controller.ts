@@ -263,6 +263,24 @@ export class EditorSessionController {
     markdownMode: MarkdownEditorMode,
     forceReload = false,
   ): Promise<OpenTextResult> {
+    return this.loadText(repositoryRoot, file, markdownMode, forceReload, true);
+  }
+
+  async ensureText(
+    repositoryRoot: string,
+    file: ProjectFile,
+    markdownMode: MarkdownEditorMode,
+  ): Promise<OpenTextResult> {
+    return this.loadText(repositoryRoot, file, markdownMode, false, false);
+  }
+
+  private async loadText(
+    repositoryRoot: string,
+    file: ProjectFile,
+    markdownMode: MarkdownEditorMode,
+    forceReload: boolean,
+    activate: boolean,
+  ): Promise<OpenTextResult> {
     if (this.disposed || this.state.workspaceRoot !== repositoryRoot) return { status: "stale" };
     const document: ProjectFileDocument = {
       kind: "project-file",
@@ -277,7 +295,7 @@ export class EditorSessionController {
     if (existing && markdownMode !== existing.markdownMode) {
       this.state.session = setTextTabMarkdownMode(this.state.session, existing.id, markdownMode);
     }
-    let opened = openTextDocument(this.state.session, document, markdownMode);
+    let opened = openTextDocument(this.state.session, document, markdownMode, activate);
     if (opened.limitReached) return { status: "limit" };
     if (forceReload && existing?.status === "ready" && opened.tabId) {
       const reload = beginTextReload(opened.session, opened.tabId);
@@ -288,7 +306,7 @@ export class EditorSessionController {
     this.emit({
       reason: opened.needsLoad ? "load-start" : "activation",
       tabId: opened.tabId ?? undefined,
-      documentChanged: true,
+      documentChanged: activate,
       tabsChanged: !existing,
     });
     if (!opened.needsLoad || !opened.tabId || opened.loadEpoch === null) {

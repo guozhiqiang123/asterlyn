@@ -213,6 +213,14 @@ import {
 import { attachSplitter } from "./presentation/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./features/files-editor/diff-navigation";
 import {
+  activeEditableTextTab,
+  diffProjectFile,
+  mountEditableWorkingDiff,
+  workingDiffActive,
+  workingDiffExpanded,
+  workingDiffTextTab,
+} from "./features/files-editor/working-diff-integration.ts";
+import {
   nextPushCommitSelection,
 } from "./features/remote-push/push-review";
 import type { ActivityTool } from "./shell/activity-order";
@@ -602,6 +610,7 @@ export class AsterlynApp {
       root,
       gateway: {
         readLocalDiff: (...args) => bridge.readLocalDiff(...args),
+        readWorkingDiffBase: (...args) => bridge.readWorkingDiffBase(...args),
         readLocalImageDiff: (...args) => bridge.readLocalImageDiff(...args),
         revertChanges: (...args) => bridge.revertChanges(...args),
         prepareRestoreChanges: (...args) => bridge.prepareRestoreChanges(...args),
@@ -1229,7 +1238,7 @@ export class AsterlynApp {
       historyFilterOpen: () => this.gitHistoryPresentationRuntime.filterState.historyFilterMenu !== null,
       historyToolOpen: () => this.shellState.layout.bottomTool === "branches",
       activeReadyTextTab: () => {
-        const tab = activeTextTab(this.editorState.session);
+        const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
         return tab?.status === "ready" ? tab.id : null;
       },
       dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationRuntime.controller.hasUnsavedConflict()),
@@ -1425,7 +1434,7 @@ export class AsterlynApp {
       this.syncChangeInclusionUi();
       this.refreshCommitComposer();
     }
-    if (change.diffChanged && change.reason !== "selection" && this.isWorkingDiffActive()) {
+    if (change.diffChanged && change.reason !== "selection" && workingDiffActive(this.activeDocument(), this.windowSession.repository.state.snapshot?.root ?? null)) {
       this.syncWorkingImageSurface();
       this.renderEditor();
     }
@@ -2554,7 +2563,7 @@ export class AsterlynApp {
   private navigationCommands(): NavigationCommand[] {
     const snapshot = this.windowSession.repository.state.snapshot;
     const hasWorkspace = this.windowSession.workspace.state.root !== null;
-    const tab = activeTextTab(this.editorState.session);
+    const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
     const copy = this.localization.catalog.navigation.commands;
     const command = (
       id: NavigationCommandId,
@@ -2599,7 +2608,7 @@ export class AsterlynApp {
         queueMicrotask(() => this.editorSurface.openFindReplace());
         break;
       case "save-current": {
-        const tab = activeTextTab(this.editorState.session);
+        const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
         if (tab) void this.saveTextTab(tab.id);
         break;
       }
@@ -5937,7 +5946,14 @@ export class AsterlynApp {
         this.renderImageDiff(document, () => void this.loadSelectedDiff());
         return;
       }
-      if (this.changesState.workingPatch) {
+      const editable = mountEditableWorkingDiff({
+        surface: this.editorSurface, document, state: this.changesState,
+        tab: workingDiffTextTab(this.editorState.session, document, this.filesState.files),
+        preferences: this.settingsState.preferences, presentation: this.diffPresentation(),
+        beforeTransition: () => this.captureMountedTextEditor(),
+        onContentChange: (tabId, content) => this.handleEditorContentChange(tabId, content),
+      });
+      if (!editable && this.changesState.workingPatch) {
         this.mountEditorDiff(
           editorDocumentContentKey(
             document,
@@ -6635,7 +6651,7 @@ export class AsterlynApp {
 
   private renderDocumentStatus(): void {
     const encoding = this.query("#document-encoding");
-    const tab = activeTextTab(this.editorState.session);
+    const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
     const visible = tab?.status === "ready";
     const label = visible ? (tab.utf8Bom ? "UTF-8 BOM" : "UTF-8") : "";
     encoding.textContent = label;
@@ -6810,8 +6826,8 @@ export class AsterlynApp {
       textReady,
       previousFile: this.adjacentDiffPath(document, -1),
       nextFile: this.adjacentDiffPath(document, 1),
-      canOpenSource: this.diffProjectFile(document) !== null,
-      expanded: this.isDiffExpanded(document),
+      canOpenSource: diffProjectFile(this.filesState.files, document) !== null,
+      expanded: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
       preferences: this.settingsState.preferences,
       copy: this.localization.catalog.editor,
     });
@@ -6917,20 +6933,6 @@ export class AsterlynApp {
     return this.historyState.details?.files ?? [];
   }
 
-  private diffProjectFile(
-    document: Extract<EditorDocument, {
-      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
-    }>,
-  ): ProjectFile | null {
-    return document.kind === "working-diff"
-      ? this.filesState.files.find(
-          (file) => file.repositoryId === "." && file.path === document.selection.path,
-        ) ?? null
-      : this.filesState.files.find(
-          (file) => file.repositoryId === document.repositoryId && file.path === document.path,
-        ) ?? null;
-  }
-
   private async openDiffSourceFile(): Promise<void> {
     const document = this.activeDocument();
     if (
@@ -6938,7 +6940,7 @@ export class AsterlynApp {
       document.kind !== "commit-diff" &&
       document.kind !== "commit-comparison-diff"
     ) return;
-    const file = this.diffProjectFile(document);
+    const file = diffProjectFile(this.filesState.files, document);
     if (!file) {
       this.setStatus(this.localization.catalog.editor.diffFileMissing, "warning");
       return;
@@ -6948,14 +6950,6 @@ export class AsterlynApp {
     this.renderActivityRail();
     await this.openProjectFile(document.repositoryRoot, file);
     if (this.windowSession.workspace.state.root === document.repositoryRoot) this.locateCurrentProjectFile();
-  }
-
-  private isDiffExpanded(
-    document: Extract<EditorDocument, {
-      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
-    }>,
-  ): boolean {
-    return this.expandedUnchangedDiffKey === editorDocumentKey(document);
   }
 
   private toggleDiffUnchangedLines(): void {
@@ -7019,12 +7013,14 @@ export class AsterlynApp {
       document.repositoryRoot !== snapshot.root ||
       document.selection.path !== selected.path
     ) return;
-    void this.changesRuntime.controller.loadSelectedDiff(this.isDiffExpanded(document));
-  }
-
-  private isWorkingDiffActive(): boolean {
-    const document = this.activeDocument();
-    return document.kind === "working-diff" && document.repositoryRoot === this.windowSession.repository.state.snapshot?.root;
+    const diff = this.changesRuntime.controller.loadSelectedDiff(workingDiffExpanded(document, this.expandedUnchangedDiffKey));
+    if (!isImagePreviewPath(selected.path) && !selected.conflicted && !selected.submodule) {
+      const file = diffProjectFile(this.filesState.files, document);
+      if (file && file.readOnly !== true) {
+        void this.filesEditorRuntime.editor.ensureText(snapshot.root, file, "source");
+      }
+    }
+    void diff;
   }
 
   private syncWorkingImageSurface(): void {
@@ -7131,7 +7127,7 @@ export class AsterlynApp {
         oid,
         file.path,
         file.originalPath,
-        this.isDiffExpanded(document),
+        workingDiffExpanded(document, this.expandedUnchangedDiffKey),
       );
       const activeDocument = this.activeDocument();
       if (
@@ -7495,7 +7491,7 @@ export class AsterlynApp {
         details.afterOid,
         file.path,
         file.originalPath,
-        this.isDiffExpanded(document),
+        workingDiffExpanded(document, this.expandedUnchangedDiffKey),
       );
       const active = this.activeDocument();
       if (

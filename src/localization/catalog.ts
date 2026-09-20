@@ -372,6 +372,7 @@ export interface EditorCopy {
   diffNavigation: string;
   previousChange: string;
   nextChange: string;
+  revertDiffChange: string;
   previousFile: string;
   nextFile: string;
   openSource: string;

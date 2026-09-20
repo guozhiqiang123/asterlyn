@@ -26,6 +26,7 @@ import {
   retryState,
 } from "./editor-view.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
+import { EditableDiffEditor } from "../../editable-diff-editor.ts";
 
 export type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -40,9 +41,11 @@ type DiffDocument = Extract<
 export class EditorSurface {
   private readonly diffEditor: LazyDiffEditor;
   private readonly textEditor: LazyTextEditor;
+  private readonly editableDiffEditor: EditableDiffEditor;
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private mountedTextLoadEpoch: number | null = null;
+  private mountedEditableDiffTabId: string | null = null;
   private markdownSourcePercent = 50;
   private markdownSplitterDisposer: (() => void) | null = null;
   private markdownScrollDisposer: (() => void) | null = null;
@@ -74,6 +77,7 @@ export class EditorSurface {
       contextMenu,
       "editor.surface.text-blame",
     );
+    this.editableDiffEditor = new EditableDiffEditor(copy);
   }
 
   setCopy(copy: EditorCopy): void {
@@ -81,11 +85,16 @@ export class EditorSurface {
     this.copy = copy;
     this.diffEditor.setBlameCopy(copy);
     this.textEditor.setBlameCopy(copy);
+    this.editableDiffEditor.setCopy(copy);
     this.localizeMountedSurface(previous);
   }
 
   retain(tabIds: readonly string[]): void {
     this.textEditor.retain(tabIds);
+    if (this.mountedEditableDiffTabId && !tabIds.includes(this.mountedEditableDiffTabId)) {
+      this.editableDiffEditor.destroy();
+      this.mountedEditableDiffTabId = null;
+    }
   }
 
   applyTextPathMutation(
@@ -102,6 +111,15 @@ export class EditorSurface {
     accept: (tabId: string, content: string) => void,
     onlyTabId?: string,
   ): void {
+    if (this.mountedEditableDiffTabId) {
+      const tabId = this.mountedEditableDiffTabId;
+      const tab = textTab(session, tabId);
+      if (!tab || (onlyTabId && onlyTabId !== tabId) || tab.status !== "ready" ||
+        tab.loadEpoch !== this.mountedTextLoadEpoch) return;
+      this.editableDiffEditor.flushChanges();
+      accept(tabId, this.editableDiffEditor.content());
+      return;
+    }
     const tabId = this.mountedTextTabId;
     const tab = tabId ? textTab(session, tabId) : null;
     if (!tabId || (onlyTabId && onlyTabId !== tabId) || !tab ||
@@ -112,10 +130,15 @@ export class EditorSurface {
 
   disposeTextTab(tabId: string): void {
     this.textEditor.dispose(tabId);
+    if (this.mountedEditableDiffTabId === tabId) {
+      this.editableDiffEditor.destroy();
+      this.mountedEditableDiffTabId = null;
+    }
   }
 
   openFindReplace(): void {
-    this.textEditor.openFindReplace();
+    if (this.mountedEditableDiffTabId) this.editableDiffEditor.openFindReplace();
+    else this.textEditor.openFindReplace();
   }
 
   selectRange(fromUtf16: number, toUtf16: number): boolean {
@@ -123,7 +146,9 @@ export class EditorSurface {
   }
 
   navigateDiffChange(direction: 1 | -1): boolean {
-    return this.diffEditor.navigateChange(direction);
+    return this.mountedEditableDiffTabId
+      ? this.editableDiffEditor.navigateChange(direction)
+      : this.diffEditor.navigateChange(direction);
   }
 
   setReadOnly(readOnly: boolean): void {
@@ -133,20 +158,24 @@ export class EditorSurface {
   setPreferences(preferences: AppPreferences): void {
     this.textEditor.setPreferences(preferences);
     this.diffEditor.setPreferences(preferences);
+    this.editableDiffEditor.setPreferences(preferences);
   }
 
   setTheme(theme: EffectiveTheme): void {
     this.textEditor.setTheme(theme);
     this.diffEditor.setTheme(theme);
+    this.editableDiffEditor.setTheme(theme);
   }
 
   setPhrases(phrases: Readonly<Record<string, string>>): void {
     this.textEditor.setPhrases(phrases);
     this.diffEditor.setPhrases(phrases);
+    this.editableDiffEditor.setPhrases(phrases);
   }
 
   setDiffPresentation(presentation: DiffPresentation): void {
     this.diffEditor.setPresentation(presentation);
+    this.editableDiffEditor.setPresentation(presentation);
   }
 
   requestMeasure(): void {
@@ -155,6 +184,7 @@ export class EditorSurface {
       this.measureFrame = null;
       this.diffEditor.requestMeasure();
       this.textEditor.requestMeasure();
+      this.editableDiffEditor.requestMeasure();
     });
   }
 
@@ -164,6 +194,7 @@ export class EditorSurface {
     this.disposeMarkdownSurface();
     this.textEditor.detach();
     this.mountedTextTabId = null;
+    this.detachEditableDiff();
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     this.resetBodyClasses(body);
@@ -254,12 +285,54 @@ export class EditorSurface {
     this.disposeMarkdownSurface();
     this.textEditor.detach();
     this.mountedTextTabId = null;
+    this.detachEditableDiff();
     this.diffEditor.destroy();
     const body = this.query("#content-body");
     body.innerHTML = "";
     this.resetBodyClasses(body);
     body.classList.add("diff-surface");
     this.diffEditor.mount(body, patch, path, preferences, presentation, blameSources);
+    this.mountedEditorKey = key;
+  }
+
+  mountEditableDiff(
+    key: string,
+    baseContent: string,
+    tab: TextTabState,
+    preferences: AppPreferences,
+    presentation: DiffPresentation,
+    beforeTransition: () => void,
+    onContentChange: (tabId: string, content: string) => void,
+  ): void {
+    if (this.mountedEditorKey === key && this.mountedEditableDiffTabId === tab.id) {
+      this.editableDiffEditor.requestMeasure();
+      return;
+    }
+    beforeTransition();
+    this.disposeMarkdownSurface();
+    this.diffEditor.destroy();
+    this.textEditor.dispose(tab.id);
+    this.textEditor.detach();
+    this.detachEditableDiff();
+    const body = this.query("#content-body");
+    body.innerHTML = "";
+    this.resetBodyClasses(body);
+    body.classList.add("diff-surface", "editable-diff-surface");
+    this.mountedTextTabId = null;
+    this.mountedEditableDiffTabId = tab.id;
+    this.mountedTextLoadEpoch = tab.loadEpoch;
+    this.editableDiffEditor.mount(
+      body,
+      baseContent,
+      tab.content,
+      tab.document.path,
+      preferences,
+      presentation,
+      (content) => {
+        if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
+        onContentChange(tab.id, content);
+      },
+    );
     this.mountedEditorKey = key;
   }
 
@@ -280,6 +353,7 @@ export class EditorSurface {
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
+    this.detachEditableDiff();
     if (!reuseTextSurface) {
       this.textEditor.detach();
       body.innerHTML = "";
@@ -309,6 +383,7 @@ export class EditorSurface {
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
+    this.detachEditableDiff();
     this.textEditor.detach();
     body.innerHTML = "";
     this.resetBodyClasses(body);
@@ -377,6 +452,7 @@ export class EditorSurface {
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
+    this.detachEditableDiff();
     this.textEditor.detach();
     const body = this.query("#content-body");
     body.innerHTML = "";
@@ -434,10 +510,12 @@ export class EditorSurface {
     this.disposeMarkdownSurface();
     this.textEditor.destroy();
     this.diffEditor.destroy();
+    this.detachEditableDiff();
     if (this.measureFrame !== null) window.cancelAnimationFrame(this.measureFrame);
     this.measureFrame = null;
     this.mountedEditorKey = null;
     this.mountedTextTabId = null;
+    this.mountedEditableDiffTabId = null;
   }
 
   private mountTextEditorSurface(
@@ -524,8 +602,13 @@ export class EditorSurface {
     this.activeMarkdownMode = null;
   }
 
+  private detachEditableDiff(): void {
+    this.editableDiffEditor.destroy();
+    this.mountedEditableDiffTabId = null;
+  }
+
   private resetBodyClasses(body: HTMLElement): void {
-    body.classList.remove("diff-surface", "text-surface", "markdown-surface", "markdown-source-surface", "markdown-split-surface", "markdown-preview-surface", "image-surface");
+    body.classList.remove("diff-surface", "editable-diff-surface", "text-surface", "markdown-surface", "markdown-source-surface", "markdown-split-surface", "markdown-preview-surface", "image-surface");
   }
 
   private localizeMountedSurface(previous: EditorCopy): void {

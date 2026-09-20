@@ -34,7 +34,21 @@ test("latest change selection owns working Diff completion", async () => {
   second.resolve(diff("b.txt"));
   await b;
   assert.equal(controller.state.workingPatch?.path, "b.txt");
+  assert.equal(controller.state.workingDiffBase?.content, "base:b.txt\n");
   assert.equal(controller.state.workingPatchLoading, false);
+});
+
+test("an unavailable editable base preserves the read-only patch fallback", async () => {
+  const controller = new ChangesCommitController(gateway({
+    async readWorkingDiffBase() { throw new Error("not editable"); },
+  }));
+  controller.installSnapshot(snapshot([change("a.txt")]));
+
+  await controller.loadSelectedDiff(false);
+
+  assert.equal(controller.state.workingPatch?.path, "a.txt");
+  assert.equal(controller.state.workingDiffBase, null);
+  assert.equal(controller.state.workingPatchError, null);
 });
 
 test("same-file reconciliation keeps the visible Diff until its refreshed patch arrives", async () => {
@@ -125,6 +139,17 @@ function gateway(overrides = {}) {
   return {
     readLocalDiff(_root, selected) {
       return diffResponses[diffIndex++] ?? Promise.resolve(diff(selected.path));
+    },
+    async readWorkingDiffBase(_root, selected) {
+      return {
+        path: selected.path,
+        originalPath: selected.originalPath,
+        headOid: "a".repeat(40),
+        blobOid: "b".repeat(40),
+        content: `base:${selected.path}\n`,
+        utf8Bom: false,
+        byteLength: selected.path.length + 6,
+      };
     },
     async readLocalImageDiff(_root, selected) {
       return { path: selected.path, before: null, after: null };

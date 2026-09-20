@@ -215,6 +215,7 @@ export function openTextDocument(
   session: EditorSession,
   document: ProjectFileDocument,
   initialMarkdownMode: MarkdownEditorMode = "source",
+  activate = true,
 ): {
   session: EditorSession;
   tabId: string | null;
@@ -239,7 +240,7 @@ export function openTextDocument(
               }
             : tab,
         ),
-        active: { kind: "text", id },
+        active: activate ? { kind: "text", id } : session.active,
       },
       tabId: id,
       loadEpoch,
@@ -297,7 +298,7 @@ export function openTextDocument(
     session: {
       ...session,
       textTabs: [...textTabs, tab],
-      active: { kind: "text", id },
+      active: activate ? { kind: "text", id } : session.active,
     },
     tabId: id,
     loadEpoch: 1,

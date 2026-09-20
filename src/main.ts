@@ -13,6 +13,7 @@ import "./features/settings/settings.css";
 import "./features/changes-commit/changes-commit.css";
 import "./features/files-editor/project-files.css";
 import "./features/files-editor/files-editor.css";
+import "./features/files-editor/editable-diff.css";
 import "./features/files-editor/workspace-search.css";
 import "./features/git-history/git-history.css";
 import "./features/git-history/history.css";

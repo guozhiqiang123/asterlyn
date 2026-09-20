@@ -26,6 +26,25 @@ test("a reopened loaded tab activates without reading again", async () => {
   assert.equal(reads, 1);
 });
 
+test("ensuring an editable Diff buffer preserves the active preview", async () => {
+  const controller = new EditorSessionController(gateway());
+  controller.installWorkspace("/repo");
+  controller.activatePreview({
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "a.ts", staged: false },
+  });
+  const events = [];
+  controller.subscribe((change) => events.push(change));
+
+  const result = await controller.ensureText("/repo", file("a.ts"), "source");
+
+  assert.equal(result.status, "ready");
+  assert.equal(controller.activeDocument().kind, "working-diff");
+  assert.equal(controller.state.session.textTabs.length, 1);
+  assert.equal(events[0].documentChanged, false);
+});
+
 test("reopening an inactive document emits activation and preserves its unsaved buffer", async () => {
   const controller = new EditorSessionController(gateway({ async readTextFile(_root, _repository, path) { return snapshot(path, path); } }));
   controller.installWorkspace("/repo");

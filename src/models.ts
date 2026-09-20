@@ -789,15 +789,8 @@ export interface DiffResult {
   truncated: boolean;
 }
 
-export interface WorkingDiffBase {
-  path: string;
-  originalPath: string | null;
-  headOid: string | null;
-  blobOid: string | null;
-  content: string;
-  utf8Bom: boolean;
-  byteLength: number;
-}
+export interface WorkingDiffBase { path: string; originalPath: string | null; headOid: string | null;
+  blobOid: string | null; content: string; utf8Bom: boolean; byteLength: number; }
 
 export type WorkspaceView = "changes" | "history" | "branches";
 

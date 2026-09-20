@@ -6,6 +6,7 @@ import type {
   RestoreChangesPlan,
   ImageDiffPreview,
   RepositorySnapshot,
+  WorkingDiffBase,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
 import {
@@ -25,6 +26,7 @@ export interface ChangesCommitState {
   collapsedDirectories: Set<string>;
   commitMessage: string;
   workingPatch: DiffResult | null;
+  workingDiffBase: WorkingDiffBase | null;
   workingImageDiff: ImageDiffPreview | null;
   workingPatchLoading: boolean;
   workingPatchError: string | null;
@@ -66,6 +68,10 @@ export interface ChangesCommitGateway {
     repositoryRoot: string,
     change: FileChange,
   ): Promise<ImageDiffPreview>;
+  readWorkingDiffBase(
+    repositoryRoot: string,
+    change: FileChange,
+  ): Promise<WorkingDiffBase>;
   revertChanges(
     repositoryRoot: string,
     plan: RestoreChangesPlan,
@@ -156,6 +162,7 @@ export class ChangesCommitController {
       this.state.workingPatchLoading || this.state.workingPatchError !== null;
     if (!retainedDiff) {
       this.state.workingPatch = null;
+      this.state.workingDiffBase = null;
       this.state.workingImageDiff = null;
       this.state.workingDiffPath = null;
     }
@@ -286,6 +293,7 @@ export class ChangesCommitController {
   clearWorkingDiff(emit = true): void {
     this.diffSequence += 1;
     this.state.workingPatch = null;
+    this.state.workingDiffBase = null;
     this.state.workingImageDiff = null;
     this.state.workingDiffPath = null;
     this.state.workingPatchLoading = false;
@@ -302,7 +310,10 @@ export class ChangesCommitController {
     const path = selected.path;
     this.state.workingDiffPath = path;
     const image = isImagePreviewPath(path);
-    if (image) this.state.workingPatch = null;
+    if (image) {
+      this.state.workingPatch = null;
+      this.state.workingDiffBase = null;
+    }
     else this.state.workingImageDiff = null;
     this.state.workingPatchLoading = true;
     this.state.workingPatchError = null;
@@ -310,16 +321,24 @@ export class ChangesCommitController {
     try {
       const result = image
         ? await this.gateway.readLocalImageDiff(snapshot.root, selected)
-        : await this.gateway.readLocalDiff(snapshot.root, selected, expandedUnchanged);
+        : await Promise.allSettled([
+            this.gateway.readLocalDiff(snapshot.root, selected, expandedUnchanged),
+            this.gateway.readWorkingDiffBase(snapshot.root, selected),
+          ]);
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       if (image) this.state.workingImageDiff = result as ImageDiffPreview;
-      else this.state.workingPatch = result as DiffResult;
+      else {
+        const [patch, base] = result as [PromiseSettledResult<DiffResult>, PromiseSettledResult<WorkingDiffBase>];
+        if (patch.status === "rejected") throw patch.reason;
+        this.state.workingPatch = patch.value;
+        this.state.workingDiffBase = base.status === "fulfilled" ? base.value : null;
+      }
       this.state.workingPatchLoading = false;
       this.state.workingPatchVersion = sequence;
       this.emit({
         reason: "diff-complete",
         diffChanged: true,
-        warning: !image && (result as DiffResult).truncated
+        warning: !image && this.state.workingPatch?.truncated
           ? this.messages.patchTruncated
           : undefined,
       });
@@ -468,6 +487,7 @@ export function createChangesCommitState(fileView: ChangeFileView): ChangesCommi
     collapsedDirectories: new Set(),
     commitMessage: "",
     workingPatch: null,
+    workingDiffBase: null,
     workingImageDiff: null,
     workingPatchLoading: false,
     workingPatchError: null,

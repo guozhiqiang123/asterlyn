@@ -63,6 +63,31 @@ test("text tabs deduplicate while one diff preview is replaced", () => {
   assert.equal(session.preview.kind, "commit-diff");
 });
 
+test("a working diff can ensure its text buffer without replacing the preview", () => {
+  let session = activatePreview(createEditorSession(), {
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "one.ts", staged: false },
+  });
+  const opened = openTextDocument(session, document("one.ts"), "source", false);
+
+  assert.equal(opened.needsLoad, true);
+  assert.equal(opened.session.textTabs.length, 1);
+  assert.deepEqual(opened.session.active, { kind: "preview" });
+  assert.equal(opened.session.preview.kind, "working-diff");
+
+  session = completeTextLoad(opened.session, opened.tabId, opened.loadEpoch, {
+    workspacePath: "one.ts",
+    content: "editable\n",
+    utf8Bom: false,
+    revision: "revision-one.ts",
+    byteLength: 9,
+  });
+  const reopened = openTextDocument(session, document("one.ts"), "source", false);
+  assert.equal(reopened.needsLoad, false);
+  assert.deepEqual(reopened.session.active, { kind: "preview" });
+});
+
 test("a historical file remains a replaceable preview rather than an editable tab", () => {
   const document = {
     kind: "historical-file",

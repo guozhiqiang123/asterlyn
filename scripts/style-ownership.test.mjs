@@ -18,6 +18,7 @@ const ownedStyles = [
   ["features/changes-commit/changes-commit.css", "main.ts"],
   ["features/files-editor/project-files.css", "main.ts"],
   ["features/files-editor/files-editor.css", "main.ts"],
+  ["features/files-editor/editable-diff.css", "main.ts"],
   ["features/files-editor/workspace-search.css", "main.ts"],
   ["features/git-history/git-history.css", "main.ts"],
   ["features/git-history/history.css", "main.ts"],
