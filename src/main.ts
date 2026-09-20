@@ -27,6 +27,7 @@ import "./shared/responsive.css";
 import { AsterlynApp } from "./app";
 import { BRAND } from "./brand";
 import type { LocaleCatalog } from "./localization/catalog.ts";
+import { ThemedSelectHost } from "./shared/themed-select-host.ts";
 
 export function startApplication(catalog: LocaleCatalog): void {
   document.title = BRAND.name;
@@ -37,6 +38,7 @@ export function startApplication(catalog: LocaleCatalog): void {
   const root = document.querySelector<HTMLElement>("#app");
   if (!root) throw new Error("Application root was not found.");
 
+  new ThemedSelectHost(document, window);
   const app = new AsterlynApp(root, catalog);
   void app.start();
 }

@@ -144,6 +144,13 @@ accent, success, warning, danger, overlay, shadow, file states, and Diff additio
 
 - Apply the effective theme through `html[data-theme="dark|light"]` and `color-scheme` so native
   form controls, scrollbars, selection, and browser surfaces agree with the palette.
+- The collapsed select remains a semantic native form control, but Asterlyn owns the opened
+  single-select listbox because macOS draws the platform popup outside the WebView palette and does
+  not expose reliable CSS theming for its selected row. One window-scoped host uses semantic
+  surface/selection/focus tokens, the configured UI font size, viewport-aware placement, outside
+  dismissal, and Enter/Space/Arrow/Home/End/Escape/typeahead behavior while synchronizing the
+  underlying `select` value and `change` event. It closes when its source control is rerendered and
+  does not introduce feature state or translated option copies.
 - The system preference listens to `prefers-color-scheme` in browser mode and Tauri's window theme
   event in native mode. Explicit Light/Dark ignores later system changes.
 - A small native appearance port calls Tauri's application `setTheme`: `null` for System and the

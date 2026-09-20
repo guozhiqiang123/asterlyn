@@ -1,4 +1,4 @@
-/* One visual treatment for native select behavior across the application. */
+/* One visual treatment for selects and their theme-owned popup across the application. */
 .select-control {
   position: relative;
   display: inline-flex;
@@ -55,6 +55,67 @@
 .select-control option {
   background: var(--bg-elevated);
   color: var(--text);
+}
+
+.themed-select-layer {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  pointer-events: none;
+}
+
+.themed-select-menu {
+  position: fixed;
+  display: grid;
+  max-height: min(320px, calc(100vh - 8px));
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 34px var(--shadow-dialog);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--ui-font-size, 13px);
+  pointer-events: auto;
+}
+
+.themed-select-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 29px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.themed-select-option.active,
+.themed-select-option:hover,
+.themed-select-option:focus,
+.themed-select-option.selected.active {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+.themed-select-option:active {
+  background: var(--selection-bg-strong);
+}
+
+.themed-select-option:disabled {
+  color: var(--text-muted);
+}
+
+.themed-select-option-mark {
+  font-weight: 750;
+  text-align: center;
 }
 
 .select-control-chevron {
