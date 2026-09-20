@@ -156,7 +156,7 @@ const editorThemeRules =
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
     ".cm-git-blame-gutter": {
-      minWidth: "214px",
+      minWidth: "260px",
       color: "var(--text-muted)",
       backgroundColor: "var(--bg-deep)",
     },
@@ -167,10 +167,10 @@ const editorThemeRules =
     },
     ".cm-git-blame-marker": {
       display: "grid",
-      gridTemplateColumns: "112px minmax(0, 1fr)",
+      gridTemplateColumns: "max-content minmax(0, 1fr)",
       gap: "8px",
       width: "100%",
-      maxWidth: "220px",
+      maxWidth: "266px",
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",

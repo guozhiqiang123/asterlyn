@@ -12,7 +12,7 @@ export const ZH_CN = {
   },
   temporal: {
     today: "今天", justNow: "刚刚",
-    secondsAgo: (count) => `${count} 秒前`, minutesAgo: (count) => `${count} 分钟前`, hoursAgo: (count) => `${count} 小时前`,
+    secondsAgo: (count) => `${count}秒前`, minutesAgo: (count) => `${count}分钟前`, hoursAgo: (count) => `${count}小时前`,
   },
   shell: {
     projectMenu: "项目菜单", openProject: "打开项目", noProject: "未打开项目",

@@ -19,7 +19,8 @@ test("presentation dates and relative time follow one local policy", () => {
   assert.equal(formatPresentationDate(seconds(localTime(2026, 9, 20, 8)), english, now), "Today");
   assert.equal(formatPresentationDate(seconds(localTime(2026, 9, 8, 8)), english, now), "2026/09/08");
   assert.equal(formatPresentationTime(seconds(now - 2_000), chinese, now), "刚刚");
-  assert.equal(formatPresentationTime(seconds(now - 18_000), chinese, now), "18 秒前");
+  assert.equal(formatPresentationTime(seconds(now - 18_000), chinese, now), "18秒前");
+  assert.equal(formatPresentationDateTime(seconds(now - 18_000), chinese, now), "今天 18秒前");
   assert.equal(formatPresentationTime(seconds(now - 12 * 60_000), english, now), "12 minutes ago");
   assert.equal(formatPresentationTime(seconds(now - 3 * 3_600_000), english, now), "3 hours ago");
 });
