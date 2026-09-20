@@ -20,6 +20,7 @@ use crate::model::{
     RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest,
     RemoteSummary, RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot,
     RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    WorkingDiffBaseVersion,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
@@ -1477,6 +1478,47 @@ impl GitRepository {
             patch: String::from_utf8_lossy(&patch).into_owned(),
             binary,
             truncated,
+        })
+    }
+
+    pub fn working_diff_base(
+        &self,
+        selected: &FileChange,
+        limit_bytes: usize,
+    ) -> Result<WorkingDiffBaseVersion, GitError> {
+        if limit_bytes == 0 {
+            return Err(GitError::InvalidInput {
+                field: "working diff".to_string(),
+                message: "the content limit must be greater than zero".to_string(),
+            });
+        }
+        let changes = self.status_changes_with_untracked()?;
+        let current = match_fresh_changes(
+            &changes,
+            std::slice::from_ref(selected),
+            "read editable working diff",
+        )?
+        .pop()
+        .expect("one selected change produces one fresh match");
+        if current.conflicted || current.submodule {
+            return Err(GitError::InvalidInput {
+                field: "working diff".to_string(),
+                message: "conflicts and submodules require their dedicated editor".to_string(),
+            });
+        }
+        let head_oid = self.head_oid()?;
+        let source_path = current.original_path.as_deref().unwrap_or(&current.path);
+        let base = head_oid
+            .as_deref()
+            .map(|head| self.read_file_at_revision(head, source_path, limit_bytes))
+            .transpose()?
+            .flatten();
+        Ok(WorkingDiffBaseVersion {
+            path: current.path,
+            original_path: current.original_path,
+            head_oid,
+            blob_oid: base.as_ref().map(|file| file.blob_oid.clone()),
+            bytes: base.map(|file| file.bytes).unwrap_or_default(),
         })
     }
 
@@ -7337,6 +7379,52 @@ mod tests {
         assert!(diff.patch.contains("-before"));
         assert!(diff.patch.contains("+working"));
         assert!(!diff.patch.contains("+staged"));
+    }
+
+    #[test]
+    fn editable_working_diff_reads_the_exact_head_base() {
+        let directory = fixture();
+        commit_file(directory.path(), "editable.txt", "before\r\n", "Base");
+        fs::write(directory.path().join("editable.txt"), "after\r\n").expect("working edit");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "editable.txt")
+            .expect("editable change");
+
+        let base = repository
+            .working_diff_base(&selected, 1024)
+            .expect("working Diff base");
+
+        assert_eq!(base.path, "editable.txt");
+        assert_eq!(base.bytes, b"before\n");
+        assert!(base.head_oid.is_some());
+        assert!(base.blob_oid.is_some());
+    }
+
+    #[test]
+    fn editable_working_diff_uses_an_empty_base_for_untracked_files() {
+        let directory = fixture();
+        commit_file(directory.path(), "tracked.txt", "tracked\n", "Base");
+        fs::write(directory.path().join("new.txt"), "new\n").expect("untracked file");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let selected = repository
+            .snapshot(50)
+            .expect("snapshot")
+            .changes
+            .into_iter()
+            .find(|change| change.path == "new.txt")
+            .expect("untracked change");
+
+        let base = repository
+            .working_diff_base(&selected, 1024)
+            .expect("empty working Diff base");
+
+        assert!(base.bytes.is_empty());
+        assert!(base.blob_oid.is_none());
     }
 
     #[test]

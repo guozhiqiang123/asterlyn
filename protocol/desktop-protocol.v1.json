@@ -21,6 +21,7 @@
     { "name": "cancel_untracked_scan", "args": { "scanId": "string" }, "result": "void", "validator": "void" },
     { "name": "read_diff", "args": { "repositoryRoot": "string", "path": "string", "staged": "boolean" }, "result": "DiffResult", "validator": "diffResult" },
     { "name": "read_local_diff", "args": { "repositoryRoot": "string", "selected": "FileChange", "expandedUnchanged": "boolean" }, "result": "DiffResult", "validator": "diffResult" },
+    { "name": "read_working_diff_base", "args": { "repositoryRoot": "string", "selected": "FileChange" }, "result": "WorkingDiffBase", "validator": "workingDiffBase" },
     { "name": "read_image_file", "args": { "repositoryRoot": "string", "repositoryId": "string", "path": "string" }, "result": "ImagePreview", "validator": "imagePreview" },
     { "name": "read_local_image_diff", "args": { "repositoryRoot": "string", "selected": "FileChange" }, "result": "ImageDiffPreview", "validator": "imageDiffPreview" },
     { "name": "list_project_files", "args": { "repositoryRoot": "string" }, "result": "ProjectFileList", "validator": "projectFileList" },

@@ -20,7 +20,7 @@ pub use model::{
     RemoteAuthenticationStatus, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan,
     RemoteMutationRequest, RemoteSummary, RemoteTransport, RepositoryReadPlan,
     RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
-    UntrackedScan, UntrackedState,
+    UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
 };
 pub use process::CancellationToken;
 pub use repository::GitRepository;

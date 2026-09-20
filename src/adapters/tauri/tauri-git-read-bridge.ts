@@ -17,6 +17,7 @@ import type {
   RepositoryStateSlice,
   TrackedChangeScan,
   UntrackedScan,
+  WorkingDiffBase,
 } from "../../models.ts";
 import type { GitReadBridge } from "../../protocol/desktop-bridge.ts";
 import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
@@ -42,6 +43,11 @@ export const tauriGitReadBridge: GitReadBridge = {
       repositoryRoot,
       selected,
       expandedUnchanged,
+    }),
+  readWorkingDiffBase: (repositoryRoot, selected) =>
+    invokeDesktopCommand<WorkingDiffBase>("read_working_diff_base", {
+      repositoryRoot,
+      selected,
     }),
   readLocalImageDiff: (repositoryRoot, selected) =>
     invokeDesktopCommand<ImageDiffPreview>("read_local_image_diff", { repositoryRoot, selected }),

@@ -25,6 +25,7 @@ export interface DesktopCommandMap {
   cancel_untracked_scan: { args: { scanId: string; }; result: void };
   read_diff: { args: { repositoryRoot: string; path: string; staged: boolean; }; result: Model.DiffResult };
   read_local_diff: { args: { repositoryRoot: string; selected: Model.FileChange; expandedUnchanged: boolean; }; result: Model.DiffResult };
+  read_working_diff_base: { args: { repositoryRoot: string; selected: Model.FileChange; }; result: Model.WorkingDiffBase };
   read_image_file: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.ImagePreview };
   read_local_image_diff: { args: { repositoryRoot: string; selected: Model.FileChange; }; result: Model.ImageDiffPreview };
   list_project_files: { args: { repositoryRoot: string; }; result: Model.ProjectFileList };
@@ -115,6 +116,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   cancel_untracked_scan: "void",
   read_diff: "diffResult",
   read_local_diff: "diffResult",
+  read_working_diff_base: "workingDiffBase",
   read_image_file: "imagePreview",
   read_local_image_diff: "imageDiffPreview",
   list_project_files: "projectFileList",

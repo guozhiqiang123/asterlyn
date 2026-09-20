@@ -7,6 +7,10 @@ const jetBrainsMonoLicense = readFileSync(
   new URL("./node_modules/@fontsource-variable/jetbrains-mono/LICENSE", import.meta.url),
   "utf8",
 );
+const codeMirrorMergeLicense = readFileSync(
+  new URL("./third-party/licenses/codemirror-merge-6.12.2-MIT.txt", import.meta.url),
+  "utf8",
+);
 
 export default defineConfig({
   plugins: [
@@ -17,6 +21,11 @@ export default defineConfig({
           type: "asset",
           fileName: "licenses/jetbrains-mono-OFL.txt",
           source: jetBrainsMonoLicense,
+        });
+        this.emitFile({
+          type: "asset",
+          fileName: "licenses/codemirror-merge-6.12.2-MIT.txt",
+          source: codeMirrorMergeLicense,
         });
       },
     },

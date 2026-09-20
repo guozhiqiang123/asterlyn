@@ -91,6 +91,22 @@ pub(crate) async fn read_local_diff(
 }
 
 #[tauri::command]
+pub(crate) async fn read_working_diff_base(
+    repository_root: String,
+    selected: FileChange,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<WorkingDiffBase, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read editable working Diff base", move || {
+        let version = GitRepository::open(root)?
+            .working_diff_base(&selected, asterlyn_workspace::DEFAULT_TEXT_LIMIT_BYTES)?;
+        working_diff_base(version)
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn read_commit_details(
     repository_root: String,
     repository_id: String,

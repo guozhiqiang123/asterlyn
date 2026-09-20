@@ -34,6 +34,7 @@ use adapters::image_preview::{
     IMAGE_PREVIEW_LIMIT_BYTES, ImageDiffPreview, ImagePreview, encode_image_diff,
     encode_image_preview,
 };
+use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
     PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
@@ -282,6 +283,7 @@ pub fn run() {
             save_text_file,
             read_diff,
             read_local_diff,
+            read_working_diff_base,
             read_local_image_diff,
             read_commit_details,
             read_commit_comparison_details,

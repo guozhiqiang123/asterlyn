@@ -47,6 +47,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   TrackedChangeScan,
+  WorkingDiffBase,
   WorkingTreeMutationOutcome,
   UntrackedScan,
   WorkspaceReplacementPreview,
@@ -175,6 +176,10 @@ export interface GitReadBridge {
     selected: FileChange,
     expandedUnchanged?: boolean,
   ): Promise<DiffResult>;
+  readWorkingDiffBase(
+    repositoryRoot: string,
+    selected: FileChange,
+  ): Promise<WorkingDiffBase>;
   readLocalImageDiff(
     repositoryRoot: string,
     selected: FileChange,

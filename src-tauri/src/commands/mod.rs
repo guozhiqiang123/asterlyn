@@ -28,7 +28,7 @@ pub(crate) use git_reads::{
     cancel_untracked_scan, compare_commit_file_to_current, read_commit_comparison_details,
     read_commit_comparison_diff, read_commit_details, read_commit_diff, read_commit_file,
     read_diff, read_git_blame, read_history_page, read_local_diff, read_tracked_changes,
-    scan_untracked,
+    read_working_diff_base, scan_untracked,
 };
 pub(crate) use image::{
     read_commit_comparison_image_diff, read_commit_image_diff, read_image_file,

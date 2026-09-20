@@ -707,6 +707,15 @@ pub struct DiffResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkingDiffBaseVersion {
+    pub path: String,
+    pub original_path: Option<String>,
+    pub head_oid: Option<String>,
+    pub blob_oid: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BinaryDiffResult {
     pub path: String,
     pub before: Option<Vec<u8>>,

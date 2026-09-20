@@ -23,6 +23,7 @@
     "longDescription": "Asterlyn is a lightweight cross-platform developer workspace with a first-class Git experience.",
     "resources": {
       "../node_modules/@fontsource-variable/jetbrains-mono/LICENSE": "licenses/jetbrains-mono-OFL.txt",
+      "../third-party/licenses/codemirror-merge-6.12.2-MIT.txt": "licenses/codemirror-merge-6.12.2-MIT.txt",
       "../third-party/licenses/trash-5.2.9-MIT.txt": "licenses/trash-5.2.9-MIT.txt"
     },
     "icon": [

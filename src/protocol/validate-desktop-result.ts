@@ -289,6 +289,14 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       booleans(result, command, "staged", "binary", "truncated");
       break;
     }
+    case "workingDiffBase": {
+      const result = record(value, command);
+      strings(result, command, "path", "content");
+      nullableStrings(result, command, "originalPath", "headOid", "blobOid");
+      booleans(result, command, "utf8Bom");
+      numbers(result, command, "byteLength");
+      break;
+    }
     case "imagePreview":
       assertImagePreview(value, command);
       break;
