@@ -84,14 +84,14 @@ test("native macOS chrome keeps the trailing settings action inset from the wind
   );
 });
 
-test("project folders stay two pixels below the configured menu scale", async () => {
+test("project folders use the same configured UI scale as files", async () => {
   const source = await readFile(
     new URL("../src/features/files-editor/project-files.css", import.meta.url),
     "utf8",
   );
   assert.match(
     source,
-    /\.project-directory > summary,\s*\.project-directory-row\s*\{[^}]*font-size:\s*max\(10px, calc\(var\(--ui-font-size, 13px\) - 2px\)\);/s,
+    /\.project-directory > summary,\s*\.project-directory-row\s*\{[^}]*font-size:\s*var\(--ui-font-size, 13px\);/s,
   );
 });
 

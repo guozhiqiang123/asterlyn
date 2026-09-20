@@ -515,8 +515,8 @@ Manual testing found missing pointer feedback, an undefined selection color toke
 folder text that did not consistently follow the UI scale, macOS secondary-click text selection,
 the WebView Reload menu, branch-filter selection loss after repository refresh, and blanket menu
 closure during unrelated file updates. The corrective implementation centralizes native-menu
-suppression and font/interaction states in the shared host, keeps folder labels two pixels below
-the configured menu size (with a 10 px floor), reconciles retained History refs instead of clearing
+suppression and font/interaction states in the shared host, keeps folder and file labels at the
+same configured UI size, reconciles retained History refs instead of clearing
 them on every ref/history result, and revalidates open menus by semantic target identity. Automated
 checks cover those contracts. A Linux release build was manually verified for branch selection,
 pointer hover, menu survival across a watcher refresh, and native-menu suppression; interactive

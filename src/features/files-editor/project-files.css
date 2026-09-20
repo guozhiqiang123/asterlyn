@@ -27,7 +27,7 @@
 
 .project-directory > summary,
 .project-directory-row {
-  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
+  font-size: var(--ui-font-size, 13px);
 }
 
 :where(.project-directory, .project-file-row) {
