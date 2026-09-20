@@ -33,6 +33,11 @@ export class ProjectFilesOperationBinding {
       event.stopPropagation();
       this.controller.cancelInline();
     });
+    input.addEventListener("blur", () => {
+      queueMicrotask(() => {
+        if (input.isConnected) void this.controller.blurInline(input.value);
+      });
+    });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       this.controller.updateInlineValue(input.value);

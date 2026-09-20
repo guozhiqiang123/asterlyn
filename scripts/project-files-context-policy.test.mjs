@@ -79,7 +79,7 @@ test("mutation and paste policy distinguish read-only, busy and empty clipboard 
   assert.deepEqual(projectFilesContextPolicy(target(), {
     snapshot: snapshot(), files, mutationBusy: true, mutationAvailable: true,
     clipboardAvailable: true, reasons,
-  }).mutation, { kind: "busy", label: "busy" });
+  }).mutation, { kind: "blocked", reason: "busy" });
   assert.deepEqual(projectFilesContextPolicy(target(), {
     snapshot: snapshot(), files, mutationBusy: false, mutationAvailable: true,
     clipboardAvailable: false, reasons,

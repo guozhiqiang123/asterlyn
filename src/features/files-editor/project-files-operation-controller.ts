@@ -193,6 +193,17 @@ export class ProjectFilesOperationController {
     this.emit();
   }
 
+  async blurInline(value: string): Promise<void> {
+    const edit = this.value.inlineEdit;
+    if (!edit || edit.busy) return;
+    this.updateInlineValue(value);
+    if (edit.kind === "create" && !value.trim()) {
+      this.cancelInline();
+      return;
+    }
+    await this.submitInline();
+  }
+
   async submitInline(): Promise<void> {
     const edit = this.value.inlineEdit;
     const identity = this.runtime.currentIdentity();

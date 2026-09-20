@@ -353,6 +353,7 @@ impl Workspace {
                 &file.workspace_path,
                 file.replacement_bytes.clone(),
                 &self.resolve_regular_file(&file.workspace_path)?.1,
+                self.text_limit_bytes,
             )?;
             let request = SaveTextFileRequest {
                 workspace_path: file.workspace_path.clone(),
@@ -464,7 +465,12 @@ impl Workspace {
             if current != replacement {
                 continue;
             }
-            let original_snapshot = decode_snapshot(&file.workspace_path, original, &metadata)?;
+            let original_snapshot = decode_snapshot(
+                &file.workspace_path,
+                original,
+                &metadata,
+                self.text_limit_bytes,
+            )?;
             let request = SaveTextFileRequest {
                 workspace_path: file.workspace_path.clone(),
                 expected_revision: revision(&current, &metadata),

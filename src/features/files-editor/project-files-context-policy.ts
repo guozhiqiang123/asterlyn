@@ -32,7 +32,7 @@ export function projectFilesContextPolicy(
   const mutation = target.readOnly
     ? blocked(options.reasons.readOnly)
     : options.mutationBusy
-      ? busy(options.reasons.mutationBusy)
+      ? blocked(options.reasons.mutationBusy)
       : options.mutationAvailable
         ? enabled()
         : blocked(options.reasons.operationsUnavailable);
@@ -127,10 +127,6 @@ function enabled(): ContextMenuAvailability {
 
 function blocked(reason: string): ContextMenuAvailability {
   return { kind: "blocked", reason };
-}
-
-function busy(label: string): ContextMenuAvailability {
-  return { kind: "busy", label };
 }
 
 function trimPath(path: string): string {

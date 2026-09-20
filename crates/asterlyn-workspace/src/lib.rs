@@ -207,7 +207,7 @@ impl Workspace {
     pub fn read_text_file(&self, workspace_path: &str) -> Result<TextFileSnapshot, WorkspaceError> {
         let (path, metadata) = self.resolve_regular_file(workspace_path)?;
         let bytes = read_bounded(&path, self.text_limit_bytes)?;
-        decode_snapshot(workspace_path, bytes, &metadata)
+        decode_snapshot(workspace_path, bytes, &metadata, self.text_limit_bytes)
     }
 
     pub fn read_binary_file(
@@ -526,8 +526,9 @@ fn decode_snapshot(
     workspace_path: &str,
     bytes: Vec<u8>,
     metadata: &Metadata,
+    limit_bytes: usize,
 ) -> Result<TextFileSnapshot, WorkspaceError> {
-    let decoded = decode_utf8_text(&bytes, bytes.len())?;
+    let decoded = decode_utf8_text(&bytes, limit_bytes)?;
     Ok(TextFileSnapshot {
         workspace_path: workspace_path.to_string(),
         content: decoded.content,
@@ -645,6 +646,23 @@ mod tests {
             decode_utf8_text(&[0xff], 32),
             Err(WorkspaceError::InvalidEncoding { .. })
         ));
+    }
+
+    #[test]
+    fn empty_and_unknown_extension_files_open_as_utf8_text() {
+        let (empty_directory, empty_workspace) = workspace_with_file("README", b"");
+        let empty = empty_workspace
+            .read_text_file("README")
+            .expect("empty extensionless file reads");
+        assert_eq!(empty.content, "");
+        assert_eq!(empty.byte_length, 0);
+        drop(empty_directory);
+
+        let (_directory, workspace) = workspace_with_file("notes.unknown-kind", b"plain text\n");
+        let unknown = workspace
+            .read_text_file("notes.unknown-kind")
+            .expect("unknown extension remains text");
+        assert_eq!(unknown.content, "plain text\n");
     }
 
     #[test]

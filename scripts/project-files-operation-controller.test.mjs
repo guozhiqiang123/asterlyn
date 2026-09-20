@@ -113,6 +113,22 @@ test("create and rename use reviewed coordinator plans", async () => {
   assert.equal(renamed.records.plans[0].editorRequest.kind, "move");
 });
 
+test("create blur cancels an empty name and submits a non-empty name", async () => {
+  const empty = fixture();
+  empty.controller.beginCreate(target());
+  await empty.controller.blurInline("   ");
+  assert.equal(empty.controller.state.inlineEdit, null);
+  assert.deepEqual(empty.records.plans, []);
+
+  const named = fixture();
+  named.controller.beginCreate(target());
+  await named.controller.blurInline("notes.txt");
+  assert.deepEqual(named.records.plans[0].operation, {
+    kind: "createFile", destination: "src/notes.txt",
+  });
+  assert.equal(named.controller.state.inlineEdit, null);
+});
+
 test("copy/paste binds the plan to the captured recursive fingerprint", async () => {
   const { controller, records } = fixture();
   await controller.capture("copy", target());
