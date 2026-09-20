@@ -15,6 +15,7 @@
   border-radius: 7px;
   background: var(--bg-elevated);
   box-shadow: 0 12px 34px var(--shadow-dialog);
+  font-size: var(--ui-font-size, 13px);
   pointer-events: auto;
 }
 
@@ -44,9 +45,13 @@
 }
 
 .context-menu-item:hover,
-.context-menu-item:focus-visible {
-  background: var(--selection);
+.context-menu-item:focus {
+  background: var(--selection-bg);
   color: var(--selection-text);
+}
+
+.context-menu-item:active {
+  background: var(--selection-bg-strong);
 }
 
 .context-menu-item[aria-disabled="true"] {
@@ -74,7 +79,7 @@
   max-width: 330px;
   margin: 3px 8px 5px 32px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
   font-weight: 400;
   line-height: 1.4;
   white-space: normal;

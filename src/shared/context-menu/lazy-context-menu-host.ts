@@ -9,9 +9,14 @@ import type { ContextMenuHost } from "./context-menu-host.ts";
 export class LazyContextMenuHost implements ContextMenuPort {
   private delegate: ContextMenuHost | null = null;
   private pending: { anchor: ContextMenuAnchor; session: ContextMenuSession } | null = null;
+  private readonly listeners = new AbortController();
   private disposed = false;
 
   constructor(document: Document, window: Window) {
+    document.addEventListener("contextmenu", this.preventNativeContextMenu, {
+      capture: true,
+      signal: this.listeners.signal,
+    });
     void import("./context-menu-host.ts")
       .then(({ ContextMenuHost }) => {
         if (this.disposed) return;
@@ -55,9 +60,14 @@ export class LazyContextMenuHost implements ContextMenuPort {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.listeners.abort();
     this.pending?.session.dismissed?.();
     this.pending = null;
     this.delegate?.dispose();
     this.delegate = null;
   }
+
+  private readonly preventNativeContextMenu = (event: Event): void => {
+    event.preventDefault();
+  };
 }

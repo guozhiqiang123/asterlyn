@@ -175,6 +175,8 @@ test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", 
   assert.match(host, /active\.session\.dismissed\?\.\(\)/u);
   assert.match(lazyHost, /import\("\.\/context-menu-host\.ts"\)/u);
   assert.match(lazyHost, /pending\?\.session\.dismissed\?\.\(\)/u);
+  assert.match(lazyHost, /addEventListener\("contextmenu", this\.preventNativeContextMenu/u);
+  assert.match(lazyHost, /this\.listeners\.abort\(\)/u);
   assert.match(app, /new LazyContextMenuHost\(document, window\)/u);
   assert.match(app, /this\.contextMenuHost\.dispose\(\)/u);
 });

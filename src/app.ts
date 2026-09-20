@@ -1960,7 +1960,7 @@ export class AsterlynApp {
       "--editor-font-family",
       editorFontFamilyStack(effectiveFont),
     );
-    this.query(".app-shell").style.setProperty(
+    document.documentElement.style.setProperty(
       "--ui-font-size",
       `${this.settingsState.preferences.uiFontSize}px`,
     );
