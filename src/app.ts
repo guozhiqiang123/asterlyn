@@ -35,11 +35,11 @@ import {
   type HistoryFilterDialog,
 } from "./features/git-history/history-filter-controller";
 import {
-  branchIsSelected,
   filteredBranches as filteredBranchesForView,
   logicalBranches as logicalBranchesForView,
   renderBranchGroups as renderBranchGroupsView,
   renderBranchNavigation as renderBranchNavigationView,
+  updateBranchSelection as updateBranchSelectionRows,
   type BranchNavigationViewModel,
 } from "./features/git-history/branch-navigation-view";
 import {
@@ -615,6 +615,7 @@ export class AsterlynApp {
       },
     );
     this.changesRuntime = new ChangesRuntime({
+      root,
       gateway: {
         readLocalDiff: (...args) => bridge.readLocalDiff(...args),
         readLocalImageDiff: (...args) => bridge.readLocalImageDiff(...args),
@@ -624,6 +625,10 @@ export class AsterlynApp {
       },
       initialFileView: loadChangeFileView(window.localStorage),
       messages: initialCatalog.changes,
+      copy: () => ({
+        ...this.localization.catalog.changes,
+        cancel: this.localization.catalog.common.cancel,
+      }),
       changed: (change) => this.handleChangesControllerChange(change),
     });
     this.filesEditorRuntime = new FilesEditorRuntime(
@@ -1566,6 +1571,7 @@ export class AsterlynApp {
     if (this.gitHistoryPresentationRuntime.filterState.historyDialog) this.renderHistoryDialog();
     this.gitOperationRuntime.refreshCopy();
     this.gitHistoryMutationRuntime.refreshCopy();
+    this.changesRuntime.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     if (this.remoteState.dialog) this.renderRemoteDialog();
@@ -4824,17 +4830,6 @@ export class AsterlynApp {
     };
   }
 
-  private updateBranchSelection(snapshot: RepositorySnapshot): void {
-    const model = this.branchNavigationViewModel(snapshot);
-    this.root.querySelectorAll<HTMLButtonElement>("[data-branch-key]").forEach((row) => {
-      const key = row.dataset.branchKey;
-      const branch = key ? snapshot.branches.find((candidate) => branchKey(candidate) === key) : null;
-      const selected = Boolean(branch && branchIsSelected(branch, model));
-      row.classList.toggle("selected", selected);
-      row.setAttribute("aria-pressed", String(selected));
-    });
-  }
-
   private bindChangeEvents(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-change-action]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -7729,7 +7724,7 @@ export class AsterlynApp {
     if (!snapshot) return;
     // Branch selection is a synchronous presentation intent. Never make its visual
     // acknowledgement wait for a filtered History read or remote reconciliation.
-    this.updateBranchSelection(snapshot);
+    updateBranchSelectionRows(this.root, this.branchNavigationViewModel(snapshot));
     const query = this.activeHistoryQuery();
     if (isSnapshotHistoryQuery(query)) {
       this.installSnapshotHistory(snapshot, preferTip);
@@ -7814,23 +7809,12 @@ export class AsterlynApp {
       this.setStatus(this.localization.catalog.changes.saveBeforeRevert, "warning");
       return;
     }
-    const label = selected.originalPath
-      ? `${selected.originalPath} → ${selected.path}`
-      : selected.path;
     const plan = await this.changesRuntime.controller.prepareRestoreSelected().catch((error) => {
       this.showError(error);
       return null;
     });
     if (!plan) return;
-    if (
-      !window.confirm(
-        selected.indexStatus === "added"
-          ? this.localization.catalog.changes.restoreAddedConfirm(label)
-          : this.localization.catalog.changes.restoreConfirm(label),
-      )
-    ) {
-      return;
-    }
+    if (!await this.changesRuntime.reviewRestore(selected)) return;
 
     this.captureMountedTextEditor();
     if (dirtyTextTabs(this.editorState.session).some((tab) => plan.paths.includes(tab.document.workspacePath))) {

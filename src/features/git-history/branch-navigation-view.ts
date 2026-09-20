@@ -97,6 +97,21 @@ export function branchIsSelected(
   );
 }
 
+export function updateBranchSelection(
+  root: ParentNode,
+  model: BranchNavigationViewModel,
+): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-branch-key]").forEach((row) => {
+    const key = row.dataset.branchKey;
+    const branch = key
+      ? model.snapshot.branches.find((candidate) => branchKey(candidate) === key)
+      : null;
+    const selected = Boolean(branch && branchIsSelected(branch, model));
+    row.classList.toggle("selected", selected);
+    row.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function renderRemoteBranches(
   branches: BranchSummary[],
   model: BranchNavigationViewModel,

@@ -52,6 +52,7 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.match(html, /id="terminal-tool-host"/);
   assert.match(html, /id="terminal-header-actions"/);
   assert.match(html, /id="hide-bottom-tool"/);
+  assert.match(html, /id="changes-restore-review-dialog"/);
   for (const host of ["navigator-body", "content-body", "history-navigation-body", "git-detail-body"]) {
     assert.match(html, new RegExp(`id="${host}"`));
   }

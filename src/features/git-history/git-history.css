@@ -16,6 +16,7 @@
 .history-row.selected,
 .branch-row.selected {
   background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .file-name,

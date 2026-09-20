@@ -47,6 +47,8 @@ local file discovery while preventing the old double History refresh.
 ## Consequences
 
 - Stable selections, disclosure, scroll, and context menus survive semantic no-op refreshes.
+- User selection intent is projected synchronously before dependent reads begin; branch-row
+  acknowledgement is not owned by filtered History or remote-refresh completion.
 - External changes still enter canonical state before presentation changes.
 - A real remote or local Git change produces one affected-surface update rather than two broad
   workbench replacements.

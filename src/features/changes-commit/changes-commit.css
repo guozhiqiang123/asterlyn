@@ -173,6 +173,33 @@
   opacity: 1;
 }
 
+.changes-restore-dialog-backdrop {
+  z-index: 74;
+}
+
+.changes-restore-dialog {
+  width: min(470px, calc(100vw - 32px));
+}
+
+.changes-restore-dialog .changes-restore-detail {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.changes-restore-dialog .danger-button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--red) 12%, var(--bg-panel));
+  color: var(--danger-text);
+  cursor: pointer;
+}
+
+.changes-restore-dialog .danger-button:hover {
+  background: color-mix(in srgb, var(--red) 20%, var(--bg-panel));
+}
+
 .conflict-pill {
   margin-right: 4px;
   border-color: var(--danger-border);

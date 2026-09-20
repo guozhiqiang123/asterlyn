@@ -20,6 +20,13 @@ Every accepted activation must satisfy exactly one of these observable paths:
    operation. A control that is intentionally focusable while semantically unavailable must remain
    activatable for this explanation.
 
+Persistent list selection uses one solid `--selection-bg`/`--selection-text` treatment. The active
+member of a multi-selection does not add a leading stripe, dot, inset shadow, or second background;
+keyboard focus may still use the shared focus outline required for accessibility. A branch click
+commits this visual selection synchronously before any filtered History read starts, so network,
+Git, or remote-reconciliation latency cannot delay acknowledgement or let an older request restore
+the previous visible row.
+
 A status-bar message may supplement every path. It is not sufficient by itself when the current
 surface, control, and content remain visually unchanged. In that case Asterlyn presents a transient
 contextual or global notification. Successful no-op results use an informational message rather
@@ -51,6 +58,13 @@ returning silently.
 Programmatic background reconciliation is different from a user command: it may use non-blocking
 status feedback and avoid stealing focus. A later explicit user activation must still receive its
 own feedback and cannot inherit an earlier background message as evidence that it ran.
+
+A destructive working-tree action requires an application-owned review surface rather than a
+WebView-native `confirm`. The review names the exact path and consequence, describes available
+recovery, defaults focus to Cancel, and fails closed on Escape, backdrop dismissal, disposal, or a
+concurrent review request. Preparing a restore plan is read-only; the Git mutation may start only
+after the review controller returns explicit authorization, and the backend still revalidates the
+exact plan immediately before writing.
 
 ## Single-title hierarchy
 
