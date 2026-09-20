@@ -51,6 +51,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-09-20-context-menu-consolidation.md`](benchmarks/2026-09-20-context-menu-consolidation.md) — bounded/grouped branch launcher, metadata-only branch inspector, Remote form correction, exact-set Unversioned group actions, browser interaction, and native Git evidence.
 - [`benchmarks/2026-09-20-editable-diff-conflict-editor.md`](benchmarks/2026-09-20-editable-diff-conflict-editor.md) — editable worktree Diff, conflict grouping, three-pane resolution, lazy merge-runtime, browser interaction, build, and native Git evidence.
 - [`benchmarks/2026-09-20-time-and-editor-change-indicators.md`](benchmarks/2026-09-20-time-and-editor-change-indicators.md) — unified temporal formatting, repository-derived editor markers, overview navigation, browser interaction, and resource evidence.
 - [`benchmarks/2026-09-19-foundation-hardening.md`](benchmarks/2026-09-19-foundation-hardening.md) — final FH0–FH7 architecture, source/artifact movement, validation, latency, resource, browser, and platform-limit evidence.

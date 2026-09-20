@@ -472,6 +472,13 @@ Reuse inclusion, working Diff, conflict, tracked restore, and navigation actions
 only through R5. The context target must not toggle commit inclusion or load a Diff merely by
 opening.
 
+The 2026-09-20 extension adds one exact-set Unversioned group target with Stage All and reviewed
+system-Trash actions. It keeps group identity and menu policy in Changes, runs one canonical
+transition rather than one refresh per file, and revalidates every path as untracked inside the Git
+mutation lock before the first platform Trash write. The Git third-column branch inspector is now
+metadata-only because its former mutation cards duplicated the Branches context actions. Evidence:
+[`context menu consolidation acceptance`](../benchmarks/2026-09-20-context-menu-consolidation.md).
+
 ### CM3 — Branch and single-commit menus
 
 Status: **locally accepted on 2026-09-15**.
