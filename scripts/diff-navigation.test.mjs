@@ -179,12 +179,31 @@ test("ordinary and Diff editor content expose the shared Git Blame menu", async 
   assert.match(diffEditorSource, /blameContentContextMenu\(openBlameMenu\)/u);
 });
 
-test("split Diff projects added and removed state into every gutter", async () => {
-  const source = await readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8");
-  assert.match(source, /gutterLineClass\.compute/u);
-  assert.match(source, /cm-source-added-gutter/u);
-  assert.match(source, /cm-source-removed-gutter/u);
-  assert.match(source, /cm-source-spacer-gutter/u);
-  assert.match(source, /cm-source-omitted-gutter/u);
-  assert.match(source, /sourceGutterDecorations\(rows, side\)/u);
+test("split Diff centers line numbers and uses one stable change gutter per side", async () => {
+  const [source, gutter] = await Promise.all([
+    readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(source, /side === "old" \? "after" : "before"/u);
+  assert.match(source, /sourceChangeGutter\(rows, side\)/u);
+  assert.match(source, /cm-source-change-indicator-gutter/u);
+  assert.doesNotMatch(source, /gutterLineClass\.compute/u);
+  assert.match(gutter, /side: DiffGutterSide/u);
+  assert.match(gutter, /cm-diff-lineNumbers-\$\{side\}/u);
+});
+
+test("merge Diff layouts preserve CodeMirror's supported outer scroll owner", async () => {
+  const [editableCss, conflictCss, editable, conflict] = await Promise.all([
+    readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(editableCss, /\.cm-mergeView \{[\s\S]*overflow: auto;/u);
+  assert.match(conflictCss, /\.cm-mergeView \{[\s\S]*overflow: auto;/u);
+  assert.doesNotMatch(editableCss, /\.cm-merge-a \.cm-gutters[\s\S]*order:/u);
+  assert.doesNotMatch(conflictCss, /\.cm-merge-a \.cm-gutters[\s\S]*order:/u);
+  assert.match(editable, /gutter: false/u);
+  assert.equal(conflict.match(/gutter: false/g)?.length, 2);
+  assert.match(conflict, /linkScrollElements\(this\.leftMerge\.dom, this\.rightMerge\.dom\)/u);
 });

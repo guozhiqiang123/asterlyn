@@ -351,6 +351,7 @@ export class EditorSurface {
     result: string,
     preferences: AppPreferences,
     copy: GitOperationCopy,
+    editorCopy: EditorCopy,
     beforeTransition: () => void,
     onContentChange: (content: string) => void,
   ): void {
@@ -369,7 +370,7 @@ export class EditorSurface {
     body.classList.add("conflict-editor-surface");
     this.mountedTextTabId = null;
     this.mountedConflictKey = key;
-    this.conflictEditor.mount(body, conflict, result, preferences, copy, onContentChange);
+    this.conflictEditor.mount(body, conflict, result, preferences, copy, editorCopy, onContentChange);
     this.mountedEditorKey = key;
   }
 

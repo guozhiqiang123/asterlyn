@@ -15,7 +15,7 @@ depends only on narrow editor/session ports rather than importing another featur
 
 ## Functional and safety evidence
 
-- The complete frontend suite passes: **540 tests**, including working-buffer ownership, exact line
+- The complete frontend suite passes: **555 tests**, including working-buffer ownership, exact line
   endings, stale completion rejection, conflict grouping, conflict draft preservation, editor
   document identity, feature dependency direction, source ownership, stylesheet ownership, and
   lazy editor boundaries.
@@ -34,6 +34,12 @@ depends only on narrow editor/session ports rather than importing another featur
   shared overview ruler. This avoids adjacent, differently classified gutter colors for the same
   change. Expanding unchanged lines now changes the merge editor's collapse configuration and mount
   identity, so the control takes effect immediately without reusing a collapsed editor instance.
+- Follow-up gutter hardening removed unsupported CSS ordering of `.cm-gutters`, disabled the native
+  merge marker whenever the shared marker is installed, and moved left-side line numbers through
+  CodeMirror's public after-content gutter contract. Read-only historical split Diffs now use the
+  same centered numbers and one semantic marker strip instead of pane labels and colored number
+  backgrounds. The conflict editor applies the same gutter contract to both merge projections and
+  links their outer scroll owners.
 
 ## Browser interaction and accessibility evidence
 
@@ -52,19 +58,30 @@ not a screen-reader certification.
 The complete browser demo also opened a real local-change Diff through the lazy boundary: its busy
 state cleared, two source documents mounted, and typing changed only the current-file side.
 
+The follow-up browser pass inspected the rendered geometry rather than relying only on a screenshot:
+the left line-number and marker gutters ended at the central revert column, the right pair began
+immediately after it, and exactly two five-pixel marker gutters existed. Replacing the current side
+with 140 lines produced a 2,705 px merge scroll height inside a 336 px surface; the merge container
+reported `overflow: auto`, accepted vertical scrolling, and retained visible change markers. A
+historical commit Diff exposed the same two centered line-number/marker pairs with no legacy pane
+labels. The deterministic demo still has no live conflicted-index fixture, so conflict scrolling is
+covered by the shared outer-scroll implementation and focused structure tests rather than a new
+end-to-end browser conflict run.
+
 ## Build and resource evidence
 
 Local production build on the project Linux host with Vite 8.2.2:
 
 | Artifact | Raw | gzip | Interpretation |
 | --- | ---: | ---: | --- |
-| application/main JavaScript | 333,050 B | 71,354 B | below the enforced 500,000-byte startup ceiling |
-| editable Diff implementation | 5,293 B | 1,948 B | loaded only after an editable local Diff opens |
-| conflict editor implementation | 5,997 B | 2,234 B | loaded only after a conflict opens |
-| shared CodeMirror Merge runtime | 28,439 B | 9,847 B | one on-demand dependency shared by both surfaces |
+| application/main JavaScript | 334,358 B | 71,563 B | below the enforced 500,000-byte startup ceiling |
+| editable Diff implementation | 6,083 B | 2,200 B | loaded only after an editable local Diff opens |
+| conflict editor implementation | 6,952 B | 2,498 B | loaded only after a conflict opens |
+| shared indicator and CodeMirror Merge runtime | 54,768 B | 18,146 B | one on-demand dependency shared by Diff and conflict surfaces |
 
-Moving the merge surfaces behind lazy ports reduced the same-build application chunk from
-372,320 B / 83,730 B gzip to 333,050 B / 71,354 B gzip. This is strong startup-transfer evidence,
+Moving the merge surfaces behind lazy ports initially reduced the same-build application chunk from
+372,320 B / 83,730 B gzip to 333,050 B / 71,354 B gzip. The gutter/scroll follow-up leaves it at
+334,358 B / 71,563 B gzip, still below the startup ceiling. This is strong startup-transfer evidence,
 but no matched process-tree PSS/RSS series was run, so absolute memory impact remains
 **inconclusive**. Diff computation remains bounded by the existing document-size policy and a
 1,000-unit scan limit with a 250 ms algorithm timeout.

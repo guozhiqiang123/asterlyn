@@ -45,6 +45,22 @@ original appears as merge decorations. A per-chunk revert control edits only the
 does not invoke `git checkout`, mutate the index, or save automatically. Standard editor undo can
 undo that buffer edit before save.
 
+### Shared gutter and scrolling contract
+
+Split working Diffs, read-only historical Diffs, and both halves of the three-pane conflict editor
+share one supported gutter rule: a left document uses a custom CodeMirror gutter with
+`side: "after"`, while a right document uses the ordinary `before` side. Change markers use the same
+side-aware extension and semantic colors. CodeMirror's native merge change gutter is disabled when
+the shared marker is present, so one logical change never produces two competing color strips.
+Historical Diffs keep their bounded patch projection and source-line mapping, but reuse this line
+number and marker presentation instead of the legacy pane-header layout.
+
+CodeMirror Merge deliberately makes the outer `.cm-mergeView` the vertical scroll owner and lets
+the inner editor scrollers grow with content. Asterlyn preserves that contract: the outer merge
+container has the bounded surface height and `overflow: auto`; editor and gutter DOM are never
+reordered with CSS. The two merge projections used by the conflict editor link their outer scroll
+containers so Ours, Result, and Theirs remain vertically coordinated.
+
 ### Conflict editor in the persistent editor region
 
 Conflict discovery remains Git-owned. Changes projects three stable groups in order: Conflicts,
@@ -92,6 +108,9 @@ startup shell, application services, domain models, or persisted state.
    buffer.
 7. Binary, unsupported, and oversized inputs fail closed without pretending to be editable text.
 8. Diff and conflict runtimes are lazy, disposable, and own no repository truth.
+9. Center gutters use CodeMirror's public gutter-side API; CSS must not reorder sticky gutter DOM.
+10. Merge surfaces retain one bounded outer vertical scroll owner, including after unchanged lines
+    are expanded.
 
 ## Delivery sequence
 

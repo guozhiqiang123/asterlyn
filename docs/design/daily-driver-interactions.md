@@ -416,6 +416,14 @@ offers an arrow for reverting each change into the current buffer. Unified mode 
 editable current document with equivalent per-change rejection. Neither mode writes automatically;
 ordinary editor undo and the existing revision-checked Save remain authoritative.
 
+The center layout is a shared editor primitive rather than a CSS rearrangement. Left-side line
+numbers and the one semantic change strip use CodeMirror's supported after-content gutter, while
+right-side gutters use the before-content position. Historical commit and commit-comparison Diffs
+reuse the same center gutter and marker appearance even though they remain read-only bounded patch
+projections. The outer merge surface owns vertical scrolling, including after unchanged sections
+are expanded; the conflict editor links the two outer merge projections that compose its three
+visible panes.
+
 When Git reports unresolved stages, Changes shows Conflicts before normal Changes and Unversioned
 Files. Resolving a path opens the editor region rather than a modal. Ours and Theirs are read-only,
 Result is the editable middle document, and Base drives change classification without consuming a

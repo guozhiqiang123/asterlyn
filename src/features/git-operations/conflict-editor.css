@@ -39,38 +39,41 @@
 
 .conflict-merge-content {
   display: grid;
+  overflow: hidden;
   min-width: 0;
   min-height: 0;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
 .conflict-left-merge,
-.conflict-right-merge,
-.conflict-three-pane .cm-mergeView,
-.conflict-three-pane .cm-mergeViewEditors,
-.conflict-three-pane .cm-mergeViewEditor {
+.conflict-right-merge {
   height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
-.conflict-left-merge .cm-mergeViewEditors {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+.conflict-three-pane .cm-mergeView {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
-.conflict-right-merge .cm-mergeViewEditors {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+.conflict-three-pane .cm-mergeViewEditors {
+  min-width: 0;
+  min-height: 100%;
+}
+
+.conflict-three-pane .cm-mergeViewEditor {
+  min-width: 0;
 }
 
 .conflict-right-merge .cm-mergeViewEditor:first-child {
   display: none;
 }
 
-.conflict-left-merge .cm-merge-a .cm-gutters {
-  order: 2;
+.conflict-three-pane .cm-diff-lineNumbers-after {
   border-right: 0;
   border-left: 1px solid var(--border);
 }
@@ -79,6 +82,7 @@
   position: relative;
   z-index: 2;
   width: 30px;
+  flex: 0 0 30px;
   border-inline: 1px solid var(--border);
   background: var(--surface-chrome);
 }

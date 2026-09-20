@@ -22,6 +22,7 @@ interface ConflictEditorSurfacePort {
     result: string,
     preferences: AppPreferences,
     copy: GitOperationCopy,
+    editorCopy: EditorCopy,
     beforeTransition: () => void,
     onContentChange: (content: string) => void,
   ): void;
@@ -111,6 +112,7 @@ export class ConflictEditorRuntime {
         state.conflictResult,
         this.options.preferences(),
         copy,
+        this.options.editorCopy(),
         () => undefined,
         (content) => controller.setConflictResult(content),
       );

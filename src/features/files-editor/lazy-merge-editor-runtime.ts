@@ -23,6 +23,7 @@ interface ConflictMount {
   result: string;
   preferences: AppPreferences;
   copy: GitOperationCopy;
+  editorCopy: EditorCopy;
   onChange: (content: string) => void;
 }
 
@@ -182,9 +183,10 @@ export class LazyConflictEditor {
     result: string,
     preferences: AppPreferences,
     copy: GitOperationCopy,
+    editorCopy: EditorCopy,
     onChange: (content: string) => void,
   ): void {
-    const mount = { parent, conflict, result, preferences, copy, onChange };
+    const mount = { parent, conflict, result, preferences, copy, editorCopy, onChange };
     this.pendingMount = mount;
     if (this.implementation) {
       this.install(this.implementation, mount);
@@ -259,6 +261,7 @@ export class LazyConflictEditor {
       mount.result,
       this.preferences ?? mount.preferences,
       mount.copy,
+      mount.editorCopy,
       mount.onChange,
     );
     editor.setResultReadOnly(this.resultReadOnly);

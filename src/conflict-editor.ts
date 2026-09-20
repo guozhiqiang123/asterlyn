@@ -11,11 +11,16 @@ import {
   highlightTrailingWhitespace,
   highlightWhitespace,
   keymap,
-  lineNumbers,
   type ViewUpdate,
 } from "@codemirror/view";
 import { EditorLanguageLoader } from "./editor-language.ts";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme.ts";
+import {
+  createEditorChangeIndicators,
+  editorChangeIndicatorCopy,
+  type EditorChangeIndicators,
+} from "./editor-change-indicators.ts";
+import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
 import {
   applyExactTextChanges,
   decodeExactText,
@@ -23,8 +28,9 @@ import {
   type ExactTextContent,
   type TextChange,
 } from "./features/files-editor/text-content.ts";
-import type { GitOperationCopy } from "./localization/catalog.ts";
+import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
+import { linkScrollElements } from "./presentation/linked-scroll.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
 
@@ -36,12 +42,15 @@ interface ViewBinding {
   theme: Compartment;
   phrases: Compartment;
   whitespace: Compartment;
+  changeIndicators: EditorChangeIndicators | null;
+  referenceTracksResult: boolean;
 }
 
 /** Three-column conflict editor built from two synchronized merge projections. */
 export class ConflictEditor {
   private leftMerge: MergeView | null = null;
   private rightMerge: MergeView | null = null;
+  private scrollDispose: (() => void) | null = null;
   private bindings: ViewBinding[] = [];
   private languageLoader = new EditorLanguageLoader();
   private languageActivation = 0;
@@ -64,6 +73,7 @@ export class ConflictEditor {
     result: string,
     preferences: AppPreferences,
     copy: GitOperationCopy,
+    editorCopy: EditorCopy,
     onChange: (content: string) => void,
   ): void {
     this.destroy();
@@ -95,8 +105,25 @@ export class ConflictEditor {
     const theirsBinding = this.binding();
     this.leftMerge = new MergeView({
       parent: leftHost,
-      a: { doc: ours, extensions: this.extensions(oursBinding, false) },
-      b: { doc: this.exactResult.text, extensions: this.extensions(primaryBinding, true, "primary") },
+      a: {
+        doc: ours,
+        extensions: this.extensions(oursBinding, false, editorCopy, undefined, "after", {
+          reference: this.exactResult.text,
+          documentSide: "a",
+          overview: false,
+          referenceTracksResult: true,
+        }),
+      },
+      b: {
+        doc: this.exactResult.text,
+        extensions: this.extensions(primaryBinding, true, editorCopy, "primary", "before", {
+          reference: ours,
+          documentSide: "b",
+          overview: true,
+          referenceTracksResult: false,
+        }),
+      },
+      gutter: false,
       revertControls: "a-to-b",
       renderRevertControl: () => this.directionButton("right", copy),
       collapseUnchanged: { margin: 3, minSize: 8 },
@@ -104,8 +131,25 @@ export class ConflictEditor {
     });
     this.rightMerge = new MergeView({
       parent: rightHost,
-      a: { doc: this.exactResult.text, extensions: this.extensions(mirrorBinding, false, "mirror") },
-      b: { doc: theirs, extensions: this.extensions(theirsBinding, false) },
+      a: {
+        doc: this.exactResult.text,
+        extensions: this.extensions(mirrorBinding, false, editorCopy, "mirror", "after", {
+          reference: theirs,
+          documentSide: "a",
+          overview: false,
+          referenceTracksResult: false,
+        }),
+      },
+      b: {
+        doc: theirs,
+        extensions: this.extensions(theirsBinding, false, editorCopy, undefined, "before", {
+          reference: this.exactResult.text,
+          documentSide: "b",
+          overview: true,
+          referenceTracksResult: true,
+        }),
+      },
+      gutter: false,
       revertControls: "b-to-a",
       renderRevertControl: () => this.directionButton("left", copy),
       collapseUnchanged: { margin: 3, minSize: 8 },
@@ -116,6 +160,7 @@ export class ConflictEditor {
     mirrorBinding.view = this.rightMerge.a;
     theirsBinding.view = this.rightMerge.b;
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
+    this.scrollDispose = linkScrollElements(this.leftMerge.dom, this.rightMerge.dom);
     this.loadLanguage(conflict.path);
   }
 
@@ -187,6 +232,8 @@ export class ConflictEditor {
     this.flushChanges();
     this.languageActivation += 1;
     this.languageLoader.cancel();
+    this.scrollDispose?.();
+    this.scrollDispose = null;
     this.leftMerge?.destroy();
     this.rightMerge?.destroy();
     this.leftMerge = null;
@@ -198,9 +245,29 @@ export class ConflictEditor {
   private extensions(
     binding: ViewBinding,
     editable: boolean,
+    editorCopy: EditorCopy,
     resultSide?: "primary" | "mirror",
+    gutterSide: DiffGutterSide = "before",
+    comparison?: {
+      reference: string;
+      documentSide: "a" | "b";
+      overview: boolean;
+      referenceTracksResult: boolean;
+    },
   ): Extension[] {
     const preferences = this.preferences!;
+    if (comparison) {
+      binding.changeIndicators = createEditorChangeIndicators(
+        comparison.reference,
+        editorChangeIndicatorCopy(editorCopy),
+        {
+          gutterSide,
+          overview: comparison.overview,
+          documentSide: comparison.documentSide,
+        },
+      );
+      binding.referenceTracksResult = comparison.referenceTracksResult;
+    }
     return [
       binding.tabSize.of(EditorState.tabSize.of(preferences.editorTabSize)),
       binding.indent.of(indentUnit.of(" ".repeat(preferences.editorIndentSize))),
@@ -216,7 +283,9 @@ export class ConflictEditor {
       resultSide === "primary"
         ? this.resultEditable.of(EditorView.editable.of(!this.resultReadOnlyValue))
         : EditorView.editable.of(editable),
-      lineNumbers(), history(), drawSelection(), highlightActiveLine(),
+      diffLineNumberGutter(gutterSide),
+      binding.changeIndicators?.extension ?? [],
+      history(), drawSelection(), highlightActiveLine(),
       highlightActiveLineGutter(), highlightSelectionMatches(), asterlynSyntaxHighlighting,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),
       resultSide ? EditorView.updateListener.of((update) => this.captureResult(update, resultSide)) : [],
@@ -232,6 +301,11 @@ export class ConflictEditor {
     this.exactResult = applyExactTextChanges(this.exactResult, changes);
     this.serializedResult = null;
     this.changePending = true;
+    for (const binding of this.bindings) {
+      if (binding.referenceTracksResult && binding.changeIndicators) {
+        binding.changeIndicators.setBaseline(binding.view, update.state.doc.toString());
+      }
+    }
     const target = source === "primary" ? this.rightMerge?.a : this.leftMerge?.b;
     if (target && target.state.doc.toString() !== update.state.doc.toString()) {
       this.synchronizing = true;
@@ -261,6 +335,8 @@ export class ConflictEditor {
       view: null as unknown as EditorView,
       language: new Compartment(), indent: new Compartment(), tabSize: new Compartment(),
       theme: new Compartment(), phrases: new Compartment(), whitespace: new Compartment(),
+      changeIndicators: null,
+      referenceTracksResult: false,
     };
   }
 
