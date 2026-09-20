@@ -73,6 +73,14 @@ matching operation marker is accepted as a paused observation rather than misrep
 ordinary failure. Continue, Skip, and Abort are derived from the reconstructed kind and unresolved
 index state.
 
+A conflict-free Merge is not accepted from process exit alone. After Git reports completion, the
+core verifies that symbolic `HEAD` still names the reviewed current branch, that the reviewed target
+object is reachable from the resulting `HEAD`, and, for a full source ref, that the source ref still
+resolves to the reviewed object. A mismatch is an uncertain result: the application refreshes and
+requires inspection instead of announcing success or retrying. The divergent-branch fixture also
+asserts that Merge leaves the source branch ref unchanged and that both the all-ref snapshot and the
+current-branch History projection contain the source commit.
+
 Squash is intentionally non-interactive and bounded to at most 1,000 commits after a selected
 first-parent ancestor. It creates one commit from the reviewed `HEAD` tree and message, then updates
 the checked-out branch only if that ref still equals the reviewed old `HEAD`. It does not run reset,
@@ -102,6 +110,9 @@ continue/abort, and exact-lease Squash.
 6. An externally changed ref is never rolled back by Asterlyn.
 7. An uncertain result is reconciled and shown to the user; it is never retried automatically.
 8. Mutation outcomes declare invalidated status, ref, history, remote, and operation slices.
+9. A completed Merge is successful only after its reviewed destination, target ancestry, and exact
+   source-ref lease are observed in Git; paused/conflicted Merge remains governed by operation
+   metadata until Continue or Abort.
 
 ## Consequences
 

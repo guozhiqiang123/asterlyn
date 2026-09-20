@@ -26,7 +26,7 @@ const ENABLED = { kind: "enabled" } as const;
 
 export interface BranchContextRuntime {
   current(target: BranchContextTarget): boolean;
-  select(target: BranchContextTarget): void;
+  highlight(target: BranchContextTarget, highlighted: boolean): void;
   snapshot(): RepositorySnapshot | null;
   policyOptions(target: BranchContextTarget): Omit<BranchContextPolicyOptions, "reasons">;
   showHistory(target: BranchContextTarget): void;
@@ -63,7 +63,7 @@ export class BranchContextActions {
   open(request: DelegatedContextRequest<BranchContextTarget>): boolean {
     const snapshot = this.runtime.snapshot();
     if (!snapshot || !this.runtime.current(request.target)) return false;
-    this.runtime.select(request.target);
+    this.runtime.highlight(request.target, true);
     const labels = this.copy().branchContextMenu;
     const policy = branchContextPolicy(request.target, snapshot, {
       ...this.runtime.policyOptions(request.target),
@@ -92,6 +92,7 @@ export class BranchContextActions {
         }
       },
       blocked: (reason) => this.runtime.blocked(reason),
+      dismissed: () => this.runtime.highlight(request.target, false),
       restoreFocus: request.restoreFocus,
     });
     return true;

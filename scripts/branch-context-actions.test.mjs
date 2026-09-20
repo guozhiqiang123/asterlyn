@@ -100,7 +100,9 @@ test("provider opens without executing and routes history, copy, and reviewed mu
     { open(_anchor, value) { session = value; }, close() {} },
     { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
     {
-      current: () => true, select: () => events.push(["select"]), snapshot: () => currentSnapshot,
+      current: () => true,
+      highlight: (_target, highlighted) => events.push(["highlight", highlighted]),
+      snapshot: () => currentSnapshot,
       policyOptions: () => ({ ...options }), showHistory: () => events.push(["history"]),
       openMutation: (kind, selected, name) => events.push(["mutation", kind, selected.fullName, name]),
       openGitOperation: (kind, name) => events.push(["operation", kind, name]),
@@ -112,12 +114,16 @@ test("provider opens without executing and routes history, copy, and reviewed mu
     () => EN_US.history,
   );
   provider.open({ target: target(branch), anchor: { x: 1, y: 2 }, trigger: {}, restoreFocus() {} });
-  assert.deepEqual(events, [["select"]]);
+  assert.deepEqual(events, [["highlight", true]]);
+  session.dismissed();
   await session.invoke("git-branches.context-actions.history");
   await session.invoke("git-branches.context-actions.copy-full");
+  await session.invoke("git-branches.context-actions.merge");
   await session.invoke("git-branches.context-actions.rename");
   assert.deepEqual(events.slice(1), [
+    ["highlight", false],
     ["history"], ["copy", branch.fullName], ["status", "Full branch reference copied"],
+    ["operation", "merge", branch.fullName],
     ["mutation", "rename", branch.fullName, branch.name],
   ]);
 });

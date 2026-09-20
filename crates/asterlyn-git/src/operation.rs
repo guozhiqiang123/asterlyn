@@ -147,11 +147,17 @@ impl GitRepository {
         reject_prestart_cancellation(plan.kind, cancellation)?;
 
         match plan.kind {
-            GitOperationKind::Merge => self.start_git_operation(
-                GitOperationKind::Merge,
-                "merge",
-                operation_arguments("merge", &plan.target_oids),
-            ),
+            GitOperationKind::Merge => {
+                let observed = self.start_git_operation(
+                    GitOperationKind::Merge,
+                    "merge",
+                    operation_arguments("merge", &plan.target_oids),
+                )?;
+                if observed.is_none() {
+                    self.verify_completed_merge(plan)?;
+                }
+                Ok(observed)
+            }
             GitOperationKind::CherryPick => self.start_git_operation(
                 GitOperationKind::CherryPick,
                 "cherry-pick",
@@ -520,6 +526,32 @@ impl GitRepository {
         } else {
             Err(command_failed(operation, output))
         }
+    }
+
+    fn verify_completed_merge(&self, plan: &GitOperationPlan) -> Result<(), GitError> {
+        let head_ref = self.symbolic_head_required(GitOperationKind::Merge)?;
+        let head_oid = self.resolve_required_commit("HEAD", "verify completed merge")?;
+        let target_oid = single_target_oid(plan)?;
+        if head_ref != plan.start_head_ref || !self.is_ancestor_oid(target_oid, &head_oid)? {
+            return Err(GitError::UnsafeOperation {
+                operation: "verify completed merge".to_string(),
+                message: "Git returned success, but the reviewed target is not contained in the reviewed current branch; refresh and inspect the repository before another operation".to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        let target_ref = single_target(plan)?;
+        if target_ref.starts_with("refs/") {
+            let refreshed_target =
+                self.resolve_required_commit(target_ref, "verify completed merge source")?;
+            if refreshed_target != target_oid {
+                return Err(GitError::UnsafeOperation {
+                    operation: "verify completed merge".to_string(),
+                    message: "the merge completed, but the reviewed source reference changed concurrently; refresh and inspect the repository before another operation".to_string(),
+                    blockers: vec![target_ref.to_string()],
+                });
+            }
+        }
+        Ok(())
     }
 
     fn execute_squash(&self, plan: &GitOperationPlan) -> Result<(), GitError> {
@@ -1867,6 +1899,64 @@ mod tests {
             .prepare_merge("HEAD~1")
             .expect_err("contained merge target has no effect");
         assert!(error.to_string().contains("already contained"));
+    }
+
+    #[test]
+    fn divergent_branch_merge_preserves_the_source_ref_and_projects_its_commit() {
+        let fixture = initialized_fixture();
+        fs::write(fixture.path().join("base.txt"), "a1\n").unwrap();
+        commit_all(&fixture, "a1");
+        git(&fixture, &["branch", "branchB"]);
+        fs::write(fixture.path().join("a2.txt"), "a2\n").unwrap();
+        commit_all(&fixture, "a2");
+        let branch_a_tip = oid(&fixture, "HEAD");
+
+        git(&fixture, &["switch", "branchB"]);
+        fs::write(fixture.path().join("b1.txt"), "b1\n").unwrap();
+        commit_all(&fixture, "b1");
+        let branch_b_tip = oid(&fixture, "HEAD");
+        git(&fixture, &["switch", "main"]);
+
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        let plan = repository
+            .prepare_merge("refs/heads/branchB")
+            .expect("prepare reviewed branch merge");
+        assert_eq!(plan.start_head_oid, branch_a_tip);
+        assert_eq!(plan.target_oids, vec![branch_b_tip.clone()]);
+        assert!(
+            repository
+                .execute_operation_plan(&plan)
+                .expect("execute branch merge")
+                .is_none()
+        );
+
+        assert_eq!(oid(&fixture, "refs/heads/branchB"), branch_b_tip);
+        assert_eq!(oid(&fixture, "HEAD^1"), branch_a_tip);
+        assert_eq!(oid(&fixture, "HEAD^2"), branch_b_tip);
+
+        let snapshot = repository
+            .tracked_snapshot(150)
+            .expect("project merged repository");
+        let branch_b = snapshot
+            .branches
+            .iter()
+            .find(|branch| branch.full_name == "refs/heads/branchB")
+            .expect("source branch remains visible");
+        assert_eq!(branch_b.oid, branch_b_tip);
+        assert!(
+            snapshot
+                .commits
+                .iter()
+                .any(|commit| commit.oid == branch_b_tip && commit.subject == "b1")
+        );
+        let branch_a_history = repository
+            .commit_history("refs/heads/main", 150)
+            .expect("read current branch history after merge");
+        assert!(
+            branch_a_history
+                .iter()
+                .any(|commit| commit.oid == branch_b_tip && commit.subject == "b1")
+        );
     }
 
     #[test]
