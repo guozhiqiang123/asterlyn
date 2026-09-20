@@ -19,7 +19,6 @@ export const tauriShellBridge: DesktopShellBridge = {
     const selected = await openDialog({
       directory: true,
       multiple: false,
-      title: "Open Project Folder",
       defaultPath: defaultPath || undefined,
     });
     if (selected === null) return { kind: "cancelled" };
