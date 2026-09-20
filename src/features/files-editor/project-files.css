@@ -25,6 +25,11 @@
   white-space: nowrap;
 }
 
+.project-directory > summary,
+.project-directory-row {
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
+}
+
 :where(.project-directory, .project-file-row) {
   color: var(--text-soft);
 }
