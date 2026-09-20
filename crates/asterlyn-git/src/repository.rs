@@ -6243,6 +6243,7 @@ mod tests {
     fn fixture() -> TempDir {
         let directory = tempfile::tempdir().expect("temp directory");
         git(directory.path(), &["init", "-b", "main"]);
+        git(directory.path(), &["config", "core.autocrlf", "false"]);
         git(directory.path(), &["config", "user.name", "Asterlyn Test"]);
         git(
             directory.path(),
@@ -7484,7 +7485,7 @@ mod tests {
             .expect("working Diff base");
 
         assert_eq!(base.path, "editable.txt");
-        assert_eq!(base.bytes, b"before\n");
+        assert_eq!(base.bytes, b"before\r\n");
         assert!(base.head_oid.is_some());
         assert!(base.blob_oid.is_some());
     }

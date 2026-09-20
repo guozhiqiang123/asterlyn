@@ -19,9 +19,11 @@ depends only on narrow editor/session ports rather than importing another featur
   endings, stale completion rejection, conflict grouping, conflict draft preservation, editor
   document identity, feature dependency direction, source ownership, stylesheet ownership, and
   lazy editor boundaries.
-- `cargo test -p asterlyn-git` passes **104 tests**. Native coverage includes exact HEAD-side reads,
+- `cargo test -p asterlyn-git` passes **105 tests**. Native coverage includes exact HEAD-side reads,
   untracked empty bases, restart-safe merge/rebase/cherry-pick conflicts, changed-worktree revision
-  rejection, literal-path staging, and verified conflict continuation/abort behavior.
+  rejection, literal-path staging, and verified conflict continuation/abort behavior. Temporary Git
+  repositories explicitly disable automatic line-ending conversion, so exact-byte assertions do not
+  inherit a developer machine or CI runner's global `core.autocrlf` setting.
 - `npm run build` passes TypeScript and the production startup budget.
 - Conflict resolve start makes Result and both directional controls read-only until success or
   failure. A dirty draft blocks another conflict from replacing it and survives repository refresh
