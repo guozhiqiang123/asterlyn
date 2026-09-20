@@ -41,13 +41,11 @@ export function historyCommitRangeTargetIsCurrent(
   selection: HistoryRangeSelection | null,
   state: GitHistoryDetailsState,
   workspaceGeneration: number,
-  repositoryRevision: number,
 ): boolean {
   if (
     !selection ||
     state.history.root !== target.workspaceRoot ||
     workspaceGeneration !== target.workspaceGeneration ||
-    repositoryRevision !== target.repositoryRevision ||
     state.history.generation !== target.historyGeneration ||
     selection.scopeKey !== target.scopeKey ||
     selection.anchorKey !== target.anchorKey ||

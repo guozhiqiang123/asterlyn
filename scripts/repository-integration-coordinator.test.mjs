@@ -21,8 +21,7 @@ test("repository integration applies only declared projection slices", () => {
   assert.deepEqual(fixture.records.files, [["src/app.ts"]]);
   assert.deepEqual(fixture.records.documents, [true]);
   assert.deepEqual(fixture.records.remote, [changed]);
-  assert.equal(fixture.records.history.length, 0);
-  assert.equal(fixture.records.branchClears, 0);
+  assert.equal(fixture.records.refreshedHistory.length, 0);
 
   fixture.coordinator.applyMutation(
     { snapshot: changed, invalidatedSlices: ["head", "refs", "history"] },
@@ -30,8 +29,9 @@ test("repository integration applies only declared projection slices", () => {
   );
 
   assert.equal(fixture.records.remote.length, 2);
-  assert.equal(fixture.records.history.length, 1);
-  assert.equal(fixture.records.branchClears, 1);
+  assert.deepEqual(fixture.records.refreshedHistory, [
+    { root: "/repo", preferTip: true },
+  ]);
   assert.equal(fixture.records.changes.length, 1);
   fixture.dispose();
 });
@@ -56,7 +56,7 @@ test("workspace mutation reconciliation commits exact paths and projections", ()
   assert.deepEqual(fixture.records.files, [["src/renamed.ts"]]);
   assert.deepEqual(fixture.records.documents, [true]);
   assert.equal(fixture.records.remote.length, 0);
-  assert.equal(fixture.records.history.length, 0);
+  assert.equal(fixture.records.refreshedHistory.length, 0);
   assert.equal(fixture.records.renders, 1);
   fixture.dispose();
 });
@@ -168,7 +168,7 @@ test("conflict resolution reconciles working state without reading history or re
   assert.deepEqual(fixture.records.operations, [accepted]);
   assert.deepEqual(fixture.records.documents, [true]);
   assert.deepEqual(fixture.records.remote, [accepted]);
-  assert.equal(fixture.records.history.length, 0);
+  assert.equal(fixture.records.refreshedHistory.length, 0);
   fixture.dispose();
 });
 
@@ -207,7 +207,9 @@ test("manual refresh reconciles one canonical snapshot without duplicating routi
   assert.deepEqual(fixture.records.workspaces, [
     { root: "/repo", changes: ["src/refreshed.ts"] },
   ]);
-  assert.equal(fixture.records.refreshedHistory, 1);
+  assert.deepEqual(fixture.records.refreshedHistory, [
+    { root: "/repo", preferTip: false },
+  ]);
   assert.deepEqual(fixture.records.operations, [refreshed]);
   assert.deepEqual(fixture.records.documents, [true]);
   assert.equal(fixture.records.renders, 1);
@@ -347,11 +349,9 @@ function integrationFixture(gatewayOverrides = {}) {
     conflictSelections: [],
     files: [],
     workspaces: [],
-    history: [],
     operations: [],
-    refreshedHistory: 0,
+    refreshedHistory: [],
     historyClears: 0,
-    branchClears: 0,
     documents: [],
     hideHistory: 0,
     workspaceOnly: 0,
@@ -386,11 +386,9 @@ function integrationFixture(gatewayOverrides = {}) {
       operations: { installSnapshot(value) { records.operations.push(value); } },
     },
     {
-      clearBranchSelection() { records.branchClears += 1; },
-      installSnapshotHistory(value, preferTip) {
-        records.history.push({ root: value.root, preferTip });
+      reconcileRefreshedHistory(value, preferTip) {
+        records.refreshedHistory.push({ root: value.root, preferTip });
       },
-      reconcileRefreshedHistory() { records.refreshedHistory += 1; },
       reconcileWorkingDocument(_snapshot, reloadIfValid = true) {
         records.documents.push(reloadIfValid);
       },

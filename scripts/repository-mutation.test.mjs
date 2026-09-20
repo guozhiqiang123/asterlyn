@@ -16,14 +16,12 @@ test("working-tree mutations do not request history or ref reconciliation", () =
   assert.equal(plan.reconcileOpenDocuments, true);
   assert.equal(plan.updateHistory, false);
   assert.equal(plan.updateRemote, true);
-  assert.equal(plan.clearBranchSelection, false);
   assert.equal(plan.reloadWorkspaceCatalog, false);
 });
 
 test("fetch reconciles refs and history without replacing files or open documents", () => {
   const plan = repositoryReconciliationPlan(outcome(["head", "refs", "history"]));
   assert.equal(plan.updateRemote, true);
-  assert.equal(plan.clearBranchSelection, true);
   assert.equal(plan.updateHistory, true);
   assert.equal(plan.updateWorkingTree, false);
   assert.equal(plan.reconcileOpenDocuments, false);

@@ -3,7 +3,6 @@ import type { RepositoryMutationOutcome, RepositoryStateSlice } from "../models.
 export interface RepositoryReconciliationPlan {
   readonly slices: ReadonlySet<RepositoryStateSlice>;
   readonly updateRemote: boolean;
-  readonly clearBranchSelection: boolean;
   readonly updateWorkingTree: boolean;
   readonly updateHistory: boolean;
   readonly reconcileOpenDocuments: boolean;
@@ -23,7 +22,6 @@ export function repositoryReconciliationPlan(
       slices.has("refs") ||
       slices.has("workingTree") ||
       slices.has("operation"),
-    clearBranchSelection: slices.has("head") || slices.has("refs"),
     updateWorkingTree: slices.has("workingTree"),
     updateHistory: slices.has("history"),
     reconcileOpenDocuments: slices.has("openDocuments") || slices.has("workingTree"),

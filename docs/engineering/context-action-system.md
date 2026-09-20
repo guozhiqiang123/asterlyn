@@ -66,7 +66,7 @@ application/domain foundations, and then add feature-owned menu providers one su
 | Paste collision policy? | First version offers a new name or cancel; it never silently replaces |
 | System file clipboard interoperability? | Deferred; text copy uses the system text clipboard, file transfer remains internal |
 | Menu nesting? | One submenu level in the first version |
-| Context-menu persistence? | None; every open session is transient and closes on invalidation |
+| Context-menu persistence? | Transient, but unrelated projection refreshes keep it open; semantic target revalidation closes it only when the target changes or disappears |
 | Existing dropdown migration? | Not required initially; share lower-level overlay utilities only after parity tests |
 
 ### Deliberately uncovered surfaces
@@ -165,6 +165,16 @@ The host may retain the generic session callback for the lifetime of one open me
 ephemeral presentation state. Serializable feature state and protocol models remain callback-free.
 Invocation must still call `isCurrent` and the underlying use case must repeat authoritative
 validation.
+
+The window-scoped host also suppresses the WebView's native document context menu, so browser-only
+commands such as Reload cannot bypass the product action model. Repository revision counters are
+not sufficient reason to invalidate a menu: refresh revalidation compares the captured feature
+identity and relevant target fields. A workspace change, History query generation change, removed
+ref/path, changed file status, or changed branch object still closes the menu. An unrelated file or
+projection refresh keeps the overlay mounted, while every activation repeats semantic validation.
+The overlay reads the root `--ui-font-size` token, exposes distinct hover/focus/pressed states, and
+prevents navigation-row text selection so macOS WebKit cannot mark a commit message during a
+secondary click.
 
 ### Selection and focus contract
 
@@ -499,6 +509,18 @@ After all context surfaces have production evidence, assess whether project, His
 editor-tab, remote, and Push-mode dropdowns benefit from the same geometry/focus primitives. Do not
 merge their feature state or force a context-action provider model onto persistent toggle menus.
 
+### 2026-09-20 manual-test follow-up
+
+Manual testing found missing pointer feedback, an undefined selection color token, menu and Files
+folder text that did not consistently follow the UI scale, macOS secondary-click text selection,
+the WebView Reload menu, branch-filter selection loss after repository refresh, and blanket menu
+closure during unrelated file updates. The corrective implementation centralizes native-menu
+suppression and font/interaction states in the shared host, keeps folder labels two pixels below
+the configured menu size (with a 10 px floor), reconciles retained History refs instead of clearing
+them on every ref/history result, and revalidates open menus by semantic target identity. Automated
+checks cover those contracts; interactive macOS/Windows/Linux re-verification remains required
+before this follow-up is marked manually accepted.
+
 ## Testing and acceptance matrix
 
 ### Pure presentation
@@ -509,6 +531,8 @@ merge their feature state or force a context-action provider model onto persiste
   pointer-intent corridor;
 - mouse, keyboard, menu key, `Shift+F10`, type-ahead, Home/End, Left/Right, Enter/Space, and nested
   Escape behavior;
+- configured UI scaling, visible hover/focus/pressed feedback, native WebView-menu suppression, and
+  non-selectable navigation-row labels on secondary click;
 - focus return after activation, cancellation, target removal, virtual scroll, and feature disposal;
 - one host per window and no cross-window close/invoke leakage.
 
@@ -520,7 +544,8 @@ merge their feature state or force a context-action provider model onto persiste
 - every draft state matrix produces the expected present/omitted/blocked/checked item set;
 - ordinary-click, toolbar, keyboard, and menu entry points call the same feature/application action;
 - right-click selection rules match each surface and never perform the primary action;
-- repository/query/workspace changes invalidate the captured target rather than retargeting;
+- repository/query/workspace changes revalidate the captured target without retargeting; unrelated
+  repository revisions preserve it, while semantic target changes invalidate it;
 - blocked activation shows its current reason without invoking a native capability.
 
 ### Capability and integration

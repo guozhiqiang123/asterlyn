@@ -80,18 +80,16 @@ export function branchContextTargetIsCurrent(
   target: BranchContextTarget,
   snapshot: RepositorySnapshot | null,
   workspaceGeneration: number,
-  repositoryRevision: number,
   selectedRepositoryIds: ReadonlySet<string>,
 ): boolean {
   if (
     !snapshot || snapshot.root !== target.workspaceRoot ||
-    workspaceGeneration !== target.workspaceGeneration ||
-    repositoryRevision !== target.repositoryRevision
+    workspaceGeneration !== target.workspaceGeneration
   ) return false;
   const refreshed = resolveBranchContextTarget(
     snapshot,
     workspaceGeneration,
-    repositoryRevision,
+    target.repositoryRevision,
     selectedRepositoryIds,
     target.key,
   );

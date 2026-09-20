@@ -75,9 +75,7 @@ export interface RepositoryIntegrationTargets {
 }
 
 export interface RepositoryIntegrationActions {
-  clearBranchSelection(): void;
-  installSnapshotHistory(snapshot: RepositorySnapshot, preferTip: boolean): void;
-  reconcileRefreshedHistory(snapshot: RepositorySnapshot): void;
+  reconcileRefreshedHistory(snapshot: RepositorySnapshot, preferTip: boolean): void;
   reconcileWorkingDocument(snapshot: RepositorySnapshot, reloadIfValid?: boolean): void;
   hideHistoryTool(): void;
   showWorkspaceOnlyTools(): void;
@@ -266,7 +264,7 @@ export class RepositoryIntegrationCoordinator {
     this.targets.changes.installSnapshot(snapshot);
     this.targets.files.installWorkspace(snapshot.root, snapshot.changes);
     this.targets.operations.installSnapshot(snapshot);
-    this.actions.reconcileRefreshedHistory(snapshot);
+    this.actions.reconcileRefreshedHistory(snapshot, false);
     this.actions.reconcileWorkingDocument(snapshot);
     this.actions.renderWorkspace();
     this.actions.loadVisibleCommitDetails();
@@ -315,7 +313,7 @@ export class RepositoryIntegrationCoordinator {
         installed?.changes ?? [],
       );
       this.targets.operations.installSnapshot(installed);
-      if (installed) this.actions.reconcileRefreshedHistory(installed);
+      if (installed) this.actions.reconcileRefreshedHistory(installed, false);
       else this.targets.history.clear();
       this.actions.renderWorkspace();
       return;
@@ -344,7 +342,6 @@ export class RepositoryIntegrationCoordinator {
     if (plan.updateRemote) {
       this.targets.remote.installSnapshot(snapshot);
     }
-    if (plan.clearBranchSelection) this.actions.clearBranchSelection();
     if (plan.updateWorkingTree) {
       this.targets.changes.installSnapshot(snapshot, options);
       this.targets.files.updateChanges(snapshot.changes);
@@ -352,7 +349,7 @@ export class RepositoryIntegrationCoordinator {
     if (plan.reloadWorkspaceCatalog) {
       this.targets.files.installWorkspace(snapshot.root, snapshot.changes);
     }
-    if (plan.updateHistory) this.actions.installSnapshotHistory(snapshot, true);
+    if (plan.updateHistory) this.actions.reconcileRefreshedHistory(snapshot, true);
     if (plan.reconcileOperation) this.targets.operations.installSnapshot(snapshot);
     if (plan.reconcileOpenDocuments) this.actions.reconcileWorkingDocument(snapshot);
     if (options.focusConflicts) this.focusFirstConflict(snapshot);

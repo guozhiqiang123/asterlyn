@@ -88,6 +88,13 @@ export class ContextMenuHost implements ContextMenuPort {
     this.closeActive(ownerId, true);
   }
 
+  revalidate(): void {
+    const active = this.active;
+    if (active && !active.session.isCurrent()) {
+      this.closeActive(active.session.ownerId, true);
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;

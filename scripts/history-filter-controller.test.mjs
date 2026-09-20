@@ -10,7 +10,10 @@ test("history filter controller owns query normalization and repository reconcil
   const state = controller.state;
   controller.install({
     repositoryIds: ["removed"],
-    refs: [{ repositoryId: ".", fullName: "refs/heads/stale" }],
+    refs: [
+      { repositoryId: ".", fullName: "refs/heads/main" },
+      { repositoryId: ".", fullName: "refs/heads/stale" },
+    ],
     startCommit: null,
     authorEmails: ["developer@example.com"],
     currentAuthor: false,
@@ -22,7 +25,9 @@ test("history filter controller owns query normalization and repository reconcil
   });
   controller.reconcile(snapshot());
 
-  assert.deepEqual(Array.from(state.historyRefs), []);
+  assert.deepEqual(Array.from(state.historyRefs.values()), [
+    { repositoryId: ".", fullName: "refs/heads/main" },
+  ]);
   assert.deepEqual(Array.from(state.historyPaths), []);
   assert.deepEqual(Array.from(state.historyRepositoryIds), []);
   assert.deepEqual(controller.query().authorEmails, ["developer@example.com"]);

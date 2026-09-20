@@ -57,6 +57,14 @@ export class LazyContextMenuHost implements ContextMenuPort {
     this.delegate?.close(ownerId);
   }
 
+  revalidate(): void {
+    if (this.pending && !this.pending.session.isCurrent()) {
+      this.pending.session.dismissed?.();
+      this.pending = null;
+    }
+    this.delegate?.revalidate();
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;

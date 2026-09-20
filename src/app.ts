@@ -97,7 +97,7 @@ import {
   renderChangeNavigation,
 } from "./features/changes-commit/changes-view";
 import {
-  resolveChangesContextTarget,
+  changesContextTargetIsCurrent,
   type ChangesContextTarget,
 } from "./features/changes-commit/changes-navigation-binding.ts";
 import {
@@ -872,16 +872,11 @@ export class AsterlynApp {
         operations: this.gitOperationRuntime.controller,
       },
       {
-        clearBranchSelection: () => {
-          this.gitHistoryPresentationRuntime.branches.setSelectedBranch(null);
-        },
-        installSnapshotHistory: (snapshot, preferTip) =>
-          this.installSnapshotHistory(snapshot, preferTip),
-        reconcileRefreshedHistory: (snapshot) => {
+        reconcileRefreshedHistory: (snapshot, preferTip) => {
           this.reconcileHistoryScope(snapshot);
           const query = this.activeHistoryQuery();
           if (isSnapshotHistoryQuery(query)) {
-            this.installSnapshotHistory(snapshot, false, true);
+            this.installSnapshotHistory(snapshot, preferTip, true);
           } else {
             this.historyReadRuntime.details.loadQuery(snapshot.root, query);
           }
@@ -1380,6 +1375,7 @@ export class AsterlynApp {
     ) {
       this.renderHistoryPane();
     }
+    if (change.catalogChanged) this.contextMenuHost.revalidate();
     if (change.error) this.showError(change.error);
   }
 
@@ -1406,7 +1402,6 @@ export class AsterlynApp {
   }
 
   private handleChangesControllerChange(change: ChangesCommitChange): void {
-    if (change.reason === "snapshot") this.contextMenuHost.close();
     if (change.reason === "presentation" && this.shellState.layout.leftTool === "changes") {
       this.renderLeftTool();
     } else if (change.inclusionChanged) {
@@ -1417,6 +1412,7 @@ export class AsterlynApp {
       this.syncWorkingImageSurface();
       this.renderEditor();
     }
+    if (change.reason === "snapshot") this.contextMenuHost.revalidate();
     if (change.warning) this.setStatus(change.warning, "warning");
     if (change.error) this.showError(change.error);
   }
@@ -1460,6 +1456,9 @@ export class AsterlynApp {
       change.reason === "refresh-complete"
     ) {
       this.loadVisibleCommitDetails();
+    }
+    if (change.historyChanged || change.selectionChanged || change.detailsChanged) {
+      this.contextMenuHost.revalidate();
     }
     if (change.warning) this.setStatus(change.warning, "warning");
     if (change.error) this.showError(change.error);
@@ -3867,6 +3866,7 @@ export class AsterlynApp {
     this.renderStatus(snapshot);
     this.gitHistoryMutationRuntime.render();
     this.gitOperationRuntime.render();
+    this.contextMenuHost.revalidate();
   }
 
   private renderTopbar(
@@ -4205,20 +4205,11 @@ export class AsterlynApp {
   }
 
   private isChangesContextTargetCurrent(target: ChangesContextTarget): boolean {
-    if (!this.windowSession.matches(target.workspaceGeneration, target.workspaceRoot)) return false;
-    const current = resolveChangesContextTarget(
+    return changesContextTargetIsCurrent(
+      target,
       this.windowSession.repository.state.snapshot,
       this.windowSession.generation,
-      target.path,
-      target.repositoryId,
-      this.windowSession.repository.state.revision,
     );
-    return Boolean(current && current.repositoryRevision === target.repositoryRevision &&
-      current.change.originalPath === target.change.originalPath &&
-      current.change.indexStatus === target.change.indexStatus &&
-      current.change.worktreeStatus === target.change.worktreeStatus &&
-      current.change.conflicted === target.change.conflicted &&
-      current.change.submodule === target.change.submodule);
   }
 
   private projectFilesRepositoryLocation(
@@ -5409,7 +5400,6 @@ export class AsterlynApp {
       target,
       this.historyState,
       this.windowSession.generation,
-      this.windowSession.repository.state.revision,
     );
   }
 
@@ -5419,7 +5409,6 @@ export class AsterlynApp {
       this.gitHistoryPresentationRuntime.rangeSelection.selection,
       this.historyState,
       this.windowSession.generation,
-      this.windowSession.repository.state.revision,
     );
   }
 
@@ -5435,7 +5424,7 @@ export class AsterlynApp {
     this.historyReadRuntime.comparison.open({
       workspaceRoot: target.workspaceRoot,
       workspaceGeneration: target.workspaceGeneration,
-      repositoryRevision: target.repositoryRevision,
+      repositoryRevision: this.windowSession.repository.state.revision,
       repositoryId: anchor.repositoryId,
       anchorOid: anchor.oid,
       activeOid: active.oid,
@@ -5458,7 +5447,6 @@ export class AsterlynApp {
     );
     return Boolean(
       current &&
-      current.repositoryRevision === target.repositoryRevision &&
       current.historyGeneration === target.historyGeneration &&
       current.repositoryId === target.repositoryId &&
       current.oid === target.oid &&
@@ -5483,7 +5471,6 @@ export class AsterlynApp {
     );
     return Boolean(
       current && current.kind === "file" && current.file &&
-      current.repositoryRevision === target.repositoryRevision &&
       current.historyGeneration === target.historyGeneration &&
       current.repositoryId === target.repositoryId &&
       current.oid === target.oid &&
@@ -5792,7 +5779,6 @@ export class AsterlynApp {
       target,
       this.windowSession.repository.state.snapshot,
       this.windowSession.generation,
-      this.windowSession.repository.state.revision,
       this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
     );
   }

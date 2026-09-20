@@ -59,6 +59,7 @@ export interface ContextMenuSession {
 export interface ContextMenuPort {
   open(anchor: ContextMenuAnchor, session: ContextMenuSession): void;
   close(ownerId?: string): void;
+  revalidate(): void;
 }
 
 export function contextMenuModelErrors(model: ContextMenuModel): string[] {

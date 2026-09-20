@@ -6,9 +6,18 @@ import {
   isDelegatedContextKey,
 } from "../src/shared/context-menu/delegated-context-binding.ts";
 import { resolveProjectFilesContextTarget } from "../src/features/files-editor/project-files-binding.ts";
-import { resolveChangesContextTarget } from "../src/features/changes-commit/changes-navigation-binding.ts";
-import { resolveBranchContextTarget } from "../src/features/git-history/branch-context-binding.ts";
-import { resolveHistoryCommitContextTarget } from "../src/features/git-history/history-context-binding.ts";
+import {
+  changesContextTargetIsCurrent,
+  resolveChangesContextTarget,
+} from "../src/features/changes-commit/changes-navigation-binding.ts";
+import {
+  branchContextTargetIsCurrent,
+  resolveBranchContextTarget,
+} from "../src/features/git-history/branch-context-binding.ts";
+import {
+  historyCommitContextTargetIsCurrent,
+  resolveHistoryCommitContextTarget,
+} from "../src/features/git-history/history-context-binding.ts";
 import { resolveCommitDetailContextTarget } from "../src/features/git-history/commit-detail-context-binding.ts";
 import { buildProjectTree } from "../src/presentation/project-tree.ts";
 import { branchKey, commitKey } from "../src/features/git-history/history-identity.ts";
@@ -172,6 +181,38 @@ test("History and commit-detail targets bind object, query generation and exact 
   assert.equal(resolveCommitDetailContextTarget(
     { ...state, selectedCommit: null }, 5, "file", "src/app.ts", snapshot, 12, "tree",
   ), null);
+});
+
+test("context targets survive unrelated repository revisions but reject semantic changes", () => {
+  const snapshot = repositorySnapshot();
+  const changesTarget = resolveChangesContextTarget(snapshot, 4, "src/app.ts", ".", 12);
+  assert.ok(changesTarget);
+  assert.equal(changesContextTargetIsCurrent(changesTarget, snapshot, 4), true);
+  assert.equal(changesContextTargetIsCurrent(changesTarget, {
+    ...snapshot,
+    changes: [{ ...change, worktreeStatus: "deleted" }],
+  }, 4), false);
+
+  const key = branchKey(branch);
+  const branchTarget = resolveBranchContextTarget(snapshot, 4, 12, new Set(["."]), key);
+  assert.ok(branchTarget);
+  assert.equal(
+    branchContextTargetIsCurrent(branchTarget, snapshot, 4, new Set(["."])),
+    true,
+  );
+  assert.equal(branchContextTargetIsCurrent(branchTarget, {
+    ...snapshot,
+    branches: [{ ...branch, oid: "c".repeat(40) }],
+  }, 4, new Set(["."])), false);
+
+  const state = historyState();
+  const historyTarget = resolveHistoryCommitContextTarget(state, 4, 12, commitKey(commit));
+  assert.ok(historyTarget);
+  assert.equal(historyCommitContextTargetIsCurrent(historyTarget, state, 4), true);
+  assert.equal(historyCommitContextTargetIsCurrent(historyTarget, {
+    ...state,
+    history: { ...state.history, generation: state.history.generation + 1 },
+  }, 4), false);
 });
 
 test("delegated binding recognizes desktop keyboard invocation and derives a row anchor", () => {

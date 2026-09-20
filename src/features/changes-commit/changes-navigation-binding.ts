@@ -72,3 +72,28 @@ export function resolveChangesContextTarget(
       }
     : null;
 }
+
+export function changesContextTargetIsCurrent(
+  target: ChangesContextTarget,
+  snapshot: RepositorySnapshot | null,
+  workspaceGeneration: number,
+): boolean {
+  if (
+    !snapshot || snapshot.root !== target.workspaceRoot ||
+    workspaceGeneration !== target.workspaceGeneration
+  ) return false;
+  const current = resolveChangesContextTarget(
+    snapshot,
+    workspaceGeneration,
+    target.path,
+    target.repositoryId,
+    target.repositoryRevision,
+  );
+  return Boolean(
+    current && current.change.originalPath === target.change.originalPath &&
+    current.change.indexStatus === target.change.indexStatus &&
+    current.change.worktreeStatus === target.change.worktreeStatus &&
+    current.change.conflicted === target.change.conflicted &&
+    current.change.submodule === target.change.submodule,
+  );
+}
