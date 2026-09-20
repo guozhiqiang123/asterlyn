@@ -18,15 +18,13 @@ test("shell menus are mutually exclusive", () => {
   const controller = new ShellController(memoryStorage());
   controller.toggleRepositoryMenu();
   controller.toggleEditorTabMenu();
-  controller.toggleRemoteActionsMenu();
 
   assert.equal(controller.state.repositoryMenuOpen, false);
-  assert.equal(controller.state.editorTabMenuOpen, false);
-  assert.equal(controller.state.remoteActionsMenuOpen, true);
+  assert.equal(controller.state.editorTabMenuOpen, true);
 
   controller.toggleRepositoryMenu();
   assert.equal(controller.state.repositoryMenuOpen, true);
-  assert.equal(controller.state.remoteActionsMenuOpen, false);
+  assert.equal(controller.state.editorTabMenuOpen, false);
 });
 
 test("shell persists activity ordering and layout independently", () => {

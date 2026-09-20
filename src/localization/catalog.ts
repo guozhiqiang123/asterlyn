@@ -31,8 +31,6 @@ export interface ShellCopy {
   remoteActions: string;
   remoteForActions: string;
   noRemote: string;
-  moreRemoteActions: string;
-  fetchBranch: string;
   updateBranch: string;
   pushBranch: string;
   cancelRemote: string;

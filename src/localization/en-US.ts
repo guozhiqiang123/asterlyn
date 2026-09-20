@@ -31,8 +31,6 @@ export const EN_US: LocaleCatalog = {
     remoteActions: "Current branch remote actions",
     remoteForActions: "Remote used by current branch actions",
     noRemote: "No remote",
-    moreRemoteActions: "More remote actions",
-    fetchBranch: "Fetch current branch",
     updateBranch: "Update current branch",
     pushBranch: "Push current branch",
     cancelRemote: "Cancel remote operation",

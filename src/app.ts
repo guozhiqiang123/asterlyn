@@ -1202,7 +1202,6 @@ export class AsterlynApp {
       gitOperationDialogOpen: () => this.gitOperationState.dialog !== null,
       repositoryMenuOpen: () => this.shellState.repositoryMenuOpen,
       editorTabMenuOpen: () => this.shellState.editorTabMenuOpen,
-      remoteActionsMenuOpen: () => this.shellState.remoteActionsMenuOpen,
       settingsOpen: () => this.shellState.page === "settings",
       replacementClosable: () => Boolean(
         this.filesEditorRuntime.replacement.state.dialog &&
@@ -1219,12 +1218,6 @@ export class AsterlynApp {
       dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationRuntime.controller.hasUnsavedConflict()),
       toggleRepositoryMenu: () => {
         this.shellController.toggleRepositoryMenu();
-        this.renderRepositoryMenu();
-        this.renderEditorTabMenu();
-        this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
-      },
-      toggleRemoteActionsMenu: () => {
-        this.shellController.toggleRemoteActionsMenu();
         this.renderRepositoryMenu();
         this.renderEditorTabMenu();
         this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
@@ -1284,10 +1277,6 @@ export class AsterlynApp {
       closeEditorTabMenu: () => {
         this.shellController.closeEditorTabMenu();
         this.renderEditorTabMenu();
-      },
-      closeRemoteActionsMenu: () => {
-        this.shellController.closeRemoteActionsMenu();
-        this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
       },
       closeHistoryFilter: () => {
         this.gitHistoryPresentationRuntime.filters.closeMenus();
@@ -1655,8 +1644,6 @@ export class AsterlynApp {
     this.root.querySelector("#remote-toolbar")?.setAttribute("aria-label", copy.remoteActions);
     label(".topbar-remote-select", copy.remoteForActions);
     label("#topbar-remote-select", copy.remoteForActions);
-    label("#remote-toolbar-menu-toggle", copy.moreRemoteActions);
-    label("#remote-fetch", copy.fetchBranch);
     label("#remote-update", copy.updateBranch);
     label("#remote-push", copy.pushBranch);
     label("#cancel-remote-operation", copy.cancelRemote);
@@ -2977,26 +2964,19 @@ export class AsterlynApp {
       this.remoteState,
       this.state.loading,
       this.localization,
-      this.shellState.remoteActionsMenuOpen,
     );
   }
 
   private async activateRemoteAction(
-    kind: "fetch" | "pull" | "push",
+    kind: "pull" | "push",
     anchor: HTMLButtonElement,
   ): Promise<void> {
-    this.shellController.closeRemoteActionsMenu();
-    this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     const blocked = this.remoteActionBlockedReason(kind);
     if (blocked) {
       this.showWarning(blocked);
       return;
     }
     this.clearError();
-    if (kind === "fetch") {
-      await this.runRemoteOperation(kind);
-      return;
-    }
     if (kind === "pull") {
       const snapshot = this.windowSession.repository.state.snapshot;
       const preferences = this.settingsState.preferences;
@@ -3020,11 +3000,11 @@ export class AsterlynApp {
     this.showWarning(reason);
   }
 
-  private remoteActionBlockedReason(kind: "fetch" | "pull" | "push"): string | null {
+  private remoteActionBlockedReason(kind: "pull" | "push"): string | null {
     const copy = this.localization.catalog.remote;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) {
-      return { fetch: copy.fetchUnavailable, pull: copy.updateUnavailable, push: copy.pushUnavailable }[kind];
+      return { pull: copy.updateUnavailable, push: copy.pushUnavailable }[kind];
     }
     if (this.remoteState.operation) {
       return copy.unavailable(

@@ -42,15 +42,10 @@ export function renderRemoteToolbarView(
   state: RemotePushState,
   loading: boolean,
   localization: Localization = DEFAULT_LOCALIZATION,
-  menuOpen = false,
 ): void {
   const toolbar = query(root, "#remote-toolbar");
   const select = query<HTMLSelectElement>(root, "#topbar-remote-select");
   const cancel = query<HTMLButtonElement>(root, "#cancel-remote-operation");
-  const menuToggle = query<HTMLButtonElement>(root, "#remote-toolbar-menu-toggle");
-  const menu = query(root, "#remote-toolbar-menu");
-  menuToggle.setAttribute("aria-expanded", String(menuOpen));
-  menu.classList.toggle("hidden", !menuOpen);
   toolbar.classList.toggle("git-unavailable", !snapshot);
   if (!snapshot) {
     renderUnavailableToolbar(root, select, cancel, localization);
@@ -74,9 +69,8 @@ export function renderRemoteToolbarView(
   select.setAttribute("aria-label", remoteScope);
   const tracksSelected = snapshot.branch.upstreamRemote === policy.selectedRemote?.name;
   const actions = [
-    { kind: "fetch", button: "#remote-fetch", hint: null, policy: policy.fetch, iconName: "download", menuItem: true },
-    { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", policy: policy.pull, iconName: "download", menuItem: false },
-    { kind: "push", button: "#remote-push", hint: "#remote-push-hint", policy: policy.push, iconName: "upload", menuItem: false },
+    { kind: "pull", button: "#remote-update", hint: "#remote-update-hint", policy: policy.pull, iconName: "download" },
+    { kind: "push", button: "#remote-push", hint: "#remote-push-hint", policy: policy.push, iconName: "upload" },
   ] as const;
   for (const action of actions) {
     const button = query<HTMLButtonElement>(root, action.button);
@@ -107,10 +101,8 @@ export function renderRemoteToolbarView(
     button.classList.toggle("running", operation?.kind === action.kind);
     const visual = operation?.kind === action.kind && !operation.cancelling
       ? '<span class="spinner" aria-hidden="true"></span>'
-      : `${icon(action.iconName, action.menuItem ? 17 : 18)}${remoteCountBadge(action.kind, snapshot, tracksSelected)}`;
-    button.innerHTML = action.menuItem
-      ? `${visual}<span>${escapeHtml(action.policy.label)}</span>`
-      : visual;
+      : `${icon(action.iconName, 18)}${remoteCountBadge(action.kind, snapshot, tracksSelected)}`;
+    button.innerHTML = visual;
     if (action.hint) {
       const hint = query<HTMLElement>(root, action.hint);
       hint.title = title;
@@ -153,7 +145,6 @@ function renderUnavailableToolbar(
   select.setAttribute("aria-label", select.title);
   cancel.classList.add("hidden");
   const unavailable = [
-    ["#remote-fetch", copy.fetchUnavailable],
     ["#remote-update", copy.updateUnavailable],
     ["#remote-push", copy.pushUnavailable],
   ] as const;
@@ -169,14 +160,11 @@ function renderUnavailableToolbar(
     if (hint) {
       hint.title = description;
     }
-    if (selector === "#remote-fetch") {
-      button.innerHTML = `${icon("download", 17)}<span>${escapeHtml(copy.actionNames.fetch)}</span>`;
-    }
   }
 }
 
 function remoteActionDescription(
-  kind: "fetch" | "pull" | "push",
+  kind: "pull" | "push",
   snapshot: RepositorySnapshot,
   selectedName: string,
   sourceRef: string,
@@ -185,10 +173,6 @@ function remoteActionDescription(
   localization: Localization,
 ): string {
   const copy = localization.catalog.remote;
-  if (kind === "fetch") {
-    const behind = tracksSelected ? snapshot.branch.behind : 0;
-    return copy.fetchDescription(selectedName, behind);
-  }
   if (kind === "pull") {
     return copy.updateDescription(sourceRef, selectedName, destinationRef);
   }
@@ -197,7 +181,7 @@ function remoteActionDescription(
 }
 
 function remoteCountBadge(
-  kind: "fetch" | "pull" | "push",
+  kind: "pull" | "push",
   snapshot: RepositorySnapshot,
   tracksSelected: boolean,
 ): string {

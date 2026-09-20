@@ -58,7 +58,8 @@ test("shell view follows persisted activity order and exposes stable feature hos
   }
   assert.ok(html.indexOf('id="repository-switcher-anchor"') < html.indexOf('id="command-center-button"'));
   assert.ok(html.indexOf('id="command-center-button"') < html.indexOf('class="topbar-actions"'));
-  assert.match(html, /id="remote-toolbar-menu"[^]*id="remote-fetch"[^]*id="remote-update"/);
+  assert.doesNotMatch(html, /id="remote-toolbar-menu"|id="remote-fetch"/);
+  assert.match(html, /id="remote-update"[^]*id="remote-push"/);
   assert.doesNotMatch(html, /id="remote-update"[^>]* disabled/);
   assert.doesNotMatch(html, /id="refresh-button"/);
   assert.doesNotMatch(html, /id="git-recoveries-open"/);
@@ -541,9 +542,6 @@ function remoteToolbarRoot() {
     "#remote-toolbar",
     "#topbar-remote-select",
     "#cancel-remote-operation",
-    "#remote-toolbar-menu-toggle",
-    "#remote-toolbar-menu",
-    "#remote-fetch",
     "#remote-update",
     "#remote-update-hint",
     "#remote-push",
