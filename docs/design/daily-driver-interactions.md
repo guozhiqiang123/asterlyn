@@ -407,6 +407,23 @@ commit reordering, per-commit squash/fixup selection, binary merging, automatic 
 or automatic retry. Complete acceptance is recorded in
 [`R4 recoverable Git operations evidence`](../benchmarks/2026-09-12-r4-recoverable-git-operations.md).
 
+### Editable working Diff and conflict editor
+
+The local text Diff evolves from a read-only patch projection into a view of the exact existing
+worktree text buffer. Split mode keeps the repository version read-only on the left and the current
+file editable on the right, places both line-number gutters beside the central action area, and
+offers an arrow for reverting each change into the current buffer. Unified mode retains one
+editable current document with equivalent per-change rejection. Neither mode writes automatically;
+ordinary editor undo and the existing revision-checked Save remain authoritative.
+
+When Git reports unresolved stages, Changes shows Conflicts before normal Changes and Unversioned
+Files. Resolving a path opens the editor region rather than a modal. Ours and Theirs are read-only,
+Result is the editable middle document, and Base drives change classification without consuming a
+fourth visible column. Directional controls apply individual regions into Result; Save and Stage
+uses the existing conflict revision token and recoverable worktree transaction. Refresh preserves a
+dirty result, and Continue stays unavailable until Git confirms every conflict is resolved. The
+architecture and dependency boundary are recorded in [`ADR-0015`](../architecture/decisions/0015-editable-diff-and-conflict-editor.md).
+
 ## Sequencing rule
 
 U1–U3 are published as the first usability phase, U4 is published as the safe local-branch slice, U5 is locally accepted as the remote daily-loop slice, U6 is locally accepted as the persistent workbench contract, U7 closes the highest-friction desktop interaction mismatches, U8 closes Diff/ref navigation consistency, U9 closes compact Git information layout, and U10 closes all-ref topology presentation. U11 history filters and graph controls precede Stage 3; E1 is locally accepted as the safe editor foundation, E2.1–E2.3 complete bounded navigation, on-demand syntax highlighting, refined search, and recoverable workspace replacement, and E3.1 establishes project navigation plus honest implemented preferences. Its desktop-shell, Git-rendering, checked-commit, and remote-toolbar corrections fix scale, icon generation, tab overflow, multi-project window ownership, splitter layout forcing, commit-selection-wide rerenders, the obsolete manual-stage commit interaction, and blind remote writes without changing the sequence. R1–R4 then establish feature ownership, application/protocol boundaries, native reconciliation, and recoverable Merge/Cherry-pick/Rebase/Squash. R5 workspace create/move/copy/trash foundations are next. Windows/macOS interactive release checks remain open; platform-specific polish becomes blocking again before an artifact is described as a release candidate, not before useful feature development.
