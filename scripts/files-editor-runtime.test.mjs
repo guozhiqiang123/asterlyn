@@ -12,6 +12,7 @@ test("Files and Editor runtime owns file, editor, search, replacement, and comma
     {
       files: {},
       editor: {},
+      changeBaseline: { async readWorkingDiffBase() { throw new Error("unexpected baseline read"); } },
       workspace: {
         startReplacementPreview: () => ({
           operationId: "replacement-1",
@@ -29,6 +30,7 @@ test("Files and Editor runtime owns file, editor, search, replacement, and comma
     {
       filesChanged: (change) => notifications.push(`files:${change.reason}`),
       editorChanged: (change) => notifications.push(`editor:${change.reason}`),
+      changeBaselineChanged: (change) => notifications.push(`baseline:${change.path}`),
     },
   );
 

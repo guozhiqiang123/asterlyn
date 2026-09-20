@@ -384,13 +384,14 @@ export class EditorSurface {
   mountText(
     key: string,
     tab: TextTabState,
+    baselineContent: string,
     preferences: AppPreferences,
     blame: GitBlameAvailability,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
     if (this.mountedEditorKey === key && this.mountedTextTabId === tab.id) {
-      this.textEditor.requestMeasure();
+      this.mountTextEditorSurface(this.query("#content-body"), tab, baselineContent, preferences, blame, onContentChange);
       return;
     }
     const body = this.query("#content-body");
@@ -407,7 +408,7 @@ export class EditorSurface {
     body.classList.add("text-surface");
     this.mountedTextTabId = tab.id;
     this.activeMarkdownMode = null;
-    this.mountTextEditorSurface(body, tab, preferences, blame, onContentChange);
+    this.mountTextEditorSurface(body, tab, baselineContent, preferences, blame, onContentChange);
     this.mountedEditorKey = key;
   }
 
@@ -439,6 +440,7 @@ export class EditorSurface {
       body,
       documentId,
       version,
+      content,
       content,
       path,
       preferences,
@@ -485,13 +487,17 @@ export class EditorSurface {
   mountMarkdown(
     key: string,
     tab: TextTabState,
+    baselineContent: string,
     preferences: AppPreferences,
     blame: GitBlameAvailability,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
     if (this.mountedEditorKey === key) {
-      this.textEditor.requestMeasure();
+      if (tab.markdownMode !== "preview") {
+        const parent = tab.markdownMode === "split" ? this.query("#markdown-source-pane") : this.query("#content-body");
+        this.mountTextEditorSurface(parent, tab, baselineContent, preferences, blame, onContentChange);
+      }
       return;
     }
     beforeTransition();
@@ -508,7 +514,7 @@ export class EditorSurface {
     if (tab.markdownMode === "source") {
       body.classList.add("markdown-source-surface");
       this.mountedTextTabId = tab.id;
-      this.mountTextEditorSurface(body, tab, preferences, blame, onContentChange);
+      this.mountTextEditorSurface(body, tab, baselineContent, preferences, blame, onContentChange);
     } else if (tab.markdownMode === "split") {
       body.classList.add("markdown-split-surface");
       body.innerHTML = `<div class="markdown-split-layout" id="markdown-split-layout" style="--markdown-source-width: ${this.markdownSourcePercent}%">
@@ -520,6 +526,7 @@ export class EditorSurface {
       this.mountTextEditorSurface(
         this.query("#markdown-source-pane"),
         tab,
+        baselineContent,
         preferences,
         blame,
         onContentChange,
@@ -566,6 +573,7 @@ export class EditorSurface {
   private mountTextEditorSurface(
     parent: HTMLElement,
     tab: TextTabState,
+    baselineContent: string,
     preferences: AppPreferences,
     blame: GitBlameAvailability,
     onContentChange: (tabId: string, content: string) => void,
@@ -576,6 +584,7 @@ export class EditorSurface {
       tab.id,
       tab.loadEpoch,
       tab.content,
+      baselineContent,
       tab.document.path,
       preferences,
       blame.source,

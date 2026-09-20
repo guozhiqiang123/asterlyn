@@ -2,7 +2,6 @@ import type { EffectiveLocale } from "../presentation/presentation-environment.t
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 import type { BranchMutationCopy } from "./branch-mutation-copy.ts";
 export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
-
 export interface CommonCopy {
   ready: string;
   operationFailed: string;
@@ -18,13 +17,9 @@ export interface CommonCopy {
 }
 
 export interface TemporalCopy {
-  today: string;
-  justNow: string;
-  secondsAgo(count: number): string;
-  minutesAgo(count: number): string;
-  hoursAgo(count: number): string;
+  today: string; justNow: string;
+  secondsAgo(count: number): string; minutesAgo(count: number): string; hoursAgo(count: number): string;
 }
-
 export interface ShellCopy {
   projectMenu: string;
   openProject: string;
@@ -381,6 +376,8 @@ export interface EditorCopy {
   previousChange: string;
   nextChange: string;
   revertDiffChange: string;
+  changeIndicatorAdded: string; changeIndicatorModified: string; changeIndicatorDeleted: string;
+  navigateChangeIndicator(kind: "added" | "modified" | "deleted", line: number): string;
   previousFile: string;
   nextFile: string;
   openSource: string;

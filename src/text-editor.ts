@@ -32,13 +32,18 @@ import {
   blameContentContextMenu,
   blameGutter,
   lineNumberGutter,
-  type GitBlameCopy,
   type GitBlameRuntime,
   type GitBlameSource,
 } from "./features/files-editor/editor-gutter.ts";
 import type { GitBlameResult } from "./models.ts";
 import type { EditorRuntimeTabRemap } from "./editor-path-mutation.ts";
 import { remapEditorCacheEntries } from "./features/files-editor/editor-cache-remap.ts";
+import {
+  createEditorChangeIndicators,
+  editorChangeIndicatorCopy,
+  type EditorChangeIndicators,
+} from "./editor-change-indicators.ts";
+import type { EditorCopy } from "./localization/catalog.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -58,6 +63,7 @@ interface CachedTextEditor {
   theme: Compartment;
   phrases: Compartment;
   blame: Compartment;
+  changeIndicators: EditorChangeIndicators;
   languageLoader: EditorLanguageLoader;
   languageActivation: number;
   languageName: string;
@@ -87,7 +93,7 @@ export class TextEditor {
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
-    private blameCopy: GitBlameCopy,
+    private blameCopy: EditorCopy,
     private readonly contextMenu: ContextMenuPort,
     private readonly contextOwnerId: string,
   ) {}
@@ -97,6 +103,7 @@ export class TextEditor {
     tabId: string,
     loadEpoch: number,
     content: string,
+    baselineContent: string,
     path: string,
     preferences: AppPreferences,
     blameSource: GitBlameSource | null,
@@ -110,6 +117,8 @@ export class TextEditor {
       active.view?.dom.parentElement === parent
     ) {
       active.onChange = onChange;
+      active.changeIndicators.setBaseline(active.view, baselineContent);
+      active.changeIndicators.setCopy(active.view, editorChangeIndicatorCopy(this.blameCopy));
       this.updateBlameAvailability(active, blameSource, blameUnavailableReason);
       applyEditorPreferences(active.view, preferences);
       active.view.requestMeasure();
@@ -130,6 +139,7 @@ export class TextEditor {
         tabId,
         loadEpoch,
         content,
+        baselineContent,
         path,
         preferences,
         blameSource,
@@ -148,6 +158,8 @@ export class TextEditor {
     mountedEntry.view = view;
     this.activeId = tabId;
     applyEditorPreferences(view, preferences);
+    mountedEntry.changeIndicators.setBaseline(view, baselineContent);
+    mountedEntry.changeIndicators.setCopy(view, editorChangeIndicatorCopy(this.blameCopy));
     this.updateLanguageDataset(mountedEntry);
     view.scrollDOM.scrollLeft = mountedEntry.scrollLeft;
     view.scrollDOM.scrollTop = mountedEntry.scrollTop;
@@ -270,11 +282,12 @@ export class TextEditor {
     }
   }
 
-  setBlameCopy(copy: GitBlameCopy): void {
+  setBlameCopy(copy: EditorCopy): void {
     if (this.blameCopy === copy) return;
     this.blameCopy = copy;
     for (const entry of this.entries.values()) {
       if (entry.blameResult) this.installBlame(entry, entry.blameResult);
+      if (entry.view) entry.changeIndicators.setCopy(entry.view, editorChangeIndicatorCopy(copy));
     }
   }
 
@@ -347,6 +360,7 @@ export class TextEditor {
     id: string,
     loadEpoch: number,
     content: string,
+    baselineContent: string,
     path: string,
     preferences: AppPreferences,
     blameSource: GitBlameSource | null,
@@ -361,6 +375,10 @@ export class TextEditor {
     const theme = new Compartment();
     const phrases = new Compartment();
     const blame = new Compartment();
+    const changeIndicators = createEditorChangeIndicators(
+      baselineContent,
+      editorChangeIndicatorCopy(this.blameCopy),
+    );
     const entry: CachedTextEditor = {
       id,
       loadEpoch,
@@ -379,6 +397,7 @@ export class TextEditor {
       theme,
       phrases,
       blame,
+      changeIndicators,
       languageLoader: new EditorLanguageLoader(),
       languageActivation: 0,
       languageName: "Plain Text",
@@ -401,6 +420,7 @@ export class TextEditor {
         editable.of(EditorView.editable.of(!this.readOnlyValue)),
         language.of([]),
         blame.of([]),
+        changeIndicators.extension,
         lineNumberGutter((event, view) => this.openBlameMenu(entry, event, view)),
         blameContentContextMenu((event, view) => this.openBlameMenu(entry, event, view)),
         foldGutter({ markerDOM: createFoldMarker }),

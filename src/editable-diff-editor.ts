@@ -27,6 +27,11 @@ import {
 import type { EditorCopy } from "./localization/catalog.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
+import {
+  createEditorChangeIndicators,
+  editorChangeIndicatorCopy,
+  type EditorChangeIndicators,
+} from "./editor-change-indicators.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -36,6 +41,7 @@ interface ViewBinding {
   theme: Compartment;
   phrases: Compartment;
   whitespace: Compartment;
+  changeIndicators: EditorChangeIndicators | null;
 }
 
 /**
@@ -122,6 +128,11 @@ export class EditableDiffEditor {
   setCopy(copy: EditorCopy): void {
     this.copy = copy;
     this.mergeView?.reconfigure({ renderRevertControl: () => this.revertButton() });
+    for (const binding of this.bindings) {
+      if (binding.changeIndicators) {
+        binding.changeIndicators.setCopy(binding.view, editorChangeIndicatorCopy(copy));
+      }
+    }
   }
 
   setPresentation(presentation: DiffPresentation): void {
@@ -237,11 +248,18 @@ export class EditableDiffEditor {
       theme: new Compartment(),
       phrases: new Compartment(),
       whitespace: new Compartment(),
+      changeIndicators: null,
     };
   }
 
   private extensions(binding: ViewBinding, editable: boolean): Extension[] {
     const preferences = this.preferences!;
+    if (editable) {
+      binding.changeIndicators = createEditorChangeIndicators(
+        this.baseContent,
+        editorChangeIndicatorCopy(this.copy),
+      );
+    }
     return [
       binding.tabSize.of(EditorState.tabSize.of(preferences.editorTabSize)),
       binding.indent.of(indentUnit.of(" ".repeat(preferences.editorIndentSize))),
@@ -254,6 +272,7 @@ export class EditableDiffEditor {
       EditorState.readOnly.of(!editable),
       EditorView.editable.of(editable),
       lineNumbers(),
+      editable ? binding.changeIndicators!.extension : [],
       history(),
       drawSelection(),
       highlightActiveLine(),

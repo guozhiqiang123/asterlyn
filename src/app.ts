@@ -634,13 +634,13 @@ export class AsterlynApp {
           readTextFile: (...args) => bridge.readTextFile(...args),
           saveTextFile: (...args) => bridge.saveTextFile(...args),
           readImageFile: (...args) => bridge.readImageFile(...args),
-        },
+        }, changeBaseline: { readWorkingDiffBase: (...args) => bridge.readWorkingDiffBase(...args) },
         workspace: this.workspaceOperations,
       },
       initialCatalog.editor,
       {
         filesChanged: (change) => this.handleProjectFilesChange(change),
-        editorChanged: (change) => this.handleEditorSessionChange(change),
+        editorChanged: (change) => this.handleEditorSessionChange(change), changeBaselineChanged: () => queueMicrotask(() => this.renderEditor()),
       },
     );
     this.gitOperationRuntime = new GitOperationRuntime({
@@ -3899,7 +3899,7 @@ export class AsterlynApp {
     this.contextMenuHost.revalidate();
   }
 
-  private renderRepositorySlices(snapshot: RepositorySnapshot, slices: Iterable<SessionInvalidationSlice>): void {
+  private renderRepositorySlices(snapshot: RepositorySnapshot, slices: Iterable<SessionInvalidationSlice>): void { this.filesEditorRuntime.changeBaseline.installSnapshot(snapshot);
     renderRepositoryProjectionSlices(snapshot, slices, {
       changesVisible: this.shellState.layout.leftTool === "changes", branchDetailVisible: this.gitHistoryPresentationRuntime.detailState.gitDetail === "branch",
       renderCapability: () => { this.applyWorkbenchLayout(false); this.renderActivityRail(); },
@@ -6324,7 +6324,7 @@ export class AsterlynApp {
   private mountTextEditor(key: string, tab: TextTabState): void {
     this.editorSurface.mountText(
       key,
-      tab,
+      tab, this.filesEditorRuntime.changeBaseline.baseline(this.windowSession.repository.state.snapshot, tab.document.repositoryId, tab.document.path, tab.persistedContent),
       this.settingsState.preferences,
       this.textBlameAvailability(tab),
       () => this.captureMountedTextEditor(),
@@ -6335,7 +6335,7 @@ export class AsterlynApp {
   private mountMarkdownEditor(key: string, tab: TextTabState): void {
     this.editorSurface.mountMarkdown(
       key,
-      tab,
+      tab, this.filesEditorRuntime.changeBaseline.baseline(this.windowSession.repository.state.snapshot, tab.document.repositoryId, tab.document.path, tab.persistedContent),
       this.settingsState.preferences,
       this.textBlameAvailability(tab),
       () => this.captureMountedTextEditor(),

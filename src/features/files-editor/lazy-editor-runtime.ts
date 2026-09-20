@@ -11,12 +11,14 @@ import type {
   GitBlameRuntime,
   GitBlameSource,
 } from "./editor-gutter.ts";
+import type { EditorCopy } from "../../localization/catalog.ts";
 
 type TextMount = {
   parent: HTMLElement;
   tabId: string;
   loadEpoch: number;
   content: string;
+  baselineContent: string;
   path: string;
   preferences: AppPreferences;
   blameSource: GitBlameSource | null;
@@ -36,7 +38,7 @@ type DiffMount = {
 /** Loads the CodeMirror text runtime only when the first editable document is mounted. */
 export class LazyTextEditor {
   private readonly blameRuntime: GitBlameRuntime;
-  private blameCopy: GitBlameCopy;
+  private blameCopy: EditorCopy;
   private implementation: TextEditor | null = null;
   private loading: Promise<TextEditor> | null = null;
   private pendingMount: TextMount | null = null;
@@ -50,7 +52,7 @@ export class LazyTextEditor {
 
   constructor(
     blameRuntime: GitBlameRuntime,
-    blameCopy: GitBlameCopy,
+    blameCopy: EditorCopy,
     contextMenu: ContextMenuPort,
     contextOwnerId: string,
   ) {
@@ -65,6 +67,7 @@ export class LazyTextEditor {
     tabId: string,
     loadEpoch: number,
     content: string,
+    baselineContent: string,
     path: string,
     preferences: AppPreferences,
     blameSource: GitBlameSource | null,
@@ -76,6 +79,7 @@ export class LazyTextEditor {
       tabId,
       loadEpoch,
       content,
+      baselineContent,
       path,
       preferences,
       blameSource,
@@ -93,6 +97,7 @@ export class LazyTextEditor {
         tabId,
         loadEpoch,
         content,
+        baselineContent,
         path,
         this.preferences ?? preferences,
         blameSource,
@@ -117,6 +122,7 @@ export class LazyTextEditor {
         mount.tabId,
         mount.loadEpoch,
         mount.content,
+        mount.baselineContent,
         mount.path,
         this.preferences ?? mount.preferences,
         mount.blameSource,
@@ -204,7 +210,7 @@ export class LazyTextEditor {
     this.implementation?.setPhrases(phrases);
   }
 
-  setBlameCopy(copy: GitBlameCopy): void {
+  setBlameCopy(copy: EditorCopy): void {
     this.blameCopy = copy;
     this.implementation?.setBlameCopy(copy);
   }

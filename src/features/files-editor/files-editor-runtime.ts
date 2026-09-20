@@ -18,22 +18,30 @@ import {
   WorkspaceReplacementController,
   type WorkspaceReplacementOperations,
 } from "./workspace-replacement-controller.ts";
+import {
+  EditorChangeBaselineController,
+  type EditorChangeBaselineChange,
+  type EditorChangeBaselineGateway,
+} from "./editor-change-baseline-controller.ts";
 
 export interface FilesEditorRuntimeGateways {
   readonly files: ProjectFilesGateway;
   readonly editor: EditorSessionGateway;
+  readonly changeBaseline: EditorChangeBaselineGateway;
   readonly workspace: WorkspaceSearchOperations & WorkspaceReplacementOperations;
 }
 
 export interface FilesEditorRuntimeNotifications {
   filesChanged(change: ProjectFilesChange): void;
   editorChanged(change: EditorSessionChange): void;
+  changeBaselineChanged(change: EditorChangeBaselineChange): void;
 }
 
 /** Owns Files, Editor, Search, and Replacement controllers and their lifecycle. */
 export class FilesEditorRuntime {
   readonly files: ProjectFilesController;
   readonly editor: EditorSessionController;
+  readonly changeBaseline: EditorChangeBaselineController;
   readonly search: WorkspaceSearchController;
   readonly replacement: WorkspaceReplacementController;
   readonly commands: CommandSurfaceController;
@@ -48,12 +56,14 @@ export class FilesEditorRuntime {
   ) {
     this.files = new ProjectFilesController(gateways.files, messages);
     this.editor = new EditorSessionController(gateways.editor, messages);
+    this.changeBaseline = new EditorChangeBaselineController(gateways.changeBaseline);
     this.search = new WorkspaceSearchController(gateways.workspace);
     this.replacement = new WorkspaceReplacementController(gateways.workspace);
     this.commands = new CommandSurfaceController();
     this.releases = [
       this.files.subscribe((change) => notifications.filesChanged(change)),
       this.editor.subscribe((change) => notifications.editorChanged(change)),
+      this.changeBaseline.subscribe((change) => notifications.changeBaselineChanged(change)),
     ];
   }
 
@@ -65,5 +75,6 @@ export class FilesEditorRuntime {
     this.replacement.dispose();
     this.files.dispose();
     this.editor.dispose();
+    this.changeBaseline.dispose();
   }
 }
