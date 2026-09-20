@@ -130,6 +130,36 @@ pub struct GitOperationPlan {
     pub preview_token: String,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitResetMode {
+    Soft,
+    Mixed,
+    Hard,
+    Keep,
+}
+
+impl GitResetMode {
+    pub fn argument(self) -> &'static str {
+        match self {
+            Self::Soft => "--soft",
+            Self::Mixed => "--mixed",
+            Self::Hard => "--hard",
+            Self::Keep => "--keep",
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitResetPlan {
+    pub repository_root: String,
+    pub start_head_ref: String,
+    pub start_head_oid: String,
+    pub target_oid: String,
+    pub preview_token: String,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitConflictContent {
@@ -233,8 +263,49 @@ pub struct BranchState {
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSummary {
     pub name: String,
+    pub url: Option<String>,
     pub fetch_supported: bool,
     pub push_supported: bool,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteMutationKind {
+    Add,
+    Edit,
+    Delete,
+}
+
+impl RemoteMutationKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Edit => "edit",
+            Self::Delete => "delete",
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteMutationRequest {
+    pub kind: RemoteMutationKind,
+    pub source_name: Option<String>,
+    pub name: String,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteMutationPlan {
+    pub repository_root: String,
+    pub kind: RemoteMutationKind,
+    pub source_name: Option<String>,
+    pub target_name: String,
+    pub source_url: Option<String>,
+    pub target_url: Option<String>,
+    pub configuration_token: String,
+    pub preview_token: String,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

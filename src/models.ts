@@ -25,9 +25,12 @@ export interface BranchState {
 
 export interface RemoteSummary {
   name: string;
+  url: string | null;
   fetchSupported: boolean;
   pushSupported: boolean;
 }
+
+export type { GitResetMode, GitResetPlan, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest } from "./git-reviewed-models.ts";
 
 export type RemoteTransport = "https" | "ssh" | "local" | "other";
 

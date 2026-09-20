@@ -238,6 +238,95 @@ pub(crate) async fn execute_branch_mutation(
 }
 
 #[tauri::command]
+pub(crate) async fn prepare_remote_mutation(
+    repository_root: String,
+    request: RemoteMutationRequest,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RemoteMutationPlan, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "prepare remote mutation",
+            move |repository| repository.prepare_remote_mutation(&request),
+        )
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn execute_remote_mutation(
+    repository_root: String,
+    plan: RemoteMutationPlan,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "execute remote mutation",
+            move |repository| {
+                repository.execute_remote_mutation(&plan)?;
+                repository
+                    .tracked_snapshot(COMMIT_LIMIT)
+                    .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+            },
+        )
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn prepare_git_reset(
+    repository_root: String,
+    target_oid: String,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<GitResetPlan, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(repository_root, "prepare Git reset", move |repository| {
+            repository.prepare_git_reset(&target_oid)
+        })
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn execute_git_reset(
+    repository_root: String,
+    plan: GitResetPlan,
+    mode: GitResetMode,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(repository_root, "execute Git reset", move |repository| {
+            repository.execute_git_reset(&plan, mode)?;
+            repository
+                .tracked_snapshot(COMMIT_LIMIT)
+                .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+        })
+        .await
+}
+
+#[tauri::command]
 pub(crate) async fn fetch_remote(
     repository_root: String,
     remote: String,

@@ -11,7 +11,9 @@ import {
   demoQueryHistory,
   demoCreateBranch,
   demoExecuteBranchMutation,
+  demoExecuteGitReset, demoExecuteRemoteMutation,
   demoPrepareBranchMutation,
+  demoPrepareGitReset, demoPrepareRemoteMutation,
   demoDiff,
   demoFetchRemote,
   demoPullCurrent,
@@ -24,54 +26,32 @@ import {
   demoUnstage,
 } from "../../demo";
 import type {
-  BranchMutationPlan,
-  BranchMutationRequest,
-  CommitComparisonDetails,
-  CommitComparisonDiffResult,
-  CommitDetails,
-  CommitDiffResult,
-  CommitFileChange,
-  CommitFilePreview,
-  CommitFileComparison,
-  CommitFileRestorePreview,
-  CommitSelectedResult,
-  DiffResult,
-  FileChange,
-  FileRestoreApplyResult,
-  FileRestoreRecoverySummary,
-  RestoreChangesPlan,
-  GitWorktreeRecovery,
-  GitConflictContent,
-  GitBlameResult,
-  GitOperationAction,
-  GitOperationKind,
-  GitOperationMutationOutcome,
-  GitOperationPlan,
-  GitOperationSnapshot,
-  HistoryQuery,
-  HistoryPage,
-  ImageDiffPreview,
-  ImagePreview,
-  ProjectFileList,
-  ProjectWindowMatch,
-  ProjectWindowOpenResult,
-  OpenedProject,
-  PushPreview,
-  PushMode,
-  PushTagMode,
-  RemoteAuthenticationStatus,
-  ReplacementApplyResult,
-  ReplacementRecoverySummary,
-  RepositoryMutationOutcome,
-  RepositorySliceProject,
-  RepositoryStateSlice,
-  SaveTextFileResult,
-  TextFileSnapshot,
-  TerminalEvent,
-  TerminalStarted,
-  TrackedChangeScan,
-  WorkingTreeMutationOutcome,
-  UntrackedScan,
+  BranchMutationPlan, BranchMutationRequest,
+  CommitComparisonDetails, CommitComparisonDiffResult,
+  CommitDetails, CommitDiffResult,
+  CommitFileChange, CommitFilePreview,
+  CommitFileComparison, CommitFileRestorePreview,
+  CommitSelectedResult, DiffResult,
+  FileChange, FileRestoreApplyResult,
+  FileRestoreRecoverySummary, RestoreChangesPlan,
+  GitWorktreeRecovery, GitConflictContent,
+  GitBlameResult, GitOperationAction,
+  GitOperationKind, GitOperationMutationOutcome,
+  GitOperationPlan, GitOperationSnapshot,
+  GitResetMode, GitResetPlan,
+  HistoryQuery, HistoryPage,
+  ImageDiffPreview, ImagePreview,
+  ProjectFileList, ProjectWindowMatch,
+  ProjectWindowOpenResult, OpenedProject,
+  PushPreview, PushMode,
+  PushTagMode, RemoteAuthenticationStatus,
+  RemoteMutationPlan, RemoteMutationRequest,
+  ReplacementApplyResult, ReplacementRecoverySummary,
+  RepositoryMutationOutcome, RepositorySliceProject,
+  RepositoryStateSlice, SaveTextFileResult,
+  TextFileSnapshot, TerminalEvent,
+  TerminalStarted, TrackedChangeScan,
+  WorkingTreeMutationOutcome, UntrackedScan,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
   WorkspaceReplacementPreview,
@@ -122,6 +102,10 @@ const demoTextBaselines = new Map(
 );
 const DEMO_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+function completeDemoMutation(): RepositoryMutationOutcome {
+  return { snapshot: demoTrackedSnapshot(browserSnapshot), invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES] };
+}
 
 function demoImage(path: string): ImagePreview {
   return {
@@ -1375,10 +1359,7 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) {
       await demoDelay(260);
       browserSnapshot = demoSwitchBranch(browserSnapshot, targetFullName);
-      return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
-        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
-      };
+      return completeDemoMutation();
     }
     return invoke<RepositoryMutationOutcome>("switch_branch", {
       repositoryRoot,
@@ -1393,10 +1374,7 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) {
       await demoDelay(260);
       browserSnapshot = demoCreateBranch(browserSnapshot, name);
-      return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
-        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
-      };
+      return completeDemoMutation();
     }
     return invoke<RepositoryMutationOutcome>("create_branch", {
       repositoryRoot,
@@ -1418,14 +1396,39 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) {
       await demoDelay(260);
       browserSnapshot = demoExecuteBranchMutation(browserSnapshot, plan);
-      return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
-        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
-      };
+      return completeDemoMutation();
     }
     return invoke<RepositoryMutationOutcome>(
       "execute_branch_mutation", { repositoryRoot, plan, operationId },
     );
+  },
+
+  async prepareRemoteMutation(repositoryRoot: string, request: RemoteMutationRequest): Promise<RemoteMutationPlan> {
+    if (!isTauri) return demoPrepareRemoteMutation(browserSnapshot, request);
+    return invoke<RemoteMutationPlan>("prepare_remote_mutation", { repositoryRoot, request });
+  },
+
+  async executeRemoteMutation(repositoryRoot: string, plan: RemoteMutationPlan): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) {
+      await demoDelay(180);
+      browserSnapshot = demoExecuteRemoteMutation(browserSnapshot, plan);
+      return completeDemoMutation();
+    }
+    return invoke<RepositoryMutationOutcome>("execute_remote_mutation", { repositoryRoot, plan });
+  },
+
+  async prepareGitReset(repositoryRoot: string, targetOid: string): Promise<GitResetPlan> {
+    if (!isTauri) return demoPrepareGitReset(browserSnapshot, targetOid);
+    return invoke<GitResetPlan>("prepare_git_reset", { repositoryRoot, targetOid });
+  },
+
+  async executeGitReset(repositoryRoot: string, plan: GitResetPlan, mode: GitResetMode): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) {
+      await demoDelay(220);
+      browserSnapshot = demoExecuteGitReset(browserSnapshot, plan, mode);
+      return completeDemoMutation();
+    }
+    return invoke<RepositoryMutationOutcome>("execute_git_reset", { repositoryRoot, plan, mode });
   },
 
   async fetchRemote(
@@ -1574,10 +1577,7 @@ const demoBridge: DesktopBridge = {
         throw new Error("Pull was cancelled; refresh before continuing.");
       }
       browserSnapshot = demoPullCurrent(browserSnapshot);
-      return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
-        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
-      };
+      return completeDemoMutation();
     }
     return invoke<RepositoryMutationOutcome>("pull_current", {
       repositoryRoot,
@@ -1683,10 +1683,7 @@ const demoBridge: DesktopBridge = {
       if (plan.startHeadOid !== browserSnapshot.branch.oid) {
         throw new Error("The reviewed operation plan is stale.");
       }
-      return {
-        snapshot: demoTrackedSnapshot(browserSnapshot),
-        invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
-      };
+      return completeDemoMutation();
     }
     return invoke<RepositoryMutationOutcome>("execute_git_operation", { repositoryRoot, plan });
   },

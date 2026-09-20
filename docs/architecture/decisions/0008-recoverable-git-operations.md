@@ -1,6 +1,6 @@
 # ADR-0008: Reviewed and recoverable Git operation lifecycle
 
-- **Status:** Implemented for merge, cherry-pick, rebase, and bounded squash
+- **Status:** Implemented for merge, cherry-pick, rebase, bounded squash, branch reset, and remote configuration
 - **Date:** 2026-09-12
 
 ## Context
@@ -99,6 +99,22 @@ stale `HEAD`, changed conflict content, dirty, detached and unborn states, initi
 identity, pre-start cancellation, Merge continue/abort, Cherry-pick order/skip/continue, Rebase
 continue/abort, and exact-lease Squash.
 
+Single-command reference and configuration mutations use the same prepare/revalidate principle
+without pretending to be resumable sequencer operations. A reviewed branch reset captures the
+canonical repository, symbolic current local branch, exact starting `HEAD`, and exact selected
+ancestor commit. Execution regenerates and compares that plan before invoking one explicit
+`reset --soft|--mixed|--hard|--keep`; it then verifies that the same branch is still checked out and
+now resolves to the selected commit. Presentation may offer this only for a non-`HEAD` commit on the
+loaded current-branch first-parent chain. `Hard` remains an explicit destructive choice with a
+warning; no mode is inferred from a generic “undo” command.
+
+Remote add, edit/rename, and delete capture the exact repository-local `remote.<name>.*`
+configuration before execution. A changed configuration rejects the plan. Add verifies the new
+name and URL, edit verifies both the optional exact rename and URL replacement, and delete verifies
+the exact section is gone. Remote URLs are transport inputs and are never accepted as command-line
+options. Deleting a remote remains separately confirmed in presentation; add/edit can execute from
+their definition form because they do not discard commits or working-tree content.
+
 ## Invariants
 
 1. System Git owns refs, index semantics, and operation state; the workspace capability owns safe raw file replacement composed by the application service.
@@ -113,6 +129,11 @@ continue/abort, and exact-lease Squash.
 9. A completed Merge is successful only after its reviewed destination, target ancestry, and exact
    source-ref lease are observed in Git; paused/conflicted Merge remains governed by operation
    metadata until Continue or Abort.
+10. Reset moves only the currently checked-out local branch to one reviewed ancestor and verifies
+    the postcondition; it never accepts an arbitrary ref, detached `HEAD`, or a commit outside that
+    branch's reviewed history.
+11. Remote configuration writes execute only while the exact reviewed local configuration token
+    remains current; external edits are reconciled instead of overwritten.
 
 ## Consequences
 

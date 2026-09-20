@@ -5,9 +5,10 @@ use asterlyn_git::{
     BranchMutationPlan, BranchMutationRequest, CommitComparisonDetails, CommitComparisonDiffResult,
     CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange, GitBlameResult,
     GitConflictContent, GitError, GitOperationAction, GitOperationKind, GitOperationPlan,
-    GitOperationSnapshot, GitRepository, HistoryPage, HistoryQuery, ProjectFileList, PushMode,
-    PushPreview, PushTagMode, RemoteAuthenticationStatus, RepositoryReadPlan,
-    RepositorySliceSnapshot, RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    GitOperationSnapshot, GitRepository, GitResetMode, GitResetPlan, HistoryPage, HistoryQuery,
+    ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
+    RemoteMutationPlan, RemoteMutationRequest, RepositoryReadPlan, RepositorySliceSnapshot,
+    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
 use asterlyn_workspace::{
@@ -307,6 +308,10 @@ pub fn run() {
             create_branch,
             prepare_branch_mutation,
             execute_branch_mutation,
+            prepare_remote_mutation,
+            execute_remote_mutation,
+            prepare_git_reset,
+            execute_git_reset,
             fetch_remote,
             read_remote_authentication,
             store_remote_https_credential,

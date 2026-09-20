@@ -7,7 +7,9 @@ import type {
   GitOperationMutationOutcome,
   GitOperationPlan,
   GitOperationSnapshot,
+  GitResetPlan,
   RemoteAuthenticationStatus,
+  RemoteMutationPlan,
   RepositoryMutationOutcome,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
@@ -50,6 +52,21 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       plan,
       operationId,
+    }),
+  prepareRemoteMutation: (repositoryRoot, request) =>
+    invokeDesktopCommand<RemoteMutationPlan>("prepare_remote_mutation", { repositoryRoot, request }),
+  executeRemoteMutation: (repositoryRoot, plan) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_remote_mutation", {
+      repositoryRoot,
+      plan,
+    }),
+  prepareGitReset: (repositoryRoot, targetOid) =>
+    invokeDesktopCommand<GitResetPlan>("prepare_git_reset", { repositoryRoot, targetOid }),
+  executeGitReset: (repositoryRoot, plan, mode) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_git_reset", {
+      repositoryRoot,
+      plan,
+      mode,
     }),
   readRemoteAuthentication: (repositoryRoot, remote) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {

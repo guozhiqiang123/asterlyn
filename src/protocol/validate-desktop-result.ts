@@ -172,6 +172,38 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       );
       break;
     }
+    case "remoteMutationPlan": {
+      const result = record(value, command);
+      strings(
+        result,
+        command,
+        "repositoryRoot",
+        "kind",
+        "targetName",
+        "configurationToken",
+        "previewToken",
+      );
+      nullableStrings(result, command, "sourceName", "sourceUrl", "targetUrl");
+      assert(
+        result.kind === "add" || result.kind === "edit" || result.kind === "delete",
+        command,
+        "kind must be a supported remote mutation kind",
+      );
+      break;
+    }
+    case "gitResetPlan": {
+      const result = record(value, command);
+      strings(
+        result,
+        command,
+        "repositoryRoot",
+        "startHeadRef",
+        "startHeadOid",
+        "targetOid",
+        "previewToken",
+      );
+      break;
+    }
     case "gitConflictContent": {
       const result = record(value, command);
       strings(result, command, "path", "revisionToken");

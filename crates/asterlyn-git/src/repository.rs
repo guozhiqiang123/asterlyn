@@ -13,12 +13,13 @@ use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
     BranchMutationSourceKind, ChangeKind, CommitComparisonDetails, CommitComparisonDiffResult,
     CommitComparisonRelation, CommitDetails, CommitDiffResult, CommitFileChange, CommitFileVersion,
-    CommitSummary, DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind,
-    HistoryOrder, HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind,
-    ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode,
-    PushTagSummary, RemoteAuthenticationStatus, RemoteBranchDeletionTarget, RemoteSummary,
-    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
-    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    CommitSummary, DiffResult, FileChange, GitBlameResult, GitResetMode, GitResetPlan,
+    GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath, HistoryQuery,
+    HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode,
+    PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus,
+    RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest,
+    RemoteSummary, RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot,
+    RepositorySnapshot, SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
@@ -3176,6 +3177,288 @@ impl GitRepository {
             .count())
     }
 
+    pub fn prepare_remote_mutation(
+        &self,
+        request: &RemoteMutationRequest,
+    ) -> Result<RemoteMutationPlan, GitError> {
+        self.ensure_no_repository_operation("prepare remote mutation")?;
+        let target_name = self.validate_remote_name(&request.name)?.to_string();
+        let target_url = match request.kind {
+            RemoteMutationKind::Add | RemoteMutationKind::Edit => {
+                Some(validate_remote_url(request.url.as_deref().unwrap_or_default())?.to_string())
+            }
+            RemoteMutationKind::Delete => {
+                if request.url.is_some() {
+                    return Err(invalid_remote_mutation(
+                        "a remote URL is not accepted while deleting a remote",
+                    ));
+                }
+                None
+            }
+        };
+        let remotes = self.remote_summaries()?;
+        let (source_name, source_url, configuration_token) = match request.kind {
+            RemoteMutationKind::Add => {
+                if request.source_name.is_some() {
+                    return Err(invalid_remote_mutation(
+                        "a new remote must not include an existing source name",
+                    ));
+                }
+                if remotes.iter().any(|remote| remote.name == target_name) {
+                    return Err(invalid_remote_mutation("the remote name already exists"));
+                }
+                (None, None, String::new())
+            }
+            RemoteMutationKind::Edit | RemoteMutationKind::Delete => {
+                let source = request.source_name.as_deref().ok_or_else(|| {
+                    invalid_remote_mutation("select an existing remote to change")
+                })?;
+                let source = self.validate_remote_name(source)?.to_string();
+                let configured = remotes
+                    .iter()
+                    .find(|remote| remote.name == source)
+                    .ok_or_else(|| {
+                        invalid_remote_mutation("the selected remote no longer exists")
+                    })?;
+                if request.kind == RemoteMutationKind::Delete && target_name != source {
+                    return Err(invalid_remote_mutation(
+                        "the reviewed remote name changed while preparing deletion",
+                    ));
+                }
+                if request.kind == RemoteMutationKind::Edit
+                    && target_name != source
+                    && remotes.iter().any(|remote| remote.name == target_name)
+                {
+                    return Err(invalid_remote_mutation(
+                        "the new remote name already exists",
+                    ));
+                }
+                (
+                    Some(source.clone()),
+                    configured.url.clone(),
+                    self.remote_configuration_token(&source)?,
+                )
+            }
+        };
+        if request.kind == RemoteMutationKind::Edit
+            && source_name.as_deref() == Some(target_name.as_str())
+            && source_url == target_url
+        {
+            return Err(invalid_remote_mutation(
+                "change the remote name or URL before saving",
+            ));
+        }
+        let preview_token = mutation_token(
+            "asterlyn-remote-mutation-v1",
+            &[
+                request.kind.label(),
+                source_name.as_deref().unwrap_or_default(),
+                &target_name,
+                source_url.as_deref().unwrap_or_default(),
+                target_url.as_deref().unwrap_or_default(),
+                &configuration_token,
+            ],
+        );
+        Ok(RemoteMutationPlan {
+            repository_root: self.root.to_string_lossy().into_owned(),
+            kind: request.kind,
+            source_name,
+            target_name,
+            source_url,
+            target_url,
+            configuration_token,
+            preview_token,
+        })
+    }
+
+    pub fn execute_remote_mutation(&self, plan: &RemoteMutationPlan) -> Result<(), GitError> {
+        if plan.repository_root != self.root.to_string_lossy() {
+            return Err(stale_remote_mutation(
+                "the reviewed plan belongs to another repository",
+            ));
+        }
+        let refreshed = self.prepare_remote_mutation(&RemoteMutationRequest {
+            kind: plan.kind,
+            source_name: plan.source_name.clone(),
+            name: plan.target_name.clone(),
+            url: plan.target_url.clone(),
+        })?;
+        if &refreshed != plan {
+            return Err(stale_remote_mutation(
+                "the selected remote configuration changed after review",
+            ));
+        }
+        match plan.kind {
+            RemoteMutationKind::Add => {
+                self.run_mutation(
+                    "add reviewed remote",
+                    vec![
+                        OsString::from("remote"),
+                        OsString::from("add"),
+                        OsString::from("--"),
+                        OsString::from(&plan.target_name),
+                        OsString::from(plan.target_url.as_deref().unwrap_or_default()),
+                    ],
+                )?;
+            }
+            RemoteMutationKind::Edit => self.edit_remote_from_plan(plan)?,
+            RemoteMutationKind::Delete => {
+                self.run_mutation(
+                    "delete reviewed remote",
+                    vec![
+                        OsString::from("remote"),
+                        OsString::from("remove"),
+                        OsString::from(plan.source_name.as_deref().unwrap_or_default()),
+                    ],
+                )?;
+            }
+        }
+        self.verify_remote_mutation(plan)
+    }
+
+    fn edit_remote_from_plan(&self, plan: &RemoteMutationPlan) -> Result<(), GitError> {
+        let source = plan.source_name.as_deref().unwrap_or_default();
+        let renamed = source != plan.target_name;
+        if renamed {
+            self.run_mutation(
+                "rename reviewed remote",
+                vec![
+                    OsString::from("remote"),
+                    OsString::from("rename"),
+                    OsString::from(source),
+                    OsString::from(&plan.target_name),
+                ],
+            )?;
+        }
+        if plan.source_url == plan.target_url {
+            return Ok(());
+        }
+        let mut arguments = vec![OsString::from("remote"), OsString::from("set-url")];
+        if plan.source_url.is_none() {
+            arguments.push(OsString::from("--add"));
+        }
+        arguments.extend([
+            OsString::from("--"),
+            OsString::from(&plan.target_name),
+            OsString::from(plan.target_url.as_deref().unwrap_or_default()),
+        ]);
+        if let Err(error) = self.run_mutation("update reviewed remote URL", arguments) {
+            if renamed
+                && self
+                    .run_mutation(
+                        "roll back remote rename",
+                        vec![
+                            OsString::from("remote"),
+                            OsString::from("rename"),
+                            OsString::from(&plan.target_name),
+                            OsString::from(source),
+                        ],
+                    )
+                    .is_err()
+            {
+                return Err(GitError::UnsafeOperation {
+                    operation: "update reviewed remote".to_string(),
+                    message: "the URL update failed and the remote rename could not be rolled back; refresh and inspect the repository configuration".to_string(),
+                    blockers: vec![source.to_string(), plan.target_name.clone()],
+                });
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn verify_remote_mutation(&self, plan: &RemoteMutationPlan) -> Result<(), GitError> {
+        let remotes = self.remote_summaries()?;
+        if plan.kind == RemoteMutationKind::Delete {
+            if remotes.iter().any(|remote| remote.name == plan.target_name) {
+                return Err(stale_remote_mutation(
+                    "Git did not remove the reviewed remote",
+                ));
+            }
+            return Ok(());
+        }
+        let configured = remotes
+            .iter()
+            .find(|remote| remote.name == plan.target_name)
+            .ok_or_else(|| stale_remote_mutation("Git did not retain the reviewed remote"))?;
+        if configured.url != plan.target_url {
+            return Err(stale_remote_mutation(
+                "Git did not retain the reviewed remote URL",
+            ));
+        }
+        if plan.source_name.as_deref().is_some_and(|source| {
+            source != plan.target_name && remotes.iter().any(|remote| remote.name == source)
+        }) {
+            return Err(stale_remote_mutation(
+                "the previous remote name still exists after rename",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn prepare_git_reset(&self, target: &str) -> Result<GitResetPlan, GitError> {
+        self.ensure_no_repository_operation("prepare reset")?;
+        let current = self.current_branch_context("prepare reset")?;
+        let target_oid = self.resolve_commit(target, "resolve reset target")?;
+        if current.oid == target_oid {
+            return Err(invalid_git_reset(
+                "select a commit other than the current HEAD",
+            ));
+        }
+        if !self.is_ancestor(&target_oid, &current.oid)? {
+            return Err(invalid_git_reset(
+                "the selected commit is not contained in the current branch",
+            ));
+        }
+        let preview_token = mutation_token(
+            "asterlyn-git-reset-v1",
+            &[&current.full_ref, &current.oid, &target_oid],
+        );
+        Ok(GitResetPlan {
+            repository_root: self.root.to_string_lossy().into_owned(),
+            start_head_ref: current.full_ref,
+            start_head_oid: current.oid,
+            target_oid,
+            preview_token,
+        })
+    }
+
+    pub fn execute_git_reset(
+        &self,
+        plan: &GitResetPlan,
+        mode: GitResetMode,
+    ) -> Result<(), GitError> {
+        if plan.repository_root != self.root.to_string_lossy() {
+            return Err(stale_git_reset(
+                "the reviewed plan belongs to another repository",
+            ));
+        }
+        let refreshed = self.prepare_git_reset(&plan.target_oid)?;
+        if &refreshed != plan {
+            return Err(stale_git_reset(
+                "the current branch or selected commit changed after review",
+            ));
+        }
+        self.run_mutation(
+            "reset reviewed current branch",
+            vec![
+                OsString::from("reset"),
+                OsString::from(mode.argument()),
+                OsString::from("--no-recurse-submodules"),
+                OsString::from(&plan.target_oid),
+            ],
+        )?;
+        let after = self.current_branch_context("verify completed reset")?;
+        if after.full_ref != plan.start_head_ref || after.oid != plan.target_oid {
+            return Err(GitError::UnsafeOperation {
+                operation: "verify completed reset".to_string(),
+                message: "Git returned success, but the reviewed current branch was not observed at the selected commit; refresh and inspect the repository before another operation".to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        Ok(())
+    }
+
     pub fn fetch_remote(
         &self,
         remote: &str,
@@ -3885,15 +4168,58 @@ impl GitRepository {
         names
             .into_iter()
             .map(|name| {
+                let url = self.remote_configured_url(&name)?;
                 let fetch_supported = self.remote_fetch_is_supported(&name)?;
                 let push_supported = fetch_supported && !self.remote_is_mirror(&name)?;
                 Ok(RemoteSummary {
                     name,
+                    url,
                     fetch_supported,
                     push_supported,
                 })
             })
             .collect()
+    }
+
+    fn remote_configured_url(&self, remote: &str) -> Result<Option<String>, GitError> {
+        let key = format!("remote.{remote}.url");
+        let output =
+            run_git_output(&self.root, ["config", "--local", "--get", &key]).map_err(|error| {
+                GitError::Io {
+                    operation: "read remote URL".to_string(),
+                    message: error.to_string(),
+                }
+            })?;
+        match output.status.code() {
+            Some(0) => {
+                let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                Ok((!url.is_empty()).then_some(url))
+            }
+            Some(1) => Ok(None),
+            _ => Err(GitError::CommandFailed {
+                operation: "read remote URL".to_string(),
+                status: output.status.code(),
+                message: "Git could not read the configured remote URL".to_string(),
+            }),
+        }
+    }
+
+    fn remote_configuration_token(&self, remote: &str) -> Result<String, GitError> {
+        let pattern = format!("^remote\\.{}\\.", regex_escape(remote));
+        let output = run_git_output(&self.root, ["config", "--local", "--get-regexp", &pattern])
+            .map_err(|error| GitError::Io {
+                operation: "read remote configuration".to_string(),
+                message: error.to_string(),
+            })?;
+        match output.status.code() {
+            Some(0) => Ok(String::from_utf8_lossy(&output.stdout).into_owned()),
+            Some(1) => Ok(String::new()),
+            _ => Err(GitError::CommandFailed {
+                operation: "read remote configuration".to_string(),
+                status: output.status.code(),
+                message: "Git could not read the selected remote configuration".to_string(),
+            }),
+        }
     }
 
     fn remote_push_url(&self, remote: &str) -> Result<String, GitError> {
@@ -4325,6 +4651,25 @@ impl GitRepository {
                 field: "branch name".to_string(),
                 message: sanitize_stderr(&output.stderr, "Git rejected the branch name"),
             });
+        }
+        Ok(name)
+    }
+
+    fn validate_remote_name<'a>(&self, name: &'a str) -> Result<&'a str, GitError> {
+        let name = name.trim();
+        let valid = !name.is_empty()
+            && name.len() <= 255
+            && !name.starts_with(['-', '.'])
+            && name != "."
+            && name != ".."
+            && name.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+            })
+            && self.ref_is_valid(&format!("refs/remotes/{name}/asterlyn-probe"))?;
+        if !valid {
+            return Err(invalid_remote_mutation(
+                "enter a simple remote name using letters, numbers, dots, underscores, or hyphens",
+            ));
         }
         Ok(name)
     }
@@ -5239,7 +5584,11 @@ fn validate_local_branch_ref(full_name: &str) -> Result<&str, GitError> {
 }
 
 fn branch_mutation_token(fields: &[&str]) -> String {
-    let mut token = String::from("asterlyn-branch-mutation-v1");
+    mutation_token("asterlyn-branch-mutation-v1", fields)
+}
+
+fn mutation_token(prefix: &str, fields: &[&str]) -> String {
+    let mut token = String::from(prefix);
     for field in fields {
         token.push('|');
         token.push_str(&field.len().to_string());
@@ -5247,6 +5596,59 @@ fn branch_mutation_token(fields: &[&str]) -> String {
         token.push_str(field);
     }
     token
+}
+
+fn validate_remote_url(url: &str) -> Result<&str, GitError> {
+    if url.is_empty() || url != url.trim() || url.len() > 4096 || url.contains(['\0', '\n', '\r']) {
+        return Err(invalid_remote_mutation(
+            "enter a non-empty literal remote URL",
+        ));
+    }
+    Ok(url)
+}
+
+fn regex_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(
+            character,
+            '.' | '^' | '$' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
+fn invalid_remote_mutation(message: &str) -> GitError {
+    GitError::InvalidInput {
+        field: "remote mutation".to_string(),
+        message: message.to_string(),
+    }
+}
+
+fn stale_remote_mutation(message: &str) -> GitError {
+    GitError::UnsafeOperation {
+        operation: "execute reviewed remote mutation".to_string(),
+        message: format!("the reviewed remote plan is stale: {message}; prepare it again"),
+        blockers: Vec::new(),
+    }
+}
+
+fn invalid_git_reset(message: &str) -> GitError {
+    GitError::InvalidInput {
+        field: "reset target".to_string(),
+        message: message.to_string(),
+    }
+}
+
+fn stale_git_reset(message: &str) -> GitError {
+    GitError::UnsafeOperation {
+        operation: "execute reviewed reset".to_string(),
+        message: format!("the reviewed reset plan is stale: {message}; prepare it again"),
+        blockers: Vec::new(),
+    }
 }
 
 fn stale_branch_plan(message: &str) -> GitError {
@@ -7923,6 +8325,192 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_remote_mutations_add_edit_rename_and_delete_exact_configuration() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        git(first.path(), &["init", "--bare"]);
+        git(second.path(), &["init", "--bare"]);
+        let first_url = first.path().to_string_lossy().into_owned();
+        let second_url = second.path().to_string_lossy().into_owned();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        let add = repository
+            .prepare_remote_mutation(&RemoteMutationRequest {
+                kind: RemoteMutationKind::Add,
+                source_name: None,
+                name: "origin".to_string(),
+                url: Some(first_url.clone()),
+            })
+            .expect("add plan");
+        repository
+            .execute_remote_mutation(&add)
+            .expect("add reviewed remote");
+        assert_eq!(
+            repository
+                .remote_summaries()
+                .unwrap()
+                .into_iter()
+                .find(|remote| remote.name == "origin")
+                .and_then(|remote| remote.url),
+            Some(first_url)
+        );
+
+        let edit = repository
+            .prepare_remote_mutation(&RemoteMutationRequest {
+                kind: RemoteMutationKind::Edit,
+                source_name: Some("origin".to_string()),
+                name: "upstream".to_string(),
+                url: Some(second_url.clone()),
+            })
+            .expect("edit plan");
+        repository
+            .execute_remote_mutation(&edit)
+            .expect("edit reviewed remote");
+        let remotes = repository.remote_summaries().unwrap();
+        assert!(!remotes.iter().any(|remote| remote.name == "origin"));
+        assert_eq!(
+            remotes
+                .iter()
+                .find(|remote| remote.name == "upstream")
+                .and_then(|remote| remote.url.as_deref()),
+            Some(second_url.as_str())
+        );
+
+        let delete = repository
+            .prepare_remote_mutation(&RemoteMutationRequest {
+                kind: RemoteMutationKind::Delete,
+                source_name: Some("upstream".to_string()),
+                name: "upstream".to_string(),
+                url: None,
+            })
+            .expect("delete plan");
+        repository
+            .execute_remote_mutation(&delete)
+            .expect("delete reviewed remote");
+        assert!(repository.remote_summaries().unwrap().is_empty());
+    }
+
+    #[test]
+    fn reviewed_remote_mutation_rejects_configuration_changed_after_review() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        git(
+            directory.path(),
+            &["remote", "add", "origin", "https://example.invalid/one.git"],
+        );
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let plan = repository
+            .prepare_remote_mutation(&RemoteMutationRequest {
+                kind: RemoteMutationKind::Edit,
+                source_name: Some("origin".to_string()),
+                name: "origin".to_string(),
+                url: Some("https://example.invalid/two.git".to_string()),
+            })
+            .expect("edit plan");
+        git(
+            directory.path(),
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "https://example.invalid/moved.git",
+            ],
+        );
+        assert!(matches!(
+            repository.execute_remote_mutation(&plan),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+    }
+
+    #[test]
+    fn reviewed_reset_modes_apply_their_distinct_index_and_worktree_semantics() {
+        for mode in [GitResetMode::Soft, GitResetMode::Mixed, GitResetMode::Hard] {
+            let directory = fixture();
+            let base = commit_file(directory.path(), "tracked.txt", "base\n", "Base");
+            commit_file(directory.path(), "tracked.txt", "tip\n", "Tip");
+            let repository = GitRepository::open(directory.path()).expect("repository opens");
+            let plan = repository.prepare_git_reset(&base).expect("reset plan");
+            repository
+                .execute_git_reset(&plan, mode)
+                .expect("execute reviewed reset");
+            assert_eq!(git_stdout(directory.path(), &["rev-parse", "HEAD"]), base);
+            match mode {
+                GitResetMode::Soft => {
+                    assert_eq!(
+                        fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+                        "tip\n"
+                    );
+                    assert!(!git_succeeds(
+                        directory.path(),
+                        &["diff", "--cached", "--quiet"]
+                    ));
+                }
+                GitResetMode::Mixed => {
+                    assert_eq!(
+                        fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+                        "tip\n"
+                    );
+                    assert!(git_succeeds(
+                        directory.path(),
+                        &["diff", "--cached", "--quiet"]
+                    ));
+                    assert!(!git_succeeds(directory.path(), &["diff", "--quiet"]));
+                }
+                GitResetMode::Hard => {
+                    assert_eq!(
+                        fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+                        "base\n"
+                    );
+                    assert!(git_succeeds(directory.path(), &["diff", "--quiet"]));
+                }
+                GitResetMode::Keep => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn reviewed_keep_reset_preserves_compatible_local_changes() {
+        let directory = fixture();
+        fs::write(directory.path().join("stable.txt"), "stable\n").unwrap();
+        fs::write(directory.path().join("moving.txt"), "base\n").unwrap();
+        git(directory.path(), &["add", "stable.txt", "moving.txt"]);
+        git(directory.path(), &["commit", "-m", "Base"]);
+        let base = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        commit_file(directory.path(), "moving.txt", "tip\n", "Tip");
+        fs::write(directory.path().join("stable.txt"), "local\n").unwrap();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let plan = repository.prepare_git_reset(&base).expect("reset plan");
+        repository
+            .execute_git_reset(&plan, GitResetMode::Keep)
+            .expect("keep reset");
+        assert_eq!(
+            fs::read_to_string(directory.path().join("moving.txt")).unwrap(),
+            "base\n"
+        );
+        assert_eq!(
+            fs::read_to_string(directory.path().join("stable.txt")).unwrap(),
+            "local\n"
+        );
+    }
+
+    #[test]
+    fn reset_review_rejects_a_commit_outside_the_current_branch() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        git(directory.path(), &["switch", "-c", "side"]);
+        let side = commit_file(directory.path(), "side.txt", "side\n", "Side");
+        git(directory.path(), &["switch", "main"]);
+        commit_file(directory.path(), "main.txt", "main\n", "Main");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        assert!(matches!(
+            repository.prepare_git_reset(&side),
+            Err(GitError::InvalidInput { .. })
+        ));
+    }
+
+    #[test]
     fn parses_nul_delimited_commit_paths_without_text_delimiter_ambiguity() {
         let files = parse_commit_files(
             b"M\0dir/file with spaces.txt\0R100\0old\tname.txt\0new\nname.txt\0",
@@ -7946,7 +8534,7 @@ mod tests {
     }
 
     #[test]
-    fn snapshots_remote_capabilities_without_exposing_urls() {
+    fn snapshots_remote_capabilities_and_configured_urls() {
         let fixture = remote_fixture();
         let repository = GitRepository::open(&fixture.local).expect("repository opens");
         let snapshot = repository
@@ -7961,6 +8549,7 @@ mod tests {
             snapshot.remotes,
             vec![RemoteSummary {
                 name: "origin".to_string(),
+                url: Some(fixture.remote.to_string_lossy().into_owned()),
                 fetch_supported: true,
                 push_supported: true,
             }]

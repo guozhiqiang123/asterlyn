@@ -12,6 +12,7 @@ import type {
   UntrackedScan,
 } from "./models";
 import { demoRemoteDeletionTarget } from "./demo-branch-mutation.ts";
+export { demoExecuteGitReset, demoExecuteRemoteMutation, demoPrepareGitReset, demoPrepareRemoteMutation } from "./demo-reviewed-mutations.ts";
 
 export const demoSnapshot: RepositorySnapshot = {
   root: "/workspace/asterlyn",
@@ -237,11 +238,13 @@ export const demoSnapshot: RepositorySnapshot = {
   remotes: [
     {
       name: "origin",
+      url: "https://github.com/example/asterlyn.git",
       fetchSupported: true,
       pushSupported: true,
     },
     {
       name: "backup",
+      url: "ssh://git@example.invalid/asterlyn.git",
       fetchSupported: true,
       pushSupported: true,
     },

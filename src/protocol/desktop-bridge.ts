@@ -23,6 +23,8 @@ import type {
   GitOperationMutationOutcome,
   GitOperationPlan,
   GitOperationSnapshot,
+  GitResetMode,
+  GitResetPlan,
   HistoryPage,
   HistoryQuery,
   ImageDiffPreview,
@@ -35,6 +37,8 @@ import type {
   PushPreview,
   PushTagMode,
   RemoteAuthenticationStatus,
+  RemoteMutationPlan,
+  RemoteMutationRequest,
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   RepositoryMutationOutcome,
@@ -299,6 +303,20 @@ export interface GitOperationBridge {
     repositoryRoot: string,
     plan: BranchMutationPlan,
     operationId: string,
+  ): Promise<RepositoryMutationOutcome>;
+  prepareRemoteMutation(
+    repositoryRoot: string,
+    request: RemoteMutationRequest,
+  ): Promise<RemoteMutationPlan>;
+  executeRemoteMutation(
+    repositoryRoot: string,
+    plan: RemoteMutationPlan,
+  ): Promise<RepositoryMutationOutcome>;
+  prepareGitReset(repositoryRoot: string, targetOid: string): Promise<GitResetPlan>;
+  executeGitReset(
+    repositoryRoot: string,
+    plan: GitResetPlan,
+    mode: GitResetMode,
   ): Promise<RepositoryMutationOutcome>;
   readRemoteAuthentication(
     repositoryRoot: string,

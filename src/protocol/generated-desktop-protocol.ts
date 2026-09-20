@@ -69,6 +69,10 @@ export interface DesktopCommandMap {
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
   prepare_branch_mutation: { args: { repositoryRoot: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
   execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  prepare_remote_mutation: { args: { repositoryRoot: string; request: Model.RemoteMutationRequest; }; result: Model.RemoteMutationPlan };
+  execute_remote_mutation: { args: { repositoryRoot: string; plan: Model.RemoteMutationPlan; }; result: Model.RepositoryMutationOutcome };
+  prepare_git_reset: { args: { repositoryRoot: string; targetOid: string; }; result: Model.GitResetPlan };
+  execute_git_reset: { args: { repositoryRoot: string; plan: Model.GitResetPlan; mode: Model.GitResetMode; }; result: Model.RepositoryMutationOutcome };
   read_remote_authentication: { args: { repositoryRoot: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
   store_remote_https_credential: { args: { repositoryRoot: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
   configure_remote_ssh: { args: { repositoryRoot: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
@@ -155,6 +159,10 @@ export const DESKTOP_RESULT_VALIDATORS: {
   create_branch: "repositoryMutationOutcome",
   prepare_branch_mutation: "branchMutationPlan",
   execute_branch_mutation: "repositoryMutationOutcome",
+  prepare_remote_mutation: "remoteMutationPlan",
+  execute_remote_mutation: "repositoryMutationOutcome",
+  prepare_git_reset: "gitResetPlan",
+  execute_git_reset: "repositoryMutationOutcome",
   read_remote_authentication: "remoteAuthenticationStatus",
   store_remote_https_credential: "remoteAuthenticationStatus",
   configure_remote_ssh: "remoteAuthenticationStatus",
