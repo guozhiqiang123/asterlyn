@@ -30,6 +30,7 @@ import {
 import {
   GitHistoryReadRuntime,
 } from "./features/git-history/git-history-read-runtime.ts";
+import { routeHistoryDetailsChange } from "./features/git-history/history-change-router.ts";
 import {
   type HistoryFilterDialog,
 } from "./features/git-history/history-filter-controller";
@@ -183,6 +184,7 @@ import { WindowChromeBinding } from "./shell/window-chrome-binding";
 import { primaryShortcut } from "./shell/window-chrome";
 import { WindowSession } from "./application/window-session";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
+import { renderRepositoryProjectionSlices } from "./application/repository-projection-renderer.ts";
 import { RepositoryIntegrationCoordinator } from "./application/repository-integration-coordinator";
 import { remoteOutcomeNeedsUntrackedScan } from "./application/repository-mutation";
 import { WorkspaceOperationCoordinator } from "./application/workspace-operation-coordinator";
@@ -894,6 +896,8 @@ export class AsterlynApp {
           bottomTool: this.shellState.layout.bottomTool === "terminal" ? "terminal" : null,
         }),
         renderWorkspace: () => this.renderWorkspace(),
+        renderRepositorySlices: (snapshot, slices) =>
+          this.renderRepositorySlices(snapshot, slices),
         loadVisibleCommitDetails: () => this.loadVisibleCommitDetails(),
         loadProjectFiles: (repositoryRoot, generation) => {
           void this.loadProjectFiles(repositoryRoot, generation);
@@ -1432,36 +1436,21 @@ export class AsterlynApp {
         this.gitHistoryPresentationRuntime.detail.show("commit");
       }
     }
-    if (change.selectionChanged) this.clearCommitDiffInspection();
-    if (change.reason === "file-selection") {
-      const path = this.historyState.selectedFile;
-      if (path) this.updateCommitFileSelection(path);
-      return;
-    }
-    const historyMounted = Boolean(this.root.querySelector("#history-results"));
-    if (change.historyChanged && historyMounted) {
-      this.renderHistoryResults();
-    } else if (change.selectionChanged && this.historyState.selectedCommit) {
-      this.updateHistoryCommitSelection(this.historyState.selectedCommit);
-    }
-    if (
-      (change.selectionChanged || change.detailsChanged) &&
-      this.root.querySelector("#git-detail-body")
-    ) {
-      this.renderGitDetailPane();
-    }
-    if (
-      change.reason === "snapshot" ||
-      change.reason === "query-complete" ||
-      change.reason === "refresh-complete"
-    ) {
-      this.loadVisibleCommitDetails();
-    }
-    if (change.historyChanged || change.selectionChanged || change.detailsChanged) {
-      this.contextMenuHost.revalidate();
-    }
-    if (change.warning) this.setStatus(change.warning, "warning");
-    if (change.error) this.showError(change.error);
+    routeHistoryDetailsChange(change, {
+      selectedCommit: this.historyState.selectedCommit, selectedFile: this.historyState.selectedFile,
+      historyMounted: Boolean(this.root.querySelector("#history-results")), detailMounted: Boolean(this.root.querySelector("#git-detail-body")),
+      clearRangeSelection: () => this.gitHistoryPresentationRuntime.rangeSelection.clear(),
+      clearCommitInspection: () => this.clearCommitDiffInspection(),
+      updateFileSelection: (path) => this.updateCommitFileSelection(path),
+      renderHistoryRows: () => this.renderHistoryResults(), updateCommitSelection: (key) => this.updateHistoryCommitSelection(key),
+      renderHistoryStatus: () => {
+        this.historyListView.updateStatus(this.historyListPresentation());
+        this.renderHistoryCount(this.filteredHistoryCommits().length);
+      },
+      renderDetail: () => this.renderGitDetailPane(), loadVisibleDetails: () => this.loadVisibleCommitDetails(),
+      revalidateContextMenu: () => this.contextMenuHost.revalidate(), error: (error) => this.showError(error),
+      warning: (message) => this.setStatus(message, "warning"),
+    });
   }
 
   private handleHistoryComparisonChange(change: HistoryComparisonChange): void {
@@ -3485,19 +3474,22 @@ export class AsterlynApp {
     }
   }
 
-  private async refreshRemoteAfterFocus(): Promise<void> {
+  private async refreshRemoteAfterFocus(): Promise<boolean> {
     if (
       bridge.isDemo ||
       this.remoteState.dialog ||
       this.gitOperationState.dialog ||
       this.remoteState.operation ||
       this.state.loading
-    ) return;
+    ) return false;
     const snapshot = this.windowSession.repository.state.snapshot;
-    if (!snapshot) return;
+    if (!snapshot) return false;
     const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
-    if (!policy.fetch.enabled || !policy.selectedRemote) return;
+    if (!policy.fetch.enabled || !policy.selectedRemote) return false;
+    const revision = this.windowSession.repository.state.revision;
     await this.runRemoteOperation("fetch", "background");
+    return this.windowSession.repository.state.snapshot?.root === snapshot.root &&
+      this.windowSession.repository.state.revision > revision;
   }
 
   private async runRemoteOperation(
@@ -3539,7 +3531,7 @@ export class AsterlynApp {
         );
         completionMessage = feedback.message;
         announceCompletion = feedback.prominent;
-        const next = this.repositoryIntegration.acceptRemoteOutcome(result.outcome);
+        const next = this.repositoryIntegration.acceptRemoteOutcome(result.outcome, false, !background);
         if (kind === "pull") {
           this.captureMountedTextEditor();
           await this.filesEditorRuntime.editor.reconcileExternalPaths([]);
@@ -3573,7 +3565,7 @@ export class AsterlynApp {
           if (!reconciled) throw new Error(this.localization.catalog.remote.activeProjectNotGit);
           this.repositoryIntegration.acceptRemoteOutcome(
             { snapshot: reconciled, invalidatedSlices: [...COMPLETE_REPOSITORY_SLICES] },
-            true,
+            true, !background,
           );
           if (
             kind === "pull" &&
@@ -3867,6 +3859,21 @@ export class AsterlynApp {
     this.gitHistoryMutationRuntime.render();
     this.gitOperationRuntime.render();
     this.contextMenuHost.revalidate();
+  }
+
+  private renderRepositorySlices(snapshot: RepositorySnapshot, slices: Iterable<SessionInvalidationSlice>): void {
+    renderRepositoryProjectionSlices(snapshot, slices, {
+      changesVisible: this.shellState.layout.leftTool === "changes", branchDetailVisible: this.gitHistoryPresentationRuntime.detailState.gitDetail === "branch",
+      renderCapability: () => { this.applyWorkbenchLayout(false); this.renderActivityRail(); },
+      renderChanges: () => this.renderLeftTool(), renderEditor: () => this.renderEditor(),
+      renderRefs: (value, detail) => { this.renderBranchPane(value); if (detail) this.renderGitDetailPane(value); },
+      renderStatus: (value) => this.renderStatus(value),
+      renderTransient: () => {
+        this.gitHistoryMutationRuntime.render();
+        this.gitOperationRuntime.render();
+        this.contextMenuHost.revalidate();
+      },
+    });
   }
 
   private renderTopbar(

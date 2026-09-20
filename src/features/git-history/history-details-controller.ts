@@ -94,6 +94,7 @@ export interface HistoryDetailsChange {
     | "details-error"
     | "file-selection";
   readonly historyChanged?: boolean;
+  readonly statusChanged?: boolean;
   readonly selectionChanged?: boolean;
   readonly detailsChanged?: boolean;
   readonly warning?: string;
@@ -201,6 +202,7 @@ export class GitHistoryDetailsController {
     preferTip = false,
   ): void {
     const previous = this.value;
+    const normalizedQuery = normalizeHistoryQuery(query);
     const previousSelected = previous.selectedCommit;
     const selected =
       !preferTip && previous.history.source?.kind === "snapshot"
@@ -216,15 +218,29 @@ export class GitHistoryDetailsController {
       previous.history.root !== root ||
       previous.history.source?.kind !== "snapshot" ||
       previousSelected !== selected;
+    const hasMore = commits.length >= this.pageSize && commits.length < this.rowLimit;
+    const historyChanged =
+      previous.history.root !== root ||
+      previous.history.source?.kind !== "snapshot" ||
+      previous.history.status !== "ready" ||
+      !sameCommitSummaries(previous.history.commits, commits);
+    const statusChanged = previous.loadingMore || previous.refreshing ||
+      previous.pagingError !== null || previous.hasMore !== hasMore;
+    if (
+      !historyChanged &&
+      !selectionChanged &&
+      !statusChanged &&
+      historyQueryKey(previous.query) === historyQueryKey(normalizedQuery)
+    ) return;
     this.pageSequence += 1;
     this.topRefreshArmed = false;
     if (selectionChanged) this.detailsSequence += 1;
     this.value = {
       ...previous,
       history: installSnapshotHistory(previous.history, root, commits),
-      query: normalizeHistoryQuery(query),
+      query: normalizedQuery,
       selectedCommit: selected,
-      hasMore: commits.length >= this.pageSize && commits.length < this.rowLimit,
+      hasMore,
       nextOffset: commits.length,
       loadingMore: false,
       refreshing: false,
@@ -234,7 +250,8 @@ export class GitHistoryDetailsController {
     };
     this.emit({
       reason: "snapshot",
-      historyChanged: true,
+      historyChanged,
+      statusChanged,
       selectionChanged,
       detailsChanged: selectionChanged,
     });
@@ -371,7 +388,7 @@ export class GitHistoryDetailsController {
       pagingError: null,
       pagingRetry: null,
     };
-    this.emit({ reason: "append-start", historyChanged: true });
+    this.emit({ reason: "append-start", statusChanged: true });
 
     try {
       const page = await this.gateway.readHistoryPage(root, query, offset, limit);
@@ -396,7 +413,7 @@ export class GitHistoryDetailsController {
         pagingError: this.messages.olderCommitsFailed(errorMessage(error)),
         pagingRetry: "append",
       };
-      this.emit({ reason: "append-error", historyChanged: true });
+      this.emit({ reason: "append-error", statusChanged: true });
     }
   }
 
@@ -426,7 +443,7 @@ export class GitHistoryDetailsController {
       pagingError: null,
       pagingRetry: null,
     };
-    this.emit({ reason: "refresh-start", historyChanged: true });
+    this.emit({ reason: "refresh-start", statusChanged: true });
 
     try {
       const page = await this.gateway.readHistoryPage(root, query, 0, limit);
@@ -443,6 +460,10 @@ export class GitHistoryDetailsController {
             ? commitKey(window.commits[0])
             : null;
       const selectionChanged = previousSelection !== selectedCommit;
+      const historyChanged = !sameCommitSummaries(
+        this.value.history.commits,
+        window.commits,
+      );
       if (selectionChanged) this.detailsSequence += 1;
       this.value = {
         ...this.value,
@@ -455,7 +476,8 @@ export class GitHistoryDetailsController {
       };
       this.emit({
         reason: "refresh-complete",
-        historyChanged: true,
+        historyChanged,
+        statusChanged: true,
         selectionChanged,
         detailsChanged: selectionChanged,
       });
@@ -469,7 +491,7 @@ export class GitHistoryDetailsController {
       };
       this.emit({
         reason: "refresh-error",
-        historyChanged: true,
+        statusChanged: true,
         warning: this.messages.historyRefreshWarning,
       });
     }
@@ -652,6 +674,27 @@ export class GitHistoryDetailsController {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
   }
+}
+
+function sameCommitSummaries(
+  left: readonly CommitSummary[],
+  right: readonly CommitSummary[],
+): boolean {
+  return left.length === right.length && left.every((commit, index) => {
+    const candidate = right[index];
+    if (!candidate) return false;
+    return commit.repositoryId === candidate.repositoryId &&
+      commit.oid === candidate.oid && commit.shortOid === candidate.shortOid &&
+      commit.authorName === candidate.authorName && commit.authorEmail === candidate.authorEmail &&
+      commit.authoredAt === candidate.authoredAt && commit.subject === candidate.subject &&
+      Boolean(commit.outgoing) === Boolean(candidate.outgoing) &&
+      sameStrings(commit.parents, candidate.parents) &&
+      sameStrings(commit.decorations, candidate.decorations);
+  });
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function emptyPaging(): Pick<

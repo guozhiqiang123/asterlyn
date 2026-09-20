@@ -80,6 +80,10 @@ export interface RepositoryIntegrationActions {
   hideHistoryTool(): void;
   showWorkspaceOnlyTools(): void;
   renderWorkspace(): void;
+  renderRepositorySlices(
+    snapshot: RepositorySnapshot,
+    slices: Iterable<SessionInvalidationSlice>,
+  ): void;
   loadVisibleCommitDetails(): void;
   loadProjectFiles(root: string, generation?: number): void;
   showChangesTool(): void;
@@ -95,6 +99,7 @@ export interface RepositoryIntegrationActions {
 
 export interface RepositoryMutationOptions extends RepositoryChangeInstallOptions {
   readonly focusConflicts?: boolean;
+  readonly preferHistoryTip?: boolean;
 }
 
 /**
@@ -195,11 +200,11 @@ export class RepositoryIntegrationCoordinator {
     cause: SessionInvalidationCause,
   ): boolean {
     this.ensureActive();
+    const previous = this.session.repository.state.snapshot;
     const committed = this.session.installRepositoryRead(lease, project, cause);
     if (!committed) return false;
     this.session.repository.consumeInvalidation();
     const snapshot = committed.state.snapshot;
-    const slices = [...committed.slices];
     if (!snapshot) {
       this.targets.remote.installSnapshot(null);
       this.targets.changes.installSnapshot(null);
@@ -210,9 +215,13 @@ export class RepositoryIntegrationCoordinator {
       this.actions.renderWorkspace();
       return true;
     }
-    this.applyPlan(snapshot, repositoryReconciliationPlan({ invalidatedSlices: slices }), {});
-    this.actions.renderWorkspace();
-    if (slices.includes("history")) this.actions.loadVisibleCommitDetails();
+    const slices = changedProjectionSlices(previous, snapshot, committed.slices);
+    this.applyPlan(
+      snapshot,
+      repositoryReconciliationPlan({ invalidatedSlices: slices }),
+      { preferHistoryTip: false },
+    );
+    if (slices.length > 0) this.actions.renderRepositorySlices(snapshot, slices);
     if (slices.includes("workingTree") && snapshot.untrackedState === "pending") {
       void this.session.scanUntracked(snapshot.root, this.session.generation, false, cause);
     }
@@ -222,17 +231,23 @@ export class RepositoryIntegrationCoordinator {
   acceptRemoteOutcome(
     outcome: RepositoryMutationOutcome,
     focusConflicts = false,
+    preferHistoryTip = true,
   ): RepositorySnapshot {
-    const snapshot = this.applyMutation(outcome, "remoteOperation", {
+    this.ensureActive();
+    const previous = this.session.repository.state.snapshot;
+    const declaredPlan = repositoryReconciliationPlan(outcome);
+    const snapshot = this.installSnapshot(outcome.snapshot, "remoteOperation", declaredPlan.slices);
+    if (!snapshot) throw new Error("Remote result removed the active Git capability.");
+    const slices = changedProjectionSlices(previous, snapshot, declaredPlan.slices);
+    const plan = repositoryReconciliationPlan({ invalidatedSlices: slices });
+    this.applyPlan(snapshot, plan, {
       clearInclusion: true,
       clearSelection: true,
       focusConflicts,
+      preferHistoryTip,
     });
-    this.actions.renderWorkspace();
-    if (outcome.invalidatedSlices.includes("history")) {
-      this.actions.loadVisibleCommitDetails();
-    }
-    if (outcome.invalidatedSlices.includes("workspaceCatalog")) {
+    if (slices.length > 0) this.actions.renderRepositorySlices(snapshot, slices);
+    if (slices.includes("workspaceCatalog")) {
       this.actions.loadProjectFiles(snapshot.root);
     }
     return snapshot;
@@ -325,7 +340,8 @@ export class RepositoryIntegrationCoordinator {
     if (outcome.invalidatedSlices.includes("openDocuments") && installed) {
       this.actions.reconcileWorkingDocument(installed);
     }
-    this.actions.renderWorkspace();
+    if (installed) this.actions.renderRepositorySlices(installed, outcome.invalidatedSlices);
+    else this.actions.renderWorkspace();
   }
 
   dispose(): void {
@@ -349,7 +365,12 @@ export class RepositoryIntegrationCoordinator {
     if (plan.reloadWorkspaceCatalog) {
       this.targets.files.installWorkspace(snapshot.root, snapshot.changes);
     }
-    if (plan.updateHistory) this.actions.reconcileRefreshedHistory(snapshot, true);
+    if (plan.updateHistory) {
+      this.actions.reconcileRefreshedHistory(
+        snapshot,
+        options.preferHistoryTip ?? true,
+      );
+    }
     if (plan.reconcileOperation) this.targets.operations.installSnapshot(snapshot);
     if (plan.reconcileOpenDocuments) this.actions.reconcileWorkingDocument(snapshot);
     if (options.focusConflicts) this.focusFirstConflict(snapshot);
@@ -384,7 +405,7 @@ export class RepositoryIntegrationCoordinator {
         change.snapshot,
         change.reason !== "untracked-scan-complete",
       );
-      this.actions.renderWorkspace();
+      this.actions.renderRepositorySlices(change.snapshot, ["workingTree"]);
       if (change.reason === "untracked-scan-complete" && change.announce) {
         const recoveries = this.actions.replacementRecoveryCount();
         this.actions.setStatus(
@@ -405,7 +426,7 @@ export class RepositoryIntegrationCoordinator {
         this.targets.changes.installSnapshot(change.snapshot);
         this.targets.files.updateChanges(change.snapshot.changes);
         this.targets.operations.installSnapshot(change.snapshot);
-        this.actions.renderWorkspace();
+        this.actions.renderRepositorySlices(change.snapshot, ["workingTree"]);
       }
       this.actions.reportError(change.error);
     }
@@ -418,4 +439,39 @@ export class RepositoryIntegrationCoordinator {
   private messages(): RepositoryIntegrationMessages {
     return this.actions.messages?.() ?? DEFAULT_MESSAGES;
   }
+}
+
+function changedProjectionSlices(
+  previous: RepositorySnapshot | null,
+  next: RepositorySnapshot,
+  slices: Iterable<SessionInvalidationSlice>,
+): SessionInvalidationSlice[] {
+  return Array.from(slices).filter((slice) => {
+    if (!previous || previous.root !== next.root || previous.gitDir !== next.gitDir) return true;
+    switch (slice) {
+      case "repositoryCapability":
+        return false;
+      case "workingTree":
+        return previous.untrackedState !== next.untrackedState ||
+          !sameProjection(previous.changes, next.changes);
+      case "head":
+        return !sameProjection(previous.branch, next.branch);
+      case "refs":
+        return !sameProjection(
+          [previous.repositoryRoots, previous.branches, previous.remotes],
+          [next.repositoryRoots, next.branches, next.remotes],
+        );
+      case "history":
+        return !sameProjection(previous.commits, next.commits);
+      case "operation":
+        return !sameProjection(previous.operation, next.operation);
+      case "workspaceCatalog":
+      case "openDocuments":
+        return true;
+    }
+  });
+}
+
+function sameProjection(left: unknown, right: unknown): boolean {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
 }

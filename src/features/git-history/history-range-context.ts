@@ -46,7 +46,6 @@ export function historyCommitRangeTargetIsCurrent(
     !selection ||
     state.history.root !== target.workspaceRoot ||
     workspaceGeneration !== target.workspaceGeneration ||
-    state.history.generation !== target.historyGeneration ||
     selection.scopeKey !== target.scopeKey ||
     selection.anchorKey !== target.anchorKey ||
     selection.activeKey !== target.activeKey ||

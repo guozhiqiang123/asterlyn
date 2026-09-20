@@ -57,7 +57,8 @@ test("workspace mutation reconciliation commits exact paths and projections", ()
   assert.deepEqual(fixture.records.documents, [true]);
   assert.equal(fixture.records.remote.length, 0);
   assert.equal(fixture.records.refreshedHistory.length, 0);
-  assert.equal(fixture.records.renders, 1);
+  assert.equal(fixture.records.renders, 0);
+  assert.deepEqual(fixture.records.sliceRenders, [["workspaceCatalog", "openDocuments", "workingTree"]]);
   fixture.dispose();
 });
 
@@ -88,6 +89,24 @@ test("metadata-only reconciliation preserves newer working state in canonical an
   );
   assert.equal(fixture.records.changes.length, 1);
   assert.deepEqual(fixture.records.files, [["newer.ts"]]);
+  fixture.dispose();
+});
+
+test("semantic no-op watcher reads commit canonical truth without rebuilding projections", () => {
+  const fixture = integrationFixture();
+  const current = structuredClone(fixture.session.repository.state.snapshot);
+
+  const accepted = fixture.coordinator.reconcileWatchedRepository(
+    { root: "/repo", repository: current },
+    readLease(fixture, ["workingTree", "head", "refs", "history", "operation"]),
+    "focusRecovery",
+  );
+
+  assert.equal(accepted, true);
+  assert.equal(fixture.session.repository.state.revision, 2);
+  assert.deepEqual(fixture.records.refreshedHistory, []);
+  assert.deepEqual(fixture.records.sliceRenders, []);
+  assert.deepEqual(fixture.records.changes, []);
   fixture.dispose();
 });
 
@@ -138,8 +157,9 @@ test("remote conflict routing selects the first conflict through one entry point
   assert.deepEqual(fixture.records.openDiffs, [{ root: "/repo", path: "src/first.ts" }]);
   assert.equal(fixture.records.showChanges, 1);
   assert.match(fixture.records.dialogErrors[0], /Resolve the listed files/);
-  assert.deepEqual(fixture.records.operations, [conflicted]);
-  assert.equal(fixture.records.renders, 1);
+  assert.deepEqual(fixture.records.operations, []);
+  assert.equal(fixture.records.renders, 0);
+  assert.deepEqual(fixture.records.sliceRenders, [["workingTree"]]);
   fixture.dispose();
 });
 
@@ -189,6 +209,7 @@ test("watch reconciliation removes unavailable Git projections without changing 
   assert.deepEqual(fixture.records.operations, [null]);
   assert.equal(fixture.records.hideHistory, 1);
   assert.equal(fixture.records.renders, 1);
+  assert.deepEqual(fixture.records.sliceRenders, []);
   fixture.dispose();
 });
 
@@ -213,6 +234,7 @@ test("manual refresh reconciles one canonical snapshot without duplicating routi
   assert.deepEqual(fixture.records.operations, [refreshed]);
   assert.deepEqual(fixture.records.documents, [true]);
   assert.equal(fixture.records.renders, 1);
+  assert.deepEqual(fixture.records.sliceRenders, []);
   assert.deepEqual(fixture.records.loads, [
     { root: "/repo", generation: fixture.session.generation },
   ]);
@@ -261,14 +283,15 @@ test("session scans reuse the same integration route and stop after disposal", a
   });
 
   await fixture.session.scanUntracked("/repo", fixture.session.generation, true, "watcher");
-  assert.equal(fixture.records.renders, 1);
+  assert.equal(fixture.records.renders, 0);
+  assert.deepEqual(fixture.records.sliceRenders, [["workingTree"]]);
   assert.equal(fixture.records.remote.at(-1).untrackedState, "complete");
   assert.deepEqual(fixture.records.documents, [false]);
   assert.deepEqual(fixture.records.status.at(-1), ["Ready", "success"]);
 
   fixture.coordinator.dispose();
   await fixture.session.scanUntracked("/repo", fixture.session.generation, true, "watcher");
-  assert.equal(fixture.records.renders, 1);
+  assert.equal(fixture.records.renders, 0);
   fixture.session.dispose();
 });
 
@@ -356,6 +379,7 @@ function integrationFixture(gatewayOverrides = {}) {
     hideHistory: 0,
     workspaceOnly: 0,
     renders: 0,
+    sliceRenders: [],
     details: 0,
     loads: [],
     showChanges: 0,
@@ -395,6 +419,9 @@ function integrationFixture(gatewayOverrides = {}) {
       hideHistoryTool() { records.hideHistory += 1; },
       showWorkspaceOnlyTools() { records.workspaceOnly += 1; },
       renderWorkspace() { records.renders += 1; },
+      renderRepositorySlices(_snapshot, slices) {
+        records.sliceRenders.push([...slices]);
+      },
       loadVisibleCommitDetails() { records.details += 1; },
       loadProjectFiles(root, generation) { records.loads.push({ root, generation }); },
       showChangesTool() { records.showChanges += 1; },

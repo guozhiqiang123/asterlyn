@@ -91,6 +91,18 @@ export class GitHistoryListView {
     this.renderCurrentWindow(true);
   }
 
+  updateStatus(presentation: HistoryListPresentation): void {
+    this.presentation = presentation;
+    if (!this.host) return;
+    const container = this.host.ownerDocument.createElement("div");
+    container.innerHTML = renderPagingStatus(presentation);
+    const next = container.firstElementChild;
+    if (!next) return;
+    const current = this.host.querySelector(".history-page-status");
+    if (current) current.replaceWith(next);
+    else this.host.append(next);
+  }
+
   private renderCurrentWindow(force = false): void {
     if (!this.host || !this.presentation) return;
     const scrollTop = this.host.scrollTop;

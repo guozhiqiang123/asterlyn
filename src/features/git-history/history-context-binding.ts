@@ -78,8 +78,7 @@ export function historyCommitContextTargetIsCurrent(
 ): boolean {
   if (
     state.history.root !== target.workspaceRoot ||
-    workspaceGeneration !== target.workspaceGeneration ||
-    state.history.generation !== target.historyGeneration
+    workspaceGeneration !== target.workspaceGeneration
   ) return false;
   const commit = state.history.commits.find((candidate) => commitKey(candidate) === target.key);
   return Boolean(

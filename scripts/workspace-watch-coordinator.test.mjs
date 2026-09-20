@@ -232,6 +232,7 @@ test("a superseding plan update keeps the installed watch until its replacement 
 test("returning from the background reconciles local state before one remote refresh", async () => {
   let now = 10_000;
   const reads = { project: 0, catalog: 0, documents: 0, remote: 0 };
+  const localSlices = [];
   const session = activeSession({
     async openProject(root) {
       reads.project += 1;
@@ -245,12 +246,16 @@ test("returning from the background reconciles local state before one remote ref
     { async refresh() { reads.catalog += 1; return true; } },
     editorFixture({ async reconcileExternalPaths() { reads.documents += 1; } }),
     {
-      reconcileRepository() { return true; },
+      reconcileRepository(_project, lease) {
+        localSlices.push([...lease.slices]);
+        return true;
+      },
       async refreshRemoteAfterFocus() {
         assert.equal(reads.project, 1);
         assert.equal(reads.catalog, 1);
         assert.equal(reads.documents, 1);
         reads.remote += 1;
+        return true;
       },
       reportWarning() {},
     },
@@ -267,6 +272,7 @@ test("returning from the background reconciles local state before one remote ref
   await settle(10);
 
   assert.equal(reads.remote, 1);
+  assert.deepEqual(localSlices, [["repositoryCapability", "workingTree", "operation"]]);
   focus.blur();
   now += 1;
   focus.focus();
@@ -284,6 +290,42 @@ test("returning from the background reconciles local state before one remote ref
   focus.focus();
   await settle();
   assert.equal(reads.remote, 2);
+});
+
+test("focus recovery reads Git metadata locally only when remote reconciliation is unavailable", async () => {
+  let now = 1_000;
+  const slices = [];
+  const session = activeSession();
+  const focus = fakeFocusPort();
+  const coordinator = createCoordinator(
+    fakeWatchBridge(),
+    session,
+    { async refresh() { return true; } },
+    editorFixture(),
+    {
+      reconcileRepository(_project, lease) {
+        slices.push([...lease.slices]);
+        return true;
+      },
+      async refreshRemoteAfterFocus() { return false; },
+      reportWarning() {},
+    },
+    focus,
+    () => now,
+  );
+  coordinator.activate();
+  await settle();
+
+  focus.blur();
+  now += 30_001;
+  focus.focus();
+  await settle(20);
+
+  assert.deepEqual(slices, [
+    ["repositoryCapability", "workingTree", "operation"],
+    ["head", "refs", "history"],
+  ]);
+  coordinator.dispose();
 });
 
 test("old watcher instances are rejected and repeated backend overflow suspends automatic recovery", async () => {

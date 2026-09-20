@@ -23,6 +23,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0011-supervised-terminal-sessions.md`](architecture/decisions/0011-supervised-terminal-sessions.md) — lazy, window-scoped PTY sessions with explicit lifecycle and resource bounds.
 - [`architecture/decisions/0012-versioned-workspace-reconciliation.md`](architecture/decisions/0012-versioned-workspace-reconciliation.md) — linearized repository commits, exact watcher ownership, bounded recovery, and capability transitions.
 - [`architecture/decisions/0013-feature-owned-context-actions.md`](architecture/decisions/0013-feature-owned-context-actions.md) — feature-owned context actions presented through one business-neutral window menu host.
+- [`architecture/decisions/0014-slice-stable-projection-refresh.md`](architecture/decisions/0014-slice-stable-projection-refresh.md) — canonical refresh with semantic slice diffs, stable feature identity, and single-pass foreground recovery.
 
 ## Delivery
 

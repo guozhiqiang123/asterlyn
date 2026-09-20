@@ -103,6 +103,14 @@ state owner. Source-file size remains a review signal rather than a boundary def
 dependency direction, explicit lifecycle, and characterization tests decide whether extraction is
 required.
 
+Accepted repository reads and visible projection writes are deliberately separate. The session
+commits every version-valid Git result, while the integration coordinator compares only the declared
+slices and fans out semantic changes. Watch, save, remote, and workspace-mutation paths use targeted
+slice rendering; a no-op read advances canonical revision without rebuilding Files, Changes,
+Branches, or History. History progress updates its status node independently from row replacement,
+and stable commit identities preserve selection and context actions. See
+[`ADR-0014`](decisions/0014-slice-stable-projection-refresh.md).
+
 Checked commit is a typed top-level-repository transaction, not a sequence of frontend stage commands. The request carries the last-observed complete `FileChange` identities. Under one canonical-root mutation lock, the Git boundary repeats full status, rejects stale identities, repository operations, conflicts, and submodule entries, and invokes Git with literal pathspecs plus `commit --only`. The new commit therefore contains the selected files' current worktree content while unrelated staged index entries remain staged. Selected untracked files receive only temporary intent-to-add entries; an ordinary hook or command failure with unchanged `HEAD` removes just those introduced entries. After Git returns successfully, Asterlyn verifies the observed commit parent and changed-path allowlist before publishing an object ID. If an external Git process changes `HEAD` during the transaction, Asterlyn never rolls that ref back: a rejected Git command fails with a refresh-and-inspect requirement, while a successful but unverifiable command returns no object ID and a do-not-retry warning. A successful commit whose following refresh fails is likewise reported as successful with a refresh warning. `Commit and Push…` is an application-level composition over this boundary: it rejects a known-unavailable Push before creating a commit and, only after a verified refreshed commit result, opens the existing Push review. It never turns commit authorization into push authorization or sends network writes without the separate remote, commit, file, tag, and force-with-lease confirmation. Local and remote writes share the same process-local per-root lock; external Git concurrency is handled by the non-rollback outcome rather than assumed away.
 
 Changes Revert is deliberately narrower than general discard/reset support. It acts only on the explicitly selected row after confirmation, repeats exact status validation, refuses an unborn branch, conflicts, submodules, untracked paths, and copied paths, and restores supported tracked paths from `HEAD` in both index and worktree. An index-added file is also supported: because it is absent from `HEAD`, the reviewed restore removes it from both index and worktree. Before either form writes, the application recovery transaction durably checkpoints the exact worktree bytes and index; a completed staged-addition Revert can therefore restore both content and staged identity after restart. Dirty open editor buffers block the action. Deleting untracked files, cleaning directories, and arbitrary reset remain separate future capabilities. Conflict resolution belongs only to the active reviewed-operation lifecycle below and cannot be entered through Revert.
@@ -111,9 +119,11 @@ Remote work follows the same reconciliation rule but uses a repository-scoped ca
 
 Returning a native project window from the background performs one controlled Fetch for the selected
 remote. A short blur/focus cycle does not force a filesystem or Git reconstruction; after at least
-30 seconds away, and only when local state is stale and outside the recovery cooldown, bounded local
-focus recovery completes before Fetch. The canonical Fetch outcome
-updates the Update incoming-count badge but never integrates commits. Automatic Fetch is skipped
+30 seconds away, and only when local state is stale and outside the recovery cooldown, one bounded
+local pass reconciles catalog, documents, repository capability, working tree, and operation state
+before Fetch. An accepted Fetch result owns HEAD/refs/History reconciliation; a local metadata read
+runs only when no remote result was accepted. The canonical Fetch outcome updates the Update
+incoming-count badge but never integrates commits. Automatic Fetch is skipped
 while a Remote/Push review, reviewed Git operation, or global workbench task is active, and when the
 current workspace lacks a supported selected remote. It does not lock the editor or open a modal;
 failures remain visible in status without replacing an existing interactive error.

@@ -212,6 +212,14 @@ test("context targets survive unrelated repository revisions but reject semantic
   assert.equal(historyCommitContextTargetIsCurrent(historyTarget, {
     ...state,
     history: { ...state.history, generation: state.history.generation + 1 },
+  }, 4), true);
+  assert.equal(historyCommitContextTargetIsCurrent(historyTarget, {
+    ...state,
+    history: {
+      ...state.history,
+      generation: state.history.generation + 1,
+      commits: [{ ...commit, subject: "changed" }],
+    },
   }, 4), false);
 });
 

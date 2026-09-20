@@ -37,7 +37,7 @@ export interface WorkspaceWatchCoordinatorActions {
     lease: RepositoryReadLease,
     cause: SessionInvalidationCause,
   ): boolean;
-  refreshRemoteAfterFocus(): Promise<void> | void;
+  refreshRemoteAfterFocus(): Promise<boolean> | boolean;
   reportWarning(message: string): void;
   messages?(): WorkspaceWatchMessages;
 }
@@ -467,7 +467,7 @@ export class WorkspaceWatchCoordinator {
       this.lastFocusRecoveryAt = now;
       const slices = ["workspaceCatalog", "openDocuments", "repositoryCapability"] as const;
       const repositorySlices = this.session.repository.state.snapshot
-        ? ["workingTree", "head", "refs", "history", "operation"] as const
+        ? ["workingTree", "operation"] as const
         : [];
       const invalidation = createSessionInvalidation(
         identity.root,
@@ -486,7 +486,22 @@ export class WorkspaceWatchCoordinator {
         !this.session.workspace.matches(identity)
       ) return;
       try {
-        await this.actions.refreshRemoteAfterFocus();
+        const remoteReconciled = await this.actions.refreshRemoteAfterFocus();
+        if (
+          !localRecoveryNeeded ||
+          remoteReconciled ||
+          !this.session.repository.state.snapshot ||
+          this.disposed ||
+          !this.session.workspace.matches(identity)
+        ) return;
+        const fallback = createSessionInvalidation(
+          identity.root,
+          identity.generation,
+          ["head", "refs", "history"],
+          "focusRecovery",
+        );
+        this.pending = mergeSessionInvalidations(this.pending, fallback);
+        await this.drain();
       } catch (error) {
         this.actions.reportWarning(this.messages().externalReconcileFailed(errorMessage(error)));
       }

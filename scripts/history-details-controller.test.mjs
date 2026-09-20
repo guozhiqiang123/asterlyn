@@ -61,6 +61,25 @@ test("paging preserves selection and refresh drops details only when selection d
   assert.equal(controller.state.selectedFile, null);
 });
 
+test("an identical snapshot is a silent semantic no-op", () => {
+  const controller = createController(gatewayWithHistory([]));
+  const commits = [commit("a"), commit("b")];
+  controller.installSnapshot("/workspace", commits, defaultHistoryQuery(), false);
+  const generation = controller.state.history.generation;
+  const changes = [];
+  controller.subscribe((change) => changes.push(change));
+
+  controller.installSnapshot(
+    "/workspace",
+    commits.map((item) => ({ ...item, parents: [...item.parents], decorations: [...item.decorations] })),
+    defaultHistoryQuery(),
+    false,
+  );
+
+  assert.equal(controller.state.history.generation, generation);
+  assert.deepEqual(changes, []);
+});
+
 test("commit detail cache avoids native reads and late detail responses are ignored", async () => {
   const detailB = deferred();
   const detailCalls = [];
