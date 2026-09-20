@@ -19,6 +19,8 @@ import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
 export const tauriGitOperationBridge: GitOperationBridge = {
   stagePaths: (repositoryRoot, paths) =>
     invokeDesktopCommand<WorkingTreeMutationOutcome>("stage_paths", { repositoryRoot, paths }),
+  trashUntrackedPaths: (repositoryRoot, paths) =>
+    invokeDesktopCommand<WorkingTreeMutationOutcome>("trash_untracked_paths", { repositoryRoot, paths }),
   unstagePaths: (repositoryRoot, paths) =>
     invokeDesktopCommand<WorkingTreeMutationOutcome>("unstage_paths", { repositoryRoot, paths }),
   commitChanges: (repositoryRoot, message, selected) =>

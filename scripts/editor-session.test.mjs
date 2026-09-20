@@ -297,6 +297,27 @@ test("a trash lease becomes stale after an edit and clean trash closes only affe
   assert.deepEqual(result.session.textTabs.map((tab) => tab.document.workspacePath), ["keep.ts"]);
 });
 
+test("a bulk trash lease closes every reviewed clean tab and blocks any dirty target", () => {
+  let session = loaded(createEditorSession(), "new/a.ts");
+  session = loaded(session, "new/b.ts");
+  session = loaded(session, "keep.ts");
+  const request = {
+    kind: "trashMany",
+    sourceWorkspacePaths: ["new/a.ts", "new/b.ts"],
+  };
+  const prepared = prepareEditorPathMutation(session, request);
+  assert.equal(prepared.status, "ready");
+  const result = applyEditorPathMutation(session, prepared.lease);
+  assert.equal(result.status, "applied");
+  assert.deepEqual(result.session.textTabs.map((tab) => tab.document.workspacePath), ["keep.ts"]);
+
+  const dirty = markTextEdited(session, session.textTabs[1].id, "unsaved");
+  assert.deepEqual(
+    prepareEditorPathMutation(dirty, request),
+    { status: "blocked", reason: "dirtyDelete" },
+  );
+});
+
 test("edits during save remain dirty and conflicts retain content", () => {
   let session = loaded(createEditorSession(), "one.ts");
   const tabId = session.textTabs[0].id;

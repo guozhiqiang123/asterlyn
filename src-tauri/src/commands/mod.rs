@@ -22,7 +22,7 @@ pub(crate) use git_operations::{
     prepare_remote_mutation, pull_current, push_current, read_conflict_content, read_git_operation,
     read_push_file_commit, read_push_preview, read_remote_authentication, resolve_conflict,
     revert_changes, run_git_operation_action, stage_paths, store_remote_https_credential,
-    switch_branch, unstage_paths,
+    switch_branch, trash_untracked_paths, unstage_paths,
 };
 pub(crate) use git_reads::{
     cancel_untracked_scan, compare_commit_file_to_current, read_commit_comparison_details,

@@ -30,6 +30,7 @@ use crate::process::{
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_COMMIT_FILE_CHANGES: usize = 20_000;
+const MAX_UNTRACKED_TRASH_PATHS: usize = 10_000;
 const BLAME_OUTPUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 // Git has no "all context" switch. A deliberately unreachable practical line count requests the
 // complete file while the existing byte limit remains the authoritative output bound.
@@ -2300,6 +2301,51 @@ impl GitRepository {
         args.extend(paths);
         self.run_mutation("stage paths", args)?;
         Ok(())
+    }
+
+    /// Revalidates a bounded set of repository-relative paths as currently untracked before a
+    /// desktop adapter performs a recoverable platform Trash operation.
+    pub fn resolve_untracked_paths_for_trash(
+        &self,
+        paths: &[String],
+    ) -> Result<Vec<PathBuf>, GitError> {
+        validate_paths(paths)?;
+        if paths.len() > MAX_UNTRACKED_TRASH_PATHS {
+            return Err(GitError::InvalidInput {
+                field: "paths".to_string(),
+                message: format!(
+                    "moving untracked files to Trash is limited to {MAX_UNTRACKED_TRASH_PATHS} paths"
+                ),
+            });
+        }
+        let mut seen = HashSet::with_capacity(paths.len());
+        for path in paths {
+            if !seen.insert(path.as_str()) {
+                return Err(GitError::InvalidInput {
+                    field: "paths".to_string(),
+                    message: "duplicate paths are not allowed".to_string(),
+                });
+            }
+        }
+        let current = self
+            .untracked_changes(&CancellationToken::new())?
+            .changes
+            .into_iter()
+            .map(|change| change.path)
+            .collect::<HashSet<_>>();
+        let blockers = paths
+            .iter()
+            .filter(|path| !current.contains(path.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !blockers.is_empty() {
+            return Err(GitError::UnsafeOperation {
+                operation: "move untracked files to Trash".to_string(),
+                message: "one or more reviewed paths are no longer untracked".to_string(),
+                blockers,
+            });
+        }
+        Ok(paths.iter().map(|path| self.root.join(path)).collect())
     }
 
     pub fn unstage(&self, paths: &[String]) -> Result<(), GitError> {
@@ -6303,6 +6349,44 @@ mod tests {
         let complete = repository.snapshot(50).expect("full snapshot loads");
         assert_eq!(complete.untracked_state, UntrackedState::Complete);
         assert_eq!(complete.changes.len(), 1);
+    }
+
+    #[test]
+    fn bulk_trash_resolution_requires_the_exact_current_untracked_set() {
+        let directory = fixture();
+        fs::write(directory.path().join("tracked.txt"), "tracked\n").expect("tracked fixture");
+        git(directory.path(), &["add", "tracked.txt"]);
+        git(directory.path(), &["commit", "-m", "Track fixture"]);
+        fs::write(directory.path().join("new-a.txt"), "a\n").expect("untracked fixture");
+        fs::write(directory.path().join("new-b.txt"), "b\n").expect("untracked fixture");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+
+        let paths = vec!["new-a.txt".to_string(), "new-b.txt".to_string()];
+        assert_eq!(
+            repository
+                .resolve_untracked_paths_for_trash(&paths)
+                .expect("current untracked paths resolve"),
+            vec![
+                directory.path().join("new-a.txt"),
+                directory.path().join("new-b.txt"),
+            ],
+        );
+        assert!(matches!(
+            repository.resolve_untracked_paths_for_trash(&[
+                "new-a.txt".to_string(),
+                "new-a.txt".to_string(),
+            ]),
+            Err(GitError::InvalidInput { .. })
+        ));
+        assert!(matches!(
+            repository.resolve_untracked_paths_for_trash(&["tracked.txt".to_string()]),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+        fs::remove_file(directory.path().join("new-b.txt")).expect("remove stale fixture");
+        assert!(matches!(
+            repository.resolve_untracked_paths_for_trash(&paths),
+            Err(GitError::UnsafeOperation { blockers, .. }) if blockers == vec!["new-b.txt"]
+        ));
     }
 
     #[test]

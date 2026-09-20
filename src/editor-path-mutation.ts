@@ -9,7 +9,8 @@ export interface EditorPathMapping {
 
 export type EditorPathMutationRequest =
   | { kind: "move"; mapping: EditorPathMapping }
-  | { kind: "trash"; sourceWorkspacePath: string };
+  | { kind: "trash"; sourceWorkspacePath: string }
+  | { kind: "trashMany"; sourceWorkspacePaths: readonly string[] };
 
 export type EditorPathMutationBlocker =
   | "invalidMapping"

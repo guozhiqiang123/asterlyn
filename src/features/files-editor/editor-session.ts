@@ -94,11 +94,13 @@ export function prepareEditorPathMutation(
   if (!validMutationRequest(request)) {
     return { status: "blocked", reason: "invalidMapping" };
   }
-  const sourceWorkspacePath = request.kind === "move"
-    ? request.mapping.sourceWorkspacePath
-    : request.sourceWorkspacePath;
+  const sourceWorkspacePaths = request.kind === "move"
+    ? [request.mapping.sourceWorkspacePath]
+    : request.kind === "trash"
+      ? [request.sourceWorkspacePath]
+      : request.sourceWorkspacePaths;
   const affected = session.textTabs.filter((tab) =>
-    isAtOrBelow(tab.document.workspacePath, sourceWorkspacePath)
+    sourceWorkspacePaths.some((path) => isAtOrBelow(tab.document.workspacePath, path))
   );
   if (affected.some((tab) => tab.saveRequest !== null)) {
     return { status: "blocked", reason: "saveInFlight" };
@@ -106,7 +108,7 @@ export function prepareEditorPathMutation(
   if (affected.some((tab) => tab.status === "loading")) {
     return { status: "blocked", reason: "sourceLoading" };
   }
-  if (request.kind === "trash" && affected.some(isTextTabDirty)) {
+  if (request.kind !== "move" && affected.some(isTextTabDirty)) {
     return { status: "blocked", reason: "dirtyDelete" };
   }
   if (request.kind === "move") {
@@ -146,17 +148,21 @@ export function applyEditorPathMutation(
     return { status: "stale" };
   }
   const affectedIds = new Set(lease.tabs.map((tab) => tab.id));
-  if (lease.request.kind === "trash") {
+  if (lease.request.kind === "trash" || lease.request.kind === "trashMany") {
     let next = session;
     for (const tabId of affectedIds) {
       const closed = closeTextTab(next, tabId);
       if (closed.blocked) return { status: "stale" };
       next = closed.session;
     }
-    if (
-      next.preview?.kind === "project-image" &&
-      isAtOrBelow(next.preview.workspacePath, lease.request.sourceWorkspacePath)
-    ) {
+    const preview = next.preview;
+    const closesImagePreview = preview?.kind === "project-image" &&
+      (lease.request.kind === "trash"
+        ? isAtOrBelow(preview.workspacePath, lease.request.sourceWorkspacePath)
+        : lease.request.sourceWorkspacePaths.some((path) =>
+            isAtOrBelow(preview.workspacePath, path)
+          ));
+    if (closesImagePreview) {
       next = closePreview(next);
     }
     return {
@@ -637,6 +643,12 @@ function sameLeaseTabs(
 
 function validMutationRequest(request: EditorPathMutationRequest): boolean {
   if (request.kind === "trash") return validRelativePrefix(request.sourceWorkspacePath);
+  if (request.kind === "trashMany") {
+    return request.sourceWorkspacePaths.length > 0 &&
+      request.sourceWorkspacePaths.length <= 10_000 &&
+      new Set(request.sourceWorkspacePaths).size === request.sourceWorkspacePaths.length &&
+      request.sourceWorkspacePaths.every(validRelativePrefix);
+  }
   const mapping = request.mapping;
   return validRelativePrefix(mapping.sourceWorkspacePath) &&
     validRelativePrefix(mapping.destinationWorkspacePath) &&

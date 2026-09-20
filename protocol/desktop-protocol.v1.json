@@ -56,6 +56,7 @@
     { "name": "read_commit_image_diff", "args": { "repositoryRoot": "string", "repositoryId": "string", "commitOid": "string", "path": "string", "originalPath": "nullable:string" }, "result": "ImageDiffPreview", "validator": "imageDiffPreview" },
     { "name": "read_commit_comparison_image_diff", "args": { "repositoryRoot": "string", "repositoryId": "string", "beforeOid": "string", "afterOid": "string", "path": "string", "originalPath": "nullable:string" }, "result": "ImageDiffPreview", "validator": "imageDiffPreview" },
     { "name": "stage_paths", "args": { "repositoryRoot": "string", "paths": "array:string" }, "result": "WorkingTreeMutationOutcome", "validator": "workingTreeMutationOutcome" },
+    { "name": "trash_untracked_paths", "args": { "repositoryRoot": "string", "paths": "array:string" }, "result": "WorkingTreeMutationOutcome", "validator": "workingTreeMutationOutcome" },
     { "name": "unstage_paths", "args": { "repositoryRoot": "string", "paths": "array:string" }, "result": "WorkingTreeMutationOutcome", "validator": "workingTreeMutationOutcome" },
     { "name": "commit_changes", "args": { "repositoryRoot": "string", "message": "string", "selected": "array:FileChange" }, "result": "CommitSelectedResult", "validator": "commitSelectedResult" },
     { "name": "prepare_restore_changes", "args": { "repositoryRoot": "string", "selected": "array:FileChange" }, "result": "RestoreChangesPlan", "validator": "restoreChangesPlan" },

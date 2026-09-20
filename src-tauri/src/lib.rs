@@ -300,6 +300,7 @@ pub fn run() {
             read_commit_image_diff,
             read_commit_comparison_image_diff,
             stage_paths,
+            trash_untracked_paths,
             unstage_paths,
             commit_changes,
             revert_changes,

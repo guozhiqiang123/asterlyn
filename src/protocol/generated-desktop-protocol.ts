@@ -60,6 +60,7 @@ export interface DesktopCommandMap {
   read_commit_image_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
   read_commit_comparison_image_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
   stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
+  trash_untracked_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
   prepare_restore_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RestoreChangesPlan };
@@ -151,6 +152,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_commit_image_diff: "imageDiffPreview",
   read_commit_comparison_image_diff: "imageDiffPreview",
   stage_paths: "workingTreeMutationOutcome",
+  trash_untracked_paths: "workingTreeMutationOutcome",
   unstage_paths: "workingTreeMutationOutcome",
   commit_changes: "commitSelectedResult",
   prepare_restore_changes: "restoreChangesPlan",

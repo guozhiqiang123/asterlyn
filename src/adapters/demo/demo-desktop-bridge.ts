@@ -3,6 +3,7 @@ import { invokeDesktopCommand as invoke, isTauriRuntime, openDialog } from
 import { tauriDesktopBridge } from "../tauri/tauri-desktop-bridge";
 import { compileDemoGlobs } from "./demo-glob";
 import { demoWorkingDiffBase } from "./demo-working-diff.ts";
+import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
 import {
   demoCommitDetails,
   demoCommitDiff,
@@ -1206,18 +1207,23 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoStage(browserSnapshot, paths);
-      return {
-        tracked: {
-          root: browserSnapshot.root,
-          changes: demoTrackedSnapshot(browserSnapshot).changes,
-        },
-        invalidatedSlices: ["workingTree"],
-      };
+      return demoWorkingTreeOutcome(browserSnapshot);
     }
     return invoke<WorkingTreeMutationOutcome>("stage_paths", {
       repositoryRoot,
       paths,
     });
+  },
+
+  async trashUntrackedPaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome> {
+    if (!isTauri) {
+      await demoDelay();
+      const removed = new Set(paths);
+      browserSnapshot = { ...browserSnapshot,
+        changes: browserSnapshot.changes.filter((change) => !removed.has(change.path)) };
+      return demoWorkingTreeOutcome(browserSnapshot);
+    }
+    return invoke<WorkingTreeMutationOutcome>("trash_untracked_paths", { repositoryRoot, paths });
   },
 
   async unstagePaths(
@@ -1227,13 +1233,7 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) {
       await demoDelay();
       browserSnapshot = demoUnstage(browserSnapshot, paths);
-      return {
-        tracked: {
-          root: browserSnapshot.root,
-          changes: demoTrackedSnapshot(browserSnapshot).changes,
-        },
-        invalidatedSlices: ["workingTree"],
-      };
+      return demoWorkingTreeOutcome(browserSnapshot);
     }
     return invoke<WorkingTreeMutationOutcome>("unstage_paths", {
       repositoryRoot,
