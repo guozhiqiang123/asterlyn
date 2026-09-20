@@ -35,6 +35,7 @@ import {
   type HistoryFilterDialog,
 } from "./features/git-history/history-filter-controller";
 import {
+  branchIsSelected,
   filteredBranches as filteredBranchesForView,
   logicalBranches as logicalBranchesForView,
   renderBranchGroups as renderBranchGroupsView,
@@ -4823,6 +4824,17 @@ export class AsterlynApp {
     };
   }
 
+  private updateBranchSelection(snapshot: RepositorySnapshot): void {
+    const model = this.branchNavigationViewModel(snapshot);
+    this.root.querySelectorAll<HTMLButtonElement>("[data-branch-key]").forEach((row) => {
+      const key = row.dataset.branchKey;
+      const branch = key ? snapshot.branches.find((candidate) => branchKey(candidate) === key) : null;
+      const selected = Boolean(branch && branchIsSelected(branch, model));
+      row.classList.toggle("selected", selected);
+      row.setAttribute("aria-pressed", String(selected));
+    });
+  }
+
   private bindChangeEvents(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-change-action]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -7715,6 +7727,9 @@ export class AsterlynApp {
   private applyHistoryQuery(preferTip = false): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return;
+    // Branch selection is a synchronous presentation intent. Never make its visual
+    // acknowledgement wait for a filtered History read or remote reconciliation.
+    this.updateBranchSelection(snapshot);
     const query = this.activeHistoryQuery();
     if (isSnapshotHistoryQuery(query)) {
       this.installSnapshotHistory(snapshot, preferTip);

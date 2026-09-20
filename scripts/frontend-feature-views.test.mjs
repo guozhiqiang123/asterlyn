@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderBranchNavigation } from "../src/features/git-history/branch-navigation-view.ts";
+import {
+  branchIsSelected,
+  renderBranchNavigation,
+} from "../src/features/git-history/branch-navigation-view.ts";
 import {
   renderCommitComparisonDetail,
   renderCommitDetail,
@@ -216,6 +219,28 @@ test("branch navigation keeps repository hierarchy and selection in feature-owne
   assert.match(html, /remote-ref-group/);
   assert.match(html, /origin/);
   assert.match(html, /branch-row[^>]*selected/);
+});
+
+test("branch selection is a synchronous projection of the active ref scope", () => {
+  const snapshot = repositorySnapshot();
+  snapshot.branches = branchFixtures();
+  const main = snapshot.branches.find((branch) => branch.fullName === "refs/heads/main");
+  assert.ok(main);
+  const base = {
+    snapshot,
+    query: "",
+    selectedRepositoryIds: new Set(),
+    collapsedGroups: new Set(),
+  };
+
+  assert.equal(branchIsSelected(main, { ...base, selectedRefs: new Map() }), false);
+  assert.equal(branchIsSelected(main, {
+    ...base,
+    selectedRefs: new Map([[".:refs%2Fheads%2Fmain", {
+      repositoryId: ".",
+      fullName: "refs/heads/main",
+    }]]),
+  }), true);
 });
 
 test("history navigation owns filter menus and list host presentation", () => {

@@ -87,6 +87,16 @@ export function matchingBranches(
   return matchingLogicalBranches(model.snapshot.branches, branch, selectedRootIds);
 }
 
+export function branchIsSelected(
+  branch: BranchSummary,
+  model: BranchNavigationViewModel,
+): boolean {
+  const activeMatches = matchingBranches(branch, model);
+  return activeMatches.length > 0 && activeMatches.every((candidate) =>
+    model.selectedRefs.has(branchKey(candidate))
+  );
+}
+
 function renderRemoteBranches(
   branches: BranchSummary[],
   model: BranchNavigationViewModel,
@@ -103,9 +113,7 @@ function branchRow(
   const key = branchKey(branch);
   const activeMatches = matchingBranches(branch, model);
   const allMatches = matchingBranches(branch, model, true);
-  const selected = activeMatches.length > 0 && activeMatches.every((candidate) =>
-    model.selectedRefs.has(branchKey(candidate)),
-  );
+  const selected = branchIsSelected(branch, model);
   const exclusive = allMatches.length === model.selectedRefs.size &&
     allMatches.every((candidate) => model.selectedRefs.has(branchKey(candidate)));
   const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
