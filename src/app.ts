@@ -736,8 +736,7 @@ export class AsterlynApp {
         branch: {
           ...contextFeedback,
           current: (target) => this.isBranchContextTargetCurrent(target),
-          highlight: (target, highlighted) =>
-            this.markBranchContextTarget(target.key, highlighted),
+          highlight: (target, highlighted) => this.markBranchContextTarget(target.key, highlighted),
           snapshot: () => this.windowSession.repository.state.snapshot,
           policyOptions: () => {
             const snapshot = this.windowSession.repository.state.snapshot;
@@ -5804,10 +5803,7 @@ export class AsterlynApp {
 
   private markBranchContextTarget(key: string, highlighted: boolean): void {
     this.root.querySelectorAll<HTMLElement>("[data-branch-key]").forEach((row) => {
-      row.classList.toggle(
-        "context-target",
-        highlighted && row.dataset.branchKey === key,
-      );
+      row.classList.toggle("context-target", highlighted && row.dataset.branchKey === key);
     });
   }
 
