@@ -636,9 +636,18 @@ export function demoPrepareBranchMutation(
   if (request.kind === "delete" && !mergedIntoCurrent) {
     throw new Error("Only a branch already merged into the current HEAD can be deleted.");
   }
+  if (request.deleteRemote && request.kind !== "delete") {
+    throw new Error("Remote deletion is available only while deleting a local branch.");
+  }
+  const remoteDeletion = request.deleteRemote
+    ? demoRemoteDeletionTarget(snapshot, source.upstream)
+    : null;
   const fields = [
     request.kind, request.sourceFullName, source.oid, source.kind, newName ?? "", startHeadRef,
     snapshot.branch.oid, source.upstream ?? "", mergedIntoCurrent ? "merged" : "",
+    request.deleteRemote ? "delete-remote" : "local-only", remoteDeletion?.remote ?? "",
+    remoteDeletion?.branchFullName ?? "", remoteDeletion?.trackingFullName ?? "",
+    remoteDeletion?.oid ?? "",
   ];
   return {
     repositoryRoot: snapshot.root,
@@ -653,6 +662,8 @@ export function demoPrepareBranchMutation(
     startHeadOid: snapshot.branch.oid,
     upstream: source.upstream,
     mergedIntoCurrent,
+    deleteRemote: request.deleteRemote,
+    remoteDeletion,
     previewToken: JSON.stringify(fields),
   };
 }
@@ -666,6 +677,7 @@ export function demoExecuteBranchMutation(
     sourceFullName: plan.sourceFullName,
     sourceOid: plan.sourceOid,
     newName: plan.newName,
+    deleteRemote: plan.deleteRemote,
   });
   if (refreshed.previewToken !== plan.previewToken) {
     throw new Error("The reviewed branch plan is stale; prepare it again.");
@@ -674,6 +686,11 @@ export function demoExecuteBranchMutation(
   const next = structuredClone(snapshot);
   if (plan.kind === "delete") {
     next.branches = next.branches.filter((branch) => branch.fullName !== plan.sourceFullName);
+    if (plan.remoteDeletion) {
+      next.branches = next.branches.filter((branch) => (
+        branch.fullName !== plan.remoteDeletion?.trackingFullName
+      ));
+    }
     return next;
   }
   if (plan.kind === "rename") {
@@ -704,6 +721,27 @@ export function demoExecuteBranchMutation(
     unborn: false,
   };
   return next;
+}
+
+function demoRemoteDeletionTarget(
+  snapshot: RepositorySnapshot,
+  upstream: string | null,
+): NonNullable<BranchMutationPlan["remoteDeletion"]> {
+  const [remote, ...branchParts] = upstream?.split("/") ?? [];
+  const branch = branchParts.join("/");
+  const trackingFullName = remote && branch ? `refs/remotes/${remote}/${branch}` : "";
+  const tracking = snapshot.branches.find((candidate) => (
+    candidate.repositoryId === "." && candidate.fullName === trackingFullName
+  ));
+  if (!remote || !branch || !tracking) {
+    throw new Error("The selected local branch has no last-fetched remote upstream to delete.");
+  }
+  return {
+    remote,
+    branchFullName: `refs/heads/${branch}`,
+    trackingFullName,
+    oid: tracking.oid,
+  };
 }
 
 export function demoFetchRemote(

@@ -294,6 +294,14 @@ export interface BranchMutationRequest {
   sourceFullName: string;
   sourceOid: string;
   newName: string | null;
+  deleteRemote: boolean;
+}
+
+export interface RemoteBranchDeletionTarget {
+  remote: string;
+  branchFullName: string;
+  trackingFullName: string;
+  oid: string;
 }
 
 export interface BranchMutationPlan {
@@ -309,6 +317,8 @@ export interface BranchMutationPlan {
   startHeadOid: string;
   upstream: string | null;
   mergedIntoCurrent: boolean | null;
+  deleteRemote: boolean;
+  remoteDeletion: RemoteBranchDeletionTarget | null;
   previewToken: string;
 }
 

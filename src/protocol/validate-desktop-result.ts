@@ -148,6 +148,11 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         "previewToken",
       );
       nullableStrings(result, command, "targetFullName", "newName", "upstream");
+      assert(typeof result.deleteRemote === "boolean", command, "deleteRemote must be a boolean");
+      if (result.remoteDeletion !== null) {
+        const remoteDeletion = record(result.remoteDeletion, command);
+        strings(remoteDeletion, command, "remote", "branchFullName", "trackingFullName", "oid");
+      }
       assert(
         ["switch", "create", "checkoutRemote", "rename", "delete"].includes(String(result.kind)),
         command,

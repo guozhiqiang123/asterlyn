@@ -66,6 +66,7 @@ export class BranchMutationController {
         sourceFullName: source.fullName,
         sourceOid: source.oid,
         newName: mutationNeedsName(kind) ? suggestedName.trim() || null : null,
+        deleteRemote: false,
       },
       value: suggestedName,
       plan: null,
@@ -82,6 +83,32 @@ export class BranchMutationController {
     if (!dialog || dialog.busy || dialog.plan) return;
     dialog.value = value;
     dialog.error = null;
+  }
+
+  async setDeleteRemote(deleteRemote: boolean): Promise<void> {
+    const dialog = this.value.dialog;
+    if (
+      !dialog || dialog.busy || dialog.request.kind !== "delete" || !dialog.plan ||
+      dialog.request.deleteRemote === deleteRemote
+    ) return;
+    const previousPlan = dialog.plan;
+    dialog.request.deleteRemote = deleteRemote;
+    dialog.busy = true;
+    dialog.error = null;
+    this.emit();
+    try {
+      const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
+      if (this.value.dialog === dialog) dialog.plan = plan;
+    } catch (error) {
+      if (this.value.dialog === dialog) {
+        dialog.request.deleteRemote = previousPlan.deleteRemote;
+        dialog.plan = previousPlan;
+        dialog.error = this.gateway.errorMessage(error);
+      }
+    } finally {
+      if (this.value.dialog === dialog) dialog.busy = false;
+      this.emit();
+    }
   }
 
   async submit(): Promise<void> {

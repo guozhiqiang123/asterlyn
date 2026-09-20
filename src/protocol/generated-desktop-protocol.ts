@@ -68,7 +68,7 @@ export interface DesktopCommandMap {
   switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositoryMutationOutcome };
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
   prepare_branch_mutation: { args: { repositoryRoot: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
-  execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; }; result: Model.RepositoryMutationOutcome };
+  execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
   read_remote_authentication: { args: { repositoryRoot: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
   store_remote_https_credential: { args: { repositoryRoot: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
   configure_remote_ssh: { args: { repositoryRoot: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };

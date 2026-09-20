@@ -1415,6 +1415,7 @@ const demoBridge: DesktopBridge = {
   async executeBranchMutation(
     repositoryRoot: string,
     plan: BranchMutationPlan,
+    operationId: string,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(260);
@@ -1424,7 +1425,11 @@ const demoBridge: DesktopBridge = {
         invalidatedSlices: [...COMPLETE_DEMO_REPOSITORY_SLICES],
       };
     }
-    return invoke<RepositoryMutationOutcome>("execute_branch_mutation", { repositoryRoot, plan });
+    return invoke<RepositoryMutationOutcome>("execute_branch_mutation", {
+      repositoryRoot,
+      plan,
+      operationId,
+    });
   },
 
   async fetchRemote(

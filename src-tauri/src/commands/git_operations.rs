@@ -199,6 +199,7 @@ pub(crate) async fn prepare_branch_mutation(
 pub(crate) async fn execute_branch_mutation(
     repository_root: String,
     plan: BranchMutationPlan,
+    operation_id: String,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
@@ -207,18 +208,33 @@ pub(crate) async fn execute_branch_mutation(
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
         .into_owned();
-    git_operations
-        .run_local(
-            repository_root,
-            "execute branch mutation",
-            move |repository| {
-                repository.execute_branch_mutation(&plan)?;
-                repository
-                    .tracked_snapshot(COMMIT_LIMIT)
-                    .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
-            },
-        )
-        .await
+    if plan.delete_remote {
+        git_operations
+            .run_remote(
+                repository_root,
+                operation_id,
+                "delete local and remote branches",
+                COMMIT_LIMIT,
+                move |repository, cancellation| {
+                    repository.execute_branch_mutation_with_remote(&plan, cancellation)
+                },
+            )
+            .await
+            .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+    } else {
+        git_operations
+            .run_local(
+                repository_root,
+                "execute branch mutation",
+                move |repository| {
+                    repository.execute_branch_mutation(&plan)?;
+                    repository
+                        .tracked_snapshot(COMMIT_LIMIT)
+                        .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+                },
+            )
+            .await
+    }
 }
 
 #[tauri::command]

@@ -45,8 +45,12 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     invokeDesktopCommand<RepositoryMutationOutcome>("create_branch", { repositoryRoot, name }),
   prepareBranchMutation: (repositoryRoot, request) =>
     invokeDesktopCommand<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, request }),
-  executeBranchMutation: (repositoryRoot, plan) =>
-    invokeDesktopCommand<RepositoryMutationOutcome>("execute_branch_mutation", { repositoryRoot, plan }),
+  executeBranchMutation: (repositoryRoot, plan, operationId) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_branch_mutation", {
+      repositoryRoot,
+      plan,
+      operationId,
+    }),
   readRemoteAuthentication: (repositoryRoot, remote) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {
       repositoryRoot,

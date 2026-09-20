@@ -374,6 +374,7 @@ export class AsterlynApp {
   private repositoryTargetPath: string | null = null;
   private recentRepositoryValidationGeneration = 0;
   private recentRepositoryValidationKey: string | null = null;
+  private branchMutationSequence = 0;
   private readonly activityRailBinding: ActivityRailBinding;
   private readonly shellEventBinding: ShellEventBinding;
   private readonly windowChromeBinding: WindowChromeBinding;
@@ -8328,8 +8329,12 @@ export class AsterlynApp {
     const copy = this.localization.catalog.history.branchMutation;
     return this.runBranchMutation(
       copy.progress(plan.kind, plan.sourceName),
-      copy.completed(plan.kind, plan.sourceName, plan.newName),
-      (root) => bridge.executeBranchMutation(root, plan),
+      copy.completed(plan.kind, plan.sourceName, plan.newName, plan.remoteDeletion?.remote ?? null),
+      (root) => bridge.executeBranchMutation(
+        root,
+        plan,
+        `branch-mutation-${++this.branchMutationSequence}`,
+      ),
     );
   }
 

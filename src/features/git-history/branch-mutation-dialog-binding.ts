@@ -56,6 +56,12 @@ export class BranchMutationDialogBinding {
     host.querySelector<HTMLButtonElement>("#branch-mutation-execute")?.addEventListener(
       "click", () => void this.controller.execute(),
     );
+    host.querySelector<HTMLInputElement>("#branch-mutation-delete-remote")?.addEventListener(
+      "change",
+      (event) => void this.controller.setDeleteRemote(
+        (event.currentTarget as HTMLInputElement).checked,
+      ),
+    );
     host.onkeydown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -68,6 +74,7 @@ export class BranchMutationDialogBinding {
     queueMicrotask(() => {
       if (!host.contains(document.activeElement)) {
         (host.querySelector<HTMLInputElement>("#branch-mutation-name") ??
+          host.querySelector<HTMLElement>("#branch-mutation-cancel") ??
           host.querySelector<HTMLElement>("button:not([disabled])"))?.focus();
       }
     });

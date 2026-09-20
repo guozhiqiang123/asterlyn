@@ -16,9 +16,10 @@ pub use model::{
     GitOperationPhase, GitOperationPlan, GitOperationProgress, GitOperationSnapshot,
     GitRootDescriptor, GitRootKind, HistoryCommitStart, HistoryOrder, HistoryPage, HistoryPath,
     HistoryQuery, HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry,
-    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteSummary,
-    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
-    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
+    PushMode, PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus,
+    RemoteBranchDeletionTarget, RemoteSummary, RemoteTransport, RepositoryReadPlan,
+    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
+    UntrackedScan, UntrackedState,
 };
 pub use process::CancellationToken;
 pub use repository::GitRepository;

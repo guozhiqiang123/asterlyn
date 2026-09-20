@@ -16,9 +16,9 @@ use crate::model::{
     CommitSummary, DiffResult, FileChange, GitBlameResult, GitRootDescriptor, GitRootKind,
     HistoryOrder, HistoryPage, HistoryPath, HistoryQuery, HistoryRef, ProjectEntryKind,
     ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode,
-    PushTagSummary, RemoteAuthenticationStatus, RemoteSummary, RemoteTransport, RepositoryReadPlan,
-    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TrackedChangeScan,
-    UntrackedScan, UntrackedState,
+    PushTagSummary, RemoteAuthenticationStatus, RemoteBranchDeletionTarget, RemoteSummary,
+    RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot,
+    SelectedCommitResult, TrackedChangeScan, UntrackedScan, UntrackedState,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
@@ -2717,6 +2717,13 @@ impl GitRepository {
     ) -> Result<BranchMutationPlan, GitError> {
         self.ensure_no_repository_operation("prepare branch mutation")?;
         validate_object_id(&request.source_oid)?;
+        if request.delete_remote && request.kind != BranchMutationKind::Delete {
+            return Err(GitError::InvalidInput {
+                field: "delete remote branch".to_string(),
+                message: "remote deletion is available only while deleting a local branch"
+                    .to_string(),
+            });
+        }
         let start_name = self
             .current_branch()?
             .ok_or_else(|| GitError::UnsafeOperation {
@@ -2894,6 +2901,28 @@ impl GitRepository {
         } else {
             None
         };
+        let remote_deletion = if request.delete_remote {
+            let target =
+                self.read_upstream_target(&source_name)?
+                    .ok_or_else(|| GitError::InvalidInput {
+                        field: "remote branch".to_string(),
+                        message: "the selected local branch has no remote upstream to delete"
+                            .to_string(),
+                    })?;
+            let remote = self.validated_upstream(&target, true)?;
+            let oid = self.resolve_commit(
+                &target.tracking_ref,
+                "resolve last-fetched remote branch for deletion",
+            )?;
+            Some(RemoteBranchDeletionTarget {
+                remote: remote.name,
+                branch_full_name: target.merge_ref,
+                tracking_full_name: target.tracking_ref,
+                oid,
+            })
+        } else {
+            None
+        };
         let preview_token = branch_mutation_token(&[
             request.kind.label(),
             &request.source_full_name,
@@ -2908,6 +2937,27 @@ impl GitRepository {
             } else {
                 ""
             },
+            if request.delete_remote {
+                "delete-remote"
+            } else {
+                "local-only"
+            },
+            remote_deletion
+                .as_ref()
+                .map(|target| target.remote.as_str())
+                .unwrap_or(""),
+            remote_deletion
+                .as_ref()
+                .map(|target| target.branch_full_name.as_str())
+                .unwrap_or(""),
+            remote_deletion
+                .as_ref()
+                .map(|target| target.tracking_full_name.as_str())
+                .unwrap_or(""),
+            remote_deletion
+                .as_ref()
+                .map(|target| target.oid.as_str())
+                .unwrap_or(""),
         ]);
         Ok(BranchMutationPlan {
             repository_root: self.root.to_string_lossy().into_owned(),
@@ -2922,11 +2972,47 @@ impl GitRepository {
             start_head_oid,
             upstream,
             merged_into_current,
+            delete_remote: request.delete_remote,
+            remote_deletion,
             preview_token,
         })
     }
 
     pub fn execute_branch_mutation(&self, plan: &BranchMutationPlan) -> Result<(), GitError> {
+        self.revalidate_branch_mutation_plan(plan)?;
+        if plan.delete_remote {
+            return Err(GitError::InvalidInput {
+                field: "branch mutation plan".to_string(),
+                message: "remote branch deletion requires the cancellable remote executor"
+                    .to_string(),
+            });
+        }
+        self.apply_local_branch_mutation(plan)
+    }
+
+    pub fn execute_branch_mutation_with_remote(
+        &self,
+        plan: &BranchMutationPlan,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
+        self.revalidate_branch_mutation_plan(plan)?;
+        if plan.kind != BranchMutationKind::Delete || !plan.delete_remote {
+            return Err(GitError::InvalidInput {
+                field: "branch mutation plan".to_string(),
+                message: "the plan does not authorize remote branch deletion".to_string(),
+            });
+        }
+        self.delete_remote_branch_from_plan(plan, cancellation)?;
+        self.delete_branch_from_plan(plan).map_err(|error| GitError::UnsafeOperation {
+            operation: "delete local branch after remote deletion".to_string(),
+            message: format!(
+                "the exact remote branch was deleted, but the local branch was retained: {error}"
+            ),
+            blockers: vec![plan.source_full_name.clone()],
+        })
+    }
+
+    fn revalidate_branch_mutation_plan(&self, plan: &BranchMutationPlan) -> Result<(), GitError> {
         if plan.repository_root != self.root.to_string_lossy() {
             return Err(stale_branch_plan(
                 "the reviewed plan belongs to another repository",
@@ -2937,6 +3023,7 @@ impl GitRepository {
             source_full_name: plan.source_full_name.clone(),
             source_oid: plan.source_oid.clone(),
             new_name: plan.new_name.clone(),
+            delete_remote: plan.delete_remote,
         };
         let refreshed = self.prepare_branch_mutation(&request)?;
         if refreshed.preview_token != plan.preview_token {
@@ -2944,6 +3031,10 @@ impl GitRepository {
                 "HEAD, the source ref, its upstream, or the destination changed",
             ));
         }
+        Ok(())
+    }
+
+    fn apply_local_branch_mutation(&self, plan: &BranchMutationPlan) -> Result<(), GitError> {
         match plan.kind {
             BranchMutationKind::Switch => self.switch_branch(&plan.source_full_name),
             BranchMutationKind::Create => self.create_branch_from(plan, false),
@@ -3029,6 +3120,46 @@ impl GitRepository {
             &self.root,
             ["config", "--remove-section", &format!("branch.{name}")],
         );
+        Ok(())
+    }
+
+    fn delete_remote_branch_from_plan(
+        &self,
+        plan: &BranchMutationPlan,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
+        let target = plan
+            .remote_deletion
+            .as_ref()
+            .ok_or_else(|| stale_branch_plan("the remote deletion target is missing"))?;
+        let args = vec![
+            OsString::from("-c"),
+            OsString::from("push.followTags=false"),
+            OsString::from("-c"),
+            OsString::from("push.recurseSubmodules=no"),
+            OsString::from("push"),
+            OsString::from("--porcelain"),
+            OsString::from("--no-progress"),
+            OsString::from("--no-mirror"),
+            OsString::from("--no-follow-tags"),
+            OsString::from("--no-signed"),
+            OsString::from("--recurse-submodules=no"),
+            OsString::from(format!(
+                "--force-with-lease={}:{}",
+                target.branch_full_name, target.oid
+            )),
+            OsString::from("--"),
+            OsString::from(&target.remote),
+            OsString::from(format!(":{}", target.branch_full_name)),
+        ];
+        self.run_remote_operation(
+            "delete remote branch",
+            &target.remote,
+            args,
+            cancellation,
+            true,
+            true,
+        )?;
         Ok(())
     }
 
@@ -5608,6 +5739,17 @@ mod tests {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
+    fn git_succeeds(path: &Path, args: &[&str]) -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .expect("git should start")
+            .status
+            .success()
+    }
+
     fn fixture() -> TempDir {
         let directory = tempfile::tempdir().expect("temp directory");
         git(directory.path(), &["init", "-b", "main"]);
@@ -7506,6 +7648,7 @@ mod tests {
             source_full_name: "refs/heads/source".to_string(),
             source_oid: source_oid.clone(),
             new_name: Some("feature/from-source".to_string()),
+            delete_remote: false,
         };
         let plan = repository
             .prepare_branch_mutation(&request)
@@ -7557,6 +7700,7 @@ mod tests {
             source_full_name: "refs/remotes/origin/topic".to_string(),
             source_oid,
             new_name: Some("topic".to_string()),
+            delete_remote: false,
         };
         let plan = repository
             .prepare_branch_mutation(&request)
@@ -7594,6 +7738,7 @@ mod tests {
                 source_full_name: "refs/heads/old-name".to_string(),
                 source_oid: oid.clone(),
                 new_name: Some("new-name".to_string()),
+                delete_remote: false,
             })
             .expect("rename plan");
         repository
@@ -7610,6 +7755,7 @@ mod tests {
                 source_full_name: "refs/heads/new-name".to_string(),
                 source_oid: oid.clone(),
                 new_name: None,
+                delete_remote: false,
             })
             .expect("delete plan");
         assert_eq!(delete.merged_into_current, Some(true));
@@ -7621,6 +7767,93 @@ mod tests {
             repository
                 .reference_exists("refs/remotes/origin/old-name")
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn reviewed_branch_deletion_can_delete_the_exact_remote_upstream() {
+        let directory = fixture();
+        let remote = tempfile::tempdir().unwrap();
+        git(remote.path(), &["init", "--bare"]);
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["branch", "topic"]);
+        git(
+            directory.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git(directory.path(), &["push", "origin", "main"]);
+        git(
+            directory.path(),
+            &["push", "--set-upstream", "origin", "topic"],
+        );
+
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let plan = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Delete,
+                source_full_name: "refs/heads/topic".to_string(),
+                source_oid: oid,
+                new_name: None,
+                delete_remote: true,
+            })
+            .expect("remote deletion plan");
+        let target = plan.remote_deletion.as_ref().expect("exact remote target");
+        assert_eq!(target.remote, "origin");
+        assert_eq!(target.branch_full_name, "refs/heads/topic");
+        repository
+            .execute_branch_mutation_with_remote(&plan, &CancellationToken::new())
+            .expect("delete exact local and remote branches");
+        assert!(!repository.reference_exists("refs/heads/topic").unwrap());
+        assert!(!git_succeeds(
+            remote.path(),
+            &["show-ref", "--verify", "--quiet", "refs/heads/topic"]
+        ));
+    }
+
+    #[test]
+    fn reviewed_remote_branch_deletion_lease_rejects_server_movement() {
+        let directory = fixture();
+        let remote = tempfile::tempdir().unwrap();
+        git(remote.path(), &["init", "--bare"]);
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let topic_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["branch", "topic"]);
+        git(
+            directory.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git(directory.path(), &["push", "origin", "main"]);
+        git(
+            directory.path(),
+            &["push", "--set-upstream", "origin", "topic"],
+        );
+        commit_file(directory.path(), "main.txt", "main\n", "Main moves");
+        let moved_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["push", "origin", "main"]);
+
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let plan = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                kind: BranchMutationKind::Delete,
+                source_full_name: "refs/heads/topic".to_string(),
+                source_oid: topic_oid,
+                new_name: None,
+                delete_remote: true,
+            })
+            .expect("remote deletion plan");
+        git(
+            remote.path(),
+            &["update-ref", "refs/heads/topic", &moved_oid],
+        );
+        assert!(matches!(
+            repository.execute_branch_mutation_with_remote(&plan, &CancellationToken::new()),
+            Err(GitError::RemoteFailed { .. })
+        ));
+        assert!(repository.reference_exists("refs/heads/topic").unwrap());
+        assert_eq!(
+            git_stdout(remote.path(), &["rev-parse", "refs/heads/topic"]),
+            moved_oid
         );
     }
 
@@ -7637,6 +7870,7 @@ mod tests {
                 source_full_name: "refs/heads/stale".to_string(),
                 source_oid: stale_oid.clone(),
                 new_name: None,
+                delete_remote: false,
             })
             .expect("switch plan");
         git(
@@ -7663,6 +7897,7 @@ mod tests {
                 source_full_name: "refs/heads/stale".to_string(),
                 source_oid: side_oid,
                 new_name: None,
+                delete_remote: false,
             })
             .expect_err("unmerged deletion is blocked");
         assert!(unmerged.to_string().contains("already merged"));
@@ -7681,6 +7916,7 @@ mod tests {
                 source_full_name: "refs/heads/linked".to_string(),
                 source_oid: linked_oid,
                 new_name: None,
+                delete_remote: false,
             })
             .expect_err("linked worktree deletion is blocked");
         assert!(linked.to_string().contains("another Git worktree"));

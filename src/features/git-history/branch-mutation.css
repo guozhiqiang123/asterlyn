@@ -95,6 +95,23 @@
   color: var(--success-text) !important;
 }
 
+.branch-mutation-remote-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.branch-mutation-remote-option input {
+  margin: 0;
+}
+
+.branch-mutation-option-detail {
+  color: var(--text-muted);
+}
+
 .branch-mutation-error {
   padding: 9px 11px;
   border: 1px solid var(--danger-border);

@@ -593,6 +593,16 @@ pub struct BranchMutationRequest {
     pub source_full_name: String,
     pub source_oid: String,
     pub new_name: Option<String>,
+    pub delete_remote: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteBranchDeletionTarget {
+    pub remote: String,
+    pub branch_full_name: String,
+    pub tracking_full_name: String,
+    pub oid: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -610,6 +620,8 @@ pub struct BranchMutationPlan {
     pub start_head_oid: String,
     pub upstream: Option<String>,
     pub merged_into_current: Option<bool>,
+    pub delete_remote: bool,
+    pub remote_deletion: Option<RemoteBranchDeletionTarget>,
     pub preview_token: String,
 }
 

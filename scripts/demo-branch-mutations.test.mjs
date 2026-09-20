@@ -19,7 +19,7 @@ test("reviewed demo branch creation starts at the selected object and remains le
   const source = snapshot.branches.find((branch) => branch.fullName === "refs/heads/main");
   const plan = demoPrepareBranchMutation(snapshot, {
     kind: "create", sourceFullName: source.fullName, sourceOid: source.oid,
-    newName: "feature/reviewed",
+    newName: "feature/reviewed", deleteRemote: false,
   });
   const next = demoExecuteBranchMutation(snapshot, plan);
   assert.equal(next.branch.head, "feature/reviewed");
@@ -36,7 +36,7 @@ test("remote checkout sets upstream while rename and delete affect local refs on
   const remote = snapshot.branches.find((branch) => branch.fullName === "refs/remotes/origin/main");
   const checkout = demoPrepareBranchMutation(snapshot, {
     kind: "checkoutRemote", sourceFullName: remote.fullName, sourceOid: remote.oid,
-    newName: "review-main",
+    newName: "review-main", deleteRemote: false,
   });
   const checkedOut = demoExecuteBranchMutation(snapshot, checkout);
   assert.equal(checkedOut.branch.upstream, "origin/main");
@@ -44,7 +44,7 @@ test("remote checkout sets upstream while rename and delete affect local refs on
   const rename = demoPrepareBranchMutation(checkedOut, {
     kind: "rename", sourceFullName: "refs/heads/main",
     sourceOid: checkedOut.branches.find((branch) => branch.fullName === "refs/heads/main").oid,
-    newName: "main-renamed",
+    newName: "main-renamed", deleteRemote: false,
   });
   const renamed = demoExecuteBranchMutation(checkedOut, rename);
   assert.ok(renamed.branches.some((branch) => branch.fullName === "refs/heads/main-renamed"));
@@ -52,9 +52,19 @@ test("remote checkout sets upstream while rename and delete affect local refs on
 
   const local = renamed.branches.find((branch) => branch.fullName === "refs/heads/main-renamed");
   const deletion = demoPrepareBranchMutation(renamed, {
-    kind: "delete", sourceFullName: local.fullName, sourceOid: local.oid, newName: null,
+    kind: "delete", sourceFullName: local.fullName, sourceOid: local.oid,
+    newName: null, deleteRemote: false,
   });
   const deleted = demoExecuteBranchMutation(renamed, deletion);
   assert.ok(!deleted.branches.some((branch) => branch.fullName === local.fullName));
   assert.ok(deleted.branches.some((branch) => branch.fullName === remote.fullName));
+
+  const remoteDeletion = demoPrepareBranchMutation(renamed, {
+    kind: "delete", sourceFullName: local.fullName, sourceOid: local.oid,
+    newName: null, deleteRemote: true,
+  });
+  assert.equal(remoteDeletion.remoteDeletion.remote, "origin");
+  const deletedEverywhere = demoExecuteBranchMutation(renamed, remoteDeletion);
+  assert.ok(!deletedEverywhere.branches.some((branch) => branch.fullName === local.fullName));
+  assert.ok(!deletedEverywhere.branches.some((branch) => branch.fullName === remote.fullName));
 });

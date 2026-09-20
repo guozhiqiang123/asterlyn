@@ -298,6 +298,7 @@ export interface GitOperationBridge {
   executeBranchMutation(
     repositoryRoot: string,
     plan: BranchMutationPlan,
+    operationId: string,
   ): Promise<RepositoryMutationOutcome>;
   readRemoteAuthentication(
     repositoryRoot: string,

@@ -1059,7 +1059,7 @@ export interface BranchMutationCopy {
   descriptions: Record<BranchMutationKind, string>;
   actions: Record<BranchMutationKind, string>;
   progress(kind: BranchMutationKind, source: string): string;
-  completed(kind: BranchMutationKind, source: string, destination: string | null): string;
+  completed(kind: BranchMutationKind, source: string, destination: string | null, remote: string | null): string;
   source: string;
   object: string;
   destination: string;
@@ -1067,7 +1067,12 @@ export interface BranchMutationCopy {
   upstream: string;
   noUpstream: string;
   mergedIntoCurrent: string;
+  remoteBranch: string;
+  deleteRemote: string;
+  deleteRemoteUnavailable: string;
+  deleteLocalAndRemote: string;
   localOnly: string;
+  localAndRemote: string;
   branchName: string;
   branchNameRequired: string;
   cancel: string;

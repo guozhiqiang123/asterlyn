@@ -291,6 +291,8 @@ test("desktop response validation accepts representative valid payloads", () => 
     startHeadOid: "b".repeat(40),
     upstream: "origin/old",
     mergedIntoCurrent: null,
+    deleteRemote: false,
+    remoteDeletion: null,
     previewToken: "reviewed-plan",
   };
   assert.deepEqual(validateDesktopResult("prepare_branch_mutation", branchPlan), branchPlan);
@@ -332,6 +334,7 @@ test("desktop response validation rejects malformed results", () => {
       sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
       targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
       startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: true,
+      deleteRemote: false, remoteDeletion: null,
       previewToken: "reviewed-plan",
     }),
     /supported branch mutation kind/,

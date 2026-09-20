@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BranchMutationController } from "../src/features/git-history/branch-mutation-controller.ts";
+import { renderBranchMutationDialog } from "../src/features/git-history/branch-mutation-view.ts";
+import { EN_US } from "../src/localization/en-US.ts";
 
 const branch = {
   repositoryId: ".", kind: "local", fullName: "refs/heads/topic", name: "topic",
@@ -14,7 +16,14 @@ function plan(request) {
     sourceOid: request.sourceOid, sourceKind: "local", sourceName: "topic",
     targetFullName: request.newName ? `refs/heads/${request.newName}` : null,
     newName: request.newName, startHeadRef: "refs/heads/main", startHeadOid: "a".repeat(40),
-    upstream: null, mergedIntoCurrent: request.kind === "delete" ? true : null, previewToken: "token",
+    upstream: request.kind === "delete" ? "origin/topic" : null,
+    mergedIntoCurrent: request.kind === "delete" ? true : null,
+    deleteRemote: request.deleteRemote,
+    remoteDeletion: request.deleteRemote ? {
+      remote: "origin", branchFullName: "refs/heads/topic",
+      trackingFullName: "refs/remotes/origin/topic", oid: request.sourceOid,
+    } : null,
+    previewToken: request.deleteRemote ? "remote-token" : "token",
   };
 }
 
@@ -34,7 +43,8 @@ test("named non-destructive mutations prepare and execute in one submission", as
   await controller.submit();
   assert.equal(controller.state.dialog, null);
   assert.deepEqual(calls[0], ["prepare", "/repo", {
-    kind: "create", sourceFullName: branch.fullName, sourceOid: branch.oid, newName: "feature/menu",
+    kind: "create", sourceFullName: branch.fullName, sourceOid: branch.oid,
+    newName: "feature/menu", deleteRemote: false,
   }]);
   assert.deepEqual(calls[1], ["execute", "token"]);
 });
@@ -66,4 +76,30 @@ test("switch prepares and executes directly without a confirmation state", async
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(calls, ["prepare", "execute"]);
   assert.equal(controller.state.dialog, null);
+});
+
+test("remote deletion is opt-in and replaces the exact delete plan before execution", async () => {
+  const requests = [];
+  const controller = new BranchMutationController({
+    async prepare(_root, request) {
+      requests.push({ ...request });
+      return plan(request);
+    },
+    async execute() { return true; },
+    errorMessage: String,
+  });
+  controller.open("/repo", "delete", branch);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(controller.state.dialog.request.deleteRemote, false);
+  assert.equal(controller.state.dialog.plan.remoteDeletion, null);
+  const localOnly = renderBranchMutationDialog(controller.state, EN_US.history.branchMutation);
+  assert.match(localOnly, /id="branch-mutation-delete-remote"/u);
+  assert.doesNotMatch(localOnly, /id="branch-mutation-delete-remote"[^>]*checked/u);
+  await controller.setDeleteRemote(true);
+  assert.equal(controller.state.dialog.request.deleteRemote, true);
+  assert.equal(controller.state.dialog.plan.remoteDeletion.remote, "origin");
+  const withRemote = renderBranchMutationDialog(controller.state, EN_US.history.branchMutation);
+  assert.match(withRemote, /id="branch-mutation-delete-remote"[^>]*checked/u);
+  assert.match(withRemote, /refs\/heads\/topic/u);
+  assert.deepEqual(requests.map((request) => request.deleteRemote), [false, true]);
 });
