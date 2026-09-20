@@ -1,6 +1,6 @@
 # ADR-0016: Consistent temporal presentation and shared editor change indicators
 
-- **Status:** Accepted for implementation
+- **Status:** Implemented
 - **Date:** 2026-09-20
 
 ## Context
@@ -102,3 +102,5 @@ still reflected immediately in the same comparison. The cost is one bounded on-d
 per changed open file identity plus a lazy visual diff calculation. The optional ordinary-editor
 local-Diff/rollback popover remains a documented follow-up rather than an unsafe partial action.
 
+Implementation and acceptance evidence is recorded in
+[`2026-09-20 temporal presentation and editor change indicators`](../../benchmarks/2026-09-20-time-and-editor-change-indicators.md).
