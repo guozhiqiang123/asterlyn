@@ -326,7 +326,6 @@ export const ZH_CN = {
       targetChanged: "分支已发生变化，请重新打开菜单",
     },
     branchMutation: {
-      eyebrow: "已审查的分支变更",
       titles: {
         switch: "审查分支切换", create: "从已审查对象创建分支",
         checkoutRemote: "检出远程分支", rename: "重命名本地分支", delete: "删除本地分支",
@@ -416,7 +415,7 @@ export const ZH_CN = {
       saveBeforeRestore: "恢复前请先保存或放弃此文件的未保存更改",
       waitForEditor: "请等待此文件完成加载或保存", restoreBusy: "另一个工作区操作仍在进行中",
       targetChanged: "提交、文件或历史查询已变化，请重新打开菜单",
-      restoreEyebrow: "历史文件恢复", restoreTitle: "审查文件恢复", recoveryTitle: "恢复记录需要处理",
+      restoreTitle: "审查文件恢复", recoveryTitle: "恢复记录需要处理",
       restoreDescription: "确认将精确的历史 blob 写入当前工作区路径。",
       appliedDescription: "历史版本已写入工作区；确认保留或撤销这次恢复。",
       recoveryDescription: "这些恢复记录在上次操作后仍然保留，请检查当前文件后选择撤销或保留。",

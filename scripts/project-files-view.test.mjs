@@ -79,7 +79,6 @@ test("trash dialog reports bounded recursive and hidden-entry counts", () => {
       },
     },
   }, {
-    eyebrow: EN_US.projectFiles.contextMenu.trash,
     title: EN_US.projectFiles.contextMenu.confirmTrashTitle,
     cancel: EN_US.projectFiles.contextMenu.cancel,
     confirm: EN_US.projectFiles.contextMenu.confirmTrash,

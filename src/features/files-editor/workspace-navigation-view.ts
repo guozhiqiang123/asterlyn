@@ -87,14 +87,14 @@ export function renderWorkspaceReplacementDialog(
   const replacement = model.replacement;
   if (replacement.status === "previewing") {
     return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-      <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.safeWorkspaceEdit)}</span><h2 id="replacement-dialog-title">${escapeHtml(copy.preparingPreview)}</h2></div></div>
+      <div class="dialog-heading"><h2 id="replacement-dialog-title">${escapeHtml(copy.preparingPreview)}</h2></div>
       ${loadingBlock(copy.rereadingFiles)}
       <div class="dialog-actions"><button class="secondary-button" id="replacement-cancel-operation" type="button">${escapeHtml(copy.cancel)}</button></div>
     </section>`;
   }
   if (replacement.status === "error" || !replacement.preview) {
     return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-      <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.safeWorkspaceEdit)}</span><h2 id="replacement-dialog-title">${escapeHtml(copy.previewUnavailable)}</h2></div><button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button></div>
+      <div class="dialog-heading"><h2 id="replacement-dialog-title">${escapeHtml(copy.previewUnavailable)}</h2><button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button></div>
       <div class="replacement-error" role="alert">${escapeHtml(replacement.error ?? copy.createNewSearch)}</div>
       <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button">${escapeHtml(copy.close)}</button></div>
     </section>`;
@@ -125,7 +125,7 @@ export function renderWorkspaceReplacementDialog(
     ? `<div class="replacement-warning">${escapeHtml(copy.skippedFiles(preview.skippedCount))}</div>`
     : "";
   return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
-    <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.safeWorkspaceEdit)}</span><h2 id="replacement-dialog-title">${escapeHtml(copy.reviewTitle)}</h2></div>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
+    <div class="dialog-heading"><h2 id="replacement-dialog-title">${escapeHtml(copy.reviewTitle)}</h2>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
     <p>${escapeHtml(copy.reviewedSummary(preview.totalMatches, preview.files.length))}</p>
     ${replacement.error ? `<div class="replacement-error" role="alert">${escapeHtml(replacement.error)}</div>` : ""}
     ${warning}
@@ -282,7 +282,7 @@ function renderReplacementRecoveries(model: WorkspaceReplacementViewModel, copy:
         </article>`;
       }).join("");
   return `<section class="dialog replacement-dialog recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-recovery-title">
-    <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.crashSafeHistory)}</span><h2 id="replacement-recovery-title">${escapeHtml(copy.recoveryTitle)}</h2></div>${model.recoveryBusy ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
+    <div class="dialog-heading"><h2 id="replacement-recovery-title">${escapeHtml(copy.recoveryTitle)}</h2>${model.recoveryBusy ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
     <p>${escapeHtml(copy.recoveryDetail)}</p>
     <div class="recovery-list">${cards}</div>
     <div class="dialog-actions"><button class="secondary-button" data-replacement-close type="button" ${model.recoveryBusy ? "disabled" : ""}>${escapeHtml(copy.close)}</button></div>

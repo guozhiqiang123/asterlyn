@@ -468,7 +468,6 @@ export const EN_US: LocaleCatalog = {
       targetChanged: "The branch changed; open its menu again",
     },
     branchMutation: {
-      eyebrow: "Reviewed branch change",
       titles: {
         switch: "Review Branch Switch", create: "Create Branch from Reviewed Object",
         checkoutRemote: "Check Out Remote Branch", rename: "Rename Local Branch",
@@ -566,7 +565,7 @@ export const EN_US: LocaleCatalog = {
       waitForEditor: "Wait for this file to finish loading or saving",
       restoreBusy: "Another workspace operation is still in progress",
       targetChanged: "The commit, file, or History query changed; open its menu again",
-      restoreEyebrow: "Historical file restore", restoreTitle: "Review File Restore",
+      restoreTitle: "Review File Restore",
       recoveryTitle: "File Restores Need Attention",
       restoreDescription: "Confirm the exact historical blob that will be written to the current working-tree path.",
       appliedDescription: "The historical version is in the working tree. Keep it or undo this restore.",

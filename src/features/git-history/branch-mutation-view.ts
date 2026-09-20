@@ -12,7 +12,7 @@ export function renderBranchMutationDialog(
   const error = dialog.error
     ? `<div class="branch-mutation-error" role="alert">${escapeHtml(localError(dialog.error, copy))}</div>`
     : "";
-  const heading = `<div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.eyebrow)}</span><h2 id="branch-mutation-dialog-title">${escapeHtml(copy.titles[kind])}</h2></div><button class="icon-button" data-branch-mutation-close type="button" aria-label="${escapeHtml(copy.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>`;
+  const heading = `<div class="dialog-heading"><h2 id="branch-mutation-dialog-title">${escapeHtml(copy.titles[kind])}</h2><button class="icon-button" data-branch-mutation-close type="button" aria-label="${escapeHtml(copy.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>`;
   if (!dialog.plan) {
     const name = mutationNeedsName(kind)
       ? `<label for="branch-mutation-name">${escapeHtml(copy.branchName)}</label><input id="branch-mutation-name" name="name" type="text" value="${escapeAttribute(dialog.value)}" autocomplete="off" spellcheck="false" aria-invalid="${Boolean(dialog.error)}" ${dialog.busy ? "disabled" : ""}/>`

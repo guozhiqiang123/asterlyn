@@ -1055,7 +1055,6 @@ export interface BranchContextMenuCopy {
 }
 
 export interface BranchMutationCopy {
-  eyebrow: string;
   titles: Record<BranchMutationKind, string>;
   descriptions: Record<BranchMutationKind, string>;
   actions: Record<BranchMutationKind, string>;
@@ -1148,7 +1147,6 @@ export interface HistoryCommitFileContextMenuCopy {
   waitForEditor: string;
   restoreBusy: string;
   targetChanged: string;
-  restoreEyebrow: string;
   restoreTitle: string;
   recoveryTitle: string;
   restoreDescription: string;

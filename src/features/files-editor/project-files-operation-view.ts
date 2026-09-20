@@ -9,7 +9,7 @@ export function renderProjectFilesOperationDialog(
   if (!dialog) return "";
   const labels = copy.contextMenu;
   return `<section class="dialog project-files-dialog" role="dialog" aria-modal="true" aria-labelledby="project-files-dialog-title">
-    <div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(labels.paste)}</span><h2 id="project-files-dialog-title">${escapeHtml(labels.choosePasteName)}</h2></div><button class="icon-button" data-project-files-dialog-close type="button" aria-label="${escapeAttribute(labels.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>
+    <div class="dialog-heading"><h2 id="project-files-dialog-title">${escapeHtml(labels.choosePasteName)}</h2><button class="icon-button" data-project-files-dialog-close type="button" aria-label="${escapeAttribute(labels.cancel)}" ${dialog.busy ? "disabled" : ""}>×</button></div>
     <p>${escapeHtml(labels.pasteNameDetail)}</p>
     <form id="project-files-paste-name-form"><label for="project-files-paste-name">${escapeHtml(labels.nameLabel)}</label><input id="project-files-paste-name" name="name" type="text" value="${escapeAttribute(dialog.value)}" aria-invalid="${Boolean(dialog.error)}" ${dialog.busy ? "disabled" : ""} autocomplete="off" spellcheck="false" />${dialog.error ? `<small class="project-files-dialog-error" role="alert">${escapeHtml(dialog.error)}</small>` : ""}<div class="dialog-actions"><button class="secondary-button" data-project-files-dialog-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(labels.cancel)}</button><button class="primary-button" type="submit" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? labels.working : labels.paste)}</button></div></form>
   </section>`;

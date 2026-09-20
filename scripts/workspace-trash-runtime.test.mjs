@@ -33,7 +33,6 @@ test("Workspace Trash runtime owns controller subscription and disposal", () => 
       trashed: "trashed",
     }),
     copy: () => ({
-      eyebrow: "Trash",
       title: "Trash entry?",
       cancel: "Cancel",
       confirm: "Trash",

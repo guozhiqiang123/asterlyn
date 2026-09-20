@@ -984,7 +984,6 @@ export class AsterlynApp {
       copy: () => {
         const labels = this.localization.catalog.projectFiles.contextMenu;
         return {
-          eyebrow: labels.trash,
           title: labels.confirmTrashTitle,
           cancel: labels.cancel,
           confirm: labels.confirmTrash,
@@ -1667,13 +1666,11 @@ export class AsterlynApp {
       text(`[data-tool="${tool}"] span`, toolLabel);
     }
     text("#dialog-title", copy.simulateOpenFolder);
-    text("#repository-dialog .panel-eyebrow", copy.browserDemo);
     text("#repository-dialog .dialog > p", copy.demoFolderDetail);
     text('label[for="repository-input"]', copy.projectFolderPath);
     text("#dialog-cancel", common.cancel);
     text('#repository-form button[type="submit"]', copy.openProjectAction);
     label("#dialog-close", common.close);
-    text("#repository-target-dialog .panel-eyebrow", copy.openProjectAction);
     text("#repository-target-title", copy.whereOpenProject);
     text("#repository-target-dialog .dialog > p", copy.targetWindowDetail);
     text("#repository-target-cancel", common.cancel);

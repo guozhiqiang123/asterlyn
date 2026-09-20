@@ -9,7 +9,7 @@ export function renderCommitFileRestoreDialog(
   const dialog = state.dialog;
   if (!dialog) return "";
   const busy = dialog.phase === "preparing" || dialog.phase === "executing" || Boolean(dialog.busyRecoveryId);
-  const heading = `<div class="dialog-heading"><div><span class="panel-eyebrow">${escapeHtml(copy.restoreEyebrow)}</span><h2 id="commit-file-restore-title">${escapeHtml(dialog.phase === "recovery" ? copy.recoveryTitle : copy.restoreTitle)}</h2></div><button class="icon-button" data-commit-file-restore-close type="button" aria-label="${escapeAttribute(copy.close)}" ${busy ? "disabled" : ""}>×</button></div>`;
+  const heading = `<div class="dialog-heading"><h2 id="commit-file-restore-title">${escapeHtml(dialog.phase === "recovery" ? copy.recoveryTitle : copy.restoreTitle)}</h2><button class="icon-button" data-commit-file-restore-close type="button" aria-label="${escapeAttribute(copy.close)}" ${busy ? "disabled" : ""}>×</button></div>`;
   const error = dialog.error
     ? `<div class="commit-file-restore-error" role="alert">${escapeHtml(dialog.error === "editor-changed" ? copy.editorChanged : dialog.error)}</div>`
     : "";

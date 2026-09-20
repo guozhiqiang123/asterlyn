@@ -82,6 +82,9 @@ primary title and its workspace-relative path is the secondary title, because id
 can exist in different directories. The absolute path remains available through accessible context
 when needed and is not promoted into another visible heading.
 
+The frontend quality gate scans production dialog title bars and rejects presentation-only eyebrow,
+kicker, or subtitle elements, so this hierarchy rule cannot silently regress in a new modal.
+
 ## Accessibility and timing
 
 - Visible labels, icons, badges, and animation are supplemental to a complete accessible action
