@@ -17,6 +17,14 @@ export interface CommonCopy {
   prepareStrategy(strategy: string): string;
 }
 
+export interface TemporalCopy {
+  today: string;
+  justNow: string;
+  secondsAgo(count: number): string;
+  minutesAgo(count: number): string;
+  hoursAgo(count: number): string;
+}
+
 export interface ShellCopy {
   projectMenu: string;
   openProject: string;
@@ -1185,6 +1193,7 @@ export interface HistoryCommitRangePolicyCopy {
 export interface LocaleCatalog {
   readonly locale: EffectiveLocale;
   readonly common: CommonCopy;
+  readonly temporal: TemporalCopy;
   readonly shell: ShellCopy;
   readonly terminal: TerminalCopy;
   readonly settings: SettingsCopy;

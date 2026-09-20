@@ -156,7 +156,7 @@ const editorThemeRules =
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
     ".cm-git-blame-gutter": {
-      minWidth: "132px",
+      minWidth: "214px",
       color: "var(--text-muted)",
       backgroundColor: "var(--bg-deep)",
     },
@@ -166,12 +166,25 @@ const editorThemeRules =
       padding: "0 8px",
     },
     ".cm-git-blame-marker": {
-      display: "block",
-      maxWidth: "168px",
+      display: "grid",
+      gridTemplateColumns: "112px minmax(0, 1fr)",
+      gap: "8px",
+      width: "100%",
+      maxWidth: "220px",
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
       cursor: "help",
+    },
+    ".cm-git-blame-time": {
+      overflow: "hidden",
+      textAlign: "left",
+      textOverflow: "ellipsis",
+    },
+    ".cm-git-blame-author": {
+      overflow: "hidden",
+      textAlign: "right",
+      textOverflow: "ellipsis",
     },
     ".cm-git-blame-tone-0": {
       backgroundColor: "color-mix(in srgb, var(--graph-1) 10%, var(--bg-deep))",

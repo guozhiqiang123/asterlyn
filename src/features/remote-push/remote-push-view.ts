@@ -15,6 +15,7 @@ import {
   type CommitFileTreeNode,
 } from "../../presentation/git-presentation.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
+import { formatPresentationDateTime } from "../../presentation/date-time.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,
@@ -287,7 +288,7 @@ function renderPushPreviewBody(model: RemotePushDialogViewModel, preview: PushPr
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.remote;
   const commits = preview.commits.length
-    ? preview.commits.map((commit) => { const selected = state.pushSelectedCommit === commit.oid; return `<button class="push-commit-row ${selected ? "selected" : ""}" type="button" role="option" data-push-commit="${escapeAttribute(commit.oid)}" aria-selected="${selected}" aria-pressed="${selected}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.authorName)} · ${escapeHtml(localization.dateTime.format(new Date(commit.authoredAt * 1000)))}</small></button>`; }).join("")
+    ? preview.commits.map((commit) => { const selected = state.pushSelectedCommit === commit.oid; return `<button class="push-commit-row ${selected ? "selected" : ""}" type="button" role="option" data-push-commit="${escapeAttribute(commit.oid)}" aria-selected="${selected}" aria-pressed="${selected}" title="${escapeAttribute(commit.oid)}"><span>${escapeHtml(commit.subject)}</span><small>${escapeHtml(commit.authorName)} · ${escapeHtml(formatPresentationDateTime(commit.authoredAt, localization))}</small></button>`; }).join("")
     : `<div class="remote-dialog-empty">${escapeHtml(copy.noNewCommitObjects)}${preview.publish ? ` ${escapeHtml(copy.publishCreatesDestination)}` : ""}</div>`;
   const reviewFiles = pushReviewFiles(preview, state);
   const files = renderPushFiles(model, preview, reviewFiles);

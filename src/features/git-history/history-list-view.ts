@@ -12,6 +12,7 @@ import {
   type CommitGraphSegment,
   type CommitReference,
 } from "../../presentation/git-presentation.ts";
+import { formatPresentationDateTime } from "../../presentation/date-time.ts";
 import {
   collapseLinearHistory,
   type HistoryDisplayEntry,
@@ -263,7 +264,7 @@ export function renderHistoryList(
       const rootBadge = multipleRoots
         ? `<span class="history-root-badge" title="${escapeAttribute(copy.gitRoot(root?.relativePath ?? commit.repositoryId))}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
         : "";
-      const authoredAt = commit.authoredAt ? localization.shortDateTime.format(new Date(commit.authoredAt * 1000)) : copy.unknownTime;
+      const authoredAt = commit.authoredAt ? formatPresentationDateTime(commit.authoredAt, localization) : copy.unknownTime;
       return `<button class="history-row ${selected ? "selected" : ""} ${active ? "active" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization, commit.outgoing === true)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
     })
     .join("");

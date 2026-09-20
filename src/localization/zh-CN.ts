@@ -10,6 +10,10 @@ export const ZH_CN = {
     actions: { closeApp: "关闭 Asterlyn", switchRepositories: "切换仓库", pullChanges: "拉取更改", reviewGitOperation: "审查 Git 操作", createCommit: "创建提交", changeBranches: "更改分支" },
     prepareStrategy: (strategy) => `准备${strategy}`,
   },
+  temporal: {
+    today: "今天", justNow: "刚刚",
+    secondsAgo: (count) => `${count} 秒前`, minutesAgo: (count) => `${count} 分钟前`, hoursAgo: (count) => `${count} 小时前`,
+  },
   shell: {
     projectMenu: "项目菜单", openProject: "打开项目", noProject: "未打开项目",
     projectMenuFor: (name) => `${name} 的项目菜单`, openProjectMenu: "打开项目菜单",

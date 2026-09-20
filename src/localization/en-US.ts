@@ -17,6 +17,13 @@ export const EN_US: LocaleCatalog = {
     actions: { closeApp: "closing Asterlyn", switchRepositories: "switching repositories", pullChanges: "pulling changes", reviewGitOperation: "reviewing a Git operation", createCommit: "creating the commit", changeBranches: "changing branches" },
     prepareStrategy: (strategy) => `preparing ${strategy}`,
   },
+  temporal: {
+    today: "Today",
+    justNow: "just now",
+    secondsAgo: (count) => `${count} ${count === 1 ? "second" : "seconds"} ago`,
+    minutesAgo: (count) => `${count} ${count === 1 ? "minute" : "minutes"} ago`,
+    hoursAgo: (count) => `${count} ${count === 1 ? "hour" : "hours"} ago`,
+  },
   shell: {
     projectMenu: "Project menu",
     openProject: "Open a project",

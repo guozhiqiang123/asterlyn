@@ -6,6 +6,7 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import type { GitBlameHunk, GitBlameResult } from "../../models.ts";
+import { formatGitBlameDateTime } from "../../presentation/date-time.ts";
 
 export interface GitBlameSource {
   repositoryRoot: string;
@@ -164,15 +165,19 @@ class GitBlameMarker extends GutterMarker {
     const marker = document.createElement("span");
     const date = this.hunk.uncommitted || this.hunk.authoredAt <= 0
       ? this.copy.gitBlameLocal
-      : compactDate(this.hunk.authoredAt);
+      : formatGitBlameDateTime(this.hunk.authoredAt);
     marker.className = "cm-git-blame-marker";
-    marker.textContent = this.hunk.uncommitted
-      ? this.copy.gitBlameLocal
-      : `${date} ${this.hunk.authorName}`;
+    const time = document.createElement("span");
+    time.className = "cm-git-blame-time";
+    time.textContent = date;
+    const author = document.createElement("span");
+    author.className = "cm-git-blame-author";
+    author.textContent = this.hunk.uncommitted ? "" : this.hunk.authorName;
+    marker.append(time, author);
     marker.title = this.copy.gitBlameDetails(
       this.hunk.authorName,
       this.hunk.authorEmail,
-      fullDate(this.hunk.authoredAt, this.copy.gitBlameLocal),
+      this.hunk.authoredAt > 0 ? formatGitBlameDateTime(this.hunk.authoredAt) : this.copy.gitBlameLocal,
       this.hunk.oid,
       this.hunk.summary,
     );
@@ -183,13 +188,4 @@ class GitBlameMarker extends GutterMarker {
 function blameTone(oid: string): number {
   const suffix = Number.parseInt(oid.slice(-2), 16);
   return Number.isFinite(suffix) ? suffix % 4 : 0;
-}
-
-function compactDate(epochSeconds: number): string {
-  const date = new Date(epochSeconds * 1000);
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function fullDate(epochSeconds: number, fallback: string): string {
-  return epochSeconds > 0 ? new Date(epochSeconds * 1000).toLocaleString() : fallback;
 }
