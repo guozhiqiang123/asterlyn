@@ -537,7 +537,7 @@ export interface ChangesCopy {
     noHistory: string;
     targetChanged: string;
   };
-  groups: Record<"changes" | "unversioned", string>;
+  groups: Record<"conflicts" | "changes" | "unversioned", string>;
   commitFileActions: string;
   refreshChanges: string;
   selectTrackedToRestore: string;
@@ -632,6 +632,8 @@ export interface GitOperationCopy {
   base: string;
   ours: string;
   theirs: string;
+  acceptOursChange: string;
+  acceptTheirsChange: string;
   resolvedResult: string;
   binaryConflict: string;
   resolvedFileContent: string;

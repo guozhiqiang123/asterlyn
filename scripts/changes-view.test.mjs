@@ -12,6 +12,7 @@ import {
 
 test("change rows preserve groups and expanded directory hierarchy", () => {
   const current = snapshot([
+    { ...change("conflict.txt"), conflicted: true },
     change("src/a.ts"),
     change("src/deep/b.ts"),
     change("new.txt", "untracked"),
@@ -19,14 +20,14 @@ test("change rows preserve groups and expanded directory hierarchy", () => {
   const rows = changeViewRows(current, state());
 
   assert.deepEqual(rows.map((row) => row.kind === "file" ? row.change.path : row.kind === "directory" ? row.node.path : row.group), [
-    "changes", "src", "src/deep", "src/deep/b.ts", "src/a.ts", "unversioned", "new.txt",
+    "conflicts", "conflict.txt", "changes", "src", "src/deep", "src/deep/b.ts", "src/a.ts", "unversioned", "new.txt",
   ]);
   assert.deepEqual(changeDisclosureKeys(current), [
-    "group:changes", "directory:changes:src", "directory:changes:src/deep", "group:unversioned",
+    "group:conflicts", "group:changes", "directory:changes:src", "directory:changes:src/deep", "group:unversioned",
   ]);
   assert.deepEqual(
     rows.filter((row) => row.kind === "directory" || row.kind === "file").map((row) => row.depth),
-    [1, 2, 3, 2, 1],
+    [1, 1, 2, 3, 2, 1],
   );
   assert.match(renderChangeNavigation(current, state()), /style="--tree-depth:1"[^>]*data-change-path="new.txt"/);
 });

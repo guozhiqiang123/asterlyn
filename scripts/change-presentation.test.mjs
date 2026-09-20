@@ -25,8 +25,10 @@ test("change groups and effective colors describe each path once", () => {
   const stagedAndModified = change("src/app.ts", "modified", "modified");
   const stagedOnly = change("README.md", "added", "unmodified");
   const untracked = change("notes.txt", "unmodified", "untracked");
+  const conflict = { ...change("conflict.txt", "unmerged", "unmerged"), conflicted: true };
   assert.equal(changeGroup(stagedAndModified), "changes");
   assert.equal(changeGroup(untracked), "unversioned");
+  assert.equal(changeGroup(conflict), "conflicts");
   assert.equal(effectiveChangeKind(stagedAndModified), "modified");
   assert.equal(effectiveChangeKind(stagedOnly), "added");
 });

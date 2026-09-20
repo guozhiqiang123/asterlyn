@@ -232,6 +232,11 @@ export class ChangesCommitController {
     let changed = false;
     for (const path of paths) {
       if (!known.has(path)) continue;
+      const conflict = this.snapshot?.changes.find((change) => change.path === path)?.conflicted === true;
+      if (conflict) {
+        changed = this.state.excludedPaths.delete(path) || changed;
+        continue;
+      }
       if (included) changed = this.state.excludedPaths.delete(path) || changed;
       else if (!this.state.excludedPaths.has(path)) {
         this.state.excludedPaths.add(path);

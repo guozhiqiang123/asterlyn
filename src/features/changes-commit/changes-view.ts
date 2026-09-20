@@ -67,6 +67,7 @@ export function changeViewRows(
   copy: ChangesCopy = EN_US.changes,
 ): ChangeViewRow[] {
   const rows: ChangeViewRow[] = [];
+  appendGroupRows(rows, copy.groups.conflicts, "conflicts", snapshot.changes, state);
   appendGroupRows(rows, copy.groups.changes, "changes", snapshot.changes, state);
   appendGroupRows(rows, copy.groups.unversioned, "unversioned", snapshot.changes, state);
   return rows;
@@ -74,7 +75,7 @@ export function changeViewRows(
 
 export function changeDisclosureKeys(snapshot: RepositorySnapshot): string[] {
   const keys: string[] = [];
-  for (const group of ["changes", "unversioned"] as const) {
+  for (const group of ["conflicts", "changes", "unversioned"] as const) {
     const changes = snapshot.changes.filter((change) => changeGroup(change) === group);
     if (changes.length === 0) continue;
     keys.push(`group:${group}`);
@@ -227,7 +228,7 @@ function renderChangeRow(
   if (row.kind === "group") {
     return `<div class="change-group virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
       <div class="group-header">
-        <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" />
+        <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" data-change-disclosure="group:${row.group}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
         <span class="group-title">${escapeHtml(row.title)}<b>${escapeHtml(copy.fileCount(row.changes.length))}</b></span>
       </div>
@@ -236,7 +237,7 @@ function renderChangeRow(
   if (row.kind === "directory") {
     return `<div class="change-directory virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
       <div class="change-directory-row" style="--tree-depth:${row.depth}">
-        <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" aria-label="${escapeAttribute(copy.include(row.node.path))}" />
+        <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" aria-label="${escapeAttribute(copy.include(row.node.path))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" data-change-disclosure="${escapeAttribute(row.key)}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
         ${icon("folder", 14)}<span>${escapeHtml(row.node.name)}</span><small>${row.paths.length}</small>
       </div>
@@ -246,7 +247,7 @@ function renderChangeRow(
   const primary = state.selectedChange?.path === row.change.path;
   const included = !state.excludedPaths.has(row.change.path);
   return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} style="--tree-depth:${row.depth ?? 1}" data-change-path="${escapeAttribute(row.change.path)}" aria-selected="${primary}" aria-label="${escapeAttribute(copy.selectedDiff(row.change.path, primary))}">
-    <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(row.change.path)}" aria-label="${escapeAttribute(copy.includeInCommit(row.change.path))}" ${included ? "checked" : ""} />
+    <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(row.change.path)}" aria-label="${escapeAttribute(copy.includeInCommit(row.change.path))}" ${included ? "checked" : ""} ${row.change.conflicted ? "disabled" : ""} />
     <span class="change-status status-${kind}" title="${escapeAttribute(copy.changeLabels[kind])}">${changeCode(kind)}</span>
     <span class="commit-file-glyph">${fileTypeIcon(row.change.path)}</span>
     <span class="change-path">

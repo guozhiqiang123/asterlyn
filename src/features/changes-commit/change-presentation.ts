@@ -1,7 +1,7 @@
 import type { ChangeKind, FileChange } from "../../models";
 
 export type ChangeFileView = "tree" | "flat";
-export type ChangeGroupId = "changes" | "unversioned";
+export type ChangeGroupId = "conflicts" | "changes" | "unversioned";
 
 export interface ChangeFileTreeNode {
   kind: "directory" | "file";
@@ -12,6 +12,7 @@ export interface ChangeFileTreeNode {
 }
 
 export function changeGroup(change: FileChange): ChangeGroupId {
+  if (change.conflicted) return "conflicts";
   return change.worktreeStatus === "untracked" ? "unversioned" : "changes";
 }
 
@@ -34,7 +35,7 @@ export function reconcileExcludedChangePaths(
   excludedPaths: ReadonlySet<string>,
   changes: FileChange[],
 ): Set<string> {
-  const current = new Set(changes.map((change) => change.path));
+  const current = new Set(changes.filter((change) => !change.conflicted).map((change) => change.path));
   return new Set(Array.from(excludedPaths).filter((path) => current.has(path)));
 }
 
