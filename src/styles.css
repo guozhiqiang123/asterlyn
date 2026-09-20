@@ -107,6 +107,7 @@
   --graph-6: #d86f89;
   --graph-7: #c4a85c;
   --graph-8: #8293b6;
+  --graph-outgoing: #f2b84b;
   --file-icon-typescript: #68a9e8;
   --file-icon-javascript: #d8c35a;
   --file-icon-kotlin: #b28ae8;
@@ -246,6 +247,7 @@
   --graph-6: #a93652;
   --graph-7: #766000;
   --graph-8: #52627d;
+  --graph-outgoing: #b35c00;
   --file-icon-typescript: #1769a8;
   --file-icon-javascript: #766400;
   --file-icon-kotlin: #7043a0;

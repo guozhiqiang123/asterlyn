@@ -471,7 +471,7 @@ export const ZH_CN = {
     olderCommitsFailed: (detail) => `无法加载更早的提交：${detail}`,
     historyRefreshFailed: (detail) => `无法刷新提交历史：${detail}`,
     historyRefreshWarning: "无法完成提交历史刷新", filteredHistoryWarning: "无法加载筛选后的提交历史",
-    rootCommit: "根提交", oneParent: "一个父提交",
+    rootCommit: "根提交", outgoingCommit: "尚未推送到当前上游", oneParent: "一个父提交",
     mergeParents: (count) => `有 ${count} 个父提交的合并提交`,
     collapsedGraphLane: (lane, total) => `提交图第 ${lane}/${total} 轨中的折叠线性延续`,
     graphLane: (lane, total, parent) => `提交图第 ${lane}/${total} 轨，${parent}`,

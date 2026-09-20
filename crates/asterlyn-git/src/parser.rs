@@ -203,6 +203,7 @@ pub(crate) fn parse_commits(input: &[u8]) -> Result<Vec<CommitSummary>, GitError
                 .map(ToString::to_string)
                 .collect(),
             subject: fields[7].to_string(),
+            outgoing: false,
         });
     }
 

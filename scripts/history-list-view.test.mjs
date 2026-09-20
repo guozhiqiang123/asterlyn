@@ -10,7 +10,10 @@ import {
 import { commitKey } from "../src/features/git-history/history-identity.ts";
 
 test("history list projects selected commits, graph metadata, references, and roots", () => {
-  const commits = [commit("tip", ["root"], ["HEAD -> main"]), commit("root", [], [])];
+  const commits = [
+    { ...commit("tip", ["root"], ["HEAD -> main"]), outgoing: true },
+    commit("root", [], []),
+  ];
   const html = renderHistoryList({
     ...presentation(commits),
     selectedCommit: commitKey(commits[0]),
@@ -22,10 +25,12 @@ test("history list projects selected commits, graph metadata, references, and ro
   });
 
   assert.match(html, /history-row selected/);
-  assert.match(html, /aria-label="Graph lane 1 of 1, one parent"/);
+  assert.match(html, /aria-label="Graph lane 1 of 1, one parent,/);
   assert.match(html, /commit-reference head/);
   assert.match(html, /history-root-badge/);
   assert.match(html, /data-commit-key="\.:tip"/);
+  assert.match(html, /commit-graph-node[^>]*outgoing/);
+  assert.match(html, /not pushed to the current upstream/);
 });
 
 test("history list preserves paging and terminal status semantics", () => {

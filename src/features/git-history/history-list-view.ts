@@ -252,7 +252,7 @@ export function renderHistoryList(
         ? `<span class="history-root-badge" title="${escapeAttribute(copy.gitRoot(root?.relativePath ?? commit.repositoryId))}">${escapeHtml(root?.displayName ?? commit.repositoryId)}</span>`
         : "";
       const authoredAt = commit.authoredAt ? localization.shortDateTime.format(new Date(commit.authoredAt * 1000)) : copy.unknownTime;
-      return `<button class="history-row ${selected ? "selected" : ""} ${active ? "active" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
+      return `<button class="history-row ${selected ? "selected" : ""} ${active ? "active" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization, commit.outgoing === true)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
     })
     .join("");
   const topSpacer = boundedWindow && boundedWindow.start > 0
@@ -340,6 +340,7 @@ function renderCommitGraph(
   width: number,
   collapsed = false,
   localization: Localization = DEFAULT_LOCALIZATION,
+  outgoing = false,
 ): string {
   const copy = localization.catalog.history;
   const parentSummary =
@@ -351,17 +352,18 @@ function renderCommitGraph(
   const lines = row.segments
     .map(
       (segment) =>
-        `<path class="commit-graph-line ${collapsed ? "collapsed" : ""} graph-color-${segment.color}" d="${commitGraphPath(segment)}" />`,
+        `<path class="commit-graph-line ${collapsed ? "collapsed" : ""} ${outgoing && segment.fromLane === row.nodeLane ? "outgoing" : ""} graph-color-${segment.color}" d="${commitGraphPath(segment)}" />`,
     )
     .join("");
   const nodeX = 7 + row.nodeLane * 12;
   const node = collapsed
     ? `<circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="8" r="1.2"/><circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="14" r="1.2"/><circle class="commit-graph-gap graph-color-${row.nodeColor}" cx="${nodeX}" cy="20" r="1.2"/>`
-    : `<circle class="commit-graph-node graph-color-${row.nodeColor} ${row.parentCount > 1 ? "merge" : ""}" cx="${nodeX}" cy="14" r="${row.parentCount > 1 ? 4 : 3.5}" />`;
+    : `<circle class="commit-graph-node graph-color-${row.nodeColor} ${row.parentCount > 1 ? "merge" : ""} ${outgoing ? "outgoing" : ""}" cx="${nodeX}" cy="14" r="${row.parentCount > 1 ? 4 : 3.5}" />`;
   const label = collapsed
     ? copy.collapsedGraphLane(row.nodeLane + 1, row.laneCount)
     : copy.graphLane(row.nodeLane + 1, row.laneCount, parentSummary);
-  return `<span class="history-graph" role="img" aria-label="${label}"><svg viewBox="0 0 ${width} 28" width="${width}" height="28" aria-hidden="true" focusable="false">${lines}${node}</svg></span>`;
+  const accessibleLabel = outgoing ? `${label}, ${copy.outgoingCommit}` : label;
+  return `<span class="history-graph" role="img" aria-label="${escapeAttribute(accessibleLabel)}"><svg viewBox="0 0 ${width} 28" width="${width}" height="28" aria-hidden="true" focusable="false">${lines}${node}</svg></span>`;
 }
 
 function commitGraphPath(segment: CommitGraphSegment): string {

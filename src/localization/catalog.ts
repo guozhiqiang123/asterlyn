@@ -947,6 +947,7 @@ export interface HistoryCopy {
   historyRefreshWarning: string;
   filteredHistoryWarning: string;
   rootCommit: string;
+  outgoingCommit: string;
   oneParent: string;
   mergeParents(count: number): string;
   collapsedGraphLane(lane: number, total: number): string;

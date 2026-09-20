@@ -36,6 +36,7 @@ const MAX_BINARY_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const TREE_ENTRY_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 const MAX_HISTORY_WINDOW: usize = 3_000;
 const MAX_HISTORY_PAGE_SIZE: usize = MAX_HISTORY_WINDOW;
+const MAX_OUTGOING_COMMITS: usize = 100_000;
 const MAX_PUSH_PREVIEW_WINDOW: usize = 1_000;
 const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
 const MAX_PUSH_PREVIEW_FILES: usize = 20_000;
@@ -799,7 +800,44 @@ impl GitRepository {
             arguments.push(OsString::from(path));
         }
         let output = self.run_read_owned(operation, arguments)?;
-        parse_commits(&output.stdout)
+        let mut commits = parse_commits(&output.stdout)?;
+        self.mark_outgoing_commits(&mut commits)?;
+        Ok(commits)
+    }
+
+    fn mark_outgoing_commits(&self, commits: &mut [CommitSummary]) -> Result<(), GitError> {
+        if commits.is_empty() {
+            return Ok(());
+        }
+        let Some(branch) = self.current_branch()? else {
+            return Ok(());
+        };
+        let mut arguments = vec![
+            OsString::from("rev-list"),
+            OsString::from(format!("--max-count={MAX_OUTGOING_COMMITS}")),
+            OsString::from("HEAD"),
+        ];
+        if let Some(upstream) = self.read_upstream_target(&branch)? {
+            if !self.reference_exists(&upstream.tracking_ref)? {
+                return Ok(());
+            }
+            arguments.push(OsString::from(format!("^{}", upstream.tracking_ref)));
+        } else {
+            arguments.push(OsString::from("--not"));
+            arguments.push(OsString::from("--remotes"));
+        }
+        arguments.push(OsString::from("--"));
+        let output = self.run_read_owned("read outgoing commits", arguments)?;
+        let outgoing: HashSet<_> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect();
+        for commit in commits {
+            commit.outgoing = outgoing.contains(commit.oid.as_str());
+        }
+        Ok(())
     }
 
     fn history_tip_oids(&self) -> Result<Vec<String>, GitError> {
@@ -7679,6 +7717,32 @@ mod tests {
             .fetch_remote("unsafe", &CancellationToken::new())
             .expect_err("unsafe fetch mapping is rejected");
         assert!(matches!(rejected, GitError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn marks_only_commits_ahead_of_the_current_upstream_as_outgoing() {
+        let fixture = remote_fixture();
+        let local_oid = commit_file(&fixture.local, "local.txt", "local\n", "Local only");
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+
+        let snapshot = repository
+            .tracked_snapshot(10)
+            .expect("tracked snapshot loads");
+        assert!(
+            snapshot
+                .commits
+                .iter()
+                .find(|commit| commit.oid == local_oid)
+                .expect("local commit is present")
+                .outgoing
+        );
+        assert!(snapshot.commits.iter().any(|commit| !commit.outgoing));
+
+        git(&fixture.local, &["push", "origin", "main"]);
+        let pushed = repository
+            .tracked_snapshot(10)
+            .expect("pushed snapshot loads");
+        assert!(pushed.commits.iter().all(|commit| !commit.outgoing));
     }
 
     #[test]

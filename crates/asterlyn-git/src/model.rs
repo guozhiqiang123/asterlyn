@@ -318,6 +318,8 @@ pub struct CommitSummary {
     pub authored_at: i64,
     pub decorations: Vec<String>,
     pub subject: String,
+    #[serde(default)]
+    pub outgoing: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

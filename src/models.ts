@@ -67,6 +67,8 @@ export interface CommitSummary {
   authoredAt: number;
   decorations: string[];
   subject: string;
+  /** Reachable from the current local branch but not its configured upstream. */
+  outgoing?: boolean;
 }
 
 export interface PushPreview {

@@ -627,7 +627,7 @@ export const EN_US: LocaleCatalog = {
     olderCommitsFailed: (detail) => `Older commits could not be loaded: ${detail}`,
     historyRefreshFailed: (detail) => `History could not be refreshed: ${detail}`,
     historyRefreshWarning: "History refresh could not be completed", filteredHistoryWarning: "Filtered history could not be loaded",
-    rootCommit: "root commit", oneParent: "one parent",
+    rootCommit: "root commit", outgoingCommit: "not pushed to the current upstream", oneParent: "one parent",
     mergeParents: (count) => `merge commit with ${count} parents`,
     collapsedGraphLane: (lane, total) => `Collapsed linear continuation in graph lane ${lane} of ${total}`,
     graphLane: (lane, total, parent) => `Graph lane ${lane} of ${total}, ${parent}`,
