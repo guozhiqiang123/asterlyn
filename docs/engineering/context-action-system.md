@@ -518,8 +518,9 @@ closure during unrelated file updates. The corrective implementation centralizes
 suppression and font/interaction states in the shared host, keeps folder labels two pixels below
 the configured menu size (with a 10 px floor), reconciles retained History refs instead of clearing
 them on every ref/history result, and revalidates open menus by semantic target identity. Automated
-checks cover those contracts; interactive macOS/Windows/Linux re-verification remains required
-before this follow-up is marked manually accepted.
+checks cover those contracts. A Linux release build was manually verified for branch selection,
+pointer hover, menu survival across a watcher refresh, and native-menu suppression; interactive
+macOS and Windows re-verification remains required before this follow-up is marked manually accepted.
 
 ## Testing and acceptance matrix
 
