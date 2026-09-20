@@ -226,7 +226,7 @@ function renderChangeRow(
 ): string {
   const position = `aria-posinset="${index + 1}" aria-setsize="${rowCount}"`;
   if (row.kind === "group") {
-    return `<div class="change-group virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
+    return `<div class="change-group virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}" data-change-group="${row.group}">
       <div class="group-header">
         <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" data-change-disclosure="group:${row.group}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>

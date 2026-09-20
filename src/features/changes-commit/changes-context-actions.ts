@@ -15,6 +15,7 @@ import {
 } from "../../shared/context-menu/context-menu-copy-actions.ts";
 import type { DelegatedContextRequest } from "../../shared/context-menu/delegated-context-binding.ts";
 import type { ChangesContextTarget } from "./changes-navigation-binding.ts";
+import type { ChangesFileContextTarget, ChangesGroupContextTarget } from "./changes-navigation-binding.ts";
 import {
   changesContextPolicy,
   changesHistoryIntent,
@@ -28,16 +29,19 @@ const ENABLED = { kind: "enabled" } as const;
 
 export interface ChangesContextRuntime {
   current(target: ChangesContextTarget): boolean;
-  select(target: ChangesContextTarget): boolean;
-  included(target: ChangesContextTarget): boolean;
+  select(target: ChangesFileContextTarget): boolean;
+  included(target: ChangesFileContextTarget): boolean;
   snapshot(): RepositorySnapshot | null;
-  policyOptions(target: ChangesContextTarget): Omit<ChangesContextPolicyOptions, "snapshot">;
-  setIncluded(target: ChangesContextTarget, included: boolean): void;
-  showDiff(target: ChangesContextTarget): void | Promise<void>;
-  jumpToSource(target: ChangesContextTarget): void | Promise<void>;
-  resolveConflict(target: ChangesContextTarget): void | Promise<void>;
-  restore(target: ChangesContextTarget): void | Promise<void>;
-  trash(target: ChangesContextTarget): void | Promise<void>;
+  policyOptions(target: ChangesFileContextTarget): Omit<ChangesContextPolicyOptions, "snapshot">;
+  groupPolicy(target: ChangesGroupContextTarget): { stage: ContextMenuAvailability; trash: ContextMenuAvailability };
+  setIncluded(target: ChangesFileContextTarget, included: boolean): void;
+  showDiff(target: ChangesFileContextTarget): void | Promise<void>;
+  jumpToSource(target: ChangesFileContextTarget): void | Promise<void>;
+  resolveConflict(target: ChangesFileContextTarget): void | Promise<void>;
+  restore(target: ChangesFileContextTarget): void | Promise<void>;
+  trash(target: ChangesFileContextTarget): void | Promise<void>;
+  stageAll(target: ChangesGroupContextTarget): void | Promise<void>;
+  trashAll(target: ChangesGroupContextTarget): void | Promise<void>;
   installHistoryQuery(intent: HistoryQueryIntent): void;
   blocked(reason: string): void;
   status(message: string): void;
@@ -65,7 +69,9 @@ export class ChangesContextActions {
 
   open(request: DelegatedContextRequest<ChangesContextTarget>): boolean {
     const { target } = request;
-    if (!this.runtime.current(target) || !this.runtime.select(target)) return false;
+    if (!this.runtime.current(target)) return false;
+    if (target.kind === "group") return this.openGroup(request, target);
+    if (!this.runtime.select(target)) return false;
     const labels = this.copy().contextMenu;
     const pathLabels = {
       copy: labels.copyPath,
@@ -109,7 +115,31 @@ export class ChangesContextActions {
     return true;
   }
 
-  private async invoke(actionId: string, target: ChangesContextTarget): Promise<void> {
+  private openGroup(
+    request: DelegatedContextRequest<ChangesContextTarget>,
+    target: ChangesGroupContextTarget,
+  ): boolean {
+    const policy = this.runtime.groupPolicy(target);
+    this.host.open(request.anchor, {
+      ownerId: OWNER_ID,
+      model: unversionedGroupContextMenuModel(target, policy, this.copy()),
+      isCurrent: () => this.runtime.current(target),
+      invoke: async (actionId) => {
+        try {
+          if (actionId === `${OWNER_ID}.stage-all`) await this.runtime.stageAll(target);
+          else if (actionId === `${OWNER_ID}.trash-all`) await this.runtime.trashAll(target);
+          else throw new Error(`Unknown Changes group context action: ${actionId}`);
+        } catch (error) {
+          this.runtime.error(error);
+        }
+      },
+      blocked: (reason) => this.runtime.blocked(reason),
+      restoreFocus: request.restoreFocus,
+    });
+    return true;
+  }
+
+  private async invoke(actionId: string, target: ChangesFileContextTarget): Promise<void> {
     const labels = this.copy().contextMenu;
     switch (actionId) {
       case `${OWNER_ID}.include`: {
@@ -133,8 +163,30 @@ export class ChangesContextActions {
   }
 }
 
+export function unversionedGroupContextMenuModel(
+  target: ChangesGroupContextTarget,
+  policy: { stage: ContextMenuAvailability; trash: ContextMenuAvailability },
+  copy: ChangesCopy,
+): ContextMenuModel {
+  const labels = copy.contextMenu;
+  return {
+    ariaLabel: labels.unversionedGroupAriaLabel(target.paths.length),
+    items: [
+      {
+        kind: "command", id: `${OWNER_ID}.stage-all`, actionId: `${OWNER_ID}.stage-all`,
+        label: labels.stageAllUnversioned, availability: policy.stage,
+      },
+      { kind: "separator" },
+      {
+        kind: "command", id: `${OWNER_ID}.trash-all`, actionId: `${OWNER_ID}.trash-all`,
+        label: labels.trashAllUnversioned, availability: policy.trash, tone: "danger",
+      },
+    ],
+  };
+}
+
 export function changesContextMenuModel(
-  target: ChangesContextTarget,
+  target: ChangesFileContextTarget,
   included: boolean,
   policy: ChangesContextPolicy,
   copy: ChangesCopy,

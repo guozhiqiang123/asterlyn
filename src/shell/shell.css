@@ -69,9 +69,10 @@
 
 .current-branch-menu {
   display: flex;
-  flex: 0 1 220px;
-  min-width: 92px;
-  max-width: 220px;
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: 72px;
+  max-width: min(220px, 30vw);
   height: 34px;
   align-items: center;
   gap: 6px;
@@ -91,7 +92,7 @@
   background: var(--surface-menu);
 }
 
-.current-branch-menu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-branch-menu span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .current-branch-menu .icon:last-child { flex: 0 0 auto; margin-left: auto; }
 
 .repository-menu {

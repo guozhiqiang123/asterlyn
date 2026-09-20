@@ -38,11 +38,7 @@ function snapshot() {
 }
 
 test("branch selection resolves exact keys and logical matches without owning History state", () => {
-  const controller = new GitBranchesController({
-    current: () => null,
-    checkout: async () => {},
-    create: async () => {},
-  });
+  const controller = new GitBranchesController();
   const state = snapshot();
   const topic = state.branches[1];
   const key = branchKey(topic);
@@ -56,43 +52,8 @@ test("branch selection resolves exact keys and logical matches without owning Hi
   assert.equal(controller.toggleHistoryScope(state, "missing", selected), null);
 });
 
-test("branch mutations revalidate kind, root, safety and current snapshot", async () => {
-  let state = snapshot();
-  let safe = true;
-  let loading = false;
-  const checkouts = [];
-  const creates = [];
-  const controller = new GitBranchesController({
-    current: () => ({ snapshot: state, safe, loading }),
-    checkout: async (target) => { checkouts.push(target.fullName); },
-    create: async (name) => {
-      creates.push(name);
-      state = { ...state, branch: { ...state.branch, head: name } };
-    },
-  });
-  assert.equal(await controller.checkout(branchKey(state.branches[1])), "accepted");
-  assert.deepEqual(checkouts, ["refs/heads/topic"]);
-  assert.equal(await controller.checkout(branchKey(state.branches[2])), "blocked");
-  assert.equal(await controller.checkout(branchKey(state.branches[3])), "blocked");
-  safe = false;
-  assert.equal(await controller.checkout(branchKey(state.branches[1])), "blocked");
-  safe = true;
-  loading = true;
-  assert.equal(await controller.checkout(branchKey(state.branches[1])), "blocked");
-
-  loading = false;
-  controller.setNewBranchName("  feature/context  ");
-  assert.equal(await controller.create(), "accepted");
-  assert.deepEqual(creates, ["feature/context"]);
-  assert.equal(controller.state.newBranchName, "");
-});
-
 test("branch presentation state is feature-owned and reconciles removed refs", () => {
-  const controller = new GitBranchesController({
-    current: () => null,
-    checkout: async () => {},
-    create: async () => {},
-  });
+  const controller = new GitBranchesController();
   controller.setQuery("topic");
   assert.equal(controller.toggleGroup("remote"), true);
   assert.equal(controller.toggleGroup("remote"), false);

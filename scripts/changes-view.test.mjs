@@ -30,6 +30,7 @@ test("change rows preserve groups and expanded directory hierarchy", () => {
     [1, 1, 2, 3, 2, 1],
   );
   assert.match(renderChangeNavigation(current, state()), /style="--tree-depth:1"[^>]*data-change-path="new.txt"/);
+  assert.match(renderChangeNavigation(current, state()), /data-change-group="unversioned"/);
 });
 
 test("large change trees mount no more than the architecture budget", () => {

@@ -27,8 +27,6 @@ const REVIEWED_LITERALS = [
   { file: "workspace-navigation-view.ts", kind: "html-text", text: "Esc" },
   { file: "workspace-navigation-view.ts", kind: "attribute", text: "src/**, **/*.ts" },
   { file: "workspace-navigation-view.ts", kind: "attribute", text: "dist/**, **/*.min.js" },
-  { file: "git-detail-view.ts", kind: "html-text", text: "HEAD" },
-  { file: "git-detail-view.ts", kind: "attribute", text: "feature/name" },
   { file: "shell-view.ts", kind: "html-text", text: "Git" },
   { file: "shell-view.ts", kind: "attribute", text: "/path/to/project" },
 ];

@@ -68,8 +68,8 @@ export class TopbarBranchMenuBinding {
     );
     const commands = new Map<string, BranchSummary>();
     const items: ContextMenuItem[] = [command(`${OWNER_ID}.manage`, labels.topbarBranchMenu.manageRemotes)];
-    appendBranches(items, commands, branches.filter((branch) => branch.kind === "local"), "local");
-    appendBranches(items, commands, branches.filter((branch) => branch.kind === "remote"), "remote");
+    appendBranches(items, commands, branches.filter((branch) => branch.kind === "local"), "local", labels.groups.local);
+    appendBranches(items, commands, branches.filter((branch) => branch.kind === "remote"), "remote", labels.groups.remote);
     const rectangle = button.getBoundingClientRect();
     button.setAttribute("aria-expanded", "true");
     this.host.open({ x: rectangle.left, y: rectangle.bottom + 3 }, {
@@ -113,9 +113,11 @@ function appendBranches(
   commands: Map<string, BranchSummary>,
   branches: BranchSummary[],
   group: string,
+  label: string,
 ): void {
   if (branches.length === 0) return;
   items.push({ kind: "separator" });
+  items.push({ kind: "heading", label });
   branches.sort((left, right) => Number(right.current) - Number(left.current) || left.name.localeCompare(right.name));
   for (const [index, branch] of branches.entries()) {
     const id = `${OWNER_ID}.${group}.${index}`;

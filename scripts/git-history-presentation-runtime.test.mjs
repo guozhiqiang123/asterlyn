@@ -18,11 +18,7 @@ function memoryStorage() {
 }
 
 test("Git History presentation runtime owns and resets synchronous feature state", () => {
-  const runtime = new GitHistoryPresentationRuntime(memoryStorage(), {
-    current: () => null,
-    checkout: async () => undefined,
-    create: async () => undefined,
-  });
+  const runtime = new GitHistoryPresentationRuntime(memoryStorage());
 
   runtime.filters.setTextQuery("needle");
   runtime.detail.show("comparison");

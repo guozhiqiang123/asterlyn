@@ -1,7 +1,6 @@
 import { CommitFolderDiffController } from "./commit-folder-diff-controller.ts";
 import {
   GitBranchesController,
-  type GitBranchesActions,
 } from "./git-branches-controller.ts";
 import { HistoryDetailPresentationController } from "./history-detail-presentation-controller.ts";
 import { HistoryFilterController } from "./history-filter-controller.ts";
@@ -15,10 +14,10 @@ export class GitHistoryPresentationRuntime {
   readonly folderDiff = new CommitFolderDiffController();
   readonly branches: GitBranchesController;
 
-  constructor(storage: Storage, branchActions: GitBranchesActions) {
+  constructor(storage: Storage) {
     this.filters = new HistoryFilterController(storage);
     this.detail = new HistoryDetailPresentationController(storage);
-    this.branches = new GitBranchesController(branchActions);
+    this.branches = new GitBranchesController();
   }
 
   get filterState() {

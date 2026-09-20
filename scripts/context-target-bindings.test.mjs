@@ -8,6 +8,7 @@ import {
 import { resolveProjectFilesContextTarget } from "../src/features/files-editor/project-files-binding.ts";
 import {
   changesContextTargetIsCurrent,
+  resolveChangesGroupContextTarget,
   resolveChangesContextTarget,
 } from "../src/features/changes-commit/changes-navigation-binding.ts";
 import {
@@ -134,6 +135,18 @@ test("feature target resolvers reject stale display labels and retain exact iden
   assert.equal(changesTarget?.repositoryId, ".");
   assert.equal(changesTarget?.repositoryRevision, 12);
   assert.equal(resolveChangesContextTarget(snapshot, 4, "app.ts"), null);
+  const untracked = { ...change, path: "new.txt", worktreeStatus: "untracked" };
+  const withUntracked = { ...snapshot, changes: [change, untracked] };
+  const groupTarget = resolveChangesGroupContextTarget(
+    withUntracked, 4, "unversioned", ".", 12,
+  );
+  assert.deepEqual(groupTarget?.paths, ["new.txt"]);
+  assert.equal(changesContextTargetIsCurrent(groupTarget, withUntracked, 4, 12), true);
+  assert.equal(changesContextTargetIsCurrent(groupTarget, {
+    ...withUntracked,
+    changes: [...withUntracked.changes, { ...untracked, path: "later.txt" }],
+  }, 4, 12), false);
+  assert.equal(resolveChangesGroupContextTarget(withUntracked, 4, "changes", ".", 12), null);
   const branchTarget = resolveBranchContextTarget(
     snapshot, 4, 12, new Set(["."]), branchKey(branch),
   );

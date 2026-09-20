@@ -6,39 +6,18 @@ export interface GitBranchesState {
   query: string;
   collapsedGroups: Set<BranchSummary["kind"]>;
   selectedBranch: string | null;
-  newBranchName: string;
 }
 
 export type BranchHistoryScopeIntent =
   | { readonly kind: "clear" }
   | { readonly kind: "select"; readonly branches: readonly BranchSummary[] };
 
-export type BranchMutationActivation = "accepted" | "blocked" | "stale";
-
-export interface BranchMutationContext {
-  readonly snapshot: RepositorySnapshot;
-  readonly loading: boolean;
-  readonly safe: boolean;
-}
-
-export interface GitBranchesActions {
-  current(): BranchMutationContext | null;
-  checkout(branch: BranchSummary): Promise<void>;
-  create(name: string): Promise<void>;
-}
-
 export class GitBranchesController {
   readonly state: GitBranchesState = {
     query: "",
     collapsedGroups: new Set(),
     selectedBranch: null,
-    newBranchName: "",
   };
-  private readonly actions: GitBranchesActions;
-
-  constructor(actions: GitBranchesActions) {
-    this.actions = actions;
-  }
 
   setQuery(query: string): void {
     this.state.query = query;
@@ -51,10 +30,6 @@ export class GitBranchesController {
     }
     this.state.collapsedGroups.add(kind);
     return true;
-  }
-
-  setNewBranchName(name: string): void {
-    this.state.newBranchName = name;
   }
 
   setSelectedBranch(key: string | null): void {
@@ -99,33 +74,6 @@ export class GitBranchesController {
     if (!branches) return null;
     this.state.selectedBranch = branches.length === 1 ? branchKey(branches[0]!) : null;
     return branches;
-  }
-
-  async checkout(key: string): Promise<BranchMutationActivation> {
-    const context = this.actions.current();
-    if (!context) return "stale";
-    const branch = context.snapshot.branches.find((candidate) => branchKey(candidate) === key);
-    if (
-      !branch ||
-      branch.repositoryId !== "." ||
-      branch.kind !== "local" ||
-      branch.current ||
-      context.loading ||
-      !context.safe
-    ) return "blocked";
-    await this.actions.checkout(branch);
-    return "accepted";
-  }
-
-  async create(): Promise<BranchMutationActivation> {
-    const context = this.actions.current();
-    if (!context) return "stale";
-    const name = this.state.newBranchName.trim();
-    if (!name || context.loading || !context.safe) return "blocked";
-    await this.actions.create(name);
-    const current = this.actions.current();
-    if (current?.snapshot.branch.head === name) this.state.newBranchName = "";
-    return "accepted";
   }
 
   private resolveHistoryScope(

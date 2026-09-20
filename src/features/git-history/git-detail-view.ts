@@ -53,18 +53,8 @@ export interface CommitFolderDetailViewModel {
   readonly localization?: Localization;
 }
 
-export interface BranchSafetyPresentation {
-  readonly ready: boolean;
-  readonly message: string;
-  readonly blockers: string[];
-}
-
 export interface BranchDetailViewModel {
-  readonly snapshot: RepositorySnapshot;
   readonly branch: BranchSummary;
-  readonly safety: BranchSafetyPresentation;
-  readonly loading: boolean;
-  readonly newBranchName: string;
   readonly localization?: Localization;
 }
 
@@ -112,18 +102,11 @@ export function renderCommitFolderDetail(model: CommitFolderDetailViewModel): st
 }
 
 export function renderBranchDetail(model: BranchDetailViewModel): string {
-  const { branch, safety } = model;
+  const { branch } = model;
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.history;
-  const mainRoot = branch.repositoryId === ".";
-  const localTarget = branch.kind === "local" && mainRoot;
-  const canCheckout = localTarget && !branch.current && safety.ready && !model.loading;
-  const checkoutLabel = branch.current ? copy.currentBranch : localTarget ? safety.ready ? copy.checkoutBranch(branch.name) : copy.checkoutBlocked : mainRoot ? copy.localBranchesOnly : copy.submoduleHistoryOnly;
-  const blockers = safety.blockers.length
-    ? `<ul class="branch-blockers">${safety.blockers.slice(0, 5).map((path) => `<li>${escapeHtml(path)}</li>`).join("")}</ul>${safety.blockers.length > 5 ? `<small>${escapeHtml(copy.moreBlockers(safety.blockers.length - 5))}</small>` : ""}`
-    : "";
   const branchKind = copy.referenceKinds[branch.kind];
-  return `<div class="inspector-header"><span class="panel-eyebrow">${escapeHtml(branchKind)}</span><h2>${escapeHtml(branch.name)}</h2></div><dl class="metadata-list"><div><dt>${escapeHtml(copy.state)}</dt><dd>${escapeHtml(branch.current ? copy.checkedOut : localization.catalog.common.available)}</dd></div><div><dt>${escapeHtml(copy.upstream)}</dt><dd>${escapeHtml(branch.upstream ?? copy.none)}</dd></div><div><dt>${escapeHtml(copy.tracking)}</dt><dd>${escapeHtml(branch.tracking ?? copy.noDivergence)}</dd></div><div><dt>${escapeHtml(copy.updated)}</dt><dd>${escapeHtml(branch.committedAt ? formatPresentationDateTime(branch.committedAt, localization) : copy.unknownTime)}</dd></div></dl>${mainRoot && !branch.current ? `<div class="git-detail-operation-actions" role="group" aria-label="${escapeAttribute(copy.operationsUsing(branch.name))}"><button class="secondary-button" type="button" data-start-git-operation="merge" data-operation-target="${escapeAttribute(branch.fullName)}">${escapeHtml(copy.mergeIntoCurrent)}</button><button class="secondary-button" type="button" data-start-git-operation="rebase" data-operation-target="${escapeAttribute(branch.fullName)}">${escapeHtml(copy.rebaseCurrentOnto)}</button></div>` : ""}<section class="branch-action-card ${safety.ready ? "ready" : "blocked"}"><div class="branch-action-heading"><span>${icon("branch", 15)}</span><strong>${escapeHtml(copy.checkout)}</strong></div><p>${localTarget ? escapeHtml(safety.message) : escapeHtml(mainRoot ? copy.selectLocalBranch : copy.submoduleReadOnly)}</p>${localTarget ? blockers : ""}<button class="primary-button" id="checkout-branch" type="button" ${canCheckout ? "" : "disabled"}>${escapeHtml(checkoutLabel)}</button></section>${mainRoot ? `<section class="branch-action-card create-branch-card ${safety.ready ? "ready" : "blocked"}"><div class="branch-action-heading"><span>${icon("plus", 15)}</span><strong>${escapeHtml(copy.newLocalBranch)}</strong></div><p>${escapeHtml(copy.createFromHead).replace("HEAD", "<code>HEAD</code>")}</p><form id="create-branch-form"><label for="new-branch-name">${escapeHtml(copy.branchName)}</label><input id="new-branch-name" type="text" value="${escapeAttribute(model.newBranchName)}" placeholder="feature/name" autocomplete="off" spellcheck="false" /><button class="secondary-button" id="create-branch-button" type="submit" ${safety.ready && model.newBranchName.trim() && !model.loading ? "" : "disabled"}>${escapeHtml(copy.createAndCheckout)}</button></form></section>` : ""}`;
+  return `<div class="inspector-header"><span class="panel-eyebrow">${escapeHtml(branchKind)}</span><h2>${escapeHtml(branch.name)}</h2></div><dl class="metadata-list"><div><dt>${escapeHtml(copy.state)}</dt><dd>${escapeHtml(branch.current ? copy.checkedOut : localization.catalog.common.available)}</dd></div><div><dt>${escapeHtml(copy.upstream)}</dt><dd>${escapeHtml(branch.upstream ?? copy.none)}</dd></div><div><dt>${escapeHtml(copy.tracking)}</dt><dd>${escapeHtml(branch.tracking ?? copy.noDivergence)}</dd></div><div><dt>${escapeHtml(copy.updated)}</dt><dd>${escapeHtml(branch.committedAt ? formatPresentationDateTime(branch.committedAt, localization) : copy.unknownTime)}</dd></div></dl>`;
 }
 
 export function inspectorPlaceholder(localization: Localization = DEFAULT_LOCALIZATION): string {

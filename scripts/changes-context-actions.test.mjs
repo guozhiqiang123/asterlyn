@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   ChangesContextActions,
   changesContextMenuModel,
+  unversionedGroupContextMenuModel,
 } from "../src/features/changes-commit/changes-context-actions.ts";
 import {
   changesContextPolicy,
@@ -56,6 +57,18 @@ test("Changes menu keeps stable groups and only adds conditional conflict/Trash 
   assert.equal(ids(conflict).includes("changes.context-actions.resolve"), true);
   assert.equal(ids(untracked).includes("changes.context-actions.trash"), true);
   assert.equal(untracked.items.find((item) => item.id === "changes.context-actions.trash").tone, "danger");
+
+  const group = unversionedGroupContextMenuModel({
+    workspaceRoot: "/repo", workspaceGeneration: 5, kind: "group",
+    group: "unversioned", repositoryId: ".", repositoryRevision: 3,
+    paths: ["new-a.txt", "new-b.txt"],
+  }, { stage: enabled, trash: enabled }, EN_US.changes);
+  assert.deepEqual(contextMenuModelErrors(group), []);
+  assert.deepEqual(ids(group), [
+    "changes.context-actions.stage-all",
+    "changes.context-actions.trash-all",
+  ]);
+  assert.equal(group.items.at(-1).tone, "danger");
 });
 
 test("policy explains conflicts, deleted sources, restore limits, demo Trash and new-file history", () => {
@@ -102,10 +115,13 @@ test("renamed history queries both exact names and action routing never opens Di
         sourceAvailable: true, conflictAvailable: false, mutationBusy: false,
         trashAvailable: true, reasons: EN_US.changes.contextMenu,
       }),
+      groupPolicy: () => ({ stage: enabled, trash: enabled }),
       setIncluded: (_candidate, value) => { included = value; events.push(["include", value]); },
       showDiff: () => events.push(["diff"]), jumpToSource: () => events.push(["source"]),
       resolveConflict: () => events.push(["resolve"]), restore: () => events.push(["restore"]),
-      trash: () => events.push(["trash"]), installHistoryQuery() {},
+      trash: () => events.push(["trash"]),
+      stageAll: () => events.push(["stage-all"]), trashAll: () => events.push(["trash-all"]),
+      installHistoryQuery() {},
       blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]), error: (error) => events.push(["error", error]),
     },
@@ -121,4 +137,14 @@ test("renamed history queries both exact names and action routing never opens Di
     ["select", "src/app.ts"], ["include", false], ["status", "Excluded from commit"],
     ["diff"], ["copy", "src/app.ts"], ["status", "Relative path copied"],
   ]);
+
+  const group = {
+    workspaceRoot: "/repo", workspaceGeneration: 5, kind: "group",
+    group: "unversioned", repositoryId: ".", repositoryRevision: 3,
+    paths: ["new-a.txt", "new-b.txt"],
+  };
+  provider.open({ target: group, anchor: { x: 3, y: 4 }, trigger: {}, restoreFocus() {} });
+  await session.invoke("changes.context-actions.stage-all");
+  await session.invoke("changes.context-actions.trash-all");
+  assert.deepEqual(events.slice(-2), [["stage-all"], ["trash-all"]]);
 });

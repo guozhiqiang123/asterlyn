@@ -237,7 +237,7 @@ export class ContextMenuHost implements ContextMenuPort {
   ): void {
     if (this.active !== active) return;
     const item = this.itemForButton(menu, button);
-    if (!item || item.kind === "separator") return;
+    if (!item || item.kind === "separator" || item.kind === "heading") return;
     const reason = itemAvailabilityReason(item);
     if (reason) {
       active.session.blocked(reason);
@@ -322,6 +322,14 @@ export class ContextMenuHost implements ContextMenuPort {
         menu.append(separator);
         continue;
       }
+      if (item.kind === "heading") {
+        const heading = this.document.createElement("div");
+        heading.className = "context-menu-heading";
+        heading.setAttribute("role", "presentation");
+        heading.textContent = item.label;
+        menu.append(heading);
+        continue;
+      }
       const entry = this.document.createElement("div");
       entry.className = "context-menu-entry";
       entry.setAttribute("role", "presentation");
@@ -349,6 +357,7 @@ export class ContextMenuHost implements ContextMenuPort {
       const label = this.document.createElement("span");
       label.className = "context-menu-label";
       label.textContent = item.availability.kind === "busy" ? item.availability.label : item.label;
+      label.title = item.label;
       const trailing = this.document.createElement("span");
       trailing.className = "context-menu-trailing";
       trailing.setAttribute("aria-hidden", "true");

@@ -13,6 +13,8 @@
 .remote-definition-dialog form { display: grid; gap: 12px; }
 .remote-definition-dialog label:not(.remote-fetch-option) { display: grid; grid-template-columns: 72px 1fr; gap: 10px; align-items: center; }
 .remote-definition-dialog input[type="text"], .remote-definition-dialog input:not([type]) { min-width: 0; }
-.remote-fetch-option { display: flex; gap: 8px; align-items: center; }
+.remote-fetch-option { display: flex; min-width: 0; align-items: center; justify-content: flex-start; gap: 8px; overflow: hidden; }
+.remote-fetch-option > input[type="checkbox"] { width: 14px; flex: 0 0 14px; }
+.remote-fetch-option > span { min-width: 0; overflow-wrap: anywhere; }
 .remote-management-error { color: var(--danger-text); }
 .remote-delete-name { display: block; padding: 10px; background: var(--surface-inset); border: 1px solid var(--border); }

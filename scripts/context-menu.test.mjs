@@ -74,18 +74,19 @@ test("context menu models enforce stable ids, reasons, separators, and one subme
 
 test("menu navigation skips separators, wraps, and supports edge and type-ahead focus", () => {
   const items = [
-    { kind: "command", id: "blocked", actionId: "blocked", label: "Blocked", availability: blocked },
-    { kind: "separator" },
-    { kind: "command", id: "copy", actionId: "copy", label: "Copy path", availability: enabled },
-    { kind: "command", id: "delete", actionId: "delete", label: "Delete", availability: enabled },
-  ];
-  assert.equal(initialContextMenuIndex(items), 2);
-  assert.equal(moveContextMenuIndex(items, 0, 1), 2);
-  assert.equal(moveContextMenuIndex(items, 0, -1), 3);
+      { kind: "command", id: "blocked", actionId: "blocked", label: "Blocked", availability: blocked },
+      { kind: "separator" },
+      { kind: "heading", label: "Files" },
+      { kind: "command", id: "copy", actionId: "copy", label: "Copy path", availability: enabled },
+      { kind: "command", id: "delete", actionId: "delete", label: "Delete", availability: enabled },
+    ];
+  assert.equal(initialContextMenuIndex(items), 3);
+  assert.equal(moveContextMenuIndex(items, 0, 1), 3);
+  assert.equal(moveContextMenuIndex(items, 0, -1), 4);
   assert.equal(contextMenuEdgeIndex(items, "first"), 0);
-  assert.equal(contextMenuEdgeIndex(items, "last"), 3);
-  assert.equal(contextMenuTypeaheadIndex(items, 2, "d"), 3);
-  assert.equal(contextMenuTypeaheadIndex(items, 3, "c"), 2);
+  assert.equal(contextMenuEdgeIndex(items, "last"), 4);
+  assert.equal(contextMenuTypeaheadIndex(items, 3, "d"), 4);
+  assert.equal(contextMenuTypeaheadIndex(items, 4, "c"), 3);
 });
 
 test("root and submenu placement stays inside the viewport and flips at the right edge", () => {

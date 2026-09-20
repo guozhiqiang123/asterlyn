@@ -31,9 +31,15 @@ export interface ContextMenuSeparator {
   readonly kind: "separator";
 }
 
+export interface ContextMenuHeading {
+  readonly kind: "heading";
+  readonly label: string;
+}
+
 export type ContextMenuItem =
   | ContextMenuActionItem
   | ContextMenuSubmenuItem
+  | ContextMenuHeading
   | ContextMenuSeparator;
 
 export interface ContextMenuModel {
@@ -78,7 +84,7 @@ export function assertContextMenuModel(model: ContextMenuModel): void {
 }
 
 export function itemAvailabilityReason(item: ContextMenuItem): string | null {
-  if (item.kind === "separator" || item.availability.kind === "enabled") return null;
+  if (item.kind === "separator" || item.kind === "heading" || item.availability.kind === "enabled") return null;
   return item.availability.kind === "busy"
     ? item.availability.label
     : item.availability.reason;
@@ -101,6 +107,10 @@ function validateGroup(
       if (items[index - 1]?.kind === "separator") {
         errors.push(`${location} menu has adjacent separators`);
       }
+      continue;
+    }
+    if (item.kind === "heading") {
+      if (!item.label.trim()) errors.push(`${location} heading ${index} has no label`);
       continue;
     }
     if (!item.id.trim()) errors.push(`${location} item ${index} has no id`);

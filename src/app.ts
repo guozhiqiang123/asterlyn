@@ -94,10 +94,13 @@ import {
 import {
   changesContextTargetIsCurrent,
   type ChangesContextTarget,
+  type ChangesFileContextTarget,
 } from "./features/changes-commit/changes-navigation-binding.ts";
 import {
   ChangesContextSurfaceRuntime,
 } from "./features/changes-commit/changes-context-runtime.ts";
+import { UnversionedTrashRuntime } from "./features/changes-commit/unversioned-trash-runtime.ts";
+import { createUnversionedGroupMutationRuntime, unversionedGroupMutationCopy } from "./features/changes-commit/unversioned-group-mutations.ts";
 import type { GitOperationChange, GitOperationResult, GitOperationState } from "./features/git-operations/git-operation-controller";
 import { renderGitOperationBanner } from "./features/git-operations/git-operation-banner";
 import { GitOperationRuntime } from "./features/git-operations/git-operation-runtime.ts";
@@ -392,8 +395,9 @@ export class AsterlynApp {
   private readonly filesEditorRuntime: FilesEditorRuntime;
   private readonly projectFilesContextRuntime: ProjectFilesContextSurfaceRuntime;
   private readonly workspaceTrashRuntime: WorkspaceTrashRuntime<
-    ProjectFilesContextTarget | ChangesContextTarget
+    ProjectFilesContextTarget | ChangesFileContextTarget
   >;
+  private readonly unversionedTrashRuntime: UnversionedTrashRuntime;
   private readonly projectFilesOperationRuntime: ProjectFilesOperationRuntime;
   private readonly gitOperationRuntime: GitOperationRuntime;
   private editorTabsMarkup = "";
@@ -567,32 +571,7 @@ export class AsterlynApp {
         },
       },
     });
-    this.gitHistoryPresentationRuntime = new GitHistoryPresentationRuntime(window.localStorage, {
-      current: () => {
-        const snapshot = this.windowSession.repository.state.snapshot;
-        return snapshot
-          ? {
-              snapshot,
-              loading: this.state.loading,
-              safe: this.branchSafety(snapshot).ready,
-            }
-          : null;
-      },
-      checkout: async (branch) => {
-        const root = this.windowSession.repository.state.snapshot?.root;
-        if (root) this.gitHistoryMutationRuntime.branch.open(root, "switch", branch);
-      },
-      create: async (name) => {
-        const snapshot = this.windowSession.repository.state.snapshot;
-        const current = snapshot?.branches.find((branch) =>
-          branch.repositoryId === "." && branch.kind === "local" && branch.current
-        );
-        if (snapshot && current) {
-          this.gitHistoryMutationRuntime.branch.open(snapshot.root, "create", current, name);
-          await this.gitHistoryMutationRuntime.branch.submit();
-        }
-      },
-    });
+    this.gitHistoryPresentationRuntime = new GitHistoryPresentationRuntime(window.localStorage);
     this.remoteRuntime = createRemoteRuntime(root, bridge,
       { remote: initialCatalog.remote, errors: initialCatalog.errors },
       {
@@ -1021,6 +1000,52 @@ export class AsterlynApp {
         }
       },
     });
+    const unversionedGroupMutations = createUnversionedGroupMutationRuntime({
+      current: (target) => this.isChangesContextTargetCurrent(target),
+      saveDirtyTabsBefore: (label) => this.saveDirtyTabsBefore(label),
+      beginTransition: () => this.windowSession.beginTransition({ reconciliationBarrier: true }),
+      matches: (generation, root) => this.windowSession.matches(generation, root),
+      completeTransition: (generation) => this.windowSession.completeTransition(generation),
+      setLoading: (loading, message) => this.setLoading(loading, message),
+      stagePaths: (root, paths) => bridge.stagePaths(root, paths),
+      trashPaths: (root, paths) => bridge.trashUntrackedPaths(root, paths),
+      install: (outcome) => this.repositoryIntegration.applyWorkingTreeMutation(outcome).root,
+      captureEditor: () => this.captureMountedTextEditor(),
+      prepareTrash: (root, paths) => this.filesEditorRuntime.editor.preparePathMigration(
+        root, { kind: "trashMany", sourceWorkspacePaths: paths },
+      ),
+      applyTrash: (lease) => this.filesEditorRuntime.editor.applyPathMigration(
+        lease, ({ remaps, disposedTabIds }) =>
+          this.editorSurface.applyTextPathMutation(remaps, disposedTabIds),
+      ),
+      releaseTrash: (lease) => this.filesEditorRuntime.editor.releasePathMigration(lease),
+      loadProjectFiles: (root, generation) => this.loadProjectFiles(root, generation),
+      render: () => this.renderWorkspace(), status: (message, tone) => this.setStatus(message, tone),
+      refresh: () => this.refresh(),
+      scanUntracked: (root, generation) => this.windowSession.scanUntracked(root, generation, true, "gitMutation"),
+      copy: () => unversionedGroupMutationCopy(this.localization.catalog),
+    });
+    this.unversionedTrashRuntime = new UnversionedTrashRuntime(
+      root,
+      {
+        current: (target) => this.isChangesContextTargetCurrent(target),
+        execute: (target, progress) => unversionedGroupMutations.trash(target, progress),
+        errorMessage: (error) => error instanceof Error && error.message === "target-changed"
+          ? this.localization.catalog.changes.contextMenu.targetChanged
+          : localizedOperationError(error, this.localization.catalog.errors),
+      },
+      () => {
+        const labels = this.localization.catalog.changes;
+        return {
+          title: labels.confirmTrashUnversionedTitle,
+          cancel: this.localization.catalog.common.cancel,
+          confirm: labels.confirmTrashUnversioned,
+          description: labels.trashUnversionedDescription,
+          warning: labels.trashUnversionedWarning,
+          progress: labels.trashingUnversioned,
+        };
+      },
+    );
     const createdFileStaging = createCreatedFileStagingRuntime({
       workspaceRoot: () => this.windowSession.workspace.state.root,
       snapshot: () => this.windowSession.repository.state.snapshot,
@@ -1206,12 +1231,27 @@ export class AsterlynApp {
             reasons: labels,
           };
         },
+        groupPolicy: () => {
+          const labels = this.localization.catalog.changes.contextMenu;
+          const busy = this.state.loading || this.changesState.mutation !== null ||
+            this.workspaceTrashRuntime.controller.busy || this.unversionedTrashRuntime.busy;
+          return {
+            stage: busy ? { kind: "busy", label: labels.mutationBusy } : { kind: "enabled" },
+            trash: busy
+              ? { kind: "busy", label: labels.mutationBusy }
+              : bridge.isDemo
+                ? { kind: "blocked", reason: labels.operationsUnavailable }
+                : { kind: "enabled" },
+          };
+        },
         setIncluded: (target, included) => this.setChangePathsIncluded([target.path], included),
         showDiff: (target) => this.openChangesContextDiff(target),
         jumpToSource: (target) => this.openChangesContextSource(target),
         resolveConflict: (target) => this.gitOperationRuntime.openConflict(target.path),
         restore: (target) => this.restoreChangesContextTarget(target),
         trash: (target) => this.workspaceTrashRuntime.controller.request(target),
+        stageAll: (target) => unversionedGroupMutations.stage(target),
+        trashAll: (target) => { this.unversionedTrashRuntime.open(target); },
         installHistoryQuery: (intent) => this.installContextHistoryQuery(intent),
         blocked: (reason) => this.setStatus(reason, "warning"),
         status: (message) => this.setStatus(message, "success"),
@@ -1602,7 +1642,7 @@ export class AsterlynApp {
     if (this.gitHistoryPresentationRuntime.filterState.historyDialog) this.renderHistoryDialog();
     this.gitOperationRuntime.refreshCopy();
     this.gitHistoryMutationRuntime.refreshCopy(); this.remoteRuntime.refreshCopy();
-    this.changesRuntime.refreshCopy();
+    this.changesRuntime.refreshCopy(); this.unversionedTrashRuntime.refreshCopy();
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     if (this.remoteState.dialog) this.renderRemoteDialog();
@@ -1734,6 +1774,7 @@ export class AsterlynApp {
     this.cancelScheduledCommandSurfaceResults();
     this.clearToastDismissTimer();
     this.changesContextRuntime.dispose();
+    this.unversionedTrashRuntime.dispose();
     this.gitHistoryContextRuntime.dispose();
     this.projectFilesContextRuntime.dispose();
     this.workspaceTrashRuntime.dispose();
@@ -4254,6 +4295,7 @@ export class AsterlynApp {
       target,
       this.windowSession.repository.state.snapshot,
       this.windowSession.generation,
+      this.windowSession.repository.state.revision,
     );
   }
 
@@ -4286,7 +4328,7 @@ export class AsterlynApp {
   }
 
   private completeChangesTrash(
-    _target: ChangesContextTarget,
+    _target: ChangesFileContextTarget,
     _outcome: WorkspaceMutationOutcome,
   ): void {
     // Versioned reconciliation has already removed the file and selected the next valid change.
@@ -7742,7 +7784,7 @@ export class AsterlynApp {
     this.loadSelectedDiff();
   }
 
-  private openChangesContextDiff(target: ChangesContextTarget): void {
+  private openChangesContextDiff(target: ChangesFileContextTarget): void {
     if (!this.isChangesContextTargetCurrent(target)) {
       this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
       return;
@@ -7750,7 +7792,7 @@ export class AsterlynApp {
     this.openSelectedChangeDiff();
   }
 
-  private async openChangesContextSource(target: ChangesContextTarget): Promise<void> {
+  private async openChangesContextSource(target: ChangesFileContextTarget): Promise<void> {
     if (!this.isChangesContextTargetCurrent(target)) {
       this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
       return;
@@ -7769,7 +7811,7 @@ export class AsterlynApp {
     }
   }
 
-  private async restoreChangesContextTarget(target: ChangesContextTarget): Promise<void> {
+  private async restoreChangesContextTarget(target: ChangesFileContextTarget): Promise<void> {
     if (!this.isChangesContextTargetCurrent(target) ||
       !this.changesRuntime.controller.selectContextChange(target.path)) {
       this.setStatus(this.localization.catalog.changes.contextMenu.targetChanged, "warning");
@@ -7962,11 +8004,7 @@ export class AsterlynApp {
       const branch = this.gitHistoryPresentationRuntime.branches.selected(snapshot);
       return branch
         ? renderBranchDetail({
-            snapshot,
             branch,
-            safety: this.branchSafety(snapshot),
-            loading: this.state.loading,
-            newBranchName: this.gitHistoryPresentationRuntime.branches.state.newBranchName,
             localization: this.localization,
           })
         : inspectorPlaceholder(this.localization);
@@ -8005,8 +8043,6 @@ export class AsterlynApp {
       return;
     }
     if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "branch") {
-      const branch = this.gitHistoryPresentationRuntime.branches.selected(snapshot);
-      if (branch) this.bindBranchInspector(branch, snapshot);
       return;
     }
     this.bindCommitFileEvents();
@@ -8317,14 +8353,6 @@ export class AsterlynApp {
         );
       }
     }
-  }
-
-  private async requestBranchCheckout(branch: BranchSummary): Promise<void> {
-    await this.gitHistoryPresentationRuntime.branches.checkout(branchKey(branch));
-  }
-
-  private async requestBranchCreate(): Promise<void> {
-    if (await this.gitHistoryPresentationRuntime.branches.create() === "accepted") this.renderBottomTool();
   }
 
   private async executeReviewedBranchMutation(plan: BranchMutationPlan): Promise<boolean> {
@@ -8654,34 +8682,6 @@ export class AsterlynApp {
       message: this.localization.catalog.history.cleanWorktreeVerified,
       blockers: [],
     };
-  }
-
-  private bindBranchInspector(
-    branch: BranchSummary,
-    snapshot: RepositorySnapshot,
-  ): void {
-    this.root.querySelector<HTMLButtonElement>("#checkout-branch")?.addEventListener(
-      "click",
-      () => void this.requestBranchCheckout(branch),
-    );
-    const input = this.root.querySelector<HTMLInputElement>("#new-branch-name");
-    const button = this.root.querySelector<HTMLButtonElement>("#create-branch-button");
-    input?.addEventListener("input", () => {
-      this.gitHistoryPresentationRuntime.branches.setNewBranchName(input.value);
-      if (button) {
-        button.disabled =
-          !this.branchSafety(snapshot).ready ||
-          input.value.trim().length === 0 ||
-          this.state.loading;
-      }
-    });
-    this.root.querySelector<HTMLFormElement>("#create-branch-form")?.addEventListener(
-      "submit",
-      (event) => {
-        event.preventDefault();
-        if (!button?.disabled) void this.requestBranchCreate();
-      },
-    );
   }
 
   private query<T extends Element = HTMLElement>(selector: string): T {

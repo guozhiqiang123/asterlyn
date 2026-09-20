@@ -2,9 +2,9 @@ import type { ContextMenuItem } from "./context-menu-model.ts";
 
 export function initialContextMenuIndex(items: readonly ContextMenuItem[]): number {
   const enabled = items.findIndex(
-    (item) => item.kind !== "separator" && item.availability.kind === "enabled",
+    (item) => isAction(item) && item.availability.kind === "enabled",
   );
-  return enabled >= 0 ? enabled : items.findIndex((item) => item.kind !== "separator");
+  return enabled >= 0 ? enabled : items.findIndex(isAction);
 }
 
 export function moveContextMenuIndex(
@@ -16,7 +16,7 @@ export function moveContextMenuIndex(
   let index = current;
   for (let visited = 0; visited < items.length; visited += 1) {
     index = (index + direction + items.length) % items.length;
-    if (items[index]?.kind !== "separator") return index;
+    if (items[index] && isAction(items[index]!)) return index;
   }
   return -1;
 }
@@ -25,9 +25,9 @@ export function contextMenuEdgeIndex(
   items: readonly ContextMenuItem[],
   edge: "first" | "last",
 ): number {
-  if (edge === "first") return items.findIndex((item) => item.kind !== "separator");
+  if (edge === "first") return items.findIndex(isAction);
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (items[index]?.kind !== "separator") return index;
+    if (items[index] && isAction(items[index]!)) return index;
   }
   return -1;
 }
@@ -42,9 +42,15 @@ export function contextMenuTypeaheadIndex(
   for (let offset = 1; offset <= items.length; offset += 1) {
     const index = (Math.max(current, -1) + offset) % items.length;
     const item = items[index];
-    if (item && item.kind !== "separator" && item.label.toLocaleLowerCase().startsWith(normalized)) {
+    if (item && isAction(item) && item.label.toLocaleLowerCase().startsWith(normalized)) {
       return index;
     }
   }
   return -1;
+}
+
+function isAction(
+  item: ContextMenuItem,
+): item is Exclude<ContextMenuItem, { readonly kind: "separator" | "heading" }> {
+  return item.kind !== "separator" && item.kind !== "heading";
 }

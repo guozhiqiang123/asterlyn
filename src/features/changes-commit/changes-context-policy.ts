@@ -2,7 +2,7 @@ import type { HistoryQueryIntent } from "../../application/workbench-navigation.
 import type { RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuAvailability } from "../../shared/context-menu/context-menu-model.ts";
 import { defaultHistoryQuery } from "../../history-query.ts";
-import type { ChangesContextTarget } from "./changes-navigation-binding.ts";
+import type { ChangesFileContextTarget } from "./changes-navigation-binding.ts";
 
 export interface ChangesContextPolicyReasons {
   readonly conflictsStayIncluded: string;
@@ -34,7 +34,7 @@ export interface ChangesContextPolicyOptions {
 }
 
 export function changesContextPolicy(
-  target: ChangesContextTarget,
+  target: ChangesFileContextTarget,
   options: ChangesContextPolicyOptions,
 ): ChangesContextPolicy {
   const mutation = options.mutationBusy
@@ -66,7 +66,7 @@ export function changesContextPolicy(
 }
 
 export function changesHistoryIntent(
-  target: ChangesContextTarget,
+  target: ChangesFileContextTarget,
   snapshot: RepositorySnapshot | null,
 ): HistoryQueryIntent | null {
   if (!snapshot || snapshot.root !== target.workspaceRoot || !changeHasHistory(target)) return null;
@@ -82,17 +82,17 @@ export function changesHistoryIntent(
   };
 }
 
-export function changeIsUntracked(target: ChangesContextTarget): boolean {
+export function changeIsUntracked(target: ChangesFileContextTarget): boolean {
   return target.change.worktreeStatus === "untracked" || target.change.indexStatus === "untracked";
 }
 
-function changeHasHistory(target: ChangesContextTarget): boolean {
+function changeHasHistory(target: ChangesFileContextTarget): boolean {
   const change = target.change;
   return !changeIsUntracked(target) && change.indexStatus !== "added" &&
     change.worktreeStatus !== "added" && change.indexStatus !== "copied";
 }
 
-function changeDeleted(target: ChangesContextTarget): boolean {
+function changeDeleted(target: ChangesFileContextTarget): boolean {
   return target.change.worktreeStatus === "deleted" || (
     target.change.indexStatus === "deleted" && target.change.worktreeStatus === "unmodified"
   );
@@ -100,7 +100,7 @@ function changeDeleted(target: ChangesContextTarget): boolean {
 
 function changeSupportsRestore(
   snapshot: RepositorySnapshot | null,
-  target: ChangesContextTarget,
+  target: ChangesFileContextTarget,
 ): boolean {
   const change = target.change;
   return Boolean(

@@ -28,6 +28,9 @@
   min-height: 0;
 }
 
+.unversioned-trash-dialog { width: min(520px, calc(100vw - 32px)); }
+.unversioned-trash-warning { color: var(--danger-text); line-height: 1.5; }
+
 .changes-commit-splitter {
   width: 100%;
 }

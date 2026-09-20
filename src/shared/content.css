@@ -408,33 +408,6 @@
   line-height: 1.5;
 }
 
-.create-branch-card form {
-  display: grid;
-  gap: 7px;
-}
-
-.create-branch-card label {
-  color: var(--text-soft);
-  font-size: 9px;
-  font-weight: 620;
-}
-
-.create-branch-card input {
-  width: 100%;
-  height: 31px;
-  padding: 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: var(--surface-chrome);
-  color: var(--text);
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-}
-
-.create-branch-card input::placeholder {
-  color: var(--text-faint);
-}
-
 .metadata-list {
   margin: 0;
   padding: 6px 14px 12px;
