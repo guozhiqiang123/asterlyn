@@ -356,6 +356,29 @@ Execution recomputes the target and selected tag set, rejects a stale confirmati
 
 Before the confirmed Push enters that execution path, a feature-owned authentication controller performs one non-interactive preflight. Missing HTTPS credentials open a localized account-name and personal-access-token dialog plus an SSH alternative. Account passwords are never requested. Missing helper configuration is repaired only through the explicit Save action and only with an installed platform-secure helper. Recheck keeps the modal mounted while the request is active, and stale completions cannot reopen a closed dialog. An authentication-classified Push failure reopens the same bounded recovery flow; network and rejection errors retain their separate guidance.
 
+### Current-branch launcher and remote configuration
+
+The top bar places one current-branch launcher between the project switcher and Search. Its first
+item opens Git Remotes; the remaining top-level local and remote-tracking rows hand the selected
+exact ref to the same Branches context-action provider used by right-click, so availability,
+Merge/Rebase routing, copy values, rename/delete confirmation, and future additions cannot drift.
+The launcher is rebound through the stable shell root because a project/locale render may replace
+the visible top bar; repository refresh updates its label without retaining a second branch state.
+
+Git Remotes lists repository-local names and URLs and offers add, edit, and delete. Add/edit use one
+definition form with an optional Fetch-after-save checkbox and do not add a redundant confirmation;
+delete alone opens a destructive confirmation. The Git core captures and revalidates the exact
+`remote.<name>.*` configuration before every write, then verifies the resulting name and URL or the
+absence of the deleted section. A changed configuration rejects the review instead of overwriting
+external edits. Clicking the backdrop or Escape dismisses transient surfaces when no write is in
+progress, and every dialog keeps one visible title.
+
+History adds Reset to Here only for a non-`HEAD` commit that the loaded graph proves reachable from
+the current local branch. Its review defaults to Mixed and explicitly describes Soft, Mixed, Hard,
+and Keep; Hard alone changes the final action to the danger treatment and states that local changes
+will be lost. Execution revalidates the same symbolic branch, starting `HEAD`, and exact ancestor,
+uses one explicit reset mode, verifies the resulting branch target, and never pushes or retries.
+
 ### R4 reviewed and recoverable Git operations
 
 The operation workflow now extends the compact Git workspace without turning History rows or

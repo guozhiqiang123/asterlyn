@@ -666,7 +666,7 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 | Checkout Revision | 不采用 | 不通过菜单进入 detached `HEAD`；需要从旧提交工作时使用“从此提交新建分支…” |
 | Show Repository at Revision | 后续候选 | 有价值，但需要独立、只读、懒加载的提交树浏览器，不能替换当前可写 Files 树 |
 | Compare with Local | 后续候选 | “Local”可能指当前 `HEAD`、索引或工作区；将来拆成明确的 commit-to-commit“与当前分支比较…” |
-| Reset Current Branch to Here… | 不采用 | 会移动当前分支且可能丢弃索引/工作区或已提交历史；不作为普通提交菜单动作 |
+| Reset Current Branch to Here… | 条件采用 | 仅对当前本地分支中非 `HEAD` 的已验证祖先提交显示；先审查精确引用租约，再由用户明确选择 Soft、Mixed、Hard 或 Keep |
 | Revert Commit | 首版必要 | 新增一个反向提交，保留原历史；必须进入精确计划、确认和冲突恢复流程 |
 | Undo Commit… | 不采用 | 含义可能是 Revert、soft reset、mixed reset 或 hard reset；使用明确的 Revert，不提供模糊撤销 |
 | Edit Commit Message… | 首版不提供 | 非 `HEAD` 提交需要重写后续历史；即使是 `HEAD` 也应属于独立 Amend 工作流 |
@@ -690,9 +690,10 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 | 身份 | 复制提交 ID | 复制完整对象 ID |
 | 应用 | Cherry-pick… | 打开单提交 Cherry-pick 计划审查 |
 | 应用 | Revert Commit… | 打开创建反向提交的计划审查 |
+| 历史改写 | Reset to Here… | 打开当前分支的精确重置审查；默认 Mixed，Hard 明确警告本地更改会丢失 |
 | 开始工作 | 从此提交新建分支… | 从精确提交创建并切换到新本地分支 |
 
-“复制提交 ID”之后和“Revert Commit…”之后显示分隔线。菜单没有危险操作区，因为首版不提供 Reset、Drop 或引用删除；Cherry-pick、Revert 和新建分支虽然会写入仓库，但都只打开命名预检/审查流程，不把右键激活视为最终执行授权。
+“复制提交 ID”之后和历史写入组之后显示分隔线。Reset 是菜单中唯一可能直接丢弃工作区内容的动作：右键激活只打开审查，默认选择 Mixed；只有用户在弹窗中明确选择 Hard 并再次执行时才进入危险路径。Cherry-pick、Revert、Reset 和新建分支都不把右键激活视为最终执行授权。
 
 普通点击已经负责选中提交并加载详情，因此菜单不重复“查看提交详情”。打开提交内某个文件的 Diff 继续由右侧提交文件列表负责。
 
@@ -707,7 +708,7 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 
 ### 仓库与可用性边界
 
-- 顶层项目仓库的单条提交可使用全部首版菜单项，但写动作要求当前 `HEAD` 是本地分支、完整工作区已确认干净、不存在活动 Git 操作或互斥仓库写入。
+- 顶层项目仓库的单条提交可使用适用的菜单项。Cherry-pick、Revert 和新建分支要求当前 `HEAD` 是本地分支、完整工作区已确认干净且不存在活动 Git 操作；Reset 允许索引/工作区存在更改，因为四种模式的区别正是如何处理这些更改，但执行前必须保存或放弃编辑器内尚未落盘的缓冲区。
 - 嵌套 Git 根或子模块提交第一版只提供“复制提交 ID”。当前所有 Git 写动作仍限定顶层项目仓库，不能因为提交对象可读就扩大 mutation 授权。
 - 当前工作区脏、未跟踪扫描尚未完成/失败、处于 detached 或 unborn `HEAD`、操作冲突中时，复制仍可用；概念上适用的写动作保持可聚焦的语义不可用状态并说明具体原因。
 - 所选提交就是当前 `HEAD` 或已经可达时，Cherry-pick 可能没有效果；菜单不靠前端图形猜测，激活后由精确计划读取给出“已经包含/无可应用变更”的结果且不进入确认。
@@ -737,6 +738,13 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 - 合并提交在首版不可用。后续支持时必须要求用户选择 mainline parent，并在计划中同时显示父对象和主线含义；绝不默认选择 `-m 1`。
 - 成功必须从权威快照确认 `HEAD` 产生了预期的新提交；失败或外部并发导致结果不确定时只重整和说明观察结果，不自动重试或回滚外部历史。
 
+#### Reset to Here…
+
+- 只对顶层仓库、当前已检出的本地分支、不是 `HEAD` 且从当前 `HEAD` 可达的历史提交显示；全引用或筛选结果无法证明这条关系时宁可隐藏，不能把“屏幕上更旧”当作当前分支祖先。
+- 弹窗保持单一标题“Git Reset”，显示当前分支、精确目标对象与提交主题，默认选择 Mixed，并解释 Soft（保留文件且暂存差异）、Mixed（保留文件且取消暂存）、Hard（文件恢复并丢弃本地更改）和 Keep（恢复目标同时保留兼容本地更改）。
+- 计划绑定规范仓库、当前完整本地分支引用、起始 `HEAD` 与目标提交。执行前重新生成并逐字段比较计划；分支、`HEAD`、目标可达性或仓库身份变化即拒绝。
+- 执行只允许一个显式 `git reset --soft|--mixed|--hard|--keep --no-recurse-submodules <exact-oid>`，随后确认仍检出同一分支且它精确指向目标对象。它不移动其他分支、不自动推送、不重试，也不把模糊“Undo”映射到某种模式。
+
 #### 从此提交新建分支…
 
 - 显示新本地分支名称输入、所选提交主题和完整/缩写对象 ID。名称使用与 Branches 草稿相同的 Git 引用验证，目标引用必须不存在。
@@ -753,7 +761,7 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 - **父/子提交导航。** 父提交使用 Git 报告的有序父对象；子提交必须处理多个结果以及筛选、折叠、分页未加载状态，不能只扫描当前可见 DOM。
 - **View in browser。** 需要 provider-neutral 远程地址适配，移除凭据和敏感 URL 片段，支持 SSH/HTTPS 与自托管实例，并明确外部导航失败。
 - **现有 bounded Squash 不改语义。** 它仍表示把所选 first-parent base 之后、直到当前 `HEAD` 的最多 1,000 个提交压成一个提交，并通过精确旧 `HEAD` lease 更新当前分支；首版不把截图中的 per-commit “Squash Into…”映射到它。
-- **不支持 detached Checkout、Reset、模糊 Undo、Fixup、Drop、编辑旧提交消息、交互式 Rebase 和 Push All up to Here。** 如果未来增加历史编辑器，它必须整体展示受影响提交序列、引用移动、恢复和远程后果，而不是逐个增加危险菜单快捷方式。
+- **不支持 detached Checkout、模糊 Undo、任意引用 Reset、Fixup、Drop、编辑旧提交消息、交互式 Rebase 和 Push All up to Here。** 当前 Reset 仅覆盖已检出本地分支到一个精确祖先的四种标准模式；更广泛的历史编辑器仍必须整体展示受影响提交序列、引用移动、恢复和远程后果。
 
 ### 当前能力与新增依赖
 
@@ -771,6 +779,7 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 - 从行菜单把精确对象预填到 Cherry-pick 审查；
 - 可由 Asterlyn 发起、继续和中止的单提交 Revert 计划及协议；
 - 从任意精确提交创建并切换分支；
+- 当前本地分支到精确非 `HEAD` 祖先的 Soft/Mixed/Hard/Keep Reset 审查与执行；
 
 以下能力仍留作后续候选：
 
@@ -786,7 +795,7 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 6. Revert 通过新增提交保留历史，重复验证 `HEAD` 和对象，并在冲突后正确提供 Continue/Abort、重启恢复和文件修订保护。
 7. 合并提交的 Cherry-pick/Revert 在没有 mainline 选择能力前被明确阻止，不默认选择父提交。
 8. 从提交新建分支使用所选对象而非当前 `HEAD`，不继承装饰分支的上游，并在清洁检查与权威刷新后完成。
-9. Reset、Undo、detached Checkout、旧提交编辑、Fixup、Drop、交互式 Rebase 和任意提交 Push 不会以占位或隐藏快捷键进入产品。
+9. Reset 仅在当前本地分支的非 `HEAD` 祖先上显示，并要求明确模式、精确租约与二次执行；任意引用 Reset、模糊 Undo、detached Checkout、旧提交编辑、Fixup、Drop、交互式 Rebase 和任意提交 Push 不会进入产品。
 10. 英文、中文、长主题、根提交、合并提交、过期对象、跨越旧 3,000 行边界的分页、虚拟滚动、键盘导航、屏幕边缘和焦点恢复通过交互检查。
 11. 实现后补充 History 列表/详情控制器、Git operation、分支创建、桌面协议、冲突恢复、真实仓库及安装平台接受证据。
 
@@ -817,7 +826,7 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 | Cherry-Pick | 首版必要，受序列约束 | 只对同一顶层仓库、可验证为无缺口线性链的非 merge commits 开放；按最旧到最新执行并完整预览 |
 | Show Repository at Revision | 不适用于多选 | 多个提交没有唯一仓库快照；单条提交的未来只读浏览入口足够 |
 | Compare Versions | 首版必要，限两条 | 比较两个根限定精确提交，不混入 `HEAD`、索引或工作区 |
-| Reset Current Branch to Here… | 不适用且不采用 | 多选范围没有唯一 Reset 目标，单条菜单也不提供危险 Reset |
+| Reset Current Branch to Here… | 多选不适用 | 多选范围没有唯一 Reset 目标；用户必须回到单条当前分支祖先提交，使用明确模式的 Reset 审查 |
 | Revert Commits | 首版必要，受序列约束 | 只反转当前分支 first-parent 上的无缺口非 merge 提交段，按最新到最旧执行 |
 | Drop Commits | 首版不提供 | 属于交互式 Rebase 和历史改写，需要展示整个受影响后继序列 |
 | Squash Commits… | 首版条件保留 | 仅当选区正好是当前分支以 `HEAD` 结尾的完整 first-parent 后缀时，映射到现有 bounded Squash |
