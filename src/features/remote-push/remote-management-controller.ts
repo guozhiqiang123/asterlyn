@@ -59,7 +59,7 @@ export class RemoteManagementController {
     if (dialog?.kind !== "list" || dialog.busy || !dialog.selected) return;
     const remote = dialog.remotes.find((candidate) => candidate.name === dialog.selected);
     if (!remote) return;
-    this.value = { dialog: { kind: "define", repositoryRoot: dialog.repositoryRoot, sourceName: remote.name, name: remote.name, url: remote.url ?? "", fetch: false, busy: false, error: null } };
+    this.value = { dialog: { kind: "define", repositoryRoot: dialog.repositoryRoot, sourceName: remote.name, name: remote.name, url: remote.url ?? "", fetch: true, busy: false, error: null } };
     this.emit();
   }
 

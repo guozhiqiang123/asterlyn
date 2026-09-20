@@ -43,3 +43,20 @@ test("remote deletion performs no mutation until the dedicated confirmation", as
   assert.equal(prepared, 1);
   assert.equal(executed, 1);
 });
+
+test("remote add and edit definitions default to fetching after save", () => {
+  const controller = new RemoteManagementController({
+    snapshot: () => repository(),
+    async prepare() { throw new Error("not called"); },
+    async execute() { throw new Error("not called"); },
+    async fetch() { throw new Error("not called"); },
+    errorMessage: String,
+  });
+  controller.open();
+  controller.add();
+  assert.equal(controller.state.dialog.fetch, true);
+  controller.back();
+  controller.select("origin");
+  controller.edit();
+  assert.equal(controller.state.dialog.fetch, true);
+});
