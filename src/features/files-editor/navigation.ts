@@ -84,6 +84,19 @@ interface IndexedProjectFile {
   readonly basenameStart: number;
 }
 
+/** The in-field query options shared by every command-surface tab. */
+export interface ProjectFileMatchOptions {
+  readonly caseSensitive: boolean;
+  readonly wholeWord: boolean;
+  readonly regexp: boolean;
+}
+
+const DEFAULT_MATCH_OPTIONS: ProjectFileMatchOptions = {
+  caseSensitive: false,
+  wholeWord: false,
+  regexp: false,
+};
+
 interface RankedProjectFile {
   readonly entry: IndexedProjectFile;
   readonly score: number;
@@ -119,15 +132,15 @@ export class ProjectFileSearchIndex {
     query: string,
     recent: readonly ProjectFile[] = [],
     limit = NAVIGATION_RESULT_LIMIT,
+    match: ProjectFileMatchOptions = DEFAULT_MATCH_OPTIONS,
   ): ProjectFile[] {
     const boundedLimit = Math.max(0, limit);
     if (boundedLimit === 0) return [];
-    const normalized = query.trim().toLocaleLowerCase();
-    if (normalized.length === 0) return this.rankDefault(recent, boundedLimit);
-
+    const trimmed = query.trim();
+    if (trimmed.length === 0) return this.rankDefault(recent, boundedLimit);
     const best: RankedProjectFile[] = [];
     for (const entry of this.entries) {
-      const score = fuzzyIndexedPathScore(entry, normalized);
+      const score = rankIndexedPath(entry, trimmed, match);
       if (score === null) continue;
       retainBestProjectFile(best, { entry, score }, boundedLimit);
     }
@@ -190,8 +203,9 @@ export function rankProjectFiles(
   query: string,
   recent: readonly ProjectFile[] = [],
   limit = NAVIGATION_RESULT_LIMIT,
+  match: ProjectFileMatchOptions = DEFAULT_MATCH_OPTIONS,
 ): ProjectFile[] {
-  return new ProjectFileSearchIndex(files).rank(query, recent, limit);
+  return new ProjectFileSearchIndex(files).rank(query, recent, limit, match);
 }
 
 export function rankCommands(
@@ -306,24 +320,84 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function fuzzyIndexedPathScore(entry: IndexedProjectFile, query: string): number | null {
-  const basenameLength = entry.normalizedPath.length - entry.basenameStart;
+function rankIndexedPath(
+  entry: IndexedProjectFile,
+  query: string,
+  match: ProjectFileMatchOptions,
+): number | null {
+  if (match.regexp) return patternIndexedPathScore(entry, query, match.caseSensitive);
+  const path = match.caseSensitive ? entry.file.workspacePath : entry.normalizedPath;
+  const needle = match.caseSensitive ? query : query.toLocaleLowerCase();
+  return match.wholeWord
+    ? wholeWordIndexedPathScore(entry, path, needle)
+    : fuzzyIndexedPathScore(entry, path, needle);
+}
+
+function fuzzyIndexedPathScore(
+  entry: IndexedProjectFile,
+  path: string,
+  query: string,
+): number | null {
+  const basenameLength = path.length - entry.basenameStart;
   if (
     basenameLength === query.length &&
-    entry.normalizedPath.startsWith(query, entry.basenameStart)
+    path.startsWith(query, entry.basenameStart)
   ) return 0;
-  if (entry.normalizedPath.startsWith(query, entry.basenameStart)) {
+  if (path.startsWith(query, entry.basenameStart)) {
     return 10 + basenameLength - query.length;
   }
-  const basenameIndex = entry.normalizedPath.indexOf(query, entry.basenameStart);
+  const basenameIndex = path.indexOf(query, entry.basenameStart);
   if (basenameIndex >= 0) return 30 + basenameIndex - entry.basenameStart;
-  if (entry.normalizedPath.startsWith(query)) {
-    return 50 + entry.normalizedPath.lastIndexOf("/");
+  if (path.startsWith(query)) {
+    return 50 + path.lastIndexOf("/");
   }
-  const pathIndex = entry.normalizedPath.indexOf(query);
+  const pathIndex = path.indexOf(query);
   if (pathIndex >= 0) return 70 + pathIndex;
-  const subsequence = subsequenceScore(entry.normalizedPath, query);
+  const subsequence = subsequenceScore(path, query);
   return subsequence === null ? null : 120 + subsequence;
+}
+
+function wholeWordIndexedPathScore(
+  entry: IndexedProjectFile,
+  path: string,
+  query: string,
+): number | null {
+  let index = path.indexOf(query);
+  while (index >= 0) {
+    if (hasWordBoundaries(path, index, query.length)) {
+      return index >= entry.basenameStart
+        ? 10 + index - entry.basenameStart
+        : 50 + index;
+    }
+    index = path.indexOf(query, index + 1);
+  }
+  return null;
+}
+
+function patternIndexedPathScore(
+  entry: IndexedProjectFile,
+  pattern: string,
+  caseSensitive: boolean,
+): number | null {
+  let expression: RegExp;
+  try {
+    expression = new RegExp(pattern, caseSensitive ? "u" : "iu");
+  } catch {
+    return null;
+  }
+  const found = expression.exec(entry.file.workspacePath);
+  if (!found) return null;
+  return found.index >= entry.basenameStart
+    ? 10 + found.index - entry.basenameStart
+    : 50 + found.index;
+}
+
+function hasWordBoundaries(path: string, index: number, length: number): boolean {
+  return !isWordCharacter(path[index - 1]) && !isWordCharacter(path[index + length]);
+}
+
+function isWordCharacter(value: string | undefined): boolean {
+  return value !== undefined && /[\p{L}\p{N}_]/u.test(value);
 }
 
 function retainBestProjectFile(

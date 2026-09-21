@@ -147,3 +147,21 @@ async function stylesheetImports(files) {
 function portablePath(value) {
   return value.split(path.sep).join("/");
 }
+
+test("both project search fields keep one query field with flat in-field option segments", async () => {
+  const [shell, search, history] = await Promise.all([
+    readFile(new URL("../src/shell/shell.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/workspace-search.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-history/history.css", import.meta.url), "utf8"),
+  ]);
+  // The command surface matches the Git History search control: a neutral border that only lights up
+  // while the field owns focus, and contiguous segments separated by 1px dividers.
+  assert.match(shell, /\.command-surface-input\s*\{[^}]*border:\s*1px solid var\(--border-strong\);/s);
+  assert.doesNotMatch(shell, /\.command-surface-input\s*\{[^}]*box-shadow/s);
+  assert.match(shell, /\.command-surface-input:focus-within\s*\{[^}]*border-color:\s*var\(--focus-ring\);[^}]*box-shadow:\s*0 0 0 1px var\(--focus-ring\);/s);
+  assert.match(shell, /\.command-surface-input textarea\s*\{/u);
+  assert.doesNotMatch(shell, /\.command-surface-input input\s*\{/u);
+  assert.match(search, /\.command-surface-input \.search-option-strip\s*\{[^}]*gap:\s*0;/s);
+  assert.match(search, /\.workspace-search-mode\s*\{[^}]*border-left:\s*1px solid var\(--border\);[^}]*border-radius:\s*0;/s);
+  assert.match(history, /\.history-mode-button\s*\{[^}]*border-left:\s*1px solid var\(--border\);[^}]*border-radius:\s*0;/s);
+});

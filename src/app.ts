@@ -303,6 +303,7 @@ import {
 } from "./features/changes-commit/change-presentation";
 import {
   loadRecentFilesFromIndex,
+  NAVIGATION_RESULT_LIMIT,
   ProjectFileSearchCatalog,
   ProjectFileSearchIndex,
   rankCommands,
@@ -311,8 +312,9 @@ import {
   type NavigationMode,
 } from "./features/files-editor/navigation";
 import { evaluateSearchNavigation } from "./features/files-editor/search-navigation";
-import type { WorkspaceSearchControls } from "./features/files-editor/workspace-search";
+import { projectFileMatchOptions, type WorkspaceSearchControls } from "./features/files-editor/workspace-search";
 import { bindWorkspaceSearchOptionControls } from "./features/files-editor/workspace-search-binding";
+import { bindCommandSurfaceLineBreak, focusCommandSurfaceQuery, syncCommandSurfaceQueryHeight } from "./features/files-editor/command-surface-input";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
@@ -2293,7 +2295,7 @@ export class AsterlynApp {
     const selected = this.filesEditorRuntime.commands.state.selectedIndex;
     host.innerHTML = renderCommandSurfaceView(model);
     this.bindCommandSurfaceEvents();
-    if (focusInput) this.focusCommandSurfaceInput();
+    if (focusInput) focusCommandSurfaceQuery(this.root);
     queueMicrotask(() => {
       this.root
         .querySelector<HTMLElement>(`#command-result-${selected}`)
@@ -2319,7 +2321,8 @@ export class AsterlynApp {
   }
 
   private bindCommandSurfaceEvents(): void {
-    const input = this.query<HTMLInputElement>("#command-surface-input");
+    const input = this.query<HTMLTextAreaElement>("#command-surface-input");
+    syncCommandSurfaceQueryHeight(this.root);
     const presentQuery = () => {
       if (this.filesEditorRuntime.commands.state.mode === "workspace") {
         this.renderCommandSurface(true);
@@ -2380,6 +2383,7 @@ export class AsterlynApp {
       () => this.filesEditorRuntime.search.state.controls,
       (controls, target) => this.updateWorkspaceSearchControls(controls, target),
     );
+    bindCommandSurfaceLineBreak(this.root);
     for (const field of ["include", "exclude"] as const) {
       const id = `workspace-search-${field}`;
       this.root.querySelector<HTMLInputElement>(`#${id}`)?.addEventListener("input", (event) => {
@@ -2544,14 +2548,6 @@ export class AsterlynApp {
     });
   }
 
-  private focusCommandSurfaceInput(): void {
-    queueMicrotask(() => {
-      const input = this.root.querySelector<HTMLInputElement>("#command-surface-input");
-      input?.focus();
-      input?.setSelectionRange(input.value.length, input.value.length);
-    });
-  }
-
   private visibleNavigationFiles(mode: "files" | "recent"): ProjectFile[] {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot) return [];
@@ -2562,9 +2558,11 @@ export class AsterlynApp {
       workspaceRoot,
       index,
     );
+    const match = projectFileMatchOptions(this.filesEditorRuntime.search.state.controls);
+    const query = this.filesEditorRuntime.commands.state.query;
     return mode === "recent"
-      ? new ProjectFileSearchIndex(recent).rank(this.filesEditorRuntime.commands.state.query)
-      : index.rank(this.filesEditorRuntime.commands.state.query, recent);
+      ? new ProjectFileSearchIndex(recent).rank(query, [], NAVIGATION_RESULT_LIMIT, match)
+      : index.rank(query, recent, NAVIGATION_RESULT_LIMIT, match);
   }
 
   private projectFileSearchIndex(): ProjectFileSearchIndex {

@@ -482,7 +482,16 @@ test("workspace navigation and replacement previews are feature-owned", () => {
 
   assert.match(commandHtml, /Search project files/);
   assert.match(commandHtml, /id="command-surface-exclude-ignored"[^>]*checked/);
-  assert.doesNotMatch(commandHtml, /data-workspace-search-option/);
+  // Files carries the same in-field query options as Text, plus the line-break insert control.
+  assert.equal((commandHtml.match(/data-workspace-search-option=/g) ?? []).length, 3);
+  assert.match(commandHtml, /data-search-insert="new-line"[^>]*>↵</);
+  assert.match(commandHtml, /<textarea id="command-surface-input"[^>]*rows="1"/);
+  const inputRow = commandHtml.slice(
+    commandHtml.indexOf('class="command-surface-input"'),
+    commandHtml.indexOf('class="command-surface-results"'),
+  );
+  assert.doesNotMatch(inputRow, /<kbd>/);
+  assert.doesNotMatch(commandHtml, /Enter to search/);
   assert.match(commandHtml, /app\.ts/);
   assert.match(commandHtml, /<small>src<\/small>/);
   assert.match(replacementHtml, /Replacement preview unavailable/);
@@ -496,7 +505,18 @@ test("workspace navigation and replacement previews are feature-owned", () => {
     workspaceSearchControls: createWorkspaceSearchControls(), searchRequestIsCurrent: false,
     replacementText: "", replacementRecoveryCount: 0,
   });
-  assert.equal((textSearchHtml.match(/data-workspace-search-option/g) ?? []).length, 4);
+  assert.equal((textSearchHtml.match(/data-workspace-search-option=/g) ?? []).length, 3);
+  assert.equal((textSearchHtml.match(/data-search-insert="new-line"/g) ?? []).length, 1);
+
+  const commandPaletteHtml = renderCommandSurface({
+    commandSurface: openCommandSurface(createCommandSurfaceState(), "commands"),
+    workspaceOpen: true,
+    filesLoading: false,
+    files: [], commands: [], workspaceSearch: createWorkspaceSearchState(),
+    workspaceSearchControls: createWorkspaceSearchControls(), searchRequestIsCurrent: false,
+    replacementText: "", replacementRecoveryCount: 0,
+  });
+  assert.doesNotMatch(commandPaletteHtml, /data-workspace-search-option=|data-search-insert=/);
 });
 
 test("editor chrome renders tabs, Markdown modes, menu, and Diff controls independently", () => {

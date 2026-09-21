@@ -3,10 +3,10 @@ import type {
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "../../models";
+import type { ProjectFileMatchOptions } from "./navigation.ts";
 
 export interface WorkspaceSearchControls {
   mode: WorkspaceTextSearchMode;
-  newLine: boolean;
   caseSensitive: boolean;
   wholeWord: boolean;
   excludeIgnored: boolean;
@@ -18,7 +18,6 @@ export interface WorkspaceSearchControls {
 export function createWorkspaceSearchControls(): WorkspaceSearchControls {
   return {
     mode: "literal",
-    newLine: false,
     caseSensitive: false,
     wholeWord: false,
     excludeIgnored: true,
@@ -28,12 +27,32 @@ export function createWorkspaceSearchControls(): WorkspaceSearchControls {
   };
 }
 
+export function queryHasLineBreak(query: string): boolean {
+  return /[\r\n]/u.test(query);
+}
+
+/** The same in-field query options drive the quick-open path matcher for Files and Recent. */
+export function projectFileMatchOptions(
+  controls: WorkspaceSearchControls,
+): ProjectFileMatchOptions {
+  return {
+    caseSensitive: controls.caseSensitive,
+    wholeWord: controls.wholeWord,
+    regexp: controls.mode === "regex",
+  };
+}
+
+/**
+ * The in-field line-break control edits the query itself, so a query that contains a real line break
+ * is searched across lines; a request never carries line breaks with the mode turned off.
+ */
 export function workspaceSearchOptions(
   controls: WorkspaceSearchControls,
+  query = "",
 ): WorkspaceTextSearchOptions {
   return {
     mode: controls.mode,
-    newLine: controls.newLine ?? false,
+    newLine: queryHasLineBreak(query),
     caseSensitive: controls.caseSensitive ?? false,
     wholeWord: controls.wholeWord ?? false,
     excludeIgnored: controls.excludeIgnored ?? true,

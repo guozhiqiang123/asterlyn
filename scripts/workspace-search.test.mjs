@@ -10,6 +10,8 @@ import {
   formatWorkspaceSearchCoverage,
   invalidateWorkspaceSearch,
   parsePathGlobs,
+  projectFileMatchOptions,
+  queryHasLineBreak,
   sameWorkspaceSearchOptions,
   workspaceSearchOptions,
 } from "../src/features/files-editor/workspace-search.ts";
@@ -133,5 +135,31 @@ test("comma-separated path controls preserve ordered non-empty full-path globs",
       excludeGlobs: ["src/generated/**"],
       contextLines: 3,
     },
+  );
+});
+
+test("a query that contains a real line break turns on the multi-line search option", () => {
+  const controls = createWorkspaceSearchControls();
+  assert.equal(workspaceSearchOptions(controls, "one line").newLine, false);
+  assert.equal(workspaceSearchOptions(controls, "first\nsecond").newLine, true);
+  assert.equal(workspaceSearchOptions(controls, "first\r\nsecond").newLine, true);
+  assert.equal(queryHasLineBreak("first\nsecond"), true);
+  assert.equal(queryHasLineBreak("first\n".trimEnd()), false);
+});
+
+test("the in-field query options drive the quick-open path matcher", () => {
+  assert.deepEqual(projectFileMatchOptions(createWorkspaceSearchControls()), {
+    caseSensitive: false,
+    wholeWord: false,
+    regexp: false,
+  });
+  assert.deepEqual(
+    projectFileMatchOptions({
+      ...createWorkspaceSearchControls(),
+      mode: "regex",
+      caseSensitive: true,
+      wholeWord: true,
+    }),
+    { caseSensitive: true, wholeWord: true, regexp: true },
   );
 });

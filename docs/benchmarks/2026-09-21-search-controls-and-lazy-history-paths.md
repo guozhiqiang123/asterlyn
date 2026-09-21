@@ -59,3 +59,46 @@ These figures are single-process local evidence, not cross-machine latency guara
 - New-line queries are search-only; cross-line replacement remains unsupported.
 - Path expansion still scans the bounded catalog for the requested level. A persistent index remains deferred until measurements justify its lifecycle and invalidation cost.
 - This slice received browser interaction acceptance on Linux. It did not add a new installed-package pass for macOS or Windows.
+
+## Follow-up: unified search fields and quick-open query options (2026-09-21)
+
+Three follow-up corrections were requested from installed-package use:
+
+- The command-surface query field now matches the Git History search control: a neutral
+  `--border-strong` border that only lights up with the focus ring while the field owns focus, and
+  contiguous in-field segments separated by 1px dividers instead of gap-separated filled chips. The
+  trailing `Enter to search` keystroke chip is removed; Enter keeps its search/open behavior and the
+  footer keystroke legend is unchanged. `scripts/style-ownership.test.mjs` now locks both fields to
+  the same border, focus-ring, and flat-segment contract.
+- Files and Recent present the same four in-field controls as Text. `Match case`, `Whole words`, and
+  `Regex` now select the quick-open path matcher: the exact workspace path for case-sensitive
+  matching, Unicode word boundaries around a contiguous occurrence for whole words, and a Unicode
+  expression over the workspace path for Regex. An invalid expression matches nothing instead of
+  throwing. With all three off, the existing case-insensitive fuzzy ranking is byte-for-byte
+  unchanged, which the existing quick-open tests continue to assert.
+- `New line` is now the editing action it was documented to be: it inserts one line break at the
+  caret in the query field, which is a textarea that grows with its own text up to 124 pixels. Editing
+  the query dispatches the surface's own `input` path, so request invalidation, result rendering, and
+  the caret stay consistent. A workspace text request now derives `new_line` from the query itself,
+  so a multi-line query is searched across lines and replacement is presented as unavailable, while a
+  line-local query can never be sent with the mode enabled. `docs/architecture/decisions/0005` records
+  the amendment.
+
+Measured in the production stylesheet order (every feature stylesheet before `main-*.css`) at a
+1000-pixel viewport: the reference History field and all four command-surface tabs render one
+bordered field with flat `↵ Cc W .*` segments, the Files and Recent tabs filter paths with the
+selected options, a two-line Text query grows the field to two rows, and the Commands tab renders no
+query options. A headless production-bundle run then drove the surface through its own shortcuts:
+`Ctrl+P` opened Files, `Match case` with the query `APP` reduced two fuzzy matches to zero, `Whole
+words` reduced the query `app` to the single exact basename, `Regex` with `^src/.*\.ts$` selected
+three source files, the line-break control turned `alpha` into `"alpha\n"` with the caret after the
+break and grew the field from 31 to 50 pixels, and a searched `Asterlyn\n` query reported one
+cross-line match with replacement unavailable while the line-local `Asterlyn` query reported four
+matches with replacement available. The browser demo's own search validation was aligned with the
+native boundary in the same change: it now rejects direct line breaks only while the multi-line
+option is off, which is what allowed the cross-line evidence above to run in the demo at all.
+
+`npm run check`, the complete 582-test script suite, and the production build passed; `src/app.ts`
+remained at 8,772 lines against its 8,781-line reviewed ceiling by moving the query-input behavior
+into a feature-owned `command-surface-input.ts` module. These figures are single-viewport render and
+demo-interaction evidence, not native-package interaction acceptance.

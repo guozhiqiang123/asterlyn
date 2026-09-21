@@ -37,6 +37,18 @@ test("workspace search controller owns controls, request identity, and accepted 
   assert.equal(controller.hasCurrentResults("needle"), true);
 });
 
+test("a multi-line query becomes a multi-line request and stays request-identical", async () => {
+  const operations = fakeOperations();
+  const controller = new WorkspaceSearchController(operations);
+  const query = "first\nsecond";
+  const completion = controller.run({ root: "/repo", generation: 4 }, query, String);
+  assert.equal(controller.state.search.request.options.newLine, true);
+  assert.equal(controller.requestIsCurrent(query), true);
+  assert.equal(controller.requestIsCurrent("first"), false);
+  operations.complete(report(operations.operationId));
+  assert.equal(await completion, true);
+});
+
 test("control changes cancel and invalidate a pending request", async () => {
   const operations = fakeOperations();
   const controller = new WorkspaceSearchController(operations);

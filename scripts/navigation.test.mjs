@@ -47,6 +47,51 @@ test("quick open favors basename matches and supports ordered subsequences", () 
   assert.equal(rankProjectFiles(files, "prtree")[0]?.workspacePath, "src/presentation/project-tree.ts");
 });
 
+test("quick open applies the in-field case, whole-word and regex options to paths", () => {
+  const files = [
+    file("src/App.ts"),
+    file("src/app-shell.ts"),
+    file("docs/application.md"),
+    file("src/deep/app.ts"),
+  ];
+  assert.deepEqual(
+    rankProjectFiles(files, "App").map((item) => item.workspacePath),
+    ["src/App.ts", "src/deep/app.ts", "src/app-shell.ts", "docs/application.md"],
+  );
+  assert.deepEqual(
+    rankProjectFiles(files, "App", [], 100, {
+      caseSensitive: true, wholeWord: false, regexp: false,
+    }).map((item) => item.workspacePath),
+    ["src/App.ts"],
+  );
+  // Whole-word drops the fuzzy subsequence and prefix fallbacks, not the exact word.
+  assert.deepEqual(
+    rankProjectFiles(files, "app", [], 100, {
+      caseSensitive: false, wholeWord: true, regexp: false,
+    }).map((item) => item.workspacePath).sort(),
+    ["src/App.ts", "src/app-shell.ts", "src/deep/app.ts"].sort(),
+  );
+  assert.deepEqual(
+    rankProjectFiles(files, "^src/(?:deep/)?app\\.ts$", [], 100, {
+      caseSensitive: false, wholeWord: false, regexp: true,
+    }).map((item) => item.workspacePath),
+    ["src/App.ts", "src/deep/app.ts"],
+  );
+  assert.deepEqual(
+    rankProjectFiles(files, "^src/(?:deep/)?app\\.ts$", [], 100, {
+      caseSensitive: true, wholeWord: false, regexp: true,
+    }).map((item) => item.workspacePath),
+    ["src/deep/app.ts"],
+  );
+  // An invalid pattern matches nothing instead of throwing or silently ignoring the option.
+  assert.deepEqual(
+    rankProjectFiles(files, "src/[", [], 100, {
+      caseSensitive: false, wholeWord: false, regexp: true,
+    }),
+    [],
+  );
+});
+
 test("persistent quick-open index retains better late matches within the bounded result set", () => {
   const files = Array.from({ length: 500 }, (_, index) =>
     file(`generated/noise-${index}-n-e-e-d-l-e.txt`),

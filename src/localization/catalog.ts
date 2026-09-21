@@ -227,8 +227,6 @@ export interface NavigationCopy {
   regularExpression: string;
   searchOptions: string; newLine: string; matchCase: string; words: string;
   filterIgnoredFiles: string;
-  enter: string;
-  enterToSearch: string;
   navigate: string;
   open: string;
   workspaceSearchOptions: string;

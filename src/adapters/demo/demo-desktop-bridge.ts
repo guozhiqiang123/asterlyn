@@ -1967,8 +1967,7 @@ function demoWorkspaceSearch(
   const encoder = new TextEncoder();
   if (
     query.length === 0 ||
-    query.includes("\n") ||
-    query.includes("\r") ||
+    (!options.newLine && (query.includes("\n") || query.includes("\r"))) ||
     query.includes("\0") ||
     encoder.encode(query).length > 4_096
   ) {

@@ -73,7 +73,7 @@ export class WorkspaceSearchController {
       request.query === query &&
       sameWorkspaceSearchOptions(
         request.options,
-        workspaceSearchOptions(this.value.controls),
+        workspaceSearchOptions(this.value.controls, query),
       ),
     );
   }
@@ -90,7 +90,7 @@ export class WorkspaceSearchController {
     describeError: (error: unknown) => string,
   ): Promise<boolean> {
     if (query.trim().length === 0) return false;
-    const options = workspaceSearchOptions(this.value.controls);
+    const options = workspaceSearchOptions(this.value.controls, query);
     const operation = this.operations.startSearch(identity, query, options);
     const started = beginWorkspaceSearch(
       this.value.search,

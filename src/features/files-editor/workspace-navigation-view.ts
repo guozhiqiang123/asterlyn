@@ -7,6 +7,7 @@ import type {
   NavigationMode,
 } from "./navigation.ts";
 import {
+  queryHasLineBreak,
   type WorkspaceSearchControls,
   type WorkspaceSearchState,
 } from "./workspace-search.ts";
@@ -53,6 +54,7 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
   const selected = model.commandSurface.selectedIndex;
   const copy = model.copy ?? EN_US.navigation;
   const title = copy.titles[mode];
+  const queryOptions = mode !== "commands";
   return `<section class="command-surface ${mode === "workspace" ? "workspace-mode" : ""}" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
     <div class="command-surface-tabs" role="tablist" aria-label="${escapeAttribute(copy.navigationMode)}">
       ${commandSurfaceTab("files", copy.tabs.files, model)}
@@ -64,14 +66,14 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
     </div>
     <div class="command-surface-input">
       ${icon("search", 17)}
-      <input id="command-surface-input" type="text" value="${escapeAttribute(model.commandSurface.query)}" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}" />
-      ${mode === "workspace" ? `<span class="search-option-strip" role="group" aria-label="${escapeAttribute(copy.searchOptions)}">
-        ${searchOptionButton("new-line", "↵", copy.newLine, model.workspaceSearchControls.newLine)}
+      <textarea id="command-surface-input" rows="1" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}">${textAreaValue(model.commandSurface.query)}</textarea>
+      ${queryOptions ? `<span class="search-option-strip" role="group" aria-label="${escapeAttribute(copy.searchOptions)}">
+        ${searchLineBreakButton(copy.newLine)}
         ${searchOptionButton("case", "Cc", copy.matchCase, model.workspaceSearchControls.caseSensitive)}
         ${searchOptionButton("word", "W", copy.words, model.workspaceSearchControls.wholeWord)}
         ${searchOptionButton("regex", ".*", copy.regularExpression, model.workspaceSearchControls.mode === "regex")}
       </span>` : ""}
-      ${mode === "workspace" && model.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${escapeHtml(mode === "workspace" ? copy.enterToSearch : copy.enter)}</kbd>`}
+      ${mode === "workspace" && model.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : ""}
     </div>
     ${mode === "workspace" ? renderWorkspaceSearchControls(model) : ""}
     <div class="command-surface-results" id="command-surface-results" role="listbox" aria-label="${escapeAttribute(title)}">
@@ -153,7 +155,7 @@ function commandSurfaceTab(
 }
 
 function searchOptionButton(
-  option: "new-line" | "case" | "word" | "regex",
+  option: "case" | "word" | "regex",
   label: string,
   title: string,
   active: boolean,
@@ -161,10 +163,21 @@ function searchOptionButton(
   return `<button class="workspace-search-mode" id="workspace-search-${option}" data-workspace-search-option="${option}" type="button" aria-label="${escapeAttribute(title)}" aria-pressed="${active}" title="${escapeAttribute(title)}">${escapeHtml(label)}</button>`;
 }
 
+/** Inserts one line break into the query field; multi-line queries search across line breaks. */
+function searchLineBreakButton(title: string): string {
+  return `<button class="workspace-search-mode" id="workspace-search-new-line" data-search-insert="new-line" type="button" aria-label="${escapeAttribute(title)}" title="${escapeAttribute(title)}">↵</button>`;
+}
+
+/** A leading line break inside <textarea> markup would be stripped by the HTML parser. */
+function textAreaValue(value: string): string {
+  return escapeHtml(value).replaceAll("\r", "&#13;").replaceAll("\n", "&#10;");
+}
+
 function renderWorkspaceSearchControls(model: CommandSurfaceViewModel): string {
   const copy = model.copy ?? EN_US.navigation;
   const controls = model.workspaceSearchControls;
-  const replacementAllowed = controls.excludeIgnored && !controls.newLine;
+  const replacementAllowed = controls.excludeIgnored &&
+    !queryHasLineBreak(model.commandSurface.query);
   const hasResults = replacementAllowed && workspaceSearchHasCurrentResults(model) && Boolean(model.workspaceSearch.report?.matches.length);
   const recoveryCount = model.replacementRecoveryCount;
   return `<div class="workspace-search-controls" role="group" aria-label="${escapeAttribute(copy.workspaceSearchOptions)}">

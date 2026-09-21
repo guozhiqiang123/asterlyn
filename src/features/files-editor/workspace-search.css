@@ -19,39 +19,41 @@
   accent-color: var(--accent);
 }
 
+/* The in-field option controls mirror the Git History search control in history.css: one bordered
+   field whose flat segments are separated by 1px dividers, with a subtle selected color instead of a
+   filled chip. Keep both surfaces in step when either changes. */
 .command-surface-input .search-option-strip {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-}
-
-.command-surface.workspace-mode .command-surface-input {
-  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  gap: 0;
 }
 
 .workspace-search-mode {
-  min-width: 28px;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 4px;
+  display: inline-flex;
+  min-width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
-  font: 10px/1 ui-monospace, monospace;
+  font: 9px/1 ui-monospace, monospace;
+  white-space: nowrap;
 }
 
-.search-option-strip .workspace-search-mode {
-  min-width: 24px;
-  height: 23px;
-  padding: 0 4px;
+.workspace-search-mode:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
-.workspace-search-mode:hover,
 .workspace-search-mode[aria-pressed="true"] {
-  border-color: var(--info-border);
-  background: var(--accent);
-  color: white;
+  background: var(--selection-bg-strong);
+  color: var(--info-text);
 }
 
 .workspace-search-controls {
