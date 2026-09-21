@@ -106,6 +106,11 @@ test("Push mode remains one aligned split action with a visible native-scale che
   );
   assert.match(source, /\.push-split-action\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*stretch;/s);
   assert.match(source, /\.push-mode-chevron\s*\{[^}]*border-right:\s*1\.5px solid currentColor;[^}]*transform:\s*rotate\(45deg\);/s);
+  // The shared primary-button surface is evaluated after the feature stylesheets, so the split
+  // declarations must outrank it by scope instead of relying on source order.
+  assert.match(source, /\.push-split-action \.push-primary-action\s*\{[^}]*border-right:\s*0;[^}]*border-radius:\s*5px 0 0 5px;/s);
+  assert.match(source, /\.push-split-action \.push-mode-toggle\s*\{[^}]*padding:\s*0;[^}]*border-radius:\s*0 5px 5px 0;/s);
+  assert.match(source, /\.push-split-action \.push-mode-chevron\s*\{/u);
 });
 
 function escapeRegExp(value) {

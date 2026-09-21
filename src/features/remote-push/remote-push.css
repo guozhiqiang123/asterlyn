@@ -730,20 +730,19 @@
   position: relative; display: inline-flex; align-items: stretch;
   border-radius: 5px; isolation: isolate;
 }
-
-.push-primary-action {
+/* Scoped to the split action: the shared primary-button stylesheet is evaluated after this file, so
+   equal-specificity declarations here would lose the junction radius and the toggle's padding. */
+.push-split-action .push-primary-action {
   min-width: 54px; border-right: 0;
   border-radius: 5px 0 0 5px;
 }
-
-.push-mode-toggle {
+.push-split-action .push-mode-toggle {
   width: 27px; min-width: 27px; flex: 0 0 27px;
   padding: 0;
   border-left-color: color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 0 5px 5px 0;
 }
-
-.push-mode-chevron { width: 7px; height: 7px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
+.push-split-action .push-mode-chevron { width: 7px; height: 7px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .push-mode-menu {
   position: absolute;
   right: 0;
