@@ -580,6 +580,7 @@ mod tests {
             include_globs: vec!["src/**".to_string()],
             exclude_globs: vec!["src/generated/**".to_string()],
             context_lines: 1,
+            ..SearchOptions::default()
         };
         let report = search_authorized_workspace(
             directory.path(),
@@ -596,6 +597,40 @@ mod tests {
         assert_eq!(report.matches.len(), 1);
         assert_eq!(report.matches[0].path, "src/code.rs");
         assert_eq!(report.matches[0].preview, "before\nNeedle 42\nafter");
+    }
+
+    #[test]
+    fn workspace_search_can_include_ignored_files_only_as_read_only_results() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::write(directory.path().join(".gitignore"), "ignored.txt\n").expect("ignore file");
+        fs::write(directory.path().join("ignored.txt"), "hidden needle\n").expect("ignored file");
+        git(directory.path(), &["add", ".gitignore"]);
+
+        let filtered = search_authorized_workspace(
+            directory.path(),
+            "ignored-filtered",
+            "needle",
+            &SearchOptions::default(),
+            &SearchCancellationToken::new(),
+        )
+        .expect("filtered search");
+        assert!(filtered.matches.is_empty());
+
+        let included = search_authorized_workspace(
+            directory.path(),
+            "ignored-included",
+            "needle",
+            &SearchOptions {
+                exclude_ignored: false,
+                ..SearchOptions::default()
+            },
+            &SearchCancellationToken::new(),
+        )
+        .expect("search including ignored files");
+        assert_eq!(included.matches.len(), 1);
+        assert_eq!(included.matches[0].workspace_path, "ignored.txt");
+        assert!(included.matches[0].read_only);
     }
 
     #[test]

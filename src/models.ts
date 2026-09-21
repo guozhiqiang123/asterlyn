@@ -605,16 +605,16 @@ export type SearchSkipReason =
 export type WorkspaceTextSearchMode = "literal" | "regex";
 
 export interface WorkspaceTextSearchOptions {
-  mode: WorkspaceTextSearchMode;
+  mode: WorkspaceTextSearchMode; newLine: boolean;
+  caseSensitive: boolean; wholeWord: boolean; excludeIgnored: boolean;
   includeGlobs: string[];
   excludeGlobs: string[];
   contextLines: number;
 }
 
 export interface WorkspaceTextSearchMatch {
-  repositoryId: string;
-  path: string;
-  workspacePath: string;
+  repositoryId: string; path: string;
+  workspacePath: string; readOnly: boolean;
   revision: string;
   fromUtf16: number;
   toUtf16: number;

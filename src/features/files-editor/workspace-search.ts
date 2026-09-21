@@ -6,6 +6,10 @@ import type {
 
 export interface WorkspaceSearchControls {
   mode: WorkspaceTextSearchMode;
+  newLine: boolean;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+  excludeIgnored: boolean;
   includeText: string;
   excludeText: string;
   contextLines: number;
@@ -14,6 +18,10 @@ export interface WorkspaceSearchControls {
 export function createWorkspaceSearchControls(): WorkspaceSearchControls {
   return {
     mode: "literal",
+    newLine: false,
+    caseSensitive: false,
+    wholeWord: false,
+    excludeIgnored: true,
     includeText: "",
     excludeText: "",
     contextLines: 0,
@@ -25,6 +33,10 @@ export function workspaceSearchOptions(
 ): WorkspaceTextSearchOptions {
   return {
     mode: controls.mode,
+    newLine: controls.newLine ?? false,
+    caseSensitive: controls.caseSensitive ?? false,
+    wholeWord: controls.wholeWord ?? false,
+    excludeIgnored: controls.excludeIgnored ?? true,
     includeGlobs: parsePathGlobs(controls.includeText),
     excludeGlobs: parsePathGlobs(controls.excludeText),
     contextLines: controls.contextLines,
@@ -180,6 +192,10 @@ function sameOptions(
 ): boolean {
   return (
     left.mode === right.mode &&
+    left.newLine === right.newLine &&
+    left.caseSensitive === right.caseSensitive &&
+    left.wholeWord === right.wholeWord &&
+    left.excludeIgnored === right.excludeIgnored &&
     left.contextLines === right.contextLines &&
     sameStrings(left.includeGlobs, right.includeGlobs) &&
     sameStrings(left.excludeGlobs, right.excludeGlobs)

@@ -156,6 +156,12 @@ impl Workspace {
         replacement_limits: ReplacementLimits,
     ) -> Result<PreparedWorkspaceReplacement, WorkspaceError> {
         validate_replacement_request(plan_id, replacement, replacement_limits)?;
+        if !options.exclude_ignored {
+            return Err(WorkspaceError::InvalidReplacement {
+                message: "ignored-file search is read-only; enable ignored-file filtering before previewing replacement"
+                    .to_string(),
+            });
+        }
         let report = self.search_text(
             plan_id,
             candidates,
@@ -226,7 +232,7 @@ impl Workspace {
                 &snapshot.content,
                 query,
                 replacement,
-                options.mode,
+                options,
                 cancellation,
                 search_limits,
             )?;
@@ -1003,6 +1009,38 @@ mod tests {
             )
             .expect_err("replacement plan ID leaves suffix capacity");
         assert!(matches!(error, WorkspaceError::InvalidReplacement { .. }));
+    }
+
+    #[test]
+    fn ignored_and_multiline_search_modes_remain_read_only() {
+        let (_directory, _recovery, workspace) = fixture();
+        for options in [
+            SearchOptions {
+                exclude_ignored: false,
+                ..SearchOptions::default()
+            },
+            SearchOptions {
+                new_line: true,
+                ..SearchOptions::default()
+            },
+        ] {
+            let error = workspace
+                .plan_text_replacement(
+                    "read-only-search",
+                    &[SearchCandidate {
+                        workspace_path: "one.txt".to_string(),
+                    }],
+                    false,
+                    "needle",
+                    "found",
+                    &options,
+                    &SearchCancellationToken::new(),
+                    SEARCH_LIMITS,
+                    REPLACEMENT_LIMITS,
+                )
+                .expect_err("read-only search options must reject replacement");
+            assert!(matches!(error, WorkspaceError::InvalidReplacement { .. }));
+        }
     }
 
     #[test]

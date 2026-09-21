@@ -53,7 +53,7 @@ export class WorkspaceSearchController {
   updateControls(controls: WorkspaceSearchControls): void {
     this.operations.cancelSearch();
     this.value = {
-      controls: { ...controls },
+      controls: { ...this.value.controls, ...controls },
       search: invalidateWorkspaceSearch(this.value.search),
     };
   }

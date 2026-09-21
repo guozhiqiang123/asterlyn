@@ -25,6 +25,7 @@ import {
   openSearchPanel,
   searchKeymap,
 } from "@codemirror/search";
+import { asterlynSearch } from "./editor-search";
 import {
   splitUnifiedDiff,
   type DiffPresentation,
@@ -368,6 +369,7 @@ export class DiffEditor {
       drawSelection(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
+      asterlynSearch(),
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
       phrases.of(EditorState.phrases.of(this.phrasesValue)),

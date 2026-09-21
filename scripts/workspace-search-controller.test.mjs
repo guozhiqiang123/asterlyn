@@ -21,6 +21,10 @@ test("workspace search controller owns controls, request identity, and accepted 
   assert.equal(controller.state.search.status, "loading");
   assert.deepEqual(controller.state.search.request.options, {
     mode: "regex",
+    newLine: false,
+    caseSensitive: false,
+    wholeWord: false,
+    excludeIgnored: true,
     includeGlobs: ["src/**", "**/*.ts"],
     excludeGlobs: ["dist/**"],
     contextLines: 2,

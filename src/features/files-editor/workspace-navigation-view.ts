@@ -59,12 +59,18 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
       ${commandSurfaceTab("recent", copy.tabs.recent, model)}
       ${commandSurfaceTab("workspace", copy.tabs.workspace, model)}
       ${commandSurfaceTab("commands", copy.tabs.commands, model)}
+      <label class="command-surface-ignore-filter"><input id="command-surface-exclude-ignored" type="checkbox" ${model.workspaceSearchControls.excludeIgnored ? "checked" : ""} /><span>${escapeHtml(copy.filterIgnoredFiles)}</span></label>
       <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="${escapeAttribute(copy.close)}">${icon("close", 15)}</button>
     </div>
     <div class="command-surface-input">
       ${icon("search", 17)}
       <input id="command-surface-input" type="text" value="${escapeAttribute(model.commandSurface.query)}" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}" />
-      ${mode === "workspace" ? `<button class="workspace-search-mode" id="workspace-search-mode" type="button" aria-label="${escapeAttribute(copy.useRegularExpressions)}" aria-pressed="${model.workspaceSearchControls.mode === "regex"}" title="${escapeAttribute(copy.regularExpression)}">.*</button>` : ""}
+      ${mode === "workspace" ? `<span class="search-option-strip" role="group" aria-label="${escapeAttribute(copy.searchOptions)}">
+        ${searchOptionButton("new-line", "↵", copy.newLine, model.workspaceSearchControls.newLine)}
+        ${searchOptionButton("case", "Cc", copy.matchCase, model.workspaceSearchControls.caseSensitive)}
+        ${searchOptionButton("word", "W", copy.words, model.workspaceSearchControls.wholeWord)}
+        ${searchOptionButton("regex", ".*", copy.regularExpression, model.workspaceSearchControls.mode === "regex")}
+      </span>` : ""}
       ${mode === "workspace" && model.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : `<kbd>${escapeHtml(mode === "workspace" ? copy.enterToSearch : copy.enter)}</kbd>`}
     </div>
     ${mode === "workspace" ? renderWorkspaceSearchControls(model) : ""}
@@ -146,17 +152,27 @@ function commandSurfaceTab(
   return `<button type="button" role="tab" data-command-mode="${mode}" aria-selected="${active}" ${mode !== "commands" && !model.workspaceOpen ? "disabled" : ""}>${escapeHtml(label)}</button>`;
 }
 
+function searchOptionButton(
+  option: "new-line" | "case" | "word" | "regex",
+  label: string,
+  title: string,
+  active: boolean,
+): string {
+  return `<button class="workspace-search-mode" id="workspace-search-${option}" data-workspace-search-option="${option}" type="button" aria-label="${escapeAttribute(title)}" aria-pressed="${active}" title="${escapeAttribute(title)}">${escapeHtml(label)}</button>`;
+}
+
 function renderWorkspaceSearchControls(model: CommandSurfaceViewModel): string {
   const copy = model.copy ?? EN_US.navigation;
   const controls = model.workspaceSearchControls;
-  const hasResults = workspaceSearchHasCurrentResults(model) && Boolean(model.workspaceSearch.report?.matches.length);
+  const replacementAllowed = controls.excludeIgnored && !controls.newLine;
+  const hasResults = replacementAllowed && workspaceSearchHasCurrentResults(model) && Boolean(model.workspaceSearch.report?.matches.length);
   const recoveryCount = model.replacementRecoveryCount;
   return `<div class="workspace-search-controls" role="group" aria-label="${escapeAttribute(copy.workspaceSearchOptions)}">
     <label><span>${escapeHtml(copy.include)}</span><input id="workspace-search-include" type="text" value="${escapeAttribute(controls.includeText)}" placeholder="src/**, **/*.ts" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.includeAria)}" /></label>
     <label><span>${escapeHtml(copy.exclude)}</span><input id="workspace-search-exclude" type="text" value="${escapeAttribute(controls.excludeText)}" placeholder="dist/**, **/*.min.js" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.excludeAria)}" /></label>
     <label class="workspace-search-context"><span>${escapeHtml(copy.context)}</span>${renderSelectControl(`<select id="workspace-search-context" aria-label="${escapeAttribute(copy.contextLines)}">${[0, 1, 2, 3].map((value) => `<option value="${value}" ${value === controls.contextLines ? "selected" : ""}>${value}</option>`).join("")}</select>`)}</label>
     <label class="workspace-replacement-input"><span>${escapeHtml(copy.replace)}</span><input id="workspace-replacement-text" type="text" value="${escapeAttribute(model.replacementText)}" placeholder="${escapeAttribute(copy.replacementText)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.replacementText)}" /></label>
-    <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"}>${escapeHtml(copy.previewReplace)}</button>
+    <button class="secondary-button workspace-replacement-preview-button" id="workspace-replacement-preview" type="button" ${hasResults ? "" : "disabled"} ${replacementAllowed ? "" : `title="${escapeAttribute(copy.replacementRequiresIgnoredFilter)}"`}>${escapeHtml(copy.previewReplace)}</button>
     ${recoveryCount > 0 ? `<button class="workspace-recovery-button" id="workspace-recovery-open" type="button" aria-label="${escapeAttribute(copy.reviewRecoveries(recoveryCount))}">${escapeHtml(copy.recoveryRecords(recoveryCount))}</button>` : ""}
   </div>`;
 }

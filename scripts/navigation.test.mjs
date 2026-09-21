@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   RECENT_FILE_LIMIT,
+  ProjectFileSearchCatalog,
   ProjectFileSearchIndex,
   closeCommandSurface,
   createCommandSurfaceState,
@@ -66,6 +67,16 @@ test("persistent quick-open index retains better late matches within the bounded
     ],
   );
   assert.equal(index.rank("needle").length <= 100, true);
+});
+
+test("quick open catalog filters ignored files by default and can expose them read-only", () => {
+  const catalog = new ProjectFileSearchCatalog();
+  const files = [file("src/app.ts"), { ...file("dist/generated.js"), readOnly: true }];
+  assert.deepEqual(catalog.resolve(files, false).rank("").map((item) => item.workspacePath), ["src/app.ts"]);
+  assert.deepEqual(
+    catalog.resolve(files, true).rank("").map((item) => item.workspacePath),
+    ["src/app.ts", "dist/generated.js"],
+  );
 });
 
 test("empty quick open puts repository-scoped recent files first", () => {

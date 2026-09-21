@@ -4,6 +4,7 @@ import type { HistoryPath, HistoryRef, ProjectFile, RepositorySnapshot } from ".
 import { branchKey, historyPathKey } from "./history-identity.ts";
 import {
   historyPathChildren,
+  historyPathRootChildren,
   type HistoryPathCandidate,
 } from "./history-path-selection.ts";
 
@@ -64,8 +65,9 @@ function renderPathTextDialog(model: HistoryDialogViewModel): string {
 function renderPathTreeDialog(model: HistoryDialogViewModel): string {
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.history;
+  const rootChildren = historyPathRootChildren(model.files);
   const roots = model.snapshot.repositoryRoots.map((root) => {
-    const children = historyPathChildren(model.files, root.id);
+    const children = rootChildren.get(root.id) ?? [];
     return `<section class="history-path-tree-root"><h3>${icon("folder", 14)}${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${children.length > 0 ? children.map((node) => renderPathTreeNode(node, 0, model)).join("") : `<div class="history-dialog-empty">${escapeHtml(copy.noTrackedPaths)}</div>`}</section>`;
   }).join("");
   return `<section class="dialog history-selection-dialog history-path-tree-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">${heading(copy.selectPathsToFilter, localization)}<div class="history-path-tree" role="tree" aria-label="${escapeAttribute(copy.trackedRepositoryPaths)}">${roots}</div><div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-clear>${escapeHtml(copy.clear)}</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-history-dialog-cancel>${escapeHtml(localization.catalog.common.cancel)}</button><button class="primary-button" type="button" data-history-dialog-apply>${escapeHtml(copy.applyCount(localization.number.format(model.pathDraft.size)))}</button></div></section>`;

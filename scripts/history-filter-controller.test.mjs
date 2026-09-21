@@ -4,7 +4,10 @@ import test from "node:test";
 import {
   HistoryFilterController,
 } from "../src/features/git-history/history-filter-controller.ts";
-import { historyPathChildren } from "../src/features/git-history/history-path-selection.ts";
+import {
+  historyPathChildren,
+  historyPathRootChildren,
+} from "../src/features/git-history/history-path-selection.ts";
 
 test("history filter controller owns query normalization and repository reconciliation", () => {
   const controller = new HistoryFilterController(memoryStorage());
@@ -168,6 +171,12 @@ test("history path tree projects only the requested level", () => {
     { path: "src/features", directory: true },
     { path: "src/index.ts", directory: false },
   ]);
+  assert.deepEqual(
+    [...historyPathRootChildren([...files, {
+      repositoryId: "nested", path: "module.rs", workspacePath: "vendor/module.rs",
+    }]).keys()],
+    [".", "nested"],
+  );
 });
 
 function snapshot() {

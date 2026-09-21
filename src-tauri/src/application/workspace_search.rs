@@ -5,7 +5,7 @@ use asterlyn_workspace::{
     SearchSkipReason, Workspace, WorkspaceError,
 };
 
-use super::workspace_catalog::load_authorized_project_catalog;
+use super::workspace_catalog::{load_authorized_project_catalog, load_project_catalog};
 
 const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 5_000;
 
@@ -43,6 +43,7 @@ pub(crate) struct WorkspaceTextSearchMatch {
     pub(crate) repository_id: String,
     pub(crate) path: String,
     pub(crate) workspace_path: String,
+    pub(crate) read_only: bool,
     pub(crate) revision: String,
     pub(crate) from_utf16: usize,
     pub(crate) to_utf16: usize,
@@ -71,7 +72,11 @@ pub(crate) fn search_authorized_workspace(
     options: &SearchOptions,
     cancellation: &SearchCancellationToken,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
-    let catalog = load_authorized_project_catalog(root)?;
+    let catalog = if options.exclude_ignored {
+        load_authorized_project_catalog(root)?
+    } else {
+        load_project_catalog(root)?
+    };
     if cancellation.is_cancelled() {
         return Err(WorkspaceError::Cancelled {
             message: "workspace search was cancelled".to_string(),
@@ -110,6 +115,7 @@ pub(crate) fn search_authorized_workspace(
                 repository_id: file.repository_id.clone(),
                 path: file.path.clone(),
                 workspace_path: found.workspace_path,
+                read_only: file.read_only,
                 revision: found.revision,
                 from_utf16: found.from_utf16,
                 to_utf16: found.to_utf16,

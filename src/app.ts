@@ -299,6 +299,7 @@ import {
 } from "./features/changes-commit/change-presentation";
 import {
   loadRecentFilesFromIndex,
+  ProjectFileSearchCatalog,
   ProjectFileSearchIndex,
   rankCommands,
   touchRecentFile,
@@ -307,6 +308,7 @@ import {
 } from "./features/files-editor/navigation";
 import { evaluateSearchNavigation } from "./features/files-editor/search-navigation";
 import type { WorkspaceSearchControls } from "./features/files-editor/workspace-search";
+import { bindWorkspaceSearchOptionControls } from "./features/files-editor/workspace-search-binding";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
@@ -368,8 +370,7 @@ export class AsterlynApp {
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
-  private commandSurfaceCatalog: readonly ProjectFile[] | null = null;
-  private commandSurfaceFileIndex: ProjectFileSearchIndex | null = null;
+  private readonly commandSurfaceSearchCatalog = new ProjectFileSearchCatalog();
   private commandSurfaceFiles: readonly ProjectFile[] = [];
   private commandSurfaceCommands: readonly NavigationCommand[] = [];
   private commandSurfaceResultsFrame: number | null = null;
@@ -1431,11 +1432,9 @@ export class AsterlynApp {
   private handleProjectFilesChange(change: ProjectFilesChange): void {
     if (change.reason === "refresh-start" && this.filesState.files.length > 0) return;
     if (change.reason === "refresh-complete" && !change.catalogChanged) return;
-    const navigationCatalogChanged = change.catalogChanged &&
-      this.commandSurfaceCatalog !== this.filesState.files;
+    const navigationCatalogChanged = change.catalogChanged;
     if (navigationCatalogChanged) {
-      this.commandSurfaceCatalog = null;
-      this.commandSurfaceFileIndex = null;
+      this.commandSurfaceSearchCatalog.invalidate();
       this.commandSurfaceFiles = [];
     }
     if (
@@ -2368,16 +2367,11 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("[data-command-surface-close]")
       ?.addEventListener("click", () => this.dismissCommandSurface());
-    this.root
-      .querySelector<HTMLButtonElement>("#workspace-search-mode")
-      ?.addEventListener("click", () => {
-        const controls = this.filesEditorRuntime.search.state.controls;
-        const mode = controls.mode === "literal" ? "regex" : "literal";
-        this.updateWorkspaceSearchControls(
-          { ...controls, mode },
-          "workspace-search-mode",
-        );
-      });
+    bindWorkspaceSearchOptionControls(
+      this.root,
+      () => this.filesEditorRuntime.search.state.controls,
+      (controls, target) => this.updateWorkspaceSearchControls(controls, target),
+    );
     for (const field of ["include", "exclude"] as const) {
       const id = `workspace-search-${field}`;
       this.root.querySelector<HTMLInputElement>(`#${id}`)?.addEventListener("input", (event) => {
@@ -2566,12 +2560,8 @@ export class AsterlynApp {
   }
 
   private projectFileSearchIndex(): ProjectFileSearchIndex {
-    const files = this.filesState.files;
-    if (this.commandSurfaceCatalog !== files || !this.commandSurfaceFileIndex) {
-      this.commandSurfaceCatalog = files;
-      this.commandSurfaceFileIndex = new ProjectFileSearchIndex(files);
-    }
-    return this.commandSurfaceFileIndex;
+    const includeIgnored = !this.filesEditorRuntime.search.state.controls.excludeIgnored;
+    return this.commandSurfaceSearchCatalog.resolve(this.filesState.files, includeIgnored);
   }
 
   private visibleNavigationCommands(): NavigationCommand[] {

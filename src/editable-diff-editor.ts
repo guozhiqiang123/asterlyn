@@ -2,6 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import { MergeView, goToNextChunk, goToPreviousChunk, unifiedMergeView } from "@codemirror/merge";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
+import { asterlynSearch } from "./editor-search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   drawSelection,
@@ -319,6 +320,7 @@ export class EditableDiffEditor {
       drawSelection(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
+      asterlynSearch(),
       highlightSelectionMatches(),
       asterlynSyntaxHighlighting,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),

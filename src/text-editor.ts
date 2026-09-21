@@ -5,6 +5,7 @@ import {
 } from "@codemirror/commands";
 import { foldGutter, foldKeymap, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
+import { asterlynSearch } from "./editor-search";
 import { Compartment, EditorState, type TransactionSpec } from "@codemirror/state";
 import {
   drawSelection,
@@ -428,6 +429,7 @@ export class TextEditor {
         drawSelection(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
+        asterlynSearch(),
         highlightSelectionMatches(),
         theme.of(asterlynEditorTheme(this.themeValue)),
         phrases.of(EditorState.phrases.of(this.phrasesValue)),

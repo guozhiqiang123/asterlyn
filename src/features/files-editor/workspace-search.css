@@ -1,4 +1,34 @@
 /* Workspace search and recoverable replacement presentation. */
+.command-surface-ignore-filter {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 0 6px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.command-surface-ignore-filter input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.command-surface-input .search-option-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.command-surface.workspace-mode .command-surface-input {
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+}
+
 .workspace-search-mode {
   min-width: 28px;
   height: 24px;
@@ -9,6 +39,12 @@
   color: var(--text-faint);
   cursor: pointer;
   font: 10px/1 ui-monospace, monospace;
+}
+
+.search-option-strip .workspace-search-mode {
+  min-width: 24px;
+  height: 23px;
+  padding: 0 4px;
 }
 
 .workspace-search-mode:hover,

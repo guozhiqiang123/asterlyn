@@ -2,6 +2,13 @@ import { invokeDesktopCommand as invoke, isTauriRuntime, openDialog } from
   "../tauri/desktop-command-adapter";
 import { tauriDesktopBridge } from "../tauri/tauri-desktop-bridge";
 import { compileDemoGlobs } from "./demo-glob";
+import {
+  demoDecodeSearchEscapes,
+  demoDocumentSearchPreview,
+  demoPatternRanges,
+  demoSearchPreview,
+  safePrefixUtf16,
+} from "./demo-text-search";
 import { demoWorkingDiffBase } from "./demo-working-diff.ts";
 import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
 import {
@@ -1979,10 +1986,13 @@ function demoWorkspaceSearch(
   }
   const include = compileDemoGlobs("include", options.includeGlobs, encoder);
   const exclude = compileDemoGlobs("exclude", options.excludeGlobs, encoder);
-  const regularExpression = options.mode === "regex" ? demoCompileRegex(query) : null;
-  const entries = Array.from(demoTextFiles.entries()).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
+  const effectiveQuery = options.newLine && options.mode === "literal"
+    ? demoDecodeSearchEscapes(query)
+    : query;
+  const ignoredPaths = new Set(browserGitEnabled ? [".cache/session.json", "local.settings"] : []);
+  const entries = Array.from(demoTextFiles.entries())
+    .filter(([path]) => !options.excludeIgnored || !ignoredPaths.has(path))
+    .sort(([left], [right]) => left.localeCompare(right));
   const eligible = entries.filter(([path]) =>
     (include.length === 0 || include.some((pattern) => pattern.test(path))) &&
     !exclude.some((pattern) => pattern.test(path)),
@@ -1995,11 +2005,37 @@ function demoWorkspaceSearch(
     const lines = normalized.split("\n");
     bytesRead += encoder.encode(file.content).length;
     filesSearched += 1;
+    if (options.newLine) {
+      for (const [from, to] of demoPatternRanges(normalized, effectiveQuery, options)) {
+        const prefix = normalized.slice(0, from);
+        const lineIndex = (prefix.match(/\n/gu) ?? []).length;
+        const lineStart = prefix.lastIndexOf("\n") + 1;
+        const preview = demoDocumentSearchPreview(normalized, from, to);
+        matches.push({
+          repositoryId: browserGitEnabled ? "." : "workspace",
+          path,
+          workspacePath: path,
+          readOnly: ignoredPaths.has(path),
+          revision: demoTextRevision(path, file),
+          fromUtf16: from,
+          toUtf16: to,
+          line: lineIndex + 1,
+          columnUtf16: from - lineStart + 1,
+          preview: preview.text,
+          previewFromUtf16: preview.from,
+          previewToUtf16: preview.to,
+          leadingClipped: preview.leadingClipped,
+          trailingClipped: preview.trailingClipped,
+        });
+        if (matches.length === 500) {
+          return demoSearchReport(requestId, matches, entries.length, eligible.length, filesSearched, bytesRead, ["matchLimit"]);
+        }
+      }
+      continue;
+    }
     let documentOffset = 0;
     for (const [lineIndex, line] of lines.entries()) {
-      const ranges = regularExpression
-        ? demoRegexRanges(regularExpression, line)
-        : demoLiteralRanges(query, line);
+      const ranges = demoPatternRanges(line, effectiveQuery, options);
       for (const [fromInLine, toInLine] of ranges) {
         const preview = demoSearchPreview(
           lines,
@@ -2012,6 +2048,7 @@ function demoWorkspaceSearch(
           repositoryId: browserGitEnabled ? "." : "workspace",
           path,
           workspacePath: path,
+          readOnly: ignoredPaths.has(path),
           revision: demoTextRevision(path, file),
           fromUtf16: documentOffset + fromInLine,
           toUtf16: documentOffset + toInLine,
@@ -2077,6 +2114,12 @@ function demoReplacementPreview(
   replacement: string,
   options: WorkspaceTextSearchOptions,
 ): WorkspaceReplacementPreview {
+  if (options.newLine || !options.excludeIgnored) {
+    throw {
+      kind: "invalidReplacement",
+      message: "Replacement is read-only while New line search or ignored files are enabled.",
+    };
+  }
   if (new TextEncoder().encode(replacement).length > 16 * 1024 || replacement.includes("\0")) {
     throw {
       kind: "invalidReplacement",
@@ -2100,7 +2143,7 @@ function demoReplacementPreview(
   for (const [workspacePath, matchCount] of matchesByPath) {
     const file = demoTextFiles.get(workspacePath);
     if (!file) continue;
-    const replacementContent = demoReplaceLineLocal(file.content, query, replacement, options.mode);
+    const replacementContent = demoReplaceLineLocal(file.content, query, replacement, options);
     if (replacementContent === file.content) continue;
     const [beforePreview, afterPreview] = demoChangePreview(file.content, replacementContent);
     files.push({
@@ -2239,16 +2282,22 @@ function demoReplaceLineLocal(
   content: string,
   query: string,
   replacement: string,
-  mode: WorkspaceTextSearchOptions["mode"],
+  options: WorkspaceTextSearchOptions,
 ): string {
   const separator = demoDominantSeparator(content);
   const inserted = replacement.replace(/\r\n?|\n/gu, "\n").replaceAll("\n", separator);
   const parts = content.split(/(\r\n|\r|\n)/u);
-  const expression = mode === "regex" ? demoCompileRegex(query) : null;
   return parts
     .map((part, index) => {
       if (index % 2 === 1) return part;
-      return expression ? part.replace(expression, inserted) : part.split(query).join(inserted);
+      const ranges = demoPatternRanges(part, query, options);
+      let cursor = 0;
+      let output = "";
+      for (const [from, to] of ranges) {
+        output += `${part.slice(cursor, from)}${inserted}`;
+        cursor = to;
+      }
+      return `${output}${part.slice(cursor)}`;
     })
     .join("");
 }
@@ -2273,103 +2322,4 @@ function demoChangePreview(before: string, after: string): [string, string] {
     return text.length > 320 ? `${safePrefixUtf16(text, 320)}…` : text;
   };
   return [line(before), line(after)];
-}
-
-function demoCompileRegex(query: string): RegExp {
-  let source = query;
-  let flags = "gu";
-  if (source.startsWith("(?i)")) {
-    source = source.slice(4);
-    flags += "i";
-  }
-  try {
-    return new RegExp(source, flags);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw {
-      kind: "invalidSearch",
-      message: detail.toLocaleLowerCase().startsWith("invalid regular expression")
-        ? detail
-        : `Invalid regular expression: ${detail}`,
-    };
-  }
-}
-
-function demoRegexRanges(expression: RegExp, line: string): Array<[number, number]> {
-  expression.lastIndex = 0;
-  const ranges: Array<[number, number]> = [];
-  let found: RegExpExecArray | null;
-  while ((found = expression.exec(line)) !== null) {
-    ranges.push([found.index, found.index + found[0].length]);
-    if (found[0].length === 0) expression.lastIndex = nextUnicodeOffset(line, expression.lastIndex);
-  }
-  return ranges;
-}
-
-function nextUnicodeOffset(value: string, offset: number): number {
-  if (offset >= value.length) return value.length + 1;
-  const code = value.codePointAt(offset);
-  return offset + (code !== undefined && code > 0xffff ? 2 : 1);
-}
-
-function demoLiteralRanges(query: string, line: string): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
-  let cursor = 0;
-  while (cursor <= line.length - query.length) {
-    const from = line.indexOf(query, cursor);
-    if (from < 0) break;
-    ranges.push([from, from + query.length]);
-    cursor = from + query.length;
-  }
-  return ranges;
-}
-
-function demoSearchPreview(
-  lines: string[],
-  lineIndex: number,
-  fromInLine: number,
-  toInLine: number,
-  contextLines: number,
-): { text: string; from: number; to: number; leadingClipped: boolean; trailingClipped: boolean } {
-  const firstLine = Math.max(0, lineIndex - contextLines);
-  const lastLine = Math.min(lines.length - 1, lineIndex + contextLines);
-  const beforeMatch = lines
-    .slice(firstLine, lineIndex)
-    .reduce((length, line) => length + line.length + 1, 0);
-  const window = lines.slice(firstLine, lastLine + 1).join("\n");
-  const from = beforeMatch + fromInLine;
-  const to = beforeMatch + toInLine;
-  const matched = window.slice(from, to);
-  if (matched.length > 320) {
-    const visible = safePrefixUtf16(matched, 320);
-    return {
-      text: visible,
-      from: 0,
-      to: visible.length,
-      leadingClipped: from > 0,
-      trailingClipped: true,
-    };
-  }
-  const context = 320 - matched.length;
-  const before = safeSuffixUtf16(window.slice(0, from), Math.floor(context / 2));
-  const after = safePrefixUtf16(window.slice(to), context - before.length);
-  return {
-    text: `${before}${matched}${after}`,
-    from: before.length,
-    to: before.length + matched.length,
-    leadingClipped: before.length < from,
-    trailingClipped: after.length < window.length - to,
-  };
-}
-
-function safePrefixUtf16(value: string, limit: number): string {
-  let end = Math.min(value.length, limit);
-  if (end > 0 && end < value.length && /[\uD800-\uDBFF]/u.test(value[end - 1]!)) end -= 1;
-  return value.slice(0, end);
-}
-
-function safeSuffixUtf16(value: string, limit: number): string {
-  let start = Math.max(0, value.length - limit);
-  if (start > 0 && start < value.length && /[\uDC00-\uDFFF]/u.test(value[start]!)) start += 1;
-  return value.slice(start);
 }

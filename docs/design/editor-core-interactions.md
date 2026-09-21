@@ -82,6 +82,12 @@ The complete evidence is recorded in [`E2.3 recoverable workspace-replacement ev
 
 No package or remote publication is produced for this sub-slice. E3 editor groups and preferences is next. Broad language-catalog packaging, normalized native resources, and installed Windows/macOS interaction remain open for the larger Stage 3 checkpoint.
 
+### Search-control unification — 2026-09-21
+
+Active-buffer search and Find in Files now expose the same embedded `New line`, `Match case`, `Whole words`, and `Regex` vocabulary. The shared CodeMirror panel is installed in the ordinary editor, editable working Diff, read-only historical Diff, and every conflict-editor pane. Read-only panes retain navigation and selection but omit replacement. The control state remains editor-local and transient; it does not become project or repository state.
+
+Find in Files carries all four options through its cancellable request identity and native bounded-search contract. New line operates on the newline-normalized document and makes replacement read-only. The Quick Open header also exposes a default-on Git-ignore filter across Files, Recent, Text, and Commands. Turning it off permits bounded navigation and text search of catalogued ignored files, but those identities remain read-only and replacement is rejected at both the presentation and workspace boundaries. This extends [`ADR-0005`](../architecture/decisions/0005-bounded-navigation-search.md) without adding an index, startup scan, or new mutation authority.
+
 ### E3 — Editor groups and preferences
 
 E3 is split into four independently reversible slices so a settings shell does not imply that every future preference already works:

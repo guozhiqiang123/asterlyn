@@ -62,29 +62,59 @@ export function historyPathChildren(
   const candidates = new Map<string, HistoryPathCandidate>();
   for (const file of files) {
     if (file.repositoryId !== repositoryId || !file.path.startsWith(prefix)) continue;
-    const remainder = file.path.slice(prefix.length);
-    if (!remainder) continue;
-    const separator = remainder.indexOf("/");
-    const name = separator < 0 ? remainder : remainder.slice(0, separator);
-    const path = parentPath ? `${parentPath}/${name}` : name;
-    const key = historyPathKey({ repositoryId, path });
-    const directory = separator >= 0;
-    const existing = candidates.get(key);
-    if (existing?.directory) continue;
-    const workspacePrefix = file.workspacePath.slice(
-      0,
-      file.workspacePath.length - file.path.length,
-    );
-    candidates.set(key, {
-      repositoryId,
-      path,
-      workspacePath: `${workspacePrefix}${path}`,
-      directory,
-    });
+    const candidate = historyPathChild(file, parentPath);
+    if (candidate) retainHistoryPathCandidate(candidates, candidate);
   }
+  return sortedHistoryPathCandidates(candidates);
+}
+
+/** Projects the first level for every repository in one bounded catalog pass. */
+export function historyPathRootChildren(
+  files: readonly ProjectFile[],
+): ReadonlyMap<string, readonly HistoryPathCandidate[]> {
+  const byRepository = new Map<string, Map<string, HistoryPathCandidate>>();
+  for (const file of files) {
+    const candidates = byRepository.get(file.repositoryId) ?? new Map();
+    byRepository.set(file.repositoryId, candidates);
+    const candidate = historyPathChild(file, "");
+    if (candidate) retainHistoryPathCandidate(candidates, candidate);
+  }
+  return new Map(Array.from(byRepository, ([repositoryId, candidates]) => [
+    repositoryId,
+    sortedHistoryPathCandidates(candidates),
+  ]));
+}
+
+function historyPathChild(file: ProjectFile, parentPath: string): HistoryPathCandidate | null {
+  const prefix = parentPath ? `${parentPath}/` : "";
+  const remainder = file.path.slice(prefix.length);
+  if (!remainder) return null;
+  const separator = remainder.indexOf("/");
+  const name = separator < 0 ? remainder : remainder.slice(0, separator);
+  const path = parentPath ? `${parentPath}/${name}` : name;
+  const workspacePrefix = file.workspacePath.slice(0, file.workspacePath.length - file.path.length);
+  return {
+    repositoryId: file.repositoryId,
+    path,
+    workspacePath: `${workspacePrefix}${path}`,
+    directory: separator >= 0,
+  };
+}
+
+function retainHistoryPathCandidate(
+  candidates: Map<string, HistoryPathCandidate>,
+  candidate: HistoryPathCandidate,
+): void {
+  const key = historyPathKey(candidate);
+  if (!candidates.get(key)?.directory) candidates.set(key, candidate);
+}
+
+function sortedHistoryPathCandidates(
+  candidates: ReadonlyMap<string, HistoryPathCandidate>,
+): HistoryPathCandidate[] {
   return Array.from(candidates.values()).sort((left, right) =>
     Number(right.directory) - Number(left.directory) ||
-    left.workspacePath.localeCompare(right.workspacePath),
+    left.workspacePath.localeCompare(right.workspacePath)
   );
 }
 

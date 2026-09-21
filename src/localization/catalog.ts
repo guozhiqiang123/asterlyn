@@ -225,6 +225,8 @@ export interface NavigationCopy {
   close: string;
   useRegularExpressions: string;
   regularExpression: string;
+  searchOptions: string; newLine: string; matchCase: string; words: string;
+  filterIgnoredFiles: string;
   enter: string;
   enterToSearch: string;
   navigate: string;
@@ -239,6 +241,7 @@ export interface NavigationCopy {
   replace: string;
   replacementText: string;
   previewReplace: string;
+  replacementRequiresIgnoredFilter: string;
   reviewRecoveries(count: number): string;
   recoveryRecords(count: number): string;
   noMatchingCommands: string;

@@ -469,10 +469,22 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   });
 
   assert.match(commandHtml, /Search project files/);
+  assert.match(commandHtml, /id="command-surface-exclude-ignored"[^>]*checked/);
+  assert.doesNotMatch(commandHtml, /data-workspace-search-option/);
   assert.match(commandHtml, /app\.ts/);
   assert.match(commandHtml, /<small>src<\/small>/);
   assert.match(replacementHtml, /Replacement preview unavailable/);
   assert.match(replacementHtml, /Preview expired/);
+
+  const textSearchHtml = renderCommandSurface({
+    commandSurface: openCommandSurface(createCommandSurfaceState(), "workspace"),
+    workspaceOpen: true,
+    filesLoading: false,
+    files: [], commands: [], workspaceSearch: createWorkspaceSearchState(),
+    workspaceSearchControls: createWorkspaceSearchControls(), searchRequestIsCurrent: false,
+    replacementText: "", replacementRecoveryCount: 0,
+  });
+  assert.equal((textSearchHtml.match(/data-workspace-search-option/g) ?? []).length, 4);
 });
 
 test("editor chrome renders tabs, Markdown modes, menu, and Diff controls independently", () => {

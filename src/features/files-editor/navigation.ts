@@ -158,6 +158,27 @@ export class ProjectFileSearchIndex {
   }
 }
 
+export class ProjectFileSearchCatalog {
+  private files: readonly ProjectFile[] | null = null;
+  private includesIgnored = false;
+  private index: ProjectFileSearchIndex | null = null;
+
+  resolve(files: readonly ProjectFile[], includeIgnored: boolean): ProjectFileSearchIndex {
+    if (this.files !== files || this.includesIgnored !== includeIgnored || !this.index) {
+      const searchable = includeIgnored ? files : files.filter((file) => file.readOnly !== true);
+      this.files = files;
+      this.includesIgnored = includeIgnored;
+      this.index = new ProjectFileSearchIndex(searchable);
+    }
+    return this.index;
+  }
+
+  invalidate(): void {
+    this.files = null;
+    this.index = null;
+  }
+}
+
 export function projectFileKey(
   file: Pick<ProjectFile, "repositoryId" | "path">,
 ): string {

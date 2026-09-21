@@ -632,7 +632,7 @@
 .command-surface-close {
   width: 28px;
   height: 28px;
-  margin: 2px 0 0 auto;
+  margin: 2px 0 0;
 }
 
 .command-surface-input {

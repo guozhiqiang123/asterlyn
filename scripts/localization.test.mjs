@@ -61,7 +61,10 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
     files: [],
     commands: [{ id: "refresh", label: catalog.navigation.commands.refresh.label, detail: catalog.navigation.commands.refresh.detail, enabled: true }],
     workspaceSearch: { generation: 0, status: "idle", request: null, report: null, error: null },
-    workspaceSearchControls: { mode: "literal", includeText: "", excludeText: "", contextLines: 0 },
+    workspaceSearchControls: {
+      mode: "literal", newLine: false, caseSensitive: false, wholeWord: false,
+      excludeIgnored: true, includeText: "", excludeText: "", contextLines: 0,
+    },
     searchRequestIsCurrent: false,
     replacementText: "",
     replacementRecoveryCount: 0,

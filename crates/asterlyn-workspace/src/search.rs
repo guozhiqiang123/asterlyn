@@ -48,13 +48,32 @@ pub enum SearchMode {
     Regex,
 }
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SearchOptions {
     pub mode: SearchMode,
+    pub new_line: bool,
+    pub case_sensitive: bool,
+    pub whole_word: bool,
+    pub exclude_ignored: bool,
     pub include_globs: Vec<String>,
     pub exclude_globs: Vec<String>,
     pub context_lines: usize,
+}
+
+impl Default for SearchOptions {
+    fn default() -> Self {
+        Self {
+            mode: SearchMode::Literal,
+            new_line: false,
+            case_sensitive: false,
+            whole_word: false,
+            exclude_ignored: true,
+            include_globs: Vec::new(),
+            exclude_globs: Vec::new(),
+            context_lines: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,7 +195,20 @@ impl Workspace {
         validate_search(request_id, query, options, limits)?;
         check_cancelled(cancellation)?;
         let path_filters = PathFilters::compile(options, cancellation)?;
-        let matcher = SearchMatcher::compile(query, options.mode, cancellation, limits)?;
+        let effective_query = if options.new_line && options.mode == SearchMode::Literal {
+            decode_search_escapes(query)
+        } else {
+            query.to_string()
+        };
+        let matcher = SearchMatcher::compile(
+            &effective_query,
+            options.mode,
+            options.case_sensitive,
+            options.whole_word,
+            options.new_line,
+            cancellation,
+            limits,
+        )?;
         let eligible_candidates = if path_filters.is_empty() {
             candidates.len()
         } else {
@@ -313,17 +345,30 @@ impl Workspace {
             report.files_searched += 1;
             let normalized = normalize_newlines(content);
             let source_revision = revision(&bytes, &metadata);
-            if append_matches(
-                &mut report,
-                candidate_index,
-                candidate,
-                &source_revision,
-                &normalized,
-                &matcher,
-                options.context_lines,
-                cancellation,
-                limits,
-            )? {
+            if (if options.new_line {
+                append_document_matches(
+                    &mut report,
+                    candidate_index,
+                    candidate,
+                    &source_revision,
+                    &normalized,
+                    &matcher,
+                    cancellation,
+                    limits,
+                )
+            } else {
+                append_matches(
+                    &mut report,
+                    candidate_index,
+                    candidate,
+                    &source_revision,
+                    &normalized,
+                    &matcher,
+                    options.context_lines,
+                    cancellation,
+                    limits,
+                )
+            })? {
                 push_coverage(&mut report, SearchCoverageReason::MatchLimit);
                 break;
             }
@@ -350,7 +395,8 @@ fn validate_search(
         });
     }
     if query.is_empty()
-        || query.contains(['\0', '\r', '\n'])
+        || query.contains('\0')
+        || (!options.new_line && query.contains(['\r', '\n']))
         || query.len() > limits.max_query_bytes
     {
         return Err(WorkspaceError::InvalidSearch {
@@ -405,7 +451,7 @@ fn append_matches(
     candidate: &SearchCandidate,
     source_revision: &str,
     normalized: &str,
-    matcher: &SearchMatcher<'_>,
+    matcher: &SearchMatcher,
     context_lines: usize,
     cancellation: &SearchCancellationToken,
     limits: SearchLimits,
@@ -454,20 +500,89 @@ fn append_matches(
     Ok(false)
 }
 
-enum SearchMatcher<'query> {
-    Literal(&'query str),
-    Regex(Regex),
+#[allow(clippy::too_many_arguments)]
+fn append_document_matches(
+    report: &mut WorkspaceSearchReport,
+    candidate_index: usize,
+    candidate: &SearchCandidate,
+    source_revision: &str,
+    normalized: &str,
+    matcher: &SearchMatcher,
+    cancellation: &SearchCancellationToken,
+    limits: SearchLimits,
+) -> Result<bool, WorkspaceError> {
+    let remaining = limits.max_matches.saturating_sub(report.matches.len());
+    let ranges = matcher.ranges(normalized, cancellation, remaining.saturating_add(1))?;
+    let mut previous_byte = 0;
+    let mut previous_utf16 = 0;
+    let mut line_index = 0;
+    let mut line_start = 0;
+    for (from_byte, to_byte) in ranges {
+        if report.matches.len() == limits.max_matches {
+            return Ok(true);
+        }
+        check_cancelled(cancellation)?;
+        while let Some(relative) = normalized[line_start..from_byte].find('\n') {
+            line_start += relative + 1;
+            line_index += 1;
+        }
+        let from_utf16 =
+            previous_utf16 + normalized[previous_byte..from_byte].encode_utf16().count();
+        let match_utf16 = normalized[from_byte..to_byte].encode_utf16().count();
+        let found_preview = preview(normalized, from_byte, to_byte, limits.max_preview_utf16);
+        report.matches.push(WorkspaceSearchMatch {
+            candidate_index,
+            workspace_path: candidate.workspace_path.clone(),
+            revision: source_revision.to_string(),
+            from_utf16,
+            to_utf16: from_utf16 + match_utf16,
+            line: line_index + 1,
+            column_utf16: normalized[line_start..from_byte].encode_utf16().count() + 1,
+            preview: found_preview.text,
+            preview_from_utf16: found_preview.from_utf16,
+            preview_to_utf16: found_preview.to_utf16,
+            leading_clipped: found_preview.leading_clipped,
+            trailing_clipped: found_preview.trailing_clipped,
+        });
+        previous_byte = to_byte;
+        previous_utf16 = from_utf16 + match_utf16;
+    }
+    Ok(false)
+}
+
+enum SearchMatcher {
+    Literal(String),
+    Regex {
+        expression: Regex,
+        whole_word: bool,
+        expand_captures: bool,
+    },
 }
 
 pub(crate) fn replace_text_line_local(
     content: &str,
     query: &str,
     replacement: &str,
-    mode: SearchMode,
+    options: &SearchOptions,
     cancellation: &SearchCancellationToken,
     limits: SearchLimits,
 ) -> Result<(String, usize), WorkspaceError> {
-    let matcher = SearchMatcher::compile(query, mode, cancellation, limits)?;
+    if options.new_line {
+        return Err(WorkspaceError::InvalidReplacement {
+            message:
+                "multi-line search is read-only; turn off New line before previewing replacement"
+                    .to_string(),
+        });
+    }
+    let matcher = SearchMatcher::compile(
+        query,
+        options.mode,
+        options.case_sensitive,
+        options.whole_word,
+        false,
+        cancellation,
+        limits,
+    )?;
     let normalized_replacement = replacement.replace("\r\n", "\n").replace('\r', "\n");
     let separator = dominant_separator(content);
     let file_replacement = normalized_replacement.replace('\n', separator);
@@ -476,20 +591,9 @@ pub(crate) fn replace_text_line_local(
 
     for line in source_lines(content) {
         check_cancelled(cancellation)?;
-        match &matcher {
-            SearchMatcher::Literal(literal) => {
-                let ranges = literal_ranges(line.text, literal, cancellation, usize::MAX)?;
-                match_count += ranges.len();
-                output.push_str(&line.text.replace(literal, &file_replacement));
-            }
-            SearchMatcher::Regex(expression) => {
-                for _ in expression.find_iter(line.text) {
-                    check_cancelled(cancellation)?;
-                    match_count += 1;
-                }
-                output.push_str(&expression.replace_all(line.text, file_replacement.as_str()));
-            }
-        }
+        let (replaced, count) = matcher.replace_all(line.text, &file_replacement, cancellation)?;
+        match_count += count;
+        output.push_str(&replaced);
         output.push_str(line.separator);
     }
     check_cancelled(cancellation)?;
@@ -561,26 +665,54 @@ fn dominant_separator(content: &str) -> &'static str {
     }
 }
 
-impl<'query> SearchMatcher<'query> {
+impl SearchMatcher {
     fn compile(
-        query: &'query str,
+        query: &str,
         mode: SearchMode,
+        case_sensitive: bool,
+        whole_word: bool,
+        new_line: bool,
         cancellation: &SearchCancellationToken,
         limits: SearchLimits,
     ) -> Result<Self, WorkspaceError> {
         check_cancelled(cancellation)?;
         let matcher = match mode {
-            SearchMode::Literal => Self::Literal(query),
+            SearchMode::Literal if case_sensitive && !whole_word => {
+                Self::Literal(query.to_string())
+            }
+            SearchMode::Literal => {
+                let expression = RegexBuilder::new(&regex::escape(query))
+                    .unicode(true)
+                    .case_insensitive(!case_sensitive)
+                    .dot_matches_new_line(new_line)
+                    .size_limit(limits.max_regex_size_bytes)
+                    .dfa_size_limit(limits.max_regex_dfa_size_bytes)
+                    .build()
+                    .map_err(|error| WorkspaceError::InvalidSearch {
+                        message: format!("invalid literal search: {error}"),
+                    })?;
+                Self::Regex {
+                    expression,
+                    whole_word,
+                    expand_captures: false,
+                }
+            }
             SearchMode::Regex => {
                 let expression = RegexBuilder::new(query)
                     .unicode(true)
+                    .case_insensitive(!case_sensitive)
+                    .dot_matches_new_line(new_line)
                     .size_limit(limits.max_regex_size_bytes)
                     .dfa_size_limit(limits.max_regex_dfa_size_bytes)
                     .build()
                     .map_err(|error| WorkspaceError::InvalidSearch {
                         message: format!("invalid regular expression: {error}"),
                     })?;
-                Self::Regex(expression)
+                Self::Regex {
+                    expression,
+                    whole_word,
+                    expand_captures: true,
+                }
             }
         };
         check_cancelled(cancellation)?;
@@ -595,10 +727,17 @@ impl<'query> SearchMatcher<'query> {
     ) -> Result<Vec<(usize, usize)>, WorkspaceError> {
         match self {
             Self::Literal(query) => literal_ranges(line, query, cancellation, max_ranges),
-            Self::Regex(expression) => {
+            Self::Regex {
+                expression,
+                whole_word,
+                ..
+            } => {
                 let mut ranges = Vec::new();
                 for found in expression.find_iter(line) {
                     check_cancelled(cancellation)?;
+                    if *whole_word && !whole_word_match(line, found.start(), found.end()) {
+                        continue;
+                    }
                     ranges.push((found.start(), found.end()));
                     if ranges.len() == max_ranges {
                         break;
@@ -609,6 +748,99 @@ impl<'query> SearchMatcher<'query> {
             }
         }
     }
+
+    fn replace_all(
+        &self,
+        text: &str,
+        replacement: &str,
+        cancellation: &SearchCancellationToken,
+    ) -> Result<(String, usize), WorkspaceError> {
+        let mut output = String::with_capacity(text.len());
+        let mut cursor = 0;
+        let mut count = 0;
+        match self {
+            Self::Literal(query) => {
+                for (from, to) in literal_ranges(text, query, cancellation, usize::MAX)? {
+                    output.push_str(&text[cursor..from]);
+                    output.push_str(replacement);
+                    cursor = to;
+                    count += 1;
+                }
+            }
+            Self::Regex {
+                expression,
+                whole_word,
+                expand_captures,
+            } => {
+                for captures in expression.captures_iter(text) {
+                    check_cancelled(cancellation)?;
+                    let found = captures
+                        .get(0)
+                        .expect("regex capture zero is always present");
+                    if *whole_word && !whole_word_match(text, found.start(), found.end()) {
+                        continue;
+                    }
+                    output.push_str(&text[cursor..found.start()]);
+                    if *expand_captures {
+                        captures.expand(replacement, &mut output);
+                    } else {
+                        output.push_str(replacement);
+                    }
+                    cursor = found.end();
+                    count += 1;
+                }
+            }
+        }
+        output.push_str(&text[cursor..]);
+        Ok((output, count))
+    }
+}
+
+fn whole_word_match(text: &str, from: usize, to: usize) -> bool {
+    let matched = &text[from..to];
+    let first_is_word = matched.chars().next().is_some_and(is_word_character);
+    let last_is_word = matched.chars().next_back().is_some_and(is_word_character);
+    (!first_is_word
+        || !text[..from]
+            .chars()
+            .next_back()
+            .is_some_and(is_word_character))
+        && (!last_is_word || !text[to..].chars().next().is_some_and(is_word_character))
+}
+
+fn is_word_character(character: char) -> bool {
+    character == '_' || character.is_alphanumeric()
+}
+
+fn decode_search_escapes(query: &str) -> String {
+    let mut decoded = String::with_capacity(query.len());
+    let mut characters = query.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character != '\\' {
+            decoded.push(character);
+            continue;
+        }
+        match characters.peek().copied() {
+            Some('n') => {
+                characters.next();
+                decoded.push('\n');
+            }
+            Some('r') => {
+                characters.next();
+                decoded.push('\r');
+            }
+            Some('t') => {
+                characters.next();
+                decoded.push('\t');
+            }
+            Some('\\') => {
+                characters.next();
+                decoded.push('\\');
+            }
+            _ => decoded.push('\\'),
+        }
+    }
+    decoded
 }
 
 struct PathFilters {
@@ -1118,6 +1350,91 @@ mod tests {
         assert_eq!(report.matches.len(), 1);
         assert_eq!(report.matches[0].from_utf16, 0);
         assert_eq!(report.matches[0].to_utf16, 5);
+    }
+
+    #[test]
+    fn query_options_cover_case_words_and_normalized_multiline_text() {
+        let directory = tempfile::tempdir().expect("workspace");
+        fs::write(
+            directory.path().join("options.txt"),
+            "Needle needle needled\nalpha\r\nbeta",
+        )
+        .expect("fixture");
+        let workspace = Workspace::open(directory.path()).expect("open");
+        let candidates = candidates(&["options.txt"]);
+        let search = |id: &str, query: &str, options: SearchOptions| {
+            workspace
+                .search_text(
+                    id,
+                    &candidates,
+                    false,
+                    query,
+                    &options,
+                    &SearchCancellationToken::new(),
+                    limits(),
+                )
+                .expect("search")
+        };
+
+        assert_eq!(
+            search("case-folded", "needle", SearchOptions::default())
+                .matches
+                .len(),
+            3
+        );
+        assert_eq!(
+            search(
+                "case-sensitive",
+                "needle",
+                SearchOptions {
+                    case_sensitive: true,
+                    ..SearchOptions::default()
+                },
+            )
+            .matches
+            .len(),
+            2,
+        );
+        assert_eq!(
+            search(
+                "whole-word",
+                "needle",
+                SearchOptions {
+                    whole_word: true,
+                    ..SearchOptions::default()
+                },
+            )
+            .matches
+            .len(),
+            2,
+        );
+        let multiline = search(
+            "multiline",
+            "alpha\\nbeta",
+            SearchOptions {
+                new_line: true,
+                ..SearchOptions::default()
+            },
+        );
+        assert_eq!(multiline.matches.len(), 1);
+        assert_eq!(
+            (multiline.matches[0].line, multiline.matches[0].column_utf16),
+            (2, 1)
+        );
+        assert_eq!(
+            search(
+                "multiline-regex",
+                "alpha.*beta",
+                SearchOptions {
+                    mode: SearchMode::Regex,
+                    new_line: true,
+                    ..SearchOptions::default()
+                },
+            )
+            .matches
+            .len(),
+            1,
+        );
     }
 
     #[test]
