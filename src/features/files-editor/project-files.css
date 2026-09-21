@@ -187,15 +187,3 @@
   display: block;
   overflow-wrap: anywhere;
 }
-
-.project-files-dialog .danger-button {
-  min-height: 30px;
-  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--red) 12%, var(--bg-panel));
-  color: var(--red);
-}
-
-.project-files-dialog .danger-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--red) 20%, var(--bg-panel));
-}

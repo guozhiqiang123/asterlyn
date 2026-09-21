@@ -236,3 +236,29 @@ projection over the bounded patch rows already held by the Diff editor. Memory i
 **inconclusive** because no matched process-tree resource series was collected. The refreshed local
 Debian package is 7,545,168 bytes with SHA-256
 `184c9350f50ca2d9dbf61cdfe5f2fdfb6089dfb0f12020305ea46bf7ea1e0dd6`.
+
+## Follow-up: one shared destructive dialog surface (2026-09-21)
+
+An installed-package report on **Move Unversioned Files to Trash** showed the destructive confirm
+rendering as a browser-default button next to a correctly styled Cancel: its label ignored the UI font
+size preference and its surface did not match the dialog. The cause was ownership, not the dialog:
+`.danger-button` had no shared definition and existed only as four near-identical rules scoped to
+`.project-files-dialog`, `.changes-restore-dialog`, `.git-operation-dialog`, and
+`.git-operation-banner`. Every dialog outside those scopes — unversioned Trash, the branch-mutation
+review, remote removal, and the hard Git reset — therefore fell back to the WebView's default button.
+
+`.danger-button` now belongs to the shared button layer in `src/shared/layout.css` together with
+`.primary-button` and `.secondary-button`: one 31-pixel height, 5-pixel radius, `0 13px` padding,
+620 weight, the destructive border/background/text tokens, a hover state, and a disabled state. The
+font size of all three follows the preference as
+`max(10px, calc(var(--ui-font-size, 13px) - 2px))`, which is 11 pixels at the default 13-pixel
+setting and therefore unchanged for existing users. The four scoped copies were deleted, and
+`scripts/style-ownership.test.mjs` now fails if any feature stylesheet re-scopes `.danger-button`.
+
+Measured in the production stylesheet order on the real Unversioned Trash dialog: at the default
+setting the Cancel and destructive buttons both report 31-pixel height, 11-pixel font, weight 620,
+5-pixel radius, and `0 13px` padding, with the destructive surface at
+`color-mix(in srgb, var(--red) 12%, var(--bg-panel))` and `--danger-text`; raising the setting to 14
+pixels moves both to 12 pixels and lowering it to 10 pixels moves both to 10 pixels. `npm run check`,
+the complete 585-test script suite, and the production build passed. This correction changes
+presentation only and adds no request, timer, or repository work.

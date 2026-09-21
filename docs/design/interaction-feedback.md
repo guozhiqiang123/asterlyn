@@ -66,6 +66,12 @@ concurrent review request. Preparing a restore plan is read-only; the Git mutati
 after the review controller returns explicit authorization, and the backend still revalidates the
 exact plan immediately before writing.
 
+Every dialog action belongs to one shared button layer: `primary-button`, `secondary-button`, and
+`danger-button` share one height, radius, padding, weight, and a font size derived from the UI font
+size preference. A dialog therefore never styles its own destructive variant, and a destructive
+confirm cannot fall back to the browser's default button appearance in a dialog that does not happen
+to scope it. Destructive confirmations keep the danger surface and the Cancel default focus.
+
 ## Single-title hierarchy
 
 Windows, dialogs, tool columns, panels, and comparable named surfaces use one visible title style

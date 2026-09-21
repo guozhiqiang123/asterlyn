@@ -61,27 +61,6 @@
   font-size: 11px;
 }
 
-.git-operation-dialog .danger-button,
-.git-operation-banner .danger-button {
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--red) 12%, var(--bg-panel));
-  color: var(--danger-text);
-  cursor: pointer;
-}
-
-.git-operation-dialog .danger-button:hover:not(:disabled),
-.git-operation-banner .danger-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--red) 20%, var(--bg-panel));
-}
-
-.git-operation-dialog .danger-button:disabled,
-.git-operation-banner .danger-button:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
 
 .conflict-resolve-button {
   border: 0;

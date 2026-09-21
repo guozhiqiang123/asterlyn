@@ -60,6 +60,9 @@ test("Unversioned Trash restores its dialog host after the application shell is 
     assert.equal(root.children.at(-1), originalHost);
     assert.equal(originalHost.isConnected, true);
     assert.match(originalHost.innerHTML, /Trash files\?/);
+    // The confirm action carries the shared destructive surface, never a browser-default button.
+    assert.match(originalHost.innerHTML, /class="secondary-button" data-unversioned-trash-close/u);
+    assert.match(originalHost.innerHTML, /class="danger-button" id="unversioned-trash-confirm"/u);
     await Promise.resolve();
     runtime.dispose();
   } finally {

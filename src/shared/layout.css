@@ -502,7 +502,8 @@
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   display: inline-flex;
   height: 31px;
   align-items: center;
@@ -510,7 +511,7 @@
   gap: 6px;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
   font-weight: 620;
   padding: 0 13px;
 }
@@ -540,6 +541,25 @@
 
 .secondary-button:hover:not(:disabled) {
   background: var(--bg-elevated);
+}
+
+/* One destructive surface for every dialog, so a dangerous confirm never falls back to the browser's
+   own button styling inside a dialog that does not scope its own variant. */
+.danger-button {
+  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
+  background: color-mix(in srgb, var(--red) 12%, var(--bg-panel));
+  color: var(--danger-text);
+}
+
+.danger-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red) 20%, var(--bg-panel));
+}
+
+.danger-button:disabled {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--text-muted);
+  cursor: default;
 }
 
 .push-diff-body.image-surface {
