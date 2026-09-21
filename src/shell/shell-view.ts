@@ -53,7 +53,7 @@ export function renderShellView(model: ShellViewModel): string {
       <section class="workbench" id="workbench">
         <div class="editor-row" id="editor-row">
           <aside class="navigator tool-window" id="left-tool" aria-label="${escapeHtml(copy.leftToolWindow)}">
-            <div class="panel-header"><div class="navigator-title-group"><h1 id="navigator-title">${escapeHtml(copy.files)}</h1><span class="panel-count" id="navigator-count">0</span></div><div class="navigator-header-actions"><div class="navigator-context-actions" id="navigator-actions"></div><button class="compact-icon-button tool-window-hide" id="hide-left-tool" type="button" aria-label="${escapeHtml(copy.hideFiles)}" title="${escapeHtml(copy.hideFiles)}">${icon("close", 14)}</button></div></div>
+            <div class="panel-header" id="navigator-header"><div class="navigator-title-group"><h1 id="navigator-title">${escapeHtml(copy.files)}</h1><span class="panel-count" id="navigator-count">0</span></div><div class="navigator-header-actions" data-navigator-header-controls><div class="navigator-context-actions" id="navigator-actions"></div><button class="compact-icon-button tool-window-hide" id="hide-left-tool" type="button" aria-label="${escapeHtml(copy.hideFiles)}" title="${escapeHtml(copy.hideFiles)}">${icon("close", 14)}</button></div></div>
             <div class="navigator-body" id="navigator-body" tabindex="-1">${loadingBlock(copy.waitingForProject)}</div>
           </aside>
           <div class="workbench-splitter vertical" id="left-splitter" aria-label="${escapeHtml(copy.resizeLeft)}"></div>

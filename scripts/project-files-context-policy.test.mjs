@@ -8,7 +8,8 @@ import {
 
 const reasons = {
   readOnly: "read-only", mutationBusy: "busy", clipboardEmpty: "empty",
-  operationsUnavailable: "unavailable", gitUnavailable: "no git", noHistory: "no history",
+  operationsUnavailable: "unavailable", rootUnavailable: "root",
+  gitUnavailable: "no git", noHistory: "no history",
   ambiguousHistory: "ambiguous",
 };
 
@@ -84,4 +85,21 @@ test("mutation and paste policy distinguish read-only, busy and empty clipboard 
     snapshot: snapshot(), files, mutationBusy: false, mutationAvailable: true,
     clipboardAvailable: false, reasons,
   }).paste, { kind: "blocked", reason: "empty" });
+});
+
+test("the workspace root accepts creation and paste but never moves, renames or trashes itself", () => {
+  const root = target({ workspacePath: "", kind: "directory", file: null });
+  const options = {
+    snapshot: snapshot(), files, mutationBusy: false, mutationAvailable: true,
+    clipboardAvailable: false, reasons,
+  };
+  const withoutClipboard = projectFilesContextPolicy(root, options);
+  assert.deepEqual(withoutClipboard.create, { kind: "enabled" });
+  assert.deepEqual(withoutClipboard.paste, { kind: "blocked", reason: "empty" });
+  assert.deepEqual(withoutClipboard.mutation, { kind: "blocked", reason: "root" });
+  assert.deepEqual(withoutClipboard.history, { kind: "blocked", reason: "no history" });
+
+  const withClipboard = projectFilesContextPolicy(root, { ...options, clipboardAvailable: true });
+  assert.deepEqual(withClipboard.paste, { kind: "enabled" });
+  assert.equal(projectFilesHistoryIntent(root, snapshot(), files), null);
 });

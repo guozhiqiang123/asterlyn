@@ -225,6 +225,14 @@ export class ProjectFilesController {
     return true;
   }
 
+  /**
+   * The workspace root is addressed by the Files navigator header. It owns no tree row, so it keeps
+   * the current row selection and only reports whether an open workspace can receive root actions.
+   */
+  selectRoot(): boolean {
+    return this.state.root !== null;
+  }
+
   setDirectoryExpanded(path: string, expanded: boolean): boolean {
     const node = findProjectTreeNode(this.tree(), path);
     if (!node || node.kind !== "directory") return false;

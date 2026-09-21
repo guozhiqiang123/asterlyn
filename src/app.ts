@@ -173,6 +173,7 @@ import {
   type ShellState,
 } from "./shell/shell-controller";
 import { renderShellView } from "./shell/shell-view";
+import { clearNavigatorRootTarget, navigatorHeaderHost, renderChangesNavigatorHeader, renderFilesNavigatorHeader } from "./shell/navigator-header";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
@@ -291,6 +292,7 @@ import {
 } from "./features/git-history/history-path-selection";
 import {
   findProjectTreeNode,
+  isProjectWorkspaceRootPath,
   type ProjectTreeNode,
 } from "./presentation/project-tree";
 import {
@@ -1136,6 +1138,9 @@ export class AsterlynApp {
       actions: {
         current: (target) => this.isProjectFilesContextTargetCurrent(target),
         select: (target) => {
+          if (isProjectWorkspaceRootPath(target.workspacePath)) {
+            return this.filesEditorRuntime.files.selectRoot();
+          }
           const selected = this.filesEditorRuntime.files.select(target.workspacePath, target.kind);
           if (selected) this.markProjectTreeSelection(target.workspacePath);
           return selected;
@@ -1156,6 +1161,7 @@ export class AsterlynApp {
               mutationBusy: labels.mutationBusy,
               clipboardEmpty: labels.clipboardEmpty,
               operationsUnavailable: labels.operationsUnavailable,
+              rootUnavailable: labels.rootUnavailable,
               gitUnavailable: labels.gitUnavailable,
               noHistory: labels.noHistory,
               ambiguousHistory: labels.ambiguousHistory,
@@ -4070,11 +4076,12 @@ export class AsterlynApp {
     const copy = this.localShellCopy();
     const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
-    if (!workspaceRoot || !this.shellState.layout.leftTool) return;
-    const title = this.query("#navigator-title");
-    const count = this.query("#navigator-count");
+    const header = navigatorHeaderHost(this.root);
+    if (!workspaceRoot || !this.shellState.layout.leftTool) {
+      clearNavigatorRootTarget(header);
+      return;
+    }
     const actions = this.query("#navigator-actions");
-    const hide = this.query<HTMLButtonElement>("#hide-left-tool");
     const body = this.query("#navigator-body");
     this.changeCommitSplitterDisposer?.();
     this.changeCommitSplitterDisposer = null;
@@ -4087,11 +4094,7 @@ export class AsterlynApp {
         : 0;
       body.dataset.navigatorView = "changes";
       body.onscroll = null;
-      title.textContent = copy.changes;
-      hide.setAttribute("aria-label", copy.hideChanges);
-      hide.title = copy.hideChanges;
-      count.textContent = snapshot.changes.length.toString();
-      count.title = this.localization.catalog.changes.changedFileCount(snapshot.changes.length);
+      renderChangesNavigatorHeader(header, copy.changes, snapshot.changes.length, this.localization.catalog.changes.changedFileCount(snapshot.changes.length), copy.hideChanges);
       actions.innerHTML = "";
       const changeRows = changeViewRows(snapshot, this.changesState);
       const changeWindow = changeTreeRenderWindow(
@@ -4113,16 +4116,7 @@ export class AsterlynApp {
       return;
     }
 
-    title.textContent = basename(workspaceRoot);
-    hide.setAttribute("aria-label", copy.hideFiles);
-    hide.title = copy.hideFiles;
-    const regularFiles = this.filesState.files.filter((file) => file.readOnly !== true).length;
-    const visibleEntries = this.filesState.files.length;
-    count.textContent = visibleEntries.toString();
-    count.title = this.localization.catalog.projectFiles.fileCount(
-      regularFiles,
-      this.filesState.ignoredEntries.length,
-    );
+    renderFilesNavigatorHeader(header, basename(workspaceRoot), copy.hideFiles);
     const preserveScroll = body.dataset.navigatorView === "files";
     const scrollTop = body.scrollTop;
     const scrollLeft = body.scrollLeft;

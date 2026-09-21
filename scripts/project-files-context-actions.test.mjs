@@ -26,7 +26,7 @@ const target = {
 const enabled = { kind: "enabled" };
 
 test("Files and folder targets receive the same ordered action set", () => {
-  const policy = { mutation: enabled, paste: enabled, history: enabled };
+  const policy = { create: enabled, mutation: enabled, paste: enabled, history: enabled };
   const fileModel = projectFilesContextMenuModel(target, policy, EN_US.projectFiles);
   const folderModel = projectFilesContextMenuModel(
     { ...target, workspacePath: "src", kind: "directory", file: null },
@@ -38,6 +38,52 @@ test("Files and folder targets receive the same ordered action set", () => {
   assert.deepEqual(shape(folderModel), shape(fileModel));
   assert.deepEqual(contextMenuModelErrors(fileModel), []);
   assert.equal(fileModel.items.at(-1).tone, "danger");
+});
+
+test("the workspace root receives the folder menu with root-safe availability and copy text", async () => {
+  const root = { ...target, workspacePath: "", kind: "directory", file: null };
+  const reason = "The project root cannot be moved, renamed, or deleted here";
+  const policy = {
+    create: enabled, mutation: { kind: "blocked", reason }, paste: enabled, history: enabled,
+  };
+  const model = projectFilesContextMenuModel(root, policy, EN_US.projectFiles);
+  const shape = (candidate) => candidate.items.map((item) =>
+    item.kind === "separator" ? "separator" : [item.kind, item.id, item.label]);
+  assert.deepEqual(shape(model), shape(projectFilesContextMenuModel(
+    { ...target, kind: "directory" }, policy, EN_US.projectFiles,
+  )));
+  assert.equal(model.items[0].availability.kind, "enabled");
+  assert.deepEqual(model.items[2].availability, { kind: "blocked", reason });
+  assert.deepEqual(model.items[3].availability, { kind: "blocked", reason });
+  assert.equal(model.items[4].availability.kind, "enabled");
+  assert.equal(model.ariaLabel, "File actions for .");
+
+  let session = null;
+  const copied = [];
+  const provider = new ProjectFilesContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    {
+      async writeText(text) {
+        copied.push(text);
+        return { status: "copied" };
+      },
+    },
+    {
+      current: () => true, select: () => true,
+      policy: () => policy,
+      createFile() {}, cut() {}, copy() {}, paste() {}, reveal() {}, rename() {},
+      historyIntent: () => null, installHistoryQuery() {}, trash() {},
+      blocked() {}, status() {}, error() {},
+    },
+    () => EN_US.projectFiles,
+  );
+  assert.equal(provider.open({
+    target: root, anchor: { x: 0, y: 0 }, trigger: {}, restoreFocus() {},
+  }), true);
+  await session.invoke("project-files.context-actions.copy-name");
+  await session.invoke("project-files.context-actions.copy-relative-path");
+  await session.invoke("project-files.context-actions.copy-absolute-path");
+  assert.deepEqual(copied, ["workspace", ".", "/workspace"]);
 });
 
 test("Files action provider owns selection, copy routing and exact target lifetime", async () => {
@@ -57,7 +103,7 @@ test("Files action provider owns selection, copy routing and exact target lifeti
     {
       current: (candidate) => candidate.workspaceGeneration === 7,
       select: (candidate) => { events.push(["select", candidate.workspacePath]); return true; },
-      policy: () => ({ mutation: enabled, paste: enabled, history: enabled }),
+      policy: () => ({ create: enabled, mutation: enabled, paste: enabled, history: enabled }),
       createFile: () => events.push(["new"]),
       cut: () => events.push(["cut"]),
       copy: () => events.push(["copy"]),
@@ -105,6 +151,7 @@ test("Files action provider owns selection, copy routing and exact target lifeti
 test("blocked policy stays semantic and provider does not open for a stale target", () => {
   const reason = "Read-only entries cannot be changed";
   const model = projectFilesContextMenuModel(target, {
+    create: { kind: "blocked", reason },
     mutation: { kind: "blocked", reason },
     paste: { kind: "blocked", reason },
     history: { kind: "blocked", reason: "No Git history" },
@@ -119,7 +166,7 @@ test("blocked policy stays semantic and provider does not open for a stale targe
     { writeText: async () => ({ status: "copied" }) },
     {
       current: () => false, select: () => true,
-      policy: () => ({ mutation: enabled, paste: enabled, history: enabled }),
+      policy: () => ({ create: enabled, mutation: enabled, paste: enabled, history: enabled }),
       createFile() {}, cut() {}, copy() {}, paste() {}, reveal() {}, rename() {},
       historyIntent: () => null, installHistoryQuery() {}, trash() {},
       blocked() {}, status() {}, error() {},
@@ -138,7 +185,7 @@ test("action failures are reported through the feature runtime", async () => {
     { writeText: async () => ({ status: "copied" }) },
     {
       current: () => true, select: () => true,
-      policy: () => ({ mutation: enabled, paste: enabled, history: enabled }),
+      policy: () => ({ create: enabled, mutation: enabled, paste: enabled, history: enabled }),
       createFile() {}, cut() {}, copy() {}, paste() {},
       async reveal() { throw new Error("reveal failed"); },
       rename() {}, historyIntent: () => null, installHistoryQuery() {}, trash() {},

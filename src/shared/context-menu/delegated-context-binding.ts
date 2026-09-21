@@ -9,6 +9,8 @@ export interface DelegatedContextRequest<TTarget> {
 
 export interface DelegatedContextBindingOptions<TTarget> {
   readonly selector: string;
+  /** Matching subtrees never open this binding's menu, even when nested inside a trigger. */
+  readonly exclude?: string;
   resolve(trigger: HTMLElement): TTarget | null;
   open(request: DelegatedContextRequest<TTarget>): boolean;
   restoreFocus?(target: TTarget, previous: HTMLElement): void;
@@ -92,6 +94,7 @@ export class DelegatedContextBinding<TTarget> {
       : eventTarget instanceof Node
         ? eventTarget.parentElement
         : null;
+    if (this.options.exclude && element?.closest(this.options.exclude)) return null;
     const trigger = element?.closest<HTMLElement>(this.options.selector) ?? null;
     return trigger && this.root.contains(trigger) ? trigger : null;
   }

@@ -11,14 +11,19 @@ import {
   buildPathCopyGroup,
   textForCopyAction,
   workspacePathCopyActions,
+  workspaceRootPathCopyActions,
+  type PathCopyLabels,
+  type TextCopyAction,
 } from "../../shared/context-menu/context-menu-copy-actions.ts";
 import type { DelegatedContextRequest } from "../../shared/context-menu/delegated-context-binding.ts";
+import { isProjectWorkspaceRootPath } from "../../presentation/project-tree.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 
 const OWNER_ID = "project-files.context-actions";
 const ENABLED = { kind: "enabled" } as const;
 
 export interface ProjectFilesContextPolicy {
+  readonly create: ContextMenuAvailability;
   readonly mutation: ContextMenuAvailability;
   readonly paste: ContextMenuAvailability;
   readonly history: ContextMenuAvailability;
@@ -65,7 +70,7 @@ export class ProjectFilesContextActions {
     const { target } = request;
     if (!this.runtime.current(target) || !this.runtime.select(target)) return false;
     const labels = this.copy().contextMenu;
-    const pathActions = workspacePathCopyActions(OWNER_ID, target, {
+    const pathActions = projectFilesPathCopyActions(target, {
       copy: labels.copyPath,
       fileName: labels.fileName,
       relativePath: labels.relativePath,
@@ -138,16 +143,16 @@ export function projectFilesContextMenuModel(
     availability,
     ...(tone === "danger" ? { tone } : {}),
   });
-  const pathActions = workspacePathCopyActions(OWNER_ID, target, {
+  const pathActions = projectFilesPathCopyActions(target, {
     copy: labels.copyPath,
     fileName: labels.fileName,
     relativePath: labels.relativePath,
     absolutePath: labels.absolutePath,
   });
   return {
-    ariaLabel: labels.ariaLabel(target.workspacePath),
+    ariaLabel: labels.ariaLabel(projectFilesTargetDisplayPath(target)),
     items: [
-      command("new-file", labels.newFile, policy.mutation),
+      command("new-file", labels.newFile, policy.create),
       { kind: "separator" },
       command("cut", labels.cut, policy.mutation),
       command("copy", labels.copy, policy.mutation),
@@ -176,4 +181,18 @@ function copyPathFeedback(
   if (actionId.endsWith(".copy-name")) return labels.copiedFileName;
   if (actionId.endsWith(".copy-relative-path")) return labels.copiedRelativePath;
   return labels.copiedAbsolutePath;
+}
+
+function projectFilesPathCopyActions(
+  target: ProjectFilesContextTarget,
+  labels: PathCopyLabels,
+): readonly TextCopyAction[] {
+  return isProjectWorkspaceRootPath(target.workspacePath)
+    ? workspaceRootPathCopyActions(OWNER_ID, target.workspaceRoot, labels)
+    : workspacePathCopyActions(OWNER_ID, target, labels);
+}
+
+/** The workspace root has no relative path of its own; "." is the conventional tree display. */
+function projectFilesTargetDisplayPath(target: ProjectFilesContextTarget): string {
+  return isProjectWorkspaceRootPath(target.workspacePath) ? "." : target.workspacePath;
 }

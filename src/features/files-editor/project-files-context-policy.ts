@@ -2,6 +2,7 @@ import type { HistoryQueryIntent } from "../../application/workbench-navigation.
 import type { ProjectFile, RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuAvailability } from "../../shared/context-menu/context-menu-model.ts";
 import { defaultHistoryQuery } from "../../history-query.ts";
+import { isProjectWorkspaceRootPath } from "../../presentation/project-tree.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 
 export interface ProjectFilesContextPolicyReasons {
@@ -9,6 +10,7 @@ export interface ProjectFilesContextPolicyReasons {
   readonly mutationBusy: string;
   readonly clipboardEmpty: string;
   readonly operationsUnavailable: string;
+  readonly rootUnavailable: string;
   readonly gitUnavailable: string;
   readonly noHistory: string;
   readonly ambiguousHistory: string;
@@ -25,24 +27,30 @@ export function projectFilesContextPolicy(
     readonly reasons: ProjectFilesContextPolicyReasons;
   },
 ): {
+  readonly create: ContextMenuAvailability;
   readonly mutation: ContextMenuAvailability;
   readonly paste: ContextMenuAvailability;
   readonly history: ContextMenuAvailability;
 } {
-  const mutation = target.readOnly
+  const writable = target.readOnly
     ? blocked(options.reasons.readOnly)
     : options.mutationBusy
       ? blocked(options.reasons.mutationBusy)
       : options.mutationAvailable
         ? enabled()
         : blocked(options.reasons.operationsUnavailable);
-  const paste = mutation.kind === "enabled" && !options.clipboardAvailable
+  // The workspace root owns everything below it, so it can receive new entries but never move,
+  // rename or trash itself through the tree.
+  const mutation = isProjectWorkspaceRootPath(target.workspacePath)
+    ? blocked(options.reasons.rootUnavailable)
+    : writable;
+  const paste = writable.kind === "enabled" && !options.clipboardAvailable
     ? blocked(options.reasons.clipboardEmpty)
-    : mutation;
+    : writable;
   const history = projectFilesHistoryIntent(target, options.snapshot, options.files)
     ? enabled()
     : blocked(historyUnavailableReason(target, options.snapshot, options.files, options.reasons));
-  return { mutation, paste, history };
+  return { create: writable, mutation, paste, history };
 }
 
 export function projectFilesHistoryIntent(

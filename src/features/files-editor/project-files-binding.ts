@@ -2,6 +2,8 @@ import type { ChangeKind, ProjectFile } from "../../models.ts";
 import type { WorkspaceEntryIdentity } from "../../application/workbench-navigation.ts";
 import {
   findProjectTreeNode,
+  isProjectWorkspaceRootPath,
+  PROJECT_WORKSPACE_ROOT_PATH,
   type ProjectTreeNode,
 } from "../../presentation/project-tree.ts";
 import type { ProjectFilesState } from "./project-files-controller.ts";
@@ -29,9 +31,20 @@ export class ProjectFilesContextBinding {
     open: (request: DelegatedContextRequest<ProjectFilesContextTarget>) => boolean,
   ) {
     this.binding = new DelegatedContextBinding(root, {
-      selector: "[data-project-node]",
+      selector: "[data-project-node], [data-project-root]",
+      // The header opens the workspace-root menu from anywhere on it, except its own controls.
+      exclude: "[data-navigator-header-controls]",
       resolve: (trigger) => {
         const context = current();
+        if (trigger.hasAttribute("data-project-root")) {
+          return resolveProjectFilesContextTarget(
+            context.state,
+            context.tree,
+            context.workspaceGeneration,
+            PROJECT_WORKSPACE_ROOT_PATH,
+            "directory",
+          );
+        }
         const path = trigger.dataset.projectNode;
         const kind = trigger.dataset.projectKind;
         return path && (kind === "file" || kind === "directory")
@@ -61,6 +74,18 @@ export function resolveProjectFilesContextTarget(
   expectedKind?: "file" | "directory",
 ): ProjectFilesContextTarget | null {
   if (!state.root) return null;
+  if (isProjectWorkspaceRootPath(workspacePath)) {
+    if (expectedKind === "file") return null;
+    return {
+      workspaceRoot: state.root,
+      workspaceGeneration,
+      workspacePath,
+      kind: "directory",
+      file: null,
+      status: "unmodified",
+      readOnly: false,
+    };
+  }
   const node = findProjectTreeNode([...tree], workspacePath);
   if (!node || (expectedKind && node.kind !== expectedKind)) return null;
   const file = node.kind === "file"

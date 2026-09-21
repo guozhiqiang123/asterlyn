@@ -52,6 +52,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Benchmarks
 
 - [`benchmarks/2026-09-21-compact-file-trees-and-diff-fills.md`](benchmarks/2026-09-21-compact-file-trees-and-diff-fills.md) — shared compact file-tree projection, full-line MergeView fills, restored Unversioned Trash review host, and acceptance evidence.
+- [`benchmarks/2026-09-21-project-root-header.md`](benchmarks/2026-09-21-project-root-header.md) — Files header identity without a workspace tally, workspace-root context target with protection rules, native root reveal, and package evidence.
 - [`benchmarks/2026-09-21-search-controls-and-lazy-history-paths.md`](benchmarks/2026-09-21-search-controls-and-lazy-history-paths.md) — single-border Branch search, clearable History filters, lazy path projection, ignored-file policy, shared editor/workspace search controls, and acceptance evidence.
 - [`benchmarks/2026-09-20-context-menu-consolidation.md`](benchmarks/2026-09-20-context-menu-consolidation.md) — bounded/grouped branch launcher, metadata-only branch inspector, Remote form correction, exact-set Unversioned group actions, browser interaction, and native Git evidence.
 - [`benchmarks/2026-09-20-editable-diff-conflict-editor.md`](benchmarks/2026-09-20-editable-diff-conflict-editor.md) — editable worktree Diff, conflict grouping, three-pane resolution, lazy merge-runtime, browser interaction, build, and native Git evidence.

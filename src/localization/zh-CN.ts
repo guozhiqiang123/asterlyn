@@ -143,7 +143,6 @@ export const ZH_CN = {
     locateCurrentFile: "在项目中定位当前文件", expandSelectedFolder: "展开所选文件夹", collapseSelectedFolder: "折叠所选文件夹",
     loadingProjectFiles: "正在加载项目文件…", listFailed: "无法列出项目文件", tryAgain: "重试",
     refreshingFiles: "正在刷新文件…", boundedCatalog: "当前显示有限范围的项目目录，部分路径已省略。", projectFiles: "项目文件",
-    fileCount: (editable, ignored) => `${editable} 个可编辑文件，${ignored} 个已忽略条目`, directoryFileCount: (count) => `${count} 个文件`,
     collapsePath: (path) => `折叠 ${path}`, expandPath: (path) => `展开 ${path}`,
     changeLabels: {
       unmodified: "未修改", added: "已添加", modified: "已修改", deleted: "已删除", renamed: "已重命名",
@@ -161,6 +160,7 @@ export const ZH_CN = {
       revealedSelection: "已在系统文件管理器中显示", openedContainingFolder: "已打开所在文件夹",
       readOnly: "此忽略条目为只读", mutationBusy: "另一项文件操作正在进行",
       clipboardEmpty: "请先复制或剪切文件或文件夹", operationsUnavailable: "文件修改功能尚不可用",
+      rootUnavailable: "项目根目录不能在此移动、重命名或删除",
       gitUnavailable: "Git History 需要 Git 项目", noHistory: "此条目没有已跟踪的 Git 历史",
       ambiguousHistory: "此文件夹跨越多个 Git 根",
       nameLabel: "名称", choosePasteName: "选择新名称",

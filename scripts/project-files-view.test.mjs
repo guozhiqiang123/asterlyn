@@ -21,7 +21,7 @@ test("expanded project trees are flattened in visible hierarchy order", () => {
   ]);
 });
 
-test("project files compact unary folders into one counted row", () => {
+test("project files compact unary folders into one uncounted row", () => {
   const tree = buildProjectTree([
     "docs/refactor/rebuild/README.md",
     "docs/refactor/rebuild/notes.md",
@@ -37,7 +37,8 @@ test("project files compact unary folders into one counted row", () => {
     ...state(), expandedDirectories,
   }, tree, 0, 500);
   assert.match(html, /data-project-node="docs\/refactor\/rebuild"/u);
-  assert.match(html, />docs\/refactor\/rebuild<\/span><small[^>]*>2 files<\/small>/u);
+  assert.match(html, />docs\/refactor\/rebuild<\/span><\/div>/u);
+  assert.doesNotMatch(html, /compact-file-tree-count|2 files/u);
 });
 
 test("large project trees mount no more than the shared architecture budget", () => {
@@ -82,6 +83,27 @@ test("project tree renders inline rename/create states and cut descendants", () 
   const createMarkup = renderProjectNavigation(state, tree, 0, 500, EN_US.projectFiles, create, "src");
   assert.match(createMarkup, /data-project-entry-edit="create"/u);
   assert.match(createMarkup, /project-node-cut/u);
+});
+
+test("the workspace-root creation form leads the tree body because the root owns no row", () => {
+  const files = {
+    root: "/workspace", paths: ["src/app.ts"],
+    files: [{ repositoryId: ".", path: "src/app.ts", workspacePath: "src/app.ts" }],
+    ignoredEntries: [], loading: false, error: null, truncated: false,
+    selection: null, expandedDirectories: new Set(),
+  };
+  const tree = buildProjectTree(["src/app.ts"]);
+  const rootCreate = {
+    inlineEdit: {
+      kind: "create", anchorPath: "", anchorKind: "directory", parentPath: "",
+      sourcePath: null, sourceKind: null, value: "", error: null, busy: false,
+    },
+    dialog: null, busyPath: null,
+  };
+  const html = renderProjectNavigation(files, tree, 0, 500, EN_US.projectFiles, rootCreate, null);
+  const body = html.slice(html.indexOf('role="tree"'), html.indexOf("data-project-node="));
+  assert.match(body, /data-project-entry-edit="create"/u);
+  assert.match(body, /style="--tree-depth:0"/u);
 });
 
 test("trash dialog reports bounded recursive and hidden-entry counts", () => {

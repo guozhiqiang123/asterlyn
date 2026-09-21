@@ -171,6 +171,28 @@ folders and files. Virtual-list spacers use the same exported row-height constan
 not corrupt scroll targeting. This changes presentation only and does not flatten Git or workspace
 truth, persist disclosure state, or introduce a second tree model.
 
+**Project-identity follow-up, 2026-09-21.** The Project Files header no longer presents any workspace
+file tally: the leading control is the project name alone, and Project Files folder rows no longer
+carry a recursive file count. The Changes tool keeps its own changed-entry count because that number
+describes the change set rather than the project, and the Changes and commit-detail trees keep their
+existing counts. The same persistent count host is therefore shared but owned per tool, and the shared
+count element is only restored when Changes renders.
+
+The Project Files header is also the workspace-root context target. Right-clicking anywhere on that
+header except its own control cluster — the Files toolbar buttons and the Hide action — opens the
+same Files folder menu for the authorized workspace root, including its grouping, labels, and
+availability semantics; the header is not a keyboard tab stop in this slice, and the existing
+`Shift+F10` behavior on tree rows is unchanged. The root has no
+workspace-relative path of its own, so protection rules are explicit rather than inherited from an
+ordinary folder: New File and Paste stay available, while Cut, Copy, Rename, and Move to Trash are
+semantically unavailable with a stated reason, and Git History stays unavailable until an exact
+Git path expression for the workspace root exists. Reveal in File Manager resolves the root itself,
+which is the one native entry point that accepts the empty root path, and Copy Path reports the
+project folder name, `.`, and the authorized absolute workspace root. Creating at the root renders
+the inline name form as the first row of the tree body because the root owns no tree row. These
+rules and their acceptance evidence are recorded in
+[`project-root header evidence`](../benchmarks/2026-09-21-project-root-header.md).
+
 ### U10 — Topology-complete commit graph
 
 - Remove the visible abbreviated object-ID column from history rows. Full and abbreviated IDs remain accepted by history filtering and remain available in commit details, where text selection is possible; the compact list does not spend permanent width on a non-interactive revision value.

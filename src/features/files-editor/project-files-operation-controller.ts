@@ -10,6 +10,7 @@ import type {
 } from "../../application/workspace-mutation-coordinator.ts";
 import type { EditorPathMutationRequest } from "../../editor-path-mutation.ts";
 import type { NewFileStagePreference } from "../../preferences.ts";
+import { isProjectWorkspaceRootPath } from "../../presentation/project-tree.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 import {
   WorkspaceFileClipboard,
@@ -177,6 +178,8 @@ export class ProjectFilesOperationController {
   }
 
   beginRename(target: ProjectFilesContextTarget): boolean {
+    // The workspace root owns no parent directory to rename inside.
+    if (isProjectWorkspaceRootPath(target.workspacePath)) return false;
     if (!this.canStart(target)) return false;
     this.cancelPending();
     this.value = {
@@ -388,6 +391,8 @@ export class ProjectFilesOperationController {
   }
 
   async requestTrash(target: ProjectFilesContextTarget): Promise<void> {
+    // Never move the authorized workspace root itself into the system trash.
+    if (isProjectWorkspaceRootPath(target.workspacePath)) return;
     if (!this.canStart(target)) return;
     await this.trash.request(target);
   }

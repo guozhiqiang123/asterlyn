@@ -36,7 +36,18 @@ pub(crate) fn resolve_workspace_entry(
     workspace_path: &str,
     kind: WorkspaceEntryKind,
 ) -> Result<PathBuf, WorkspaceError> {
-    Workspace::open(root)?.resolve_existing_entry(workspace_path, kind)
+    let workspace = Workspace::open(root)?;
+    if workspace_path.is_empty() {
+        // The Files navigator header addresses the workspace root itself, which has no relative
+        // path of its own. Only a directory reveal of that exact authorized root is accepted.
+        return match kind {
+            WorkspaceEntryKind::Directory => Ok(workspace.root().to_path_buf()),
+            WorkspaceEntryKind::File => Err(WorkspaceError::InvalidPath {
+                message: "the workspace root is a directory".to_string(),
+            }),
+        };
+    }
+    workspace.resolve_existing_entry(workspace_path, kind)
 }
 
 pub(crate) fn load_authorized_project_catalog(
@@ -145,4 +156,28 @@ pub(crate) fn authorize_project_file(
         workspace_path: path.to_string(),
         read_only: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_workspace_entry_path_addresses_only_the_authorized_root_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(directory.path().join("src")).unwrap();
+        let canonical = std::fs::canonicalize(directory.path()).unwrap();
+        assert_eq!(
+            resolve_workspace_entry(directory.path(), "", WorkspaceEntryKind::Directory).unwrap(),
+            canonical
+        );
+        assert!(matches!(
+            resolve_workspace_entry(directory.path(), "", WorkspaceEntryKind::File),
+            Err(WorkspaceError::InvalidPath { .. })
+        ));
+        assert!(matches!(
+            resolve_workspace_entry(directory.path(), "../outside", WorkspaceEntryKind::Directory),
+            Err(WorkspaceError::InvalidPath { .. })
+        ));
+    }
 }

@@ -280,7 +280,6 @@ export interface ProjectFilesCopy {
   refreshingFiles: string;
   boundedCatalog: string;
   projectFiles: string;
-  fileCount(editable: number, ignored: number): string; directoryFileCount(count: number): string;
   collapsePath(path: string): string;
   expandPath(path: string): string;
   changeLabels: Record<ChangeKind, string>;
@@ -308,6 +307,7 @@ export interface ProjectFilesCopy {
     mutationBusy: string;
     clipboardEmpty: string;
     operationsUnavailable: string;
+    rootUnavailable: string;
     gitUnavailable: string;
     noHistory: string;
     ambiguousHistory: string;

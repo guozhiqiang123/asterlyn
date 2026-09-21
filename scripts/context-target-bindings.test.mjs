@@ -128,6 +128,14 @@ test("feature target resolvers reject stale display labels and retain exact iden
   );
   assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "app.ts", "file"), null);
   assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "src", "file"), null);
+  assert.deepEqual(resolveProjectFilesContextTarget(filesState, tree, 4, "", "directory"), {
+    workspaceRoot: "/workspace", workspaceGeneration: 4, workspacePath: "",
+    kind: "directory", file: null, status: "unmodified", readOnly: false,
+  });
+  assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "", "file"), null);
+  assert.equal(resolveProjectFilesContextTarget(
+    { ...filesState, root: null }, tree, 4, "", "directory",
+  ), null);
 
   const snapshot = repositorySnapshot();
   const changesTarget = resolveChangesContextTarget(snapshot, 4, "src/app.ts", ".", 12);
@@ -265,6 +273,8 @@ test("all virtualized context surfaces own delegated bindings with stable row at
   assert.match(historyView, /data-commit-key/u);
   assert.match(detailView, /data-commit-file-directory/u);
   assert.match(detailView, /data-commit-file/u);
+  assert.match(bindings[0], /selector: "\[data-project-node\], \[data-project-root\]"/u);
+  assert.match(bindings[0], /exclude: "\[data-navigator-header-controls\]"/u);
   for (const binding of bindings) {
     assert.match(binding, /new DelegatedContextBinding/u);
     assert.match(binding, /workspaceGeneration/u);

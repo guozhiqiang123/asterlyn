@@ -21,6 +21,16 @@ export interface ProjectTreeSelection {
   kind: "directory" | "file";
 }
 
+/**
+ * Tree entries are workspace-relative, so the workspace root itself owns no path segment. The Files
+ * navigator header addresses that exact root with this value, and only the header may use it.
+ */
+export const PROJECT_WORKSPACE_ROOT_PATH = "";
+
+export function isProjectWorkspaceRootPath(path: string): boolean {
+  return path === PROJECT_WORKSPACE_ROOT_PATH;
+}
+
 export interface ReconciledProjectTreeState {
   expandedDirectories: Set<string>;
   selection: ProjectTreeSelection | null;

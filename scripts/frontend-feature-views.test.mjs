@@ -55,9 +55,13 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.match(html, /id="terminal-header-actions"/);
   assert.match(html, /id="hide-bottom-tool"/);
   assert.match(html, /id="changes-restore-review-dialog"/);
-  for (const host of ["navigator-body", "content-body", "history-navigation-body", "git-detail-body"]) {
+  for (const host of [
+    "navigator-header", "navigator-body", "content-body", "history-navigation-body",
+    "git-detail-body",
+  ]) {
     assert.match(html, new RegExp(`id="${host}"`));
   }
+  assert.match(html, /id="navigator-header"[^>]*>.*data-navigator-header-controls/u);
   assert.ok(html.indexOf('id="repository-switcher-anchor"') < html.indexOf('id="command-center-button"'));
   assert.ok(html.indexOf('id="command-center-button"') < html.indexOf('class="topbar-actions"'));
   assert.doesNotMatch(html, /id="remote-toolbar-menu"|id="remote-fetch"/);
