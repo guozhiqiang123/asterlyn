@@ -247,6 +247,7 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   const outgoingPush = renderRemoteDialogContent(viewModel(state));
   const outgoingModeToggle = outgoingPush.match(/<button[^>]*id="push-mode-toggle"[^>]*>/)?.[0] ?? "";
   assert.doesNotMatch(outgoingModeToggle, / disabled/);
+  assert.match(outgoingPush, /class="push-mode-chevron" aria-hidden="true"/);
 });
 
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {

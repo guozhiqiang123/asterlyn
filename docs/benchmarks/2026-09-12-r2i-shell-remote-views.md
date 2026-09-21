@@ -36,3 +36,11 @@ decomposition trigger, so this is an interim R2 checkpoint rather than phase acc
 The browser demo cannot validate native credentials, real remote writes, or platform window
 controls. Continue by moving Git History/branch presentation and editor presentation behind their
 feature boundaries, then run native and packaging acceptance at the R2 boundary.
+
+## 2026-09-21 Push split-action visual correction
+
+The Push confirmation retains separate activation and mode-selection semantics, but now presents
+them as one aligned 31-pixel control. The mode affordance uses a CSS-drawn, current-color chevron
+instead of relying on the shared SVG's inline layout, so native-scale WebViews cannot reduce the
+right segment to an apparently empty accent block. Browser acceptance measured contiguous main and
+mode segments with no gap, a centered visible chevron, and the existing accessible mode label.

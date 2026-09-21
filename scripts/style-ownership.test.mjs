@@ -99,6 +99,15 @@ test("project folders use the same configured UI scale as files", async () => {
   );
 });
 
+test("Push mode remains one aligned split action with a visible native-scale chevron", async () => {
+  const source = await readFile(
+    new URL("../src/features/remote-push/remote-push.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /\.push-split-action\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*stretch;/s);
+  assert.match(source, /\.push-mode-chevron\s*\{[^}]*border-right:\s*1\.5px solid currentColor;[^}]*transform:\s*rotate\(45deg\);/s);
+});
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

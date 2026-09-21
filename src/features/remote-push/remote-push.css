@@ -727,23 +727,23 @@
 }
 
 .push-split-action {
-  position: relative;
-  display: flex;
+  position: relative; display: inline-flex; align-items: stretch;
+  border-radius: 5px; isolation: isolate;
 }
 
 .push-primary-action {
-  border-right: 0;
+  min-width: 54px; border-right: 0;
   border-radius: 5px 0 0 5px;
 }
 
 .push-mode-toggle {
-  width: 29px;
+  width: 27px; min-width: 27px; flex: 0 0 27px;
   padding: 0;
-  border-left-color: var(--focus-ring);
+  border-left-color: color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 0 5px 5px 0;
 }
 
-.push-mode-toggle:disabled { border-left-color: var(--info-border); }
+.push-mode-chevron { width: 7px; height: 7px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .push-mode-menu {
   position: absolute;
   right: 0;
