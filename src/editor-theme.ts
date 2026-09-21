@@ -399,6 +399,18 @@ const editorThemeRules =
       color: "inherit !important",
       fontStyle: "inherit",
     },
+    "&.cm-merge-a .cm-changedLine, .cm-deletedChunk": {
+      backgroundColor: "var(--editor-diff-removed-bg)",
+    },
+    "&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine": {
+      backgroundColor: "var(--editor-diff-added-bg)",
+    },
+    "&.cm-merge-a .cm-changedText, .cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-changedText": {
+      background: "transparent",
+    },
+    ".cm-insertedLine, .cm-deletedLine, .cm-deletedLine del": {
+      textDecoration: "none",
+    },
     ".cm-source-added": { backgroundColor: "var(--editor-diff-added-bg)" },
     ".cm-source-removed": { backgroundColor: "var(--editor-diff-removed-bg)" },
     ".cm-source-added-gutter": { backgroundColor: "var(--editor-diff-added-bg)" },

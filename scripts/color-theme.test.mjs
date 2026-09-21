@@ -85,6 +85,18 @@ test("Git Blame and Diff gutters use semantic background layers", async () => {
   assert.match(source, /var\(--editor-diff-removed-bg\)/u);
 });
 
+test("CodeMirror MergeView uses full-line semantic Diff fills without underline gradients", async () => {
+  const source = await readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8");
+  assert.match(source, /&\.cm-merge-a \.cm-changedLine, \.cm-deletedChunk/u);
+  assert.match(source, /&\.cm-merge-b \.cm-changedLine, \.cm-inlineChangedLine/u);
+  assert.match(
+    source,
+    /&\.cm-merge-a \.cm-changedText, \.cm-deletedChunk \.cm-deletedText, &\.cm-merge-b \.cm-changedText/u,
+  );
+  assert.match(source, /background: "transparent"/u);
+  assert.doesNotMatch(source, /cm-changedText[^}]*linear-gradient/su);
+});
+
 test("forced-colors preserves native controls, focus, and selected state", async () => {
   const source = await readFile(path.join(sourceRoot, "styles.css"), "utf8");
   const block = source.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/u)?.[1] ?? "";
