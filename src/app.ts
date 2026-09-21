@@ -148,7 +148,9 @@ import {
 } from "./features/files-editor/editor-view";
 import {
   PROJECT_TREE_ROW_HEIGHT,
+  projectTreeElementRepresentsPath,
   projectTreeRenderWindow,
+  projectTreeRowRepresentsPath,
   projectTreeRows,
   renderProjectNavigation,
   renderProjectToolbar,
@@ -4442,7 +4444,7 @@ export class AsterlynApp {
 
   private markProjectTreeSelection(path: string): void {
     this.root.querySelectorAll<HTMLElement>("[data-project-node]").forEach((row) => {
-      const selected = row.dataset.projectNode === path;
+      const selected = projectTreeElementRepresentsPath(row, path);
       row.classList.toggle("selected", selected);
       row.setAttribute("aria-selected", String(selected));
     });
@@ -4487,7 +4489,7 @@ export class AsterlynApp {
     queueMicrotask(() => {
       const target = Array.from(
         this.root.querySelectorAll<HTMLElement>("[data-project-directory]"),
-      ).find((row) => row.dataset.projectDirectory === selection.path);
+      ).find((row) => projectTreeElementRepresentsPath(row, selection.path));
       target?.scrollIntoView({ block: "nearest" });
       target?.focus();
     });
@@ -5688,13 +5690,13 @@ export class AsterlynApp {
     const targetIndex = projectTreeRows(
       this.projectTree(),
       this.filesState.expandedDirectories,
-    ).findIndex(({ node }) => node.path === target.workspacePath);
+    ).findIndex((row) => projectTreeRowRepresentsPath(row, target.workspacePath));
     this.renderLeftTool();
     const body = this.root.querySelector<HTMLElement>("#navigator-body");
     if (body && targetIndex >= 0) body.scrollTop = targetIndex * PROJECT_TREE_ROW_HEIGHT;
     queueMicrotask(() => {
       Array.from(this.root.querySelectorAll<HTMLElement>("[data-project-node]"))
-        .find((row) => row.dataset.projectNode === target.workspacePath)
+        .find((row) => projectTreeElementRepresentsPath(row, target.workspacePath))
         ?.focus();
     });
   }

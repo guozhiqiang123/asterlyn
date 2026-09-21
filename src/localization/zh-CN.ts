@@ -143,7 +143,7 @@ export const ZH_CN = {
     locateCurrentFile: "在项目中定位当前文件", expandSelectedFolder: "展开所选文件夹", collapseSelectedFolder: "折叠所选文件夹",
     loadingProjectFiles: "正在加载项目文件…", listFailed: "无法列出项目文件", tryAgain: "重试",
     refreshingFiles: "正在刷新文件…", boundedCatalog: "当前显示有限范围的项目目录，部分路径已省略。", projectFiles: "项目文件",
-    fileCount: (editable, ignored) => `${editable} 个可编辑文件，${ignored} 个已忽略条目`,
+    fileCount: (editable, ignored) => `${editable} 个可编辑文件，${ignored} 个已忽略条目`, directoryFileCount: (count) => `${count} 个文件`,
     collapsePath: (path) => `折叠 ${path}`, expandPath: (path) => `展开 ${path}`,
     changeLabels: {
       unmodified: "未修改", added: "已添加", modified: "已修改", deleted: "已删除", renamed: "已重命名",

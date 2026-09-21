@@ -136,6 +136,18 @@
   font-size: 9px;
 }
 
+.compact-file-tree {
+  --compact-file-tree-row-height: 25px;
+  --compact-file-tree-indent: 12px;
+}
+
+.compact-file-tree-count {
+  color: var(--text-faint);
+  font-size: max(9px, calc(var(--ui-font-size, 13px) - 3px));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .group-action {
   padding: 3px 5px;
   border: 0;

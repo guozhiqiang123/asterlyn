@@ -280,7 +280,7 @@ export interface ProjectFilesCopy {
   refreshingFiles: string;
   boundedCatalog: string;
   projectFiles: string;
-  fileCount(editable: number, ignored: number): string;
+  fileCount(editable: number, ignored: number): string; directoryFileCount(count: number): string;
   collapsePath(path: string): string;
   expandPath(path: string): string;
   changeLabels: Record<ChangeKind, string>;

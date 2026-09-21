@@ -18,6 +18,9 @@ import {
 } from "../../presentation/git-presentation.ts";
 import type { CommitDetailDirectoryContextTarget } from "./commit-detail-context-binding.ts";
 import { formatPresentationDateTime } from "../../presentation/date-time.ts";
+import {
+  compactDirectoryChain,
+} from "../../presentation/compact-file-tree.ts";
 
 export interface CommitDetailViewModel {
   readonly snapshot: RepositorySnapshot;
@@ -126,7 +129,7 @@ function commitFileRows(model: CommitDetailViewModel): string {
   }
   const rootExpanded = !model.collapsedDirectories.has(".");
   const rootName = model.snapshot.repositoryRoots.find((root) => root.id === model.commit.repositoryId)?.displayName ?? basename(model.snapshot.root);
-  return `<div class="commit-file-tree" role="tree" aria-label="${escapeAttribute(copy.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-commit-file-directory="." data-commit-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(rootName)}</span><small>${escapeHtml(copy.fileCount(model.details.files.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(model.details.files).map((node) => commitFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
+  return `<div class="commit-file-tree compact-file-tree" role="tree" aria-label="${escapeAttribute(copy.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-commit-file-directory="." data-commit-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(rootName)}</span><small class="compact-file-tree-count">${escapeHtml(copy.fileCount(model.details.files.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(model.details.files).map((node) => commitFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
 }
 
 function comparisonFileRows(model: CommitComparisonDetailViewModel): string {
@@ -150,7 +153,7 @@ function comparisonFileRows(model: CommitComparisonDetailViewModel): string {
   const rootName = model.snapshot.repositoryRoots.find(
     (root) => root.id === model.repositoryId,
   )?.displayName ?? basename(model.snapshot.root);
-  return `<div class="commit-file-tree" role="tree" aria-label="${escapeAttribute(copy.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-comparison-file-directory="." data-comparison-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(rootName)}</span><small>${escapeHtml(copy.fileCount(model.details.files.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(model.details.files).map((node) => comparisonFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
+  return `<div class="commit-file-tree compact-file-tree" role="tree" aria-label="${escapeAttribute(copy.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-comparison-file-directory="." data-comparison-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(rootName)}</span><small class="compact-file-tree-count">${escapeHtml(copy.fileCount(model.details.files.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(model.details.files).map((node) => comparisonFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
 }
 
 function commitFolderFileRows(model: CommitFolderDetailViewModel): string {
@@ -172,7 +175,7 @@ function commitFolderFileRows(model: CommitFolderDetailViewModel): string {
   );
   const rootExpanded = !model.collapsedDirectories.has(model.target.path);
   const children = projected?.children ?? [];
-  return `<div class="commit-file-tree" role="tree" aria-label="${escapeAttribute(localization.catalog.history.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-commit-folder-file-directory="${escapeAttribute(model.target.path)}" data-commit-folder-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(basename(model.target.path))}</span><small>${escapeHtml(localization.catalog.history.fileCount(model.target.descendants.length))}</small></summary><div role="group">${rootExpanded ? children.map((node) => commitFolderFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
+  return `<div class="commit-file-tree compact-file-tree" role="tree" aria-label="${escapeAttribute(localization.catalog.history.changedFilesByDirectory)}"><details class="commit-file-directory commit-file-root" data-commit-folder-file-directory="${escapeAttribute(model.target.path)}" data-commit-folder-file-rendered-expanded="${rootExpanded}" ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(basename(model.target.path))}</span><small class="compact-file-tree-count">${escapeHtml(localization.catalog.history.fileCount(model.target.descendants.length))}</small></summary><div role="group">${rootExpanded ? children.map((node) => commitFolderFileTreeNode(node, 1, model)).join("") : ""}</div></details></div>`;
 }
 
 function commitFolderFileTreeNode(
@@ -181,8 +184,10 @@ function commitFolderFileTreeNode(
   model: CommitFolderDetailViewModel,
 ): string {
   if (node.kind === "directory") {
-    const expanded = !model.collapsedDirectories.has(node.path);
-    return `<details class="commit-file-directory" data-commit-folder-file-directory="${escapeAttribute(node.path)}" data-commit-folder-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => commitFolderFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
+    const chain = compactDirectoryChain(node);
+    const expanded = !model.collapsedDirectories.has(chain.terminal.path);
+    const count = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history.fileCount(chain.fileCount);
+    return `<details class="commit-file-directory" data-commit-folder-file-directory="${escapeAttribute(chain.terminal.path)}" data-commit-folder-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}" title="${escapeAttribute(chain.terminal.path)}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(chain.label)}</span><small class="compact-file-tree-count">${escapeHtml(count)}</small></summary><div role="group">${expanded ? chain.terminal.children.map((child) => commitFolderFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
   }
   return commitFolderFileRow(
     node.file!,
@@ -224,8 +229,10 @@ function comparisonFileTreeNode(
   model: CommitComparisonDetailViewModel,
 ): string {
   if (node.kind === "directory") {
-    const expanded = !model.collapsedDirectories.has(node.path);
-    return `<details class="commit-file-directory" data-comparison-file-directory="${escapeAttribute(node.path)}" data-comparison-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => comparisonFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
+    const chain = compactDirectoryChain(node);
+    const expanded = !model.collapsedDirectories.has(chain.terminal.path);
+    const count = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history.fileCount(chain.fileCount);
+    return `<details class="commit-file-directory" data-comparison-file-directory="${escapeAttribute(chain.terminal.path)}" data-comparison-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}" title="${escapeAttribute(chain.terminal.path)}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(chain.label)}</span><small class="compact-file-tree-count">${escapeHtml(count)}</small></summary><div role="group">${expanded ? chain.terminal.children.map((child) => comparisonFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
   }
   return comparisonFileRow(
     node.file!,
@@ -250,8 +257,10 @@ function comparisonFileRow(
 
 function commitFileTreeNode(node: CommitFileTreeNode, depth: number, model: CommitDetailViewModel): string {
   if (node.kind === "directory") {
-    const expanded = !model.collapsedDirectories.has(node.path);
-    return `<details class="commit-file-directory" data-commit-file-directory="${escapeAttribute(node.path)}" data-commit-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${countFiles(node)}</small></summary><div role="group">${expanded ? node.children.map((child) => commitFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
+    const chain = compactDirectoryChain(node);
+    const expanded = !model.collapsedDirectories.has(chain.terminal.path);
+    const count = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history.fileCount(chain.fileCount);
+    return `<details class="commit-file-directory" data-commit-file-directory="${escapeAttribute(chain.terminal.path)}" data-commit-file-rendered-expanded="${expanded}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}" title="${escapeAttribute(chain.terminal.path)}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(chain.label)}</span><small class="compact-file-tree-count">${escapeHtml(count)}</small></summary><div role="group">${expanded ? chain.terminal.children.map((child) => commitFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
   }
   return commitFileRow(node.file!, node.file!.path === model.selectedFile, depth, model.localization ?? DEFAULT_LOCALIZATION);
 }
@@ -283,10 +292,6 @@ function loadingBlock(label: string): string {
 
 function retryState(title: string, detail: string, localization: Localization): string {
   return `<div class="empty-state"><span class="empty-icon">${icon("history", 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><button class="secondary-button retry-button" id="retry-commit-details" type="button">${escapeHtml(localization.catalog.common.retry)}</button></div>`;
-}
-
-function countFiles(node: CommitFileTreeNode): number {
-  return node.kind === "file" ? 1 : node.children.reduce((count, child) => count + countFiles(child), 0);
 }
 
 function changeCode(kind: ChangeKind): string {

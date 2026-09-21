@@ -364,7 +364,11 @@ test("history dialogs and commit details render without the application shell", 
       repositoryId: ".",
       oid: commit.oid,
       parentOid: "1111111111111111",
-      files: [{ path: "src/main.ts", originalPath: null, status: "modified" }],
+      files: [
+        { path: "src/main.ts", originalPath: null, status: "modified" },
+        { path: "docs/refactor/rebuild/README.md", originalPath: null, status: "added" },
+        { path: "docs/refactor/rebuild/notes.md", originalPath: null, status: "modified" },
+      ],
     },
     loading: false,
     error: null,
@@ -382,7 +386,7 @@ test("history dialogs and commit details render without the application shell", 
       beforeOid: "1".repeat(40),
       afterOid: "2".repeat(40),
       relation: "divergent",
-      files: [{ path: "src/compare.ts", originalPath: null, status: "modified" }],
+      files: [{ path: "pkg/deep/compare.ts", originalPath: null, status: "modified" }],
     },
     loading: false,
     error: null,
@@ -397,7 +401,7 @@ test("history dialogs and commit details render without the application shell", 
       parentOid: "1".repeat(40), path: "src", kind: "directory", file: null,
       descendants: [
         { path: "src/main.ts", originalPath: null, status: "modified" },
-        { path: "src/nested/new.ts", originalPath: null, status: "added" },
+        { path: "src/nested/deep/new.ts", originalPath: null, status: "added" },
       ],
       historyGeneration: 3,
     },
@@ -410,13 +414,16 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(dialog, /data-history-dialog-ref/);
   assert.match(detail, /src\/main\.ts|main\.ts/);
   assert.match(detail, /Compared with 1111111111/);
+  assert.match(detail, />docs\/refactor\/rebuild<\/span>/u);
   assert.doesNotMatch(detail, /data-start-git-operation="(?:cherryPick|squash)"/);
   assert.match(comparison, /Net changed files/);
-  assert.match(comparison, /data-comparison-file="src\/compare\.ts"/);
+  assert.match(comparison, /data-comparison-file="pkg\/deep\/compare\.ts"/);
+  assert.match(comparison, />pkg\/deep<\/span>/u);
   assert.match(comparison, /Swap Before and After/);
   assert.match(comparison, /divergent histories/);
   assert.match(folder, /Folder changes/);
   assert.match(folder, /data-commit-folder-file="src\/main\.ts"/);
+  assert.match(folder, />nested\/deep<\/span>/u);
   assert.match(folder, /2 changed files projected under this folder/);
 });
 

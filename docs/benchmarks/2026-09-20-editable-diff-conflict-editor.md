@@ -40,6 +40,11 @@ depends only on narrow editor/session ports rather than importing another featur
   same centered numbers and one semantic marker strip instead of pane labels and colored number
   backgrounds. The conflict editor applies the same gutter contract to both merge projections and
   links their outer scroll owners.
+- A 2026-09-21 theme follow-up replaces CodeMirror Merge's faint line fill plus two-pixel intraline
+  gradient with the existing opaque semantic added/removed line fills. The shared editor theme is
+  installed by editable working Diffs, read-only historical Diffs, and both conflict projections, so
+  the correction does not fork those surfaces. Intraline marks become transparent and retain syntax
+  color while the complete changed line carries the state background.
 
 ## Browser interaction and accessibility evidence
 

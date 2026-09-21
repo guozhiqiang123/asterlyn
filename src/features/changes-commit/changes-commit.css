@@ -48,7 +48,7 @@
 
 .change-group > .group-header {
   display: grid;
-  height: 28px;
+  height: var(--compact-file-tree-row-height);
   grid-template-columns: 18px 15px minmax(0, 1fr);
   justify-content: initial;
   gap: 4px;
@@ -98,11 +98,11 @@
 .change-directory > summary,
 .change-directory-row {
   display: grid;
-  height: 27px;
+  height: var(--compact-file-tree-row-height);
   grid-template-columns: 18px 15px 18px minmax(90px, 1fr) auto;
   align-items: center;
-  gap: 4px;
-  padding: 0 8px 0 calc(7px + var(--tree-depth) * 13px);
+  gap: 3px;
+  padding: 0 7px 0 calc(6px + var(--tree-depth) * var(--compact-file-tree-indent));
   border-radius: 3px;
   color: var(--text-soft);
   cursor: default;
@@ -126,9 +126,9 @@
 
 .change-row {
   grid-template-columns: 18px 18px 18px minmax(90px, 1fr) auto;
-  min-height: 28px;
-  gap: 4px;
-  padding: 2px 7px 2px calc(7px + var(--tree-depth, 0) * 13px);
+  min-height: var(--compact-file-tree-row-height);
+  gap: 3px;
+  padding: 1px 7px 1px calc(6px + var(--tree-depth, 0) * var(--compact-file-tree-indent));
 }
 
 .change-row.primary {

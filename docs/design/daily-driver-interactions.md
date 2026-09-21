@@ -162,6 +162,15 @@ Final acceptance passed 32 frontend/delivery tests, 23 Git-core tests, two deskt
 
 The interaction conclusion is **improved**: the three columns now carry materially more visible information without adding repository work, tree/flat files remain one selection model, and the commit-summary boundary behaves like the other durable workbench splitters. Runtime memory was not remeasured, so U9 makes no memory-improvement claim. Remaining limits are the existing 150-commit bound, a single graph lane, no history path/user/date filters, non-persisted tree disclosure state, and no new Windows/macOS interaction evidence. Stage 3 editor foundations remain the next product slice.
 
+**Compact-tree follow-up, 2026-09-21.** Project Files, Changes, and commit-detail file
+trees now share one pure presentation projection: consecutive directories with no file or directory
+siblings render as one slash-separated row, the terminal directory remains the exact interaction
+target, and the row reports its recursive file count. All three surfaces use the same 25-pixel row
+height and 12-pixel indentation step; Project Files applies the configured UI font size equally to
+folders and files. Virtual-list spacers use the same exported row-height constant, so denser rows do
+not corrupt scroll targeting. This changes presentation only and does not flatten Git or workspace
+truth, persist disclosure state, or introduce a second tree model.
+
 ### U10 — Topology-complete commit graph
 
 - Remove the visible abbreviated object-ID column from history rows. Full and abbreviated IDs remain accepted by history filtering and remain available in commit details, where text selection is possible; the compact list does not spend permanent width on a non-interactive revision value.

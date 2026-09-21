@@ -8,9 +8,13 @@ import type {
   ProjectFilesInlineEdit,
   ProjectFilesOperationState,
 } from "./project-files-operation-controller.ts";
+import {
+  COMPACT_FILE_TREE_ROW_HEIGHT,
+  compactDirectoryChain,
+} from "../../presentation/compact-file-tree.ts";
 
 export const PROJECT_TREE_MOUNT_LIMIT = 200;
-export const PROJECT_TREE_ROW_HEIGHT = 27;
+export const PROJECT_TREE_ROW_HEIGHT = COMPACT_FILE_TREE_ROW_HEIGHT;
 const PROJECT_TREE_OVERSCAN = 32;
 
 export interface ProjectTreeRow {
@@ -18,6 +22,9 @@ export interface ProjectTreeRow {
   depth: number;
   positionInSet: number;
   setSize: number;
+  label: string;
+  directoryPaths: readonly string[];
+  fileCount: number;
 }
 
 export interface ProjectTreeRenderWindow {
@@ -75,7 +82,7 @@ export function renderProjectNavigation(
       ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(state.error)}</span></div>`
       : "",
   ].join("");
-  return `<div class="project-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRowWithOperations(state, row, copy, operations?.inlineEdit ?? null, cutPath)).join("")}${bottomSpacer}</div>${notices}`;
+  return `<div class="project-tree compact-file-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row) => renderProjectRowWithOperations(state, row, copy, operations?.inlineEdit ?? null, cutPath)).join("")}${bottomSpacer}</div>${notices}`;
 }
 
 export function projectTreeRows(
@@ -84,10 +91,33 @@ export function projectTreeRows(
 ): ProjectTreeRow[] {
   const rows: ProjectTreeRow[] = [];
   const visit = (node: ProjectTreeNode, depth: number, positionInSet: number, setSize: number): void => {
-    rows.push({ node, depth, positionInSet, setSize });
-    if (node.kind === "directory" && expandedDirectories.has(node.path)) {
-      node.children.forEach((child, index) => visit(child, depth + 1, index + 1, node.children.length));
+    if (node.kind === "directory") {
+      const chain = compactDirectoryChain(node);
+      rows.push({
+        node: chain.terminal,
+        depth,
+        positionInSet,
+        setSize,
+        label: chain.label,
+        directoryPaths: chain.paths,
+        fileCount: chain.fileCount,
+      });
+      if (expandedDirectories.has(chain.terminal.path)) {
+        chain.terminal.children.forEach((child, index) =>
+          visit(child, depth + 1, index + 1, chain.terminal.children.length)
+        );
+      }
+      return;
     }
+    rows.push({
+      node,
+      depth,
+      positionInSet,
+      setSize,
+      label: node.name,
+      directoryPaths: [],
+      fileCount: 1,
+    });
   };
   nodes.forEach((node, index) => visit(node, 0, index + 1, nodes.length));
   return rows;
@@ -115,14 +145,32 @@ function renderProjectRow(
   copy: ProjectFilesCopy,
 ): string {
   const { node, depth } = row;
-  const selected = state.selection?.path === node.path && state.selection.kind === node.kind;
+  const selected = state.selection?.kind === node.kind && (
+    state.selection.path === node.path || row.directoryPaths.includes(state.selection.path)
+  );
   const statusClass = `file-status-${node.status}`;
   const common = `role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-kind="${node.kind}" data-project-status="${node.status}" aria-selected="${selected}" aria-level="${depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" title="${escapeAttribute(`${node.path} · ${copy.changeLabels[node.status]}`)}"`;
   if (node.kind === "directory") {
     const expanded = state.expandedDirectories.has(node.path);
-    return `<div class="project-directory virtual ${statusClass}"><div class="project-directory-row project-node-row ${selected ? "selected" : ""}" tabindex="0" ${common} data-project-directory="${escapeAttribute(node.path)}" aria-expanded="${expanded}"><button class="project-tree-toggle" type="button" data-project-directory-toggle="${escapeAttribute(node.path)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}"><span class="tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 12)}</span></button>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(node.name)}</span></div></div>`;
+    return `<div class="project-directory virtual ${statusClass}"><div class="project-directory-row project-node-row ${selected ? "selected" : ""}" tabindex="0" ${common} data-project-directory="${escapeAttribute(node.path)}" data-project-directory-paths="${escapeAttribute(JSON.stringify(row.directoryPaths))}" aria-expanded="${expanded}"><button class="project-tree-toggle" type="button" data-project-directory-toggle="${escapeAttribute(node.path)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}"><span class="tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 12)}</span></button>${icon("folder", 15)}<span class="project-node-label">${escapeHtml(row.label)}</span><small class="compact-file-tree-count">${escapeHtml(copy.directoryFileCount(row.fileCount))}</small></div></div>`;
   }
-  return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" ${common} data-project-file="${escapeAttribute(node.path)}"><span class="project-file-glyph">${fileTypeIcon(node.name)}</span><span class="project-node-label">${escapeHtml(node.name)}</span></button>`;
+  return `<button class="project-file-row project-node-row ${statusClass} ${selected ? "selected" : ""}" type="button" ${common} data-project-file="${escapeAttribute(node.path)}"><span class="project-file-glyph">${fileTypeIcon(node.name)}</span><span class="project-node-label">${escapeHtml(row.label)}</span></button>`;
+}
+
+export function projectTreeRowRepresentsPath(row: ProjectTreeRow, path: string): boolean {
+  return row.node.path === path || row.directoryPaths.includes(path);
+}
+
+export function projectTreeElementRepresentsPath(element: HTMLElement, path: string): boolean {
+  if (element.dataset.projectNode === path) return true;
+  const serialized = element.dataset.projectDirectoryPaths;
+  if (!serialized) return false;
+  try {
+    const paths: unknown = JSON.parse(serialized);
+    return Array.isArray(paths) && paths.includes(path);
+  } catch {
+    return false;
+  }
 }
 
 function renderProjectRowWithOperations(

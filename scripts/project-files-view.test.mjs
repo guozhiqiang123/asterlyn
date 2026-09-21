@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   PROJECT_TREE_MOUNT_LIMIT,
+  PROJECT_TREE_ROW_HEIGHT,
   projectTreeRenderWindow,
+  projectTreeRowRepresentsPath,
   projectTreeRows,
   renderProjectNavigation,
 } from "../src/features/files-editor/project-files-view.ts";
@@ -19,11 +21,30 @@ test("expanded project trees are flattened in visible hierarchy order", () => {
   ]);
 });
 
+test("project files compact unary folders into one counted row", () => {
+  const tree = buildProjectTree([
+    "docs/refactor/rebuild/README.md",
+    "docs/refactor/rebuild/notes.md",
+  ]);
+  const expandedDirectories = new Set(["docs/refactor/rebuild"]);
+  const rows = projectTreeRows(tree, expandedDirectories);
+  assert.equal(rows[0].label, "docs/refactor/rebuild");
+  assert.equal(rows[0].node.path, "docs/refactor/rebuild");
+  assert.equal(rows[0].fileCount, 2);
+  assert.equal(projectTreeRowRepresentsPath(rows[0], "docs/refactor"), true);
+
+  const html = renderProjectNavigation({
+    ...state(), expandedDirectories,
+  }, tree, 0, 500);
+  assert.match(html, /data-project-node="docs\/refactor\/rebuild"/u);
+  assert.match(html, />docs\/refactor\/rebuild<\/span><small[^>]*>2 files<\/small>/u);
+});
+
 test("large project trees mount no more than the shared architecture budget", () => {
   const paths = Array.from({ length: 1_000 }, (_, index) => `file-${String(index).padStart(4, "0")}.ts`);
   const tree = buildProjectTree(paths);
-  const window = projectTreeRenderWindow(paths.length, 27 * 700, 700);
-  const html = renderProjectNavigation(state(), tree, 27 * 700, 700);
+  const window = projectTreeRenderWindow(paths.length, PROJECT_TREE_ROW_HEIGHT * 700, 700);
+  const html = renderProjectNavigation(state(), tree, PROJECT_TREE_ROW_HEIGHT * 700, 700);
   const mounted = html.match(/data-project-node=/g)?.length ?? 0;
 
   assert.ok(window.start > 0);

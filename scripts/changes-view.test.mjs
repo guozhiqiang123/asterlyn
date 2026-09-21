@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CHANGE_TREE_MOUNT_LIMIT,
+  CHANGE_TREE_ROW_HEIGHT,
   changeSupportsRestore,
   changeDisclosureKeys,
   changeTreeRenderWindow,
@@ -33,6 +34,23 @@ test("change rows preserve groups and expanded directory hierarchy", () => {
   assert.match(renderChangeNavigation(current, state()), /data-change-group="unversioned"/);
 });
 
+test("Changes compacts unary folders while preserving the terminal disclosure target", () => {
+  const current = snapshot([
+    change("docs/refactor/rebuild/README.md"),
+    change("docs/refactor/rebuild/notes.md"),
+  ]);
+  const rows = changeViewRows(current, state());
+  const directory = rows.find((row) => row.kind === "directory");
+  assert.equal(directory?.node.path, "docs/refactor/rebuild");
+  assert.equal(directory?.label, "docs/refactor/rebuild");
+  assert.deepEqual(changeDisclosureKeys(current), [
+    "group:changes",
+    "directory:changes:docs/refactor/rebuild",
+  ]);
+  const html = renderChangeNavigation(current, state());
+  assert.match(html, />docs\/refactor\/rebuild<\/span><small[^>]*>2 files<\/small>/u);
+});
+
 test("large change trees mount no more than the architecture budget", () => {
   const changes = Array.from({ length: 1_200 }, (_, index) =>
     change(`src/file-${String(index).padStart(4, "0")}.ts`),
@@ -41,10 +59,15 @@ test("large change trees mount no more than the architecture budget", () => {
   const viewState = state();
   const window = changeTreeRenderWindow(
     changeViewRows(current, viewState).length,
-    28 * 800,
+    CHANGE_TREE_ROW_HEIGHT * 800,
     700,
   );
-  const html = renderChangeNavigation(current, viewState, 28 * 800, 700);
+  const html = renderChangeNavigation(
+    current,
+    viewState,
+    CHANGE_TREE_ROW_HEIGHT * 800,
+    700,
+  );
   const mounted = html.match(/aria-posinset=/g)?.length ?? 0;
 
   assert.ok(window.start > 0);

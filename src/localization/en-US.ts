@@ -265,7 +265,7 @@ export const EN_US: LocaleCatalog = {
     tryAgain: "Try again",
     refreshingFiles: "Refreshing files…",
     boundedCatalog: "Showing a bounded project catalog; some paths were omitted.",
-    projectFiles: "Project files", fileCount: (editable, ignored) => `${editable} editable files and ${ignored} ignored entries`,
+    projectFiles: "Project files", fileCount: (editable, ignored) => `${editable} editable files and ${ignored} ignored entries`, directoryFileCount: (count) => `${count} ${count === 1 ? "file" : "files"}`,
     collapsePath: (path) => `Collapse ${path}`,
     expandPath: (path) => `Expand ${path}`,
     changeLabels: {

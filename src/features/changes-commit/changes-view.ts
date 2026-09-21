@@ -12,9 +12,13 @@ import {
 import type { ChangesCommitState } from "./changes-commit-controller.ts";
 import type { ChangesCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import {
+  COMPACT_FILE_TREE_ROW_HEIGHT,
+  compactDirectoryChain,
+} from "../../presentation/compact-file-tree.ts";
 
 export const CHANGE_TREE_MOUNT_LIMIT = 200;
-export const CHANGE_TREE_ROW_HEIGHT = 28;
+export const CHANGE_TREE_ROW_HEIGHT = COMPACT_FILE_TREE_ROW_HEIGHT;
 const CHANGE_TREE_OVERSCAN = 32;
 
 export type ChangeViewRow =
@@ -33,6 +37,7 @@ export type ChangeViewRow =
       key: string;
       paths: string[];
       collapsed: boolean;
+      label: string;
     }
   | {
       kind: "file";
@@ -81,8 +86,9 @@ export function changeDisclosureKeys(snapshot: RepositorySnapshot): string[] {
     keys.push(`group:${group}`);
     const visit = (node: ChangeFileTreeNode): void => {
       if (node.kind !== "directory") return;
-      keys.push(`directory:${group}:${node.path}`);
-      for (const child of node.children) visit(child);
+      const chain = compactDirectoryChain(node);
+      keys.push(`directory:${group}:${chain.terminal.path}`);
+      for (const child of chain.terminal.children) visit(child);
     };
     for (const node of buildChangeFileTree(changes)) visit(node);
   }
@@ -175,7 +181,7 @@ function renderChangeResults(
   const bottomSpacer = bottomCount > 0
     ? `<div class="change-virtual-spacer" aria-hidden="true" style="height:${bottomCount * CHANGE_TREE_ROW_HEIGHT}px"></div>`
     : "";
-  return `<div class="change-list virtual-tree" role="tree" aria-label="${escapeAttribute(copy.changedFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => renderChangeRow(state, row, (window?.start ?? 0) + offset, rows.length, copy)).join("")}${bottomSpacer}</div>${untrackedScanNotice(snapshot, copy)}`;
+  return `<div class="change-list compact-file-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.changedFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => renderChangeRow(state, row, (window?.start ?? 0) + offset, rows.length, copy)).join("")}${bottomSpacer}</div>${untrackedScanNotice(snapshot, copy)}`;
 }
 
 function appendGroupRows(
@@ -201,18 +207,22 @@ function appendGroupRows(
       rows.push({ kind: "file", group, change: node.change!, depth });
       return;
     }
-    const key = `directory:${group}:${node.path}`;
+    const chain = compactDirectoryChain(node);
+    const key = `directory:${group}:${chain.terminal.path}`;
     const collapsedDirectory = state.collapsedDirectories.has(key);
     rows.push({
       kind: "directory",
       group,
-      node,
+      node: chain.terminal,
       depth,
       key,
-      paths: descendantChangePaths(node),
+      paths: descendantChangePaths(chain.terminal),
       collapsed: collapsedDirectory,
+      label: chain.label,
     });
-    if (!collapsedDirectory) for (const child of node.children) visit(child, depth + 1);
+    if (!collapsedDirectory) {
+      for (const child of chain.terminal.children) visit(child, depth + 1);
+    }
   };
   for (const node of buildChangeFileTree(changes)) visit(node, 1);
 }
@@ -239,7 +249,7 @@ function renderChangeRow(
       <div class="change-directory-row" style="--tree-depth:${row.depth}">
         <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" aria-label="${escapeAttribute(copy.include(row.node.path))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" data-change-disclosure="${escapeAttribute(row.key)}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
-        ${icon("folder", 14)}<span>${escapeHtml(row.node.name)}</span><small>${row.paths.length}</small>
+        ${icon("folder", 14)}<span>${escapeHtml(row.label)}</span><small class="compact-file-tree-count">${escapeHtml(copy.fileCount(row.paths.length))}</small>
       </div>
     </div>`;
   }

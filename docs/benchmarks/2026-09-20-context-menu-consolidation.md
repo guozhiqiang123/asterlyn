@@ -11,6 +11,10 @@
 - The Remote definition form keeps **Fetch remote** because it has real, narrow behavior: a successful Add/Edit optionally performs one immediate Fetch. The checkbox and label remain together inside the dialog. This choice does not alter a later Update Current Project strategy.
 - A complete, non-empty Unversioned group owns one exact-set context target. Stage All performs one bounded exact-path Git add and one reconciliation. Move All to Trash requires a destructive confirmation, blocks dirty/open-save targets, and asks the Git core to revalidate the full unique path set as currently untracked before the first platform Trash write.
 - The bulk Trash path never calls `git clean` and never admits tracked paths. Clean editor tabs for the reviewed paths close through one editor lease. Success installs one typed working-tree outcome, reloads the project catalog once, and starts one untracked scan.
+- The Unversioned Trash review host is persistent across shell replacement. Opening a project rebuilds
+  the shell markup after window-scoped runtimes are constructed; the runtime therefore reattaches its
+  original host before every render, matching other reviewed dialog bindings. Without this invariant,
+  the menu action ran but its confirmation was rendered into the detached startup shell.
 
 ## Automated evidence
 
