@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HistoryFilterController,
 } from "../src/features/git-history/history-filter-controller.ts";
+import { historyPathChildren } from "../src/features/git-history/history-path-selection.ts";
 
 test("history filter controller owns query normalization and repository reconciliation", () => {
   const controller = new HistoryFilterController(memoryStorage());
@@ -124,6 +125,48 @@ test("history path dialogs validate text and normalize overlapping tree choices"
   assert.equal(treeResult.status, "applied");
   assert.deepEqual(Array.from(treeResult.paths.values()), [
     { repositoryId: ".", path: "src" },
+  ]);
+});
+
+test("history filter chips clear only their owned query dimension", () => {
+  const controller = new HistoryFilterController(memoryStorage());
+  controller.install({
+    repositoryIds: ["."],
+    refs: [{ repositoryId: ".", fullName: "refs/heads/main" }],
+    startCommit: null,
+    authorEmails: ["developer@example.com"],
+    currentAuthor: true,
+    sinceEpoch: 123,
+    paths: [{ repositoryId: ".", path: "src" }],
+    firstParent: false,
+    excludeMerges: false,
+    order: "topological",
+  });
+
+  controller.clearFilter("user");
+  assert.equal(controller.query().refs.length, 1);
+  assert.equal(controller.query().authorEmails.length, 0);
+  assert.equal(controller.query().currentAuthor, false);
+  assert.equal(controller.query().paths.length, 1);
+
+  controller.clearFilter("paths");
+  assert.equal(controller.query().paths.length, 0);
+  assert.equal(controller.query().repositoryIds.length, 0);
+});
+
+test("history path tree projects only the requested level", () => {
+  const files = [
+    { repositoryId: ".", path: "src/features/app.ts", workspacePath: "src/features/app.ts" },
+    { repositoryId: ".", path: "src/index.ts", workspacePath: "src/index.ts" },
+    { repositoryId: ".", path: "README.md", workspacePath: "README.md" },
+  ];
+  assert.deepEqual(historyPathChildren(files, ".").map(({ path, directory }) => ({ path, directory })), [
+    { path: "src", directory: true },
+    { path: "README.md", directory: false },
+  ]);
+  assert.deepEqual(historyPathChildren(files, ".", "src").map(({ path, directory }) => ({ path, directory })), [
+    { path: "src/features", directory: true },
+    { path: "src/index.ts", directory: false },
   ]);
 });
 

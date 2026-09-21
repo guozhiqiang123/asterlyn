@@ -121,7 +121,10 @@ function historyFilterButton(
 ): string {
   const open = model.filterMenu === menu;
   const menuIcon = iconName ?? (menu === "branch" ? "branch" : menu === "user" ? "user" : menu === "date" ? "calendar" : "folder");
-  return `<button class="history-filter-button ${active ? "active" : ""} ${open ? "open" : ""}" type="button" data-history-menu="${menu}" aria-expanded="${open}" aria-label="${escapeAttribute(title)}" title="${escapeAttribute(title)}">${icon(menuIcon, 13)}${iconName ? "" : `<span>${escapeHtml(label)}</span><span class="history-filter-chevron">${icon("chevron-down", 10)}</span>`}</button>`;
+  const button = `<button class="history-filter-button ${active ? "active" : ""} ${open ? "open" : ""}" type="button" data-history-menu="${menu}" aria-expanded="${open}" aria-label="${escapeAttribute(title)}" title="${escapeAttribute(title)}">${icon(menuIcon, 13)}${iconName ? "" : `<span>${escapeHtml(label)}</span>${active ? "" : `<span class="history-filter-chevron">${icon("chevron-down", 10)}</span>`}`}</button>`;
+  if (!active || menu === "graph") return button;
+  const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
+  return `<span class="history-filter-chip">${button}<button class="history-filter-clear" type="button" data-history-clear-filter="${menu}" aria-label="${escapeAttribute(`${copy.clear}: ${title}`)}" title="${escapeAttribute(`${copy.clear}: ${title}`)}">${icon("close", 10)}</button></span>`;
 }
 
 function renderHistoryFilterPopover(model: HistoryNavigationViewModel): string {

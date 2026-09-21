@@ -1,8 +1,11 @@
 import { icon } from "../../icons.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type { HistoryPath, HistoryRef, ProjectFile, RepositorySnapshot } from "../../models.ts";
-import { buildProjectTree, type ProjectTreeNode } from "../../presentation/project-tree.ts";
 import { branchKey, historyPathKey } from "./history-identity.ts";
+import {
+  historyPathChildren,
+  type HistoryPathCandidate,
+} from "./history-path-selection.ts";
 
 export type HistoryDialogKind = "branches" | "paths-text" | "paths-tree";
 
@@ -16,7 +19,7 @@ export interface HistoryDialogViewModel {
   readonly favoriteRefs: ReadonlyMap<string, HistoryRef>;
   readonly pathDraft: ReadonlyMap<string, HistoryPath>;
   readonly pathText: string;
-  readonly collapsedTreePaths: ReadonlySet<string>;
+  readonly expandedTreePaths: ReadonlySet<string>;
   readonly localization?: Localization;
 }
 
@@ -62,27 +65,30 @@ function renderPathTreeDialog(model: HistoryDialogViewModel): string {
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.history;
   const roots = model.snapshot.repositoryRoots.map((root) => {
-    const files = model.files.filter((file) => file.repositoryId === root.id);
-    const tree = buildProjectTree(files.map((file) => file.path));
-    return `<section class="history-path-tree-root"><h3>${icon("folder", 14)}${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${tree.length > 0 ? tree.map((node) => renderPathTreeNode(node, root.id, 0, model)).join("") : `<div class="history-dialog-empty">${escapeHtml(copy.noTrackedPaths)}</div>`}</section>`;
+    const children = historyPathChildren(model.files, root.id);
+    return `<section class="history-path-tree-root"><h3>${icon("folder", 14)}${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${children.length > 0 ? children.map((node) => renderPathTreeNode(node, 0, model)).join("") : `<div class="history-dialog-empty">${escapeHtml(copy.noTrackedPaths)}</div>`}</section>`;
   }).join("");
   return `<section class="dialog history-selection-dialog history-path-tree-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">${heading(copy.selectPathsToFilter, localization)}<div class="history-path-tree" role="tree" aria-label="${escapeAttribute(copy.trackedRepositoryPaths)}">${roots}</div><div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-clear>${escapeHtml(copy.clear)}</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-history-dialog-cancel>${escapeHtml(localization.catalog.common.cancel)}</button><button class="primary-button" type="button" data-history-dialog-apply>${escapeHtml(copy.applyCount(localization.number.format(model.pathDraft.size)))}</button></div></section>`;
 }
 
 function renderPathTreeNode(
-  node: ProjectTreeNode,
-  repositoryId: string,
+  node: HistoryPathCandidate,
   depth: number,
   model: HistoryDialogViewModel,
 ): string {
-  const key = historyPathKey({ repositoryId, path: node.path });
+  const key = historyPathKey(node);
   const selected = model.pathDraft.has(key);
-  if (node.kind === "file") {
-    return `<label class="history-path-tree-row file" role="treeitem" style="--tree-depth:${depth}"><span class="tree-chevron"></span><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" ${selected ? "checked" : ""} />${icon("file", 13)}<span>${escapeHtml(node.name)}</span></label>`;
+  const name = node.path.split("/").at(-1) ?? node.path;
+  if (!node.directory) {
+    return `<label class="history-path-tree-row file" role="treeitem" style="--tree-depth:${depth}"><span class="tree-chevron"></span><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" data-history-repository="${escapeAttribute(node.repositoryId)}" data-history-path="${escapeAttribute(node.path)}" ${selected ? "checked" : ""} />${icon("file", 13)}<span>${escapeHtml(name)}</span></label>`;
   }
-  const collapsed = model.collapsedTreePaths.has(key);
+  const expanded = model.expandedTreePaths.has(key);
   const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
-  return `<div class="history-path-tree-node" role="treeitem" aria-expanded="${!collapsed}"><div class="history-path-tree-row directory" style="--tree-depth:${depth}"><button type="button" data-history-tree-toggle="${escapeAttribute(key)}" aria-label="${escapeAttribute(collapsed ? copy.expandPath(node.path) : copy.collapsePath(node.path))}">${icon("chevron", 11)}</button><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" ${selected ? "checked" : ""} />${icon("folder", 13)}<span>${escapeHtml(node.name)}</span></div><div role="group" ${collapsed ? "hidden" : ""}>${node.children.map((child) => renderPathTreeNode(child, repositoryId, depth + 1, model)).join("")}</div></div>`;
+  const children = expanded
+    ? historyPathChildren(model.files, node.repositoryId, node.path)
+        .map((child) => renderPathTreeNode(child, depth + 1, model)).join("")
+    : "";
+  return `<div class="history-path-tree-node" role="treeitem" aria-expanded="${expanded}"><div class="history-path-tree-row directory" style="--tree-depth:${depth}"><button type="button" data-history-tree-toggle="${escapeAttribute(key)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}">${icon("chevron", 11)}</button><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" data-history-repository="${escapeAttribute(node.repositoryId)}" data-history-path="${escapeAttribute(node.path)}" ${selected ? "checked" : ""} />${icon("folder", 13)}<span>${escapeHtml(name)}</span></div>${expanded ? `<div role="group">${children}</div>` : ""}</div>`;
 }
 
 function heading(title: string, localization: Localization): string {

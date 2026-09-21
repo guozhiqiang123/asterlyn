@@ -69,7 +69,7 @@ interface HistoryFilterState {
   historyRefDraft: Map<string, HistoryRef>;
   historyPathDraft: Map<string, HistoryPath>;
   historyPathText: string;
-  historyTreeCollapsed: Set<string>;
+  historyTreeExpanded: Set<string>;
 }
 
 type HistoryFilterCollectionField =
@@ -82,7 +82,7 @@ type HistoryFilterCollectionField =
   | "historyRecentRefs"
   | "historyRefDraft"
   | "historyPathDraft"
-  | "historyTreeCollapsed";
+  | "historyTreeExpanded";
 
 export type HistoryFilterViewState = Readonly<
   Omit<HistoryFilterState, HistoryFilterCollectionField>
@@ -96,7 +96,7 @@ export type HistoryFilterViewState = Readonly<
   readonly historyRecentRefs: readonly HistoryRef[];
   readonly historyRefDraft: ReadonlyMap<string, HistoryRef>;
   readonly historyPathDraft: ReadonlyMap<string, HistoryPath>;
-  readonly historyTreeCollapsed: ReadonlySet<string>;
+  readonly historyTreeExpanded: ReadonlySet<string>;
 };
 
 export class HistoryFilterController {
@@ -236,6 +236,24 @@ export class HistoryFilterController {
     this.value.historyAuthorEmails.clear();
   }
 
+  clearFilter(menu: Exclude<HistoryFilterMenu, "graph">): void {
+    this.value.historyStartCommit = null;
+    if (menu === "branch") this.value.historyRefs.clear();
+    if (menu === "user") {
+      this.value.historyCurrentAuthor = false;
+      this.value.historyAuthorEmails.clear();
+    }
+    if (menu === "date") {
+      this.value.historyDatePreset = "all";
+      this.value.historySinceEpoch = null;
+    }
+    if (menu === "paths") {
+      this.value.historyPaths.clear();
+      this.value.historyRepositoryIds.clear();
+    }
+    this.closeMenus();
+  }
+
   toggleCurrentAuthor(): void {
     this.value.historyStartCommit = null;
     this.value.historyCurrentAuthor = !this.value.historyCurrentAuthor;
@@ -308,6 +326,7 @@ export class HistoryFilterController {
       return;
     }
     this.value.historyPathDraft = new Map(this.value.historyPaths);
+    if (kind === "paths-tree") this.value.historyTreeExpanded.clear();
     this.value.historyPathText = Array.from(this.value.historyPaths.values())
       .map((path) => historyPathWorkspaceLabel(path, files))
       .join("\n");
@@ -348,8 +367,8 @@ export class HistoryFilterController {
   }
 
   toggleTreePath(key: string): void {
-    if (this.value.historyTreeCollapsed.has(key)) this.value.historyTreeCollapsed.delete(key);
-    else this.value.historyTreeCollapsed.add(key);
+    if (this.value.historyTreeExpanded.has(key)) this.value.historyTreeExpanded.delete(key);
+    else this.value.historyTreeExpanded.add(key);
   }
 
   setPathText(text: string): void {
@@ -451,7 +470,7 @@ function createHistoryFilterState(): HistoryFilterState {
     historyRefDraft: new Map(),
     historyPathDraft: new Map(),
     historyPathText: "",
-    historyTreeCollapsed: new Set(),
+    historyTreeExpanded: new Set(),
   };
 }
 

@@ -338,6 +338,7 @@ test("history navigation owns filter menus and list host presentation", () => {
   assert.match(html, /Last 24 hours/);
   assert.match(html, /No commits match these filters/);
   assert.match(html, /Up to aaaaaaaaaa/);
+  assert.match(html, /data-history-clear-filter="branch"/);
 });
 
 test("history dialogs and commit details render without the application shell", () => {
@@ -353,7 +354,7 @@ test("history dialogs and commit details render without the application shell", 
     favoriteRefs: new Map(),
     pathDraft: new Map(),
     pathText: "",
-    collapsedTreePaths: new Set(),
+    expandedTreePaths: new Set(),
   });
   const commit = commitFixture();
   const detail = renderCommitDetail({
@@ -417,6 +418,30 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(folder, /Folder changes/);
   assert.match(folder, /data-commit-folder-file="src\/main\.ts"/);
   assert.match(folder, /2 changed files projected under this folder/);
+});
+
+test("history path dialog mounts only expanded directory levels", () => {
+  const snapshot = repositorySnapshot();
+  const files = [
+    { repositoryId: ".", path: "src/features/deep.ts", workspacePath: "src/features/deep.ts" },
+    { repositoryId: ".", path: "README.md", workspacePath: "README.md" },
+  ];
+  const collapsed = renderHistoryDialogView({
+    kind: "paths-tree", snapshot, files, query: "", error: null,
+    refDraft: new Map(), favoriteRefs: new Map(), pathDraft: new Map(), pathText: "",
+    expandedTreePaths: new Set(),
+  });
+  assert.match(collapsed, />src</);
+  assert.doesNotMatch(collapsed, />features</);
+  assert.doesNotMatch(collapsed, />deep\.ts</);
+
+  const expanded = renderHistoryDialogView({
+    kind: "paths-tree", snapshot, files, query: "", error: null,
+    refDraft: new Map(), favoriteRefs: new Map(), pathDraft: new Map(), pathText: "",
+    expandedTreePaths: new Set([".:src"]),
+  });
+  assert.match(expanded, />features</);
+  assert.doesNotMatch(expanded, />deep\.ts</);
 });
 
 test("workspace navigation and replacement previews are feature-owned", () => {

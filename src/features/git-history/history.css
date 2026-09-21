@@ -141,6 +141,39 @@
   gap: 2px;
 }
 
+.history-filter-chip {
+  display: inline-flex;
+  overflow: hidden;
+  flex: 0 1 auto;
+  align-items: center;
+  border-radius: 4px;
+  background: var(--selection-bg-strong);
+}
+
+.history-filter-chip .history-filter-button {
+  min-width: 0;
+  border-radius: 4px 0 0 4px;
+}
+
+.history-filter-clear {
+  display: inline-grid;
+  width: 20px;
+  height: 25px;
+  flex: 0 0 20px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  color: var(--info-text);
+  cursor: pointer;
+}
+
+.history-filter-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .history-filter-button > span {
   overflow: hidden;
   max-width: 90px;

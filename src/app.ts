@@ -4752,7 +4752,7 @@ export class AsterlynApp {
       favoriteRefs: this.gitHistoryPresentationRuntime.filterState.historyFavoriteRefs,
       pathDraft: this.gitHistoryPresentationRuntime.filterState.historyPathDraft,
       pathText: this.gitHistoryPresentationRuntime.filterState.historyPathText,
-      collapsedTreePaths: this.gitHistoryPresentationRuntime.filterState.historyTreeCollapsed,
+      expandedTreePaths: this.gitHistoryPresentationRuntime.filterState.historyTreeExpanded,
       localization: this.localization,
     });
     this.bindHistoryDialogEvents();
@@ -5162,6 +5162,15 @@ export class AsterlynApp {
         this.renderHistoryPane();
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-history-clear-filter]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const menu = button.dataset.historyClearFilter;
+        if (menu !== "branch" && menu !== "user" && menu !== "date" && menu !== "paths") return;
+        this.gitHistoryPresentationRuntime.filters.clearFilter(menu);
+        this.applyHistoryQuery();
+      });
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-branch-submenu]").forEach((button) => {
       const open = () => {
         const submenu = button.dataset.historyBranchSubmenu;
@@ -5297,12 +5306,10 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLInputElement>("[data-history-dialog-path]").forEach((input) => {
       input.addEventListener("change", () => {
         const key = input.dataset.historyDialogPath;
-        const candidate = key
-          ? historyPathCandidates(this.filesState.files).find(
-              (path) => historyPathKey(path) === key,
-            )
-          : null;
-        if (!key || !candidate) return;
+        const repositoryId = input.dataset.historyRepository;
+        const path = input.dataset.historyPath;
+        if (!key || !repositoryId || !path) return;
+        const candidate = { repositoryId, path };
         this.gitHistoryPresentationRuntime.filters.setPathDraft(key, candidate, input.checked);
         this.renderHistoryDialog();
       });

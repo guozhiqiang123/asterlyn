@@ -33,12 +33,21 @@
 }
 
 .branch-filter input {
+  appearance: none;
   min-width: 0;
   border: 0;
   outline: 0;
+  box-shadow: none;
   background: transparent;
   color: var(--text);
   font-size: 10px;
+}
+
+.branch-filter input:focus,
+.branch-filter input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
 }
 
 .branch-filter input::-webkit-search-cancel-button {

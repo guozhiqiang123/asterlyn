@@ -129,7 +129,7 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   assert.match(inspectorPlaceholder(localization), /未选择任何项目/);
   const historyDialog = renderHistoryDialogView({
     kind: "branches", snapshot: { branches: [], repositoryRoots: [] }, files: [], query: "", error: null,
-    refDraft: new Map(), favoriteRefs: new Map(), pathDraft: new Map(), pathText: "", collapsedTreePaths: new Set(), localization,
+    refDraft: new Map(), favoriteRefs: new Map(), pathDraft: new Map(), pathText: "", expandedTreePaths: new Set(), localization,
   });
   assert.match(historyDialog, /选择分支或标签/);
 

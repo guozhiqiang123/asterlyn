@@ -48,6 +48,46 @@ export function historyPathCandidates(files: ProjectFile[]): HistoryPathCandidat
   );
 }
 
+/**
+ * Projects only one directory level from the bounded catalog. The History path dialog calls this
+ * again when a directory is expanded, so opening the dialog never constructs or mounts the whole
+ * repository tree.
+ */
+export function historyPathChildren(
+  files: readonly ProjectFile[],
+  repositoryId: string,
+  parentPath = "",
+): HistoryPathCandidate[] {
+  const prefix = parentPath ? `${parentPath}/` : "";
+  const candidates = new Map<string, HistoryPathCandidate>();
+  for (const file of files) {
+    if (file.repositoryId !== repositoryId || !file.path.startsWith(prefix)) continue;
+    const remainder = file.path.slice(prefix.length);
+    if (!remainder) continue;
+    const separator = remainder.indexOf("/");
+    const name = separator < 0 ? remainder : remainder.slice(0, separator);
+    const path = parentPath ? `${parentPath}/${name}` : name;
+    const key = historyPathKey({ repositoryId, path });
+    const directory = separator >= 0;
+    const existing = candidates.get(key);
+    if (existing?.directory) continue;
+    const workspacePrefix = file.workspacePath.slice(
+      0,
+      file.workspacePath.length - file.path.length,
+    );
+    candidates.set(key, {
+      repositoryId,
+      path,
+      workspacePath: `${workspacePrefix}${path}`,
+      directory,
+    });
+  }
+  return Array.from(candidates.values()).sort((left, right) =>
+    Number(right.directory) - Number(left.directory) ||
+    left.workspacePath.localeCompare(right.workspacePath),
+  );
+}
+
 export function resolveHistoryPathText(
   text: string,
   candidates: HistoryPathCandidate[],
