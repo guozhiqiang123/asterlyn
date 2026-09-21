@@ -109,3 +109,30 @@ but no matched process-tree PSS/RSS series was run, so absolute memory impact re
 - `npm run test:scripts`
 - `npm run build`
 - `cargo test -p asterlyn-git`
+
+## Follow-up: collapsed rows, revert control, and horizontal scrolling (2026-09-21)
+
+Three installed-package reports were fixed and measured on a purpose-built local harness that mounts
+the real `EditableDiffEditor` through the development server with 60 long lines, one multi-line
+change, and both collapsed-unchanged regions:
+
+- The `N unchanged lines` row is CodeMirror Merge's own collapsed widget; it already ships a
+  `.cm-collapsedLines` class and base-theme rule, so the app editor theme now restates it with
+  semantic tokens (`--info-text` text on an `--info-bg` band). The measured computed color changed
+  from the package default `rgb(221, 221, 221)` to `rgb(168, 199, 250)`.
+- The per-chunk revert control grew from 22 to 26 pixels, gained a subtle surface background, and is
+  now centered: CodeMirror sets only a document-relative `top`, so the editor content's 10-pixel top
+  padding is added back and the box is centered horizontally in its 32-pixel gutter. Measured on a
+  changed line spanning y 96–115 inside a 474–506 gutter, the control occupies x 477–503 and y 93–119,
+  placing its center within half a pixel of the changed line's center and exactly on the gutter's
+  horizontal center.
+- Horizontal panning was not linked at all: the panes keep separate inner scrollers under one shared
+  vertical scroller, so scrolling one pane left the other fixed (measured `scrollLeft` 90 against 0).
+  The editable Diff now links only that axis with `linkHorizontalScroll` and disposes the link with the
+  surface; the same probe reports 90 against 90, and the read-only Diff and conflict editor keep their
+  existing full-axis links.
+
+`npm run check`, the complete 584-test script suite, and the production build passed. The harness page
+and its development-server session were removed again; the retained evidence is the measured geometry
+above plus the style-ownership assertions that now lock the collapsed-row tokens, the revert-control
+geometry, and the horizontal-link call site.

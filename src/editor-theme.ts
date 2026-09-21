@@ -433,6 +433,13 @@ const editorThemeRules =
       color: "var(--text-muted)",
       fontStyle: "italic",
     },
+    // CodeMirror's merged-view collapsed-row widget is a real element with its own base-theme rule, so
+    // the app restates it with its tokens: a dim band that reads as a system hint instead of code.
+    ".cm-collapsedLines": {
+      color: "var(--info-text)",
+      background: "linear-gradient(to bottom, transparent 0, var(--info-bg) 30%, var(--info-bg) 70%, transparent 100%)",
+      fontStyle: "italic",
+    },
     ".cm-source-word-added": {
       borderRadius: "2px",
       backgroundColor: "var(--editor-intraline-added)",

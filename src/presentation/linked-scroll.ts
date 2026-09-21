@@ -37,6 +37,19 @@ export function linkVerticalScrollProportionally(
   );
 }
 
+/**
+ * Mirrors horizontal offsets while leaving vertical offsets to whatever owns them. Merged Diff panes
+ * share one vertical scroller but keep two independent horizontal ones, so only `scrollLeft` is
+ * linked here.
+ */
+export function linkHorizontalScroll(
+  first: LinkedScrollElement,
+  second: LinkedScrollElement,
+  scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
+): () => void {
+  return linkMappedScrollElements(first, second, horizontalPosition, true, scheduler);
+}
+
 type Position = { top: number; left: number };
 
 function linkMappedScrollElements(
@@ -183,5 +196,18 @@ function proportionalVerticalPosition(
   return {
     top: progress * targetMaximum,
     left: target.scrollLeft,
+  };
+}
+
+function horizontalPosition(
+  source: LinkedScrollElement,
+  target: LinkedScrollElement,
+): Position {
+  return {
+    top: target.scrollTop,
+    left: Math.min(
+      source.scrollLeft,
+      Math.max(0, target.scrollWidth - target.clientWidth),
+    ),
   };
 }

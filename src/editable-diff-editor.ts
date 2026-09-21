@@ -18,6 +18,7 @@ import {
 import { EditorLanguageLoader } from "./editor-language.ts";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme.ts";
 import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
+import { linkHorizontalScroll } from "./presentation/linked-scroll.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
 import {
   applyExactTextChanges,
@@ -70,6 +71,7 @@ export class EditableDiffEditor {
   private phrases: Readonly<Record<string, string>> = {};
   private onChange: (content: string) => void = () => undefined;
   private copy: EditorCopy;
+  private scrollDispose: (() => void) | null = null;
   private changePending = false;
   private changeFrame: number | null = null;
 
@@ -183,6 +185,7 @@ export class EditableDiffEditor {
 
   destroy(): void {
     this.flushChanges();
+    this.releaseScrollLink();
     this.languageActivation += 1;
     this.languageLoader.cancel();
     if (this.changeFrame !== null) window.cancelAnimationFrame(this.changeFrame);
@@ -196,10 +199,16 @@ export class EditableDiffEditor {
     this.parent = null;
   }
 
+  private releaseScrollLink(): void {
+    this.scrollDispose?.();
+    this.scrollDispose = null;
+  }
+
   private render(): void {
     const parent = this.parent;
     const preferences = this.preferences;
     if (!parent || !preferences) return;
+    this.releaseScrollLink();
     this.mergeView?.destroy();
     this.unifiedView?.destroy();
     this.mergeView = null;
@@ -258,6 +267,12 @@ export class EditableDiffEditor {
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
+    // Both panes keep their own horizontal scroller under one shared vertical scroller, so their
+    // horizontal offsets are linked explicitly.
+    this.scrollDispose = linkHorizontalScroll(
+      this.mergeView.a.scrollDOM,
+      this.mergeView.b.scrollDOM,
+    );
   }
 
   private binding(): ViewBinding {

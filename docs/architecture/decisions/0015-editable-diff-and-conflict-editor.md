@@ -61,6 +61,15 @@ container has the bounded surface height and `overflow: auto`; editor and gutter
 reordered with CSS. The two merge projections used by the conflict editor link their outer scroll
 containers so Ours, Result, and Theirs remain vertically coordinated.
 
+**Amendment, 2026-09-21.** Because the inner scrollers still own the horizontal axis, the editable
+working Diff links its two panes' horizontal offsets explicitly (`linkHorizontalScroll`) and
+disposes that link with the surface; vertical positions stay with the outer scroll owner. The
+per-chunk revert control is a 26-pixel control centered in its gutter and centered on the changed
+line: CodeMirror positions it with a document-relative `top` while the gutter is a sibling of the
+editor rows, so the editor content's own top padding is added back in the surface stylesheet.
+Collapsed-unchanged rows are CodeMirror's own widget, so the app editor theme restates
+`.cm-collapsedLines` with semantic tokens instead of inheriting the package's neutral defaults.
+
 ### Conflict editor in the persistent editor region
 
 Conflict discovery remains Git-owned. Changes projects three stable groups in order: Conflicts,

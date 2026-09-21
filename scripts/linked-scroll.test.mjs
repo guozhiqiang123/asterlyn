@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  linkHorizontalScroll,
   linkScrollElements,
   linkVerticalScrollProportionally,
 } from "../src/presentation/linked-scroll.ts";
@@ -118,6 +119,28 @@ test("delayed and alternating scroll events settle without feedback", () => {
   dispose();
   first.userScroll(10, 10);
   assert.deepEqual([second.scrollLeft, second.scrollTop], [65, 60]);
+});
+
+test("horizontal-only linking mirrors offsets without touching vertical positions", () => {
+  const first = new FakeScroller(700, 900);
+  const second = new FakeScroller(900, 900);
+  const dispose = linkHorizontalScroll(first, second);
+
+  first.userScroll(120, 40);
+  second.flush();
+  assert.deepEqual([second.scrollLeft, second.scrollTop], [120, 0]);
+
+  second.userScroll(260, 70);
+  first.flush();
+  assert.deepEqual([first.scrollLeft, first.scrollTop], [260, 40]);
+
+  first.userScroll(700, 0);
+  second.flush();
+  assert.deepEqual([second.scrollLeft, second.scrollTop], [600, 70]);
+
+  dispose();
+  first.userScroll(10, 0);
+  assert.equal(second.scrollLeft, 600);
 });
 
 test("proportional vertical linking maps unequal document heights in both directions", () => {

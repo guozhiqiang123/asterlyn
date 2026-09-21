@@ -165,3 +165,17 @@ test("both project search fields keep one query field with flat in-field option 
   assert.match(search, /\.workspace-search-mode\s*\{[^}]*border-left:\s*1px solid var\(--border\);[^}]*border-radius:\s*0;/s);
   assert.match(history, /\.history-mode-button\s*\{[^}]*border-left:\s*1px solid var\(--border\);[^}]*border-radius:\s*0;/s);
 });
+
+test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {
+  const [theme, diff, editor] = await Promise.all([
+    readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+  ]);
+  // CodeMirror renders collapsed unchanged rows as a real widget, so the app theme owns its color.
+  assert.match(theme, /"\.cm-collapsedLines":\s*\{[^}]*color:\s*"var\(--info-text\)",[^}]*background:\s*"linear-gradient/s);
+  assert.match(diff, /\.cm-merge-revert\s*\{[^}]*width:\s*32px;[^}]*flex:\s*0 0 32px;/s);
+  assert.match(diff, /\.editable-diff-revert\s*\{[^}]*width:\s*26px;[^}]*height:\s*26px;[^}]*margin-top:\s*7px;[^}]*transform:\s*translateX\(-50%\);/s);
+  // The panes own separate horizontal scrollers, so the editable Diff links only that axis.
+  assert.match(editor, /linkHorizontalScroll\(\s*this\.mergeView\.a\.scrollDOM,\s*this\.mergeView\.b\.scrollDOM,\s*\)/s);
+});

@@ -23,23 +23,32 @@
 .content-body.editable-diff-surface .cm-merge-revert {
   position: relative;
   z-index: 2;
-  width: 30px;
-  flex: 0 0 30px;
+  width: 32px;
+  flex: 0 0 32px;
   border-inline: 1px solid var(--border);
   background: var(--surface-chrome);
 }
 
+/*
+ * CodeMirror positions this control with a document-relative `top` while the gutter is a sibling of
+ * the editor rows, so the editor content's own 10px top padding has to be added back; the remaining
+ * 3px centre the box on that changed line instead of hanging it above the line.
+ */
 .content-body.editable-diff-surface .editable-diff-revert {
+  left: 50%;
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
+  margin-top: 7px;
   place-items: center;
+  transform: translateX(-50%);
   border: 0;
-  border-radius: 3px;
-  background: transparent;
+  border-radius: 4px;
+  background: var(--bg-elevated);
   color: var(--text-soft);
   cursor: pointer;
   font: inherit;
+  font-size: 15px;
 }
 
 .content-body.editable-diff-surface .editable-diff-revert:hover {
