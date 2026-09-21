@@ -27,6 +27,7 @@ interface DialogState {
 
 /** Owns the one-review, exact-path bulk Trash workflow for unversioned files. */
 export class UnversionedTrashRuntime {
+  private readonly root: HTMLElement;
   private readonly host: HTMLElement;
   private readonly gateway: UnversionedTrashGateway;
   private readonly copy: () => UnversionedTrashCopy;
@@ -39,6 +40,7 @@ export class UnversionedTrashRuntime {
     gateway: UnversionedTrashGateway,
     copy: () => UnversionedTrashCopy,
   ) {
+    this.root = root;
     this.gateway = gateway;
     this.copy = copy;
     this.host = document.createElement("div");
@@ -102,6 +104,9 @@ export class UnversionedTrashRuntime {
   }
 
   private render(): void {
+    // The application shell is replaced when a workspace opens. Dialog runtimes
+    // outlive that shell, so restore the persistent host before every render.
+    if (!this.host.isConnected) this.root.append(this.host);
     const dialog = this.dialog;
     this.host.classList.toggle("hidden", !dialog);
     if (!dialog) {
