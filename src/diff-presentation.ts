@@ -38,7 +38,164 @@ export interface SplitDiffDocument {
   rows: SourceDiffRow[];
 }
 
+export interface UnifiedDiffRow {
+  kind: "context" | "added" | "removed" | "omitted" | "notice";
+  oldLineNumber: number | null;
+  newLineNumber: number | null;
+  text: string;
+  changed?: TextRange[];
+}
+
+export interface UnifiedDiffDocument {
+  document: string;
+  rows: UnifiedDiffRow[];
+}
+
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+
+export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
+  const lines = document.split("\n");
+  const rows: UnifiedDiffRow[] = [];
+  let index = 0;
+  let oldLine = 0;
+  let newLine = 0;
+  let sawHunk = false;
+
+  while (index < lines.length) {
+    const header = HUNK_HEADER.exec(lines[index] ?? "");
+    if (!header) {
+      index += 1;
+      continue;
+    }
+
+    const nextOldLine = Number(header[1]);
+    const nextNewLine = Number(header[3]);
+    const oldCount = Math.max(0, nextOldLine - (sawHunk ? oldLine : 1));
+    const newCount = Math.max(0, nextNewLine - (sawHunk ? newLine : 1));
+    if (oldCount > 0 || newCount > 0) {
+      const label =
+        oldCount === newCount
+          ? `⋯ ${oldCount} unchanged ${oldCount === 1 ? "line" : "lines"} omitted ⋯`
+          : `⋯ ${oldCount} old / ${newCount} new lines omitted ⋯`;
+      rows.push({
+        kind: "omitted",
+        oldLineNumber: null,
+        newLineNumber: null,
+        text: label,
+      });
+    }
+    sawHunk = true;
+    oldLine = nextOldLine;
+    newLine = nextNewLine;
+    index += 1;
+
+    while (index < lines.length && !HUNK_HEADER.test(lines[index] ?? "")) {
+      const line = lines[index] ?? "";
+      if (line.startsWith("diff --git ")) break;
+      if (line.startsWith("-")) {
+        const removed: string[] = [];
+        const added: string[] = [];
+        while (index < lines.length && (lines[index] ?? "").startsWith("-")) {
+          removed.push((lines[index] ?? "").slice(1));
+          index += 1;
+        }
+        while (index < lines.length && (lines[index] ?? "").startsWith("+")) {
+          added.push((lines[index] ?? "").slice(1));
+          index += 1;
+        }
+        const minLen = Math.min(removed.length, added.length);
+        const pairs: Array<{ old: TextRange[]; new: TextRange[] } | null> = [];
+        for (let i = 0; i < minLen; i += 1) {
+          const rText = removed[i];
+          const aText = added[i];
+          if (rText !== undefined && aText !== undefined) {
+            pairs.push(intralineRanges(rText, aText));
+          } else {
+            pairs.push(null);
+          }
+        }
+        for (let i = 0; i < removed.length; i += 1) {
+          rows.push({
+            kind: "removed",
+            oldLineNumber: oldLine + i,
+            newLineNumber: null,
+            text: removed[i] ?? "",
+            changed: pairs[i]?.old ?? [],
+          });
+        }
+        oldLine += removed.length;
+        for (let i = 0; i < added.length; i += 1) {
+          rows.push({
+            kind: "added",
+            oldLineNumber: null,
+            newLineNumber: newLine + i,
+            text: added[i] ?? "",
+            changed: pairs[i]?.new ?? [],
+          });
+        }
+        newLine += added.length;
+        continue;
+      }
+      if (line.startsWith("+")) {
+        while (index < lines.length && (lines[index] ?? "").startsWith("+")) {
+          rows.push({
+            kind: "added",
+            oldLineNumber: null,
+            newLineNumber: newLine,
+            text: (lines[index] ?? "").slice(1),
+          });
+          newLine += 1;
+          index += 1;
+        }
+        continue;
+      }
+      if (line.startsWith(" ")) {
+        rows.push({
+          kind: "context",
+          oldLineNumber: oldLine,
+          newLineNumber: newLine,
+          text: line.slice(1),
+        });
+        oldLine += 1;
+        newLine += 1;
+        index += 1;
+        continue;
+      }
+      if (isNoNewlineMarker(line)) {
+        index += 1;
+        continue;
+      }
+      if (line.startsWith("[Diff truncated")) {
+        rows.push({
+          kind: "notice",
+          oldLineNumber: null,
+          newLineNumber: null,
+          text: line,
+        });
+      }
+      index += 1;
+    }
+  }
+
+  if (!sawHunk) {
+    const documentLines = document.split("\n");
+    const notice =
+      documentLines.find((line) => line.startsWith("Binary file")) ??
+      documentLines.find((line) => line.startsWith("[Diff truncated")) ??
+      "No textual changes in the bounded patch";
+    rows.push({
+      kind: "notice",
+      oldLineNumber: null,
+      newLineNumber: null,
+      text: notice,
+    });
+  }
+
+  return {
+    document: rows.map((r) => r.text).join("\n"),
+    rows,
+  };
+}
 
 export function splitUnifiedDiff(document: string): SplitDiffDocument {
   const lines = document.split("\n");

@@ -1,7 +1,6 @@
 import {
   Compartment,
   EditorState,
-  RangeSetBuilder,
   StateEffect,
   StateField,
   type Extension,
@@ -27,15 +26,17 @@ import {
 } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
 import {
+  parseUnifiedDiff,
   splitUnifiedDiff,
   type DiffPresentation,
   type SourceDiffRow,
+  type UnifiedDiffRow,
 } from "./diff-presentation";
 import { attachSplitter } from "./presentation/splitter";
 import { linkScrollElements } from "./presentation/linked-scroll";
 import {
   splitChangeBlocks,
-  unifiedChangeBlocks,
+  unifiedDiffChangeBlocks,
   type DiffChangeBlock,
   type DiffDirection,
 } from "./features/files-editor/diff-navigation";
@@ -61,36 +62,14 @@ import {
   DEFAULT_APP_PREFERENCES,
   type AppPreferences,
 } from "./preferences";
-
-const unifiedLineDecorations = EditorView.decorations.compute(["doc"], (state) => {
-  const builder = new RangeSetBuilder<Decoration>();
-  let inHunk = false;
-  for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
-    const line = state.doc.line(lineNumber);
-    const text = line.text;
-    let className = "";
-    if (text.startsWith("diff --git ")) inHunk = false;
-    if (text.startsWith("@@")) inHunk = true;
-    if (text.startsWith("+") && (inHunk || !text.startsWith("+++ "))) {
-      className = "cm-diff-added";
-    } else if (text.startsWith("-") && (inHunk || !text.startsWith("--- "))) {
-      className = "cm-diff-removed";
-    } else if (text.startsWith("@@")) {
-      className = "cm-diff-hunk";
-    } else if (
-      text.startsWith("diff --git") ||
-      text.startsWith("index ") ||
-      text.startsWith("---") ||
-      text.startsWith("+++") ||
-      text.startsWith("new file") ||
-      text.startsWith("deleted file")
-    ) {
-      className = "cm-diff-meta";
-    }
-    if (className) builder.add(line.from, line.from, Decoration.line({ class: className }));
-  }
-  return builder.finish();
-});
+import {
+  renderOverviewRuler,
+  splitOverviewBlocks,
+  unifiedChangeGutter,
+  unifiedLineDecorations,
+  unifiedOverviewBlocks,
+  type DiffOverviewBlock,
+} from "./diff-overview-ruler";
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -158,6 +137,7 @@ export class DiffEditor {
     old: { result: null, loading: false, generation: 0 },
     new: { result: null, loading: false, generation: 0 },
   };
+  private ruler: HTMLDivElement | null = null;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -280,9 +260,31 @@ export class DiffEditor {
     parent.replaceChildren();
     parent.classList.toggle("split-diff", this.presentation.layout === "split");
 
+    const onSelect = (block: DiffOverviewBlock) => {
+      this.activeChangeStart = block.fromLine;
+      for (const view of this.views) {
+        if (block.fromLine > view.state.doc.lines) continue;
+        const line = view.state.doc.line(block.fromLine);
+        view.dispatch({
+          selection: { anchor: line.from },
+          effects: [
+            setActiveDiffBlock.of({ fromLine: block.fromLine, toLine: block.toLine }),
+            EditorView.scrollIntoView(line.from, { y: "center" }),
+          ],
+        });
+      }
+      this.views[0]?.focus();
+    };
+
     if (this.presentation.layout === "unified") {
-      this.changeBlocks = unifiedChangeBlocks(this.sourceDocument);
-      this.views.push(this.createView(parent, this.sourceDocument));
+      const unified = parseUnifiedDiff(this.sourceDocument);
+      this.changeBlocks = unifiedDiffChangeBlocks(unified.rows);
+      const view = this.createView(parent, unified.document, undefined, undefined, unified.rows);
+      this.views.push(view);
+      const blocks = unifiedOverviewBlocks(unified.rows, view);
+      if (blocks.length > 0) {
+        this.ruler = renderOverviewRuler(parent, view.state.doc.lines, blocks, onSelect);
+      }
       return;
     }
 
@@ -328,6 +330,11 @@ export class DiffEditor {
     const newView = this.createView(newHost, split.newDocument, split.rows, "new");
     this.views.push(oldView, newView);
     this.scrollDispose = linkScrollElements(oldView.scrollDOM, newView.scrollDOM);
+
+    const blocks = splitOverviewBlocks(split.rows, newView);
+    if (blocks.length > 0) {
+      this.ruler = renderOverviewRuler(parent, newView.state.doc.lines, blocks, onSelect);
+    }
   }
 
   private createPane(
@@ -350,6 +357,7 @@ export class DiffEditor {
     document: string,
     rows?: SourceDiffRow[],
     side?: "old" | "new",
+    unifiedRows?: readonly UnifiedDiffRow[],
   ): EditorView {
     const language = new Compartment();
     const tabSize = new Compartment();
@@ -361,7 +369,9 @@ export class DiffEditor {
     const activeBlame = side ? this.blameState[side].result : null;
     const sourceLine = rows && side
       ? (documentLine: number) => rows[documentLine - 1]?.[side].lineNumber ?? null
-      : (documentLine: number) => documentLine;
+      : unifiedRows
+        ? (documentLine: number) => unifiedRows[documentLine - 1]?.newLineNumber ?? unifiedRows[documentLine - 1]?.oldLineNumber ?? null
+        : (documentLine: number) => documentLine;
     const extensions: Extension[] = [
       EditorState.readOnly.of(true),
       tabSize.of(EditorState.tabSize.of(this.editorPreferences.editorTabSize)),
@@ -398,8 +408,20 @@ export class DiffEditor {
         sourceChangeGutter(rows, side),
         sourceLineDecorations(rows, side),
       );
-    } else {
-      extensions.push(lineNumberGutter(openBlameMenu), unifiedLineDecorations);
+    } else if (unifiedRows) {
+      extensions.push(
+        lineNumberGutter(
+          openBlameMenu,
+          (lineNumber) => {
+            const r = unifiedRows[lineNumber - 1];
+            if (!r || r.kind === "omitted" || r.kind === "notice") return "";
+            return (r.newLineNumber ?? r.oldLineNumber)?.toString() ?? "";
+          },
+          "before",
+        ),
+        unifiedChangeGutter(unifiedRows),
+        unifiedLineDecorations(unifiedRows),
+      );
     }
     if (this.presentation.layout === "unified") {
       extensions.push(EditorView.lineWrapping);
@@ -584,6 +606,8 @@ export class DiffEditor {
     this.scrollDispose = null;
     this.splitDispose?.();
     this.splitDispose = null;
+    this.ruler?.remove();
+    this.ruler = null;
     for (const view of this.views) view.destroy();
     this.views.length = 0;
     this.languageBindings.length = 0;

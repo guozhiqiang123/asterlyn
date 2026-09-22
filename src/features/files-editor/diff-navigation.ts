@@ -19,6 +19,12 @@ export function splitChangeStartLines(rows: readonly SourceDiffRow[]): number[] 
   return splitChangeBlocks(rows).map((block) => block.fromLine);
 }
 
+export function unifiedDiffChangeBlocks(rows: readonly { kind: string }[]): DiffChangeBlock[] {
+  return groupedBlocks(
+    rows.map((row) => row.kind === "added" || row.kind === "removed"),
+  );
+}
+
 export function unifiedChangeBlocks(document: string): DiffChangeBlock[] {
   const lines = document.split("\n");
   let inHunk = false;

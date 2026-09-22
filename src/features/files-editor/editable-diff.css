@@ -112,6 +112,7 @@
   border-left: 1px solid var(--border);
 }
 
+.content-body.diff-surface > .cm-change-overview-ruler,
 .content-body.editable-diff-surface > .cm-change-overview-ruler {
   position: absolute;
   z-index: 8;

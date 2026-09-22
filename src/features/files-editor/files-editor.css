@@ -370,6 +370,7 @@
 }
 
 .content-body.diff-surface {
+  position: relative;
   overflow: hidden;
 }
 
