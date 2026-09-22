@@ -88,6 +88,7 @@
   --editor-diff-meta: #858a94;
   --editor-intraline-added: #397b4eaa;
   --editor-intraline-removed: #94424aaa;
+  --editor-whitespace: #6f737b80;
   --syntax-comment: #8c919b;
   --syntax-keyword: #cf8e6d;
   --syntax-string: #6aab73;
@@ -228,6 +229,7 @@
   --editor-diff-meta: #666d77;
   --editor-intraline-added: #83c99599;
   --editor-intraline-removed: #e58d9499;
+  --editor-whitespace: #858b9580;
   --syntax-comment: #69717d;
   --syntax-keyword: #a14218;
   --syntax-string: #26733a;

@@ -460,6 +460,21 @@ const editorThemeRules =
     ".cm-diff-current-change-start.cm-diff-current-change-end": {
       boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 1px 0 var(--focus-ring), inset 0 -1px 0 var(--focus-ring)",
     },
+    ".cm-highlightSpace": {
+      backgroundImage: "radial-gradient(circle at center, var(--editor-whitespace) 0, var(--editor-whitespace) 0.9px, transparent 1.5px)",
+      backgroundPosition: "center",
+      backgroundSize: "1ch 100%",
+      backgroundRepeat: "repeat-x",
+    },
+    ".cm-highlightTab": {
+      backgroundImage: "url('data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"20\"><path stroke=\"%236f737b\" stroke-opacity=\"0.55\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" d=\"M1 10H196L190 5M190 15L196 10\"/></svg>')",
+      backgroundSize: "auto 100%",
+      backgroundPosition: "right 90%",
+      backgroundRepeat: "no-repeat",
+    },
+    ".cm-trailingSpace": {
+      backgroundColor: "color-mix(in srgb, var(--danger-border) 35%, transparent)",
+    },
   };
 
 const editorThemes = {
