@@ -160,12 +160,16 @@ export function createEditorChangeIndicators(
         const state = this.view.state.field(field);
         this.ruler.setAttribute("aria-label", state.copy.overview);
         const blocks = blocksFromChunks(state.chunks, this.view.state.doc, documentSide);
-        const lineRange = Math.max(1, this.view.state.doc.lines - 1);
+        const totalLines = Math.max(1, this.view.state.doc.lines);
         this.ruler.replaceChildren(...blocks.map((block) => {
           const marker = document.createElement("button");
           marker.type = "button";
           marker.className = `cm-change-overview-marker cm-change-${block.kind}`;
-          marker.style.top = `${((block.lineFrom - 1) / lineRange) * 100}%`;
+          const lineCount = Math.max(1, block.lineTo - block.lineFrom + 1);
+          const topPercent = ((block.lineFrom - 1) / totalLines) * 100;
+          const heightPercent = (lineCount / totalLines) * 100;
+          marker.style.top = `${topPercent}%`;
+          marker.style.height = `max(5px, ${heightPercent}%)`;
           marker.title = state.copy.navigate(block.kind, block.lineFrom);
           marker.setAttribute("aria-label", marker.title);
           marker.addEventListener("click", () => {
