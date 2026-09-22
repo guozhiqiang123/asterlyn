@@ -246,12 +246,6 @@ const editorThemeRules =
       width: "7px",
       pointerEvents: "none",
     },
-    ".cm-mergeView .cm-change-overview-ruler": {
-      position: "sticky",
-      top: "2px",
-      right: "2px",
-      bottom: "auto",
-    },
     ".cm-change-overview-marker": {
       position: "absolute",
       right: "0",

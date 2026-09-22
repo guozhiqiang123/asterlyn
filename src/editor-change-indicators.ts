@@ -123,59 +123,36 @@ export function createEditorChangeIndicators(
     options.overview === false ? [] : ViewPlugin.fromClass(class {
       private readonly ruler: HTMLDivElement;
       private readonly view: EditorView;
-      private resizeObserver: ResizeObserver | null = null;
 
       constructor(view: EditorView) {
         this.view = view;
         this.ruler = document.createElement("div");
         this.ruler.className = "cm-change-overview-ruler";
-        view.dom.append(this.ruler);
-        this.setupRuler();
+        this.attach();
         this.render();
+        if (typeof queueMicrotask === "function") {
+          queueMicrotask(() => this.attach());
+        }
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => this.attach());
+        }
       }
 
-      private setupRuler(): void {
-        const updateHeight = () => {
-          const mergeView = this.view.dom.closest<HTMLElement>(".cm-mergeView");
-          if (mergeView) {
-            const height = Math.max(0, mergeView.clientHeight - 4);
-            this.ruler.style.height = `${height}px`;
-          }
-        };
-        updateHeight();
-        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-          window.requestAnimationFrame(updateHeight);
-        }
-        if (typeof ResizeObserver !== "undefined") {
-          this.resizeObserver = new ResizeObserver(updateHeight);
-          const mergeView = this.view.dom.closest<HTMLElement>(".cm-mergeView");
-          if (mergeView) {
-            this.resizeObserver.observe(mergeView);
-          } else {
-            this.resizeObserver.observe(this.view.dom);
-          }
+      private attach(): void {
+        const mergeView = this.view.dom.closest<HTMLElement>(".cm-mergeView");
+        const target = mergeView?.parentElement ?? this.view.dom;
+        if (this.ruler.parentElement !== target) {
+          target.append(this.ruler);
         }
       }
 
       update(update: ViewUpdate): void {
+        this.attach();
         if (update.docChanged || update.transactions.some((transaction) =>
           transaction.effects.some((effect) => effect.is(updateIndicator)))) this.render();
-        if (update.geometryChanged || update.viewportChanged) {
-          const mergeView = this.view.dom.closest<HTMLElement>(".cm-mergeView");
-          if (mergeView) {
-            const height = Math.max(0, mergeView.clientHeight - 4);
-            if (this.ruler.style.height !== `${height}px`) {
-              this.ruler.style.height = `${height}px`;
-            }
-            if (this.resizeObserver && mergeView) {
-              this.resizeObserver.observe(mergeView);
-            }
-          }
-        }
       }
 
       destroy(): void {
-        this.resizeObserver?.disconnect();
         this.ruler.remove();
       }
 

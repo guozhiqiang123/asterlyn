@@ -47,10 +47,22 @@
 
 .conflict-left-merge,
 .conflict-right-merge {
+  position: relative;
   height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.conflict-left-merge > .cm-change-overview-ruler,
+.conflict-right-merge > .cm-change-overview-ruler {
+  position: absolute;
+  z-index: 8;
+  top: 2px;
+  right: 2px;
+  bottom: 2px;
+  width: 7px;
+  pointer-events: none;
 }
 
 .conflict-three-pane .cm-mergeView {
