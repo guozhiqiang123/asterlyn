@@ -150,6 +150,8 @@ export class EditorSurface {
     return this.textEditor.selectRange(fromUtf16, toUtf16);
   }
 
+  isTextTabMounted(tabId: string): boolean { return this.mountedTextTabId === tabId; }
+
   navigateDiffChange(direction: 1 | -1): boolean {
     return this.mountedEditableDiffTabId
       ? this.editableDiffEditor.navigateChange(direction)
@@ -411,12 +413,13 @@ export class EditorSurface {
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
-    if (this.mountedEditorKey === key && this.mountedTextTabId === tab.id) {
-      this.mountTextEditorSurface(this.query("#content-body"), tab, baselineContent, preferences, blame, onContentChange);
-      return;
-    }
     const body = this.query("#content-body");
     const reuseTextSurface = this.textEditor.isMountedIn(body);
+    if (this.mountedTextTabId === tab.id && reuseTextSurface) {
+      this.mountedEditorKey = key;
+      this.mountTextEditorSurface(body, tab, baselineContent, preferences, blame, onContentChange);
+      return;
+    }
     beforeTransition();
     this.disposeMarkdownSurface();
     this.diffEditor.destroy();
@@ -514,11 +517,13 @@ export class EditorSurface {
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
   ): void {
-    if (this.mountedEditorKey === key) {
+    if (this.mountedEditorKey === key || (this.mountedTextTabId === tab.id && this.activeMarkdownMode === tab.markdownMode)) {
+      this.mountedEditorKey = key;
       if (tab.markdownMode !== "preview") {
         const parent = tab.markdownMode === "split" ? this.query("#markdown-source-pane") : this.query("#content-body");
         this.mountTextEditorSurface(parent, tab, baselineContent, preferences, blame, onContentChange);
       }
+      if (tab.markdownMode !== "source") this.queueMarkdownPreview(tab.id, tab.content);
       return;
     }
     beforeTransition();
@@ -544,14 +549,7 @@ export class EditorSurface {
         <section class="markdown-preview-pane" id="markdown-preview" aria-label="${escapeHtml(this.copy.markdownPreview)}">${markdownPreviewLoadingBlock(this.copy)}</section>
       </div>`;
       this.mountedTextTabId = tab.id;
-      this.mountTextEditorSurface(
-        this.query("#markdown-source-pane"),
-        tab,
-        baselineContent,
-        preferences,
-        blame,
-        onContentChange,
-      );
+      this.mountTextEditorSurface(this.query("#markdown-source-pane"), tab, baselineContent, preferences, blame, onContentChange);
       const layout = this.query("#markdown-split-layout");
       this.markdownSplitterDisposer = attachSplitter(this.query("#markdown-splitter"), {
         orientation: "vertical",
@@ -563,11 +561,7 @@ export class EditorSurface {
           layout.style.setProperty("--markdown-source-width", `${this.markdownSourcePercent}%`);
           this.requestMeasure();
         },
-        onReset: () => {
-          this.markdownSourcePercent = 50;
-          layout.style.setProperty("--markdown-source-width", "50%");
-          this.requestMeasure();
-        },
+        onReset: () => { this.markdownSourcePercent = 50; layout.style.setProperty("--markdown-source-width", "50%"); this.requestMeasure(); },
       });
       this.queueMarkdownPreview(tab.id, tab.content, true);
     } else {

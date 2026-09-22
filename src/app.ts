@@ -5918,6 +5918,7 @@ export class AsterlynApp {
         return;
       }
       if (tab.status === "loading") {
+        if (this.editorSurface.isTextTabMounted(tab.id)) return;
         this.showEditorHtml(
           editorDocumentContentKey(document, `loading:${tab.loadEpoch}`),
           renderEditorLoadingBlock(copy.loadingText),

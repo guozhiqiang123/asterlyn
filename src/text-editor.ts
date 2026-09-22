@@ -24,6 +24,7 @@ import { linkVerticalScrollProportionally } from "./presentation/linked-scroll";
 import type { AppPreferences } from "./preferences";
 import {
   applyExactTextChanges,
+  computeTextChange,
   decodeExactText,
   encodeExactText,
   type ExactTextContent,
@@ -91,6 +92,7 @@ export class TextEditor {
   private readOnlyValue = false;
   private themeValue: EffectiveTheme = "dark";
   private phrasesValue: Readonly<Record<string, string>> = {};
+  private synchronizing = false;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -114,14 +116,37 @@ export class TextEditor {
     const active = this.activeEntry();
     if (
       active?.id === tabId &&
-      active.loadEpoch === loadEpoch &&
-      active.view?.dom.parentElement === parent
+      active.view?.dom.parentElement === parent &&
+      active.path === path
     ) {
+      active.loadEpoch = loadEpoch;
       active.onChange = onChange;
       active.changeIndicators.setBaseline(active.view, baselineContent);
       active.changeIndicators.setCopy(active.view, editorChangeIndicatorCopy(this.blameCopy));
       this.updateBlameAvailability(active, blameSource, blameUnavailableReason);
       applyEditorPreferences(active.view, preferences);
+
+      const currentText = active.view.state.doc.toString();
+      const decoded = decodeExactText(content);
+      if (currentText !== decoded.text) {
+        const prevScrollTop = active.view.scrollDOM.scrollTop;
+        const prevScrollLeft = active.view.scrollDOM.scrollLeft;
+        active.exactContent = decoded;
+        active.serializedContent = content;
+        const change = computeTextChange(currentText, decoded.text);
+        if (change) {
+          this.synchronizing = true;
+          try {
+            active.view.dispatch({ changes: change });
+          } finally {
+            this.synchronizing = false;
+          }
+        }
+        this.restoreScroll(active.view.scrollDOM, prevScrollTop, prevScrollLeft);
+      } else {
+        active.exactContent = decoded;
+        active.serializedContent = content;
+      }
       active.view.requestMeasure();
       return;
     }
@@ -131,9 +156,20 @@ export class TextEditor {
         ? this.releaseActiveView(true)
         : (this.detach(), null);
     let entry = this.entries.get(tabId);
-    if (entry && (entry.loadEpoch !== loadEpoch || entry.path !== path)) {
+    if (entry && entry.path !== path) {
       this.dispose(tabId);
       entry = undefined;
+    }
+    if (entry && entry.loadEpoch !== loadEpoch) {
+      entry.loadEpoch = loadEpoch;
+      const decoded = decodeExactText(content);
+      entry.exactContent = decoded;
+      entry.serializedContent = content;
+      const currentText = entry.state.doc.toString();
+      if (currentText !== decoded.text) {
+        const change = computeTextChange(currentText, decoded.text);
+        if (change) entry.state = entry.state.update({ changes: change }).state;
+      }
     }
     if (!entry) {
       entry = this.createEntry(
@@ -162,17 +198,34 @@ export class TextEditor {
     mountedEntry.changeIndicators.setBaseline(view, baselineContent);
     mountedEntry.changeIndicators.setCopy(view, editorChangeIndicatorCopy(this.blameCopy));
     this.updateLanguageDataset(mountedEntry);
-    view.scrollDOM.scrollLeft = mountedEntry.scrollLeft;
-    view.scrollDOM.scrollTop = mountedEntry.scrollTop;
-    window.requestAnimationFrame(() => {
-      if (mountedEntry.view !== view || this.activeId !== tabId) return;
-      view.scrollDOM.scrollLeft = mountedEntry.scrollLeft;
-      view.scrollDOM.scrollTop = mountedEntry.scrollTop;
-      view.requestMeasure();
-    });
+    this.restoreScroll(view.scrollDOM, mountedEntry.scrollTop, mountedEntry.scrollLeft);
     if (mountedEntry.languageStatus === "loading") {
       this.loadLanguage(mountedEntry);
     }
+  }
+
+  private restoreScroll(
+    scrollDOM: HTMLElement,
+    scrollTop: number,
+    scrollLeft: number,
+  ): void {
+    let attempts = 0;
+    const apply = () => {
+      if (!scrollDOM.isConnected) return;
+      const max = Math.max(0, scrollDOM.scrollHeight - scrollDOM.clientHeight);
+      if (max > 0 || attempts >= 5) {
+        scrollDOM.scrollTop = Math.min(max, scrollTop);
+      } else {
+        scrollDOM.scrollTop = scrollTop;
+      }
+      scrollDOM.scrollLeft = scrollLeft;
+      if (scrollDOM.scrollTop < scrollTop && max > scrollDOM.scrollTop && attempts < 5) {
+        attempts += 1;
+        window.requestAnimationFrame(apply);
+      }
+    };
+    apply();
+    window.requestAnimationFrame(apply);
   }
 
   isMountedIn(parent: HTMLElement): boolean {
@@ -443,7 +496,7 @@ export class TextEditor {
         ]),
         EditorView.updateListener.of((update) => {
           entry.state = update.state;
-          if (!update.docChanged) return;
+          if (!update.docChanged || this.synchronizing) return;
           this.invalidateBlameForEdit(entry);
           const changes: TextChange[] = [];
           update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {

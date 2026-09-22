@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyExactTextChanges,
+  computeTextChange,
   decodeExactText,
   encodeExactText,
 } from "../src/features/files-editor/text-content.ts";
@@ -44,3 +45,23 @@ test("multiple descending edits retain untouched mixed separators", () => {
   ]);
   assert.equal(encodeExactText(edited), "ONE\r\ntwo\nTHREE\r\n3.5\r\nfour");
 });
+
+test("computeTextChange identifies minimal diff range or null for identical text", () => {
+  assert.equal(computeTextChange("hello world", "hello world"), null);
+  assert.deepEqual(computeTextChange("hello world", "hello beautiful world"), {
+    from: 6,
+    to: 6,
+    insert: "beautiful ",
+  });
+  assert.deepEqual(computeTextChange("hello world", "hello"), {
+    from: 5,
+    to: 11,
+    insert: "",
+  });
+  assert.deepEqual(computeTextChange("abcde", "abXde"), {
+    from: 2,
+    to: 3,
+    insert: "X",
+  });
+});
+

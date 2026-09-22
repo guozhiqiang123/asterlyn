@@ -22,6 +22,7 @@ import { linkHorizontalScroll } from "./presentation/linked-scroll.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
 import {
   applyExactTextChanges,
+  computeTextChange,
   decodeExactText,
   encodeExactText,
   type ExactTextContent,
@@ -637,21 +638,3 @@ export class EditableDiffEditor {
   }
 }
 
-function computeTextChange(oldText: string, newText: string): { from: number; to: number; insert: string } | null {
-  if (oldText === newText) return null;
-  let start = 0;
-  while (start < oldText.length && start < newText.length && oldText.charCodeAt(start) === newText.charCodeAt(start)) {
-    start++;
-  }
-  let oldEnd = oldText.length;
-  let newEnd = newText.length;
-  while (oldEnd > start && newEnd > start && oldText.charCodeAt(oldEnd - 1) === newText.charCodeAt(newEnd - 1)) {
-    oldEnd--;
-    newEnd--;
-  }
-  return {
-    from: start,
-    to: oldEnd,
-    insert: newText.slice(start, newEnd),
-  };
-}
