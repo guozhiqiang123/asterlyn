@@ -613,7 +613,7 @@
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--ui-font-size, 13px);
 }
 
 .command-surface-tabs > button:hover:not(:disabled),
@@ -664,8 +664,8 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 11px;
-  line-height: 19px;
+  font-size: var(--ui-font-size, 13px);
+  line-height: calc(var(--ui-font-size, 13px) + 6px);
   overflow-y: hidden;
   resize: none;
 }
@@ -734,13 +734,13 @@
 }
 
 .command-result-copy strong {
-  font-size: 10px;
+  font-size: var(--ui-font-size, 13px);
   font-weight: 580;
 }
 
 .command-result-copy small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
 }
 
 .command-result.selected .command-result-copy small {
@@ -761,12 +761,12 @@
 
 .command-surface-empty strong {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--ui-font-size, 13px);
 }
 
 .command-surface-empty span:not(.spinner) {
   max-width: 430px;
-  font-size: 9px;
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
   line-height: 1.45;
 }
 
@@ -779,7 +779,7 @@
   border-top: 1px solid var(--border);
   background: var(--surface-chrome);
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
 }
 
 .command-surface-footer > span:first-child {
