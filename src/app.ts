@@ -1465,6 +1465,9 @@ export class AsterlynApp {
     ) {
       this.renderHistoryPane();
     }
+    if (change.catalogChanged && this.activeDocument().kind === "working-diff") {
+      void this.loadSelectedDiff();
+    }
     if (change.catalogChanged) this.contextMenuHost.revalidate();
     if (change.error) this.showError(change.error);
   }

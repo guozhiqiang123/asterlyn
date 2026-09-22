@@ -17,9 +17,15 @@ interface EditableWorkingDiffState {
 }
 
 export function diffProjectFile(files: readonly ProjectFile[], document: DiffDocument): ProjectFile | null {
-  return document.kind === "working-diff"
-    ? files.find((file) => file.repositoryId === "." && file.path === document.selection.path) ?? null
-    : files.find((file) => file.repositoryId === document.repositoryId && file.path === document.path) ?? null;
+  if (document.kind === "working-diff") {
+    return files.find((file) => file.repositoryId === "." && file.path === document.selection.path) ?? {
+      repositoryId: ".",
+      path: document.selection.path,
+      workspacePath: document.selection.path,
+      readOnly: false,
+    };
+  }
+  return files.find((file) => file.repositoryId === document.repositoryId && file.path === document.path) ?? null;
 }
 
 export function workingDiffTextTab(

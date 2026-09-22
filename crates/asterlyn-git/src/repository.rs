@@ -6354,13 +6354,14 @@ mod tests {
         let repository = GitRepository::open(directory.path()).expect("repository opens");
 
         let paths = vec!["new-a.txt".to_string(), "new-b.txt".to_string()];
+        let canonical_root = fs::canonicalize(directory.path()).expect("canonical root");
         assert_eq!(
             repository
                 .resolve_untracked_paths_for_trash(&paths)
                 .expect("current untracked paths resolve"),
             vec![
-                directory.path().join("new-a.txt"),
-                directory.path().join("new-b.txt"),
+                canonical_root.join("new-a.txt"),
+                canonical_root.join("new-b.txt"),
             ],
         );
         assert!(matches!(

@@ -6,7 +6,7 @@ use asterlyn_git::{
     CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange, GitBlameResult,
     GitConflictContent, GitError, GitOperationAction, GitOperationKind, GitOperationPlan,
     GitOperationSnapshot, GitRepository, GitResetMode, GitResetPlan, HistoryPage, HistoryQuery,
-    ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
+    ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
     RemoteMutationPlan, RemoteMutationRequest, RepositoryReadPlan, RepositorySliceSnapshot,
     RepositorySnapshot, TrackedChangeScan, UntrackedScan,
 };

@@ -89,6 +89,24 @@ pub(crate) async fn open_project(
     );
     pending.remove(window.label());
     activation?;
+    if let Some(repository) = &project.repository {
+        let seeded_files: Vec<ProjectFile> = repository
+            .changes
+            .iter()
+            .map(|change| ProjectFile {
+                repository_id: ".".to_string(),
+                path: change.path.clone(),
+                workspace_path: change.path.clone(),
+                read_only: false,
+            })
+            .collect();
+        let _ = active_workspaces.seed_catalog(
+            window.label(),
+            token,
+            Path::new(&project.root),
+            &seeded_files,
+        );
+    }
     terminal_sessions.remove_owner_if_root_changed(window.label(), Path::new(&project.root));
     Ok(project)
 }
@@ -113,6 +131,24 @@ pub(crate) async fn read_project_snapshot(
             .as_ref()
             .map(|repository| Path::new(&repository.git_dir)),
     )?;
+    if let Some(repository) = &project.repository {
+        let seeded_files: Vec<ProjectFile> = repository
+            .changes
+            .iter()
+            .map(|change| ProjectFile {
+                repository_id: ".".to_string(),
+                path: change.path.clone(),
+                workspace_path: change.path.clone(),
+                read_only: false,
+            })
+            .collect();
+        let _ = active_workspaces.seed_catalog(
+            window.label(),
+            token,
+            Path::new(&project.root),
+            &seeded_files,
+        );
+    }
     Ok(project)
 }
 

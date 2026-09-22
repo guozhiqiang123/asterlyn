@@ -352,6 +352,49 @@ impl ActiveWorkspaces {
         Ok(())
     }
 
+    pub(crate) fn seed_catalog(
+        &self,
+        window_label: &str,
+        token: u64,
+        root: &Path,
+        files: &[ProjectFile],
+    ) -> Result<(), WorkspaceError> {
+        let activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        if activations.get(window_label) != Some(&token) {
+            return Err(stale_activation());
+        }
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "seed project catalog".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get_mut(window_label)
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "open a project folder before installing its file catalog".to_string(),
+            })?;
+        if active.root != root {
+            return Err(WorkspaceError::NotAuthorized {
+                message: "the project catalog belongs to a stale workspace session".to_string(),
+            });
+        }
+        let mut directories: BTreeSet<PathBuf> = active.watch_directories.iter().cloned().collect();
+        for file in files {
+            active
+                .catalog
+                .entry(file.repository_id.clone())
+                .or_default()
+                .insert(file.path.clone(), file.clone());
+            if !file.read_only {
+                insert_workspace_path_directories(&mut directories, root, &file.workspace_path);
+            }
+        }
+        active.watch_directories = directories.into_iter().collect();
+        Ok(())
+    }
+
     pub(crate) fn authorize_catalogued_file(
         &self,
         window_label: &str,
@@ -359,12 +402,12 @@ impl ActiveWorkspaces {
         repository_id: &str,
         path: &str,
     ) -> Result<ProjectFile, WorkspaceError> {
-        let roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
             operation: "authorize project file".to_string(),
             message: "active workspace lock was poisoned".to_string(),
         })?;
         let active = roots
-            .get(window_label)
+            .get_mut(window_label)
             .ok_or_else(|| WorkspaceError::NotAuthorized {
                 message: "open a project folder before reading or saving files".to_string(),
             })?;
@@ -373,14 +416,36 @@ impl ActiveWorkspaces {
                 message: "the file belongs to a stale workspace session".to_string(),
             });
         }
-        active
+        if let Some(file) = active
             .catalog
             .get(repository_id)
             .and_then(|files| files.get(path))
-            .cloned()
-            .ok_or_else(|| WorkspaceError::NotAuthorized {
-                message: "select a file from the current project catalog".to_string(),
-            })
+        {
+            return Ok(file.clone());
+        }
+
+        if active.git_enabled && repository_id == "." {
+            let candidate = ProjectFile {
+                repository_id: repository_id.to_string(),
+                path: path.to_string(),
+                workspace_path: path.to_string(),
+                read_only: false,
+            };
+            if let Ok(authorized) =
+                crate::application::workspace_catalog::reauthorize_session_file_for_read(root, &candidate)
+            {
+                active
+                    .catalog
+                    .entry(repository_id.to_string())
+                    .or_default()
+                    .insert(path.to_string(), authorized.clone());
+                return Ok(authorized);
+            }
+        }
+
+        Err(WorkspaceError::NotAuthorized {
+            message: "select a file from the current project catalog".to_string(),
+        })
     }
 
     pub(crate) fn window_for_root(&self, root: &Path) -> Result<Option<String>, WorkspaceError> {
