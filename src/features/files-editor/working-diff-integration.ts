@@ -83,6 +83,7 @@ export function mountEditableWorkingDiff(options: {
   expandedUnchanged: boolean;
   beforeTransition: () => void;
   onContentChange: (tabId: string, content: string) => void;
+  onRevert?: (tabId: string) => void;
 }): boolean {
   const { surface, document, state, tab } = options;
   if (!state.workingPatch || !state.workingDiffBase || tab?.status !== "ready" || state.workingPatch.binary) {
@@ -100,6 +101,7 @@ export function mountEditableWorkingDiff(options: {
     options.expandedUnchanged,
     options.beforeTransition,
     options.onContentChange,
+    options.onRevert,
   );
   return true;
 }

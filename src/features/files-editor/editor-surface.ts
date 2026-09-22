@@ -313,6 +313,7 @@ export class EditorSurface {
     expandedUnchanged: boolean,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
+    onRevert?: (tabId: string) => void,
   ): void {
     if (this.mountedEditorKey === key && this.mountedEditableDiffTabId === tab.id) {
       this.editableDiffEditor.requestMeasure();
@@ -343,6 +344,10 @@ export class EditorSurface {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
         onContentChange(tab.id, content);
       },
+      onRevert ? () => {
+        if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
+        onRevert(tab.id);
+      } : undefined,
     );
     this.mountedEditorKey = key;
   }

@@ -15,6 +15,7 @@ interface EditableDiffMount {
   presentation: DiffPresentation;
   expandedUnchanged: boolean;
   onChange: (content: string) => void;
+  onRevert?: () => void;
 }
 
 interface ConflictMount {
@@ -52,6 +53,7 @@ export class LazyEditableDiffEditor {
     presentation: DiffPresentation,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
+    onRevert?: () => void,
   ): void {
     const mount = {
       parent,
@@ -62,6 +64,7 @@ export class LazyEditableDiffEditor {
       presentation,
       expandedUnchanged,
       onChange,
+      onRevert,
     };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
@@ -152,6 +155,7 @@ export class LazyEditableDiffEditor {
       this.presentation,
       mount.expandedUnchanged,
       mount.onChange,
+      mount.onRevert,
     );
   }
 

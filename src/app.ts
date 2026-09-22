@@ -5987,6 +5987,7 @@ export class AsterlynApp {
         preferences: this.settingsState.preferences, presentation: this.diffPresentation(), expandedUnchanged: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
         beforeTransition: () => this.captureMountedTextEditor(),
         onContentChange: (tabId, content) => this.handleEditorContentChange(tabId, content),
+        onRevert: (tabId) => void this.saveTextTab(tabId),
       });
       if (!editable && this.changesState.workingPatch) {
         this.mountEditorDiff(

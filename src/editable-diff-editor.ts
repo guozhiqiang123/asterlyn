@@ -70,6 +70,7 @@ export class EditableDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private onChange: (content: string) => void = () => undefined;
+  private onRevert: (() => void) | null = null;
   private copy: EditorCopy;
   private scrollDispose: (() => void) | null = null;
   private changePending = false;
@@ -88,6 +89,7 @@ export class EditableDiffEditor {
     presentation: DiffPresentation,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
+    onRevert?: () => void,
   ): void {
     this.destroy();
     this.parent = parent;
@@ -99,6 +101,7 @@ export class EditableDiffEditor {
     this.presentation = { ...presentation };
     this.expandedUnchanged = expandedUnchanged;
     this.onChange = onChange;
+    this.onRevert = onRevert ?? null;
     this.render();
     this.loadLanguage();
   }
@@ -197,6 +200,7 @@ export class EditableDiffEditor {
     this.unifiedView = null;
     this.bindings = [];
     this.parent = null;
+    this.onRevert = null;
   }
 
   private releaseScrollLink(): void {
@@ -339,12 +343,13 @@ export class EditableDiffEditor {
       highlightSelectionMatches(),
       asterlynSyntaxHighlighting,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),
-      editable ? EditorView.updateListener.of((update) => this.captureUpdate(update)) : [],
+      editable ? EditorView.updateListener.of((update) => this.onDocUpdate(update)) : [],
     ];
   }
 
-  private captureUpdate(update: ViewUpdate): void {
+  private onDocUpdate(update: ViewUpdate): void {
     if (!update.docChanged) return;
+    const isRevert = update.transactions.some((tr) => tr.isUserEvent("revert"));
     const changes: TextChange[] = [];
     update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
       changes.push({ from, to, insert: inserted.toString() });
@@ -357,6 +362,11 @@ export class EditableDiffEditor {
       }
     }
     this.changePending = true;
+    if (isRevert) {
+      this.flushChanges();
+      this.onRevert?.();
+      return;
+    }
     if (this.changeFrame !== null) return;
     this.changeFrame = window.requestAnimationFrame(() => {
       this.changeFrame = null;
