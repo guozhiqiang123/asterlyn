@@ -29,7 +29,7 @@ test("before-side indicators anchor removals in the left document", () => {
   );
   assert.deepEqual(
     editorChangeIndicatorBlocks("one\ntwo\n", "one\ninserted\ntwo\n", "a").map(project),
-    [{ kind: "added", lineFrom: 2, lineTo: 2 }],
+    [],
   );
 });
 

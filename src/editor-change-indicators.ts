@@ -212,7 +212,9 @@ function blocksFromChunks(
   current: Text,
   documentSide: "a" | "b" = "b",
 ): readonly EditorChangeIndicatorBlock[] {
-  return chunks.map((chunk) => {
+  const blocks: EditorChangeIndicatorBlock[] = [];
+  for (const chunk of chunks) {
+    if (documentSide === "a" && chunk.fromA === chunk.toA) continue;
     const kind = chunk.fromB === chunk.toB
       ? "deleted"
       : chunk.fromA === chunk.toA
@@ -222,8 +224,9 @@ function blocksFromChunks(
     const to = Math.min(documentSide === "a" ? chunk.endA : chunk.endB, current.length);
     const lineFrom = current.lineAt(from).number;
     const lineTo = current.lineAt(Math.max(from, to)).number;
-    return { kind, from, to, lineFrom, lineTo };
-  });
+    blocks.push({ kind, from, to, lineFrom, lineTo });
+  }
+  return blocks;
 }
 
 function blockAtLine(
