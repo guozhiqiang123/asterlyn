@@ -5992,7 +5992,10 @@ export class AsterlynApp {
         onContentChange: (tabId, content) => this.handleEditorContentChange(tabId, content),
         onRevert: (tabId) => void this.saveTextTab(tabId),
       });
-      if (!editable && this.changesState.workingPatch) {
+      if (editable) {
+        return;
+      }
+      if (this.changesState.workingPatch) {
         this.mountEditorDiff(
           editorDocumentContentKey(
             document,

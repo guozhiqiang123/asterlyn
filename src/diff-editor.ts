@@ -155,7 +155,11 @@ export class DiffEditor {
     preferences: AppPreferences,
     presentation: DiffPresentation,
     blameSources: DiffGitBlameSources,
+    restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
+    const isSamePath = this.parent === parent || this.sourcePath === path;
+    const scroll = restoredScroll ?? (isSamePath ? this.captureScroll() : null);
+    const previousLayout = this.presentation.layout;
     this.destroy();
     this.parent = parent;
     this.sourceDocument = document;
@@ -164,6 +168,9 @@ export class DiffEditor {
     this.presentation = { ...presentation };
     this.blameSources = blameSources;
     this.render();
+    if (scroll) {
+      this.restoreScroll(scroll, previousLayout === this.presentation.layout);
+    }
     void this.loadLanguage(parent, path);
   }
 
@@ -173,14 +180,7 @@ export class DiffEditor {
     this.presentation = { ...presentation };
     if (!this.parent) return;
     this.render();
-    window.requestAnimationFrame(() => {
-      for (const view of this.views) {
-        const maximum = Math.max(0, view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight);
-        view.scrollDOM.scrollTop = maximum * scroll.topRatio;
-        view.scrollDOM.scrollLeft =
-          previousLayout === this.presentation.layout ? scroll.left : 0;
-      }
-    });
+    this.restoreScroll(scroll, previousLayout === this.presentation.layout);
   }
 
   requestMeasure(): void {
@@ -591,13 +591,45 @@ export class DiffEditor {
     }
   }
 
-  private captureScroll(): { topRatio: number; left: number } {
+  currentPath(): string {
+    return this.sourcePath;
+  }
+
+  captureScroll(): { topRatio: number; scrollTop: number; left: number } {
     const first = this.views[0]?.scrollDOM;
     const maximum = first ? Math.max(0, first.scrollHeight - first.clientHeight) : 0;
     return {
       topRatio: first && maximum > 0 ? first.scrollTop / maximum : 0,
+      scrollTop: first?.scrollTop ?? 0,
       left: first?.scrollLeft ?? 0,
     };
+  }
+
+  private restoreScroll(
+    scroll: { topRatio: number; scrollTop: number; left: number },
+    preserveExact: boolean,
+  ): void {
+    let attempts = 0;
+    const apply = () => {
+      if (!this.parent || this.views.length === 0) return;
+      for (const view of this.views) {
+        const dom = view.scrollDOM;
+        const max = Math.max(0, dom.scrollHeight - dom.clientHeight);
+        if (max > 0 || attempts >= 5) {
+          dom.scrollTop = preserveExact ? Math.min(max, scroll.scrollTop) : max * scroll.topRatio;
+        } else {
+          dom.scrollTop = scroll.scrollTop;
+        }
+        dom.scrollLeft = preserveExact ? scroll.left : 0;
+      }
+      const first = this.views[0]?.scrollDOM;
+      if (first && preserveExact && first.scrollTop < scroll.scrollTop && attempts < 5) {
+        attempts += 1;
+        window.requestAnimationFrame(apply);
+      }
+    };
+    apply();
+    window.requestAnimationFrame(apply);
   }
 
   private destroyViews(): void {

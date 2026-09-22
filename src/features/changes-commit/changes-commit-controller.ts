@@ -313,16 +313,19 @@ export class ChangesCommitController {
     const sequence = ++this.diffSequence;
     const generation = this.repositoryGeneration;
     const path = selected.path;
-    this.state.workingDiffPath = path;
     const image = isImagePreviewPath(path);
+    const hasExistingDiff = this.state.workingDiffPath === path &&
+      ((image && this.state.workingImageDiff !== null) || (!image && this.state.workingPatch !== null));
+    this.state.workingDiffPath = path;
     if (image) {
       this.state.workingPatch = null;
       this.state.workingDiffBase = null;
+    } else {
+      this.state.workingImageDiff = null;
     }
-    else this.state.workingImageDiff = null;
     this.state.workingPatchLoading = true;
     this.state.workingPatchError = null;
-    this.emit({ reason: "diff-start", diffChanged: true });
+    this.emit({ reason: "diff-start", diffChanged: !hasExistingDiff });
     try {
       const result = image
         ? await this.gateway.readLocalImageDiff(snapshot.root, selected)
@@ -331,18 +334,28 @@ export class ChangesCommitController {
             this.gateway.readWorkingDiffBase(snapshot.root, selected),
           ]);
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
-      if (image) this.state.workingImageDiff = result as ImageDiffPreview;
-      else {
+      let changed = !hasExistingDiff;
+      if (image) {
+        const nextImage = result as ImageDiffPreview;
+        changed = changed || !imageDiffsEqual(this.state.workingImageDiff, nextImage);
+        this.state.workingImageDiff = nextImage;
+      } else {
         const [patch, base] = result as [PromiseSettledResult<DiffResult>, PromiseSettledResult<WorkingDiffBase>];
         if (patch.status === "rejected") throw patch.reason;
-        this.state.workingPatch = patch.value;
-        this.state.workingDiffBase = base.status === "fulfilled" ? base.value : null;
+        const nextPatch = patch.value;
+        const nextBase = base.status === "fulfilled" ? base.value : null;
+        changed = changed || !diffResultsEqual(this.state.workingPatch, nextPatch) ||
+          !workingDiffBasesEqual(this.state.workingDiffBase, nextBase);
+        this.state.workingPatch = nextPatch;
+        this.state.workingDiffBase = nextBase;
       }
       this.state.workingPatchLoading = false;
-      this.state.workingPatchVersion = sequence;
+      if (changed) {
+        this.state.workingPatchVersion = sequence;
+      }
       this.emit({
         reason: "diff-complete",
-        diffChanged: true,
+        diffChanged: changed,
         warning: !image && this.state.workingPatch?.truncated
           ? this.messages.patchTruncated
           : undefined,
@@ -508,4 +521,34 @@ function toErrorMessage(error: unknown, fallback: string): string {
     return String((error as { message: unknown }).message);
   }
   return fallback;
+}
+
+function diffResultsEqual(a: DiffResult | null, b: DiffResult | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.path === b.path &&
+    a.staged === b.staged &&
+    a.patch === b.patch &&
+    a.binary === b.binary &&
+    a.truncated === b.truncated;
+}
+
+function workingDiffBasesEqual(a: WorkingDiffBase | null, b: WorkingDiffBase | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.path === b.path &&
+    a.blobOid === b.blobOid &&
+    a.headOid === b.headOid &&
+    a.originalPath === b.originalPath &&
+    a.content === b.content;
+}
+
+function imageDiffsEqual(a: ImageDiffPreview | null, b: ImageDiffPreview | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.path === b.path &&
+    a.before?.dataUrl === b.before?.dataUrl &&
+    a.before?.byteLength === b.before?.byteLength &&
+    a.after?.dataUrl === b.after?.dataUrl &&
+    a.after?.byteLength === b.after?.byteLength;
 }

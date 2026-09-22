@@ -16,6 +16,7 @@ interface EditableDiffMount {
   expandedUnchanged: boolean;
   onChange: (content: string) => void;
   onRevert?: () => void;
+  restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
 }
 
 interface ConflictMount {
@@ -44,6 +45,14 @@ export class LazyEditableDiffEditor {
     this.copy = copy;
   }
 
+  currentPath(): string | null {
+    return this.implementation?.currentPath() ?? this.pendingMount?.path ?? null;
+  }
+
+  captureScroll(): { topRatio: number; scrollTop: number; left: number } | null {
+    return this.implementation?.captureScroll() ?? null;
+  }
+
   mount(
     parent: HTMLElement,
     baseContent: string,
@@ -54,6 +63,7 @@ export class LazyEditableDiffEditor {
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
     onRevert?: () => void,
+    restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const mount = {
       parent,
@@ -65,6 +75,7 @@ export class LazyEditableDiffEditor {
       expandedUnchanged,
       onChange,
       onRevert,
+      restoredScroll,
     };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
@@ -156,6 +167,7 @@ export class LazyEditableDiffEditor {
       mount.expandedUnchanged,
       mount.onChange,
       mount.onRevert,
+      mount.restoredScroll,
     );
   }
 

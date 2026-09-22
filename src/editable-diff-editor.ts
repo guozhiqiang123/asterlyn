@@ -1,9 +1,9 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
-import { MergeView, goToNextChunk, goToPreviousChunk, unifiedMergeView } from "@codemirror/merge";
+import { MergeView, getOriginalDoc, goToNextChunk, goToPreviousChunk, originalDocChangeEffect, unifiedMergeView } from "@codemirror/merge";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -86,9 +86,36 @@ export class EditableDiffEditor {
   private diffScrollbars: DiffScrollbars | null = null;
   private changePending = false;
   private changeFrame: number | null = null;
+  private synchronizing = false;
 
   constructor(copy: EditorCopy) {
     this.copy = copy;
+  }
+
+  currentPath(): string {
+    return this.path;
+  }
+
+  captureScroll(): { topRatio: number; scrollTop: number; left: number } {
+    if (this.mergeView) {
+      const dom = this.mergeView.dom;
+      const max = Math.max(0, dom.scrollHeight - dom.clientHeight);
+      return {
+        topRatio: max > 0 ? dom.scrollTop / max : 0,
+        scrollTop: dom.scrollTop,
+        left: this.mergeView.b.scrollDOM.scrollLeft,
+      };
+    }
+    if (this.unifiedView) {
+      const dom = this.unifiedView.scrollDOM;
+      const max = Math.max(0, dom.scrollHeight - dom.clientHeight);
+      return {
+        topRatio: max > 0 ? dom.scrollTop / max : 0,
+        scrollTop: dom.scrollTop,
+        left: dom.scrollLeft,
+      };
+    }
+    return { topRatio: 0, scrollTop: 0, left: 0 };
   }
 
   mount(
@@ -101,7 +128,74 @@ export class EditableDiffEditor {
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
     onRevert?: () => void,
+    restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
+    const isSamePath = this.path === path;
+    const canUpdateInPlace =
+      this.parent === parent &&
+      isSamePath &&
+      this.presentation.layout === presentation.layout &&
+      this.expandedUnchanged === expandedUnchanged &&
+      (this.mergeView !== null || this.unifiedView !== null);
+
+    if (canUpdateInPlace) {
+      const scroll = restoredScroll ?? this.captureScroll();
+      this.flushChanges();
+      this.onChange = onChange;
+      this.onRevert = onRevert ?? null;
+      this.preferences = { ...preferences };
+      this.setPreferences(preferences);
+
+      const baseChanged = this.baseContent !== baseContent;
+      const contentChanged = this.serializedContent !== currentContent;
+      this.baseContent = baseContent;
+      this.exactContent = decodeExactText(currentContent);
+      this.serializedContent = currentContent;
+
+      this.synchronizing = true;
+      try {
+        if (this.mergeView) {
+          if (baseChanged && this.mergeView.a.state.doc.toString() !== baseContent) {
+            const change = computeTextChange(this.mergeView.a.state.doc.toString(), baseContent);
+            if (change) this.mergeView.a.dispatch({ changes: change });
+          }
+          if (contentChanged && this.mergeView.b.state.doc.toString() !== this.exactContent.text) {
+            const change = computeTextChange(this.mergeView.b.state.doc.toString(), this.exactContent.text);
+            if (change) this.mergeView.b.dispatch({ changes: change });
+          }
+          if (baseChanged) {
+            for (const binding of this.bindings) {
+              if (binding.comparisonSide === "a" && binding.changeIndicators) {
+                binding.changeIndicators.setBaseline(binding.view, baseContent);
+              }
+            }
+          }
+          this.updateScrollbars();
+        } else if (this.unifiedView) {
+          if (contentChanged && this.unifiedView.state.doc.toString() !== this.exactContent.text) {
+            const change = computeTextChange(this.unifiedView.state.doc.toString(), this.exactContent.text);
+            if (change) this.unifiedView.dispatch({ changes: change });
+          }
+          if (baseChanged) {
+            const origDoc = getOriginalDoc(this.unifiedView.state);
+            const change = computeTextChange(origDoc.toString(), baseContent);
+            if (change) {
+              const changes = ChangeSet.of(change, origDoc.length);
+              this.unifiedView.dispatch({
+                effects: originalDocChangeEffect(this.unifiedView.state, changes),
+              });
+            }
+          }
+        }
+      } finally {
+        this.synchronizing = false;
+      }
+      this.restoreScroll(scroll, true);
+      return;
+    }
+
+    const scroll = restoredScroll ?? (isSamePath ? this.captureScroll() : null);
+    const previousLayout = this.presentation.layout;
     this.destroy();
     this.parent = parent;
     this.baseContent = baseContent;
@@ -114,7 +208,49 @@ export class EditableDiffEditor {
     this.onChange = onChange;
     this.onRevert = onRevert ?? null;
     this.render();
+    if (scroll) {
+      this.restoreScroll(scroll, previousLayout === this.presentation.layout);
+    }
     this.loadLanguage();
+  }
+
+  private restoreScroll(
+    scroll: { topRatio: number; scrollTop: number; left: number },
+    preserveExact: boolean,
+  ): void {
+    let attempts = 0;
+    const apply = () => {
+      if (!this.parent) return;
+      if (this.mergeView) {
+        const dom = this.mergeView.dom;
+        const max = Math.max(0, dom.scrollHeight - dom.clientHeight);
+        if (max > 0 || attempts >= 5) {
+          dom.scrollTop = preserveExact ? Math.min(max, scroll.scrollTop) : max * scroll.topRatio;
+        } else {
+          dom.scrollTop = scroll.scrollTop;
+        }
+        this.mergeView.b.scrollDOM.scrollLeft = preserveExact ? scroll.left : 0;
+        if (preserveExact && dom.scrollTop < scroll.scrollTop && max > dom.scrollTop && attempts < 5) {
+          attempts += 1;
+          window.requestAnimationFrame(apply);
+        }
+      } else if (this.unifiedView) {
+        const dom = this.unifiedView.scrollDOM;
+        const max = Math.max(0, dom.scrollHeight - dom.clientHeight);
+        if (max > 0 || attempts >= 5) {
+          dom.scrollTop = preserveExact ? Math.min(max, scroll.scrollTop) : max * scroll.topRatio;
+        } else {
+          dom.scrollTop = scroll.scrollTop;
+        }
+        dom.scrollLeft = preserveExact ? scroll.left : 0;
+        if (preserveExact && dom.scrollTop < scroll.scrollTop && max > dom.scrollTop && attempts < 5) {
+          attempts += 1;
+          window.requestAnimationFrame(apply);
+        }
+      }
+    };
+    apply();
+    window.requestAnimationFrame(apply);
   }
 
   content(): string {
@@ -423,7 +559,7 @@ export class EditableDiffEditor {
   }
 
   private onDocUpdate(update: ViewUpdate): void {
-    if (!update.docChanged) return;
+    if (!update.docChanged || this.synchronizing) return;
     const isRevert = update.transactions.some((tr) => tr.isUserEvent("revert"));
     const changes: TextChange[] = [];
     update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
@@ -499,4 +635,23 @@ export class EditableDiffEditor {
       }
     });
   }
+}
+
+function computeTextChange(oldText: string, newText: string): { from: number; to: number; insert: string } | null {
+  if (oldText === newText) return null;
+  let start = 0;
+  while (start < oldText.length && start < newText.length && oldText.charCodeAt(start) === newText.charCodeAt(start)) {
+    start++;
+  }
+  let oldEnd = oldText.length;
+  let newEnd = newText.length;
+  while (oldEnd > start && newEnd > start && oldText.charCodeAt(oldEnd - 1) === newText.charCodeAt(newEnd - 1)) {
+    oldEnd--;
+    newEnd--;
+  }
+  return {
+    from: start,
+    to: oldEnd,
+    insert: newText.slice(start, newEnd),
+  };
 }

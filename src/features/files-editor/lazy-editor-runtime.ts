@@ -33,6 +33,7 @@ type DiffMount = {
   preferences: AppPreferences;
   presentation: DiffPresentation;
   blameSources: DiffGitBlameSources;
+  restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
 };
 
 /** Loads the CodeMirror text runtime only when the first editable document is mounted. */
@@ -303,6 +304,14 @@ export class LazyDiffEditor {
     this.contextOwnerId = contextOwnerId;
   }
 
+  currentPath(): string | null {
+    return this.implementation?.currentPath() ?? this.pendingMount?.path ?? null;
+  }
+
+  captureScroll(): { topRatio: number; scrollTop: number; left: number } | null {
+    return this.implementation?.captureScroll() ?? null;
+  }
+
   mount(
     parent: HTMLElement,
     document: string,
@@ -310,8 +319,9 @@ export class LazyDiffEditor {
     preferences: AppPreferences,
     presentation: DiffPresentation,
     blameSources: DiffGitBlameSources,
+    restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
-    const mount = { parent, document, path, preferences, presentation, blameSources };
+    const mount = { parent, document, path, preferences, presentation, blameSources, restoredScroll };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
@@ -324,6 +334,7 @@ export class LazyDiffEditor {
         this.preferences ?? preferences,
         this.presentation,
         blameSources,
+        restoredScroll,
       );
       return;
     }
@@ -343,6 +354,7 @@ export class LazyDiffEditor {
         this.preferences ?? mount.preferences,
         this.presentation,
         mount.blameSources,
+        mount.restoredScroll,
       );
     });
   }

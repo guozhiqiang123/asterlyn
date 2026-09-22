@@ -290,17 +290,22 @@ export class EditorSurface {
       this.diffEditor.requestMeasure();
       return;
     }
-    beforeTransition();
-    this.disposeMarkdownSurface();
-    this.textEditor.detach();
-    this.mountedTextTabId = null;
-    this.detachSpecializedEditors();
-    this.diffEditor.destroy();
+    const isSamePath = this.diffEditor.currentPath() === path;
+    const scroll = isSamePath ? this.diffEditor.captureScroll() : null;
+    if (!isSamePath) {
+      beforeTransition();
+      this.disposeMarkdownSurface();
+      this.textEditor.detach();
+      this.mountedTextTabId = null;
+      this.detachSpecializedEditors();
+      this.diffEditor.destroy();
+      const body = this.query("#content-body");
+      body.innerHTML = "";
+      this.resetBodyClasses(body);
+      body.classList.add("diff-surface");
+    }
     const body = this.query("#content-body");
-    body.innerHTML = "";
-    this.resetBodyClasses(body);
-    body.classList.add("diff-surface");
-    this.diffEditor.mount(body, patch, path, preferences, presentation, blameSources);
+    this.diffEditor.mount(body, patch, path, preferences, presentation, blameSources, scroll);
     this.mountedEditorKey = key;
   }
 
@@ -319,16 +324,21 @@ export class EditorSurface {
       this.editableDiffEditor.requestMeasure();
       return;
     }
-    beforeTransition();
-    this.disposeMarkdownSurface();
-    this.diffEditor.destroy();
-    this.textEditor.dispose(tab.id);
-    this.textEditor.detach();
-    this.detachSpecializedEditors();
+    const isSameTab = this.mountedEditableDiffTabId === tab.id;
+    const scroll = this.editableDiffEditor.currentPath() === tab.document.path ? this.editableDiffEditor.captureScroll() : null;
+    if (!isSameTab) {
+      beforeTransition();
+      this.disposeMarkdownSurface();
+      this.diffEditor.destroy();
+      this.textEditor.dispose(tab.id);
+      this.textEditor.detach();
+      this.detachSpecializedEditors();
+      const body = this.query("#content-body");
+      body.innerHTML = "";
+      this.resetBodyClasses(body);
+      body.classList.add("diff-surface", "editable-diff-surface");
+    }
     const body = this.query("#content-body");
-    body.innerHTML = "";
-    this.resetBodyClasses(body);
-    body.classList.add("diff-surface", "editable-diff-surface");
     this.mountedTextTabId = null;
     this.mountedEditableDiffTabId = tab.id;
     this.mountedTextLoadEpoch = tab.loadEpoch;
@@ -348,6 +358,7 @@ export class EditorSurface {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
         onRevert(tab.id);
       } : undefined,
+      scroll,
     );
     this.mountedEditorKey = key;
   }

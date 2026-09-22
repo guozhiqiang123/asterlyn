@@ -74,6 +74,27 @@ test("same-file reconciliation keeps the visible Diff until its refreshed patch 
   assert.equal(controller.state.workingPatchLoading, false);
 });
 
+test("same-file reconciliation with identical diff does not bump workingPatchVersion and emits diffChanged: false", async () => {
+  const events = [];
+  const controller = new ChangesCommitController(gateway());
+  controller.subscribe((change) => events.push(change));
+  controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
+  await controller.loadSelectedDiff(false);
+
+  const initialVersion = controller.state.workingPatchVersion;
+  assert.equal(initialVersion > 0, true);
+
+  events.length = 0;
+  // Background AI modifies other file b.txt, triggering snapshot install and reconciliation
+  controller.installSnapshot(snapshot([change("a.txt"), change("b.txt"), change("c.txt")]));
+  await controller.loadSelectedDiff(false);
+
+  assert.equal(controller.state.workingPatchVersion, initialVersion);
+  const diffEvents = events.filter((e) => e.reason === "diff-start" || e.reason === "diff-complete");
+  assert.equal(diffEvents.length, 2);
+  assert.equal(diffEvents.every((e) => e.diffChanged === false), true);
+});
+
 test("context selection moves the row without clearing or retargeting the visible Diff", async () => {
   const controller = new ChangesCommitController(gateway());
   controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
