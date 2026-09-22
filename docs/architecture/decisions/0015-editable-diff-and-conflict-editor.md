@@ -70,6 +70,15 @@ editor rows, so the editor content's own top padding is added back in the surfac
 Collapsed-unchanged rows are CodeMirror's own widget, so the app editor theme restates
 `.cm-collapsedLines` with semantic tokens instead of inheriting the package's neutral defaults.
 
+**Amendment, 2026-09-22.** To prevent horizontal scrollbars from being buried at the bottom of tall
+documents where they require scrolling to the end of the file to reach, the split editable Diff mounts
+a fixed bottom scrollbar track below `.cm-mergeView`. The bottom scrollbar track aligns separate
+horizontal scrollers under both panes (with a spacer for the revert gutter and an auto-sized spacer for
+the vertical scrollbar) and links them directly to each pane's `scrollDOM` using `linkHorizontalScroll`.
+The document-bottom scrollbars on `.cm-scroller` inside `.cm-mergeView` are suppressed with CSS,
+ensuring horizontal scrolling is immediately accessible at the bottom of the viewport at all times
+without breaking linked scroll coordination.
+
 ### Conflict editor in the persistent editor region
 
 Conflict discovery remains Git-owned. Changes projects three stable groups in order: Conflicts,

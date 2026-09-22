@@ -1,3 +1,8 @@
+.content-body.editable-diff-surface {
+  display: flex;
+  flex-direction: column;
+}
+
 .content-body.editable-diff-surface > .cm-editor {
   height: 100%;
   min-width: 0;
@@ -5,6 +10,7 @@
 }
 
 .content-body.editable-diff-surface .cm-mergeView {
+  flex: 1 1 0;
   height: 100%;
   min-width: 0;
   min-height: 0;
@@ -27,6 +33,49 @@
   flex: 0 0 32px;
   border-inline: 1px solid var(--border);
   background: var(--surface-chrome);
+}
+
+.content-body.editable-diff-surface .cm-mergeView .cm-scroller {
+  scrollbar-width: none;
+}
+
+.content-body.editable-diff-surface .cm-mergeView .cm-scroller::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.content-body.editable-diff-surface .editable-diff-scrollbars {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.content-body.editable-diff-surface .editable-diff-scrollbar-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.content-body.editable-diff-surface .editable-diff-scrollbar-spacer {
+  width: 32px;
+  flex: 0 0 32px;
+  border-inline: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.content-body.editable-diff-surface .editable-diff-scrollbar-corner {
+  flex: 0 0 0px;
+  width: 0px;
+  background: var(--surface-chrome);
+}
+
+.content-body.editable-diff-surface .editable-diff-scrollbar-content {
+  height: 1px;
 }
 
 /*

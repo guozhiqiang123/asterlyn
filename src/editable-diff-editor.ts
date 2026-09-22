@@ -48,6 +48,16 @@ interface ViewBinding {
   comparisonSide: "a" | "b" | null;
 }
 
+interface DiffScrollbars {
+  container: HTMLDivElement;
+  paneA: HTMLDivElement;
+  contentA: HTMLDivElement;
+  paneB: HTMLDivElement;
+  contentB: HTMLDivElement;
+  corner: HTMLDivElement;
+  resizeObserver: ResizeObserver;
+}
+
 /**
  * A worktree Diff adapter. The repository side is immutable and the current
  * side projects the existing editor-session buffer. It never writes a file;
@@ -73,6 +83,7 @@ export class EditableDiffEditor {
   private onRevert: (() => void) | null = null;
   private copy: EditorCopy;
   private scrollDispose: (() => void) | null = null;
+  private diffScrollbars: DiffScrollbars | null = null;
   private changePending = false;
   private changeFrame: number | null = null;
 
@@ -134,6 +145,7 @@ export class EditableDiffEditor {
 
   requestMeasure(): void {
     for (const binding of this.bindings) binding.view.requestMeasure();
+    this.updateScrollbars();
   }
 
   setCopy(copy: EditorCopy): void {
@@ -206,6 +218,8 @@ export class EditableDiffEditor {
   private releaseScrollLink(): void {
     this.scrollDispose?.();
     this.scrollDispose = null;
+    this.diffScrollbars?.container.remove();
+    this.diffScrollbars = null;
   }
 
   private render(): void {
@@ -273,10 +287,71 @@ export class EditableDiffEditor {
     this.bindings.push(left, right);
     // Both panes keep their own horizontal scroller under one shared vertical scroller, so their
     // horizontal offsets are linked explicitly.
-    this.scrollDispose = linkHorizontalScroll(
+    const disposeAB = linkHorizontalScroll(
       this.mergeView.a.scrollDOM,
       this.mergeView.b.scrollDOM,
     );
+
+    const container = document.createElement("div");
+    container.className = "editable-diff-scrollbars";
+    container.setAttribute("aria-hidden", "true");
+
+    const paneA = document.createElement("div");
+    paneA.className = "editable-diff-scrollbar-pane editable-diff-scrollbar-a";
+    const contentA = document.createElement("div");
+    contentA.className = "editable-diff-scrollbar-content";
+    paneA.appendChild(contentA);
+
+    const spacer = document.createElement("div");
+    spacer.className = "editable-diff-scrollbar-spacer";
+
+    const paneB = document.createElement("div");
+    paneB.className = "editable-diff-scrollbar-pane editable-diff-scrollbar-b";
+    const contentB = document.createElement("div");
+    contentB.className = "editable-diff-scrollbar-content";
+    paneB.appendChild(contentB);
+
+    const corner = document.createElement("div");
+    corner.className = "editable-diff-scrollbar-corner";
+
+    container.appendChild(paneA);
+    container.appendChild(spacer);
+    container.appendChild(paneB);
+    container.appendChild(corner);
+    parent.appendChild(container);
+
+    const disposeSbA = linkHorizontalScroll(
+      paneA,
+      this.mergeView.a.scrollDOM,
+    );
+    const disposeSbB = linkHorizontalScroll(
+      paneB,
+      this.mergeView.b.scrollDOM,
+    );
+
+    const resizeObserver = new ResizeObserver(() => {
+      this.updateScrollbars();
+    });
+    resizeObserver.observe(this.mergeView.dom);
+    resizeObserver.observe(this.mergeView.a.scrollDOM);
+    resizeObserver.observe(this.mergeView.b.scrollDOM);
+
+    this.scrollDispose = () => {
+      disposeAB();
+      disposeSbA();
+      disposeSbB();
+      resizeObserver.disconnect();
+    };
+    this.diffScrollbars = {
+      container,
+      paneA,
+      contentA,
+      paneB,
+      contentB,
+      corner,
+      resizeObserver,
+    };
+    this.updateScrollbars();
   }
 
   private binding(): ViewBinding {
@@ -362,6 +437,7 @@ export class EditableDiffEditor {
       }
     }
     this.changePending = true;
+    this.updateScrollbars();
     if (isRevert) {
       this.flushChanges();
       this.onRevert?.();
@@ -372,6 +448,28 @@ export class EditableDiffEditor {
       this.changeFrame = null;
       this.flushChanges();
     });
+  }
+
+  private updateScrollbars(): void {
+    if (!this.diffScrollbars || !this.mergeView) return;
+    const a = this.mergeView.a.scrollDOM;
+    const b = this.mergeView.b.scrollDOM;
+    if (!a.isConnected || !b.isConnected) return;
+    const widthA = a.scrollWidth;
+    const widthB = b.scrollWidth;
+    this.diffScrollbars.contentA.style.width = `${widthA}px`;
+    this.diffScrollbars.contentB.style.width = `${widthB}px`;
+
+    const verticalScrollbarWidth = Math.max(
+      0,
+      this.mergeView.dom.offsetWidth - this.mergeView.dom.clientWidth,
+    );
+    this.diffScrollbars.corner.style.width = `${verticalScrollbarWidth}px`;
+    this.diffScrollbars.corner.style.flex = `0 0 ${verticalScrollbarWidth}px`;
+
+    const hasOverflowA = widthA > a.clientWidth;
+    const hasOverflowB = widthB > b.clientWidth;
+    this.diffScrollbars.container.style.display = (hasOverflowA || hasOverflowB) ? "flex" : "none";
   }
 
   private currentView(): EditorView {
