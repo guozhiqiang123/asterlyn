@@ -155,6 +155,11 @@ export class LazyEditableDiffEditor {
     );
   }
 
+  /** Loads this runtime's module ahead of the first mount; mounting itself is unchanged. */
+  preload(): void {
+    void this.load();
+  }
+
   private load(): Promise<EditableDiffEditor> {
     if (this.implementation) return Promise.resolve(this.implementation);
     this.loading ??= import("../../editable-diff-editor.ts").then(({ EditableDiffEditor }) => {

@@ -3924,6 +3924,7 @@ export class AsterlynApp {
     const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!workspaceRoot) return;
+    this.editorSurface.scheduleRuntimePreload();
     this.renderTopbar(workspaceRoot, snapshot);
     this.applyWorkbenchLayout(false);
     this.renderActivityRail();

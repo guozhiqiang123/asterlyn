@@ -27,6 +27,7 @@ import {
 } from "./editor-view.ts";
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import { LazyConflictEditor, LazyEditableDiffEditor } from "./lazy-merge-editor-runtime.ts";
+import { scheduleEditorRuntimePreload } from "./editor-runtime-preload.ts";
 
 export type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -56,6 +57,7 @@ export class EditorSurface {
   private markdownPreviewPending: { tabId: string; content: string; request: number } | null = null;
   private activeMarkdownMode: TextTabState["markdownMode"] | null = null;
   private measureFrame: number | null = null;
+  private cancelRuntimePreload: (() => void) | null = null;
 
   private readonly root: HTMLElement;
   private copy: EditorCopy;
@@ -561,7 +563,24 @@ export class EditorSurface {
     this.mountedEditorKey = key;
   }
 
+  /**
+   * Warms the lazily imported editor runtimes once, on the first idle moment of an open workspace, so
+   * the first file or Diff open does not pay to fetch and parse their modules.
+   */
+  scheduleRuntimePreload(): void {
+    if (this.cancelRuntimePreload) return;
+    this.cancelRuntimePreload = scheduleEditorRuntimePreload({
+      preloadRuntimes: () => {
+        this.textEditor.preload();
+        this.diffEditor.preload();
+        this.editableDiffEditor.preload();
+      },
+    });
+  }
+
   destroy(): void {
+    this.cancelRuntimePreload?.();
+    this.cancelRuntimePreload = null;
     this.disposeMarkdownSurface();
     this.textEditor.destroy();
     this.diffEditor.destroy();

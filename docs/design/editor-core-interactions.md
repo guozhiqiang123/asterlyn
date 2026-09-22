@@ -341,3 +341,8 @@ only complete incremental records survive truncation and the UI reports partial 
 requests are guarded by editor identity, Diff side, revision, and generation so a late response
 cannot annotate another file or replacement view. Validation and limitations are recorded in
 [`on-demand Git Blame gutter evidence`](../benchmarks/2026-09-14-editor-git-blame-gutter.md).
+
+Editor runtimes stay lazily imported, and one guarded warm-up removes their cost from the first open:
+after a workspace root exists, the window schedules a single idle preload of the text, read-only Diff,
+and editable Diff modules. The preload is presentation code loading only — it reads no repository
+data, keeps no live timer, can be cancelled on disposal, and never runs on the workspace-open path.

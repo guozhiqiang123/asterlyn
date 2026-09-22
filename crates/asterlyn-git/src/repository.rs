@@ -1427,11 +1427,10 @@ impl GitRepository {
         selected: &FileChange,
         expanded_unchanged: bool,
     ) -> Result<DiffResult, GitError> {
-        let changes = self.status_changes_with_untracked()?;
-        let current =
-            match_fresh_changes(&changes, std::slice::from_ref(selected), "read local diff")?
-                .pop()
-                .expect("one selected change produces one fresh match");
+        validate_relative_path(&selected.path)?;
+        if let Some(original) = &selected.original_path {
+            validate_relative_path(original)?;
+        }
         let mut args = vec![
             OsString::from("--literal-pathspecs"),
             OsString::from("diff"),
@@ -1443,8 +1442,8 @@ impl GitRepository {
             args.push(OsString::from("HEAD"));
         }
         args.push(OsString::from("--"));
-        args.push(OsString::from(&current.path));
-        if let Some(original) = &current.original_path {
+        args.push(OsString::from(&selected.path));
+        if let Some(original) = &selected.original_path {
             args.push(OsString::from(original));
         }
 
@@ -1453,7 +1452,7 @@ impl GitRepository {
         let mut patch = output.stdout;
         let mut binary = patch.windows(15).any(|window| window == b"Binary files ");
         if patch.is_empty() {
-            let candidate = self.root.join(&current.path);
+            let candidate = self.root.join(&selected.path);
             if candidate.is_file() {
                 let data = fs::read(&candidate).map_err(|error| GitError::Io {
                     operation: "read untracked file".to_string(),
@@ -1461,9 +1460,9 @@ impl GitRepository {
                 })?;
                 binary = data.contains(&0);
                 patch = if binary {
-                    format!("Binary file: {}\n", current.path).into_bytes()
+                    format!("Binary file: {}\n", selected.path).into_bytes()
                 } else {
-                    untracked_patch(&current.path, &data).into_bytes()
+                    untracked_patch(&selected.path, &data).into_bytes()
                 };
             }
         }
@@ -1474,7 +1473,7 @@ impl GitRepository {
             patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
         }
         Ok(DiffResult {
-            path: current.path,
+            path: selected.path.clone(),
             staged: false,
             patch: String::from_utf8_lossy(&patch).into_owned(),
             binary,
@@ -1493,30 +1492,26 @@ impl GitRepository {
                 message: "the content limit must be greater than zero".to_string(),
             });
         }
-        let changes = self.status_changes_with_untracked()?;
-        let current = match_fresh_changes(
-            &changes,
-            std::slice::from_ref(selected),
-            "read editable working diff",
-        )?
-        .pop()
-        .expect("one selected change produces one fresh match");
-        if current.conflicted || current.submodule {
+        validate_relative_path(&selected.path)?;
+        if let Some(original) = &selected.original_path {
+            validate_relative_path(original)?;
+        }
+        if selected.conflicted || selected.submodule {
             return Err(GitError::InvalidInput {
                 field: "working diff".to_string(),
                 message: "conflicts and submodules require their dedicated editor".to_string(),
             });
         }
         let head_oid = self.head_oid()?;
-        let source_path = current.original_path.as_deref().unwrap_or(&current.path);
+        let source_path = selected.original_path.as_deref().unwrap_or(&selected.path);
         let base = head_oid
             .as_deref()
             .map(|head| self.read_file_at_revision(head, source_path, limit_bytes))
             .transpose()?
             .flatten();
         Ok(WorkingDiffBaseVersion {
-            path: current.path,
-            original_path: current.original_path,
+            path: selected.path.clone(),
+            original_path: selected.original_path.clone(),
             head_oid,
             blob_oid: base.as_ref().map(|file| file.blob_oid.clone()),
             bytes: base.map(|file| file.bytes).unwrap_or_default(),
@@ -1524,23 +1519,19 @@ impl GitRepository {
     }
 
     pub fn local_binary_diff(&self, selected: &FileChange) -> Result<BinaryDiffResult, GitError> {
-        let changes = self.status_changes_with_untracked()?;
-        let current = match_fresh_changes(
-            &changes,
-            std::slice::from_ref(selected),
-            "read local image diff",
-        )?
-        .pop()
-        .expect("one selected change produces one fresh match");
-        let before_path = current.original_path.as_deref().unwrap_or(&current.path);
+        validate_relative_path(&selected.path)?;
+        if let Some(original) = &selected.original_path {
+            validate_relative_path(original)?;
+        }
+        let before_path = selected.original_path.as_deref().unwrap_or(&selected.path);
         let before = self
             .head_oid()?
             .map(|head| self.read_binary_at_revision(&head, before_path))
             .transpose()?
             .flatten();
-        let after = self.read_binary_from_worktree(&current.path)?;
+        let after = self.read_binary_from_worktree(&selected.path)?;
         Ok(BinaryDiffResult {
-            path: current.path,
+            path: selected.path.clone(),
             before,
             after,
         })

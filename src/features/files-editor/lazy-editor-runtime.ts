@@ -253,6 +253,11 @@ export class LazyTextEditor {
     this.loading = null;
   }
 
+  /** Loads this runtime's module ahead of the first mount; mounting itself is unchanged. */
+  preload(): void {
+    void this.load();
+  }
+
   private load(): Promise<TextEditor> {
     if (this.implementation) return Promise.resolve(this.implementation);
     if (!this.loading) {
@@ -380,6 +385,11 @@ export class LazyDiffEditor {
     this.pendingMount?.parent.removeAttribute("aria-busy");
     this.pendingMount = null;
     this.implementation?.destroy();
+  }
+
+  /** Loads this runtime's module ahead of the first mount; mounting itself is unchanged. */
+  preload(): void {
+    void this.load();
   }
 
   private load(): Promise<DiffEditor> {
