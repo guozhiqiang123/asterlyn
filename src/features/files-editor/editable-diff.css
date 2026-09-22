@@ -118,26 +118,26 @@
   top: 2px;
   right: 14px;
   bottom: 12px;
-  width: 8px;
+  width: 5px;
   pointer-events: none;
 }
 
 .cm-change-overview-marker {
   position: absolute;
   right: 0;
-  width: 8px;
+  width: 5px;
   min-width: 0;
   min-height: 5px;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: 1px;
   pointer-events: auto;
   cursor: pointer;
 }
 
 .cm-change-overview-marker:hover,
 .cm-change-overview-marker:focus-visible {
-  width: 10px;
+  width: 7px;
   outline: 1px solid var(--focus-ring);
   outline-offset: 1px;
 }
