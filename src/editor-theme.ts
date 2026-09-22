@@ -206,12 +206,14 @@ const editorThemeRules =
       fontStyle: "italic",
     },
     ".cm-foldGutter": { width: "19px" },
-    ".cm-change-indicator-gutter": {
+    ".cm-change-indicator-gutter, .cm-changeGutter": {
       width: "5px",
       minWidth: "5px",
       backgroundColor: "var(--bg-deep)",
+      paddingLeft: "0",
+      paddingRight: "0",
     },
-    ".cm-change-indicator-gutter .cm-gutterElement": {
+    ".cm-change-indicator-gutter .cm-gutterElement, .cm-changeGutter .cm-gutterElement": {
       boxSizing: "border-box",
       width: "5px",
       minWidth: "5px",

@@ -154,3 +154,17 @@
   background-color: var(--file-deleted);
 }
 
+.content-body.editable-diff-surface .cm-changeGutter {
+  width: 5px;
+  min-width: 5px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.content-body.editable-diff-surface .cm-changeGutter .cm-gutterElement {
+  box-sizing: border-box;
+  width: 5px;
+  min-width: 5px;
+  padding: 0;
+}
+
