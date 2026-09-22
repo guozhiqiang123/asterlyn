@@ -24,6 +24,7 @@
 
 .content-body.editable-diff-surface .cm-mergeViewEditor {
   min-width: 0;
+  overflow: visible;
 }
 
 .content-body.editable-diff-surface .cm-merge-revert {

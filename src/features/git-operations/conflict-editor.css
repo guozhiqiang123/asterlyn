@@ -67,6 +67,7 @@
 
 .conflict-three-pane .cm-mergeViewEditor {
   min-width: 0;
+  overflow: visible;
 }
 
 .conflict-right-merge .cm-mergeViewEditor:first-child {
