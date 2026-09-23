@@ -45,6 +45,44 @@ test("ensuring an editable Diff buffer preserves the active preview", async () =
   assert.equal(events[0].documentChanged, false);
 });
 
+test("closing preview cleans up clean ephemeral backing tabs without leaving stale single-pane tabs", async () => {
+  const controller = new EditorSessionController(gateway());
+  controller.installWorkspace("/repo");
+  controller.activatePreview({
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "a.ts", staged: false },
+  });
+  await controller.ensureText("/repo", file("a.ts"), "source");
+  assert.equal(controller.state.session.textTabs[0].ephemeral, true);
+
+  controller.closePreview();
+
+  assert.equal(controller.state.session.preview, null);
+  assert.equal(controller.state.session.textTabs.length, 0);
+  assert.equal(controller.activeDocument().kind, "welcome");
+});
+
+test("closing preview preserves explicitly opened user tabs", async () => {
+  const controller = new EditorSessionController(gateway());
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("manual.ts"), "source");
+  controller.activatePreview({
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "a.ts", staged: false },
+  });
+  await controller.ensureText("/repo", file("a.ts"), "source");
+  assert.equal(controller.state.session.textTabs.length, 2);
+
+  controller.closePreview();
+
+  assert.equal(controller.state.session.preview, null);
+  assert.equal(controller.state.session.textTabs.length, 1);
+  assert.equal(controller.state.session.textTabs[0].document.path, "manual.ts");
+  assert.equal(controller.activeDocument().path, "manual.ts");
+});
+
 test("reopening an inactive document emits activation and preserves its unsaved buffer", async () => {
   const controller = new EditorSessionController(gateway({ async readTextFile(_root, _repository, path) { return snapshot(path, path); } }));
   controller.installWorkspace("/repo");

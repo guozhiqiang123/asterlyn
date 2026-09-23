@@ -46,6 +46,7 @@ export interface TextTabState {
   error: string | null;
   conflict: boolean;
   markdownMode: MarkdownEditorMode;
+  ephemeral?: boolean;
 }
 
 export interface EditorSession {
@@ -242,6 +243,7 @@ export function openTextDocument(
             ? {
                 ...tab,
                 document,
+                ...(activate ? { ephemeral: false } : {}),
                 ...(retry ? { status: "loading" as const, loadEpoch, error: null } : {}),
               }
             : tab,
@@ -299,6 +301,7 @@ export function openTextDocument(
     error: null,
     conflict: false,
     markdownMode: initialMarkdownMode,
+    ephemeral: !activate,
   };
   return {
     session: {
@@ -435,7 +438,13 @@ export function failTextLoad(
 
 export function activateTextTab(session: EditorSession, tabId: string): EditorSession {
   return session.textTabs.some((tab) => tab.id === tabId)
-    ? { ...session, active: { kind: "text", id: tabId } }
+    ? {
+        ...session,
+        textTabs: session.textTabs.map((tab) =>
+          tab.id === tabId && tab.ephemeral ? { ...tab, ephemeral: false } : tab,
+        ),
+        active: { kind: "text", id: tabId },
+      }
     : session;
 }
 
@@ -590,15 +599,25 @@ export function closeTextTab(
 }
 
 export function closePreview(session: EditorSession): EditorSession {
+  const textTabs = session.textTabs.filter(
+    (tab) => !tab.ephemeral || isTextTabDirty(tab),
+  );
+  const fallback = textTabs.at(-1);
+  const activeTextId = session.active.kind === "text" ? session.active.id : null;
   return {
     ...session,
+    textTabs,
     preview: null,
     active:
       session.active.kind === "preview"
-        ? session.textTabs.at(-1)
-          ? { kind: "text", id: session.textTabs.at(-1)!.id }
+        ? fallback
+          ? { kind: "text", id: fallback.id }
           : { kind: "welcome" }
-        : session.active,
+        : activeTextId !== null && !textTabs.some((tab) => tab.id === activeTextId)
+          ? fallback
+            ? { kind: "text", id: fallback.id }
+            : { kind: "welcome" }
+          : session.active,
   };
 }
 

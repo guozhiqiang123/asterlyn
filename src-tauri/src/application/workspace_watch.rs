@@ -657,6 +657,7 @@ impl PendingHint {
                 RepositoryStateSlice::Head,
                 RepositoryStateSlice::Refs,
                 RepositoryStateSlice::History,
+                RepositoryStateSlice::WorkingTree,
             ]);
         } else if is_operation_marker(first) {
             self.slices.extend([
@@ -1170,6 +1171,7 @@ mod tests {
                 RepositoryStateSlice::Head,
                 RepositoryStateSlice::Refs,
                 RepositoryStateSlice::History,
+                RepositoryStateSlice::WorkingTree,
             ])
         );
         assert!(hint.paths.is_empty());

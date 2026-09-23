@@ -1424,7 +1424,7 @@ export class AsterlynApp {
 
   private handleEditorSessionChange(change: EditorSessionChange): void {
     if (
-      change.reason === "activation" ||
+      change.reason === "activation" || change.reason === "close" ||
       change.reason === "load-start" ||
       change.reason === "load-complete" ||
       change.reason === "load-error" ||
