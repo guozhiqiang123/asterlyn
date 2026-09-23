@@ -21,7 +21,7 @@ import {
   toggleSelection,
   type ProjectFilesSelectionState,
 } from "./project-files-selection.ts";
-import type { ProjectTreeRow } from "./project-files-view.ts";
+import { projectTreeRows, type ProjectTreeRow } from "./project-files-view.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 
@@ -42,6 +42,7 @@ export interface ProjectFilesState {
 export type ProjectFilesChangeReason =
   | "workspace"
   | "status"
+  | "mutation"
   | "refresh-start"
   | "refresh-complete"
   | "refresh-error"
@@ -137,6 +138,53 @@ export class ProjectFilesController {
     this.treeCache = null;
     this.reconcileTreeState();
     this.emit({ reason: "status", catalogChanged: true });
+  }
+
+  removeAtOrBelow(paths: readonly string[]): boolean {
+    const roots = [...new Set(paths.map(normalizeWorkspacePath).filter(Boolean))];
+    if (roots.length === 0) return false;
+    const retained = (path: string) => !roots.some((root) => isAtOrBelow(path, root));
+    const nextPaths = this.state.paths.filter(retained);
+    const nextFiles = this.state.files.filter((file) => retained(file.workspacePath));
+    const nextIgnoredEntries = this.state.ignoredEntries.filter((entry) => retained(entry.workspacePath));
+    const nextChanges = this.changes.filter((change) => retained(change.path));
+    if (
+      nextPaths.length === this.state.paths.length &&
+      nextFiles.length === this.state.files.length &&
+      nextIgnoredEntries.length === this.state.ignoredEntries.length &&
+      nextChanges.length === this.changes.length
+    ) return false;
+
+    this.generation += 1;
+    this.refreshRoot = null;
+    this.refreshGeneration = null;
+    this.refreshPromise = null;
+    this.state.paths = nextPaths;
+    this.state.files = nextFiles;
+    this.state.ignoredEntries = nextIgnoredEntries;
+    this.state.loading = false;
+    this.state.error = null;
+    this.changes = nextChanges;
+    this.treeCache = null;
+    this.reconcileTreeState();
+    this.emit({
+      reason: "mutation",
+      catalogChanged: true,
+      selectionChanged: true,
+      disclosureChanged: true,
+    });
+    return true;
+  }
+
+  removeTrashTargets(paths: readonly string[]): boolean {
+    const anchor = paths.map(normalizeWorkspacePath).filter(Boolean)
+      .sort((left, right) => left.localeCompare(right))[0];
+    const removed = this.removeAtOrBelow(paths);
+    if (!removed || this.state.selection || !anchor) return removed;
+    const rows = projectTreeRows(this.tree(), this.state.expandedDirectories);
+    const next = rows.find((row) => row.node.path.localeCompare(anchor) > 0) ?? rows.at(-1);
+    if (next) this.select(next.node.path, next.node.kind);
+    return removed;
   }
 
   refresh(): Promise<boolean> {
@@ -398,6 +446,15 @@ function sameChange(a: FileChange, b: FileChange): boolean {
   return a.path === b.path && a.originalPath === b.originalPath &&
     a.indexStatus === b.indexStatus && a.worktreeStatus === b.worktreeStatus &&
     a.conflicted === b.conflicted && a.submodule === b.submodule;
+}
+
+function normalizeWorkspacePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+}
+
+function isAtOrBelow(path: string, root: string): boolean {
+  const normalized = normalizeWorkspacePath(path);
+  return normalized === root || normalized.startsWith(`${root}/`);
 }
 
 function sameRecords<T extends object>(a: T[], b: T[]): boolean {

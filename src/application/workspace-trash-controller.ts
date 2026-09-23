@@ -51,7 +51,8 @@ export interface WorkspaceTrashMutationPort {
 export interface WorkspaceTrashRuntime<TTarget extends WorkspaceTrashTarget> {
   currentIdentity(): WorkspaceMutationIdentity | null;
   isTargetCurrent(target: TTarget): boolean;
-  completed(target: TTarget, outcome: WorkspaceMutationOutcome): void;
+  completed(targets: readonly TTarget[], outcome: WorkspaceMutationOutcome): void;
+  reconciliationFailed?(error: unknown): void;
   status(message: string): void;
   error(error: unknown): void;
 }
@@ -196,19 +197,27 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
     }
     this.value = { ...this.value, dialog: { ...dialog, busy: true } };
     this.emit();
-    const execution = await this.mutations.execute(identity, dialog.planId);
+    const reconcileInBackground = this.mutations.reconcile !== undefined;
+    const execution = await this.mutations.execute(
+      identity,
+      dialog.planId,
+      reconcileInBackground ? { reconcile: false } : undefined,
+    );
     const currentDialog = this.value.dialog;
     if (!currentDialog || currentDialog.planId !== dialog.planId) return;
-    const outcome = completedOutcome(execution);
-    if (!outcome) {
+    const outcome = completedMutationOutcome(execution);
+    if (!outcome || execution.status !== "completed") {
+      if (outcome && reconcileInBackground) {
+        void this.reconcileCompleted(identity, outcome);
+        this.runtime.completed(targets, outcome);
+      }
       this.value = { planningTarget: null, dialog: null };
       this.emit();
       this.runtime.error(new Error(executionFailure(execution, this.messages())));
       return;
     }
-    for (const item of targets) {
-      this.runtime.completed(item, outcome);
-    }
+    if (reconcileInBackground) void this.reconcileCompleted(identity, outcome);
+    this.runtime.completed(targets, outcome);
     this.value = { planningTarget: null, dialog: null };
     this.emit();
     this.runtime.status(this.messages().trashed);
@@ -241,14 +250,38 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
     return Boolean(current && current.root === identity.root && current.generation === identity.generation);
   }
 
+  private async reconcileCompleted(
+    identity: WorkspaceMutationIdentity,
+    outcome: WorkspaceMutationOutcome,
+  ): Promise<void> {
+    try {
+      const result = await this.mutations.reconcile?.(identity, outcome);
+      if (result?.status !== "failure") return;
+      this.reportReconciliationFailure(result.error);
+    } catch (error) {
+      this.reportReconciliationFailure(error);
+    }
+  }
+
+  private reportReconciliationFailure(error: unknown): void {
+    if (this.disposed) return;
+    if (this.runtime.reconciliationFailed) {
+      this.runtime.reconciliationFailed(error);
+      return;
+    }
+    this.runtime.error(error);
+  }
+
   private emit(): void {
     if (this.disposed) return;
     for (const listener of this.listeners) listener();
   }
 }
 
-function completedOutcome(result: WorkspaceMutationExecutionResult): WorkspaceMutationOutcome | null {
-  return result.status === "completed" &&
+function completedMutationOutcome(
+  result: WorkspaceMutationExecutionResult,
+): WorkspaceMutationOutcome | null {
+  return "outcome" in result &&
       (result.outcome.status === "completed" || result.outcome.status === "noOp")
     ? result.outcome
     : null;

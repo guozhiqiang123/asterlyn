@@ -109,6 +109,20 @@ complete read:
 Single-flight keys include workspace generation and request kind. An invalidation arriving during a
 matching request is retained as a dirty-after-read flag; it cannot disappear into the active promise.
 
+### Post-mutation presentation handoff
+
+An accepted native mutation outcome may update a feature-owned presentation before the follow-up
+authoritative reads finish when the projection can be derived exactly from that outcome. Trash uses
+this rule to close affected clean editor tabs and remove the reviewed paths and descendants from the
+current Files catalog. The controller advances its request generation at the same time, so a catalog
+read started before the native write cannot restore a removed path when it completes.
+
+This handoff does not mutate the canonical repository snapshot and is not a second commit boundary.
+The coordinator immediately starts the normal versioned reconciliation for `workingTree`,
+`workspaceCatalog`, and `openDocuments` in the background. Its accepted result remains authoritative
+and may correct the temporary projection. Failed current-session reconciliation reports the error
+and requests a complete refresh; stale-session reconciliation is discarded.
+
 ### Native watcher ownership and activation
 
 The native service maintains an exact desired plan per owner:

@@ -3,7 +3,7 @@
 - **Date:** 2026-09-23
 - **Status:** locally accepted; installed package interaction remains a manual platform check
 - **Scope:** Files multi-selection and context actions, one reviewed multi-source Trash operation,
-  faster Trash planning, and editable Git-ignored files and folders
+  faster Trash planning and visible completion, and editable Git-ignored files and folders
 
 ## Accepted behavior
 
@@ -21,13 +21,18 @@
 - Execution checks the reviewed source/inventory correspondence and every source again before the
   platform call. A partial platform result is reported as uncertain and retains recovery evidence;
   it is never reported as an unchanged failure.
+- After the platform adapter reports completion, the review closes and Files removes the reviewed
+  paths immediately. The controller invalidates catalog work that started before deletion, while
+  Git status, the complete project catalog, and untracked state reconcile under the versioned
+  window-session barrier in the background. A current-session failure is visible and schedules an
+  authoritative refresh.
 
 ## Automated evidence
 
 | Gate | Result |
 | --- | --- |
 | TypeScript check | passed |
-| Complete frontend/delivery script suite | 604 passed |
+| Complete frontend/delivery script suite | 612 passed, including visible Trash completion, editor-conflict recovery, stale catalog rejection, authoritative convergence, and retained-row selection |
 | Production frontend build | passed; enforced source and bundle budgets passed |
 | Rust formatting | passed |
 | Full Rust workspace suite | 231 passed; 2 native-watcher tests intentionally ignored |
@@ -49,7 +54,10 @@ context per selected entry.
 
 No normalized wall-clock, resident-memory, or installed-package series was recorded, so no numeric
 latency or memory improvement is claimed. The expected improvement follows from removing payload
-reads from Trash planning and eliminating repeated platform-context creation.
+reads from Trash planning, eliminating repeated platform-context creation, and removing Git status,
+complete catalog, and untracked scans from the confirmation dialog's visible-completion critical
+path. Recursive plan/revalidation and the operating-system Trash call remain synchronous safety
+work.
 
 ## Known limits
 

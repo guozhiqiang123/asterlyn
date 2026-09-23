@@ -964,13 +964,20 @@ export class AsterlynApp {
         isTargetCurrent: (target) => "change" in target
           ? this.isChangesContextTargetCurrent(target)
           : this.isProjectFilesContextTargetCurrent(target),
-        completed: (target, outcome) => {
-          if ("change" in target) {
-            this.completeChangesTrash(target, outcome);
+        completed: (targets, _outcome) => {
+          const first = targets[0];
+          if (!first) return;
+          const paths = targets.map((target) => target.workspacePath);
+          if ("change" in first) {
+            this.filesEditorRuntime.files.removeAtOrBelow(paths);
           } else {
-            this.projectFilesOperationRuntime.controller.clearClipboardAtOrBelow(target.workspacePath);
-            this.completeProjectFilesTrash(target, outcome);
+            for (const path of paths) this.projectFilesOperationRuntime.controller.clearClipboardAtOrBelow(path);
+            this.filesEditorRuntime.files.removeTrashTargets(paths);
           }
+        },
+        reconciliationFailed: (error) => {
+          this.showError(error);
+          void this.refresh();
         },
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
@@ -4312,23 +4319,6 @@ export class AsterlynApp {
     const root = this.windowSession.workspace.state.root;
     const file = this.filesEditorRuntime.files.fileForWorkspacePath(destination);
     if (root && file) void this.openProjectFile(root, file);
-  }
-
-  private completeProjectFilesTrash(
-    target: ProjectFilesContextTarget,
-    _outcome: WorkspaceMutationOutcome,
-  ): void {
-    const rows = projectTreeRows(this.projectTree(), this.filesState.expandedDirectories);
-    const next = rows.find((row) => row.node.path.localeCompare(target.workspacePath) > 0)
-      ?? rows.at(-1);
-    if (next) this.filesEditorRuntime.files.select(next.node.path, next.node.kind);
-  }
-
-  private completeChangesTrash(
-    _target: ChangesFileContextTarget,
-    _outcome: WorkspaceMutationOutcome,
-  ): void {
-    // Versioned reconciliation has already removed the file and selected the next valid change.
   }
 
   private installContextHistoryQuery(

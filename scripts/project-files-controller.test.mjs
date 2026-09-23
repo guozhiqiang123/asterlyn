@@ -155,15 +155,97 @@ test("reveal expands ancestors and rejects paths outside the catalog", async () 
   assert.equal(controller.state.expandedDirectories.has("src"), true);
 });
 
-function catalog(root, paths) {
+test("optimistic removal prunes exact descendants while preserving prefixed siblings", async () => {
+  const changes = [
+    change("src/change-only.ts"),
+    change("src-old/change.ts"),
+  ];
+  const controller = new ProjectFilesController({
+    async listProjectFiles() {
+      return catalog(
+        "/repo",
+        ["src/a.ts", "src/deep/b.ts", "src-old/keep.ts", "keep.md"],
+        [{ workspacePath: "src/ignored", kind: "directory" }],
+      );
+    },
+  });
+  controller.installWorkspace("/repo", changes);
+  await controller.refresh();
+  controller.setDirectoryExpanded("src", true);
+  controller.setDirectoryExpanded("src/deep", true);
+  controller.select("src/deep/b.ts", "file");
+  const events = [];
+  controller.subscribe((event) => events.push(event));
+
+  assert.equal(controller.removeAtOrBelow(["src", "src/a.ts"]), true);
+
+  assert.deepEqual(controller.state.paths, ["src-old/keep.ts", "keep.md"]);
+  assert.deepEqual(controller.state.files.map((file) => file.workspacePath), ["src-old/keep.ts", "keep.md"]);
+  assert.deepEqual(controller.state.ignoredEntries, []);
+  assert.equal(controller.state.selection, null);
+  assert.equal(controller.state.expandedDirectories.has("src"), false);
+  assert.equal(controller.state.expandedDirectories.has("src/deep"), false);
+  assert.deepEqual(treePaths(controller.tree()), [
+    "src-old", "src-old/change.ts", "src-old/keep.ts", "keep.md",
+  ]);
+  assert.equal(events.at(-1).reason, "mutation");
+});
+
+test("optimistic removal rejects stale catalog completion and allows later convergence", async () => {
+  const stale = deferred();
+  const catalogs = [
+    catalog("/repo", ["gone.txt", "keep.txt"]),
+    stale.promise,
+    catalog("/repo", ["gone.txt", "keep.txt", "recreated.txt"]),
+  ];
+  const controller = new ProjectFilesController({
+    listProjectFiles() { return Promise.resolve(catalogs.shift()); },
+  });
+  controller.installWorkspace("/repo");
+  await controller.refresh();
+
+  const obsolete = controller.refresh();
+  assert.equal(controller.removeAtOrBelow(["gone.txt"]), true);
+  stale.resolve(catalog("/repo", ["gone.txt", "keep.txt", "stale.txt"]));
+
+  assert.equal(await obsolete, false);
+  assert.deepEqual(controller.state.paths, ["keep.txt"]);
+  assert.equal(await controller.refresh(), true);
+  assert.deepEqual(controller.state.paths, ["gone.txt", "keep.txt", "recreated.txt"]);
+});
+
+test("Trash removal selects the next retained visible row", async () => {
+  const controller = new ProjectFilesController({
+    async listProjectFiles() { return catalog("/repo", ["a.txt", "b.txt", "c.txt"]); },
+  });
+  controller.installWorkspace("/repo");
+  await controller.refresh();
+  controller.select("b.txt", "file");
+
+  assert.equal(controller.removeTrashTargets(["b.txt"]), true);
+  assert.deepEqual(controller.state.selection, { path: "c.txt", kind: "file" });
+});
+
+function catalog(root, paths, ignoredEntries = []) {
   return {
     root,
     paths,
     files: paths.map((path) => ({ repositoryId: ".", path, workspacePath: path })),
-    ignoredEntries: [],
+    ignoredEntries,
     repositoryRoots: [],
     truncated: false,
   };
+}
+
+function change(path) {
+  return {
+    path, originalPath: null, indexStatus: "unmodified", worktreeStatus: "modified",
+    conflicted: false, submodule: false,
+  };
+}
+
+function treePaths(nodes) {
+  return nodes.flatMap((node) => [node.path, ...treePaths(node.children)]);
 }
 
 function deferred() {

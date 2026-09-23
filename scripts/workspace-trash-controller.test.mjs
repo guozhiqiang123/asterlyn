@@ -19,34 +19,52 @@ function preview(planId = "plan-1") {
   };
 }
 
-function fixture() {
-  const records = { plans: [], executions: [], cancels: 0, completed: [], status: [], errors: [] };
+function fixture({ reconcile } = {}) {
+  const records = {
+    plans: [], executions: [], reconciliations: [], cancels: 0, completed: [],
+    status: [], errors: [], reconciliationErrors: [], sequence: [],
+  };
   let current = { root: "/workspace", generation: 4 };
   let targetCurrent = true;
   let nextPlan = { status: "ready", preview: preview() };
-  const controller = new WorkspaceTrashController(
-    {
-      plan(identity, operation, collisionPolicy, editorRequest) {
-        records.plans.push({ identity, operation, collisionPolicy, editorRequest });
-        return { planId: "plan-1", completion: Promise.resolve(nextPlan) };
-      },
-      async execute(identity, planId) {
-        records.executions.push({ identity, planId });
-        return {
-          status: "completed",
-          outcome: {
-            planId, status: "completed", affectedPaths: ["src/app.ts"], pathRemaps: [],
-            invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
-            recoveryId: null, error: null,
-          },
-        };
-      },
-      cancel() { records.cancels += 1; },
+  let nextExecution = null;
+  const mutations = {
+    plan(identity, operation, collisionPolicy, editorRequest) {
+      records.plans.push({ identity, operation, collisionPolicy, editorRequest });
+      return { planId: "plan-1", completion: Promise.resolve(nextPlan) };
     },
+    async execute(identity, planId, options) {
+      records.executions.push({ identity, planId, options });
+      return nextExecution ?? {
+        status: "completed",
+        outcome: {
+          planId, status: "completed", affectedPaths: ["src/app.ts"], pathRemaps: [],
+          invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
+          recoveryId: null, error: null,
+        },
+      };
+    },
+    cancel() { records.cancels += 1; },
+  };
+  if (reconcile) {
+    mutations.reconcile = (identity, outcome) => {
+      records.sequence.push("reconcile");
+      records.reconciliations.push({ identity, outcome });
+      return reconcile(identity, outcome);
+    };
+  }
+  const controller = new WorkspaceTrashController(
+    mutations,
     {
       currentIdentity: () => current,
       isTargetCurrent: () => targetCurrent,
-      completed: (...args) => records.completed.push(args),
+      completed: (...args) => {
+        records.sequence.push("completed");
+        records.completed.push(args);
+      },
+      reconciliationFailed: (error) => records.reconciliationErrors.push(
+        error instanceof Error ? error.message : String(error),
+      ),
       status: (message) => records.status.push(message),
       error: (error) => records.errors.push(error instanceof Error ? error.message : String(error)),
     },
@@ -57,6 +75,7 @@ function fixture() {
     setCurrent(value) { current = value; },
     setTargetCurrent(value) { targetCurrent = value; },
     setNextPlan(value) { nextPlan = value; },
+    setNextExecution(value) { nextExecution = value; },
   };
 }
 
@@ -73,8 +92,53 @@ test("Trash plans exact paths and executes only after explicit confirmation", as
   await controller.confirm();
 
   assert.equal(records.executions[0].planId, "plan-1");
-  assert.equal(records.completed[0][0], target);
+  assert.equal(records.executions[0].options, undefined);
+  assert.deepEqual(records.completed[0][0], [target]);
   assert.deepEqual(records.status, ["trashed"]);
+});
+
+test("Trash reports visible completion before background reconciliation settles", async () => {
+  const reconciliation = deferred();
+  const { controller, records } = fixture({ reconcile: () => reconciliation.promise });
+  await controller.request(target);
+
+  let confirmationResolved = false;
+  const confirmation = controller.confirm().then(() => { confirmationResolved = true; });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(confirmationResolved, true);
+  assert.equal(controller.state.dialog, null);
+  assert.deepEqual(records.executions[0].options, { reconcile: false });
+  assert.deepEqual(records.completed[0][0], [target]);
+  assert.deepEqual(records.status, ["trashed"]);
+  assert.equal(records.reconciliations.length, 1);
+  assert.deepEqual(records.sequence, ["reconcile", "completed"]);
+
+  reconciliation.resolve({ status: "failure", error: new Error("refresh failed") });
+  await confirmation;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(records.reconciliationErrors, ["refresh failed"]);
+});
+
+test("a completed native Trash still reconciles after an editor migration conflict", async () => {
+  const outcome = {
+    planId: "plan-1", status: "completed", affectedPaths: ["src/app.ts"], pathRemaps: [],
+    invalidatedSlices: ["workspaceCatalog", "openDocuments", "workingTree"],
+    recoveryId: null, error: null,
+  };
+  const fixtureState = fixture({ reconcile: async () => ({ status: "accepted" }) });
+  fixtureState.setNextExecution({ status: "editor-conflict", outcome, reason: "runtime-conflict" });
+  await fixtureState.controller.request(target);
+
+  await fixtureState.controller.confirm();
+  await Promise.resolve();
+
+  assert.deepEqual(fixtureState.records.completed[0][0], [target]);
+  assert.equal(fixtureState.records.reconciliations.length, 1);
+  assert.deepEqual(fixtureState.records.errors, ["failed"]);
+  assert.equal(fixtureState.controller.state.dialog, null);
 });
 
 test("closing a review cancels its plan and a stale target cannot execute", async () => {
@@ -162,7 +226,12 @@ test("multi-selection Trash plans all targets upfront and executes on confirmati
   await controller.confirm();
 
   assert.equal(records.executions.length, 1);
-  assert.equal(records.completed.length, 2);
-  assert.deepEqual(records.completed[0][0], multiTarget.selectedTargets[0]);
-  assert.deepEqual(records.completed[1][0], multiTarget.selectedTargets[1]);
+  assert.equal(records.completed.length, 1);
+  assert.deepEqual(records.completed[0][0], multiTarget.selectedTargets);
 });
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}

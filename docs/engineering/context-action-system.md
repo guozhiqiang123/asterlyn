@@ -346,10 +346,18 @@ affected open-document identities and destination collision checks.
 - failed or uncertain mutation does not apply a speculative remap;
 - workspace/project replacement cancels an unstarted plan and invalidates all leases.
 
-The mutation executes behind the existing window-session reconciliation barrier. After a successful
-outcome, path remaps are installed and one exact invalidation commits `workspaceCatalog`, affected
-`openDocuments`, and `workingTree`; watcher events remain coalesced hints rather than a competing
-state owner.
+Native execution and editor migration remain serialized by the workspace-mutation coordinator.
+Create, rename, copy, and move publish through the existing window-session reconciliation barrier.
+After the platform Trash adapter reports a completed outcome, the editor migration closes the exact
+clean documents and Files removes the reviewed source paths from its current catalog immediately.
+That removal is only a presentation handoff from the accepted native outcome: it invalidates any
+older catalog request and does not commit Git or repository state.
+
+Trash then reconciles `workspaceCatalog`, affected `openDocuments`, and `workingTree` behind the
+window-session barrier in the background. The authoritative result may correct the optimistic Files
+projection. A current-session reconciliation failure is reported and triggers a complete refresh;
+stale-session results remain ignored. Watcher events continue to coalesce as hints rather than
+becoming a competing state owner.
 
 ### R5.4 — Trash adapters
 
