@@ -124,6 +124,62 @@ test("same-workspace refresh retains valid selection and disclosure", async () =
   assert.equal(controller.state.expandedDirectories.has("src"), true);
 });
 
+test("same-workspace refresh restores disclosure after a build directory disappears transiently", async () => {
+  const catalogs = [
+    catalog("/repo", ["dist/assets/first.js", "src/main.ts"]),
+    catalog("/repo", ["src/main.ts"]),
+    catalog("/repo", ["dist/assets/second.js", "src/main.ts"]),
+  ];
+  const controller = new ProjectFilesController({
+    async listProjectFiles() { return catalogs.shift(); },
+  });
+  controller.installWorkspace("/repo");
+  await controller.refresh();
+  controller.setDirectoryExpanded("dist", true);
+  controller.setDirectoryExpanded("dist/assets", true);
+
+  await controller.refresh();
+  assert.deepEqual([...controller.state.expandedDirectories], []);
+
+  await controller.refresh();
+  assert.equal(controller.state.expandedDirectories.has("dist"), true);
+  assert.equal(controller.state.expandedDirectories.has("dist/assets"), true);
+});
+
+test("explicit removal prunes remembered disclosure before a directory is recreated", async () => {
+  const catalogs = [
+    catalog("/repo", ["dist/assets/first.js", "src/main.ts"]),
+    catalog("/repo", ["dist/assets/recreated.js", "src/main.ts"]),
+  ];
+  const controller = new ProjectFilesController({
+    async listProjectFiles() { return catalogs.shift(); },
+  });
+  controller.installWorkspace("/repo");
+  await controller.refresh();
+  controller.setDirectoryExpanded("dist", true);
+  controller.setDirectoryExpanded("dist/assets", true);
+
+  assert.equal(controller.removeAtOrBelow(["dist"]), true);
+  await controller.refresh();
+
+  assert.equal(controller.state.expandedDirectories.has("dist"), false);
+  assert.equal(controller.state.expandedDirectories.has("dist/assets"), false);
+});
+
+test("workspace switches do not carry remembered disclosure into the next root", async () => {
+  const controller = new ProjectFilesController({
+    async listProjectFiles(root) { return catalog(root, ["src/main.ts"]); },
+  });
+  controller.installWorkspace("/one");
+  await controller.refresh();
+  controller.setDirectoryExpanded("src", true);
+
+  controller.installWorkspace("/two");
+  await controller.refresh();
+
+  assert.equal(controller.state.expandedDirectories.has("src"), false);
+});
+
 test("status updates rebuild tree without replacing catalog identity", async () => {
   const controller = new ProjectFilesController({
     async listProjectFiles() { return catalog("/repo", ["a.txt"]); },

@@ -92,7 +92,10 @@ message churn is not forwarded as a stream of UI work.
   boundary. Manual Refresh, focus recovery, and watcher reconciliation may share the active read;
   they must not start parallel full-catalog scans for the same root.
 - Project catalog reconciliation preserves surviving file identity, expanded directories,
-  selection, and scroll position.
+  selection, and scroll position. Same-workspace disclosure intent is retained separately from the
+  current catalog projection, so a build directory that disappears in one transient snapshot and
+  reappears in the next resumes its prior expansion. Workspace switches, explicit collapse, and
+  reviewed Files removal prune that intent.
 - Working-tree reconciliation uses the tracked-first Git read, then the cancellable untracked
   supplement. It updates Changes, file/tab colors, and an active working Diff without reloading
   History or refs.

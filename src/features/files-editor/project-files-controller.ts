@@ -82,6 +82,7 @@ export class ProjectFilesController {
   private refreshRoot: string | null = null;
   private refreshGeneration: number | null = null;
   private refreshPromise: Promise<boolean> | null = null;
+  private readonly expandedDirectoryIntent = new Set<string>();
   private readonly loadedIgnoredDirectories = new Set<string>();
   private readonly directoryRequests = new Map<string, Promise<boolean>>();
   private messages: Pick<EditorCopy, "unexpectedProjectFilesError">;
@@ -134,6 +135,7 @@ export class ProjectFilesController {
       this.state.selections = [];
       this.state.selectionAnchor = null;
       this.state.expandedDirectories.clear();
+      this.expandedDirectoryIntent.clear();
     } else {
       this.reconcileTreeState();
     }
@@ -183,6 +185,9 @@ export class ProjectFilesController {
     this.state.directoryErrors.clear();
     this.loadedIgnoredDirectories.clear();
     this.directoryRequests.clear();
+    for (const path of [...this.expandedDirectoryIntent]) {
+      if (!retained(path)) this.expandedDirectoryIntent.delete(path);
+    }
     this.changes = nextChanges;
     this.treeCache = null;
     this.reconcileTreeState();
@@ -258,6 +263,7 @@ export class ProjectFilesController {
         this.state.selections = [];
         this.state.selectionAnchor = null;
         this.state.expandedDirectories.clear();
+        this.expandedDirectoryIntent.clear();
       } else {
         this.reconcileTreeState();
       }
@@ -362,8 +368,10 @@ export class ProjectFilesController {
       : this.state.expandedDirectories.has(path);
     if (expanded) {
       this.state.expandedDirectories.add(path);
+      this.expandedDirectoryIntent.add(path);
     } else {
       this.state.expandedDirectories.delete(path);
+      this.expandedDirectoryIntent.delete(path);
     }
     if (changed) this.emit({ reason: "disclosure", disclosureChanged: true });
     if (expanded) void this.loadIgnoredDirectory(path);
@@ -397,6 +405,7 @@ export class ProjectFilesController {
     if (!node || node.kind !== "file") return false;
     for (const directory of ancestorProjectDirectories(path)) {
       this.state.expandedDirectories.add(directory);
+      this.expandedDirectoryIntent.add(directory);
     }
     this.state.selection = { path, kind: "file" };
     this.state.selections = [{ path, kind: "file" }];
@@ -414,6 +423,7 @@ export class ProjectFilesController {
     if (!node || node.kind !== "directory") return false;
     for (const directory of ancestorProjectDirectories(path)) {
       this.state.expandedDirectories.add(directory);
+      this.expandedDirectoryIntent.add(directory);
     }
     this.state.selection = { path, kind: "directory" };
     this.state.selections = [{ path, kind: "directory" }];
@@ -434,8 +444,10 @@ export class ProjectFilesController {
     for (const path of descendantProjectDirectories(node)) {
       if (expanded) {
         this.state.expandedDirectories.add(path);
+        this.expandedDirectoryIntent.add(path);
       } else {
         this.state.expandedDirectories.delete(path);
+        this.expandedDirectoryIntent.delete(path);
       }
     }
     this.emit({ reason: "disclosure", disclosureChanged: true });
@@ -467,7 +479,7 @@ export class ProjectFilesController {
     const tree = this.tree();
     const reconciled = reconcileProjectTreeState(
       tree,
-      this.state.expandedDirectories,
+      this.expandedDirectoryIntent,
       this.state.selection,
     );
     this.state.expandedDirectories = reconciled.expandedDirectories;

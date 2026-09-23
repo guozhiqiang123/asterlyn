@@ -19,6 +19,12 @@ workspace and current ignore policy, rejects symbolic-link traversal, assigns th
 repository identity, and merges returned files into the window's authorization catalog before the
 frontend presents them. Nested ignored directories use the same operation when expanded.
 
+Files disclosure now keeps user expansion intent separate from the directory identities available
+in one catalog snapshot. Build output such as `dist/assets` may disappear while a compiler replaces
+the output directory; the temporary snapshot hides those rows without forgetting their expansion,
+and the next snapshot restores the expanded path. A workspace switch, explicit collapse, or reviewed
+Files removal clears the affected intent instead of reopening a deliberately closed or deleted path.
+
 ## FilesRecovery measurement
 
 Measurements used `/Users/gzq/AndroidStudioProjects/FilesRecovery` on the same local checkout and
