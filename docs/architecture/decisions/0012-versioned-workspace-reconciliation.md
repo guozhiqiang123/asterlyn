@@ -4,7 +4,8 @@
 
 Accepted on 2026-09-14. This decision supersedes the scheduling, overflow, watcher-plan, and
 same-root capability-transition details in ADR-0009. ADR-0009 remains the decision that native
-events are hints and filesystem/Git reads are authoritative.
+events are hints and filesystem/Git reads are authoritative. ADR-0017 later made ignored documents
+editable without changing the bounded hot-set watcher rule recorded here.
 
 ## Context
 
@@ -139,8 +140,8 @@ Watcher activation is a handshake:
 The frontend buffers at most 64 instance-qualified events during this handshake. Crossing that
 bound cannot silently lose state: it becomes one budgeted complete verification.
 
-Open ignored read-only documents form a bounded hot set. Their authorized parent directories are
-included even when they are absent from the writable catalog. Closing the last such tab removes its
+Open ignored documents form a bounded hot set. Their authorized parent directories are included
+even when they are absent from the default watcher catalog. Closing the last such tab removes its
 owner-specific directory on the next plan update.
 
 ### Event validity, recovery classes, and health

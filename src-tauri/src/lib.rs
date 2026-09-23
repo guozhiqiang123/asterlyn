@@ -453,24 +453,23 @@ mod tests {
             .into_iter()
             .find(|file| file.path == "ignored.txt")
             .expect("ignored file identity");
+        let ignored_snapshot =
+            read_session_text_file(directory.path(), &ignored).expect("ignored file is readable");
+        assert_eq!(ignored_snapshot.content, "ignored\n");
+        save_session_text_file(
+            directory.path(),
+            &ignored,
+            ignored_snapshot.revision,
+            "saved ignored\n".to_string(),
+            false,
+            "native-save-ignored".to_string(),
+            &WorkspaceWriteRegistry::default(),
+        )
+        .expect("catalogued ignored file saves");
         assert_eq!(
-            read_session_text_file(directory.path(), &ignored)
-                .expect("ignored file is readable")
-                .content,
-            "ignored\n"
+            fs::read_to_string(directory.path().join("ignored.txt")).unwrap(),
+            "saved ignored\n"
         );
-        assert!(matches!(
-            save_session_text_file(
-                directory.path(),
-                &ignored,
-                "unused".to_string(),
-                "blocked\n".to_string(),
-                false,
-                "native-save-ignored".to_string(),
-                &WorkspaceWriteRegistry::default(),
-            ),
-            Err(WorkspaceError::NotAuthorized { .. })
-        ));
         assert!(matches!(
             read_authorized_text_file(directory.path(), ".", "ignored.txt"),
             Err(WorkspaceError::NotAuthorized { .. })
@@ -600,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_search_can_include_ignored_files_only_as_read_only_results() {
+    fn workspace_search_can_include_ignored_files_as_editable_results() {
         let directory = tempfile::tempdir().expect("temporary repository");
         git(directory.path(), &["init", "-b", "main"]);
         fs::write(directory.path().join(".gitignore"), "ignored.txt\n").expect("ignore file");
@@ -630,7 +629,8 @@ mod tests {
         .expect("search including ignored files");
         assert_eq!(included.matches.len(), 1);
         assert_eq!(included.matches[0].workspace_path, "ignored.txt");
-        assert!(included.matches[0].read_only);
+        assert!(!included.matches[0].read_only);
+        assert!(included.matches[0].ignored);
     }
 
     #[test]

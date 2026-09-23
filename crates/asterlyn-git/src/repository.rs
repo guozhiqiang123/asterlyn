@@ -1001,6 +1001,7 @@ impl GitRepository {
                     path,
                     workspace_path,
                     read_only: false,
+                    ignored: false,
                 });
             }
             if include_ignored {
@@ -1020,7 +1021,8 @@ impl GitRepository {
                             repository_id: root.descriptor.id.clone(),
                             path,
                             workspace_path: workspace_path.clone(),
-                            read_only: true,
+                            read_only: false,
+                            ignored: true,
                         });
                     }
                     ignored_entries.push(ProjectIgnoredEntry {
@@ -1069,7 +1071,7 @@ impl GitRepository {
             .collect();
         let mut paths: Vec<String> = files
             .iter()
-            .filter(|file| !file.read_only && !nested_roots.contains(file.workspace_path.as_str()))
+            .filter(|file| !file.ignored && !nested_roots.contains(file.workspace_path.as_str()))
             .map(|file| file.workspace_path.clone())
             .collect();
         paths.sort();
@@ -1163,6 +1165,7 @@ impl GitRepository {
             path: path.to_string(),
             workspace_path,
             read_only: false,
+            ignored: false,
         })
     }
 
@@ -1181,8 +1184,9 @@ impl GitRepository {
         self.reauthorize_project_file_for_read(file)
     }
 
-    /// Revalidates a catalogued file for a bounded read. Ignored catalog entries are admitted only
-    /// while they remain ignored, and retain their read-only identity.
+    /// Revalidates a catalogued file for a bounded read or write. Ignored catalog entries are
+    /// admitted only while they remain ignored, but ignored status is independent from read-only
+    /// capability.
     pub fn reauthorize_project_file_for_read(
         &self,
         file: &ProjectFile,
@@ -1245,7 +1249,7 @@ impl GitRepository {
             .stdout
             .split(|byte| *byte == 0)
             .any(|candidate| candidate == file.path.as_bytes());
-        if file.read_only && is_tracked {
+        if file.ignored && is_tracked {
             return Err(GitError::InvalidInput {
                 field: "project file".to_string(),
                 message: "the selected ignored-file identity is stale".to_string(),
@@ -1267,7 +1271,7 @@ impl GitRepository {
             })?;
             match ignored.status.code() {
                 Some(0) => {
-                    if !file.read_only {
+                    if !file.ignored {
                         return Err(GitError::InvalidInput {
                             field: "project file".to_string(),
                             message: "the selected project file is now ignored".to_string(),
@@ -1275,7 +1279,7 @@ impl GitRepository {
                     }
                 }
                 Some(1) => {
-                    if file.read_only {
+                    if file.ignored {
                         return Err(GitError::InvalidInput {
                             field: "project file".to_string(),
                             message: "the selected ignored-file identity is stale".to_string(),
@@ -6924,17 +6928,20 @@ mod tests {
             .find(|file| file.path == "ignored-dir/cache.bin")
             .expect("ignored directory descendant is catalogued")
             .clone();
-        assert!(ignored.read_only);
+        assert!(ignored.ignored);
+        assert!(!ignored.read_only);
         assert_eq!(
             repository
                 .reauthorize_project_file_for_read(&ignored)
                 .expect("catalogued ignored file passes read authorization"),
             ignored
         );
-        assert!(matches!(
-            repository.reauthorize_project_file(&ignored),
-            Err(GitError::InvalidInput { .. })
-        ));
+        assert_eq!(
+            repository
+                .reauthorize_project_file(&ignored)
+                .expect("catalogued ignored file remains writable while it stays ignored"),
+            ignored
+        );
 
         let cached_untracked = complete
             .files

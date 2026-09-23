@@ -12,6 +12,7 @@ import {
   COMPACT_FILE_TREE_ROW_HEIGHT,
   compactDirectoryChain,
 } from "../../presentation/compact-file-tree.ts";
+import { isProjectTreeRowSelected } from "./project-files-selection.ts";
 
 export const PROJECT_TREE_MOUNT_LIMIT = 200;
 export const PROJECT_TREE_ROW_HEIGHT = COMPACT_FILE_TREE_ROW_HEIGHT;
@@ -87,7 +88,7 @@ export function renderProjectNavigation(
       ? `<div class="project-tree-notice warning"><span>!</span><span>${escapeHtml(state.error)}</span></div>`
       : "",
   ].join("");
-  return `<div class="project-tree compact-file-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${rootEdit}${topSpacer}${visible.map((row) => renderProjectRowWithOperations(state, row, copy, edit, cutPath)).join("")}${bottomSpacer}</div>${notices}`;
+  return `<div class="project-tree compact-file-tree virtual-tree" role="tree" aria-multiselectable="true" aria-label="${escapeAttribute(copy.projectFiles)}" aria-rowcount="${rows.length}">${rootEdit}${topSpacer}${visible.map((row) => renderProjectRowWithOperations(state, row, copy, edit, cutPath)).join("")}${bottomSpacer}</div>${notices}`;
 }
 
 export function projectTreeRows(
@@ -150,9 +151,7 @@ function renderProjectRow(
   copy: ProjectFilesCopy,
 ): string {
   const { node, depth } = row;
-  const selected = state.selection?.kind === node.kind && (
-    state.selection.path === node.path || row.directoryPaths.includes(state.selection.path)
-  );
+  const selected = isProjectTreeRowSelected(state.selections ?? [], state.selection, row);
   const statusClass = `file-status-${node.status}`;
   const common = `role="treeitem" style="--tree-depth:${depth}" data-project-node="${escapeAttribute(node.path)}" data-project-kind="${node.kind}" data-project-status="${node.status}" aria-selected="${selected}" aria-level="${depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" title="${escapeAttribute(`${node.path} · ${copy.changeLabels[node.status]}`)}"`;
   if (node.kind === "directory") {
@@ -166,17 +165,7 @@ export function projectTreeRowRepresentsPath(row: ProjectTreeRow, path: string):
   return row.node.path === path || row.directoryPaths.includes(path);
 }
 
-export function projectTreeElementRepresentsPath(element: HTMLElement, path: string): boolean {
-  if (element.dataset.projectNode === path) return true;
-  const serialized = element.dataset.projectDirectoryPaths;
-  if (!serialized) return false;
-  try {
-    const paths: unknown = JSON.parse(serialized);
-    return Array.isArray(paths) && paths.includes(path);
-  } catch {
-    return false;
-  }
-}
+export { projectTreeElementRepresentsPath } from "./project-files-selection.ts";
 
 function renderProjectRowWithOperations(
   state: ProjectFilesState,

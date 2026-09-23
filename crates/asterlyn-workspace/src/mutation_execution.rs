@@ -97,6 +97,13 @@ struct MutationRecoveryManifest {
     source_hold: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrashSourceObservation {
+    Missing,
+    Unchanged,
+    ChangedOrUnknown,
+}
+
 impl Workspace {
     pub fn execute_mutation_plan(
         &self,
@@ -135,9 +142,9 @@ impl Workspace {
         trash: F,
     ) -> Result<WorkspaceMutationOutcome, WorkspaceError>
     where
-        F: FnOnce(&Path) -> Result<(), WorkspaceError>,
+        F: FnOnce(&[PathBuf]) -> Result<(), WorkspaceError>,
     {
-        let WorkspaceMutationOperation::Trash { source } = &plan.operation else {
+        let WorkspaceMutationOperation::Trash { .. } = &plan.operation else {
             return Err(WorkspaceError::InvalidMutation {
                 message: "the workspace mutation plan is not a trash operation".into(),
             });
@@ -147,7 +154,34 @@ impl Workspace {
                 message: "a blocked workspace mutation plan cannot execute".into(),
             });
         }
-        let inventory = self.revalidate_source(plan, source)?;
+        let sources = plan.operation.trash_sources();
+        let inventories = if !plan.inventories.is_empty() {
+            &plan.inventories
+        } else if let Some(ref inv) = plan.inventory {
+            std::slice::from_ref(inv)
+        } else {
+            return Err(WorkspaceError::InvalidMutation {
+                message: "workspace mutation plan has no source inventory".into(),
+            });
+        };
+        if sources.is_empty() || sources.len() != inventories.len() {
+            return Err(WorkspaceError::InvalidMutation {
+                message: "trash sources and reviewed inventories do not match".into(),
+            });
+        }
+        for (source, inv) in sources.iter().zip(inventories.iter()) {
+            if inv.source.workspace_path != *source {
+                return Err(WorkspaceError::InvalidMutation {
+                    message: "trash source does not match its reviewed inventory".into(),
+                });
+            }
+            let current = self.inspect_trash_entry(source, plan.limits)?;
+            if current.fingerprint != inv.fingerprint || current.source != inv.source {
+                return Err(WorkspaceError::Conflict {
+                    current_revision: current.fingerprint,
+                });
+            }
+        }
         if cancellation.is_cancelled() {
             return Ok(outcome(
                 plan,
@@ -156,48 +190,81 @@ impl Workspace {
                 None,
             ));
         }
-        let mut journal =
-            MutationJournal::create(self.root(), recovery_root, plan, Some(&inventory))?;
+        let mut journal = MutationJournal::create(
+            self.root(),
+            recovery_root,
+            plan,
+            plan.inventory.as_ref().or_else(|| plan.inventories.first()),
+        )?;
         journal.update("trash-started", None)?;
-        let target = self.root().join(validate_relative_path(source)?);
-        match trash(&target) {
-            Ok(()) if fs::symlink_metadata(&target).is_err() => {
-                journal.remove()?;
-                Ok(outcome(
-                    plan,
-                    WorkspaceMutationStatus::Completed,
-                    None,
-                    None,
-                ))
-            }
-            Ok(()) => Ok(outcome(
+        let targets = sources
+            .iter()
+            .map(|source| validate_relative_path(source).map(|relative| self.root().join(relative)))
+            .collect::<Result<Vec<_>, _>>()?;
+        let adapter_result = trash(&targets);
+        let observations = sources
+            .iter()
+            .zip(inventories.iter())
+            .zip(targets.iter())
+            .map(
+                |((source, inventory), target)| match fs::symlink_metadata(target) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        TrashSourceObservation::Missing
+                    }
+                    Err(_) => TrashSourceObservation::ChangedOrUnknown,
+                    Ok(_) => self
+                        .inspect_trash_entry(source, plan.limits)
+                        .map(|current| {
+                            if current.source == inventory.source
+                                && current.fingerprint == inventory.fingerprint
+                            {
+                                TrashSourceObservation::Unchanged
+                            } else {
+                                TrashSourceObservation::ChangedOrUnknown
+                            }
+                        })
+                        .unwrap_or(TrashSourceObservation::ChangedOrUnknown),
+                },
+            )
+            .collect::<Vec<_>>();
+
+        if adapter_result.is_ok()
+            && observations
+                .iter()
+                .all(|observation| *observation == TrashSourceObservation::Missing)
+        {
+            journal.remove()?;
+            return Ok(outcome(
                 plan,
-                WorkspaceMutationStatus::Uncertain,
-                Some(plan.plan_id.clone()),
-                Some("the trash adapter returned before the source disappeared".into()),
-            )),
-            Err(error) => {
-                let unchanged = self
-                    .inspect_entry(source, plan.limits)
-                    .is_ok_and(|current| current.fingerprint == inventory.fingerprint);
-                if unchanged {
-                    journal.remove()?;
-                    Ok(outcome(
-                        plan,
-                        WorkspaceMutationStatus::FailedWithoutChange,
-                        None,
-                        Some(error.to_string()),
-                    ))
-                } else {
-                    Ok(outcome(
-                        plan,
-                        WorkspaceMutationStatus::Uncertain,
-                        Some(plan.plan_id.clone()),
-                        Some(error.to_string()),
-                    ))
-                }
+                WorkspaceMutationStatus::Completed,
+                None,
+                None,
+            ));
+        }
+        if observations
+            .iter()
+            .all(|observation| *observation == TrashSourceObservation::Unchanged)
+        {
+            if let Err(error) = &adapter_result {
+                journal.remove()?;
+                return Ok(outcome(
+                    plan,
+                    WorkspaceMutationStatus::FailedWithoutChange,
+                    None,
+                    Some(error.to_string()),
+                ));
             }
         }
+        let error = adapter_result.err().map_or_else(
+            || "the trash adapter returned before every source disappeared".to_string(),
+            |error| error.to_string(),
+        );
+        Ok(outcome(
+            plan,
+            WorkspaceMutationStatus::Uncertain,
+            Some(plan.plan_id.clone()),
+            Some(error),
+        ))
     }
 
     pub fn list_mutation_recoveries(
@@ -717,16 +784,28 @@ fn outcome(
     error: Option<String>,
 ) -> WorkspaceMutationOutcome {
     let source_paths = || {
-        plan.inventory
-            .as_ref()
-            .map(|inventory| {
-                inventory
-                    .entries
-                    .iter()
-                    .map(|entry| entry.workspace_path.clone())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
+        if !plan.inventories.is_empty() {
+            plan.inventories
+                .iter()
+                .flat_map(|inventory| {
+                    inventory
+                        .entries
+                        .iter()
+                        .map(|entry| entry.workspace_path.clone())
+                })
+                .collect::<Vec<_>>()
+        } else {
+            plan.inventory
+                .as_ref()
+                .map(|inventory| {
+                    inventory
+                        .entries
+                        .iter()
+                        .map(|entry| entry.workspace_path.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        }
     };
     let destination_paths = |source: &str, destination: &str| {
         source_paths()
@@ -1198,6 +1277,74 @@ mod tests {
             .unwrap();
         assert_eq!(outcome.status, WorkspaceMutationStatus::FailedWithoutChange);
         assert!(outcome.recovery_id.is_none());
+    }
+
+    #[test]
+    fn trash_rejects_a_plan_whose_sources_and_inventories_do_not_match() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("one"), b"one").unwrap();
+        fs::write(directory.path().join("two"), b"two").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let mut plan = workspace
+            .plan_trash_sources(
+                "trash-mismatch",
+                &["one".to_string(), "two".to_string()],
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        plan.inventories.pop();
+        let result = workspace.execute_trash_plan_with(
+            recovery.path(),
+            &plan,
+            &WorkspaceMutationCancellationToken::default(),
+            |_| panic!("an inconsistent plan must not reach the trash adapter"),
+        );
+        assert!(matches!(
+            result,
+            Err(WorkspaceError::InvalidMutation { .. })
+        ));
+    }
+
+    #[test]
+    fn partial_batch_trash_failure_is_uncertain_and_keeps_recovery_evidence() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("one"), b"one").unwrap();
+        fs::write(directory.path().join("two"), b"two").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_trash_sources(
+                "trash-partial",
+                &["one".to_string(), "two".to_string()],
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        let outcome = workspace
+            .execute_trash_plan_with(
+                recovery.path(),
+                &plan,
+                &WorkspaceMutationCancellationToken::default(),
+                |targets| {
+                    fs::remove_file(&targets[0]).unwrap();
+                    Err(WorkspaceError::Io {
+                        operation: "trash".into(),
+                        message: "partial failure".into(),
+                    })
+                },
+            )
+            .unwrap();
+        assert_eq!(outcome.status, WorkspaceMutationStatus::Uncertain);
+        assert_eq!(outcome.recovery_id.as_deref(), Some("trash-partial"));
+        assert!(!directory.path().join("one").exists());
+        assert!(directory.path().join("two").exists());
+        assert_eq!(
+            workspace
+                .list_mutation_recoveries(recovery.path())
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[cfg(unix)]

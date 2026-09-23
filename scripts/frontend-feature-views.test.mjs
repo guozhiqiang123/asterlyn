@@ -562,6 +562,187 @@ test("conflict resolution is represented as a persistent editor preview", () => 
   assert.match(menu, /Conflict/);
 });
 
+test("active Diff preview renders Diff tab without exposing ephemeral backing text tab in strip or menu", () => {
+  const document = {
+    kind: "working-diff",
+    repositoryRoot: "/workspace/repository",
+    selection: { section: "unstaged", path: "src/feature.ts" },
+  };
+  const backingTab = textTabFixture({
+    id: "file\0/workspace/repository\0.\0src/feature.ts",
+    document: {
+      kind: "project-file",
+      repositoryRoot: "/workspace/repository",
+      repositoryId: ".",
+      path: "src/feature.ts",
+      workspacePath: "src/feature.ts",
+    },
+    ephemeral: true,
+  });
+  const session = {
+    textTabs: [backingTab],
+    preview: document,
+    active: { kind: "preview" },
+  };
+  const tabs = renderEditorTabs({
+    session,
+    document,
+    statusClass: () => "file-status-modified",
+  });
+  const menu = renderEditorTabMenu({
+    session,
+    open: true,
+    statusClass: () => "file-status-modified",
+  });
+
+  assert.doesNotMatch(tabs, /data-editor-tab=/);
+  assert.doesNotMatch(tabs, /data-editor-tab-index=/);
+  assert.doesNotMatch(tabs, /data-close-editor-tab-index=/);
+  assert.doesNotMatch(tabs, /editor-tab active(?! preview)/);
+  assert.doesNotMatch(menu, /data-editor-menu-tab-index=/);
+
+  assert.match(tabs, /data-editor-preview/);
+  assert.match(tabs, /data-close-editor-preview/);
+  assert.match(tabs, /feature\.ts/);
+  assert.match(tabs, /<small>Diff<\/small>/);
+  assert.match(tabs, /class="editor-tab preview file-status-modified active"/);
+
+  assert.match(menu, /data-editor-menu-preview/);
+  assert.match(menu, /feature\.ts/);
+  assert.match(menu, /<small>Diff preview<\/small>/);
+});
+
+test("editor tab strip and menu omit ephemeral text tabs while preserving original indices for visible tabs", () => {
+  const tab0 = textTabFixture({
+    id: "file\0/workspace/repository\0.\0src/hidden-0.ts",
+    document: {
+      kind: "project-file",
+      repositoryRoot: "/workspace/repository",
+      repositoryId: ".",
+      path: "src/hidden-0.ts",
+      workspacePath: "src/hidden-0.ts",
+    },
+    ephemeral: true,
+  });
+  const tab1 = textTabFixture({
+    id: "file\0/workspace/repository\0.\0src/visible-1.ts",
+    document: {
+      kind: "project-file",
+      repositoryRoot: "/workspace/repository",
+      repositoryId: ".",
+      path: "src/visible-1.ts",
+      workspacePath: "src/visible-1.ts",
+    },
+    ephemeral: false,
+  });
+  const tab2 = textTabFixture({
+    id: "file\0/workspace/repository\0.\0src/hidden-2.ts",
+    document: {
+      kind: "project-file",
+      repositoryRoot: "/workspace/repository",
+      repositoryId: ".",
+      path: "src/hidden-2.ts",
+      workspacePath: "src/hidden-2.ts",
+    },
+    ephemeral: true,
+  });
+  const tab3 = textTabFixture({
+    id: "file\0/workspace/repository\0.\0src/visible-3.ts",
+    document: {
+      kind: "project-file",
+      repositoryRoot: "/workspace/repository",
+      repositoryId: ".",
+      path: "src/visible-3.ts",
+      workspacePath: "src/visible-3.ts",
+    },
+  });
+  const session = {
+    textTabs: [tab0, tab1, tab2, tab3],
+    preview: null,
+    active: { kind: "text", id: tab1.id },
+  };
+  const tabs = renderEditorTabs({
+    session,
+    document: tab1.document,
+    statusClass: () => "file-status-modified",
+  });
+  const menu = renderEditorTabMenu({
+    session,
+    open: true,
+    statusClass: () => "file-status-modified",
+  });
+
+  // Ephemeral tabs must not appear in strip or menu
+  assert.doesNotMatch(tabs, /hidden-0\.ts/);
+  assert.doesNotMatch(tabs, /hidden-2\.ts/);
+  assert.doesNotMatch(tabs, /data-editor-tab="0"/);
+  assert.doesNotMatch(tabs, /data-editor-tab="2"/);
+  assert.doesNotMatch(tabs, /data-editor-tab-index="0"/);
+  assert.doesNotMatch(tabs, /data-editor-tab-index="2"/);
+  assert.doesNotMatch(tabs, /data-close-editor-tab-index="0"/);
+  assert.doesNotMatch(tabs, /data-close-editor-tab-index="2"/);
+
+  assert.doesNotMatch(menu, /hidden-0\.ts/);
+  assert.doesNotMatch(menu, /hidden-2\.ts/);
+  assert.doesNotMatch(menu, /data-editor-menu-tab-index="0"/);
+  assert.doesNotMatch(menu, /data-editor-menu-tab-index="2"/);
+
+  // Original indices must be retained for visible tabs in both strip and menu
+  assert.match(tabs, /data-editor-tab="1"/);
+  assert.match(tabs, /data-editor-tab-index="1"/);
+  assert.match(tabs, /data-close-editor-tab-index="1"/);
+  assert.match(tabs, /visible-1\.ts/);
+
+  assert.match(tabs, /data-editor-tab="3"/);
+  assert.match(tabs, /data-editor-tab-index="3"/);
+  assert.match(tabs, /data-close-editor-tab-index="3"/);
+  assert.match(tabs, /visible-3\.ts/);
+
+  assert.match(menu, /data-editor-menu-tab-index="1"/);
+  assert.match(menu, /visible-1\.ts/);
+  assert.match(menu, /data-editor-menu-tab-index="3"/);
+  assert.match(menu, /visible-3\.ts/);
+
+  // Exactly two visible tabs are rendered
+  assert.equal((tabs.match(/class="editor-tab /g) ?? []).length, 2);
+  assert.equal((menu.match(/class="editor-tab-menu-item /g) ?? []).length, 2);
+
+  // Also verify mixture when an active Diff preview is present
+  const diffDocument = {
+    kind: "working-diff",
+    repositoryRoot: "/workspace/repository",
+    selection: { section: "unstaged", path: "src/hidden-2.ts" },
+  };
+  const diffSession = {
+    textTabs: [tab0, tab1, tab2, tab3],
+    preview: diffDocument,
+    active: { kind: "preview" },
+  };
+  const diffTabs = renderEditorTabs({
+    session: diffSession,
+    document: diffDocument,
+    statusClass: () => "file-status-modified",
+  });
+  const diffMenu = renderEditorTabMenu({
+    session: diffSession,
+    open: true,
+    statusClass: () => "file-status-modified",
+  });
+
+  assert.doesNotMatch(diffTabs, /data-editor-tab="0"/);
+  assert.doesNotMatch(diffTabs, /data-editor-tab="2"/);
+  assert.match(diffTabs, /data-editor-tab="1"/);
+  assert.match(diffTabs, /data-editor-tab="3"/);
+  assert.match(diffTabs, /data-editor-preview/);
+  assert.match(diffTabs, /hidden-2\.ts<small>Diff<\/small>/);
+
+  assert.doesNotMatch(diffMenu, /data-editor-menu-tab-index="0"/);
+  assert.doesNotMatch(diffMenu, /data-editor-menu-tab-index="2"/);
+  assert.match(diffMenu, /data-editor-menu-tab-index="1"/);
+  assert.match(diffMenu, /data-editor-menu-tab-index="3"/);
+  assert.match(diffMenu, /data-editor-menu-preview/);
+});
+
 function viewModel(state) {
   return {
     snapshot: repositorySnapshot(),
@@ -677,7 +858,7 @@ function commitFixture() {
   };
 }
 
-function textTabFixture() {
+function textTabFixture(overrides = {}) {
   const document = {
     kind: "project-file",
     repositoryRoot: "/workspace/repository",
@@ -700,6 +881,7 @@ function textTabFixture() {
     error: null,
     conflict: false,
     markdownMode: "split",
+    ...overrides,
   };
 }
 

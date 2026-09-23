@@ -132,10 +132,26 @@ test("feature target resolvers reject stale display labels and retain exact iden
     workspaceRoot: "/workspace", workspaceGeneration: 4, workspacePath: "",
     kind: "directory", file: null, status: "unmodified", readOnly: false,
   });
-  assert.equal(resolveProjectFilesContextTarget(filesState, tree, 4, "", "file"), null);
   assert.equal(resolveProjectFilesContextTarget(
     { ...filesState, root: null }, tree, 4, "", "directory",
   ), null);
+  const ignoredTree = [{
+    path: "feature-blood-pressure",
+    kind: "directory",
+    name: "feature-blood-pressure",
+    status: "ignored",
+    children: [],
+  }];
+  const ignoredTarget = resolveProjectFilesContextTarget(
+    filesState,
+    ignoredTree,
+    4,
+    "feature-blood-pressure",
+    "directory",
+  );
+  assert.equal(ignoredTarget?.readOnly, false);
+  assert.equal(ignoredTarget?.status, "ignored");
+
 
   const snapshot = repositorySnapshot();
   const changesTarget = resolveChangesContextTarget(snapshot, 4, "src/app.ts", ".", 12);

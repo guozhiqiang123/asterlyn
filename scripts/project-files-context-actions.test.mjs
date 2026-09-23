@@ -5,6 +5,7 @@ import {
   ProjectFilesContextActions,
   projectFilesContextMenuModel,
 } from "../src/features/files-editor/project-files-context-actions.ts";
+import { projectFilesContextPolicy } from "../src/features/files-editor/project-files-context-policy.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { contextMenuModelErrors } from "../src/shared/context-menu/context-menu-model.ts";
 
@@ -38,6 +39,47 @@ test("Files and folder targets receive the same ordered action set", () => {
   assert.deepEqual(shape(folderModel), shape(fileModel));
   assert.deepEqual(contextMenuModelErrors(fileModel), []);
   assert.equal(fileModel.items.at(-1).tone, "danger");
+});
+
+test("Git-ignored files and folders remain writable Files targets", () => {
+  const reasons = {
+    readOnly: "read only",
+    mutationBusy: "busy",
+    operationsUnavailable: "unavailable",
+    rootUnavailable: "root",
+    clipboardEmpty: "clipboard",
+    gitUnavailable: "git",
+    noHistory: "history",
+    ambiguousHistory: "ambiguous",
+  };
+  for (const ignored of [
+    {
+      ...target,
+      workspacePath: "ignored.txt",
+      status: "ignored",
+      file: { ...target.file, path: "ignored.txt", workspacePath: "ignored.txt", ignored: true },
+    },
+    {
+      ...target,
+      workspacePath: "ignored-dir",
+      kind: "directory",
+      status: "ignored",
+      file: null,
+    },
+  ]) {
+    const policy = projectFilesContextPolicy(ignored, {
+      mutationBusy: false,
+      mutationAvailable: true,
+      clipboardAvailable: false,
+      snapshot: null,
+      files: [],
+      reasons,
+    });
+    assert.equal(policy.mutation.kind, "enabled");
+    const trash = projectFilesContextMenuModel(ignored, policy, EN_US.projectFiles)
+      .items.find((item) => item.id === "project-files.context-actions.trash");
+    assert.equal(trash.availability.kind, "enabled");
+  }
 });
 
 test("the workspace root receives the folder menu with root-safe availability and copy text", async () => {
@@ -198,4 +240,77 @@ test("action failures are reported through the feature runtime", async () => {
   await session.invoke("project-files.context-actions.reveal");
 
   assert.deepEqual(errors, ["reveal failed"]);
+});
+
+test("multi-selection disables single-only actions and formats copy paths with newlines", async () => {
+  const multiTarget = {
+    ...target,
+    selectedTargets: [
+      { ...target, workspacePath: "src/a.ts" },
+      { ...target, workspacePath: "src/b.ts" },
+    ],
+  };
+  const policy = { create: enabled, mutation: enabled, paste: enabled, history: enabled };
+  const model = projectFilesContextMenuModel(multiTarget, policy, EN_US.projectFiles);
+
+  const singleOnlyIds = [
+    "project-files.context-actions.new-file",
+    "project-files.context-actions.cut",
+    "project-files.context-actions.copy",
+    "project-files.context-actions.paste",
+    "project-files.context-actions.rename",
+    "project-files.context-actions.history",
+  ];
+  for (const id of singleOnlyIds) {
+    const item = model.items.find((i) => i.id === id);
+    assert.ok(item, `Action ${id} should exist`);
+    assert.equal(item.availability.kind, "blocked");
+    assert.equal(item.availability.reason, EN_US.projectFiles.contextMenu.multipleSelected);
+  }
+
+  const trashItem = model.items.find((i) => i.id === "project-files.context-actions.trash");
+  assert.equal(trashItem.availability.kind, "enabled");
+  assert.equal(trashItem.tone, "danger");
+
+  const revealItem = model.items.find((i) => i.id === "project-files.context-actions.reveal");
+  assert.equal(revealItem.availability.kind, "enabled");
+
+  let session = null;
+  const copied = [];
+  const revealed = [];
+  const provider = new ProjectFilesContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    {
+      async writeText(text) {
+        copied.push(text);
+        return { status: "copied" };
+      },
+    },
+    {
+      current: () => true,
+      select: () => true,
+      policy: () => policy,
+      createFile() {}, cut() {}, copy() {}, paste() {},
+      reveal: (t) => { revealed.push(t.workspacePath); },
+      rename() {}, historyIntent: () => null, installHistoryQuery() {}, trash() {},
+      blocked() {}, status() {}, error() {},
+    },
+    () => EN_US.projectFiles,
+  );
+
+  assert.equal(provider.open({
+    target: multiTarget, anchor: { x: 0, y: 0 }, trigger: {}, restoreFocus() {},
+  }), true);
+
+  await session.invoke("project-files.context-actions.copy-name");
+  await session.invoke("project-files.context-actions.copy-relative-path");
+  await session.invoke("project-files.context-actions.copy-absolute-path");
+  assert.deepEqual(copied, [
+    "a.ts\nb.ts",
+    "src/a.ts\nsrc/b.ts",
+    "/workspace/src/a.ts\n/workspace/src/b.ts",
+  ]);
+
+  await session.invoke("project-files.context-actions.reveal");
+  assert.deepEqual(revealed, ["src/a.ts", "src/b.ts"]);
 });

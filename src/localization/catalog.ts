@@ -301,7 +301,7 @@ export interface ProjectFilesCopy {
     clipboardUnavailable: string;
     revealedSelection: string;
     openedContainingFolder: string;
-    readOnly: string;
+    readOnly: string; multipleSelected: string;
     mutationBusy: string;
     clipboardEmpty: string;
     operationsUnavailable: string;
@@ -321,7 +321,7 @@ export interface ProjectFilesCopy {
     working: string;
     confirmTrashTitle: string;
     confirmTrash: string;
-    trashFileDetail(path: string): string;
+    trashFileDetail(path: string): string; trashMultipleDetail(count: number): string;
     trashFolderDetail(entries: number, bytes: number, hidden: number): string;
     invalidName: string;
     unsafeSource: string;
@@ -425,7 +425,6 @@ export interface EditorCopy {
   noTextualDiff: string;
   loadingCommitPatch: string;
   currentEncoding(label?: string): string;
-  ignoredReadOnly: string;
   outsideProjectTree: string;
   gutterActions: string;
   annotateGitBlame: string;

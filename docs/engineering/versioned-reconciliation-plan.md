@@ -24,7 +24,7 @@ is [`2026-09-14 versioned workspace reconciliation`](../benchmarks/2026-09-14-ve
 | Activation gap | Long catalog reads occur before watching starts | Root watch starts first and expanded plans require one verification pass |
 | Capability split brain | Same root can be Git in one state owner and ordinary in another | Capability transition is one atomic full-repository commit and watch-plan change |
 | Unbounded recovery | Persistent errors repeatedly schedule all slices | Recovery classes, backoff, budget, suspension, and edge-triggered warnings |
-| Ignored open files | Authorized read-only tabs may sit outside the catalog watch plan | Bounded open-document parents are part of the owner plan |
+| Ignored open files | Authorized ignored tabs may sit outside the catalog watch plan | Bounded open-document parents are part of the owner plan |
 | Weak protocol | Empty or escaping path payloads enter coalescing | Validate cardinality, uniqueness, normalized relative paths, and recovery consistency |
 
 ## Delivery sequence
@@ -61,7 +61,7 @@ and ordinary <-> Git transitions pass without reopening the workspace.
 - Keep slice specificity when only path targeting is truncated.
 - Add watcher health, rolling broad-recovery budget, exponential backoff, and suspension.
 - Make focus recovery conditional on health/staleness and add a cooldown.
-- Reconfigure the exact owner plan when open text tabs change so ignored read-only documents stay in
+- Reconfigure the exact owner plan when open text tabs change so ignored documents stay in
   the hot set.
 
 Exit checks: malformed events are rejected; path-list truncation does not read history; a persistent

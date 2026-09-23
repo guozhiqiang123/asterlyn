@@ -556,6 +556,7 @@ export interface ProjectFile {
   path: string;
   workspacePath: string;
   readOnly?: boolean;
+  ignored?: boolean;
 }
 
 export interface ProjectIgnoredEntry {
@@ -614,7 +615,7 @@ export interface WorkspaceTextSearchOptions {
 
 export interface WorkspaceTextSearchMatch {
   repositoryId: string; path: string;
-  workspacePath: string; readOnly: boolean;
+  workspacePath: string; readOnly: boolean; ignored: boolean;
   revision: string;
   fromUtf16: number;
   toUtf16: number;
@@ -695,7 +696,8 @@ export type WorkspaceMutationOperation =
   | { kind: "createFile"; destination: string }
   | { kind: "copy"; source: string; destination: string }
   | { kind: "move"; source: string; destination: string }
-  | { kind: "trash"; source: string };
+  | { kind: "trash"; source: string; sources?: never }
+  | { kind: "trash"; source?: string; sources: string[] };
 
 export type WorkspaceMutationBlocker =
   | { kind: "destinationExists"; path: string }
@@ -782,15 +784,13 @@ export interface GitRootDescriptor {
 }
 
 export interface DiffResult {
-  path: string;
-  staged: boolean;
-  patch: string;
-  binary: boolean;
-  truncated: boolean;
+  path: string; staged: boolean; patch: string; binary: boolean; truncated: boolean;
 }
 
-export interface WorkingDiffBase { path: string; originalPath: string | null; headOid: string | null;
-  blobOid: string | null; content: string; utf8Bom: boolean; byteLength: number; }
+export interface WorkingDiffBase {
+  path: string; originalPath: string | null; headOid: string | null;
+  blobOid: string | null; content: string; utf8Bom: boolean; byteLength: number;
+}
 
 export type WorkspaceView = "changes" | "history" | "branches";
 

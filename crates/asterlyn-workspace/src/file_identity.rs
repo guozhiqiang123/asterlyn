@@ -13,18 +13,48 @@ pub(crate) fn opened_file_matches_path(
     platform::opened_file_matches_path(path, expected, opened, opened_metadata)
 }
 
+/// Returns a stable platform file identity after confirming that the pre-open metadata, opened
+/// handle, and current path still name the same file. Platforms without a stable identity return
+/// `None`, allowing callers to fall back to content hashing.
+pub(crate) fn opened_file_identity_token(
+    path: &Path,
+    expected: &Metadata,
+    opened: &File,
+    opened_metadata: &Metadata,
+) -> io::Result<Option<[u64; 2]>> {
+    platform::opened_file_identity_token(path, expected, opened, opened_metadata)
+}
+
 #[cfg(unix)]
 mod platform {
     use super::*;
     use std::os::unix::fs::MetadataExt;
 
     pub(super) fn opened_file_matches_path(
-        _path: &Path,
+        path: &Path,
         expected: &Metadata,
         _opened: &File,
         opened_metadata: &Metadata,
     ) -> io::Result<bool> {
-        Ok(expected.dev() == opened_metadata.dev() && expected.ino() == opened_metadata.ino())
+        let current = std::fs::symlink_metadata(path)?;
+        Ok(expected.dev() == opened_metadata.dev()
+            && expected.ino() == opened_metadata.ino()
+            && current.dev() == opened_metadata.dev()
+            && current.ino() == opened_metadata.ino())
+    }
+
+    pub(super) fn opened_file_identity_token(
+        path: &Path,
+        expected: &Metadata,
+        opened: &File,
+        opened_metadata: &Metadata,
+    ) -> io::Result<Option<[u64; 2]>> {
+        if !opened_file_matches_path(path, expected, opened, opened_metadata)? {
+            return Err(io::Error::other(
+                "file identity changed while it was inspected",
+            ));
+        }
+        Ok(Some([opened_metadata.dev(), opened_metadata.ino()]))
     }
 }
 
@@ -61,6 +91,33 @@ mod platform {
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(path)?;
         Ok(file_identity(opened)? == file_identity(&current)?)
+    }
+
+    pub(super) fn opened_file_identity_token(
+        path: &Path,
+        expected: &Metadata,
+        opened: &File,
+        opened_metadata: &Metadata,
+    ) -> io::Result<Option<[u64; 2]>> {
+        if !same_metadata_snapshot(expected, opened_metadata) {
+            return Err(io::Error::other(
+                "file metadata changed while it was inspected",
+            ));
+        }
+        let current = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)?;
+        let opened_identity = file_identity(opened)?;
+        if opened_identity != file_identity(&current)? {
+            return Err(io::Error::other(
+                "file identity changed while it was inspected",
+            ));
+        }
+        Ok(Some([
+            u64::from(opened_identity.volume_serial_number),
+            opened_identity.file_index,
+        ]))
     }
 
     fn same_metadata_snapshot(left: &Metadata, right: &Metadata) -> bool {
@@ -103,6 +160,20 @@ mod platform {
         Ok(expected.len() == opened_metadata.len()
             && expected.permissions().readonly() == opened_metadata.permissions().readonly())
     }
+
+    pub(super) fn opened_file_identity_token(
+        path: &Path,
+        expected: &Metadata,
+        opened: &File,
+        opened_metadata: &Metadata,
+    ) -> io::Result<Option<[u64; 2]>> {
+        if !opened_file_matches_path(path, expected, opened, opened_metadata)? {
+            return Err(io::Error::other(
+                "file identity changed while it was inspected",
+            ));
+        }
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -122,7 +193,7 @@ mod tests {
         assert!(opened_file_matches_path(&path, &expected, &opened, &opened_metadata).unwrap());
     }
 
-    #[cfg(windows)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn replaced_path_does_not_match_the_opened_file() {
         let directory = tempfile::tempdir().unwrap();

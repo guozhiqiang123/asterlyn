@@ -2,8 +2,10 @@
 
 ## Status
 
-Accepted on 2026-09-13. This decision supersedes the ignored-entry boundary described in
-decisions 0003 and 0004 where ignored paths were display-only and ignored directories were opaque.
+Accepted on 2026-09-13 and superseded in part by decision 0017 on 2026-09-23. Decision 0017 removes
+the read-only restriction while retaining bounded ignored-file enumeration and watcher containment.
+This decision originally superseded the ignored-entry boundary described in decisions 0003 and
+0004 where ignored paths were display-only and ignored directories were opaque.
 
 ## Decision
 

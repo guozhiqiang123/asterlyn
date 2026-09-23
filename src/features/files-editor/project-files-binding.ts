@@ -16,6 +16,7 @@ export type ProjectFilesContextTarget = WorkspaceEntryIdentity & {
   readonly file: ProjectFile | null;
   readonly status: ChangeKind;
   readonly readOnly: boolean;
+  readonly selectedTargets?: readonly ProjectFilesContextTarget[];
 };
 
 export class ProjectFilesContextBinding {
@@ -47,15 +48,31 @@ export class ProjectFilesContextBinding {
         }
         const path = trigger.dataset.projectNode;
         const kind = trigger.dataset.projectKind;
-        return path && (kind === "file" || kind === "directory")
-          ? resolveProjectFilesContextTarget(
-              context.state,
-              context.tree,
-              context.workspaceGeneration,
-              path,
-              kind,
+        if (!path || (kind !== "file" && kind !== "directory")) return null;
+        const primary = resolveProjectFilesContextTarget(
+          context.state,
+          context.tree,
+          context.workspaceGeneration,
+          path,
+          kind,
+        );
+        if (!primary) return null;
+        const selections = context.state.selections ?? [];
+        if (selections.some((s) => s.path === path) && selections.length > 1) {
+          const selectedTargets = selections
+            .map((s) =>
+              resolveProjectFilesContextTarget(
+                context.state,
+                context.tree,
+                context.workspaceGeneration,
+                s.path,
+                s.kind,
+              ),
             )
-          : null;
+            .filter((t): t is ProjectFilesContextTarget => t !== null);
+          return { ...primary, selectedTargets };
+        }
+        return primary;
       },
       open,
     });
@@ -98,6 +115,6 @@ export function resolveProjectFilesContextTarget(
     kind: node.kind,
     file: file ? { ...file } : null,
     status: node.status,
-    readOnly: node.status === "ignored" || file?.readOnly === true,
+    readOnly: file?.readOnly === true,
   };
 }

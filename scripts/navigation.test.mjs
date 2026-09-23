@@ -114,9 +114,11 @@ test("persistent quick-open index retains better late matches within the bounded
   assert.equal(index.rank("needle").length <= 100, true);
 });
 
-test("quick open catalog filters ignored files by default and can expose them read-only", () => {
+test("quick open catalog filters ignored files by default and can expose them as editable", () => {
   const catalog = new ProjectFileSearchCatalog();
-  const files = [file("src/app.ts"), { ...file("dist/generated.js"), readOnly: true }];
+  const files = [file("src/app.ts"), {
+    ...file("dist/generated.js"), readOnly: false, ignored: true,
+  }];
   assert.deepEqual(catalog.resolve(files, false).rank("").map((item) => item.workspacePath), ["src/app.ts"]);
   assert.deepEqual(
     catalog.resolve(files, true).rank("").map((item) => item.workspacePath),

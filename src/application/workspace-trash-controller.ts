@@ -6,15 +6,19 @@ import type {
   WorkspaceMutationExecutionResult,
   WorkspaceMutationIdentity,
   WorkspaceMutationPlanResult,
+  WorkspaceMutationReconciliationResult,
 } from "./workspace-mutation-coordinator.ts";
 import type { WorkspaceEntryIdentity } from "./workbench-navigation.ts";
 
-export interface WorkspaceTrashTarget extends WorkspaceEntryIdentity {}
+export interface WorkspaceTrashTarget extends WorkspaceEntryIdentity {
+  readonly selectedTargets?: readonly WorkspaceTrashTarget[];
+}
 
 export interface WorkspaceTrashState<TTarget extends WorkspaceTrashTarget> {
   readonly planningTarget: TTarget | null;
   readonly dialog: {
     readonly target: TTarget;
+    readonly targets?: readonly TTarget[];
     readonly planId: string;
     readonly preview: WorkspaceMutationPreview;
     readonly busy: boolean;
@@ -24,14 +28,23 @@ export interface WorkspaceTrashState<TTarget extends WorkspaceTrashTarget> {
 export interface WorkspaceTrashMutationPort {
   plan(
     identity: WorkspaceMutationIdentity,
-    operation: { readonly kind: "trash"; readonly source: string },
+    operation:
+      | { readonly kind: "trash"; readonly source: string }
+      | { readonly kind: "trash"; readonly sources: string[] },
     collisionPolicy: "cancel",
-    editorRequest: { readonly kind: "trash"; readonly sourceWorkspacePath: string },
+    editorRequest:
+      | { readonly kind: "trash"; readonly sourceWorkspacePath: string }
+      | { readonly kind: "trashMany"; readonly sourceWorkspacePaths: readonly string[] },
   ): { planId: string; completion: Promise<WorkspaceMutationPlanResult> };
   execute(
     identity: WorkspaceMutationIdentity,
     planId: string,
+    options?: { readonly reconcile?: boolean },
   ): Promise<WorkspaceMutationExecutionResult>;
+  reconcile?(
+    identity: WorkspaceMutationIdentity,
+    outcome: WorkspaceMutationOutcome,
+  ): Promise<WorkspaceMutationReconciliationResult>;
   cancel(): void;
 }
 
@@ -48,9 +61,38 @@ export interface WorkspaceTrashMessages {
   readonly blocked: string;
   readonly operationFailed: string;
   readonly trashed: string;
+  readonly saveBeforeTrash?: string;
 }
 
 type Listener = () => void;
+
+export function normalizeTrashTargets<TTarget extends WorkspaceTrashTarget>(
+  targets: readonly TTarget[],
+): readonly TTarget[] {
+  if (targets.length <= 1) return targets;
+  const map = new Map<string, TTarget>();
+  for (const t of targets) {
+    if (!map.has(t.workspacePath)) {
+      map.set(t.workspacePath, t);
+    }
+  }
+  const sorted = Array.from(map.values()).sort((a, b) =>
+    a.workspacePath.length - b.workspacePath.length || a.workspacePath.localeCompare(b.workspacePath)
+  );
+  const result: TTarget[] = [];
+  for (const target of sorted) {
+    const isDescendant = result.some((parent) => {
+      const parentPrefix = parent.workspacePath.endsWith("/")
+        ? parent.workspacePath
+        : `${parent.workspacePath}/`;
+      return target.workspacePath.startsWith(parentPrefix);
+    });
+    if (!isDescendant) {
+      result.push(target);
+    }
+  }
+  return result;
+}
 
 /** One window-wide reviewed Trash workflow shared by feature-owned context targets. */
 export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
@@ -87,16 +129,29 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
   async request(target: TTarget): Promise<void> {
     const identity = this.runtime.currentIdentity();
     if (this.disposed || this.busy || !identity || !this.runtime.isTargetCurrent(target)) return;
+    const rawTargets = target.selectedTargets && target.selectedTargets.length > 0
+      ? (target.selectedTargets as readonly TTarget[])
+      : [target];
+    const targets = normalizeTrashTargets(rawTargets);
+    if (targets.length === 0 || !targets.every((t) => this.runtime.isTargetCurrent(t))) return;
+
     this.value = { planningTarget: target, dialog: null };
     this.emit();
+
+    const isMultiple = targets.length > 1;
+    const sourceWorkspacePaths = targets.map((t) => t.workspacePath);
     const planned = this.mutations.plan(
       identity,
-      { kind: "trash", source: target.workspacePath },
+      isMultiple
+        ? { kind: "trash", sources: sourceWorkspacePaths }
+        : { kind: "trash", source: targets[0]!.workspacePath },
       "cancel",
-      { kind: "trash", sourceWorkspacePath: target.workspacePath },
+      isMultiple
+        ? { kind: "trashMany", sourceWorkspacePaths }
+        : { kind: "trash", sourceWorkspacePath: targets[0]!.workspacePath },
     );
     const result = await planned.completion;
-    if (!this.sameIdentity(identity) || !this.runtime.isTargetCurrent(target)) {
+    if (!this.sameIdentity(identity) || !targets.every((t) => this.runtime.isTargetCurrent(t))) {
       this.mutations.cancel();
       if (this.value.planningTarget === target) {
         this.value = { planningTarget: null, dialog: null };
@@ -116,7 +171,13 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
     }
     this.value = {
       planningTarget: null,
-      dialog: { target, planId: planned.planId, preview: result.preview, busy: false },
+      dialog: {
+        target,
+        targets: isMultiple ? targets : undefined,
+        planId: planned.planId,
+        preview: result.preview,
+        busy: false,
+      },
     };
     this.emit();
   }
@@ -125,7 +186,8 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
     const dialog = this.value.dialog;
     const identity = this.runtime.currentIdentity();
     if (!dialog || dialog.busy || !identity) return;
-    if (!this.runtime.isTargetCurrent(dialog.target)) {
+    const targets = dialog.targets ?? [dialog.target];
+    if (!targets.every((t) => this.runtime.isTargetCurrent(t))) {
       this.mutations.cancel();
       this.value = { planningTarget: null, dialog: null };
       this.emit();
@@ -138,13 +200,17 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
     const currentDialog = this.value.dialog;
     if (!currentDialog || currentDialog.planId !== dialog.planId) return;
     const outcome = completedOutcome(execution);
-    this.value = { planningTarget: null, dialog: null };
-    this.emit();
     if (!outcome) {
+      this.value = { planningTarget: null, dialog: null };
+      this.emit();
       this.runtime.error(new Error(executionFailure(execution, this.messages())));
       return;
     }
-    this.runtime.completed(dialog.target, outcome);
+    for (const item of targets) {
+      this.runtime.completed(item, outcome);
+    }
+    this.value = { planningTarget: null, dialog: null };
+    this.emit();
     this.runtime.status(this.messages().trashed);
   }
 
@@ -189,7 +255,12 @@ function completedOutcome(result: WorkspaceMutationExecutionResult): WorkspaceMu
 }
 
 function planFailure(result: WorkspaceMutationPlanResult, messages: WorkspaceTrashMessages): string {
-  if (result.status === "blocked") return messages.blocked;
+  if (result.status === "blocked") {
+    if (result.source === "editor" && result.reason === "dirtyDelete" && messages.saveBeforeTrash) {
+      return messages.saveBeforeTrash;
+    }
+    return messages.blocked;
+  }
   if (result.status === "failure" && result.error instanceof Error) return result.error.message;
   return messages.operationFailed;
 }

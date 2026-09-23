@@ -63,6 +63,28 @@ test("closing preview cleans up clean ephemeral backing tabs without leaving sta
   assert.equal(controller.activeDocument().kind, "welcome");
 });
 
+test("closing preview promotes a dirty ephemeral backing buffer to a visible text tab", async () => {
+  const controller = new EditorSessionController(gateway());
+  controller.installWorkspace("/repo");
+  controller.activatePreview({
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "a.ts", staged: false },
+  });
+  await controller.ensureText("/repo", file("a.ts"), "source");
+  const backingTab = controller.state.session.textTabs[0];
+  controller.markEdited(backingTab.id, "unsaved change");
+
+  controller.closePreview();
+
+  assert.equal(controller.state.session.preview, null);
+  assert.equal(controller.state.session.textTabs.length, 1);
+  assert.equal(controller.state.session.textTabs[0].ephemeral, false);
+  assert.equal(controller.state.session.textTabs[0].content, "unsaved change");
+  assert.equal(controller.activeDocument().kind, "project-file");
+  assert.equal(controller.activeDocument().path, "a.ts");
+});
+
 test("closing preview preserves explicitly opened user tabs", async () => {
   const controller = new EditorSessionController(gateway());
   controller.installWorkspace("/repo");

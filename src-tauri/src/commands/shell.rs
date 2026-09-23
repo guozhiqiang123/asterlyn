@@ -98,6 +98,7 @@ pub(crate) async fn open_project(
                 path: change.path.clone(),
                 workspace_path: change.path.clone(),
                 read_only: false,
+                ignored: false,
             })
             .collect();
         let _ = active_workspaces.seed_catalog(
@@ -140,6 +141,7 @@ pub(crate) async fn read_project_snapshot(
                 path: change.path.clone(),
                 workspace_path: change.path.clone(),
                 read_only: false,
+                ignored: false,
             })
             .collect();
         let _ = active_workspaces.seed_catalog(

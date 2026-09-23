@@ -410,7 +410,7 @@ const demoBridge: DesktopBridge = {
       for (const path of ignoredPaths) {
         if (!demoTextFiles.has(path)) {
           demoTextFiles.set(path, {
-            content: `Read-only ignored content for ${path}\n`,
+            content: `Ignored content for ${path}\n`,
             utf8Bom: false,
             revision: 1,
           });
@@ -425,12 +425,14 @@ const demoBridge: DesktopBridge = {
             path,
             workspacePath: path,
             readOnly: false,
+            ignored: false,
           })),
           ...ignoredPaths.map((path) => ({
             repositoryId: ".",
             path,
             workspacePath: path,
-            readOnly: true,
+            readOnly: false,
+            ignored: true,
           })),
         ],
         ignoredEntries: ignoredPaths.map((workspacePath) => ({
@@ -2014,7 +2016,8 @@ function demoWorkspaceSearch(
           repositoryId: browserGitEnabled ? "." : "workspace",
           path,
           workspacePath: path,
-          readOnly: ignoredPaths.has(path),
+          readOnly: false,
+          ignored: ignoredPaths.has(path),
           revision: demoTextRevision(path, file),
           fromUtf16: from,
           toUtf16: to,
@@ -2047,7 +2050,8 @@ function demoWorkspaceSearch(
           repositoryId: browserGitEnabled ? "." : "workspace",
           path,
           workspacePath: path,
-          readOnly: ignoredPaths.has(path),
+          readOnly: false,
+          ignored: ignoredPaths.has(path),
           revision: demoTextRevision(path, file),
           fromUtf16: documentOffset + fromInLine,
           toUtf16: documentOffset + toInLine,

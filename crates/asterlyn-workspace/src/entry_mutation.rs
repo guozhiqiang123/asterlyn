@@ -5,7 +5,9 @@ use std::path::{Component, Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Workspace, WorkspaceError, file_identity::opened_file_matches_path, validate_relative_path,
+    Workspace, WorkspaceError,
+    file_identity::{opened_file_identity_token, opened_file_matches_path},
+    validate_relative_path,
 };
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -59,10 +61,40 @@ pub enum WorkspaceCollisionPolicy {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum WorkspaceMutationOperation {
-    CreateFile { destination: String },
-    Copy { source: String, destination: String },
-    Move { source: String, destination: String },
-    Trash { source: String },
+    CreateFile {
+        destination: String,
+    },
+    Copy {
+        source: String,
+        destination: String,
+    },
+    Move {
+        source: String,
+        destination: String,
+    },
+    Trash {
+        #[serde(default)]
+        source: String,
+        #[serde(default)]
+        sources: Vec<String>,
+    },
+}
+
+impl WorkspaceMutationOperation {
+    pub fn trash_sources(&self) -> Vec<String> {
+        match self {
+            WorkspaceMutationOperation::Trash { source, sources } => {
+                if !sources.is_empty() {
+                    sources.clone()
+                } else if !source.is_empty() {
+                    vec![source.clone()]
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -83,7 +115,10 @@ pub struct WorkspaceMutationPlan {
     pub operation: WorkspaceMutationOperation,
     pub collision_policy: WorkspaceCollisionPolicy,
     pub limits: WorkspaceMutationLimits,
+    #[serde(default)]
     pub inventory: Option<WorkspaceEntryInventory>,
+    #[serde(default)]
+    pub inventories: Vec<WorkspaceEntryInventory>,
     pub blockers: Vec<WorkspaceMutationBlocker>,
 }
 
@@ -102,14 +137,29 @@ pub struct WorkspaceMutationLimits {
     pub max_path_bytes: usize,
 }
 
-impl Default for WorkspaceMutationLimits {
-    fn default() -> Self {
+impl WorkspaceMutationLimits {
+    pub const fn default_transfer() -> Self {
         Self {
             max_entries: 20_000,
             max_total_bytes: 512 * 1024 * 1024,
             max_depth: 64,
             max_path_bytes: 4_096,
         }
+    }
+
+    pub const fn default_trash() -> Self {
+        Self {
+            max_entries: 200_000,
+            max_total_bytes: 64 * 1024 * 1024 * 1024,
+            max_depth: 64,
+            max_path_bytes: 4_096,
+        }
+    }
+}
+
+impl Default for WorkspaceMutationLimits {
+    fn default() -> Self {
+        Self::default_transfer()
     }
 }
 
@@ -143,6 +193,23 @@ impl Workspace {
         workspace_path: &str,
         limits: WorkspaceMutationLimits,
     ) -> Result<WorkspaceEntryInventory, WorkspaceError> {
+        self.inspect_entry_with_revision(workspace_path, limits, FileRevisionPolicy::Content)
+    }
+
+    pub(crate) fn inspect_trash_entry(
+        &self,
+        workspace_path: &str,
+        limits: WorkspaceMutationLimits,
+    ) -> Result<WorkspaceEntryInventory, WorkspaceError> {
+        self.inspect_entry_with_revision(workspace_path, limits, FileRevisionPolicy::Identity)
+    }
+
+    fn inspect_entry_with_revision(
+        &self,
+        workspace_path: &str,
+        limits: WorkspaceMutationLimits,
+        file_revision: FileRevisionPolicy,
+    ) -> Result<WorkspaceEntryInventory, WorkspaceError> {
         validate_limits(limits)?;
         let relative = validate_relative_path(workspace_path)?;
         let source = self.resolve_entry_without_links(relative)?;
@@ -153,7 +220,7 @@ impl Workspace {
             });
         }
         let kind = entry_kind(&metadata)?;
-        let mut builder = InventoryBuilder::new(relative, limits);
+        let mut builder = InventoryBuilder::new(relative, limits, file_revision);
         builder.collect(relative, &source, &metadata, 0)?;
         builder.finish(workspace_path, kind, &metadata)
     }
@@ -180,6 +247,7 @@ impl Workspace {
             collision_policy,
             limits: WorkspaceMutationLimits::default(),
             inventory: None,
+            inventories: Vec::new(),
             blockers,
         })
     }
@@ -219,17 +287,57 @@ impl Workspace {
         source: &str,
         limits: WorkspaceMutationLimits,
     ) -> Result<WorkspaceMutationPlan, WorkspaceError> {
+        self.plan_trash_sources(plan_id, &[source.to_string()], limits)
+    }
+
+    pub fn plan_trash_sources(
+        &self,
+        plan_id: &str,
+        sources: &[String],
+        limits: WorkspaceMutationLimits,
+    ) -> Result<WorkspaceMutationPlan, WorkspaceError> {
         validate_plan_id(plan_id)?;
-        let inventory = self.inspect_entry(source, limits)?;
-        let blockers = inventory_blockers(&inventory);
+        if sources.is_empty() {
+            return Err(WorkspaceError::InvalidMutation {
+                message: "trash operation requires at least one source".to_string(),
+            });
+        }
+        let sources = normalize_trash_sources(sources)?;
+        let mut inventories = Vec::with_capacity(sources.len());
+        let mut blockers = Vec::new();
+        let mut entry_count = 0_usize;
+        let mut total_bytes = 0_u64;
+        for source in &sources {
+            let remaining_entries = limits.max_entries.saturating_sub(entry_count);
+            let remaining_bytes = limits.max_total_bytes.saturating_sub(total_bytes);
+            if remaining_entries == 0 || remaining_bytes == 0 {
+                blockers.push(WorkspaceMutationBlocker::InventoryTruncated);
+                break;
+            }
+            let inventory = self.inspect_trash_entry(
+                source,
+                WorkspaceMutationLimits {
+                    max_entries: remaining_entries,
+                    max_total_bytes: remaining_bytes,
+                    ..limits
+                },
+            )?;
+            blockers.extend(inventory_blockers(&inventory));
+            entry_count = entry_count.saturating_add(inventory.entries.len());
+            total_bytes = total_bytes.saturating_add(inventory.total_bytes);
+            inventories.push(inventory);
+        }
+        let inventory = (inventories.len() == 1).then(|| inventories.pop().unwrap());
         Ok(WorkspaceMutationPlan {
             plan_id: plan_id.to_string(),
             operation: WorkspaceMutationOperation::Trash {
-                source: source.to_string(),
+                source: sources.first().cloned().unwrap_or_default(),
+                sources,
             },
             collision_policy: WorkspaceCollisionPolicy::Cancel,
             limits,
-            inventory: Some(inventory),
+            inventory,
+            inventories,
             blockers,
         })
     }
@@ -281,6 +389,7 @@ impl Workspace {
             collision_policy,
             limits,
             inventory: Some(inventory),
+            inventories: Vec::new(),
             blockers,
         })
     }
@@ -323,9 +432,16 @@ impl Workspace {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum FileRevisionPolicy {
+    Content,
+    Identity,
+}
+
 struct InventoryBuilder {
     source: PathBuf,
     limits: WorkspaceMutationLimits,
+    file_revision: FileRevisionPolicy,
     entries: Vec<WorkspaceEntryInventoryItem>,
     total_bytes: u64,
     symlink_paths: Vec<String>,
@@ -336,10 +452,15 @@ struct InventoryBuilder {
 }
 
 impl InventoryBuilder {
-    fn new(source: &Path, limits: WorkspaceMutationLimits) -> Self {
+    fn new(
+        source: &Path,
+        limits: WorkspaceMutationLimits,
+        file_revision: FileRevisionPolicy,
+    ) -> Self {
         Self {
             source: source.to_path_buf(),
             limits,
+            file_revision,
             entries: Vec::new(),
             total_bytes: 0,
             symlink_paths: Vec::new(),
@@ -389,7 +510,10 @@ impl InventoryBuilder {
                 self.truncated = true;
                 return Ok(());
             }
-            let revision = hash_file(absolute, length, metadata)?;
+            let revision = match self.file_revision {
+                FileRevisionPolicy::Content => hash_file(absolute, length, metadata)?,
+                FileRevisionPolicy::Identity => trash_file_revision(absolute, length, metadata)?,
+            };
             self.total_bytes += length;
             (revision, length)
         } else {
@@ -540,6 +664,32 @@ fn validate_plan_id(plan_id: &str) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
+fn normalize_trash_sources(sources: &[String]) -> Result<Vec<String>, WorkspaceError> {
+    let mut validated = Vec::with_capacity(sources.len());
+    for source in sources {
+        validate_relative_path(source)?;
+        validated.push(source.clone());
+    }
+    validated.sort_by(|left, right| {
+        Path::new(left)
+            .components()
+            .count()
+            .cmp(&Path::new(right).components().count())
+            .then_with(|| left.cmp(right))
+    });
+    let mut normalized: Vec<String> = Vec::with_capacity(validated.len());
+    for source in validated {
+        if normalized
+            .iter()
+            .any(|ancestor| Path::new(&source).starts_with(Path::new(ancestor)))
+        {
+            continue;
+        }
+        normalized.push(source);
+    }
+    Ok(normalized)
+}
+
 fn workspace_path(path: &Path) -> Result<String, WorkspaceError> {
     path.components()
         .map(|component| match component {
@@ -582,7 +732,8 @@ fn hash_file(
     let mut digest = Sha256::new();
     digest.update(b"workspace-entry-file-v1\0");
     digest.update(expected_length.to_le_bytes());
-    let mut buffer = [0_u8; 64 * 1024];
+
+    let mut buffer = [0_u8; 256 * 1024];
     let mut read = 0_u64;
     loop {
         let count = file.read(&mut buffer).map_err(inventory_io)?;
@@ -596,6 +747,48 @@ fn hash_file(
         return Err(WorkspaceError::Conflict {
             current_revision: "size-changed-during-inventory".into(),
         });
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+fn trash_file_revision(
+    path: &Path,
+    expected_length: u64,
+    expected_metadata: &Metadata,
+) -> Result<String, WorkspaceError> {
+    let file = open_file_without_links(path)?;
+    let opened_metadata = file.metadata().map_err(inventory_io)?;
+    let Some(identity) =
+        opened_file_identity_token(path, expected_metadata, &file, &opened_metadata)
+            .map_err(inventory_io)?
+    else {
+        return hash_file(path, expected_length, expected_metadata);
+    };
+    if opened_metadata.len() != expected_length {
+        return Err(WorkspaceError::Conflict {
+            current_revision: "size-changed-during-inventory".into(),
+        });
+    }
+    let mut digest = Sha256::new();
+    digest.update(b"workspace-trash-file-identity-v1\0");
+    digest.update(identity[0].to_le_bytes());
+    digest.update(identity[1].to_le_bytes());
+    digest.update(expected_length.to_le_bytes());
+    digest.update(mode(&opened_metadata).to_le_bytes());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        digest.update(opened_metadata.mtime().to_le_bytes());
+        digest.update(opened_metadata.mtime_nsec().to_le_bytes());
+        digest.update(opened_metadata.ctime().to_le_bytes());
+        digest.update(opened_metadata.ctime_nsec().to_le_bytes());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        digest.update(opened_metadata.creation_time().to_le_bytes());
+        digest.update(opened_metadata.last_write_time().to_le_bytes());
+        digest.update(opened_metadata.file_attributes().to_le_bytes());
     }
     Ok(format!("{:x}", digest.finalize()))
 }
@@ -858,5 +1051,108 @@ mod tests {
             workspace.plan_create_file("create-3", "../outside", WorkspaceCollisionPolicy::Cancel),
             Err(WorkspaceError::InvalidPath { .. })
         ));
+    }
+
+    #[test]
+    fn trash_limits_allow_larger_reviewed_operations_than_copy_or_move() {
+        let trash = WorkspaceMutationLimits::default_trash();
+        let transfer = WorkspaceMutationLimits::default_transfer();
+        assert!(trash.max_entries > transfer.max_entries);
+        assert!(trash.max_total_bytes > transfer.max_total_bytes);
+    }
+
+    #[test]
+    fn large_sparse_file_uses_trash_identity_inventory_without_a_transfer_limit() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = fs::File::create(directory.path().join("large.bin")).unwrap();
+        file.set_len(600 * 1024 * 1024).unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_trash(
+                "trash-large",
+                "large.bin",
+                WorkspaceMutationLimits::default_trash(),
+            )
+            .unwrap();
+        assert!(plan.executable());
+        assert_eq!(plan.inventory.unwrap().total_bytes, 600 * 1024 * 1024);
+    }
+
+    #[test]
+    fn multiple_trash_sources_plan_and_aggregate_inventories() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir_all(directory.path().join("dir1")).unwrap();
+        fs::write(directory.path().join("dir1/a.txt"), "hello").unwrap();
+        fs::create_dir_all(directory.path().join("dir2")).unwrap();
+        fs::write(directory.path().join("dir2/b.txt"), "world!").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_trash_sources(
+                "trash-multi",
+                &["dir1".to_string(), "dir2".to_string()],
+                WorkspaceMutationLimits::default_trash(),
+            )
+            .unwrap();
+        assert!(plan.executable());
+        assert_eq!(plan.inventories.len(), 2);
+        let total_bytes: u64 = plan.inventories.iter().map(|i| i.total_bytes).sum();
+        assert_eq!(total_bytes, 11);
+    }
+
+    #[test]
+    fn multiple_trash_sources_prune_duplicates_and_descendants() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir_all(directory.path().join("parent/child")).unwrap();
+        fs::write(directory.path().join("parent/child/file.txt"), "child").unwrap();
+        fs::write(directory.path().join("other.txt"), "other").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_trash_sources(
+                "trash-normalized",
+                &[
+                    "parent/child/file.txt".to_string(),
+                    "parent".to_string(),
+                    "other.txt".to_string(),
+                    "parent".to_string(),
+                ],
+                WorkspaceMutationLimits::default_trash(),
+            )
+            .unwrap();
+        assert_eq!(
+            plan.operation.trash_sources(),
+            ["other.txt".to_string(), "parent".to_string()]
+        );
+        assert_eq!(plan.inventories.len(), 2);
+        assert!(plan.inventory.is_none());
+    }
+
+    #[test]
+    fn trash_identity_fingerprints_detect_same_size_external_edits() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("large.bin");
+        let mut bytes = vec![0_u8; 9 * 1024 * 1024];
+        fs::write(&path, &bytes).unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let before = workspace
+            .plan_trash(
+                "trash-before",
+                "large.bin",
+                WorkspaceMutationLimits::default_trash(),
+            )
+            .unwrap()
+            .inventory
+            .unwrap();
+        bytes[4 * 1024 * 1024] = 1;
+        fs::write(&path, &bytes).unwrap();
+        let after = workspace
+            .plan_trash(
+                "trash-after",
+                "large.bin",
+                WorkspaceMutationLimits::default_trash(),
+            )
+            .unwrap()
+            .inventory
+            .unwrap();
+        assert_ne!(before.fingerprint, after.fingerprint);
     }
 }

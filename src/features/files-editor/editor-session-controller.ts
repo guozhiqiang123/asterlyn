@@ -289,6 +289,7 @@ export class EditorSessionController {
       path: file.path,
       workspacePath: file.workspacePath,
       readOnly: file.readOnly === true,
+      ignored: file.ignored === true,
     };
     const id = editorDocumentKey(document);
     const existing = textTab(this.state.session, id);

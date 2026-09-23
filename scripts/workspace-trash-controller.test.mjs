@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { WorkspaceTrashController } from "../src/application/workspace-trash-controller.ts";
+import {
+  normalizeTrashTargets,
+  WorkspaceTrashController,
+} from "../src/application/workspace-trash-controller.ts";
 
 const messages = { targetChanged: "changed", blocked: "blocked", operationFailed: "failed", trashed: "trashed" };
 const target = {
@@ -123,4 +126,43 @@ test("blocked and replaced workspaces clear planning state without opening a rev
   await pending;
   assert.equal(records.cancels, 1);
   assert.equal(controller.busy, false);
+});
+
+test("normalizeTrashTargets prunes duplicates and descendants", () => {
+  const t = (path) => ({ ...target, workspacePath: path });
+  const input = [
+    t("src/feature"),
+    t("src/feature/sub/file.ts"),
+    t("src/app.ts"),
+    t("src/feature/file.ts"),
+    t("src/app.ts"),
+  ];
+  const normalized = normalizeTrashTargets(input);
+  assert.deepEqual(
+    normalized.map((x) => x.workspacePath),
+    ["src/app.ts", "src/feature"],
+  );
+});
+
+test("multi-selection Trash plans all targets upfront and executes on confirmation", async () => {
+  const { controller, records } = fixture();
+  const multiTarget = {
+    ...target,
+    workspacePath: "src/a.ts",
+    selectedTargets: [
+      { ...target, workspacePath: "src/a.ts" },
+      { ...target, workspacePath: "src/b.ts" },
+    ],
+  };
+  await controller.request(multiTarget);
+  assert.equal(controller.state.dialog.targets.length, 2);
+  assert.equal(records.plans.length, 1);
+  assert.deepEqual(records.plans[0].operation, { kind: "trash", sources: ["src/a.ts", "src/b.ts"] });
+
+  await controller.confirm();
+
+  assert.equal(records.executions.length, 1);
+  assert.equal(records.completed.length, 2);
+  assert.deepEqual(records.completed[0][0], multiTarget.selectedTargets[0]);
+  assert.deepEqual(records.completed[1][0], multiTarget.selectedTargets[1]);
 });

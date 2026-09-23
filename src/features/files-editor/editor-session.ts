@@ -599,9 +599,9 @@ export function closeTextTab(
 }
 
 export function closePreview(session: EditorSession): EditorSession {
-  const textTabs = session.textTabs.filter(
-    (tab) => !tab.ephemeral || isTextTabDirty(tab),
-  );
+  const textTabs = session.textTabs
+    .filter((tab) => !tab.ephemeral || isTextTabDirty(tab))
+    .map((tab) => tab.ephemeral ? { ...tab, ephemeral: false } : tab);
   const fallback = textTabs.at(-1);
   const activeTextId = session.active.kind === "text" ? session.active.id : null;
   return {

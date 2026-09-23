@@ -128,18 +128,18 @@ test("a new Markdown tab accepts its restored presentation mode", () => {
 });
 
 test("read-only project files cannot become dirty or start a save", () => {
-  const readOnly = { ...document("ignored.txt"), readOnly: true };
+  const readOnly = { ...document("locked.txt"), readOnly: true };
   const opened = openTextDocument(createEditorSession(), readOnly);
   const session = completeTextLoad(opened.session, opened.tabId, opened.loadEpoch, {
-    workspacePath: "ignored.txt",
-    content: "ignored\n",
+    workspacePath: "locked.txt",
+    content: "locked\n",
     utf8Bom: false,
-    revision: "ignored-revision",
+    revision: "locked-revision",
     byteLength: 8,
   });
 
   const edited = markTextEdited(session, opened.tabId, "changed\n");
-  const saving = beginTextSave(edited, opened.tabId, "changed\n", "save-ignored");
+  const saving = beginTextSave(edited, opened.tabId, "changed\n", "save-locked");
   assert.equal(edited, session);
   assert.equal(saving.session, session);
   assert.equal(saving.request, null);

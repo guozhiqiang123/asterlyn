@@ -387,7 +387,7 @@ impl ActiveWorkspaces {
                 .entry(file.repository_id.clone())
                 .or_default()
                 .insert(file.path.clone(), file.clone());
-            if !file.read_only {
+            if !file.ignored {
                 insert_workspace_path_directories(&mut directories, root, &file.workspace_path);
             }
         }
@@ -430,9 +430,12 @@ impl ActiveWorkspaces {
                 path: path.to_string(),
                 workspace_path: path.to_string(),
                 read_only: false,
+                ignored: false,
             };
             if let Ok(authorized) =
-                crate::application::workspace_catalog::reauthorize_session_file_for_read(root, &candidate)
+                crate::application::workspace_catalog::reauthorize_session_file_for_read(
+                    root, &candidate,
+                )
             {
                 active
                     .catalog
@@ -489,7 +492,7 @@ fn stale_activation() -> WorkspaceError {
 fn catalog_watch_directories(root: &Path, catalog: &ProjectFileList) -> Vec<PathBuf> {
     let mut directories = BTreeSet::from([root.to_path_buf()]);
     for file in &catalog.files {
-        if file.read_only {
+        if file.ignored {
             continue;
         }
         insert_workspace_path_directories(&mut directories, root, &file.workspace_path);
@@ -719,7 +722,8 @@ mod tests {
                 repository_id: ".".to_string(),
                 path: "generated/deep/open.txt".to_string(),
                 workspace_path: "generated/deep/open.txt".to_string(),
-                read_only: true,
+                read_only: false,
+                ignored: true,
             }],
             ignored_entries: Vec::new(),
             repository_roots: Vec::new(),

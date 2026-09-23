@@ -213,6 +213,8 @@ pub struct ProjectFile {
     pub workspace_path: String,
     #[serde(default)]
     pub read_only: bool,
+    #[serde(default)]
+    pub ignored: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

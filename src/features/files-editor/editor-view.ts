@@ -40,6 +40,7 @@ export interface DiffControlsViewModel {
 export function renderEditorTabs(model: EditorTabsViewModel): string {
   const copy = model.copy ?? EN_US.editor;
   const textTabs = model.session.textTabs.map((tab, index) => {
+    if (tab.ephemeral) return "";
     const active = model.document.kind === "project-file" && editorDocumentKey(model.document) === tab.id;
     const dirty = isTextTabDirty(tab);
     const state = tab.conflict ? copy.conflict : tab.saveRequest ? copy.saving : dirty ? copy.unsaved : copy.saved;
@@ -76,6 +77,7 @@ export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
   if (!model.open) return "";
   const copy = model.copy ?? EN_US.editor;
   const textItems = model.session.textTabs.map((tab, index) => {
+    if (tab.ephemeral) return "";
     const active = model.session.active.kind === "text" && model.session.active.id === tab.id;
     const dirty = isTextTabDirty(tab);
     return `<button class="editor-tab-menu-item ${model.statusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? `<span class="editor-dirty-dot" aria-label="${escapeAttribute(copy.unsaved)}"></span>` : ""}${active ? icon("check", 14) : ""}</button>`;

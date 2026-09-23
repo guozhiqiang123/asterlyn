@@ -151,12 +151,14 @@ export class WorkspaceMutationCoordinator {
   async execute(
     identity: WorkspaceMutationIdentity,
     planId: string,
+    options?: { readonly reconcile?: boolean },
   ): Promise<WorkspaceMutationExecutionResult> {
     const active = this.active;
     if (!active || !sameMutation(active, identity, planId)) return { status: "stale" };
     if (active.phase !== "review") return { status: "busy" };
-    const reconciliationLease = this.reconciliation.begin(identity);
-    if (!reconciliationLease) {
+    const reconcile = options?.reconcile !== false;
+    const reconciliationLease = reconcile ? this.reconciliation.begin(identity) : null;
+    if (reconcile && !reconciliationLease) {
       this.releaseEditorLease(active);
       this.active = null;
       return { status: "stale" };
@@ -195,10 +197,21 @@ export class WorkspaceMutationCoordinator {
         this.releaseEditorLease(active);
       }
 
+      if (!reconcile) {
+        this.active = null;
+        if (!resultIsCurrent) {
+          return { status: "failure", error: new Error("Workspace mutation result is stale.") };
+        }
+        if (editorConflict) {
+          return { status: "editor-conflict", outcome, reason: editorConflict };
+        }
+        return { status: "completed", outcome };
+      }
+
       active.phase = "reconciling";
       let reconciliation: WorkspaceMutationReconciliationResult;
       try {
-        reconciliation = await this.reconciliation.accept(reconciliationLease, outcome);
+        reconciliation = await this.reconciliation.accept(reconciliationLease!, outcome);
       } catch (error) {
         reconciliation = { status: "failure", error };
       }
@@ -219,6 +232,22 @@ export class WorkspaceMutationCoordinator {
         return { status: "editor-conflict", outcome, reason: editorConflict };
       }
       return { status: "completed", outcome };
+    } finally {
+      if (reconciliationLease) this.reconciliation.settle(reconciliationLease);
+    }
+  }
+
+  async reconcile(
+    identity: WorkspaceMutationIdentity,
+    outcome: WorkspaceMutationOutcome,
+  ): Promise<WorkspaceMutationReconciliationResult> {
+    if (this.disposed) return { status: "stale" };
+    const reconciliationLease = this.reconciliation.begin(identity);
+    if (!reconciliationLease) return { status: "stale" };
+    try {
+      return await this.reconciliation.accept(reconciliationLease, outcome);
+    } catch (error) {
+      return { status: "failure", error };
     } finally {
       this.reconciliation.settle(reconciliationLease);
     }

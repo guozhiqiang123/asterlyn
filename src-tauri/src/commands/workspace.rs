@@ -5,7 +5,7 @@ use crate::adapters::recovery_paths::{
 use crate::adapters::system_file_manager::{
     RevealWorkspaceEntryResult, reveal_workspace_entry as reveal_in_system_file_manager,
 };
-use crate::adapters::system_trash::move_to_system_trash;
+use crate::adapters::system_trash::move_all_to_system_trash;
 use asterlyn_workspace::WorkspaceEntryKind;
 
 #[tauri::command]
@@ -108,7 +108,12 @@ pub(crate) async fn execute_workspace_mutation(
     let recovery_root = workspace_mutation_recovery_root(&app)?;
     let task_root = root.clone();
     let result = run_workspace_blocking("execute workspace mutation", move || {
-        execute_workspace_mutation_plan(&task_root, &recovery_root, execution, move_to_system_trash)
+        execute_workspace_mutation_plan(
+            &task_root,
+            &recovery_root,
+            execution,
+            move_all_to_system_trash,
+        )
     })
     .await;
     mutations.finish_execution(&window_label, &repository_root, &plan_id, &cancellation)?;

@@ -11,12 +11,9 @@ use asterlyn_workspace::{
 
 use super::WorkspaceWriteRegistry;
 
-const WORKSPACE_MUTATION_LIMITS: WorkspaceMutationLimits = WorkspaceMutationLimits {
-    max_entries: 20_000,
-    max_total_bytes: 512 * 1024 * 1024,
-    max_depth: 64,
-    max_path_bytes: 4_096,
-};
+const WORKSPACE_MUTATION_LIMITS: WorkspaceMutationLimits =
+    WorkspaceMutationLimits::default_transfer();
+const WORKSPACE_TRASH_LIMITS: WorkspaceMutationLimits = WorkspaceMutationLimits::default_trash();
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +31,41 @@ pub(crate) struct WorkspaceMutationPreview {
 
 impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
     fn from(plan: &WorkspaceMutationPlan) -> Self {
+        let entry_count: usize = if !plan.inventories.is_empty() {
+            plan.inventories
+                .iter()
+                .map(|inventory| inventory.entries.len())
+                .sum()
+        } else {
+            plan.inventory
+                .as_ref()
+                .map_or(0, |inventory| inventory.entries.len())
+        };
+        let total_bytes: u64 = if !plan.inventories.is_empty() {
+            plan.inventories
+                .iter()
+                .map(|inventory| inventory.total_bytes)
+                .sum()
+        } else {
+            plan.inventory
+                .as_ref()
+                .map_or(0, |inventory| inventory.total_bytes)
+        };
+        let hidden_entry_count: usize = if !plan.inventories.is_empty() {
+            plan.inventories
+                .iter()
+                .flat_map(|inventory| inventory.entries.iter())
+                .filter(|entry| entry.hidden)
+                .count()
+        } else {
+            plan.inventory.as_ref().map_or(0, |inventory| {
+                inventory
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.hidden)
+                    .count()
+            })
+        };
         Self {
             plan_id: plan.plan_id.clone(),
             operation: plan.operation.clone(),
@@ -41,25 +73,15 @@ impl From<&WorkspaceMutationPlan> for WorkspaceMutationPreview {
             source: plan
                 .inventory
                 .as_ref()
+                .or_else(|| plan.inventories.first())
                 .map(|inventory| inventory.source.clone()),
-            entry_count: plan
-                .inventory
-                .as_ref()
-                .map_or(0, |inventory| inventory.entries.len()),
-            total_bytes: plan
-                .inventory
-                .as_ref()
-                .map_or(0, |inventory| inventory.total_bytes),
-            hidden_entry_count: plan.inventory.as_ref().map_or(0, |inventory| {
-                inventory
-                    .entries
-                    .iter()
-                    .filter(|entry| entry.hidden)
-                    .count()
-            }),
+            entry_count,
+            total_bytes,
+            hidden_entry_count,
             fingerprint: plan
                 .inventory
                 .as_ref()
+                .or_else(|| plan.inventories.first())
                 .map(|inventory| inventory.fingerprint.clone()),
             blockers: plan.blockers.clone(),
         }
@@ -146,8 +168,9 @@ pub(crate) fn prepare_workspace_mutation_plan(
             collision_policy,
             WORKSPACE_MUTATION_LIMITS,
         ),
-        WorkspaceMutationOperation::Trash { source } => {
-            workspace.plan_trash(plan_id, &source, WORKSPACE_MUTATION_LIMITS)
+        WorkspaceMutationOperation::Trash { .. } => {
+            let sources = operation.trash_sources();
+            workspace.plan_trash_sources(plan_id, &sources, WORKSPACE_TRASH_LIMITS)
         }
     }?;
     let preview = WorkspaceMutationPreview::from(&plan);
@@ -165,7 +188,7 @@ pub(crate) fn execute_workspace_mutation_plan<F>(
     trash: F,
 ) -> Result<WorkspaceMutationOutcome, WorkspaceError>
 where
-    F: FnOnce(&Path) -> Result<(), WorkspaceError>,
+    F: FnOnce(&[PathBuf]) -> Result<(), WorkspaceError>,
 {
     let _guard = execution
         .write_lock
@@ -526,17 +549,18 @@ mod tests {
     #[test]
     fn latest_plan_replaces_older_plans_for_the_same_window() {
         let root = tempfile::tempdir().unwrap();
+        let root_path = std::fs::canonicalize(root.path()).unwrap();
         let coordinator = WorkspaceMutationCoordinator::new(WorkspaceWriteRegistry::default());
-        install_plan(&coordinator, root.path(), "first");
-        install_plan(&coordinator, root.path(), "second");
+        install_plan(&coordinator, &root_path, "first");
+        install_plan(&coordinator, &root_path, "second");
 
         assert!(matches!(
-            coordinator.start_execution("main", "/repo", root.path(), "first"),
+            coordinator.start_execution("main", "/repo", &root_path, "first"),
             Err(WorkspaceError::InvalidMutation { .. })
         ));
         assert!(
             coordinator
-                .start_execution("main", "/repo", root.path(), "second")
+                .start_execution("main", "/repo", &root_path, "second")
                 .is_ok()
         );
     }
@@ -544,10 +568,11 @@ mod tests {
     #[test]
     fn active_mutation_is_never_replaced_and_window_cleanup_cancels_it() {
         let root = tempfile::tempdir().unwrap();
+        let root_path = std::fs::canonicalize(root.path()).unwrap();
         let coordinator = WorkspaceMutationCoordinator::new(WorkspaceWriteRegistry::default());
-        install_plan(&coordinator, root.path(), "first");
+        install_plan(&coordinator, &root_path, "first");
         let execution = coordinator
-            .start_execution("main", "/repo", root.path(), "first")
+            .start_execution("main", "/repo", &root_path, "first")
             .unwrap();
 
         assert!(matches!(
@@ -555,7 +580,7 @@ mod tests {
             Err(WorkspaceError::Busy { .. })
         ));
         assert!(matches!(
-            coordinator.start_execution("main", "/repo", root.path(), "first"),
+            coordinator.start_execution("main", "/repo", &root_path, "first"),
             Err(WorkspaceError::Busy { .. })
         ));
         coordinator.remove_window("main");
@@ -565,17 +590,18 @@ mod tests {
     #[test]
     fn a_finished_token_cannot_remove_a_newer_execution() {
         let root = tempfile::tempdir().unwrap();
+        let root_path = std::fs::canonicalize(root.path()).unwrap();
         let coordinator = WorkspaceMutationCoordinator::new(WorkspaceWriteRegistry::default());
-        install_plan(&coordinator, root.path(), "first");
+        install_plan(&coordinator, &root_path, "first");
         let first = coordinator
-            .start_execution("main", "/repo", root.path(), "first")
+            .start_execution("main", "/repo", &root_path, "first")
             .unwrap();
         coordinator
             .finish_execution("main", "/repo", "first", &first.cancellation)
             .unwrap();
-        install_plan(&coordinator, root.path(), "second");
+        install_plan(&coordinator, &root_path, "second");
         let second = coordinator
-            .start_execution("main", "/repo", root.path(), "second")
+            .start_execution("main", "/repo", &root_path, "second")
             .unwrap();
 
         coordinator
@@ -583,7 +609,7 @@ mod tests {
             .unwrap();
         assert!(!second.cancellation.is_cancelled());
         assert!(matches!(
-            coordinator.start_execution("main", "/repo", root.path(), "second"),
+            coordinator.start_execution("main", "/repo", &root_path, "second"),
             Err(WorkspaceError::Busy { .. })
         ));
     }
@@ -591,6 +617,7 @@ mod tests {
     #[test]
     fn an_older_plan_completion_cannot_replace_the_latest_plan() {
         let root = tempfile::tempdir().unwrap();
+        let root_path = std::fs::canonicalize(root.path()).unwrap();
         let coordinator = WorkspaceMutationCoordinator::new(WorkspaceWriteRegistry::default());
         let old = coordinator.begin_plan("main", "/repo", "old").unwrap();
         let current = coordinator.begin_plan("main", "/repo", "current").unwrap();
@@ -601,7 +628,7 @@ mod tests {
                 "/repo",
                 "old",
                 old,
-                Some(stored(root.path(), "old", "old")),
+                Some(stored(&root_path, "old", "old")),
             ),
             Err(WorkspaceError::Cancelled { .. })
         ));
@@ -611,12 +638,12 @@ mod tests {
                 "/repo",
                 "current",
                 current,
-                Some(stored(root.path(), "current", "current")),
+                Some(stored(&root_path, "current", "current")),
             )
             .unwrap();
         assert!(
             coordinator
-                .start_execution("main", "/repo", root.path(), "current")
+                .start_execution("main", "/repo", &root_path, "current")
                 .is_ok()
         );
     }

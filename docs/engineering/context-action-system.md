@@ -357,7 +357,15 @@ Trash uses a platform adapter selected and tested for macOS, Windows, and suppor
 environments. Dependency choice is deferred until license, maintenance, integrity, package impact,
 and native behavior are recorded. If the system trash is unavailable, Asterlyn fails without
 falling back to permanent deletion. The confirmation and result explicitly identify files versus a
-fully inventoried directory subtree.
+fully inventoried directory subtree. A multi-selection is normalized again at the workspace
+boundary so duplicate paths and descendants of an already selected directory cannot execute twice.
+Every source is completely inventoried and revalidated before the first write; the platform adapter
+receives the validated paths as one batch and reuses one trash context. A source/inventory count
+mismatch fails before the adapter runs. Any partial platform result is `uncertain` and retains its
+recovery journal; an adapter failure is `failedWithoutChange` only when every source still matches
+its reviewed inventory. Copy and move keep exact content hashes. Trash fingerprints the complete
+path graph plus stable platform file identities, size, mode, and modification metadata, so deleting
+a large file does not read its entire payload and never relies on head/tail content sampling.
 
 One window-wide `WorkspaceTrashController` owns the single reviewed plan and confirmation lifetime.
 Files and Changes contribute typed targets, current-target validation, completion behavior, and

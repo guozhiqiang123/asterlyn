@@ -14,6 +14,14 @@ import {
   type ProjectTreeNode,
   type ProjectTreeSelection,
 } from "../../presentation/project-tree.ts";
+import {
+  rangeSelection,
+  reconcileSelections,
+  selectSingle,
+  toggleSelection,
+  type ProjectFilesSelectionState,
+} from "./project-files-selection.ts";
+import type { ProjectTreeRow } from "./project-files-view.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 
@@ -26,6 +34,8 @@ export interface ProjectFilesState {
   error: string | null;
   truncated: boolean;
   selection: ProjectTreeSelection | null;
+  selections: ProjectTreeSelection[];
+  selectionAnchor: ProjectTreeSelection | null;
   expandedDirectories: Set<string>;
 }
 
@@ -106,6 +116,8 @@ export class ProjectFilesController {
       this.state.error = null;
       this.state.truncated = false;
       this.state.selection = null;
+      this.state.selections = [];
+      this.state.selectionAnchor = null;
       this.state.expandedDirectories.clear();
     } else {
       this.reconcileTreeState();
@@ -174,6 +186,8 @@ export class ProjectFilesController {
       if (this.catalogRoot !== result.root) {
         this.catalogRoot = result.root;
         this.state.selection = null;
+        this.state.selections = [];
+        this.state.selectionAnchor = null;
         this.state.expandedDirectories.clear();
       } else {
         this.reconcileTreeState();
@@ -219,10 +233,45 @@ export class ProjectFilesController {
   select(path: string, kind: ProjectTreeSelection["kind"]): boolean {
     const node = findProjectTreeNode(this.tree(), path);
     if (!node || node.kind !== kind) return false;
-    const changed = this.state.selection?.path !== path || this.state.selection.kind !== kind;
-    this.state.selection = { path, kind };
+    const next = selectSingle({ path, kind });
+    const changed = this.state.selection?.path !== path ||
+      this.state.selection.kind !== kind ||
+      this.state.selections.length !== 1;
+    this.state.selection = next.selection;
+    this.state.selections = [...next.selections];
+    this.state.selectionAnchor = next.anchor;
     if (changed) this.emit({ reason: "selection", selectionChanged: true });
     return true;
+  }
+
+  selectWithMode(
+    path: string,
+    kind: ProjectTreeSelection["kind"],
+    mode: "single" | "toggle" | "range",
+    visibleRows: readonly ProjectTreeRow[] = [],
+  ): boolean {
+    const node = findProjectTreeNode(this.tree(), path);
+    if (!node || node.kind !== kind) return false;
+    const current: ProjectFilesSelectionState = {
+      selection: this.state.selection,
+      selections: this.state.selections,
+      anchor: this.state.selectionAnchor,
+    };
+    const next =
+      mode === "toggle"
+        ? toggleSelection(current, { path, kind })
+        : mode === "range"
+          ? rangeSelection(current, { path, kind }, visibleRows)
+          : selectSingle({ path, kind });
+    this.state.selection = next.selection;
+    this.state.selections = [...next.selections];
+    this.state.selectionAnchor = next.anchor;
+    this.emit({ reason: "selection", selectionChanged: true });
+    return true;
+  }
+
+  isSelected(path: string, kind: ProjectTreeSelection["kind"]): boolean {
+    return this.state.selections.some((s) => s.path === path && s.kind === kind);
   }
 
   /**
@@ -252,6 +301,8 @@ export class ProjectFilesController {
       this.state.expandedDirectories.add(directory);
     }
     this.state.selection = { path, kind: "file" };
+    this.state.selections = [{ path, kind: "file" }];
+    this.state.selectionAnchor = { path, kind: "file" };
     this.emit({
       reason: "selection",
       selectionChanged: true,
@@ -267,6 +318,8 @@ export class ProjectFilesController {
       this.state.expandedDirectories.add(directory);
     }
     this.state.selection = { path, kind: "directory" };
+    this.state.selections = [{ path, kind: "directory" }];
+    this.state.selectionAnchor = { path, kind: "directory" };
     this.emit({
       reason: "selection",
       selectionChanged: true,
@@ -308,13 +361,27 @@ export class ProjectFilesController {
 
   private reconcileTreeState(): void {
     if (this.catalogRoot !== this.state.root) return;
+    const tree = this.tree();
     const reconciled = reconcileProjectTreeState(
-      this.tree(),
+      tree,
       this.state.expandedDirectories,
       this.state.selection,
     );
     this.state.expandedDirectories = reconciled.expandedDirectories;
     this.state.selection = reconciled.selection;
+    this.state.selections = reconcileSelections(this.state.selections, tree);
+    if (this.state.selection && !this.state.selections.some((s) => s.path === this.state.selection?.path)) {
+      this.state.selection = this.state.selections.at(-1) ?? null;
+    }
+    if (!this.state.selection && this.state.selections.length > 0) {
+      this.state.selection = this.state.selections.at(-1) ?? null;
+    }
+    if (
+      this.state.selectionAnchor &&
+      !this.state.selections.some((s) => s.path === this.state.selectionAnchor?.path)
+    ) {
+      this.state.selectionAnchor = this.state.selection;
+    }
   }
 
   private requestMatches(generation: number, root: string): boolean {
@@ -351,6 +418,8 @@ export function createProjectFilesState(): ProjectFilesState {
     error: null,
     truncated: false,
     selection: null,
+    selections: [],
+    selectionAnchor: null,
     expandedDirectories: new Set(),
   };
 }

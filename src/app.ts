@@ -115,6 +115,10 @@ import {
   type ProjectFilesContextTarget,
 } from "./features/files-editor/project-files-binding.ts";
 import {
+  bindProjectTreeRowEvents,
+  syncProjectTreeSelectionUi,
+} from "./features/files-editor/project-files-selection.ts";
+import {
   ProjectFilesContextSurfaceRuntime,
 } from "./features/files-editor/project-files-context-runtime.ts";
 import {
@@ -978,6 +982,7 @@ export class AsterlynApp {
           blocked: labels.trashBlocked,
           operationFailed: labels.operationFailed,
           trashed: labels.trashedEntry,
+          saveBeforeTrash: this.localization.catalog.changes.saveBeforeTrashUnversioned,
         };
       },
       copy: () => {
@@ -989,6 +994,7 @@ export class AsterlynApp {
           working: labels.working,
           fileDetail: labels.trashFileDetail,
           folderDetail: labels.trashFolderDetail,
+          multipleDetail: labels.trashMultipleDetail,
         };
       },
       focusTarget: (target) => Array.from(this.root.querySelectorAll<HTMLElement>(
@@ -1142,6 +1148,9 @@ export class AsterlynApp {
         select: (target) => {
           if (isProjectWorkspaceRootPath(target.workspacePath)) {
             return this.filesEditorRuntime.files.selectRoot();
+          }
+          if (target.selectedTargets && target.selectedTargets.length > 1) {
+            return true;
           }
           const selected = this.filesEditorRuntime.files.select(target.workspacePath, target.kind);
           if (selected) this.markProjectTreeSelection(target.workspacePath);
@@ -4375,34 +4384,25 @@ export class AsterlynApp {
           this.toggleProjectDirectory(path);
         });
       });
-    this.root
-      .querySelectorAll<HTMLElement>("[data-project-directory]")
-      .forEach((row) => {
-        const toggle = (): void => {
-          const path = row.dataset.projectDirectory;
-          if (!path) return;
-          this.filesEditorRuntime.files.select(path, "directory");
-          this.toggleProjectDirectory(path);
-        };
-        row.addEventListener("click", toggle);
-        row.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          toggle();
-        });
-      });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-project-file]").forEach((row) => {
-      row.addEventListener("click", () => {
-        const path = row.dataset.projectFile;
-        const currentRoot = this.windowSession.workspace.state.root;
-        if (!path || !currentRoot) return;
-        this.filesEditorRuntime.files.select(path, "file");
+    bindProjectTreeRowEvents(this.root, {
+      onSelectSingle: (path, kind) => {
+        this.filesEditorRuntime.files.select(path, kind);
         this.markProjectTreeSelection(path);
+      },
+      onSelectMulti: (path, kind, mode) => {
+        const rows = projectTreeRows(this.projectTree(), this.filesState.expandedDirectories);
+        this.filesEditorRuntime.files.selectWithMode(path, kind, mode, rows);
+        this.markProjectTreeSelection();
+      },
+      onActivateFile: (path) => {
+        const currentRoot = this.windowSession.workspace.state.root;
+        if (!currentRoot) return;
         const file = this.filesState.files.find(
           (candidate) => candidate.workspacePath === path,
         ) ?? { repositoryId: ".", path, workspacePath: path, readOnly: false };
         void this.openProjectFile(currentRoot, file);
-      });
+      },
+      onToggleDirectory: (path) => this.toggleProjectDirectory(path),
     });
   }
 
@@ -4438,18 +4438,13 @@ export class AsterlynApp {
     });
   }
 
-  private markProjectTreeSelection(path: string): void {
-    this.root.querySelectorAll<HTMLElement>("[data-project-node]").forEach((row) => {
-      const selected = projectTreeElementRepresentsPath(row, path);
-      row.classList.toggle("selected", selected);
-      row.setAttribute("aria-selected", String(selected));
-    });
-    const directorySelected = this.filesState.selection?.kind === "directory";
-    this.root.querySelectorAll<HTMLButtonElement>(
-      "#expand-project-folder, #collapse-project-folder",
-    ).forEach((button) => {
-      button.disabled = !directorySelected;
-    });
+  private markProjectTreeSelection(path?: string): void {
+    syncProjectTreeSelectionUi(
+      this.root,
+      this.filesState.selections ?? [],
+      path ?? this.filesState.selection?.path,
+      this.filesState.selection?.kind === "directory",
+    );
   }
 
   private locateCurrentProjectFile(): void {
@@ -4496,9 +4491,6 @@ export class AsterlynApp {
     file: ProjectFile,
     searchMatch?: WorkspaceTextSearchMatch,
   ): Promise<void> {
-    if (file.readOnly === true) {
-      this.setStatus(this.localization.catalog.editor.ignoredReadOnly, "normal");
-    }
     if (!searchMatch && isImagePreviewPath(file.path)) {
       await this.openProjectImage(repositoryRoot, file);
       return;
@@ -4511,6 +4503,7 @@ export class AsterlynApp {
       path: file.path,
       workspacePath: file.workspacePath,
       readOnly: file.readOnly === true,
+      ignored: file.ignored === true,
     };
     const documentKey = editorDocumentKey(document);
     const existing = textTab(this.editorState.session, documentKey);
@@ -6271,6 +6264,7 @@ export class AsterlynApp {
       path: file.path,
       workspacePath: file.workspacePath,
       readOnly: file.readOnly === true,
+      ignored: file.ignored === true,
     };
     const tab = textTab(this.editorState.session, editorDocumentKey(currentDocument));
     if (tab?.saveRequest || tab?.status === "loading") {
@@ -6400,7 +6394,7 @@ export class AsterlynApp {
         this.localization.catalog.editor.gitBlameRequiresSavedFile,
       );
     }
-    const untracked = document.readOnly === true || (
+    const untracked = document.ignored === true || (
       document.repositoryId === "." && snapshot.changes.some((change) =>
         change.path === document.path && (
           change.indexStatus === "untracked" || change.worktreeStatus === "untracked"

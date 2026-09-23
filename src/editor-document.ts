@@ -7,6 +7,7 @@ export interface ProjectFileDocument {
   path: string;
   workspacePath: string;
   readOnly?: boolean;
+  ignored?: boolean;
 }
 
 export interface ProjectImageDocument {

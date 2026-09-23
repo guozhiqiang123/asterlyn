@@ -81,6 +81,7 @@ fn load_project_catalog_with_ignored(
             path: path.clone(),
             workspace_path: path.clone(),
             read_only: false,
+            ignored: false,
         })
         .collect();
     Ok(ProjectFileList {
@@ -155,6 +156,7 @@ pub(crate) fn authorize_project_file(
         path: path.to_string(),
         workspace_path: path.to_string(),
         read_only: false,
+        ignored: false,
     })
 }
 
@@ -176,7 +178,11 @@ mod tests {
             Err(WorkspaceError::InvalidPath { .. })
         ));
         assert!(matches!(
-            resolve_workspace_entry(directory.path(), "../outside", WorkspaceEntryKind::Directory),
+            resolve_workspace_entry(
+                directory.path(),
+                "../outside",
+                WorkspaceEntryKind::Directory
+            ),
             Err(WorkspaceError::InvalidPath { .. })
         ));
     }

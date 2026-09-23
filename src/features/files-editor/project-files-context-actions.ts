@@ -111,7 +111,15 @@ export class ProjectFilesContextActions {
       case `${OWNER_ID}.cut`: return this.runtime.cut(target);
       case `${OWNER_ID}.copy`: return this.runtime.copy(target);
       case `${OWNER_ID}.paste`: return this.runtime.paste(target);
-      case `${OWNER_ID}.reveal`: return this.runtime.reveal(target);
+      case `${OWNER_ID}.reveal`: {
+        if (target.selectedTargets && target.selectedTargets.length > 1) {
+          for (const item of target.selectedTargets) {
+            await this.runtime.reveal(item);
+          }
+          return;
+        }
+        return this.runtime.reveal(target);
+      }
       case `${OWNER_ID}.rename`: return this.runtime.rename(target);
       case `${OWNER_ID}.history`: {
         const intent = this.runtime.historyIntent(target);
@@ -130,6 +138,19 @@ export function projectFilesContextMenuModel(
   copy: ProjectFilesCopy,
 ): ContextMenuModel {
   const labels = copy.contextMenu;
+  const isMultiple = Boolean(target.selectedTargets && target.selectedTargets.length > 1);
+  const singleOnly = isMultiple
+    ? { kind: "blocked" as const, reason: labels.multipleSelected }
+    : policy.mutation;
+  const singleCreate = isMultiple
+    ? { kind: "blocked" as const, reason: labels.multipleSelected }
+    : policy.create;
+  const singlePaste = isMultiple
+    ? { kind: "blocked" as const, reason: labels.multipleSelected }
+    : policy.paste;
+  const singleHistory = isMultiple
+    ? { kind: "blocked" as const, reason: labels.multipleSelected }
+    : policy.history;
   const command = (
     id: string,
     label: string,
@@ -152,14 +173,14 @@ export function projectFilesContextMenuModel(
   return {
     ariaLabel: labels.ariaLabel(projectFilesTargetDisplayPath(target)),
     items: [
-      command("new-file", labels.newFile, policy.create),
+      command("new-file", labels.newFile, singleCreate),
       { kind: "separator" },
-      command("cut", labels.cut, policy.mutation),
-      command("copy", labels.copy, policy.mutation),
-      command("paste", labels.paste, policy.paste),
+      command("cut", labels.cut, singleOnly),
+      command("copy", labels.copy, singleOnly),
+      command("paste", labels.paste, singlePaste),
       { kind: "separator" },
       command("reveal", labels.reveal, ENABLED),
-      command("rename", labels.rename, policy.mutation),
+      command("rename", labels.rename, singleOnly),
       buildPathCopyGroup(`${OWNER_ID}.copy-path`, {
         copy: labels.copyPath,
         fileName: labels.fileName,
@@ -167,7 +188,7 @@ export function projectFilesContextMenuModel(
         absolutePath: labels.absolutePath,
       }, pathActions),
       { kind: "separator" },
-      command("history", labels.gitHistory, policy.history),
+      command("history", labels.gitHistory, singleHistory),
       { kind: "separator" },
       command("trash", labels.trash, policy.mutation, "danger"),
     ],
@@ -187,6 +208,17 @@ function projectFilesPathCopyActions(
   target: ProjectFilesContextTarget,
   labels: PathCopyLabels,
 ): readonly TextCopyAction[] {
+  if (target.selectedTargets && target.selectedTargets.length > 1) {
+    const targets = target.selectedTargets;
+    const names = targets.map((t) => t.workspacePath.split("/").pop() ?? t.workspacePath).join("\n");
+    const relatives = targets.map((t) => t.workspacePath).join("\n");
+    const absolutes = targets.map((t) => `${t.workspaceRoot}/${t.workspacePath}`).join("\n");
+    return [
+      { id: `${OWNER_ID}.copy-name`, actionId: `${OWNER_ID}.copy-name`, label: labels.fileName, text: names },
+      { id: `${OWNER_ID}.copy-relative-path`, actionId: `${OWNER_ID}.copy-relative-path`, label: labels.relativePath, text: relatives },
+      { id: `${OWNER_ID}.copy-absolute-path`, actionId: `${OWNER_ID}.copy-absolute-path`, label: labels.absolutePath, text: absolutes },
+    ];
+  }
   return isProjectWorkspaceRootPath(target.workspacePath)
     ? workspaceRootPathCopyActions(OWNER_ID, target.workspaceRoot, labels)
     : workspacePathCopyActions(OWNER_ID, target, labels);
@@ -194,5 +226,8 @@ function projectFilesPathCopyActions(
 
 /** The workspace root has no relative path of its own; "." is the conventional tree display. */
 function projectFilesTargetDisplayPath(target: ProjectFilesContextTarget): string {
+  if (target.selectedTargets && target.selectedTargets.length > 1) {
+    return `${target.selectedTargets.length} items`;
+  }
   return isProjectWorkspaceRootPath(target.workspacePath) ? "." : target.workspacePath;
 }

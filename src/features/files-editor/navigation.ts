@@ -178,7 +178,7 @@ export class ProjectFileSearchCatalog {
 
   resolve(files: readonly ProjectFile[], includeIgnored: boolean): ProjectFileSearchIndex {
     if (this.files !== files || this.includesIgnored !== includeIgnored || !this.index) {
-      const searchable = includeIgnored ? files : files.filter((file) => file.readOnly !== true);
+      const searchable = includeIgnored ? files : files.filter((file) => file.ignored !== true);
       this.files = files;
       this.includesIgnored = includeIgnored;
       this.index = new ProjectFileSearchIndex(searchable);

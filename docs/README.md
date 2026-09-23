@@ -19,13 +19,14 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0007-workbench-feature-ownership.md`](architecture/decisions/0007-workbench-feature-ownership.md) — feature-owned workbench state, stable DOM hosts, and scoped rendering.
 - [`architecture/decisions/0008-recoverable-git-operations.md`](architecture/decisions/0008-recoverable-git-operations.md) — reviewed, resumable, and conflict-aware Git operation lifecycle.
 - [`architecture/decisions/0009-hinted-workspace-reconciliation.md`](architecture/decisions/0009-hinted-workspace-reconciliation.md) — native watcher hints, typed slice invalidation, authoritative reconciliation, and fallback policy.
-- [`architecture/decisions/0010-read-only-ignored-previews.md`](architecture/decisions/0010-read-only-ignored-previews.md) — bounded, individually authorized read-only previews for Git-ignored files.
+- [`architecture/decisions/0010-read-only-ignored-previews.md`](architecture/decisions/0010-read-only-ignored-previews.md) — historical bounded ignored-file preview and watcher-containment decision, superseded in its read-only restriction by ADR-0017.
 - [`architecture/decisions/0011-supervised-terminal-sessions.md`](architecture/decisions/0011-supervised-terminal-sessions.md) — lazy, window-scoped PTY sessions with explicit lifecycle and resource bounds.
 - [`architecture/decisions/0012-versioned-workspace-reconciliation.md`](architecture/decisions/0012-versioned-workspace-reconciliation.md) — linearized repository commits, exact watcher ownership, bounded recovery, and capability transitions.
 - [`architecture/decisions/0013-feature-owned-context-actions.md`](architecture/decisions/0013-feature-owned-context-actions.md) — feature-owned context actions presented through one business-neutral window menu host.
 - [`architecture/decisions/0014-slice-stable-projection-refresh.md`](architecture/decisions/0014-slice-stable-projection-refresh.md) — canonical refresh with semantic slice diffs, stable feature identity, and single-pass foreground recovery.
 - [`architecture/decisions/0015-editable-diff-and-conflict-editor.md`](architecture/decisions/0015-editable-diff-and-conflict-editor.md) — one-buffer editable working Diff, center-gutter reverts, and in-editor three-pane conflict resolution.
 - [`architecture/decisions/0016-temporal-presentation-and-editor-change-indicators.md`](architecture/decisions/0016-temporal-presentation-and-editor-change-indicators.md) — one localized time policy plus repository-derived, shared editor change indicators.
+- [`architecture/decisions/0017-editable-ignored-files.md`](architecture/decisions/0017-editable-ignored-files.md) — explicit ignored identity with individually authorized editing, saving, and Files mutations.
 
 ## Delivery
 
@@ -51,6 +52,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-09-23-files-multiselect-trash-and-editable-ignored.md`](benchmarks/2026-09-23-files-multiselect-trash-and-editable-ignored.md) — Files multi-selection, one reviewed batch Trash operation, identity-based Trash planning, editable ignored entries, and acceptance evidence.
 - [`benchmarks/2026-09-21-compact-file-trees-and-diff-fills.md`](benchmarks/2026-09-21-compact-file-trees-and-diff-fills.md) — shared compact file-tree projection, full-line MergeView fills, restored Unversioned Trash review host, and acceptance evidence.
 - [`benchmarks/2026-09-21-project-root-header.md`](benchmarks/2026-09-21-project-root-header.md) — Files header identity without a workspace tally, workspace-root context target with protection rules, native root reveal, and package evidence.
 - [`benchmarks/2026-09-21-search-controls-and-lazy-history-paths.md`](benchmarks/2026-09-21-search-controls-and-lazy-history-paths.md) — single-border Branch search, clearable History filters, lazy path projection, ignored-file policy, shared editor/workspace search controls, and acceptance evidence.

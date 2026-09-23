@@ -1,19 +1,28 @@
 # ADR-0005: Bounded navigation and workspace search
 
-- **Status:** Accepted through E2.3; revised search controls accepted 2026-09-21
+- **Status:** Accepted through E2.3; revised search controls accepted 2026-09-21; ignored-file mutability superseded by ADR-0017 on 2026-09-23
 - **Date:** 2026-09-09
 
 ## Context
 
 E1 established authorized text reads, conflict-safe saves, and editor-owned buffers. E2 must make those files fast to reach without turning startup into an indexing job, letting stale asynchronous results navigate the wrong repository, or introducing a bulk-write path before recovery exists.
 
-The project catalog is the bounded source for tracked, untracked, and display-only ignored identities. Mutation authorization remains a narrower tracked/non-ignored boundary. CodeMirror provides reversible find and replace inside the active buffer. What is missing is one coherent keyboard-first command surface, repository-scoped recent files, and bounded text search across the current catalog.
+The project catalog is the bounded source for tracked, untracked, and ignored identities. At the time
+of this decision, mutation authorization used a narrower tracked/non-ignored boundary; ADR-0017 later
+made catalogued ignored identities editable while retaining the separate bulk-replacement boundary.
+CodeMirror provides reversible find and replace inside the active buffer. What is missing is one
+coherent keyboard-first command surface, repository-scoped recent files, and bounded text search
+across the current catalog.
 
 ## Decision
 
 E2.1 adds one transient navigation surface with four modes: files, recent files, workspace text, and commands. `Ctrl/Cmd+P` opens files, `Ctrl/Cmd+E` opens recents, `Ctrl/Cmd+Shift+F` opens workspace text search, and `Ctrl/Cmd+Shift+P` opens commands. Arrow keys move one selection model, Enter activates it, and Escape closes the surface without changing the active editor. `Ctrl/Cmd+F` remains the active-buffer find and replace path. The ordinary editor, editable working Diff, read-only historical Diff, and three-pane conflict editor install the same CodeMirror search extension and use the same embedded `New line`, `Match case`, `Whole words`, and `Regex` controls; read-only panes omit replacement controls.
 
-The navigation bar also owns one `Filter Git-ignored files` checkbox visible in all four modes and enabled by default. Files and Recents rank only non-ignored catalog identities while it is enabled. Commands have no file candidates. Workspace Text regenerates the corresponding bounded native catalog. Disabling the filter can expose ignored files for navigation and search, but every such result is marked read-only and cannot enter save or replacement authorization.
+The navigation bar also owns one `Filter Git-ignored files` checkbox visible in all four modes and
+enabled by default. Files and Recents rank only non-ignored catalog identities while it is enabled.
+Commands have no file candidates. Workspace Text regenerates the corresponding bounded native
+catalog. Disabling the filter can expose ignored files for navigation and search. ADR-0017 later made
+those results editable and savable; they remain excluded from bulk replacement.
 
 File and command ranking is a pure presentation operation over the already loaded bounded catalog and a fixed command registry. Recent files are repository-scoped presentation preferences, capped at 50 exact root-qualified identities, pruned against the current catalog, and updated only after a file opens successfully. They contain no file content or repository truth.
 

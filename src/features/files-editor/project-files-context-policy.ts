@@ -32,7 +32,11 @@ export function projectFilesContextPolicy(
   readonly paste: ContextMenuAvailability;
   readonly history: ContextMenuAvailability;
 } {
-  const writable = target.readOnly
+  const hasRoot = isProjectWorkspaceRootPath(target.workspacePath) ||
+    Boolean(target.selectedTargets?.some((t) => isProjectWorkspaceRootPath(t.workspacePath)));
+  const isReadOnly = target.readOnly ||
+    Boolean(target.selectedTargets?.some((t) => t.readOnly));
+  const writable = isReadOnly
     ? blocked(options.reasons.readOnly)
     : options.mutationBusy
       ? blocked(options.reasons.mutationBusy)
@@ -41,7 +45,7 @@ export function projectFilesContextPolicy(
         : blocked(options.reasons.operationsUnavailable);
   // The workspace root owns everything below it, so it can receive new entries but never move,
   // rename or trash itself through the tree.
-  const mutation = isProjectWorkspaceRootPath(target.workspacePath)
+  const mutation = hasRoot
     ? blocked(options.reasons.rootUnavailable)
     : writable;
   const paste = writable.kind === "enabled" && !options.clipboardAvailable
@@ -58,7 +62,7 @@ export function projectFilesHistoryIntent(
   snapshot: RepositorySnapshot | null,
   files: readonly ProjectFile[],
 ): HistoryQueryIntent | null {
-  if (!snapshot || target.readOnly) return null;
+  if (!snapshot || target.readOnly || target.status === "ignored") return null;
   const path = historyPath(target, snapshot, files);
   if (!path) return null;
   const query = defaultHistoryQuery();
@@ -84,6 +88,7 @@ function historyPath(
   }
   const prefix = `${target.workspacePath}/`;
   const candidates = files.filter((file) =>
+    file.ignored !== true &&
     !file.readOnly &&
     file.workspacePath.startsWith(prefix) &&
     !isUntracked(snapshot, file)
@@ -118,11 +123,16 @@ function historyUnavailableReason(
   reasons: ProjectFilesContextPolicyReasons,
 ): string {
   if (!snapshot) return reasons.gitUnavailable;
-  if (target.readOnly || target.status === "untracked") return reasons.noHistory;
+  if (target.readOnly || target.status === "untracked" || target.status === "ignored") {
+    return reasons.noHistory;
+  }
   if (target.kind === "directory") {
     const prefix = `${target.workspacePath}/`;
     const roots = new Set(files.filter((file) =>
-      !file.readOnly && file.workspacePath.startsWith(prefix) && !isUntracked(snapshot, file)
+      file.ignored !== true &&
+      !file.readOnly &&
+      file.workspacePath.startsWith(prefix) &&
+      !isUntracked(snapshot, file)
     ).map((file) => file.repositoryId));
     if (roots.size > 1) return reasons.ambiguousHistory;
   }

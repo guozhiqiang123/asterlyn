@@ -669,7 +669,7 @@ function assertStringArray(
   value: unknown,
   command: DesktopCommandName,
   field: string,
-): void {
+): asserts value is string[] {
   assert(isStringArray(value), command, `${field} must contain only strings`);
 }
 
@@ -730,7 +730,12 @@ function assertWorkspaceMutationOperation(
       strings(operation, command, "source", "destination");
       break;
     case "trash":
-      strings(operation, command, "source");
+      if ("sources" in operation) {
+        assertStringArray(operation.sources, command, "sources");
+        assert(operation.sources.length > 0 && operation.sources.every(Boolean), command, "sources must contain non-empty paths");
+      } else {
+        assert(typeof operation.source === "string" && operation.source.length > 0, command, "source must not be empty");
+      }
       break;
     default:
       assert(false, command, "operation kind must be supported");
