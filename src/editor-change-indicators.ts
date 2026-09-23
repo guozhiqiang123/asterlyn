@@ -1,6 +1,7 @@
 import { Chunk } from "@codemirror/merge";
-import { EditorState, StateEffect, StateField, Text, type Extension, type StateEffectType } from "@codemirror/state";
+import { EditorState, StateEffect, StateField, Text, type Extension, type Range, type StateEffectType } from "@codemirror/state";
 import {
+  Decoration,
   EditorView,
   GutterMarker,
   gutter,
@@ -31,6 +32,12 @@ export interface EditorChangeIndicators {
   readonly extension: Extension;
   setBaseline(view: EditorView, content: string): void;
   setCopy(view: EditorView, copy: EditorChangeIndicatorCopy): void;
+  revealFirst(view: EditorView): boolean;
+}
+
+export interface EditorChangeHighlightLine {
+  readonly lineNumber: number;
+  readonly className: string;
 }
 
 export interface EditorChangeIndicatorOptions {
@@ -69,6 +76,7 @@ export function createEditorChangeIndicators(
   options: EditorChangeIndicatorOptions = {},
 ): EditorChangeIndicators {
   const updateIndicator = StateEffect.define<IndicatorUpdate>();
+  const revealIndicator = StateEffect.define<EditorChangeIndicatorBlock | null>();
   const baseline = text(initialBaseline);
   const documentSide = options.documentSide ?? "b";
   const field = StateField.define<IndicatorState>({
@@ -105,8 +113,37 @@ export function createEditorChangeIndicators(
       return next;
     },
   });
+  const revealedChange = StateField.define({
+    create: () => Decoration.none,
+    update: (decorations, transaction) => {
+      const revealed = transaction.effects.find((effect) => effect.is(revealIndicator));
+      if (!revealed) {
+        const baselineChanged = transaction.effects.some((effect) =>
+          effect.is(updateIndicator) && effect.value.kind === "baseline"
+        );
+        return transaction.docChanged || baselineChanged
+          ? Decoration.none
+          : decorations;
+      }
+      if (revealed.value === null) return Decoration.none;
+      const ranges: Array<Range<Decoration>> = [];
+      for (const line of editorChangeHighlightLines(
+        revealed.value,
+        transaction.newDoc.lines,
+      )) {
+        ranges.push(
+          Decoration.line({ class: line.className }).range(
+            transaction.newDoc.line(line.lineNumber).from,
+          ),
+        );
+      }
+      return Decoration.set(ranges, true);
+    },
+    provide: (highlight) => EditorView.decorations.from(highlight),
+  });
   const extension = [
     field,
+    revealedChange,
     options.gutter === false ? [] : gutter({
       class: "cm-change-indicator-gutter",
       side: options.gutterSide ?? "before",
@@ -173,11 +210,7 @@ export function createEditorChangeIndicators(
           marker.title = state.copy.navigate(block.kind, block.lineFrom);
           marker.setAttribute("aria-label", marker.title);
           marker.addEventListener("click", () => {
-            this.view.dispatch({
-              selection: { anchor: block.from },
-              effects: EditorView.scrollIntoView(block.from, { y: "center" }),
-            });
-            this.view.focus();
+            revealIndicatorBlock(this.view, block, revealIndicator);
           });
           return marker;
         }));
@@ -195,7 +228,32 @@ export function createEditorChangeIndicators(
       if (copy === view.state.field(field).copy) return;
       view.dispatch({ effects: updateIndicator.of({ kind: "copy", copy }) });
     },
+    revealFirst(view) {
+      const block = indicatorBlocks(view.state, field, documentSide)[0];
+      if (!block) return false;
+      revealIndicatorBlock(view, block, revealIndicator);
+      return true;
+    },
   };
+}
+
+export function editorChangeHighlightLines(
+  block: Pick<EditorChangeIndicatorBlock, "lineFrom" | "lineTo">,
+  totalLines: number,
+): readonly EditorChangeHighlightLine[] {
+  if (totalLines < 1 || block.lineFrom > totalLines) return [];
+  const fromLine = Math.max(1, block.lineFrom);
+  const toLine = Math.min(totalLines, Math.max(fromLine, block.lineTo));
+  const lines: EditorChangeHighlightLine[] = [];
+  for (let lineNumber = fromLine; lineNumber <= toLine; lineNumber += 1) {
+    const classes = [
+      "cm-diff-current-change",
+      lineNumber === fromLine ? "cm-diff-current-change-start" : "",
+      lineNumber === toLine ? "cm-diff-current-change-end" : "",
+    ].filter(Boolean).join(" ");
+    lines.push({ lineNumber, className: classes });
+  }
+  return lines;
 }
 
 export function editorChangeIndicatorBlocks(
@@ -216,6 +274,21 @@ function indicatorChanged(effect: StateEffectType<IndicatorUpdate>) {
   return (update: ViewUpdate): boolean => update.docChanged ||
     update.transactions.some((transaction) =>
       transaction.effects.some((candidate) => candidate.is(effect)));
+}
+
+function revealIndicatorBlock(
+  view: EditorView,
+  block: EditorChangeIndicatorBlock,
+  effect: StateEffectType<EditorChangeIndicatorBlock | null>,
+): void {
+  view.dispatch({
+    selection: { anchor: block.from },
+    effects: [
+      effect.of(block),
+      EditorView.scrollIntoView(block.from, { y: "center" }),
+    ],
+  });
+  view.focus();
 }
 
 function indicatorBlocks(

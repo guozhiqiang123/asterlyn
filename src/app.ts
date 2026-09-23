@@ -6978,7 +6978,12 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     await this.openProjectFile(document.repositoryRoot, file);
-    if (this.windowSession.workspace.state.root === document.repositoryRoot) this.locateCurrentProjectFile();
+    if (this.windowSession.workspace.state.root === document.repositoryRoot) {
+      this.locateCurrentProjectFile();
+      if (document.kind === "working-diff") {
+        queueMicrotask(() => this.editorSurface.revealFirstSourceChange());
+      }
+    }
   }
 
   private toggleDiffUnchangedLines(): void {

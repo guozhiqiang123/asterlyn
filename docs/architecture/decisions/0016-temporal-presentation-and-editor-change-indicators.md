@@ -59,7 +59,15 @@ classifies each bounded change as added, deleted, or modified. It supplies:
 1. colored left-gutter markers beside affected lines, including a deletion notch anchored at the
    nearest surviving line;
 2. a right-side overview ruler with the same semantic colors; and
-3. keyboard-focusable overview targets whose activation scrolls the matching change into view.
+3. keyboard-focusable overview targets whose activation scrolls the matching change into view and
+   frames its complete line range.
+
+Opening the editable source from a working Diff reuses the same exact `HEAD` comparison to reveal
+and frame its first change block after the source tab mounts. The Files tree reveal and source
+highlight remain presentation actions over the existing editor state and issue no additional Git
+read. The active block frame uses one consistent one-pixel bright edge on all four sides; multi-line
+blocks compose that frame from left/right edges plus a top edge on the first line and a bottom edge on
+the last line.
 
 The ordinary text editor uses the repository-derived baseline. The editable current side of a
 working Diff uses the exact repository source already supplied by that Diff read, so it does not
@@ -83,7 +91,8 @@ write path before a reviewed popover contract exists.
 6. Change indicators own no repository truth and never write the worktree or index.
 7. Unsupported, binary, invalid-UTF-8, deleted, conflicted, or oversized files fail closed without
    fabricated line classifications.
-8. Overview activation navigates only; rollback remains an explicit undoable editor operation.
+8. Overview and working-Diff source activation navigate and frame only; rollback remains an
+   explicit undoable editor operation.
 
 ## Delivery sequence
 

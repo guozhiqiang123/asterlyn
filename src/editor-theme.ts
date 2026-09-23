@@ -449,16 +449,16 @@ const editorThemeRules =
       backgroundColor: "var(--editor-intraline-removed)",
     },
     ".cm-diff-current-change": {
-      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring)",
+      boxShadow: "inset 1px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring-bright)",
     },
     ".cm-diff-current-change-start": {
-      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 1px 0 var(--focus-ring)",
+      boxShadow: "inset 1px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring-bright), inset 0 1px 0 var(--focus-ring-bright)",
     },
     ".cm-diff-current-change-end": {
-      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 -1px 0 var(--focus-ring)",
+      boxShadow: "inset 1px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring-bright), inset 0 -1px 0 var(--focus-ring-bright)",
     },
     ".cm-diff-current-change-start.cm-diff-current-change-end": {
-      boxShadow: "inset 3px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring), inset 0 1px 0 var(--focus-ring), inset 0 -1px 0 var(--focus-ring)",
+      boxShadow: "inset 1px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring-bright), inset 0 1px 0 var(--focus-ring-bright), inset 0 -1px 0 var(--focus-ring-bright)",
     },
     ".cm-highlightSpace": {
       backgroundImage: "radial-gradient(circle at center, var(--editor-whitespace) 0, var(--editor-whitespace) 0.9px, transparent 1.5px)",

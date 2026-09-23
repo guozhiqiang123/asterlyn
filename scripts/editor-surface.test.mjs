@@ -37,6 +37,18 @@ test("a synchronous flush that changes the active editor still captures the orig
   assert.deepEqual(captured, [["a", "alpha"]]);
 });
 
+test("source change reveal is delegated to the mounted text editor", () => {
+  const { surface, runtime } = testSurface();
+  let reveals = 0;
+  runtime.revealFirstChange = () => {
+    reveals += 1;
+    return true;
+  };
+
+  assert.equal(surface.revealFirstSourceChange(), true);
+  assert.equal(reveals, 1);
+});
+
 function testSurface() {
   const body = { innerHTML: "", classList: { add() {}, remove() {} } };
   const surface = new EditorSurface(

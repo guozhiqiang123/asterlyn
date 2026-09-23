@@ -91,3 +91,12 @@ them on repository replacement or runtime disposal.
 - `npm run check`
 - `npm run test:scripts`
 - `npm run build`
+
+### 2026-09-23 source-reveal frame follow-up
+
+Working-Diff source reveal now activates the first ordinary-editor change block after opening the
+source file. The shared indicator extension scrolls to the block and restores the complete focus
+frame for both this route and overview-marker activation; edits or a replacement baseline clear a
+stale frame. The follow-up style pass replaces the asymmetric three-pixel left edge with the same
+one-pixel bright edge used on the right, top, and bottom. Focused line-range tests cover multi-line
+and clamped single-line frames, and the complete frontend validation remains the acceptance gate.

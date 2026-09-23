@@ -173,6 +173,16 @@ export class LazyTextEditor {
     return true;
   }
 
+  revealFirstChange(): boolean {
+    if (this.implementation) return this.implementation.revealFirstChange();
+    if (!this.pendingMount) return false;
+    const generation = this.mountGeneration;
+    void this.load().then((editor) => {
+      if (generation === this.mountGeneration) editor.revealFirstChange();
+    });
+    return true;
+  }
+
   requestMeasure(): void {
     this.implementation?.requestMeasure();
   }

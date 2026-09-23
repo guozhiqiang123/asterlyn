@@ -277,6 +277,13 @@ export class TextEditor {
     return true;
   }
 
+  revealFirstChange(): boolean {
+    const entry = this.activeEntry();
+    return entry?.view
+      ? entry.changeIndicators.revealFirst(entry.view)
+      : false;
+  }
+
   requestMeasure(): void {
     this.activeEntry()?.view?.requestMeasure();
   }

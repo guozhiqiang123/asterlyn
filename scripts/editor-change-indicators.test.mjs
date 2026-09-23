@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { editorChangeIndicatorBlocks } from "../src/editor-change-indicators.ts";
+import {
+  editorChangeHighlightLines,
+  editorChangeIndicatorBlocks,
+} from "../src/editor-change-indicators.ts";
 
 test("change indicators classify additions, modifications, and deletions", () => {
   assert.deepEqual(
@@ -31,6 +34,17 @@ test("before-side indicators anchor removals in the left document", () => {
     editorChangeIndicatorBlocks("one\ntwo\n", "one\ninserted\ntwo\n", "a").map(project),
     [],
   );
+});
+
+test("revealed editor changes frame the complete line block", () => {
+  assert.deepEqual(editorChangeHighlightLines({ lineFrom: 3, lineTo: 5 }, 8), [
+    { lineNumber: 3, className: "cm-diff-current-change cm-diff-current-change-start" },
+    { lineNumber: 4, className: "cm-diff-current-change" },
+    { lineNumber: 5, className: "cm-diff-current-change cm-diff-current-change-end" },
+  ]);
+  assert.deepEqual(editorChangeHighlightLines({ lineFrom: 8, lineTo: 9 }, 8), [
+    { lineNumber: 8, className: "cm-diff-current-change cm-diff-current-change-start cm-diff-current-change-end" },
+  ]);
 });
 
 function project(block) {

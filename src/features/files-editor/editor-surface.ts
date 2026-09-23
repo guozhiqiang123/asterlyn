@@ -150,6 +150,10 @@ export class EditorSurface {
     return this.textEditor.selectRange(fromUtf16, toUtf16);
   }
 
+  revealFirstSourceChange(): boolean {
+    return this.textEditor.revealFirstChange();
+  }
+
   isTextTabMounted(tabId: string): boolean { return this.mountedTextTabId === tabId; }
 
   navigateDiffChange(direction: 1 | -1): boolean {
