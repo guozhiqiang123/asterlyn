@@ -254,6 +254,31 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.match(outgoingPush, /class="push-mode-chevron" aria-hidden="true"/);
 });
 
+test("push review compacts unary file directories around branching points", () => {
+  const state = createRemotePushState();
+  state.dialog = "push";
+  state.pushPreview = pushPreview({
+    files: [
+      { path: "app/src/main/assets/mock.json", originalPath: null, status: "added" },
+      { path: "app/src/main/java/com/example/App.kt", originalPath: null, status: "modified" },
+    ],
+  });
+
+  const expanded = renderRemoteDialogContent(viewModel(state));
+
+  assert.match(expanded, /class="push-file-list compact-file-tree"/);
+  assert.match(expanded, /data-push-directory="app\/src\/main" open><summary[^>]*title="app\/src\/main"[^>]*>[^]*>app\/src\/main</);
+  assert.match(expanded, />assets<\/span>/);
+  assert.match(expanded, />java\/com\/example<\/span>/);
+  assert.doesNotMatch(expanded, /data-push-directory="app"|data-push-directory="app\/src"/);
+  assert.match(expanded, /compact-file-tree-count">2 files</);
+
+  state.pushCollapsedFileDirectories.add("app/src/main");
+  const collapsed = renderRemoteDialogContent(viewModel(state));
+  assert.match(collapsed, /data-push-directory="app\/src\/main" ><summary/);
+  assert.doesNotMatch(collapsed, />assets<\/span>|>java\/com\/example<\/span>/);
+});
+
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
   const snapshot = repositorySnapshot();
   snapshot.branches = branchFixtures();

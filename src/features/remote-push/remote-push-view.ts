@@ -16,6 +16,7 @@ import {
 } from "../../presentation/git-presentation.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { formatPresentationDateTime } from "../../presentation/date-time.ts";
+import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,
@@ -293,7 +294,7 @@ function renderPushPreviewBody(model: RemotePushDialogViewModel, preview: PushPr
   const reviewFiles = pushReviewFiles(preview, state);
   const files = renderPushFiles(model, preview, reviewFiles);
   const fileScope = state.pushSelectedCommit ? copy.filesInSelectedCommit : copy.filesInAllCommits;
-  return `<div class="push-preview-grid"><section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">${escapeHtml(copy.outgoingCommits)}</h3><span>${localization.number.format(preview.commits.length)}/${localization.number.format(preview.totalCommits)}</span></div><div class="push-commit-list" role="listbox" aria-label="${escapeAttribute(copy.outgoingListAria)}">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${state.pushPreviewLoadingMore ? "disabled" : ""}>${escapeHtml(state.pushPreviewLoadingMore ? copy.loading : copy.showMore)}</button>` : preview.truncated ? `<p class="push-preview-limit">${escapeHtml(copy.truncatedCommits(localization.number.format(preview.totalCommits)))}</p>` : ""}</section><section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${escapeHtml(fileScope)}</h3><span>${localization.number.format(reviewFiles.length)}${preview.filesTruncated && !state.pushSelectedCommit ? "+" : ""}</span>${pushFileToolbar(model, Boolean(state.pushSelectedFile))}</div><div class="push-file-list" role="tree">${files}</div></section></div>`;
+  return `<div class="push-preview-grid"><section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">${escapeHtml(copy.outgoingCommits)}</h3><span>${localization.number.format(preview.commits.length)}/${localization.number.format(preview.totalCommits)}</span></div><div class="push-commit-list" role="listbox" aria-label="${escapeAttribute(copy.outgoingListAria)}">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${state.pushPreviewLoadingMore ? "disabled" : ""}>${escapeHtml(state.pushPreviewLoadingMore ? copy.loading : copy.showMore)}</button>` : preview.truncated ? `<p class="push-preview-limit">${escapeHtml(copy.truncatedCommits(localization.number.format(preview.totalCommits)))}</p>` : ""}</section><section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${escapeHtml(fileScope)}</h3><span>${localization.number.format(reviewFiles.length)}${preview.filesTruncated && !state.pushSelectedCommit ? "+" : ""}</span>${pushFileToolbar(model, Boolean(state.pushSelectedFile))}</div><div class="push-file-list compact-file-tree" role="tree">${files}</div></section></div>`;
 }
 
 function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview, reviewFiles: CommitFileChange[]): string {
@@ -305,7 +306,7 @@ function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview,
   if (!reviewFiles.length) return `<div class="remote-dialog-empty">${escapeHtml(preview.filesTruncated && !state.pushSelectedCommit ? copy.pushedRangeExceeded : state.pushSelectedCommit ? copy.noSelectedCommitFiles : copy.noNetFileChanges)}</div>`;
   if (state.pushFileView === "flat") return reviewFiles.map((file) => pushFileRow(file, file.path === state.pushSelectedFile, null, localization)).join("");
   const rootExpanded = !state.pushCollapsedFileDirectories.has(".");
-  return `<details class="push-file-directory push-file-root" data-push-directory="." ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<strong>${escapeHtml(basename(model.workspaceRoot ?? preview.branch))}</strong><small>${escapeHtml(localization.catalog.history.fileCount(reviewFiles.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(reviewFiles).map((node) => renderPushFileTreeNode(node, 1, model)).join("") : ""}</div></details>`;
+  return `<details class="push-file-directory push-file-root" data-push-directory="." ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<strong>${escapeHtml(basename(model.workspaceRoot ?? preview.branch))}</strong><small class="compact-file-tree-count">${escapeHtml(localization.catalog.history.fileCount(reviewFiles.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(reviewFiles).map((node) => renderPushFileTreeNode(node, 1, model)).join("") : ""}</div></details>`;
 }
 
 function pushFileToolbar(model: RemotePushDialogViewModel, selected: boolean): string {
@@ -319,8 +320,11 @@ function pushFileToolbar(model: RemotePushDialogViewModel, selected: boolean): s
 function renderPushFileTreeNode(node: CommitFileTreeNode, depth: number, model: RemotePushDialogViewModel): string {
   const { state } = model;
   if (node.kind === "directory") {
-    const expanded = !state.pushCollapsedFileDirectories.has(node.path);
-    return `<details class="push-file-directory" data-push-directory="${escapeAttribute(node.path)}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(node.name)}</span><small>${(model.localization ?? DEFAULT_LOCALIZATION).number.format(countCommitTreeFiles(node))}</small></summary><div role="group">${expanded ? node.children.map((child) => renderPushFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
+    const chain = compactDirectoryChain(node);
+    const localization = model.localization ?? DEFAULT_LOCALIZATION;
+    const expanded = !state.pushCollapsedFileDirectories.has(chain.terminal.path);
+    const count = localization.catalog.history.fileCount(chain.fileCount);
+    return `<details class="push-file-directory" data-push-directory="${escapeAttribute(chain.terminal.path)}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}" title="${escapeAttribute(chain.terminal.path)}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(chain.label)}</span><small class="compact-file-tree-count">${escapeHtml(count)}</small></summary><div role="group">${expanded ? chain.terminal.children.map((child) => renderPushFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
   }
   const file = node.file!;
   return pushFileRow(file, file.path === state.pushSelectedFile, depth, model.localization ?? DEFAULT_LOCALIZATION);
@@ -418,10 +422,6 @@ function emptyImageSide(label: string, message: string): string {
 
 function loadingBlock(label: string): string {
   return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(label)}</span></div>`;
-}
-
-function countCommitTreeFiles(node: CommitFileTreeNode): number {
-  return node.kind === "file" ? 1 : node.children.reduce((count, child) => count + countCommitTreeFiles(child), 0);
 }
 
 function changeCode(kind: ChangeKind): string {

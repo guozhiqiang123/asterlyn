@@ -398,7 +398,7 @@
   grid-template-columns: 16px 17px minmax(0, 1fr) minmax(0, 0.8fr);
   align-items: center;
   gap: 5px;
-  min-height: 28px;
+  min-height: var(--compact-file-tree-row-height, 25px);
   padding: 0 6px;
   border: 0;
   border-radius: 4px;
@@ -411,7 +411,7 @@
 
 .push-file-row[style] {
   grid-template-columns: 16px 17px minmax(0, 1fr);
-  padding-left: calc(6px + var(--tree-depth) * 14px);
+  padding-left: calc(6px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
 }
 
 .push-file-row > span:nth-child(3),
@@ -438,10 +438,10 @@
 .push-file-directory > summary {
   display: flex;
   min-width: max-content;
-  height: 27px;
+  height: var(--compact-file-tree-row-height, 25px);
   align-items: center;
   gap: 5px;
-  padding: 0 6px 0 calc(5px + var(--tree-depth) * 14px);
+  padding: 0 6px 0 calc(5px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
   border-radius: 4px;
   color: var(--text-soft);
   cursor: default;
@@ -463,11 +463,6 @@
 
 .push-file-directory[open] > summary .tree-chevron {
   transform: rotate(90deg);
-}
-
-.push-file-directory > summary small {
-  color: var(--text-faint);
-  font-size: 8px;
 }
 
 .push-file-root > summary strong {

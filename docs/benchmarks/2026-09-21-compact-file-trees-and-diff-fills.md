@@ -70,3 +70,12 @@ failure message.
 - `npm run test:scripts`
 - `npm run build`
 - `cargo test -p asterlyn-git`
+
+## 2026-09-23 Push review follow-up
+
+The Push review file tree now consumes the same `compactDirectoryChain` projection and shared
+25-pixel row-height and 12-pixel indentation tokens. Consecutive unary directories occupy one row,
+branching ends the chain, and the terminal path remains the disclosure key used by the existing
+single-row and recursive expand/collapse controls. Focused coverage verifies expanded child chains,
+localized recursive counts, and collapsed terminal rows. The complete frontend script suite,
+TypeScript check, production build, and whitespace validation passed after this follow-up.
