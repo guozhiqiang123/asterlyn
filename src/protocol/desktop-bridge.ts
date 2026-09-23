@@ -84,6 +84,10 @@ export interface DesktopShellBridge {
 
 export interface WorkspaceBridge {
   listProjectFiles(repositoryRoot: string): Promise<ProjectFileList>;
+  listIgnoredProjectDirectory(
+    repositoryRoot: string,
+    workspacePath: string,
+  ): Promise<ProjectFileList>;
   revealWorkspaceEntry(
     repositoryRoot: string,
     workspacePath: string,

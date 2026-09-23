@@ -448,6 +448,41 @@ const demoBridge: DesktopBridge = {
     return invoke<ProjectFileList>("list_project_files", { repositoryRoot });
   },
 
+  async listIgnoredProjectDirectory(
+    repositoryRoot: string,
+    workspacePath: string,
+  ): Promise<ProjectFileList> {
+    if (!isTauri) {
+      await demoDelay(80);
+      const files = workspacePath === ".cache"
+        ? [{
+            repositoryId: ".",
+            path: ".cache/session.json",
+            workspacePath: ".cache/session.json",
+            readOnly: false,
+            ignored: true,
+          }]
+        : [];
+      return {
+        root: repositoryRoot,
+        paths: [],
+        files,
+        ignoredEntries: files.map((file) => ({
+          workspacePath: file.workspacePath,
+          kind: "file" as const,
+        })),
+        repositoryRoots: browserGitEnabled
+          ? structuredClone(browserSnapshot.repositoryRoots)
+          : [],
+        truncated: false,
+      };
+    }
+    return invoke<ProjectFileList>("list_ignored_project_directory", {
+      repositoryRoot,
+      workspacePath,
+    });
+  },
+
   async revealWorkspaceEntry(
     repositoryRoot: string,
     workspacePath: string,

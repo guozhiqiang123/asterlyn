@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Output;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
@@ -973,6 +973,164 @@ impl GitRepository {
         self.project_files_with_ignored(limit, false)
     }
 
+    /// Lists one level below an ignored directory without recursively materializing its contents.
+    ///
+    /// The initial project catalog deliberately collapses ignored directories because build output
+    /// can contain hundreds of thousands of files. Files expands one ignored directory at a time
+    /// through this method, preserving exact repository identity for editable ignored files.
+    pub fn project_ignored_directory(
+        &self,
+        workspace_path: &str,
+        limit: usize,
+    ) -> Result<ProjectFileList, GitError> {
+        validate_relative_path(workspace_path)?;
+        let roots = self.discovered_roots()?;
+        let root = roots
+            .iter()
+            .filter(|candidate| {
+                candidate.descriptor.id == "."
+                    || workspace_path == candidate.descriptor.relative_path
+                    || workspace_path
+                        .starts_with(&format!("{}/", candidate.descriptor.relative_path))
+            })
+            .max_by_key(|candidate| {
+                if candidate.descriptor.id == "." {
+                    0
+                } else {
+                    candidate.descriptor.relative_path.len()
+                }
+            })
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "ignored directory".to_string(),
+                message: "the selected directory is outside the active project".to_string(),
+            })?;
+        let relative = if root.descriptor.id == "." {
+            workspace_path
+        } else {
+            workspace_path
+                .strip_prefix(&root.descriptor.relative_path)
+                .and_then(|path| path.strip_prefix('/'))
+                .ok_or_else(|| GitError::InvalidInput {
+                    field: "ignored directory".to_string(),
+                    message: "the selected directory does not belong to its repository".to_string(),
+                })?
+        };
+        validate_relative_path(relative)?;
+        let ignored = run_git_output(
+            root.repository.root(),
+            [
+                OsStr::new("check-ignore"),
+                OsStr::new("--quiet"),
+                OsStr::new("--"),
+                OsStr::new(relative),
+            ],
+        )
+        .map_err(|error| GitError::Io {
+            operation: "authorize ignored project directory".to_string(),
+            message: error.to_string(),
+        })?;
+        match ignored.status.code() {
+            Some(0) => {}
+            Some(1) => {
+                return Err(GitError::InvalidInput {
+                    field: "ignored directory".to_string(),
+                    message: "the selected directory is no longer ignored".to_string(),
+                });
+            }
+            status => {
+                return Err(GitError::CommandFailed {
+                    operation: "authorize ignored project directory".to_string(),
+                    status,
+                    message: sanitize_stderr(
+                        &ignored.stderr,
+                        "Git could not evaluate the current ignore policy",
+                    ),
+                });
+            }
+        }
+        let maximum = limit.clamp(1, 100_000);
+        let directory = resolve_real_directory(root.repository.root(), relative)?;
+        if fs::symlink_metadata(directory.join(".git")).is_ok() {
+            return Err(GitError::InvalidInput {
+                field: "ignored directory".to_string(),
+                message: "nested repositories remain opaque unless they are initialized submodules"
+                    .to_string(),
+            });
+        }
+        let entries = fs::read_dir(&directory).map_err(|error| GitError::Io {
+            operation: "list ignored project directory".to_string(),
+            message: error.to_string(),
+        })?;
+        let mut children = Vec::with_capacity(maximum.min(4_096).saturating_add(1));
+        for entry in entries {
+            children.push(entry.map_err(|error| GitError::Io {
+                operation: "list ignored project directory".to_string(),
+                message: error.to_string(),
+            })?);
+            if children.len() > maximum {
+                break;
+            }
+        }
+        children.sort_by_key(|entry| entry.file_name());
+        let truncated = children.len() > maximum;
+        children.truncate(maximum);
+
+        let mut files = Vec::new();
+        let mut ignored_entries = Vec::new();
+        for child in children {
+            let name = child
+                .file_name()
+                .into_string()
+                .map_err(|_| GitError::Parse {
+                    context: "ignored project directory".to_string(),
+                    message: "non-UTF-8 project paths are not supported".to_string(),
+                })?;
+            let metadata = child.file_type().map_err(|error| GitError::Io {
+                operation: "inspect ignored project entry".to_string(),
+                message: error.to_string(),
+            })?;
+            if name == ".git"
+                || metadata.is_symlink()
+                || (!metadata.is_dir() && !metadata.is_file())
+            {
+                continue;
+            }
+            let path = format!("{relative}/{name}");
+            validate_relative_path(&path)?;
+            let child_workspace_path = if root.descriptor.id == "." {
+                path.clone()
+            } else {
+                format!("{}/{path}", root.descriptor.relative_path)
+            };
+            let kind = if metadata.is_dir() {
+                ProjectEntryKind::Directory
+            } else {
+                ProjectEntryKind::File
+            };
+            if kind == ProjectEntryKind::File {
+                files.push(ProjectFile {
+                    repository_id: root.descriptor.id.clone(),
+                    path,
+                    workspace_path: child_workspace_path.clone(),
+                    read_only: false,
+                    ignored: true,
+                });
+            }
+            ignored_entries.push(ProjectIgnoredEntry {
+                workspace_path: child_workspace_path,
+                kind,
+            });
+        }
+        Ok(ProjectFileList {
+            root: self.root.to_string_lossy().into_owned(),
+            paths: Vec::new(),
+            files,
+            ignored_entries,
+            repository_roots: roots.into_iter().map(|root| root.descriptor).collect(),
+            truncated,
+        })
+    }
+
     fn project_files_with_ignored(
         &self,
         limit: usize,
@@ -1318,17 +1476,7 @@ impl GitRepository {
         &self,
         limit: usize,
     ) -> Result<(Vec<ProjectIgnoredEntry>, bool), GitError> {
-        let (mut records, files_truncated) = self.read_catalog_records(
-            &[
-                "ls-files",
-                "--others",
-                "--ignored",
-                "--exclude-standard",
-                "-z",
-            ],
-            limit,
-        )?;
-        let (collapsed, directories_truncated) = self.read_catalog_records(
+        let (records, truncated) = self.read_catalog_records(
             &[
                 "ls-files",
                 "--others",
@@ -1340,7 +1488,6 @@ impl GitRepository {
             ],
             limit,
         )?;
-        records.extend(collapsed);
         let mut entries = Vec::new();
         for raw_path in records.iter().map(|record| record.as_bytes()) {
             if raw_path.is_empty() {
@@ -1370,7 +1517,7 @@ impl GitRepository {
                 })
         });
         entries.dedup();
-        Ok((entries, files_truncated || directories_truncated))
+        Ok((entries, truncated))
     }
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
@@ -5584,6 +5731,30 @@ fn validate_relative_path(path: &str) -> Result<(), GitError> {
     Ok(())
 }
 
+fn resolve_real_directory(root: &Path, relative: &str) -> Result<PathBuf, GitError> {
+    let mut current = root.to_path_buf();
+    for component in Path::new(relative).components() {
+        let Component::Normal(name) = component else {
+            return Err(GitError::InvalidInput {
+                field: "ignored directory".to_string(),
+                message: "only ordinary relative path components are supported".to_string(),
+            });
+        };
+        current.push(name);
+        let metadata = fs::symlink_metadata(&current).map_err(|error| GitError::Io {
+            operation: "inspect ignored project directory".to_string(),
+            message: error.to_string(),
+        })?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(GitError::InvalidInput {
+                field: "ignored directory".to_string(),
+                message: "ignored directory paths must contain only real directories".to_string(),
+            });
+        }
+    }
+    Ok(current)
+}
+
 fn validate_object_id(oid: &str) -> Result<(), GitError> {
     if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(GitError::InvalidInput {
@@ -6848,6 +7019,10 @@ mod tests {
         let directory = fixture();
         fs::create_dir_all(directory.path().join("src")).expect("fixture directory");
         fs::create_dir_all(directory.path().join("ignored-dir")).expect("ignored directory");
+        fs::create_dir_all(directory.path().join("ignored-dir/nested"))
+            .expect("nested ignored directory");
+        fs::create_dir_all(directory.path().join("ignored-dir/nested/.git"))
+            .expect("nested repository marker");
         fs::write(directory.path().join("src/zeta.rs"), "zeta\n").expect("tracked file");
         fs::write(directory.path().join("alpha.txt"), "alpha\n").expect("tracked file");
         fs::write(directory.path().join("untracked.txt"), "later\n").expect("untracked file");
@@ -6879,10 +7054,6 @@ mod tests {
                 ProjectIgnoredEntry {
                     workspace_path: "ignored-dir".to_string(),
                     kind: ProjectEntryKind::Directory,
-                },
-                ProjectIgnoredEntry {
-                    workspace_path: "ignored-dir/cache.bin".to_string(),
-                    kind: ProjectEntryKind::File,
                 },
                 ProjectIgnoredEntry {
                     workspace_path: "ignored.txt".to_string(),
@@ -6922,7 +7093,32 @@ mod tests {
             Err(GitError::InvalidInput { .. })
         ));
 
-        let ignored = complete
+        let expanded = repository
+            .project_ignored_directory("ignored-dir", 10)
+            .expect("ignored directory expands one level");
+        assert_eq!(
+            expanded.ignored_entries,
+            [
+                ProjectIgnoredEntry {
+                    workspace_path: "ignored-dir/cache.bin".to_string(),
+                    kind: ProjectEntryKind::File,
+                },
+                ProjectIgnoredEntry {
+                    workspace_path: "ignored-dir/nested".to_string(),
+                    kind: ProjectEntryKind::Directory,
+                },
+            ]
+        );
+        let bounded_ignored = repository
+            .project_ignored_directory("ignored-dir", 1)
+            .expect("ignored directory expansion remains bounded");
+        assert_eq!(bounded_ignored.ignored_entries.len(), 1);
+        assert!(bounded_ignored.truncated);
+        assert!(matches!(
+            repository.project_ignored_directory("ignored-dir/nested", 10),
+            Err(GitError::InvalidInput { .. })
+        ));
+        let ignored = expanded
             .files
             .iter()
             .find(|file| file.path == "ignored-dir/cache.bin")

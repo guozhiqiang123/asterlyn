@@ -3,16 +3,17 @@
 ## Status
 
 Accepted on 2026-09-13 and superseded in part by decision 0017 on 2026-09-23. Decision 0017 removes
-the read-only restriction while retaining bounded ignored-file enumeration and watcher containment.
+the read-only restriction. Its 2026-09-23 amendment also replaces eager ignored-descendant
+enumeration with bounded one-level expansion while retaining watcher containment.
 This decision originally superseded the ignored-entry boundary described in decisions 0003 and
 0004 where ignored paths were display-only and ignored directories were opaque.
 
 ## Decision
 
-The bounded project catalog carries two distinct file capabilities. Tracked and non-ignored
-untracked files remain writable project files. Git-ignored files are enumerated individually and
-carry a `readOnly` identity. The Files tree derives ignored directory nodes from those file paths,
-so expanding an ignored directory reveals its descendants without an additional filesystem walk.
+The original bounded project catalog carried two distinct file capabilities. Tracked and
+non-ignored untracked files remained writable project files. Git-ignored files were enumerated
+individually and carried a `readOnly` identity. The Files tree derived ignored directory nodes from
+those file paths. Decision 0017 now owns both write capability and enumeration behavior.
 
 An active window installs both identity classes in its session catalog. A text or image read first
 requires that exact catalog identity, then asks Git to confirm that a read-only identity is still

@@ -19,6 +19,11 @@ import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
 export const tauriWorkspaceBridge: WorkspaceBridge = {
   listProjectFiles: (repositoryRoot) =>
     invokeDesktopCommand<ProjectFileList>("list_project_files", { repositoryRoot }),
+  listIgnoredProjectDirectory: (repositoryRoot, workspacePath) =>
+    invokeDesktopCommand<ProjectFileList>("list_ignored_project_directory", {
+      repositoryRoot,
+      workspacePath,
+    }),
   revealWorkspaceEntry: (repositoryRoot, workspacePath, kind) =>
     invokeDesktopCommand<WorkspaceRevealResult>("reveal_workspace_entry", {
       repositoryRoot,

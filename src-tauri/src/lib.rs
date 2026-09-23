@@ -43,10 +43,10 @@ use application::{
     WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
     apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
     finalize_replacement, inspect_workspace_entry_inventory, list_replacement_recoveries,
-    load_project_catalog, load_workspace_mutation_recoveries, prepare_authorized_replacement,
-    prepare_workspace_mutation_plan, read_session_text_file, reauthorize_session_file_for_read,
-    resolve_workspace_entry, rollback_replacement, save_session_text_file,
-    search_authorized_workspace,
+    load_ignored_project_directory, load_project_catalog, load_workspace_mutation_recoveries,
+    prepare_authorized_replacement, prepare_workspace_mutation_plan, read_session_text_file,
+    reauthorize_session_file_for_read, resolve_workspace_entry, rollback_replacement,
+    save_session_text_file, search_authorized_workspace,
 };
 #[cfg(test)]
 use application::{
@@ -264,6 +264,7 @@ pub fn run() {
             scan_untracked,
             cancel_untracked_scan,
             list_project_files,
+            list_ignored_project_directory,
             reveal_workspace_entry,
             inspect_workspace_entry,
             plan_workspace_mutation,

@@ -352,6 +352,44 @@ impl ActiveWorkspaces {
         Ok(())
     }
 
+    pub(crate) fn merge_catalog(
+        &self,
+        window_label: &str,
+        token: u64,
+        root: &Path,
+        catalog: &ProjectFileList,
+    ) -> Result<(), WorkspaceError> {
+        let activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        if activations.get(window_label) != Some(&token) {
+            return Err(stale_activation());
+        }
+        let mut roots = self.roots.lock().map_err(|_| WorkspaceError::Io {
+            operation: "merge project catalog".to_string(),
+            message: "active workspace lock was poisoned".to_string(),
+        })?;
+        let active = roots
+            .get_mut(window_label)
+            .ok_or_else(|| WorkspaceError::NotAuthorized {
+                message: "open a project folder before extending its file catalog".to_string(),
+            })?;
+        if active.root != root || catalog.root != root.to_string_lossy() {
+            return Err(WorkspaceError::NotAuthorized {
+                message: "the project catalog belongs to a stale workspace session".to_string(),
+            });
+        }
+        for file in &catalog.files {
+            active
+                .catalog
+                .entry(file.repository_id.clone())
+                .or_default()
+                .insert(file.path.clone(), file.clone());
+        }
+        Ok(())
+    }
+
     pub(crate) fn seed_catalog(
         &self,
         window_label: &str,
@@ -703,6 +741,60 @@ mod tests {
 
         active.remove("project-1");
         assert_eq!(active.window_for_root(&second_root).unwrap(), None);
+    }
+
+    #[test]
+    fn lazy_catalog_merge_preserves_existing_file_authorization() {
+        let active = ActiveWorkspaces::default();
+        let directory = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(directory.path()).unwrap();
+        let token = active.begin_activation("main").unwrap();
+        active.activate_current("main", token, &root, None).unwrap();
+        let initial = ProjectFileList {
+            root: root.to_string_lossy().into_owned(),
+            paths: vec!["src/main.rs".to_string()],
+            files: vec![ProjectFile {
+                repository_id: "workspace".to_string(),
+                path: "src/main.rs".to_string(),
+                workspace_path: "src/main.rs".to_string(),
+                read_only: false,
+                ignored: false,
+            }],
+            ignored_entries: Vec::new(),
+            repository_roots: Vec::new(),
+            truncated: false,
+        };
+        active
+            .install_catalog("main", token, &root, &initial)
+            .unwrap();
+        let lazy = ProjectFileList {
+            root: root.to_string_lossy().into_owned(),
+            paths: Vec::new(),
+            files: vec![ProjectFile {
+                repository_id: "workspace".to_string(),
+                path: "build/output.txt".to_string(),
+                workspace_path: "build/output.txt".to_string(),
+                read_only: false,
+                ignored: true,
+            }],
+            ignored_entries: Vec::new(),
+            repository_roots: Vec::new(),
+            truncated: false,
+        };
+        active.merge_catalog("main", token, &root, &lazy).unwrap();
+
+        assert_eq!(
+            active
+                .authorize_catalogued_file("main", &root, "workspace", "src/main.rs")
+                .unwrap(),
+            initial.files[0]
+        );
+        assert_eq!(
+            active
+                .authorize_catalogued_file("main", &root, "workspace", "build/output.txt")
+                .unwrap(),
+            lazy.files[0]
+        );
     }
 
     #[test]

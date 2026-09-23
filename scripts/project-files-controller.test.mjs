@@ -226,6 +226,56 @@ test("Trash removal selects the next retained visible row", async () => {
   assert.deepEqual(controller.state.selection, { path: "c.txt", kind: "file" });
 });
 
+test("ignored directories load one level on demand without blocking the initial catalog", async () => {
+  const directory = deferred();
+  let directoryReads = 0;
+  const controller = new ProjectFilesController({
+    async listProjectFiles() {
+      return catalog("/repo", ["src/main.ts"], [
+        { workspacePath: "build", kind: "directory" },
+      ]);
+    },
+    listIgnoredProjectDirectory(root, path) {
+      directoryReads += 1;
+      assert.equal(root, "/repo");
+      assert.equal(path, "build");
+      return directory.promise;
+    },
+  });
+  controller.installWorkspace("/repo");
+
+  assert.equal(await controller.refresh(), true);
+  assert.deepEqual(treePaths(controller.tree()), ["build", "src", "src/main.ts"]);
+  assert.equal(controller.setDirectoryExpanded("build", true), true);
+  assert.equal(controller.state.loadingDirectories.has("build"), true);
+  assert.equal(controller.setDirectoryExpanded("build", true), false);
+  assert.equal(directoryReads, 1);
+  assert.equal(await controller.refresh(), true);
+  assert.equal(controller.state.loadingDirectories.has("build"), true);
+
+  directory.resolve({
+    root: "/repo",
+    paths: [],
+    files: [{
+      repositoryId: ".", path: "build/output.txt", workspacePath: "build/output.txt",
+      readOnly: false, ignored: true,
+    }],
+    ignoredEntries: [
+      { workspacePath: "build/cache", kind: "directory" },
+      { workspacePath: "build/output.txt", kind: "file" },
+    ],
+    repositoryRoots: [],
+    truncated: false,
+  });
+
+  assert.equal(await controller.loadIgnoredDirectory("build"), true);
+  assert.equal(controller.state.loadingDirectories.has("build"), false);
+  assert.deepEqual(treePaths(controller.tree()), [
+    "build", "build/cache", "build/output.txt", "src", "src/main.ts",
+  ]);
+  assert.equal(controller.fileForWorkspacePath("build/output.txt")?.ignored, true);
+});
+
 function catalog(root, paths, ignoredEntries = []) {
   return {
     root,

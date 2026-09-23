@@ -619,6 +619,8 @@ export class AsterlynApp {
       {
         files: {
           listProjectFiles: (root) => bridge.listProjectFiles(root),
+          listIgnoredProjectDirectory: (root, path) =>
+            bridge.listIgnoredProjectDirectory(root, path),
         },
         editor: {
           readTextFile: (...args) => bridge.readTextFile(...args),

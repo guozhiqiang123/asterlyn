@@ -22,8 +22,8 @@ pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchReg
 #[cfg(test)]
 pub(crate) use workspace_catalog::PROJECT_FILE_LIMIT;
 pub(crate) use workspace_catalog::{
-    exact_git_repository, load_project_catalog, reauthorize_session_file_for_read,
-    resolve_workspace_entry,
+    exact_git_repository, load_ignored_project_directory, load_project_catalog,
+    reauthorize_session_file_for_read, resolve_workspace_entry,
 };
 #[cfg(test)]
 pub(crate) use workspace_document::{read_authorized_text_file, save_authorized_text_file};

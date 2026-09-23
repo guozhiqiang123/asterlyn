@@ -29,6 +29,7 @@ export interface DesktopCommandMap {
   read_image_file: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.ImagePreview };
   read_local_image_diff: { args: { repositoryRoot: string; selected: Model.FileChange; }; result: Model.ImageDiffPreview };
   list_project_files: { args: { repositoryRoot: string; }; result: Model.ProjectFileList };
+  list_ignored_project_directory: { args: { repositoryRoot: string; workspacePath: string; }; result: Model.ProjectFileList };
   reveal_workspace_entry: { args: { repositoryRoot: string; workspacePath: string; kind: Model.WorkspaceEntryKind; }; result: Model.WorkspaceRevealResult };
   inspect_workspace_entry: { args: { repositoryRoot: string; workspacePath: string; }; result: Model.WorkspaceEntryInspection };
   plan_workspace_mutation: { args: { repositoryRoot: string; planId: string; operation: Model.WorkspaceMutationOperation; collisionPolicy: Model.WorkspaceCollisionPolicy; }; result: Model.WorkspaceMutationPreview };
@@ -121,6 +122,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_image_file: "imagePreview",
   read_local_image_diff: "imageDiffPreview",
   list_project_files: "projectFileList",
+  list_ignored_project_directory: "projectFileList",
   reveal_workspace_entry: "workspaceRevealResult",
   inspect_workspace_entry: "workspaceEntryInspection",
   plan_workspace_mutation: "workspaceMutationPreview",

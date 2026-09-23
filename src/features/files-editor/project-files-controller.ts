@@ -33,6 +33,8 @@ export interface ProjectFilesState {
   loading: boolean;
   error: string | null;
   truncated: boolean;
+  loadingDirectories: Set<string>;
+  directoryErrors: Map<string, string>;
   selection: ProjectTreeSelection | null;
   selections: ProjectTreeSelection[];
   selectionAnchor: ProjectTreeSelection | null;
@@ -46,6 +48,9 @@ export type ProjectFilesChangeReason =
   | "refresh-start"
   | "refresh-complete"
   | "refresh-error"
+  | "directory-load-start"
+  | "directory-load-complete"
+  | "directory-load-error"
   | "selection"
   | "disclosure";
 
@@ -59,6 +64,7 @@ export interface ProjectFilesChange {
 
 export interface ProjectFilesGateway {
   listProjectFiles(root: string): Promise<ProjectFileList>;
+  listIgnoredProjectDirectory(root: string, workspacePath: string): Promise<ProjectFileList>;
 }
 
 type Listener = (change: ProjectFilesChange) => void;
@@ -71,10 +77,13 @@ export class ProjectFilesController {
   private changes: FileChange[] = [];
   private catalogRoot: string | null = null;
   private generation = 0;
+  private workspaceGeneration = 0;
   private disposed = false;
   private refreshRoot: string | null = null;
   private refreshGeneration: number | null = null;
   private refreshPromise: Promise<boolean> | null = null;
+  private readonly loadedIgnoredDirectories = new Set<string>();
+  private readonly directoryRequests = new Map<string, Promise<boolean>>();
   private messages: Pick<EditorCopy, "unexpectedProjectFilesError">;
   private treeCache: {
     files: ProjectFile[];
@@ -109,6 +118,7 @@ export class ProjectFilesController {
     this.treeCache = null;
     if (rootChanged) {
       this.generation += 1;
+      this.workspaceGeneration += 1;
       this.catalogRoot = null;
       this.state.paths = [];
       this.state.files = [];
@@ -116,6 +126,10 @@ export class ProjectFilesController {
       this.state.loading = false;
       this.state.error = null;
       this.state.truncated = false;
+      this.state.loadingDirectories.clear();
+      this.state.directoryErrors.clear();
+      this.loadedIgnoredDirectories.clear();
+      this.directoryRequests.clear();
       this.state.selection = null;
       this.state.selections = [];
       this.state.selectionAnchor = null;
@@ -156,6 +170,7 @@ export class ProjectFilesController {
     ) return false;
 
     this.generation += 1;
+    this.workspaceGeneration += 1;
     this.refreshRoot = null;
     this.refreshGeneration = null;
     this.refreshPromise = null;
@@ -164,6 +179,10 @@ export class ProjectFilesController {
     this.state.ignoredEntries = nextIgnoredEntries;
     this.state.loading = false;
     this.state.error = null;
+    this.state.loadingDirectories.clear();
+    this.state.directoryErrors.clear();
+    this.loadedIgnoredDirectories.clear();
+    this.directoryRequests.clear();
     this.changes = nextChanges;
     this.treeCache = null;
     this.reconcileTreeState();
@@ -231,6 +250,8 @@ export class ProjectFilesController {
       this.state.loading = false;
       this.state.error = null;
       this.treeCache = null;
+      this.state.directoryErrors.clear();
+      this.loadedIgnoredDirectories.clear();
       if (this.catalogRoot !== result.root) {
         this.catalogRoot = result.root;
         this.state.selection = null;
@@ -246,6 +267,9 @@ export class ProjectFilesController {
         selectionChanged: true,
         disclosureChanged: true,
       });
+      for (const path of this.state.expandedDirectories) {
+        void this.loadIgnoredDirectory(path);
+      }
       return true;
     } catch (error) {
       if (!this.requestMatches(generation, root)) return false;
@@ -336,10 +360,36 @@ export class ProjectFilesController {
     const changed = expanded
       ? !this.state.expandedDirectories.has(path)
       : this.state.expandedDirectories.has(path);
-    if (expanded) this.state.expandedDirectories.add(path);
-    else this.state.expandedDirectories.delete(path);
+    if (expanded) {
+      this.state.expandedDirectories.add(path);
+    } else {
+      this.state.expandedDirectories.delete(path);
+    }
     if (changed) this.emit({ reason: "disclosure", disclosureChanged: true });
+    if (expanded) void this.loadIgnoredDirectory(path);
     return changed;
+  }
+
+  loadIgnoredDirectory(path: string): Promise<boolean> {
+    const root = this.state.root;
+    if (!root || this.disposed || this.loadedIgnoredDirectories.has(path)) {
+      return Promise.resolve(Boolean(root && this.loadedIgnoredDirectories.has(path)));
+    }
+    const node = findProjectTreeNode(this.tree(), path);
+    const lazyIgnoredDirectory = node?.kind === "directory" && node.status === "ignored" &&
+      this.state.ignoredEntries.some((entry) =>
+        entry.kind === "directory" && entry.workspacePath === path
+      );
+    if (!lazyIgnoredDirectory) return Promise.resolve(false);
+    const pending = this.directoryRequests.get(path);
+    if (pending) return pending;
+    const request = this.performIgnoredDirectoryLoad(root, path, this.workspaceGeneration);
+    this.directoryRequests.set(path, request);
+    const release = () => {
+      if (this.directoryRequests.get(path) === request) this.directoryRequests.delete(path);
+    };
+    void request.then(release, release);
+    return request;
   }
 
   revealFile(path: string): boolean {
@@ -382,10 +432,14 @@ export class ProjectFilesController {
     const node = findProjectTreeNode(this.tree(), selection.path);
     if (!node || node.kind !== "directory") return false;
     for (const path of descendantProjectDirectories(node)) {
-      if (expanded) this.state.expandedDirectories.add(path);
-      else this.state.expandedDirectories.delete(path);
+      if (expanded) {
+        this.state.expandedDirectories.add(path);
+      } else {
+        this.state.expandedDirectories.delete(path);
+      }
     }
     this.emit({ reason: "disclosure", disclosureChanged: true });
+    if (expanded) void this.loadIgnoredDirectory(selection.path);
     return true;
   }
 
@@ -403,6 +457,7 @@ export class ProjectFilesController {
     if (this.disposed) return;
     this.disposed = true;
     this.generation += 1;
+    this.workspaceGeneration += 1;
     this.listeners.clear();
     this.treeCache = null;
   }
@@ -434,6 +489,50 @@ export class ProjectFilesController {
 
   private requestMatches(generation: number, root: string): boolean {
     return !this.disposed && generation === this.generation && this.state.root === root;
+  }
+
+  private async performIgnoredDirectoryLoad(
+    root: string,
+    path: string,
+    workspaceGeneration: number,
+  ): Promise<boolean> {
+    this.state.loadingDirectories.add(path);
+    this.state.directoryErrors.delete(path);
+    this.emit({ reason: "directory-load-start" });
+    try {
+      const result = await this.gateway.listIgnoredProjectDirectory(root, path);
+      if (!this.workspaceRequestMatches(workspaceGeneration, root) || result.root !== root) {
+        return false;
+      }
+      this.state.files = mergeRecords(
+        this.state.files,
+        result.files,
+        (file) => `${file.repositoryId}\0${file.path}`,
+      );
+      this.state.ignoredEntries = mergeRecords(
+        this.state.ignoredEntries,
+        result.ignoredEntries,
+        (entry) => `${entry.kind}\0${entry.workspacePath}`,
+      );
+      this.state.truncated ||= result.truncated;
+      this.state.loadingDirectories.delete(path);
+      this.loadedIgnoredDirectories.add(path);
+      this.treeCache = null;
+      this.reconcileTreeState();
+      this.emit({ reason: "directory-load-complete", catalogChanged: true });
+      return true;
+    } catch (error) {
+      if (!this.workspaceRequestMatches(workspaceGeneration, root)) return false;
+      const message = errorMessage(error, this.messages.unexpectedProjectFilesError);
+      this.state.loadingDirectories.delete(path);
+      this.state.directoryErrors.set(path, message);
+      this.emit({ reason: "directory-load-error", error: message });
+      return false;
+    }
+  }
+
+  private workspaceRequestMatches(generation: number, root: string): boolean {
+    return !this.disposed && generation === this.workspaceGeneration && this.state.root === root;
   }
 
   private emit(change: ProjectFilesChange): void {
@@ -474,11 +573,23 @@ export function createProjectFilesState(): ProjectFilesState {
     loading: false,
     error: null,
     truncated: false,
+    loadingDirectories: new Set(),
+    directoryErrors: new Map(),
     selection: null,
     selections: [],
     selectionAnchor: null,
     expandedDirectories: new Set(),
   };
+}
+
+function mergeRecords<T>(
+  current: T[],
+  additions: T[],
+  key: (value: T) => string,
+): T[] {
+  const merged = new Map(current.map((value) => [key(value), value]));
+  for (const value of additions) merged.set(key(value), value);
+  return [...merged.values()].sort((left, right) => key(left).localeCompare(key(right)));
 }
 
 function errorMessage(error: unknown, fallback: string): string {

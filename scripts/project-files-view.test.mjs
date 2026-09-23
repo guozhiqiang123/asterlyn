@@ -54,6 +54,20 @@ test("large project trees mount no more than the shared architecture budget", ()
   assert.match(html, /project-virtual-spacer/);
 });
 
+test("an ignored directory shows a row-local spinner while its children load", () => {
+  const tree = buildProjectTree([{ path: "build", kind: "directory", status: "ignored" }]);
+  const html = renderProjectNavigation({
+    ...state(),
+    ignoredEntries: [{ workspacePath: "build", kind: "directory" }],
+    loadingDirectories: new Set(["build"]),
+  }, tree, 0, 500);
+
+  assert.match(html, /data-project-directory="build"/u);
+  assert.match(html, /aria-busy="true"/u);
+  assert.match(html, /class="spinner"/u);
+  assert.doesNotMatch(html, /project-tree-notice/u);
+});
+
 test("project tree renders inline rename/create states and cut descendants", () => {
   const state = {
     root: "/workspace", paths: ["src/app.ts"],

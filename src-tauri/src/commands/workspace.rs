@@ -26,6 +26,24 @@ pub(crate) async fn list_project_files(
 }
 
 #[tauri::command]
+pub(crate) async fn list_ignored_project_directory(
+    repository_root: String,
+    workspace_path: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<ProjectFileList, WorkspaceError> {
+    let token = active_workspaces.activation_token(window.label())?;
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let task_root = root.clone();
+    let catalog = run_workspace_blocking("list ignored project directory", move || {
+        load_ignored_project_directory(&task_root, &workspace_path)
+    })
+    .await?;
+    active_workspaces.merge_catalog(window.label(), token, &root, &catalog)?;
+    Ok(catalog)
+}
+
+#[tauri::command]
 pub(crate) fn reveal_workspace_entry(
     repository_root: String,
     workspace_path: String,

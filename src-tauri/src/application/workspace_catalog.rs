@@ -31,6 +31,21 @@ pub(crate) fn load_project_catalog(root: &Path) -> Result<ProjectFileList, Works
     load_project_catalog_with_ignored(root, true)
 }
 
+pub(crate) fn load_ignored_project_directory(
+    root: &Path,
+    workspace_path: &str,
+) -> Result<ProjectFileList, WorkspaceError> {
+    let repository = exact_git_repository(root)?.ok_or_else(|| WorkspaceError::NotAuthorized {
+        message: "ignored directory expansion requires a Git project".to_string(),
+    })?;
+    repository
+        .project_ignored_directory(workspace_path, PROJECT_FILE_LIMIT)
+        .map_err(|error| WorkspaceError::Io {
+            operation: "list ignored project directory".to_string(),
+            message: error.to_string(),
+        })
+}
+
 pub(crate) fn resolve_workspace_entry(
     root: &Path,
     workspace_path: &str,
