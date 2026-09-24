@@ -453,6 +453,7 @@ pub(crate) async fn configure_remote_ssh(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_push_preview(
     repository_root: String,
     remote: String,
@@ -477,6 +478,7 @@ pub(crate) async fn read_push_preview(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_push_file_commit(
     repository_root: String,
     remote: String,

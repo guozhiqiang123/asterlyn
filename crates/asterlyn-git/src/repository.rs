@@ -89,6 +89,13 @@ struct PushTargetContext {
     set_upstream_after_push: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PushExecutionOptions<'a> {
+    mode: PushMode,
+    tag_mode: PushTagMode,
+    destination_branch: Option<&'a str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RemoteEndpoint {
     transport: RemoteTransport,
@@ -3962,12 +3969,14 @@ impl GitRepository {
     ) -> Result<(), GitError> {
         self.push_current_with_options_internal(
             remote,
-            mode,
-            tag_mode,
             Some(expected_preview_token),
             cancellation,
             || {},
-            destination_branch,
+            PushExecutionOptions {
+                mode,
+                tag_mode,
+                destination_branch,
+            },
         )
     }
 
@@ -4075,13 +4084,7 @@ impl GitRepository {
         expected_preview_token: &str,
         path: &str,
     ) -> Result<Option<CommitDetails>, GitError> {
-        self.push_file_commit_with_destination(
-            remote,
-            tag_mode,
-            expected_preview_token,
-            path,
-            None,
-        )
+        self.push_file_commit_with_destination(remote, tag_mode, expected_preview_token, path, None)
     }
 
     pub fn push_file_commit_with_destination(
@@ -4131,28 +4134,33 @@ impl GitRepository {
     {
         self.push_current_with_options_internal(
             remote,
-            PushMode::Ordinary,
-            PushTagMode::None,
             expected_preview_token,
             cancellation,
             before_execute,
-            None,
+            PushExecutionOptions {
+                mode: PushMode::Ordinary,
+                tag_mode: PushTagMode::None,
+                destination_branch: None,
+            },
         )
     }
 
     fn push_current_with_options_internal<F>(
         &self,
         remote: &str,
-        mode: PushMode,
-        tag_mode: PushTagMode,
         expected_preview_token: Option<&str>,
         cancellation: &CancellationToken,
         before_execute: F,
-        destination_branch: Option<&str>,
+        options: PushExecutionOptions<'_>,
     ) -> Result<(), GitError>
     where
         F: FnOnce(),
     {
+        let PushExecutionOptions {
+            mode,
+            tag_mode,
+            destination_branch,
+        } = options;
         self.ensure_no_repository_operation("push")?;
         let target = self.push_target_context(remote, destination_branch)?;
         let tags = self.push_tags(&target, tag_mode)?;
@@ -4286,9 +4294,7 @@ impl GitRepository {
         let is_same_as_local = target_branch == branch;
         let set_upstream_after_push = is_same_as_local && context.upstream.is_none();
         let (destination_ref, comparison_base_oid, publish) = match context.upstream.as_ref() {
-            Some(upstream)
-                if is_same_as_local && upstream.remote == configured_remote.name =>
-            {
+            Some(upstream) if is_same_as_local && upstream.remote == configured_remote.name => {
                 self.validated_upstream(upstream, true)?;
                 let base =
                     self.resolve_commit(&upstream.tracking_ref, "read push comparison base")?;
@@ -4298,14 +4304,15 @@ impl GitRepository {
                 // Choosing another remote or explicit destination is an explicit review action.
                 let tracking_ref =
                     format!("refs/remotes/{}/{}", configured_remote.name, target_branch);
-                let base = if self.reference_exists(&tracking_ref)? {
-                    Some(self.resolve_commit(
-                        &tracking_ref,
-                        "read destination branch comparison base",
-                    )?)
-                } else {
-                    None
-                };
+                let base =
+                    if self.reference_exists(&tracking_ref)? {
+                        Some(self.resolve_commit(
+                            &tracking_ref,
+                            "read destination branch comparison base",
+                        )?)
+                    } else {
+                        None
+                    };
                 let publish = base.is_none();
                 (format!("refs/heads/{}", target_branch), base, publish)
             }

@@ -17,9 +17,13 @@ pub fn move_to_system_trash(path: &Path) -> Result<(), WorkspaceError> {
 /// call. This reuses the platform context and lets callers classify partial completion as a single
 /// reviewed operation.
 pub fn move_all_to_system_trash(paths: &[PathBuf]) -> Result<(), WorkspaceError> {
-    let mut context = trash::TrashContext::new();
+    let context = trash::TrashContext::new();
     #[cfg(target_os = "macos")]
-    context.set_delete_method(DeleteMethod::NsFileManager);
+    let context = {
+        let mut context = context;
+        context.set_delete_method(DeleteMethod::NsFileManager);
+        context
+    };
     context
         .delete_all(paths)
         .map_err(|error| WorkspaceError::Io {
@@ -48,7 +52,7 @@ mod tests {
             .map(|i| parent.path().join(format!("folder_{i}")))
             .collect::<Vec<_>>();
         for child in &children {
-            std::fs::create_dir(&child).unwrap();
+            std::fs::create_dir(child).unwrap();
         }
         move_all_to_system_trash(&children).unwrap();
         for child in children {

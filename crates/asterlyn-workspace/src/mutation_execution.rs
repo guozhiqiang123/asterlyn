@@ -244,16 +244,15 @@ impl Workspace {
         if observations
             .iter()
             .all(|observation| *observation == TrashSourceObservation::Unchanged)
+            && let Err(error) = &adapter_result
         {
-            if let Err(error) = &adapter_result {
-                journal.remove()?;
-                return Ok(outcome(
-                    plan,
-                    WorkspaceMutationStatus::FailedWithoutChange,
-                    None,
-                    Some(error.to_string()),
-                ));
-            }
+            journal.remove()?;
+            return Ok(outcome(
+                plan,
+                WorkspaceMutationStatus::FailedWithoutChange,
+                None,
+                Some(error.to_string()),
+            ));
         }
         let error = adapter_result.err().map_or_else(
             || "the trash adapter returned before every source disappeared".to_string(),
