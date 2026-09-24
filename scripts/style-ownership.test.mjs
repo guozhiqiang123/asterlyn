@@ -28,6 +28,7 @@ const ownedStyles = [
   ["features/git-history/commit-file-restore.css", "main.ts"],
   ["features/git-history/details.css", "main.ts"],
   ["features/remote-push/remote-push.css", "main.ts"],
+  ["features/remote-push/push-diff-resize.css", "main.ts"],
   ["features/remote-push/remote-authentication.css", "main.ts"],
   ["features/remote-push/remote-management.css", "main.ts"],
   ["features/git-operations/git-operation-controls.css", "main.ts"],

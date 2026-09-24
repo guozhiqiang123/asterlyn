@@ -456,7 +456,7 @@ const editorThemeRules =
       color: "transparent",
     },
     ".cm-source-omitted": {
-      backgroundColor: "var(--info-bg)",
+      background: "linear-gradient(to bottom, transparent 0, var(--info-bg) 30%, var(--info-bg) 70%, transparent 100%)",
       color: "var(--info-text)",
       fontStyle: "italic",
     },

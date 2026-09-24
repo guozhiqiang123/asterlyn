@@ -76,6 +76,7 @@ import type { RemoteAuthenticationResult } from "./features/remote-push/remote-a
 import type { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
 import { createRemoteRuntime } from "./features/remote-push/create-remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
+import { bindPushDiffResize } from "./features/remote-push/push-diff-resize.ts";
 import {
   pushReviewFiles,
   renderRemoteDialogContent,
@@ -3173,6 +3174,7 @@ export class AsterlynApp {
     if (!dialog || !snapshot) {
       host.classList.add("hidden");
       host.innerHTML = "";
+      bindPushDiffResize(this.root);
       return;
     }
     const focusedId =
@@ -3364,19 +3366,13 @@ export class AsterlynApp {
       "click",
       () => void this.remoteRuntime.push.loadMorePushPreview(),
     );
-    this.root.querySelector<HTMLButtonElement>("#push-diff-close")?.addEventListener(
-      "click",
-      () => this.closePushDiff(),
-    );
-    this.root.querySelector<HTMLElement>("#push-diff-backdrop")?.addEventListener(
-      "click",
-      (event) => {
-        if (event.target === event.currentTarget) this.closePushDiff();
-      },
-    );
+    this.root.querySelector<HTMLButtonElement>("#push-diff-close")?.addEventListener("click", () => this.closePushDiff());
+    this.root.querySelector<HTMLElement>("#push-diff-backdrop")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) this.closePushDiff();
+    });
+    bindPushDiffResize(this.root);
     this.bindPushDiffEvents();
   }
-
 
   private renderPushFileToolbarState(): void {
     const selected = this.remoteState.pushSelectedFile !== null;
@@ -3431,7 +3427,6 @@ export class AsterlynApp {
     if (this.windowSession.workspace.state.root === workspaceRoot) this.locateCurrentProjectFile();
   }
 
-
   private mountPushDiffSurface(): void {
     const state = this.remoteState.pushDiff;
     const host = this.root.querySelector<HTMLElement>("#push-diff-editor-host");
@@ -3452,6 +3447,10 @@ export class AsterlynApp {
   }
 
   private bindPushDiffEvents(): void {
+    this.root.querySelector<HTMLElement>("#push-diff-editor-host")?.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".cm-source-omitted")) return;
+      if (!this.remoteState.pushDiff?.expandedUnchanged) void this.remoteRuntime.push.togglePushDiffUnchangedLines();
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-diff-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const action = button.dataset.pushDiffAction;
@@ -3485,7 +3484,6 @@ export class AsterlynApp {
       this.updatePreferences({ showWhitespace: !this.settingsState.preferences.showWhitespace });
     });
   }
-
 
   private closePushDiff(): void {
     const path = this.remoteRuntime.push.closePushDiff();

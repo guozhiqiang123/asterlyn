@@ -25,6 +25,7 @@ import "./features/git-history/details.css";
 import "./features/git-operations/git-operation-controls.css";
 import "./features/git-operations/conflict-editor.css";
 import "./features/remote-push/remote-push.css";
+import "./features/remote-push/push-diff-resize.css";
 import "./features/remote-push/remote-authentication.css";
 import "./features/remote-push/remote-management.css";
 import "./shared/responsive.css";

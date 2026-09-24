@@ -211,6 +211,28 @@ test("switching files invalidates an older push Diff request", async () => {
   assert.equal(controller.state.pushFileActionLoading, false);
 });
 
+test("expanding omitted Push Diff context requests the complete patch", async () => {
+  const requested = [];
+  const controller = new RemotePushController(createGateway({
+    previewResponses: [Promise.resolve(preview("origin", "token"))],
+    async readCommitDiff(_root, _repositoryId, _oid, _path, _originalPath, expandedUnchanged) {
+      requested.push(expandedUnchanged);
+      return { repositoryId: ".", oid: "one", path: "one.txt", patch: "@@ -1 +1 @@\n-a\n+b", binary: false, truncated: false };
+    },
+  }));
+  controller.installSnapshot(snapshot());
+  controller.openDialog("push");
+  await settle();
+
+  controller.selectPushFile("one.txt");
+  await controller.openSelectedPushFileDiff();
+  assert.equal(controller.state.pushDiff?.expandedUnchanged, false);
+  await controller.togglePushDiffUnchangedLines();
+  assert.equal(controller.state.pushDiff?.expandedUnchanged, true);
+  assert.deepEqual(requested, [false, true]);
+  controller.dispose();
+});
+
 test("operation ownership rejects completions after repository replacement", async () => {
   const fetch = deferred();
   const gateway = createGateway({ fetchResponse: fetch.promise });
