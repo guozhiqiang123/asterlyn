@@ -91,10 +91,6 @@
   user-select: text;
 }
 
-.remote-action-dialog.push-dialog {
-  width: min(1080px, calc(100vw - 44px));
-}
-
 .remote-action-dialog > p,
 .remote-action-dialog .remote-dialog-note {
   margin: 0;

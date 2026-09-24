@@ -1,4 +1,5 @@
-.push-diff-resize-handle {
+.push-diff-resize-handle,
+.push-dialog-resize-handle {
   position: absolute;
   z-index: 5;
   touch-action: none;
@@ -6,49 +7,74 @@
 }
 
 .push-diff-resize-handle.n,
-.push-diff-resize-handle.s {
+.push-diff-resize-handle.s,
+.push-dialog-resize-handle.n,
+.push-dialog-resize-handle.s {
   right: 12px;
   left: 12px;
   height: 8px;
   cursor: ns-resize;
 }
 
-.push-diff-resize-handle.n { top: 0; }
-.push-diff-resize-handle.s { bottom: 0; }
+.push-diff-resize-handle.n,
+.push-dialog-resize-handle.n { top: 0; }
+.push-diff-resize-handle.s,
+.push-dialog-resize-handle.s { bottom: 0; }
 
 .push-diff-resize-handle.e,
-.push-diff-resize-handle.w {
+.push-diff-resize-handle.w,
+.push-dialog-resize-handle.e,
+.push-dialog-resize-handle.w {
   top: 12px;
   bottom: 12px;
   width: 8px;
   cursor: ew-resize;
 }
 
-.push-diff-resize-handle.e { right: 0; }
-.push-diff-resize-handle.w { left: 0; }
+.push-diff-resize-handle.e,
+.push-dialog-resize-handle.e { right: 0; }
+.push-diff-resize-handle.w,
+.push-dialog-resize-handle.w { left: 0; }
 
 .push-diff-resize-handle.ne,
 .push-diff-resize-handle.se,
 .push-diff-resize-handle.sw,
-.push-diff-resize-handle.nw {
+.push-diff-resize-handle.nw,
+.push-dialog-resize-handle.ne,
+.push-dialog-resize-handle.se,
+.push-dialog-resize-handle.sw,
+.push-dialog-resize-handle.nw {
   width: 12px;
   height: 12px;
 }
 
 .push-diff-resize-handle.ne,
-.push-diff-resize-handle.sw { cursor: nesw-resize; }
+.push-diff-resize-handle.sw,
+.push-dialog-resize-handle.ne,
+.push-dialog-resize-handle.sw { cursor: nesw-resize; }
 .push-diff-resize-handle.se,
-.push-diff-resize-handle.nw { cursor: nwse-resize; }
-.push-diff-resize-handle.ne,
-.push-diff-resize-handle.nw { top: 0; }
-.push-diff-resize-handle.se,
-.push-diff-resize-handle.sw { bottom: 0; }
-.push-diff-resize-handle.ne,
-.push-diff-resize-handle.se { right: 0; }
 .push-diff-resize-handle.nw,
-.push-diff-resize-handle.sw { left: 0; }
+.push-dialog-resize-handle.se,
+.push-dialog-resize-handle.nw { cursor: nwse-resize; }
+.push-diff-resize-handle.ne,
+.push-diff-resize-handle.nw,
+.push-dialog-resize-handle.ne,
+.push-dialog-resize-handle.nw { top: 0; }
+.push-diff-resize-handle.se,
+.push-diff-resize-handle.sw,
+.push-dialog-resize-handle.se,
+.push-dialog-resize-handle.sw { bottom: 0; }
+.push-diff-resize-handle.ne,
+.push-diff-resize-handle.se,
+.push-dialog-resize-handle.ne,
+.push-dialog-resize-handle.se { right: 0; }
+.push-diff-resize-handle.nw,
+.push-diff-resize-handle.sw,
+.push-dialog-resize-handle.nw,
+.push-dialog-resize-handle.sw { left: 0; }
 
-.push-diff-resize-handle.se::after {
+.push-diff-resize-handle.se::after,
+.push-dialog-resize-handle.se::after {
   position: absolute;
   right: 2px;
   bottom: 2px;
@@ -59,7 +85,42 @@
   content: "";
 }
 
-.push-diff-resize-handle.se:focus-visible { outline: 2px solid var(--accent); }
+.push-diff-resize-handle.se:focus-visible,
+.push-dialog-resize-handle.se:focus-visible { outline: 2px solid var(--accent); }
+
+.remote-action-dialog.push-dialog {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 640px;
+  min-height: 420px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+}
+
+.push-dialog .dialog-heading,
+.push-dialog .remote-dialog-route,
+.push-dialog .push-route-row,
+.push-dialog .remote-dialog-warning,
+.push-dialog .remote-dialog-note,
+.push-dialog .push-dialog-footer {
+  flex: 0 0 auto;
+}
+
+.push-dialog .remote-dialog-loading,
+.push-dialog .remote-dialog-empty {
+  flex: 1 1 0;
+  min-height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.push-dialog .push-preview-grid {
+  flex: 1 1 0;
+  min-height: 200px;
+  height: auto;
+}
 
 #push-diff-editor-host {
   position: relative;

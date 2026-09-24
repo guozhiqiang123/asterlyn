@@ -822,6 +822,7 @@ export interface RemoteCopy {
   loadingPushedDiff: string;
   closePushedDiff: string;
   resizePushedDiff: string;
+  resizePushDialog: string;
   pushedDiffToolbar: string;
   previousPushedFile: string;
   nextPushedFile: string;

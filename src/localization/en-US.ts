@@ -752,7 +752,7 @@ export const EN_US: LocaleCatalog = {
     pushedFileToolbar: "Pushed file presentation and navigation", openOutgoingDiff: "Open the latest outgoing commit Diff for the selected file",
     showPushedFilesAs: (view) => `Show pushed files as ${view}`, flatList: "a flat list", folderTree: "a folder tree",
     expandPushedFolders: "Expand all pushed file folders", collapsePushedFolders: "Collapse all pushed file folders",
-    loadingPushedDiff: "Loading pushed file Diff…", closePushedDiff: "Close pushed file Diff", resizePushedDiff: "Resize pushed file Diff", pushedDiffToolbar: "Pushed file Diff navigation and presentation",
+    loadingPushedDiff: "Loading pushed file Diff…", closePushedDiff: "Close pushed file Diff", resizePushedDiff: "Resize pushed file Diff", resizePushDialog: "Resize push dialog", pushedDiffToolbar: "Pushed file Diff navigation and presentation",
     previousPushedFile: "Previous pushed file", nextPushedFile: "Next pushed file", imagePreviewAlt: (label) => `${label} image preview`,
     upstreamChanged: "The current upstream changed during Fetch; open Update again", alreadyUpToDate: "All files are up to date",
     activeProjectNotGit: "The active project is no longer a Git repository.", endedRefreshRequired: "Remote operation ended; refresh required",

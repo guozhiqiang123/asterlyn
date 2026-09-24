@@ -267,7 +267,7 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
     <p class="remote-dialog-note">${escapeHtml(forceSelected ? copy.forcePushNote : copy.ordinaryPushNote)} ${escapeHtml(copy.tagsAndRetryNote)}</p>
     <div class="push-dialog-footer"><div class="push-tags-control"><label><input id="push-tags-enabled" type="checkbox" ${state.pushTagsEnabled ? "checked" : ""} ${operation ? "disabled" : ""}/><span>${escapeHtml(copy.pushTags)}</span></label>${renderSelectControl(`<select id="push-tag-mode" aria-label="${escapeAttribute(copy.tagScope)}" ${!state.pushTagsEnabled || operation ? "disabled" : ""}><option value="all" ${state.pushTagMode === "all" ? "selected" : ""}>${escapeHtml(copy.all)}</option><option value="currentBranch" ${state.pushTagMode === "currentBranch" ? "selected" : ""}>${escapeHtml(copy.currentBranch)}</option></select>`)}<span class="push-tag-count" aria-live="polite">${state.pushPreviewRefreshing ? `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(copy.refreshingReview)}` : state.pushTagsEnabled && preview ? escapeHtml(tagsLabel) : ""}</span></div>
       <div class="push-dialog-actions">${operation ? `<button class="secondary-button" id="remote-dialog-cancel-operation" type="button" ${operation.cancelling ? "disabled" : ""}>${escapeHtml(operation.cancelling ? copy.cancelling : copy.cancelPush)}</button>` : `<button class="secondary-button" id="remote-dialog-cancel" type="button">${escapeHtml(localization.catalog.common.cancel)}</button>`}<div class="push-split-action"><button class="primary-button push-primary-action" id="remote-dialog-confirm-push" type="button" aria-label="${escapeAttribute(copy.pushConfirmationAria(actionLabel, preview?.totalCommits ?? 0, preview?.tags.length ?? 0, route))}" aria-disabled="${confirmation.ariaDisabled}" data-refreshing="${state.pushPreviewRefreshing}" ${confirmation.nativeDisabled ? "disabled" : ""}>${escapeHtml(operation?.cancelling ? copy.cancelling : operation ? copy.pushing : authenticationChecking ? copy.checkingAuthentication : actionLabel)}</button><button class="primary-button push-mode-toggle" id="push-mode-toggle" type="button" aria-label="${escapeAttribute(copy.choosePushMode)}" aria-haspopup="menu" aria-expanded="${state.pushModeMenuOpen}" ${modeMenuAvailable ? "" : "disabled"}><span class="push-mode-chevron" aria-hidden="true"></span></button><div class="push-mode-menu ${state.pushModeMenuOpen ? "" : "hidden"}" role="menu" aria-label="${escapeAttribute(copy.pushMode)}"><button type="button" role="menuitemradio" data-push-mode="ordinary" aria-checked="${!forceSelected}" ${preview?.ordinaryAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.push)}</strong><small>${escapeHtml(copy.ordinaryNonForce)}</small></span>${!forceSelected ? icon("check", 13) : ""}</button><button type="button" role="menuitemradio" data-push-mode="forceWithLease" aria-checked="${forceSelected}" ${preview?.forceWithLeaseAllowed ? "" : "disabled"}><span><strong>${escapeHtml(copy.forcePushWithLease)}</strong><small>${escapeHtml(copy.forceLeaseDetail)}</small></span>${forceSelected ? icon("check", 13) : ""}</button></div></div></div>
-    </div>
+    </div>${renderPushDialogResizeHandles(copy.resizePushDialog)}
   </section>`;
 }
 
@@ -375,6 +375,14 @@ function renderRemoteAuthenticationDialog(model: RemotePushDialogViewModel): str
     ${error}<div class="remote-authentication-methods">${https}${ssh}</div>
     <div class="dialog-actions"><button class="secondary-button" id="remote-authentication-recheck" type="button" ${busy ? "disabled" : ""}>${escapeHtml(authentication.checking ? copy.checkingAuthentication : copy.recheckAuthentication)}</button><button class="secondary-button" id="remote-authentication-cancel" type="button" ${busy ? "disabled" : ""}>${escapeHtml(localization.catalog.common.cancel)}</button></div>
   </section></div>`;
+}
+
+function renderPushDialogResizeHandles(label: string): string {
+  return (["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const)
+    .map((edge) => `<span class="push-dialog-resize-handle ${edge}" data-push-dialog-resize="${edge}" ${edge === "se"
+      ? `role="separator" tabindex="0" aria-label="${escapeAttribute(label)}"`
+      : 'aria-hidden="true"'}></span>`)
+    .join("");
 }
 
 function renderPushDiffResizeHandles(label: string): string {

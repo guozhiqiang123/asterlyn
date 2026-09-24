@@ -77,6 +77,7 @@ import type { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
 import { createRemoteRuntime } from "./features/remote-push/create-remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import { bindPushDiffResize } from "./features/remote-push/push-diff-resize.ts";
+import { bindPushDialogResize } from "./features/remote-push/push-dialog-resize.ts";
 import {
   pushReviewFiles,
   renderRemoteDialogContent,
@@ -3152,9 +3153,7 @@ export class AsterlynApp {
     ) return false;
     this.remoteDialogReturnFocus = returnFocus;
     queueMicrotask(() => {
-      this.root
-        .querySelector<HTMLButtonElement>("#remote-dialog-close")
-        ?.focus();
+      this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.focus();
     });
     return true;
   }
@@ -3175,6 +3174,7 @@ export class AsterlynApp {
       host.classList.add("hidden");
       host.innerHTML = "";
       bindPushDiffResize(this.root);
+      bindPushDialogResize(this.root, window.localStorage);
       return;
     }
     const focusedId =
@@ -3371,6 +3371,7 @@ export class AsterlynApp {
       if (event.target === event.currentTarget) this.closePushDiff();
     });
     bindPushDiffResize(this.root);
+    bindPushDialogResize(this.root, window.localStorage);
     this.bindPushDiffEvents();
   }
 

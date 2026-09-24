@@ -259,6 +259,7 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   const outgoingModeToggle = outgoingPush.match(/<button[^>]*id="push-mode-toggle"[^>]*>/)?.[0] ?? "";
   assert.doesNotMatch(outgoingModeToggle, / disabled/);
   assert.match(outgoingPush, /class="push-mode-chevron" aria-hidden="true"/);
+  assert.match(outgoingPush, /class="push-dialog-resize-handle se"[^>]*data-push-dialog-resize="se"/);
 });
 
 test("push review compacts unary file directories around branching points", () => {
