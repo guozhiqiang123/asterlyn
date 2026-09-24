@@ -235,7 +235,7 @@ export const EN_US: LocaleCatalog = {
     catalogLoading: "The project catalog is still loading.", fileQueryDetail: "Try part of a filename or path.",
     searchingProject: "Searching current project…", boundedSearchDetail: "The scan is bounded and cancellable.",
     searchFailed: "Search could not complete", tryAgain: "Try again.", searchFileContents: "Search file contents",
-    searchInstructions: "Enter text, choose New line, Match case, Whole words, or Regex as needed, then press Enter. Replacement always requires a separate preview.",
+    searchInstructions: "Search starts as you type or change search options. Replacement always requires a separate preview.",
     noSubsetMatches: "No matches in the searched subset", noMatches: "No matches", zeroWidthMatch: "Zero-width match",
     coverageMatches: (count) => `${count} matches`, coverageFiles: (searched, catalog) => `${searched}/${catalog} files`,
     coverageEligible: (searched, eligible, catalog) => `${searched}/${eligible} eligible · ${catalog} catalog`,

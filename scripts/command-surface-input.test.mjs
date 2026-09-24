@@ -82,6 +82,22 @@ test("the query field grows with its text and never leaves the hidden scroll ran
   assert.equal(tall.style.overflowY, "auto");
 });
 
+test("ordinary input changes resize the mounted query field", () => {
+  const input = textarea("first");
+  bindCommandSurfaceLineBreak(rootFor(input, null));
+  assert.equal(input.style.height, "31px");
+
+  input.value = "first\nsecond";
+  input.scrollHeight = 52;
+  input.dispatchEvent(new Event("input"));
+  assert.equal(input.style.height, "52px");
+
+  input.value = "first";
+  input.scrollHeight = 31;
+  input.dispatchEvent(new Event("input"));
+  assert.equal(input.style.height, "31px");
+});
+
 test("focusing the query places the caret at the end of the query", async () => {
   focused.length = 0;
   const input = textarea("first\nsecond");

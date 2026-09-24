@@ -3,7 +3,7 @@ import type {
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "../../models";
-import type { ProjectFileMatchOptions } from "./navigation.ts";
+import type { NavigationMode, ProjectFileMatchOptions } from "./navigation.ts";
 
 export interface WorkspaceSearchControls {
   mode: WorkspaceTextSearchMode;
@@ -25,6 +25,16 @@ export function createWorkspaceSearchControls(): WorkspaceSearchControls {
     excludeText: "",
     contextLines: 0,
   };
+}
+
+export function retainedWorkspaceSearchQuery(
+  mode: NavigationMode,
+  previousMode: NavigationMode | null,
+  currentQuery: string,
+  requestQuery: string | undefined,
+): string {
+  if (mode !== "workspace") return "";
+  return previousMode === "workspace" ? currentQuery : requestQuery ?? "";
 }
 
 export function queryHasLineBreak(query: string): boolean {

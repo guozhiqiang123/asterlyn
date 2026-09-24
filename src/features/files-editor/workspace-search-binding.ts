@@ -1,7 +1,7 @@
 import type { WorkspaceSearchControls } from "./workspace-search";
 
 type ControlReader = () => WorkspaceSearchControls;
-type ControlUpdater = (controls: WorkspaceSearchControls, focusTargetId: string) => void;
+type ControlUpdater = (controls: WorkspaceSearchControls, focusTargetId: string, caret?: number) => void;
 
 export function bindWorkspaceSearchOptionControls(
   root: HTMLElement,
@@ -25,6 +25,28 @@ export function bindWorkspaceSearchOptionControls(
       const target = event.currentTarget as HTMLInputElement;
       update({ ...read(), excludeIgnored: target.checked }, target.id);
     });
+}
+
+export function bindWorkspaceSearchDetailControls(
+  root: HTMLElement,
+  read: ControlReader,
+  update: ControlUpdater,
+): void {
+  for (const field of ["include", "exclude"] as const) {
+    const id = `workspace-search-${field}`;
+    root.querySelector<HTMLInputElement>(`#${id}`)?.addEventListener("input", (event) => {
+      const target = event.currentTarget as HTMLInputElement;
+      update(
+        { ...read(), [field === "include" ? "includeText" : "excludeText"]: target.value },
+        id,
+        target.selectionStart ?? target.value.length,
+      );
+    });
+  }
+  root.querySelector<HTMLSelectElement>("#workspace-search-context")?.addEventListener("change", (event) => {
+    const target = event.currentTarget as HTMLSelectElement;
+    update({ ...read(), contextLines: Number(target.value) }, "workspace-search-context");
+  });
 }
 
 /** The in-field line-break control edits the query text instead of toggling a search mode. */

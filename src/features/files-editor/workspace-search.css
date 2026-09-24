@@ -100,12 +100,12 @@
 }
 
 .workspace-search-context {
-  grid-template-columns: auto 42px !important;
+  grid-template-columns: auto 64px !important;
 }
 
 .workspace-search-context .select-control {
-  width: 42px;
-  min-width: 42px;
+  width: 64px;
+  min-width: 64px;
 }
 
 .workspace-search-context .select-control select {
@@ -123,27 +123,45 @@
   font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
 }
 
-.workspace-search-result {
+.command-result.workspace-search-result {
   min-height: 45px;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: fit-content(65%) minmax(0, 1fr);
   align-content: center;
-  gap: 3px;
+  gap: 12px;
+}
+
+.workspace-search-result .search-result-location {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .workspace-search-result code {
   display: block;
   overflow: hidden;
-  max-height: 105px;
+  min-width: 0;
   color: var(--text-muted);
   font: max(10px, calc(var(--ui-font-size, 13px) - 2px))/15px ui-monospace, monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-search-result mark {
   border-radius: 2px;
   background: var(--yellow);
   color: white;
+}
+
+.command-result mark.command-result-match {
+  background: none;
+  color: var(--yellow);
+  font-weight: 700;
+}
+
+.command-result-copy .command-result-alias {
+  color: var(--text-muted);
 }
 
 .workspace-search-result mark.zero-width {

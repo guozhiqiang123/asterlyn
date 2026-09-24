@@ -316,9 +316,10 @@ import {
   type NavigationMode,
 } from "./features/files-editor/navigation";
 import { evaluateSearchNavigation } from "./features/files-editor/search-navigation";
-import { projectFileMatchOptions, type WorkspaceSearchControls } from "./features/files-editor/workspace-search";
-import { bindWorkspaceSearchOptionControls } from "./features/files-editor/workspace-search-binding";
-import { bindCommandSurfaceLineBreak, focusCommandSurfaceQuery, syncCommandSurfaceQueryHeight } from "./features/files-editor/command-surface-input";
+import { projectFileMatchOptions, retainedWorkspaceSearchQuery, type WorkspaceSearchControls } from "./features/files-editor/workspace-search";
+import { bindWorkspaceSearchDetailControls, bindWorkspaceSearchOptionControls } from "./features/files-editor/workspace-search-binding";
+import { bindCommandSurfaceLineBreak, focusCommandSurfaceQuery, renderCommandSurfacePreservingFocus, syncCommandSurfaceQueryHeight } from "./features/files-editor/command-surface-input";
+import { hasCurrentWorkspaceSearch, WorkspaceSearchDebouncer } from "./features/files-editor/workspace-search-debouncer";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
@@ -384,6 +385,7 @@ export class AsterlynApp {
   private commandSurfaceFiles: readonly ProjectFile[] = [];
   private commandSurfaceCommands: readonly NavigationCommand[] = [];
   private commandSurfaceResultsFrame: number | null = null;
+  private readonly workspaceSearchDebouncer = new WorkspaceSearchDebouncer();
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private recentRepositoryValidationGeneration = 0;
@@ -1802,6 +1804,7 @@ export class AsterlynApp {
     this.projectTreeScrollFrame = null;
     this.changeTreeScrollFrame = null;
     this.cancelScheduledCommandSurfaceResults();
+    this.workspaceSearchDebouncer.cancel();
     this.clearToastDismissTimer();
     this.changesContextRuntime.dispose();
     this.unversionedTrashRuntime.dispose();
@@ -2274,6 +2277,7 @@ export class AsterlynApp {
   private openCommandSurface(mode: NavigationMode): void {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (mode !== "commands" && !workspaceRoot) return;
+    this.workspaceSearchDebouncer.cancel();
     if (this.filesEditorRuntime.commands.state.mode === "workspace" && mode !== "workspace") {
       this.filesEditorRuntime.search.invalidate();
     }
@@ -2281,16 +2285,20 @@ export class AsterlynApp {
       this.commandSurfaceReturnFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     }
-    const retainedQuery =
-      mode === "workspace" ? (this.filesEditorRuntime.search.state.search.request?.query ?? "") : "";
+    const retainedQuery = retainedWorkspaceSearchQuery(
+      mode, this.filesEditorRuntime.commands.state.mode, this.filesEditorRuntime.commands.state.query,
+      this.filesEditorRuntime.search.state.search.request?.query,
+    );
     this.filesEditorRuntime.commands.open(mode, retainedQuery);
     this.renderCommandSurface(true);
+    if (mode === "workspace") this.scheduleWorkspaceSearch();
     if (mode === "recent" && workspaceRoot && !this.filesState.loading) {
       void this.loadProjectFiles(workspaceRoot);
     }
   }
 
   private dismissCommandSurface(): void {
+    this.workspaceSearchDebouncer.cancel();
     this.filesEditorRuntime.search.invalidate();
     this.filesEditorRuntime.commands.close();
     this.renderCommandSurface();
@@ -2346,7 +2354,8 @@ export class AsterlynApp {
     syncCommandSurfaceQueryHeight(this.root);
     const presentQuery = () => {
       if (this.filesEditorRuntime.commands.state.mode === "workspace") {
-        this.renderCommandSurface(true);
+        renderCommandSurfacePreservingFocus(this.root, () => this.renderCommandSurface());
+        this.scheduleWorkspaceSearch();
       } else {
         this.scheduleCommandSurfaceResults();
       }
@@ -2360,7 +2369,10 @@ export class AsterlynApp {
         this.invalidateWorkspaceReplacementPreview();
       }
       this.filesEditorRuntime.commands.updateQuery(input.value);
-      if (event instanceof InputEvent && event.isComposing) return;
+      if (event instanceof InputEvent && event.isComposing) {
+        this.workspaceSearchDebouncer.cancel();
+        return;
+      }
       presentQuery();
     });
     input.addEventListener("compositionend", () => {
@@ -2383,6 +2395,7 @@ export class AsterlynApp {
       if (event.key === "Enter") {
         event.preventDefault();
         this.flushScheduledCommandSurfaceResults();
+        this.workspaceSearchDebouncer.cancel();
         if (this.filesEditorRuntime.commands.state.mode === "workspace" && !this.workspaceSearchHasCurrentResults()) {
           void this.runWorkspaceSearch();
         } else {
@@ -2405,32 +2418,11 @@ export class AsterlynApp {
       (controls, target) => this.updateWorkspaceSearchControls(controls, target),
     );
     bindCommandSurfaceLineBreak(this.root);
-    for (const field of ["include", "exclude"] as const) {
-      const id = `workspace-search-${field}`;
-      this.root.querySelector<HTMLInputElement>(`#${id}`)?.addEventListener("input", (event) => {
-        const target = event.currentTarget as HTMLInputElement;
-        this.updateWorkspaceSearchControls(
-          {
-            ...this.filesEditorRuntime.search.state.controls,
-            [field === "include" ? "includeText" : "excludeText"]: target.value,
-          },
-          id,
-          target.selectionStart ?? target.value.length,
-        );
-      });
-    }
-    this.root
-      .querySelector<HTMLSelectElement>("#workspace-search-context")
-      ?.addEventListener("change", (event) => {
-        const target = event.currentTarget as HTMLSelectElement;
-        this.updateWorkspaceSearchControls(
-          {
-            ...this.filesEditorRuntime.search.state.controls,
-            contextLines: Number(target.value),
-          },
-          "workspace-search-context",
-        );
-      });
+    bindWorkspaceSearchDetailControls(
+      this.root,
+      () => this.filesEditorRuntime.search.state.controls,
+      (controls, target, caret) => this.updateWorkspaceSearchControls(controls, target, caret),
+    );
     this.root
       .querySelector<HTMLInputElement>("#workspace-replacement-text")
       ?.addEventListener("input", (event) => {
@@ -2488,6 +2480,17 @@ export class AsterlynApp {
     if (this.commandSurfaceResultsFrame === null) return;
     window.cancelAnimationFrame(this.commandSurfaceResultsFrame);
     this.commandSurfaceResultsFrame = null;
+  }
+
+  private scheduleWorkspaceSearch(): void {
+    this.workspaceSearchDebouncer.schedule(() => ({
+      workspaceMode: this.filesEditorRuntime.commands.state.mode === "workspace",
+      root: this.windowSession.workspace.state.root,
+      generation: this.windowSession.generation,
+      query: this.filesEditorRuntime.commands.state.query,
+      requestCurrent: this.workspaceSearchRequestIsCurrent(),
+      status: this.filesEditorRuntime.search.state.search.status,
+    }), () => void this.runWorkspaceSearch());
   }
 
   private renderCommandSurfaceResults(): void {
@@ -2557,9 +2560,11 @@ export class AsterlynApp {
     focusId: string,
     caret?: number,
   ): void {
+    this.workspaceSearchDebouncer.cancel();
     this.invalidateWorkspaceReplacementPreview();
     this.filesEditorRuntime.search.updateControls(controls);
     this.renderCommandSurface();
+    this.scheduleWorkspaceSearch();
     queueMicrotask(() => {
       const target = this.root.querySelector<HTMLElement>(`#${focusId}`);
       target?.focus();
@@ -2704,18 +2709,22 @@ export class AsterlynApp {
   }
 
   private async runWorkspaceSearch(): Promise<void> {
+    this.workspaceSearchDebouncer.cancel();
+    if (this.filesEditorRuntime.commands.state.mode !== "workspace") return;
     const workspaceRoot = this.windowSession.workspace.state.root;
     const query = this.filesEditorRuntime.commands.state.query;
     if (!workspaceRoot || query.trim().length === 0) return;
+    if (hasCurrentWorkspaceSearch(
+      this.filesEditorRuntime.search.state.search, workspaceRoot, this.windowSession.generation,
+      this.workspaceSearchRequestIsCurrent(),
+    )) return;
     const completion = this.filesEditorRuntime.search.run(
       { root: workspaceRoot, generation: this.windowSession.generation },
       query,
       (error) => localizedOperationError(error, this.localization.catalog.errors),
     );
-    this.renderCommandSurface(true);
-    if (await completion) {
-      this.renderCommandSurface(true);
-    }
+    renderCommandSurfacePreservingFocus(this.root, () => this.renderCommandSurface());
+    if (await completion) renderCommandSurfacePreservingFocus(this.root, () => this.renderCommandSurface());
   }
 
   private invalidateWorkspaceReplacementPreview(): void {

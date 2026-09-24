@@ -5,12 +5,19 @@ import type {
   CommandSurfaceState,
   NavigationCommand,
   NavigationMode,
+  ProjectFileMatchOptions,
 } from "./navigation.ts";
 import {
+  projectFileMatchOptions,
   queryHasLineBreak,
   type WorkspaceSearchControls,
   type WorkspaceSearchState,
 } from "./workspace-search.ts";
+import {
+  commandHighlightRanges,
+  filePathHighlightRanges,
+  type NavigationHighlightRange,
+} from "./navigation-highlights.ts";
 import type { WorkspaceReplacementState } from "./workspace-replacement.ts";
 import type { NavigationCopy, ReplacementCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
@@ -73,7 +80,6 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
         ${searchOptionButton("word", "W", copy.words, model.workspaceSearchControls.wholeWord)}
         ${searchOptionButton("regex", ".*", copy.regularExpression, model.workspaceSearchControls.mode === "regex")}
       </span>` : ""}
-      ${mode === "workspace" && model.workspaceSearch.status === "loading" ? '<span class="spinner"></span>' : ""}
     </div>
     ${mode === "workspace" ? renderWorkspaceSearchControls(model) : ""}
     <div class="command-surface-results" id="command-surface-results" role="listbox" aria-label="${escapeAttribute(title)}">
@@ -199,7 +205,7 @@ export function renderCommandSurfaceResults(
   if (mode === "workspace") return renderWorkspaceSearchResults(selected, model);
   if (mode === "commands") {
     return model.commands.length
-      ? model.commands.map((command, index) => renderCommandResult(command, index, selected)).join("")
+      ? model.commands.map((command, index) => renderCommandResult(command, index, selected, model.commandSurface.query)).join("")
       : commandSurfaceEmpty(copy.noMatchingCommands, copy.broaderCommand);
   }
   if (model.files.length === 0) {
@@ -212,7 +218,10 @@ export function renderCommandSurfaceResults(
           : copy.fileQueryDetail,
     );
   }
-  return model.files.map((file, index) => renderFileNavigationResult(file, index, selected)).join("");
+  const options = projectFileMatchOptions(model.workspaceSearchControls);
+  return model.files.map((file, index) =>
+    renderFileNavigationResult(file, index, selected, model.commandSurface.query, options)
+  ).join("");
 }
 
 function renderWorkspaceSearchResults(selected: number, model: CommandSurfaceViewModel): string {
@@ -257,19 +266,38 @@ function formatLocalizedWorkspaceSearchCoverage(report: WorkspaceTextSearchRepor
   return `${base} · ${copy.coveragePartial(reasons)}`;
 }
 
-function renderFileNavigationResult(file: ProjectFile, index: number, selected: number): string {
-  const directory = dirname(file.workspacePath);
+function renderFileNavigationResult(
+  file: ProjectFile,
+  index: number,
+  selected: number,
+  query: string,
+  options: ProjectFileMatchOptions,
+): string {
+  const path = file.workspacePath;
+  const directory = dirname(path);
+  const name = basename(path);
+  const ranges = filePathHighlightRanges(path, query, options);
+  const nameStart = path.length - name.length;
+  const separatorMatched = directory.length > 0 && ranges.some((range) =>
+    range.from <= directory.length && range.to > directory.length
+  );
+  const directoryLabel = directory ? `${directory}${separatorMatched ? "/" : ""}` : "/";
   return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
     <span class="command-result-icon">${icon("file", 15)}</span>
-    <span class="command-result-copy"><strong>${escapeHtml(basename(file.workspacePath))}</strong><small>${escapeHtml(directory || "/")}</small></span>
+    <span class="command-result-copy"><strong>${renderHighlightedText(name, clipHighlightRanges(ranges, nameStart, path.length))}</strong><small>${renderHighlightedText(directoryLabel, clipHighlightRanges(ranges, 0, separatorMatched ? directory.length + 1 : directory.length))}</small></span>
     ${file.repositoryId === "." ? "" : `<span class="scope-pill">${escapeHtml(file.repositoryId)}</span>`}
   </button>`;
 }
 
-function renderCommandResult(command: NavigationCommand, index: number, selected: number): string {
+function renderCommandResult(command: NavigationCommand, index: number, selected: number, query: string): string {
+  const ranges = commandHighlightRanges(command, query);
+  const hidden = [
+    ranges.keywords.length ? renderHighlightedText(command.keywords ?? "", ranges.keywords) : "",
+    ranges.id.length ? renderHighlightedText(command.id, ranges.id) : "",
+  ].filter(Boolean).join(" · ");
   return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}" ${command.enabled ? "" : "disabled"}>
     <span class="command-result-icon">${icon("search", 15)}</span>
-    <span class="command-result-copy"><strong>${escapeHtml(command.label)}</strong><small>${escapeHtml(command.detail)}</small></span>
+    <span class="command-result-copy"><strong>${renderHighlightedText(command.label, ranges.label)}</strong><small>${renderHighlightedText(command.detail, ranges.detail)}</small>${hidden ? `<small class="command-result-alias">${hidden}</small>` : ""}</span>
     ${command.shortcut ? `<kbd>${escapeHtml(command.shortcut)}</kbd>` : ""}
   </button>`;
 }
@@ -284,12 +312,39 @@ function renderWorkspaceSearchResult(
   const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
   const after = match.preview.slice(match.previewToUtf16);
   const highlighted = found.length > 0
-    ? `<mark>${escapeHtml(found)}</mark>`
-    : `<mark class="zero-width" aria-label="${escapeAttribute(copy.zeroWidthMatch)}" title="${escapeAttribute(copy.zeroWidthMatch)}">│</mark>`;
+    ? `<mark class="command-result-match">${escapeHtml(found)}</mark>`
+    : `<mark class="command-result-match zero-width" aria-label="${escapeAttribute(copy.zeroWidthMatch)}" title="${escapeAttribute(copy.zeroWidthMatch)}">│</mark>`;
+  const location = `${basename(match.workspacePath)}:${match.line}`;
+  const fullLocation = `${match.workspacePath}:${match.line}`;
   return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
-    <span class="search-result-location">${escapeHtml(`${match.workspacePath}:${match.line}:${match.columnUtf16}`)}</span>
+    <span class="search-result-location" title="${escapeAttribute(fullLocation)}">${escapeHtml(location)}</span>
     <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
   </button>`;
+}
+
+function clipHighlightRanges(
+  ranges: readonly NavigationHighlightRange[],
+  from: number,
+  to: number,
+): readonly NavigationHighlightRange[] {
+  return ranges.flatMap((range) => {
+    const start = Math.max(from, range.from);
+    const end = Math.min(to, range.to);
+    return start < end ? [{ from: start - from, to: end - from }] : [];
+  });
+}
+
+function renderHighlightedText(value: string, ranges: readonly NavigationHighlightRange[]): string {
+  if (!ranges.length) return escapeHtml(value);
+  let html = "";
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.from < cursor || range.to <= range.from || range.to > value.length) continue;
+    html += escapeHtml(value.slice(cursor, range.from));
+    html += `<mark class="command-result-match">${escapeHtml(value.slice(range.from, range.to))}</mark>`;
+    cursor = range.to;
+  }
+  return html + escapeHtml(value.slice(cursor));
 }
 
 function renderReplacementRecoveries(model: WorkspaceReplacementViewModel, copy: ReplacementCopy): string {

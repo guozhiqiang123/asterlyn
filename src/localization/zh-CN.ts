@@ -118,7 +118,7 @@ export const ZH_CN = {
     catalogLoading: "项目目录仍在加载。", fileQueryDetail: "请尝试输入文件名或路径的一部分。",
     searchingProject: "正在搜索当前项目…", boundedSearchDetail: "扫描范围有限，并且可以取消。",
     searchFailed: "搜索未能完成", tryAgain: "请重试。", searchFileContents: "搜索文件内容",
-    searchInstructions: "输入文本，按需选择换行、区分大小写、全词匹配或正则表达式，然后按回车。替换始终需要单独预览。",
+    searchInstructions: "输入文本或调整搜索选项后会自动搜索。替换仍需单独预览。",
     noSubsetMatches: "已搜索范围内没有匹配项", noMatches: "没有匹配项", zeroWidthMatch: "零宽匹配",
     coverageMatches: (count) => `${count} 处匹配`, coverageFiles: (searched, catalog) => `已搜索 ${searched}/${catalog} 个文件`,
     coverageEligible: (searched, eligible, catalog) => `已搜索 ${searched}/${eligible} 个符合条件的文件 · 目录共 ${catalog} 个`,

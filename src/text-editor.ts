@@ -93,6 +93,7 @@ export class TextEditor {
   private themeValue: EffectiveTheme = "dark";
   private phrasesValue: Readonly<Record<string, string>> = {};
   private synchronizing = false;
+  private scrollRestorationGeneration = 0;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -209,9 +210,10 @@ export class TextEditor {
     scrollTop: number,
     scrollLeft: number,
   ): void {
+    const generation = ++this.scrollRestorationGeneration;
     let attempts = 0;
     const apply = () => {
-      if (!scrollDOM.isConnected) return;
+      if (generation !== this.scrollRestorationGeneration || !scrollDOM.isConnected) return;
       const max = Math.max(0, scrollDOM.scrollHeight - scrollDOM.clientHeight);
       if (max > 0 || attempts >= 5) {
         scrollDOM.scrollTop = Math.min(max, scrollTop);
@@ -257,7 +259,8 @@ export class TextEditor {
   }
 
   selectRange(fromUtf16: number, toUtf16: number): boolean {
-    const view = this.activeEntry()?.view;
+    const active = this.activeEntry();
+    const view = active?.view;
     if (!view) return false;
     const length = view.state.doc.length;
     if (
@@ -269,11 +272,20 @@ export class TextEditor {
     ) {
       return false;
     }
+    // A search result takes precedence over scroll restoration queued by a newly mounted tab.
+    const scrollGeneration = ++this.scrollRestorationGeneration;
+    const loadEpoch = active.loadEpoch;
     view.dispatch({
       selection: { anchor: fromUtf16, head: toUtf16 },
       effects: EditorView.scrollIntoView(fromUtf16, { y: "center" }),
     });
     view.focus();
+    // On the first lazy mount, CodeMirror may not have measured the viewport yet.
+    window.requestAnimationFrame(() => {
+      if (this.scrollRestorationGeneration !== scrollGeneration || this.activeEntry() !== active ||
+        active.loadEpoch !== loadEpoch || active.view !== view || !view.dom.isConnected) return;
+      view.dispatch({ effects: EditorView.scrollIntoView(fromUtf16, { y: "center" }) });
+    });
     return true;
   }
 

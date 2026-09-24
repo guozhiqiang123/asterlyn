@@ -19,6 +19,29 @@ export function focusCommandSurfaceQuery(root: ParentNode): void {
   });
 }
 
+/** A search rerender keeps the active field and caret instead of moving text edits to the end. */
+export function renderCommandSurfacePreservingFocus(root: HTMLElement, render: () => void): void {
+  const host = root.querySelector<HTMLElement>("#command-surface");
+  const active = document.activeElement;
+  const focusId = active instanceof HTMLElement && host?.contains(active) ? active.id : "";
+  const selection = active instanceof HTMLTextAreaElement ||
+    (active instanceof HTMLInputElement && active.type === "text")
+    ? [active.selectionStart, active.selectionEnd] as const
+    : null;
+  render();
+  if (!focusId) return;
+  queueMicrotask(() => {
+    const target = root.querySelector<HTMLElement>(`#${focusId}`);
+    target?.focus({ preventScroll: true });
+    if (
+      selection && selection[0] !== null && selection[1] !== null &&
+      (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)
+    ) {
+      target.setSelectionRange(selection[0], selection[1]);
+    }
+  });
+}
+
 /** The field grows with its own text so an inserted line break stays visible. */
 export function syncCommandSurfaceQueryHeight(root: ParentNode): void {
   const input = commandSurfaceQueryInput(root);
@@ -31,6 +54,7 @@ export function syncCommandSurfaceQueryHeight(root: ParentNode): void {
 
 export function bindCommandSurfaceLineBreak(root: HTMLElement): void {
   syncCommandSurfaceQueryHeight(root);
+  commandSurfaceQueryInput(root)?.addEventListener("input", () => syncCommandSurfaceQueryHeight(root));
   root
     .querySelector<HTMLButtonElement>('[data-search-insert="new-line"]')
     ?.addEventListener("click", () => insertQueryLineBreak(root));
