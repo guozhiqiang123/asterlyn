@@ -10,3 +10,7 @@ These instructions apply to the whole repository.
 6. Do not extract or copy source code, icons, fonts, or branded assets from Rebased, Android Studio, or another installed product. A standalone open-source dependency may be adopted only from its published distribution after its license, attribution, version, integrity, and package impact are recorded.
 7. Every milestone closes only with recorded acceptance evidence, including functionality, performance, memory, accessibility, and known limitations.
 8. Prefer focused tests first. Run `npm run check`, `npm run build`, and `cargo test -p asterlyn-git` for changes that touch their respective areas.
+
+## Local bug-fix delivery
+
+After each bug fix in this repository passes its required checks, create a fresh native package and replace the existing local Asterlyn installation. Packaging may be delegated when eligible under the Antigravity worker rules, but Codex verifies the artifact and performs the installation. If the app is running, stop it before replacement and relaunch it afterward; the user has authorized this without a separate shutdown confirmation. Verify the installed bundle matches the accepted build, and never install an older bundle after a failed build.

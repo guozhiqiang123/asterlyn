@@ -136,6 +136,7 @@ The memory helper launches only the supplied local binary and repository, waits 
   not a substitute for the Linux gate. Windows uses its native bundle target.
 
   Report the exact package path, byte size, and SHA-256 digest for manual acceptance. This local package does not imply a remote push, release publication, signing, or cross-platform acceptance.
+- After a local Asterlyn bug fix passes its checks, replace the existing installed app with the freshly built native bundle. Packaging may be delegated under the worker rules, but Codex verifies the bundle and performs the installation. If the app is running, stop it before replacement and relaunch it afterward; the user has authorized this without a separate shutdown confirmation. Verify that the installed bundle matches the accepted build. Never install an older bundle when the current build fails.
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.
 - The preview matrix and its trust boundary are documented in [`ci.md`](ci.md).
 - Signing/notarization credentials belong in protected CI facilities, never repository files.
