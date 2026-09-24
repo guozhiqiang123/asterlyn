@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
-import { MergeView, getOriginalDoc, goToNextChunk, goToPreviousChunk, originalDocChangeEffect, unifiedMergeView } from "@codemirror/merge";
+import { MergeView, getChunks, getOriginalDoc, goToNextChunk, goToPreviousChunk, originalDocChangeEffect, unifiedMergeView } from "@codemirror/merge";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
 import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -18,6 +18,11 @@ import {
 import { EditorLanguageLoader } from "./editor-language.ts";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme.ts";
 import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
+import {
+  activeEditableDiffBlockDecoration,
+  diffBlockFromOffsets,
+  setActiveEditableDiffBlock,
+} from "./features/files-editor/editable-diff-change-highlight.ts";
 import { linkHorizontalScroll } from "./presentation/linked-scroll.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
 import {
@@ -191,6 +196,7 @@ export class EditableDiffEditor {
       } finally {
         this.synchronizing = false;
       }
+      if (baseChanged || contentChanged) this.clearActiveChangeHighlights();
       this.restoreScroll(scroll, true);
       return;
     }
@@ -277,7 +283,36 @@ export class EditableDiffEditor {
 
   navigateChange(direction: 1 | -1): boolean {
     const view = this.currentView();
-    return direction === 1 ? goToNextChunk(view) : goToPreviousChunk(view);
+    const moved = direction === 1 ? goToNextChunk(view) : goToPreviousChunk(view);
+    const info = getChunks(view.state);
+    if (!info?.chunks.length) return moved;
+    const side = info.side ?? "b";
+    const head = view.state.selection.main.head;
+    const range = (chunk: (typeof info.chunks)[number]) => side === "b"
+      ? [chunk.fromB, chunk.toB] as const
+      : [chunk.fromA, chunk.toA] as const;
+    const chunk = info.chunks.find((candidate) => range(candidate)[0] === head)
+      ?? info.chunks.find((candidate) => {
+        const [from, to] = range(candidate);
+        return from <= head && head < to;
+      })
+      ?? (direction === 1 ? info.chunks[0] : info.chunks.at(-1));
+    if (!chunk) return moved;
+    for (const binding of this.bindings) {
+      const oldSide = binding.view === this.mergeView?.a;
+      const from = oldSide ? chunk.fromA : chunk.fromB;
+      const to = oldSide ? chunk.toA : chunk.toB;
+      binding.view.dispatch({ effects: setActiveEditableDiffBlock.of(
+        diffBlockFromOffsets(binding.view.state.doc, from, to),
+      ) });
+    }
+    return true;
+  }
+
+  private clearActiveChangeHighlights(): void {
+    for (const binding of this.bindings) {
+      binding.view.dispatch({ effects: setActiveEditableDiffBlock.of(null) });
+    }
   }
 
   requestMeasure(): void {
@@ -547,6 +582,7 @@ export class EditableDiffEditor {
       EditorView.editable.of(editable),
       gutterSide ? diffLineNumberGutter(gutterSide) : lineNumbers(),
       binding.changeIndicators?.extension ?? [],
+      activeEditableDiffBlockDecoration,
       history(),
       drawSelection(),
       highlightActiveLine(),
@@ -561,6 +597,9 @@ export class EditableDiffEditor {
 
   private onDocUpdate(update: ViewUpdate): void {
     if (!update.docChanged || this.synchronizing) return;
+    queueMicrotask(() => {
+      if (this.parent) this.clearActiveChangeHighlights();
+    });
     const isRevert = update.transactions.some((tr) => tr.isUserEvent("revert"));
     const changes: TextChange[] = [];
     update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
@@ -637,4 +676,3 @@ export class EditableDiffEditor {
     });
   }
 }
-

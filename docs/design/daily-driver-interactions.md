@@ -450,6 +450,9 @@ file editable on the right, places both line-number gutters beside the central a
 offers an arrow for reverting each change into the current buffer. Unified mode retains one
 editable current document with equivalent per-change rejection. Neither mode writes automatically;
 ordinary editor undo and the existing revision-checked Save remain authoritative.
+The editor Changes Diff previous/next change controls mark each changed line of the selected chunk
+with the same one-pixel blue line border as the read-only Diff, on each side that contains changed
+lines in split mode or on the current side in unified mode.
 
 The center layout is a shared editor primitive rather than a CSS rearrangement. Left-side line
 numbers and the one semantic change strip use CodeMirror's supported after-content gutter, while
