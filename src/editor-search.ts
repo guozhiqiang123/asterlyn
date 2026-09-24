@@ -13,8 +13,8 @@ import {
 import type { Extension } from "@codemirror/state";
 import { type EditorView, type Panel, type ViewUpdate } from "@codemirror/view";
 
-export type EditorSearchOption = "newLine" | "caseSensitive" | "wholeWord" | "regexp";
-
+export type EditorSearchOption = "caseSensitive" | "wholeWord" | "regexp";
+const MAXIMUM_SEARCH_FIELD_HEIGHT = 124;
 const literalQueryMarker = () => true;
 const newLineQueryMarker = () => true;
 
@@ -30,11 +30,22 @@ export function toggleEditorSearchOption(
   query: SearchQuery,
   option: EditorSearchOption,
 ): SearchQuery {
-  return editorSearchQuery(query, {
-    [option]: option === "newLine"
-      ? query.literal
-      : !query[option],
-  });
+  return editorSearchQuery(query, { [option]: !query[option] });
+}
+
+/** The New line control edits the query at the caret, like workspace search. */
+export function insertEditorSearchLineBreak(
+  query: SearchQuery,
+  from: number,
+  to: number,
+): { query: SearchQuery; caret: number } {
+  const caret = from + 1;
+  return {
+    query: editorSearchQuery(query, {
+      search: `${query.search.slice(0, from)}\n${query.search.slice(to)}`,
+    }),
+    caret,
+  };
 }
 
 function editorSearchQuery(
@@ -42,21 +53,21 @@ function editorSearchQuery(
   changes: Partial<{
     search: string;
     replace: string;
-    newLine: boolean;
     caseSensitive: boolean;
     wholeWord: boolean;
     regexp: boolean;
   }>,
 ): SearchQuery {
-  const newLine = changes.newLine ?? !query.literal;
+  const searchText = changes.search ?? query.search;
+  const hasLineBreak = /[\r\n]/u.test(searchText);
   return new SearchQuery({
-    search: changes.search ?? query.search,
+    search: searchText,
     replace: changes.replace ?? query.replace,
     caseSensitive: changes.caseSensitive ?? query.caseSensitive,
     wholeWord: changes.wholeWord ?? query.wholeWord,
     regexp: changes.regexp ?? query.regexp,
-    literal: !newLine,
-    test: newLine ? newLineQueryMarker : literalQueryMarker,
+    literal: !hasLineBreak,
+    test: hasLineBreak ? newLineQueryMarker : literalQueryMarker,
   });
 }
 
@@ -64,7 +75,7 @@ class AsterlynSearchPanel implements Panel {
   readonly dom: HTMLElement;
   readonly top = true;
   private readonly view: EditorView;
-  private readonly searchField: HTMLInputElement;
+  private readonly searchField: HTMLTextAreaElement;
   private readonly replaceField: HTMLInputElement | null;
   private readonly optionButtons = new Map<EditorSearchOption, HTMLButtonElement>();
 
@@ -75,7 +86,7 @@ class AsterlynSearchPanel implements Panel {
     this.dom.addEventListener("submit", (event) => event.preventDefault());
 
     const searchShell = element("div", "asterlyn-search-input-shell");
-    this.searchField = input(view.state.phrase("Find"), query.search);
+    this.searchField = searchTextArea(view.state.phrase("Find"), query.search);
     this.searchField.setAttribute("main-field", "true");
     searchShell.append(this.searchField, this.options(query));
     this.dom.append(searchShell, this.navigationActions());
@@ -86,12 +97,16 @@ class AsterlynSearchPanel implements Panel {
   }
 
   mount(): void {
+    this.syncSearchFieldHeight();
     this.searchField.select();
   }
 
   update(update: ViewUpdate): void {
     const query = getSearchQuery(update.state);
-    if (this.searchField.value !== query.search) this.searchField.value = query.search;
+    if (this.searchField.value !== query.search) {
+      this.searchField.value = query.search;
+      this.syncSearchFieldHeight();
+    }
     if (this.replaceField && this.replaceField.value !== query.replace) {
       this.replaceField.value = query.replace;
     }
@@ -102,8 +117,11 @@ class AsterlynSearchPanel implements Panel {
     const strip = element("span", "asterlyn-search-option-strip");
     strip.setAttribute("role", "group");
     strip.setAttribute("aria-label", this.view.state.phrase("search options"));
+    const newLine = action("↵", this.view.state.phrase("new line"));
+    newLine.dataset.searchInsert = "new-line";
+    newLine.addEventListener("click", () => this.insertLineBreak());
+    strip.append(newLine);
     const definitions: Array<[EditorSearchOption, string, string]> = [
-      ["newLine", "↵", this.view.state.phrase("new line")],
       ["caseSensitive", "Cc", this.view.state.phrase("match case")],
       ["wholeWord", "W", this.view.state.phrase("by word")],
       ["regexp", ".*", this.view.state.phrase("regexp")],
@@ -148,8 +166,10 @@ class AsterlynSearchPanel implements Panel {
   private bindFields(): void {
     this.searchField.addEventListener("input", () => {
       this.setQuery(editorSearchQuery(getSearchQuery(this.view.state), { search: this.searchField.value }));
+      this.syncSearchFieldHeight();
     });
     this.searchField.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
       if (event.key === "Enter") {
         event.preventDefault();
         (event.shiftKey ? findPrevious : findNext)(this.view);
@@ -167,9 +187,26 @@ class AsterlynSearchPanel implements Panel {
     this.view.dispatch({ effects: setSearchQuery.of(query) });
   }
 
+  private insertLineBreak(): void {
+    const from = this.searchField.selectionStart ?? this.searchField.value.length;
+    const to = this.searchField.selectionEnd ?? from;
+    const result = insertEditorSearchLineBreak(getSearchQuery(this.view.state), from, to);
+    this.searchField.value = result.query.search;
+    this.searchField.focus();
+    this.searchField.setSelectionRange(result.caret, result.caret);
+    this.syncSearchFieldHeight();
+    this.setQuery(result.query);
+  }
+
+  private syncSearchFieldHeight(): void {
+    this.searchField.style.height = "auto";
+    const height = Math.min(this.searchField.scrollHeight, MAXIMUM_SEARCH_FIELD_HEIGHT);
+    this.searchField.style.height = `${height}px`;
+    this.searchField.style.overflowY = this.searchField.scrollHeight > height ? "auto" : "hidden";
+  }
+
   private syncOptions(query: SearchQuery): void {
     const active: Record<EditorSearchOption, boolean> = {
-      newLine: !query.literal,
       caseSensitive: query.caseSensitive,
       wholeWord: query.wholeWord,
       regexp: query.regexp,
@@ -190,6 +227,17 @@ function input(label: string, value: string): HTMLInputElement {
   const field = document.createElement("input");
   field.type = "text";
   field.value = value;
+  field.placeholder = label;
+  field.setAttribute("aria-label", label);
+  field.autocomplete = "off";
+  field.spellcheck = false;
+  return field;
+}
+
+function searchTextArea(label: string, value: string): HTMLTextAreaElement {
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.rows = 1;
   field.placeholder = label;
   field.setAttribute("aria-label", label);
   field.autocomplete = "off";

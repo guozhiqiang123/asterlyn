@@ -676,7 +676,7 @@
 }
 
 .command-surface-input > .search-option-strip {
-  margin-top: calc((var(--ui-font-size, 13px) - 7px) / 2);
+  margin-top: calc((var(--ui-font-size, 13px) - 12px) / 2);
 }
 
 .command-surface-results {
