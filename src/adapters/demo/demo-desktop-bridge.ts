@@ -1573,6 +1573,7 @@ const demoBridge: DesktopBridge = {
     tagMode: PushTagMode,
     offset: number,
     pageSize: number,
+    destinationBranch?: string | null,
   ): Promise<PushPreview> {
     if (!isTauri) {
       await demoDelay(120);
@@ -1584,6 +1585,7 @@ const demoBridge: DesktopBridge = {
       tagMode,
       offset,
       pageSize,
+      destinationBranch: destinationBranch ?? null,
     });
   },
 
@@ -1593,6 +1595,7 @@ const demoBridge: DesktopBridge = {
     tagMode: PushTagMode,
     previewToken: string,
     path: string,
+    destinationBranch?: string | null,
   ): Promise<CommitDetails | null> {
     if (!isTauri) {
       await demoDelay(100);
@@ -1611,6 +1614,7 @@ const demoBridge: DesktopBridge = {
       tagMode,
       previewToken,
       path,
+      destinationBranch: destinationBranch ?? null,
     });
   },
 
@@ -1639,6 +1643,7 @@ const demoBridge: DesktopBridge = {
     tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
+    destinationBranch?: string | null,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(520);
@@ -1661,6 +1666,7 @@ const demoBridge: DesktopBridge = {
       tagMode,
       previewToken,
       operationId,
+      destinationBranch: destinationBranch ?? null,
     });
   },
 

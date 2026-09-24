@@ -56,6 +56,7 @@ export interface RemotePushGateway {
     tagMode: PushTagMode,
     offset: number,
     pageSize: number,
+    destinationBranch?: string | null,
   ): Promise<PushPreview>;
   readCommitDetails(
     repositoryRoot: string,
@@ -68,6 +69,7 @@ export interface RemotePushGateway {
     tagMode: PushTagMode,
     previewToken: string,
     path: string,
+    destinationBranch?: string | null,
   ): Promise<CommitDetails | null>;
   readCommitDiff(
     repositoryRoot: string,
@@ -97,6 +99,7 @@ export interface RemotePushGateway {
     tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
+    destinationBranch?: string | null,
   ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
 }
@@ -112,6 +115,7 @@ export interface RemotePushControllerOptions {
   detailCacheLimit?: number;
   messages?: RemoteCopy;
   errorMessages?: ErrorCopy;
+  storage?: Pick<Storage, "getItem" | "setItem">;
 }
 
 export interface UpdateDialogOptions {

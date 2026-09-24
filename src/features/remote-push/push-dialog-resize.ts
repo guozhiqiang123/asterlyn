@@ -1,3 +1,5 @@
+import { attachSplitter } from "../../presentation/splitter.ts";
+
 /** Geometry and persistence for the resizable Push review window. */
 export interface PushDialogRect {
   left: number;
@@ -14,15 +16,20 @@ export interface PushDialogBounds {
 export type PushDialogResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
 export const PUSH_DIALOG_GEOMETRY_KEY = "asterlyn.push-dialog-geometry";
+export const PUSH_COMMITS_WIDTH_KEY = "asterlyn.push-commits-width";
 
 const INSET = 12;
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 420;
 const DEFAULT_WIDTH = 1080;
 const DEFAULT_HEIGHT = 680;
+const DEFAULT_COMMITS_WIDTH = 360;
+const MIN_COMMITS_WIDTH = 220;
+const MIN_FILES_WIDTH = 240;
 
 const geometry = new WeakMap<HTMLElement, PushDialogRect>();
 const bindings = new WeakMap<HTMLElement, AbortController>();
+const previewSplitterBindings = new WeakMap<HTMLElement, () => void>();
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -113,6 +120,7 @@ export function bindPushDialogResize(
 ): void {
   bindings.get(root)?.abort();
   bindings.delete(root);
+  bindPushPreviewSplitter(root, storage);
   const backdrop = root.querySelector<HTMLElement>("#remote-action-dialog");
   const dialog = backdrop?.querySelector<HTMLElement>(".push-dialog");
   if (!backdrop || !dialog) return;
@@ -206,4 +214,74 @@ export function bindPushDialogResize(
     const current = geometry.get(root);
     if (current) apply(current);
   }, { signal });
+}
+
+export function bindPushPreviewSplitter(
+  root: HTMLElement,
+  storage?: Pick<Storage, "getItem" | "setItem">,
+): (() => void) | null {
+  previewSplitterBindings.get(root)?.();
+  previewSplitterBindings.delete(root);
+
+  const grid = root.querySelector<HTMLElement>(".push-preview-grid");
+  const splitter = grid?.querySelector<HTMLElement>("#push-preview-splitter");
+  if (!grid || !splitter) return null;
+
+  const loadWidth = (): number => {
+    const raw = storage?.getItem(PUSH_COMMITS_WIDTH_KEY);
+    if (raw) {
+      const val = Number(raw);
+      if (Number.isFinite(val) && val > 0) return val;
+    }
+    return DEFAULT_COMMITS_WIDTH;
+  };
+
+  const applyWidth = (width: number) => {
+    grid.style.setProperty("--push-commits-width", `${Math.round(width)}px`);
+  };
+
+  const getRange = () => {
+    const total = grid.clientWidth;
+    const max = Math.max(MIN_COMMITS_WIDTH, (total || DEFAULT_COMMITS_WIDTH + MIN_FILES_WIDTH) - MIN_FILES_WIDTH - 5);
+    return { minimum: MIN_COMMITS_WIDTH, maximum: max };
+  };
+
+  const getValue = (): number => {
+    const raw = grid.style.getPropertyValue("--push-commits-width");
+    const parsed = parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return loadWidth();
+  };
+
+  const initialWidth = clamp(
+    loadWidth(),
+    MIN_COMMITS_WIDTH,
+    Math.max(MIN_COMMITS_WIDTH, (grid.clientWidth || DEFAULT_COMMITS_WIDTH + MIN_FILES_WIDTH) - MIN_FILES_WIDTH - 5),
+  );
+  applyWidth(initialWidth);
+
+  const dispose = attachSplitter(splitter, {
+    orientation: "vertical",
+    getValue,
+    getRange,
+    onChange: (val) => applyWidth(val),
+    onCommit: () => {
+      try {
+        storage?.setItem(PUSH_COMMITS_WIDTH_KEY, String(Math.round(getValue())));
+      } catch {
+        // Ignore quota/serialization issues.
+      }
+    },
+    onReset: () => {
+      applyWidth(DEFAULT_COMMITS_WIDTH);
+      try {
+        storage?.setItem(PUSH_COMMITS_WIDTH_KEY, String(DEFAULT_COMMITS_WIDTH));
+      } catch {
+        // Ignore quota/serialization issues.
+      }
+    },
+  });
+
+  previewSplitterBindings.set(root, dispose);
+  return dispose;
 }

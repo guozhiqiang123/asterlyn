@@ -277,6 +277,7 @@ export interface GitReadBridge {
     tagMode: PushTagMode,
     offset: number,
     pageSize: number,
+    destinationBranch?: string | null,
   ): Promise<PushPreview>;
   readPushFileCommit(
     repositoryRoot: string,
@@ -284,6 +285,7 @@ export interface GitReadBridge {
     tagMode: PushTagMode,
     previewToken: string,
     path: string,
+    destinationBranch?: string | null,
   ): Promise<CommitDetails | null>;
 }
 
@@ -356,6 +358,7 @@ export interface GitOperationBridge {
     tagMode: PushTagMode,
     previewToken: string,
     operationId: string,
+    destinationBranch?: string | null,
   ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
   readGitOperation(repositoryRoot: string): Promise<GitOperationSnapshot | null>;

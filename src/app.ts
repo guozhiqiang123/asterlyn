@@ -599,7 +599,7 @@ export class AsterlynApp {
       {
         pushChanged: (change) => this.handleRemoteControllerChange(change),
         authenticationChanged: () => { if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog(); },
-      }, () => this.localization.catalog.remote.management,
+      }, () => this.localization.catalog.remote.management, window.localStorage,
     );
     this.changesRuntime = new ChangesRuntime({
       root,
@@ -3217,37 +3217,27 @@ export class AsterlynApp {
       const remote = (event.currentTarget as HTMLSelectElement).value;
       if (remote) this.remoteRuntime.push.selectRemote(remote);
     });
+    this.root.querySelector<HTMLSelectElement>("#push-branch-select")?.addEventListener("change", (event) => {
+      const branch = (event.currentTarget as HTMLSelectElement).value;
+      if (branch && branch !== "__new__") {
+        this.remoteRuntime.push.setDestinationBranch(branch);
+      }
+    });
     this.root.querySelector<HTMLButtonElement>("#push-all-commits")?.addEventListener("click", () => {
       void this.remoteRuntime.push.selectPushCommit(null);
     });
-    this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.addEventListener(
-      "click",
-      () => this.closeRemoteDialog(),
-    );
-    this.root.querySelector<HTMLButtonElement>("#remote-dialog-cancel")?.addEventListener(
-      "click",
-      () => this.closeRemoteDialog(),
-    );
-    this.root
-      .querySelector<HTMLButtonElement>("#remote-dialog-cancel-operation")
-      ?.addEventListener("click", () => void this.cancelActiveRemoteOperation());
-    this.root
-      .querySelector<HTMLButtonElement>("#remote-dialog-confirm-update")
-      ?.addEventListener("click", () => void this.confirmRemoteUpdate());
+    this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.addEventListener("click", () => this.closeRemoteDialog());
+    this.root.querySelector<HTMLButtonElement>("#remote-dialog-cancel")?.addEventListener("click", () => this.closeRemoteDialog());
+    this.root.querySelector<HTMLButtonElement>("#remote-dialog-cancel-operation")?.addEventListener("click", () => void this.cancelActiveRemoteOperation());
+    this.root.querySelector<HTMLButtonElement>("#remote-dialog-confirm-update")?.addEventListener("click", () => void this.confirmRemoteUpdate());
     this.root.querySelectorAll<HTMLInputElement>("input[name='update-strategy']").forEach((radio) => {
       radio.addEventListener("change", () => {
-        if (radio.checked) {
-          this.remoteRuntime.push.setUpdateStrategy(radio.value as RemoteUpdateStrategy);
-        }
+        if (radio.checked) this.remoteRuntime.push.setUpdateStrategy(radio.value as RemoteUpdateStrategy);
       });
     });
-    this.root
-      .querySelector<HTMLInputElement>("#remote-update-remember-strategy")
-      ?.addEventListener("change", (event) => {
-        this.remoteRuntime.push.setRememberUpdateStrategy(
-          (event.currentTarget as HTMLInputElement).checked,
-        );
-      });
+    this.root.querySelector<HTMLInputElement>("#remote-update-remember-strategy")?.addEventListener("change", (e) => {
+      this.remoteRuntime.push.setRememberUpdateStrategy((e.currentTarget as HTMLInputElement).checked);
+    });
     this.root
       .querySelector<HTMLButtonElement>("#remote-dialog-confirm-push")
       ?.addEventListener("click", () => {
@@ -3391,6 +3381,8 @@ export class AsterlynApp {
     }
     const remote = this.root.querySelector<HTMLSelectElement>("#push-remote-select");
     if (remote) remote.disabled = true;
+    const branch = this.root.querySelector<HTMLSelectElement>("#push-branch-select");
+    if (branch) branch.disabled = true;
     const count = this.root.querySelector<HTMLElement>(".push-tag-count");
     if (count) {
       count.innerHTML = `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(this.localization.catalog.remote.refreshingReview)}`;

@@ -120,6 +120,15 @@
   flex: 1 1 0;
   min-height: 200px;
   height: auto;
+  grid-template-columns: var(--push-commits-width, 360px) 5px minmax(260px, 1fr);
+}
+
+.push-dialog .push-preview-commits {
+  border-right: none;
+}
+
+.push-dialog .push-preview-splitter {
+  height: 100%;
 }
 
 #push-diff-editor-host {
@@ -135,3 +144,6 @@
   width: 5px;
   pointer-events: none;
 }
+
+
+

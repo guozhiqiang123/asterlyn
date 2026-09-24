@@ -44,10 +44,12 @@ export class RemoteRuntime {
     notifications: RemoteRuntimeNotifications,
     root?: HTMLElement,
     managementCopy: () => RemoteManagementCopy = () => messages.remote.management,
+    storage?: Pick<Storage, "getItem" | "setItem">,
   ) {
     this.push = new RemotePushController(gateways.push, {
       messages: messages.remote,
       errorMessages: messages.errors,
+      storage,
     });
     this.authentication = new RemoteAuthenticationController(
       gateways.authentication,

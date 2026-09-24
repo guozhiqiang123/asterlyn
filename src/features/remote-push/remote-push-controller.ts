@@ -9,6 +9,7 @@ import type {
 } from "../../models.ts";
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
 import { filesForPushReview, isPushPreviewActionable } from "./push-review.ts";
+import { isValidGitBranchName } from "./git-branch-name.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
@@ -45,6 +46,8 @@ export {
   PUSH_COMMIT_DETAILS_CACHE_LIMIT,
   PUSH_PREVIEW_PAGE_SIZE,
 } from "./remote-push-contract.ts";
+export const PUSH_TAGS_ENABLED_KEY = "asterlyn.push-tags-enabled";
+export const PUSH_TAG_MODE_KEY = "asterlyn.push-tag-mode";
 export type {
   RemoteOperationResult,
   RemotePushChange,
@@ -60,6 +63,7 @@ export class RemotePushController {
   readonly state: RemotePushState = createRemotePushState();
 
   private readonly gateway: RemotePushGateway;
+  private readonly storage: Pick<Storage, "getItem" | "setItem"> | null;
   private readonly previewPageSize: number;
   private readonly commitDetailsCache: RecentValueCache<CommitDetails>;
   private readonly listeners = new Set<Listener>();
@@ -75,12 +79,21 @@ export class RemotePushController {
 
   constructor(gateway: RemotePushGateway, options: RemotePushControllerOptions = {}) {
     this.gateway = gateway;
+    this.storage = options.storage ?? null;
     this.messages = options.messages ?? EN_US.remote;
     this.errorMessages = options.errorMessages ?? EN_US.errors;
     this.previewPageSize = options.previewPageSize ?? PUSH_PREVIEW_PAGE_SIZE;
     this.commitDetailsCache = new RecentValueCache(
       options.detailCacheLimit ?? PUSH_COMMIT_DETAILS_CACHE_LIMIT,
     );
+    const initialTagsEnabled = this.readSavedPushTagsEnabled();
+    if (initialTagsEnabled !== null) {
+      this.state.pushTagsEnabled = initialTagsEnabled;
+    }
+    const initialTagMode = this.readSavedPushTagMode();
+    if (initialTagMode !== null) {
+      this.state.pushTagMode = initialTagMode;
+    }
   }
 
   subscribe(listener: Listener): () => void {
@@ -116,12 +129,53 @@ export class RemotePushController {
       this.state.operation ||
       !snapshot.remotes.some((candidate) => candidate.name === remote) ||
       remote === this.state.selectedRemote
-    ) {
-      return false;
-    }
+    ) return false;
     this.state.selectedRemote = remote;
+    this.state.destinationBranch = null;
+    this.state.pushCustomBranch = false;
+    this.state.pushCustomBranchInput = "";
     this.emit({ reason: "remote-selection", toolbarChanged: true });
     if (this.state.dialog === "push") this.reloadPushPreview(false);
+    return true;
+  }
+
+  setDestinationBranch(branch: string): boolean {
+    if (this.state.operation) return false;
+    this.state.pushCustomBranch = false;
+    this.state.pushCustomBranchInput = "";
+    if (this.state.destinationBranch === branch) return false;
+    this.state.destinationBranch = branch;
+    if (this.state.dialog === "push") this.reloadPushPreview(true);
+    return true;
+  }
+
+  enableCustomBranch(initialValue?: string): boolean {
+    if (this.state.dialog !== "push" || this.state.operation) return false;
+    this.state.pushCustomBranch = true;
+    this.state.pushCustomBranchInput = initialValue ?? "";
+    this.emit({ reason: "push-options", dialogChanged: true });
+    return true;
+  }
+
+  disableCustomBranch(): boolean {
+    if (this.state.dialog !== "push" || this.state.operation || !this.state.pushCustomBranch) return false;
+    this.state.pushCustomBranch = false;
+    this.state.pushCustomBranchInput = "";
+    this.state.destinationBranch = null;
+    this.reloadPushPreview(true);
+    return true;
+  }
+
+  setCustomBranchInput(input: string): boolean {
+    if (this.state.dialog !== "push" || this.state.operation || !this.state.pushCustomBranch) return false;
+    this.state.pushCustomBranchInput = input;
+    const trimmed = input.trim();
+    if (isValidGitBranchName(trimmed) && trimmed !== this.state.destinationBranch) {
+      this.state.destinationBranch = trimmed;
+      this.reloadPushPreview(true);
+    } else {
+      this.emit({ reason: "push-options", dialogChanged: true });
+    }
     return true;
   }
 
@@ -187,12 +241,18 @@ export class RemotePushController {
   setPushTagsEnabled(enabled: boolean): void {
     if (this.state.pushTagsEnabled === enabled || this.state.operation) return;
     this.state.pushTagsEnabled = enabled;
+    try {
+      this.storage?.setItem(PUSH_TAGS_ENABLED_KEY, String(enabled));
+    } catch {}
     this.reloadPushPreview(true);
   }
 
   setPushTagMode(mode: Exclude<PushTagMode, "none">): void {
     if (this.state.pushTagMode === mode || this.state.operation) return;
     this.state.pushTagMode = mode;
+    try {
+      this.storage?.setItem(PUSH_TAG_MODE_KEY, mode);
+    } catch {}
     this.reloadPushPreview(true);
   }
 
@@ -327,6 +387,7 @@ export class RemotePushController {
         preview.tagMode,
         preview.commits.length,
         this.previewPageSize,
+        this.effectiveDestinationBranch(),
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       if (page.previewToken !== preview.previewToken) {
@@ -380,6 +441,7 @@ export class RemotePushController {
             preview.tagMode,
             preview.previewToken,
             path,
+            this.effectiveDestinationBranch(),
           );
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       if (!details) throw new Error(this.messages.noOutgoingCommitForFile(path));
@@ -470,7 +532,9 @@ export class RemotePushController {
     const remote = policy.selectedRemote;
     if (kind !== "pull" && !remote) return { status: "unavailable" };
     const preview = kind === "push" ? this.state.pushPreview : null;
-    if (kind === "push" && !preview) return { status: "unavailable" };
+    if (kind === "push" && (!preview || (this.state.pushCustomBranch && !isValidGitBranchName(this.state.pushCustomBranchInput.trim())))) {
+      return { status: "unavailable" };
+    }
 
     const generation = this.repositoryGeneration;
     const operationId = `${generation}-${++this.operationSequence}-${kind}`;
@@ -496,6 +560,7 @@ export class RemotePushController {
               preview!.tagMode,
               preview!.previewToken,
               operationId,
+              this.effectiveDestinationBranch(),
             );
       if (!this.operationRequestMatches(generation, snapshot.root, operationId)) {
         return { status: "stale" };
@@ -578,6 +643,7 @@ export class RemotePushController {
         this.effectivePushTagMode(),
         0,
         this.previewPageSize,
+        this.effectiveDestinationBranch(),
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreview = preview;
@@ -606,6 +672,28 @@ export class RemotePushController {
     return this.state.pushTagsEnabled ? this.state.pushTagMode : "none";
   }
 
+  private effectiveDestinationBranch(): string | null {
+    if (this.state.pushCustomBranch) {
+      const trimmed = this.state.pushCustomBranchInput.trim();
+      return isValidGitBranchName(trimmed) ? trimmed : null;
+    }
+    return this.state.destinationBranch ?? (this.snapshot?.branch.head ?? null);
+  }
+
+  private readSavedPushTagsEnabled(): boolean | null {
+    try {
+      const value = this.storage?.getItem(PUSH_TAGS_ENABLED_KEY);
+      return value === "true" ? true : value === "false" ? false : null;
+    } catch { return null; }
+  }
+
+  private readSavedPushTagMode(): Exclude<PushTagMode, "none"> | null {
+    try {
+      const value = this.storage?.getItem(PUSH_TAG_MODE_KEY);
+      return value === "currentBranch" || value === "all" ? value : null;
+    } catch { return null; }
+  }
+
   private async loadPushDiffContent(
     sequence: number,
     generation: number,
@@ -616,21 +704,8 @@ export class RemotePushController {
     const { repositoryId, oid, file, expandedUnchanged } = current;
     const image = isImagePreviewPath(file.path);
     const result = image
-      ? await this.gateway.readCommitImageDiff(
-          repositoryRoot,
-          repositoryId,
-          oid,
-          file.path,
-          file.originalPath,
-        )
-      : await this.gateway.readCommitDiff(
-          repositoryRoot,
-          repositoryId,
-          oid,
-          file.path,
-          file.originalPath,
-          expandedUnchanged,
-        );
+      ? await this.gateway.readCommitImageDiff(repositoryRoot, repositoryId, oid, file.path, file.originalPath)
+      : await this.gateway.readCommitDiff(repositoryRoot, repositoryId, oid, file.path, file.originalPath, expandedUnchanged);
     if (!this.diffRequestMatches(sequence, generation, repositoryRoot, file.path)) return;
     this.state.pushDiff = {
       ...current,
@@ -663,8 +738,11 @@ export class RemotePushController {
     this.state.pushPreviewRefreshing = false;
     this.state.pushPreviewLoadingMore = false;
     this.clearPushSelection();
-    this.state.pushTagsEnabled = false;
-    this.state.pushTagMode = "all";
+    this.state.pushTagsEnabled = this.readSavedPushTagsEnabled() ?? this.state.pushTagsEnabled;
+    this.state.pushTagMode = this.readSavedPushTagMode() ?? this.state.pushTagMode;
+    this.state.destinationBranch = null;
+    this.state.pushCustomBranch = false;
+    this.state.pushCustomBranchInput = "";
     this.state.pushMode = "ordinary";
     this.state.pushModeMenuOpen = false;
     this.state.pushFileActionLoading = false;
@@ -676,56 +754,20 @@ export class RemotePushController {
     this.diffSequence += 1;
   }
 
-  private dialogRequestMatches(
-    sequence: number,
-    generation: number,
-    root: string,
-  ): boolean {
-    return !this.disposed &&
-      sequence === this.dialogSequence &&
-      generation === this.repositoryGeneration &&
-      this.snapshot?.root === root &&
-      this.state.dialog === "push";
+  private dialogRequestMatches(sequence: number, generation: number, root: string): boolean {
+    return !this.disposed && sequence === this.dialogSequence && generation === this.repositoryGeneration && this.snapshot?.root === root && this.state.dialog === "push";
   }
 
-  private detailsRequestMatches(
-    sequence: number,
-    generation: number,
-    root: string,
-    oid: string,
-  ): boolean {
-    return !this.disposed &&
-      sequence === this.detailsSequence &&
-      generation === this.repositoryGeneration &&
-      this.snapshot?.root === root &&
-      this.state.dialog === "push" &&
-      this.state.pushSelectedCommit === oid;
+  private detailsRequestMatches(sequence: number, generation: number, root: string, oid: string): boolean {
+    return !this.disposed && sequence === this.detailsSequence && generation === this.repositoryGeneration && this.snapshot?.root === root && this.state.dialog === "push" && this.state.pushSelectedCommit === oid;
   }
 
-  private diffRequestMatches(
-    sequence: number,
-    generation: number,
-    root: string,
-    path: string,
-  ): boolean {
-    return !this.disposed &&
-      sequence === this.diffSequence &&
-      generation === this.repositoryGeneration &&
-      this.snapshot?.root === root &&
-      this.state.dialog === "push" &&
-      this.state.pushSelectedFile === path &&
-      this.state.pushDiff?.file.path === path;
+  private diffRequestMatches(sequence: number, generation: number, root: string, path: string): boolean {
+    return !this.disposed && sequence === this.diffSequence && generation === this.repositoryGeneration && this.snapshot?.root === root && this.state.dialog === "push" && this.state.pushSelectedFile === path && this.state.pushDiff?.file.path === path;
   }
 
-  private operationRequestMatches(
-    generation: number,
-    root: string,
-    operationId: string,
-  ): boolean {
-    return !this.disposed &&
-      generation === this.repositoryGeneration &&
-      this.snapshot?.root === root &&
-      this.state.operation?.id === operationId;
+  private operationRequestMatches(generation: number, root: string, operationId: string): boolean {
+    return !this.disposed && generation === this.repositoryGeneration && this.snapshot?.root === root && this.state.operation?.id === operationId;
   }
 
   private errorMessage(error: unknown): string {

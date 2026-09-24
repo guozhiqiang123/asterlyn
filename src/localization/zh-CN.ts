@@ -591,7 +591,7 @@ export const ZH_CN = {
     pushedFileToolbar: "已推送文件的显示和导航", openOutgoingDiff: "打开所选文件最新传出提交的差异",
     showPushedFilesAs: (view) => `以${view}显示推送文件`, flatList: "平铺列表", folderTree: "文件夹树",
     expandPushedFolders: "展开所有推送文件夹", collapsePushedFolders: "折叠所有推送文件夹",
-    loadingPushedDiff: "正在加载推送文件差异…", closePushedDiff: "关闭推送文件差异", resizePushedDiff: "调整推送文件差异窗口大小", resizePushDialog: "调整推送窗口大小", pushedDiffToolbar: "推送文件差异的导航和显示",
+    loadingPushedDiff: "正在加载推送文件差异…", closePushedDiff: "关闭推送文件差异", resizePushedDiff: "调整推送文件差异窗口大小", resizePushDialog: "调整推送窗口大小", resizePushPreview: "调整推送预览分割大小", newBadge: "New", newBranchOption: "+ 新建分支…", newBranchPlaceholder: "分支名称", chooseExistingBranch: "选择已有分支", invalidBranchName: "分支名称不符合 Git 规范", pushedDiffToolbar: "推送文件差异的导航和显示",
     previousPushedFile: "上一个推送文件", nextPushedFile: "下一个推送文件", imagePreviewAlt: (label) => `${label}图片预览`,
     upstreamChanged: "获取期间当前上游发生变化；请重新打开“更新”", alreadyUpToDate: "所有文件均为最新",
     activeProjectNotGit: "当前项目已不再是 Git 仓库。", endedRefreshRequired: "远程操作已结束；需要刷新",

@@ -568,32 +568,35 @@
   color: var(--success-text);
 }
 
-.push-route-destination {
-  display: grid;
-  grid-template-columns: 14px minmax(90px, 150px) auto minmax(0, 1fr);
-}
-
+.push-route-destination { display: flex; min-width: 0; align-items: center; gap: 4px; }
+.push-route-destination svg { flex-shrink: 0; }
 .push-remote-target .select-control {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 140px;
   height: 22px;
   border-radius: 4px;
   background: var(--bg-elevated);
   color: var(--text-soft);
   font-size: 10px;
 }
-
-.push-remote-target .select-control select {
-  padding-left: 8px;
-}
-
-.push-route-separator {
-  color: var(--text-faint);
-}
-
-.push-route-destination strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.push-remote-target .select-control select { padding-left: 8px; }
+.push-route-separator { color: var(--text-faint); flex-shrink: 0; }
+.push-branch-badge.new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  text-transform: uppercase;
 }
 
 .remote-dialog-loading.compact {
@@ -764,29 +767,9 @@
   text-align: left;
 }
 
-.push-mode-menu button:hover:not(:disabled) {
-  background: var(--selection);
-  color: white;
-}
-
-.push-mode-menu button:disabled {
-  opacity: 0.45;
-}
-
-.push-mode-menu button span {
-  display: grid;
-  gap: 2px;
-}
-
-.push-mode-menu small {
-  color: var(--text-faint);
-  font-size: 9px;
-}
-
-.push-load-more {
-  margin: 4px 8px 8px;
-}
-
-.push-preview-limit {
-  margin: 7px 9px;
-}
+.push-mode-menu button:hover:not(:disabled) { background: var(--selection); color: white; }
+.push-mode-menu button:disabled { opacity: 0.45; }
+.push-mode-menu button span { display: grid; gap: 2px; }
+.push-mode-menu small { color: var(--text-faint); font-size: 9px; }
+.push-load-more { margin: 4px 8px 8px; }
+.push-preview-limit { margin: 7px 9px; }

@@ -176,20 +176,22 @@ export const tauriGitReadBridge: GitReadBridge = {
     path,
     originalPath,
   }),
-  readPushPreview: (repositoryRoot, remote, tagMode, offset, pageSize) =>
+  readPushPreview: (repositoryRoot, remote, tagMode, offset, pageSize, destinationBranch) =>
     invokeDesktopCommand<PushPreview>("read_push_preview", {
       repositoryRoot,
       remote,
       tagMode,
       offset,
       pageSize,
+      destinationBranch: destinationBranch ?? null,
     }),
-  readPushFileCommit: (repositoryRoot, remote, tagMode, previewToken, path) =>
+  readPushFileCommit: (repositoryRoot, remote, tagMode, previewToken, path, destinationBranch) =>
     invokeDesktopCommand<CommitDetails | null>("read_push_file_commit", {
       repositoryRoot,
       remote,
       tagMode,
       previewToken,
       path,
+      destinationBranch: destinationBranch ?? null,
     }),
 };

@@ -459,12 +459,19 @@ pub(crate) async fn read_push_preview(
     tag_mode: PushTagMode,
     offset: usize,
     page_size: usize,
+    destination_branch: Option<String>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<PushPreview, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read push preview", move || {
-        GitRepository::open(root)?.push_preview_with_tags(&remote, tag_mode, offset, page_size)
+        GitRepository::open(root)?.push_preview_with_destination(
+            &remote,
+            tag_mode,
+            offset,
+            page_size,
+            destination_branch.as_deref(),
+        )
     })
     .await
 }
@@ -476,12 +483,19 @@ pub(crate) async fn read_push_file_commit(
     tag_mode: PushTagMode,
     preview_token: String,
     path: String,
+    destination_branch: Option<String>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<Option<CommitDetails>, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read pushed file commit", move || {
-        GitRepository::open(root)?.push_file_commit(&remote, tag_mode, &preview_token, &path)
+        GitRepository::open(root)?.push_file_commit_with_destination(
+            &remote,
+            tag_mode,
+            &preview_token,
+            &path,
+            destination_branch.as_deref(),
+        )
     })
     .await
 }
@@ -519,6 +533,7 @@ pub(crate) async fn push_current(
     tag_mode: PushTagMode,
     preview_token: String,
     operation_id: String,
+    destination_branch: Option<String>,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
@@ -534,12 +549,13 @@ pub(crate) async fn push_current(
             "push",
             COMMIT_LIMIT,
             move |repository, cancellation| {
-                repository.push_current_with_options(
+                repository.push_current_with_destination(
                     &remote,
                     mode,
                     tag_mode,
                     &preview_token,
                     cancellation,
+                    destination_branch.as_deref(),
                 )
             },
         )

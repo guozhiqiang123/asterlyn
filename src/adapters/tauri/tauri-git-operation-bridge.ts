@@ -99,7 +99,7 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       operationId,
     }),
-  pushCurrent: (repositoryRoot, remote, mode, tagMode, previewToken, operationId) =>
+  pushCurrent: (repositoryRoot, remote, mode, tagMode, previewToken, operationId, destinationBranch) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("push_current", {
       repositoryRoot,
       remote,
@@ -107,6 +107,7 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       tagMode,
       previewToken,
       operationId,
+      destinationBranch: destinationBranch ?? null,
     }),
   cancelRemoteOperation: (repositoryRoot, operationId) =>
     invokeDesktopCommand<void>("cancel_remote_operation", { repositoryRoot, operationId }),

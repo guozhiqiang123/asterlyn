@@ -23,6 +23,7 @@ import {
   isPushPreviewActionable,
   pushConfirmationAvailability,
 } from "./push-review.ts";
+import { isValidGitBranchName } from "./git-branch-name.ts";
 import type { RemoteAuthenticationState } from "./remote-authentication-controller.ts";
 import {
   isRemoteUpdateStrategyAvailable,
@@ -249,7 +250,8 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const route = preview ? copy.route(preview.sourceRef, preview.remote, preview.destinationRef) : copy.selectedRoute;
   const forceSelected = state.pushMode === "forceWithLease";
   const modeAllowed = Boolean(preview && (forceSelected ? preview.forceWithLeaseAllowed : preview.ordinaryAllowed));
-  const actionable = isPushPreviewActionable(preview);
+  const branchValid = !state.pushCustomBranch || isValidGitBranchName(state.pushCustomBranchInput.trim());
+  const actionable = isPushPreviewActionable(preview) && branchValid;
   const modeMenuAvailable = Boolean(
     preview &&
     actionable &&
@@ -277,11 +279,50 @@ function renderPushRoute(model: RemotePushDialogViewModel, preview: PushPreview 
   const copy = localization.catalog.remote;
   const branch = snapshot.branch.head ?? "current branch";
   const selectedRemote = preview?.remote ?? state.selectedRemote ?? "";
-  const destination = preview?.destinationRef ?? `refs/heads/${branch}`;
+  const destination = preview?.destinationRef ?? `refs/heads/${state.destinationBranch ?? branch}`;
   const destinationBranch = destination.replace(/^refs\/heads\//, "");
   const outgoingCount = preview?.totalCommits ?? 0;
   const options = snapshot.remotes.map((remote) => `<option value="${escapeAttribute(remote.name)}" ${remote.name === selectedRemote ? "selected" : ""} ${remote.pushSupported ? "" : "disabled"}>${escapeHtml(remote.name)}${remote.pushSupported ? "" : ` · ${escapeHtml(copy.unsupported)}`}</option>`).join("");
-  return `<div class="push-route-row" aria-label="${escapeAttribute(copy.pushRouteAria(branch, `${selectedRemote}/${destinationBranch}`))}"><button class="push-route-endpoint push-route-scope ${state.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${state.pushSelectedCommit === null}" title="${escapeAttribute(copy.showAllOutgoingFiles)}"><span class="push-route-kind">${escapeHtml(copy.localBranch)}</span><span class="push-route-name">${icon("branch", 14)}<strong>${escapeHtml(branch)}</strong></span><small>${escapeHtml(copy.outgoingCommitCount(outgoingCount))} · ${escapeHtml(copy.showAllFiles)}</small></button><span class="push-route-arrow" aria-hidden="true"><small>${escapeHtml(copy.push)}</small><strong>→</strong></span><label class="push-route-endpoint push-remote-target"><span class="push-route-kind">${escapeHtml(copy.remoteBranch)}</span><span class="push-route-name push-route-destination">${icon("upload", 14)}${renderSelectControl(`<select id="push-remote-select" aria-label="${escapeAttribute(copy.pushRemote)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${options}</select>`)}<span class="push-route-separator">/</span><strong>${escapeHtml(destinationBranch)}</strong></span><small>${escapeHtml(copy.selectedDestination)}</small></label></div>`;
+
+  const existingRemoteBranches = new Set<string>();
+  const remotePrefix = `refs/remotes/${selectedRemote}/`;
+  for (const b of snapshot.branches) {
+    if (b.kind === "remote") {
+      let branchName = "";
+      if (b.fullName.startsWith(remotePrefix)) {
+        branchName = b.fullName.slice(remotePrefix.length);
+      } else {
+        const slash = b.name.indexOf("/");
+        if (slash >= 0 && b.name.slice(0, slash) === selectedRemote) {
+          branchName = b.name.slice(slash + 1);
+        }
+      }
+      if (branchName && branchName !== "HEAD" && branchName !== selectedRemote && !branchName.endsWith("/HEAD")) {
+        existingRemoteBranches.add(branchName);
+      }
+    }
+  }
+
+  const candidates: string[] = [branch];
+  if (destinationBranch && !candidates.includes(destinationBranch)) {
+    candidates.push(destinationBranch);
+  }
+  const sortedRemotes = Array.from(existingRemoteBranches).sort((a, b) => a.localeCompare(b));
+  for (const rb of sortedRemotes) {
+    if (!candidates.includes(rb)) candidates.push(rb);
+  }
+  const showNewBadge = !existingRemoteBranches.has(destinationBranch);
+  const branchOptions = [
+    `<option value="__new__" data-editable="branch" data-placeholder="${escapeAttribute(copy.newBranchPlaceholder)}" data-error="${escapeAttribute(copy.invalidBranchName)}">${escapeHtml(copy.newBranchOption)}</option>`,
+    ...candidates.map((candidate) => {
+      const isNew = !existingRemoteBranches.has(candidate);
+      const label = isNew ? `${candidate} (${copy.newBadge})` : candidate;
+      return `<option value="${escapeAttribute(candidate)}" ${candidate === destinationBranch ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }),
+  ].join("");
+  const branchControl = renderSelectControl(`<select id="push-branch-select" aria-label="${escapeAttribute(copy.remoteBranch)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${branchOptions}</select>`);
+
+  return `<div class="push-route-row" aria-label="${escapeAttribute(copy.pushRouteAria(branch, `${selectedRemote}/${destinationBranch}`))}"><button class="push-route-endpoint push-route-scope ${state.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${state.pushSelectedCommit === null}" title="${escapeAttribute(copy.showAllOutgoingFiles)}"><span class="push-route-kind">${escapeHtml(copy.localBranch)}</span><span class="push-route-name">${icon("branch", 14)}<strong>${escapeHtml(branch)}</strong></span><small>${escapeHtml(copy.outgoingCommitCount(outgoingCount))} · ${escapeHtml(copy.showAllFiles)}</small></button><span class="push-route-arrow" aria-hidden="true"><small>${escapeHtml(copy.push)}</small><strong>→</strong></span><div class="push-route-endpoint push-remote-target"><span class="push-route-kind">${escapeHtml(copy.remoteBranch)}</span><span class="push-route-name push-route-destination">${icon("upload", 14)}${renderSelectControl(`<select id="push-remote-select" aria-label="${escapeAttribute(copy.pushRemote)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${options}</select>`)}<span class="push-route-separator">/</span>${branchControl}${showNewBadge ? `<span class="push-branch-badge new">${escapeHtml(copy.newBadge)}</span>` : ""}</span><small>${escapeHtml(copy.selectedDestination)}</small></div></div>`;
 }
 
 function renderPushPreviewBody(model: RemotePushDialogViewModel, preview: PushPreview): string {
@@ -294,7 +335,7 @@ function renderPushPreviewBody(model: RemotePushDialogViewModel, preview: PushPr
   const reviewFiles = pushReviewFiles(preview, state);
   const files = renderPushFiles(model, preview, reviewFiles);
   const fileScope = state.pushSelectedCommit ? copy.filesInSelectedCommit : copy.filesInAllCommits;
-  return `<div class="push-preview-grid"><section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">${escapeHtml(copy.outgoingCommits)}</h3><span>${localization.number.format(preview.commits.length)}/${localization.number.format(preview.totalCommits)}</span></div><div class="push-commit-list" role="listbox" aria-label="${escapeAttribute(copy.outgoingListAria)}">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${state.pushPreviewLoadingMore ? "disabled" : ""}>${escapeHtml(state.pushPreviewLoadingMore ? copy.loading : copy.showMore)}</button>` : preview.truncated ? `<p class="push-preview-limit">${escapeHtml(copy.truncatedCommits(localization.number.format(preview.totalCommits)))}</p>` : ""}</section><section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${escapeHtml(fileScope)}</h3><span>${localization.number.format(reviewFiles.length)}${preview.filesTruncated && !state.pushSelectedCommit ? "+" : ""}</span>${pushFileToolbar(model, Boolean(state.pushSelectedFile))}</div><div class="push-file-list compact-file-tree" role="tree">${files}</div></section></div>`;
+  return `<div class="push-preview-grid"><section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">${escapeHtml(copy.outgoingCommits)}</h3><span>${localization.number.format(preview.commits.length)}/${localization.number.format(preview.totalCommits)}</span></div><div class="push-commit-list" role="listbox" aria-label="${escapeAttribute(copy.outgoingListAria)}">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${state.pushPreviewLoadingMore ? "disabled" : ""}>${escapeHtml(state.pushPreviewLoadingMore ? copy.loading : copy.showMore)}</button>` : preview.truncated ? `<p class="push-preview-limit">${escapeHtml(copy.truncatedCommits(localization.number.format(preview.totalCommits)))}</p>` : ""}</section><div class="workbench-splitter vertical push-preview-splitter" id="push-preview-splitter" aria-label="${escapeAttribute(copy.resizePushPreview)}"></div><section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${escapeHtml(fileScope)}</h3><span>${localization.number.format(reviewFiles.length)}${preview.filesTruncated && !state.pushSelectedCommit ? "+" : ""}</span>${pushFileToolbar(model, Boolean(state.pushSelectedFile))}</div><div class="push-file-list compact-file-tree" role="tree">${files}</div></section></div>`;
 }
 
 function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview, reviewFiles: CommitFileChange[]): string {

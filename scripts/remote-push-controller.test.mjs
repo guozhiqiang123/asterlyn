@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  PUSH_TAGS_ENABLED_KEY,
+  PUSH_TAG_MODE_KEY,
   RemotePushController,
   resolveRemoteUpdateActivation,
 } from "../src/features/remote-push/remote-push-controller.ts";
@@ -426,3 +428,196 @@ async function settle() {
   await Promise.resolve();
   await Promise.resolve();
 }
+
+test("push tags enabled and mode are remembered in storage across dialog reset and controller restarts", async () => {
+  const store = new Map();
+  const storage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => store.set(key, String(value)),
+  };
+
+  const gateway = createGateway();
+  const controller = new RemotePushController(gateway, { storage });
+  controller.installSnapshot(snapshot());
+
+  assert.equal(controller.state.pushTagsEnabled, false);
+  assert.equal(controller.state.pushTagMode, "all");
+
+  assert.equal(controller.openDialog("push"), true);
+  await settle();
+
+  controller.setPushTagsEnabled(true);
+  controller.setPushTagMode("currentBranch");
+  await settle();
+
+  assert.equal(controller.state.pushTagsEnabled, true);
+  assert.equal(controller.state.pushTagMode, "currentBranch");
+  assert.equal(store.get(PUSH_TAGS_ENABLED_KEY), "true");
+  assert.equal(store.get(PUSH_TAG_MODE_KEY), "currentBranch");
+
+  assert.equal(controller.closeDialog(), true);
+  assert.equal(controller.state.pushTagsEnabled, true);
+  assert.equal(controller.state.pushTagMode, "currentBranch");
+
+  assert.equal(controller.openDialog("push"), true);
+  await settle();
+  assert.equal(controller.state.pushTagsEnabled, true);
+  assert.equal(controller.state.pushTagMode, "currentBranch");
+  controller.dispose();
+
+  const newController = new RemotePushController(gateway, { storage });
+  newController.installSnapshot(snapshot());
+  assert.equal(newController.state.pushTagsEnabled, true);
+  assert.equal(newController.state.pushTagMode, "currentBranch");
+
+  assert.equal(newController.openDialog("push"), true);
+  await settle();
+  assert.equal(newController.state.pushTagsEnabled, true);
+  assert.equal(newController.state.pushTagMode, "currentBranch");
+
+  newController.setPushTagsEnabled(false);
+  assert.equal(store.get(PUSH_TAGS_ENABLED_KEY), "false");
+  newController.dispose();
+});
+
+test("selecting destination branch reloads push preview and forwards to push", async () => {
+  const previewCalls = [];
+  const pushCalls = [];
+  const gateway = createGateway({
+    previewResponses: [
+      Promise.resolve(preview("origin", "t1")),
+      Promise.resolve(preview("origin", "t2")),
+      Promise.resolve(preview("origin", "t3")),
+    ],
+    readPushPreview(_root, remote, tagMode, _offset, _pageSize, destinationBranch) {
+      previewCalls.push({ remote, tagMode, destinationBranch });
+      return gateway.previewResponses.shift();
+    },
+    pushCurrent(_root, remote, mode, tagMode, _token, _opId, destinationBranch) {
+      pushCalls.push({ remote, mode, tagMode, destinationBranch });
+      return Promise.resolve(snapshot());
+    },
+  });
+  gateway.previewResponses = [
+    Promise.resolve(preview("origin", "t1")),
+    Promise.resolve(preview("origin", "t2")),
+    Promise.resolve(preview("origin", "t3")),
+  ];
+
+  const controller = new RemotePushController(gateway);
+  controller.installSnapshot(snapshot());
+
+  assert.equal(controller.openDialog("push"), true);
+  await settle();
+  assert.equal(controller.state.destinationBranch, null);
+  assert.equal(previewCalls.length, 1);
+  assert.equal(previewCalls[0].destinationBranch, "main");
+
+  assert.equal(controller.setDestinationBranch("new-feature"), true);
+  await settle();
+  assert.equal(controller.state.destinationBranch, "new-feature");
+  assert.equal(previewCalls.length, 2);
+  assert.equal(previewCalls[1].destinationBranch, "new-feature");
+
+  await controller.runOperation("push");
+  assert.equal(pushCalls.length, 1);
+  assert.equal(pushCalls[0].destinationBranch, "new-feature");
+
+  controller.dispose();
+});
+
+test("custom branch mode validates branch name and handles custom branch push", async () => {
+  const previewCalls = [];
+  const pushCalls = [];
+  const gateway = createGateway({
+    previewResponses: [
+      Promise.resolve(preview("origin", "p1")),
+      Promise.resolve(preview("origin", "p2")),
+    ],
+    readPushPreview(_root, remote, tagMode, _offset, _pageSize, destinationBranch) {
+      previewCalls.push({ remote, destinationBranch });
+      return gateway.previewResponses.shift();
+    },
+    pushCurrent(_root, remote, mode, tagMode, _token, _opId, destinationBranch) {
+      pushCalls.push({ remote, destinationBranch });
+      return Promise.resolve(snapshot());
+    },
+  });
+  gateway.previewResponses = [
+    Promise.resolve(preview("origin", "p1")),
+    Promise.resolve(preview("origin", "p2")),
+  ];
+
+  const controller = new RemotePushController(gateway);
+  controller.installSnapshot(snapshot());
+  assert.equal(controller.openDialog("push"), true);
+  await settle();
+
+  // Enable custom branch
+  assert.equal(controller.enableCustomBranch("feature/user-custom"), true);
+  assert.equal(controller.state.pushCustomBranch, true);
+  assert.equal(controller.state.pushCustomBranchInput, "feature/user-custom");
+
+  // Invalid branch name should cause push operation to be unavailable
+  controller.setCustomBranchInput("invalid branch name..");
+  assert.equal(controller.state.pushCustomBranchInput, "invalid branch name..");
+  const result = await controller.runOperation("push");
+  assert.equal(result.status, "unavailable");
+  assert.equal(pushCalls.length, 0);
+
+  // Valid branch name triggers preview reload and allows push
+  controller.setCustomBranchInput("feature/valid-name");
+  await new Promise((r) => setTimeout(r, 200)); // wait for debounce
+  await settle();
+  assert.equal(previewCalls[previewCalls.length - 1].destinationBranch, "feature/valid-name");
+
+  await controller.runOperation("push");
+  assert.equal(pushCalls.length, 1);
+  assert.equal(pushCalls[0].destinationBranch, "feature/valid-name");
+
+  // Disabling custom branch reverts mode
+  assert.equal(controller.disableCustomBranch(), true);
+  assert.equal(controller.state.pushCustomBranch, false);
+
+  controller.dispose();
+});
+
+test("push dialog view excludes origin/HEAD and origin from branch dropdown and includes __new__", async () => {
+  const { renderRemoteDialogContent } = await import("../src/features/remote-push/remote-push-view.ts");
+  const repo = snapshot({
+    branches: [
+      { name: "main", fullName: "refs/heads/main", kind: "local" },
+      { name: "origin", fullName: "refs/remotes/origin/HEAD", kind: "remote" },
+      { name: "origin/main", fullName: "refs/remotes/origin/main", kind: "remote" },
+      { name: "origin/feature-x", fullName: "refs/remotes/origin/feature-x", kind: "remote" },
+    ],
+  });
+  const gateway = createGateway();
+  const controller = new RemotePushController(gateway);
+  controller.installSnapshot(repo);
+  controller.openDialog("push");
+
+  const html = renderRemoteDialogContent({
+    snapshot: repo,
+    state: controller.state,
+    activeTab: "push",
+  });
+
+  const branchSelectMatch = html.match(/<select id="push-branch-select"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(branchSelectMatch);
+  const branchOptionsHtml = branchSelectMatch[1];
+
+  // Verify __new__ option exists with editable branch metadata
+  assert.match(branchOptionsHtml, /<option value="__new__"[^>]*data-editable="branch"/);
+  assert.match(branchOptionsHtml, /data-placeholder=/);
+  assert.match(branchOptionsHtml, /data-error=/);
+  // Verify feature-x is present
+  assert.match(branchOptionsHtml, /<option value="feature-x"/);
+  // Verify origin and HEAD are NOT present as branch choices
+  assert.doesNotMatch(branchOptionsHtml, /<option value="origin"/);
+  assert.doesNotMatch(branchOptionsHtml, /<option value="HEAD"/);
+
+  controller.dispose();
+});
+
+

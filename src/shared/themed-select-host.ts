@@ -1,3 +1,5 @@
+import { isValidGitBranchName } from "./git-branch-name.ts";
+
 const VIEWPORT_MARGIN = 4;
 const MENU_GAP = 4;
 const TYPEAHEAD_RESET_MS = 600;
@@ -7,10 +9,11 @@ interface ActiveSelectMenu {
   readonly layer: HTMLDivElement;
   readonly menu: HTMLDivElement;
   readonly options: readonly HTMLOptionElement[];
-  readonly buttons: readonly HTMLButtonElement[];
+  readonly buttons: (HTMLButtonElement | HTMLElement)[];
   activeIndex: number;
   typeahead: string;
   typeaheadTimer: number | null;
+  editingIndex: number | null;
 }
 
 export interface ThemedSelectPlacement {
@@ -86,6 +89,9 @@ export class ThemedSelectHost {
     }
     const active = this.active;
     if (!active) return;
+    if (active.editingIndex !== null && active.layer.contains(this.document.activeElement) && this.document.activeElement instanceof HTMLInputElement) {
+      return;
+    }
     if (event.key === "Tab") {
       this.close(false);
       return;
@@ -164,6 +170,7 @@ export class ThemedSelectHost {
       button.setAttribute("aria-selected", String(option.selected));
       button.disabled = option.disabled;
       button.dataset.selectOptionIndex = String(index);
+      if (option.dataset.editable) button.dataset.editable = option.dataset.editable;
       const mark = this.document.createElement("span");
       mark.className = "themed-select-option-mark";
       mark.setAttribute("aria-hidden", "true");
@@ -171,9 +178,17 @@ export class ThemedSelectHost {
       const label = this.document.createElement("span");
       label.textContent = option.label || option.textContent || "";
       button.append(mark, label);
-      button.addEventListener("pointerenter", () => this.focus(this.active, index, false));
+      button.addEventListener("pointerenter", () => {
+        if (this.active?.editingIndex === null) this.focus(this.active, index, false);
+      });
       button.addEventListener("click", () => {
-        if (this.active?.select === select) this.choose(this.active, index);
+        if (this.active?.select === select) {
+          if (option.dataset.editable) {
+            this.startInlineEdit(this.active, index);
+          } else {
+            this.choose(this.active, index);
+          }
+        }
       });
       menu.append(button);
       return button;
@@ -195,6 +210,7 @@ export class ThemedSelectHost {
       activeIndex,
       typeahead: "",
       typeaheadTimer: null,
+      editingIndex: null,
     };
     this.active = active;
     select.setAttribute("aria-expanded", "true");
@@ -202,10 +218,12 @@ export class ThemedSelectHost {
     const rectangle = select.closest<HTMLElement>(".select-control")?.getBoundingClientRect() ??
       select.getBoundingClientRect();
     const menuRectangle = menu.getBoundingClientRect();
+    const hasEditable = options.some((option) => Boolean(option.dataset.editable));
+    const targetWidth = hasEditable ? Math.max(menuRectangle.width, 220) : menuRectangle.width;
     const placement = themedSelectPlacement(rectangle, menuRectangle.height, {
       width: this.window.innerWidth,
       height: this.window.innerHeight,
-    });
+    }, targetWidth);
     menu.style.left = `${placement.left}px`;
     menu.style.top = `${placement.top}px`;
     menu.style.width = `${placement.width}px`;
@@ -214,12 +232,13 @@ export class ThemedSelectHost {
 
   private focus(active: ActiveSelectMenu | null, index: number, moveFocus = true): void {
     if (!active || this.active !== active || index < 0 || index >= active.buttons.length) return;
+    if (active.editingIndex !== null) return;
     active.activeIndex = index;
     active.buttons.forEach((button, buttonIndex) => {
       button.classList.toggle("active", buttonIndex === index);
     });
     const button = active.buttons[index];
-    if (moveFocus && button && !button.disabled) {
+    if (moveFocus && button instanceof HTMLButtonElement && !button.disabled) {
       button.focus({ preventScroll: true });
       button.scrollIntoView({ block: "nearest" });
     }
@@ -228,6 +247,10 @@ export class ThemedSelectHost {
   private choose(active: ActiveSelectMenu, index: number): void {
     const option = active.options[index];
     if (!option || option.disabled) return;
+    if (option.dataset.editable) {
+      this.startInlineEdit(active, index);
+      return;
+    }
     const select = active.select;
     const changed = select.selectedIndex !== option.index;
     select.selectedIndex = option.index;
@@ -236,6 +259,161 @@ export class ThemedSelectHost {
       select.dispatchEvent(new Event("input", { bubbles: true }));
       select.dispatchEvent(new Event("change", { bubbles: true }));
     }
+  }
+
+  private updatePlacement(active: ActiveSelectMenu): void {
+    const rectangle = active.select.closest<HTMLElement>(".select-control")?.getBoundingClientRect() ??
+      active.select.getBoundingClientRect();
+    const menuRectangle = active.menu.getBoundingClientRect();
+    const hasEditable = active.options.some((option) => Boolean(option.dataset.editable));
+    const targetWidth = hasEditable ? Math.max(menuRectangle.width, 220) : menuRectangle.width;
+    const placement = themedSelectPlacement(rectangle, menuRectangle.height, {
+      width: this.window.innerWidth,
+      height: this.window.innerHeight,
+    }, targetWidth);
+    active.menu.style.left = `${placement.left}px`;
+    active.menu.style.top = `${placement.top}px`;
+    active.menu.style.width = `${placement.width}px`;
+  }
+
+  private startInlineEdit(active: ActiveSelectMenu, index: number): void {
+    if (active.editingIndex !== null) return;
+    const option = active.options[index];
+    const button = active.buttons[index];
+    if (!option || !button) return;
+    active.editingIndex = index;
+
+    const placeholder = option.dataset.placeholder || option.label || option.textContent || "";
+    const errorMsg = option.dataset.error || "";
+    const editType = option.dataset.editable;
+
+    const wrap = this.document.createElement("div");
+    wrap.className = "themed-select-editable-wrap";
+
+    const row = this.document.createElement("div");
+    row.className = "themed-select-editable-row";
+
+    const input = this.document.createElement("input");
+    input.type = "text";
+    input.className = "themed-select-editable-input";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder);
+    input.spellcheck = false;
+    input.autocomplete = "off";
+
+    const submit = this.document.createElement("button");
+    submit.type = "button";
+    submit.className = "themed-select-editable-submit";
+    submit.textContent = "✓";
+    submit.disabled = true;
+    const confirmTitle = option.dataset.confirmTitle || placeholder;
+    if (confirmTitle) {
+      submit.title = confirmTitle;
+      submit.setAttribute("aria-label", confirmTitle);
+    }
+
+    const errorEl = this.document.createElement("div");
+    errorEl.className = "themed-select-editable-error hidden";
+    errorEl.setAttribute("role", "alert");
+
+    row.append(input, submit);
+    wrap.append(row, errorEl);
+
+    button.replaceWith(wrap);
+    active.buttons[index] = wrap;
+
+    const validate = (val: string): boolean => {
+      if (editType === "branch") return isValidGitBranchName(val);
+      return val.length > 0;
+    };
+
+    const checkValidity = (): boolean => {
+      const val = input.value.trim();
+      if (val.length === 0) {
+        row.classList.remove("invalid");
+        errorEl.classList.add("hidden");
+        errorEl.textContent = "";
+        submit.disabled = true;
+        return false;
+      }
+      const ok = validate(val);
+      if (ok) {
+        row.classList.remove("invalid");
+        errorEl.classList.add("hidden");
+        errorEl.textContent = "";
+        submit.disabled = false;
+      } else {
+        row.classList.add("invalid");
+        errorEl.classList.remove("hidden");
+        errorEl.textContent = errorMsg;
+        submit.disabled = true;
+      }
+      return ok;
+    };
+
+    input.addEventListener("input", () => {
+      checkValidity();
+      this.updatePlacement(active);
+    });
+
+    const commit = () => {
+      const val = input.value.trim();
+      if (!validate(val)) {
+        row.classList.add("invalid");
+        errorEl.classList.remove("hidden");
+        errorEl.textContent = errorMsg;
+        submit.disabled = true;
+        this.updatePlacement(active);
+        return;
+      }
+      this.commitInlineEdit(active, val);
+    };
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        commit();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.cancelInlineEdit(active, index, button as HTMLButtonElement, wrap);
+      }
+    });
+
+    submit.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      commit();
+    });
+
+    this.updatePlacement(active);
+    queueMicrotask(() => input.focus());
+  }
+
+  private commitInlineEdit(active: ActiveSelectMenu, value: string): void {
+    const select = active.select;
+    let opt = Array.from(select.options).find((o) => o.value === value);
+    if (!opt) {
+      opt = this.document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      select.append(opt);
+    }
+    select.value = value;
+    this.close(true);
+    if (select.isConnected) {
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  private cancelInlineEdit(active: ActiveSelectMenu, index: number, button: HTMLButtonElement, wrap: HTMLElement): void {
+    active.editingIndex = null;
+    wrap.replaceWith(button);
+    active.buttons[index] = button;
+    this.updatePlacement(active);
+    button.focus();
   }
 
   private close(restoreFocus: boolean): void {
@@ -254,9 +432,10 @@ export function themedSelectPlacement(
   anchor: Pick<DOMRect, "left" | "right" | "top" | "bottom" | "width">,
   menuHeight: number,
   viewport: { width: number; height: number },
+  menuWidth = 0,
 ): ThemedSelectPlacement {
   const width = Math.min(
-    Math.max(anchor.width, 120),
+    Math.max(anchor.width, menuWidth, 120),
     Math.max(120, viewport.width - VIEWPORT_MARGIN * 2),
   );
   const left = Math.min(

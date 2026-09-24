@@ -80,10 +80,10 @@ export interface DesktopCommandMap {
   store_remote_https_credential: { args: { repositoryRoot: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
   configure_remote_ssh: { args: { repositoryRoot: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
   fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
-  read_push_preview: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; offset: number; pageSize: number; }; result: Model.PushPreview };
-  read_push_file_commit: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; previewToken: string; path: string; }; result: Model.CommitDetails | null };
+  read_push_preview: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; offset: number; pageSize: number; destinationBranch: string | null; }; result: Model.PushPreview };
+  read_push_file_commit: { args: { repositoryRoot: string; remote: string; tagMode: Model.PushTagMode; previewToken: string; path: string; destinationBranch: string | null; }; result: Model.CommitDetails | null };
   pull_current: { args: { repositoryRoot: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
-  push_current: { args: { repositoryRoot: string; remote: string; mode: Model.PushMode; tagMode: Model.PushTagMode; previewToken: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  push_current: { args: { repositoryRoot: string; remote: string; mode: Model.PushMode; tagMode: Model.PushTagMode; previewToken: string; operationId: string; destinationBranch: string | null; }; result: Model.RepositoryMutationOutcome };
   cancel_remote_operation: { args: { repositoryRoot: string; operationId: string; }; result: void };
   read_git_operation: { args: { repositoryRoot: string; }; result: Model.GitOperationSnapshot | null };
   prepare_git_operation: { args: { repositoryRoot: string; kind: Model.GitOperationKind; targetRefs: Array<string>; message: string | null; }; result: Model.GitOperationPlan };

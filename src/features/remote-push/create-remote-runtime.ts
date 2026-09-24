@@ -14,6 +14,7 @@ export function createRemoteRuntime(
   management: RemoteManagementGateway,
   notifications: RemoteRuntimeNotifications,
   managementCopy?: () => RemoteManagementCopy,
+  storage?: Pick<Storage, "getItem" | "setItem">,
 ): RemoteRuntime {
   return new RemoteRuntime({
     push: {
@@ -33,5 +34,5 @@ export function createRemoteRuntime(
       configureRemoteSsh: (...args) => bridge.configureRemoteSsh(...args),
     },
     management,
-  }, messages, notifications, root, managementCopy);
+  }, messages, notifications, root, managementCopy, storage);
 }

@@ -39,6 +39,15 @@ test("theme-owned popup stays inside the viewport and prefers available space", 
     ),
     { left: 8, top: 44, width: 120 },
   );
+  assert.deepEqual(
+    themedSelectPlacement(
+      { left: 10, right: 100, top: 10, bottom: 40, width: 90 },
+      60,
+      { width: 300, height: 240 },
+      160,
+    ),
+    { left: 10, top: 44, width: 160 },
+  );
 });
 
 test("theme-owned popup keyboard navigation skips disabled choices", () => {

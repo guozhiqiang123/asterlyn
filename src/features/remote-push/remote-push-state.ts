@@ -107,6 +107,9 @@ export interface RemotePushState {
   pushMode: PushMode;
   pushModeMenuOpen: boolean;
   pushFileActionLoading: boolean;
+  destinationBranch: string | null;
+  pushCustomBranch: boolean;
+  pushCustomBranchInput: string;
   pushDiff: PushDiffState | null;
 }
 
@@ -134,6 +137,9 @@ export function createRemotePushState(): RemotePushState {
     pushMode: "ordinary",
     pushModeMenuOpen: false,
     pushFileActionLoading: false,
+    destinationBranch: null,
+    pushCustomBranch: false,
+    pushCustomBranchInput: "",
     pushDiff: null,
   };
 }
