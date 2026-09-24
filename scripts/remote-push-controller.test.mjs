@@ -225,6 +225,28 @@ test("operation ownership rejects completions after repository replacement", asy
   assert.equal(controller.state.operation, null);
 });
 
+test("automatic Fetch is identified as background work while manual Fetch remains interactive", async () => {
+  const firstFetch = deferred();
+  const secondFetch = deferred();
+  let calls = 0;
+  const controller = new RemotePushController(createGateway({
+    fetchRemote() { return ++calls === 1 ? firstFetch.promise : secondFetch.promise; },
+  }));
+  controller.installSnapshot(snapshot());
+
+  const automatic = controller.runOperation("fetch", true);
+  assert.equal(controller.state.operation?.background, true);
+  firstFetch.resolve(snapshot());
+  assert.equal((await automatic).status, "success");
+  assert.equal(controller.state.operation, null);
+
+  const manual = controller.runOperation("fetch");
+  assert.equal(controller.state.operation?.background, false);
+  secondFetch.resolve(snapshot());
+  assert.equal((await manual).status, "success");
+  controller.dispose();
+});
+
 test("structured remote failures retain their localized actionable reason in the dialog", async () => {
   const remoteError = {
     kind: "remoteFailed",

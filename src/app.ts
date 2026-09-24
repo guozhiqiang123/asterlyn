@@ -3615,8 +3615,7 @@ export class AsterlynApp {
     if (!background) this.clearError();
     const actionName = this.localization.catalog.remote.actionNames[kind];
     const progressMessage = this.localization.catalog.remote.operationInProgress(actionName);
-    if (background) this.setStatus(progressMessage, "busy");
-    else this.setLoading(true, progressMessage);
+    if (!background) this.setLoading(true, progressMessage);
     let pendingRoot: string | null = null;
     let succeeded = false;
     let failed = false;
@@ -3625,7 +3624,7 @@ export class AsterlynApp {
     let failureMessage: string | null = null;
 
     try {
-      const result = await this.remoteRuntime.push.runOperation(kind);
+      const result = await this.remoteRuntime.push.runOperation(kind, background);
       if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
         const feedback = remoteOperationCompletionFeedback(
@@ -3689,7 +3688,7 @@ export class AsterlynApp {
       this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) {
         if (!background) this.setLoading(false, this.localization.catalog.common.ready);
-        if (succeeded) {
+        if (succeeded && !background) {
           if (announceCompletion) this.showInformation(completionMessage);
           else this.setStatus(completionMessage, "success");
         } else if (failed) {

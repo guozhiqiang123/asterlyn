@@ -28,6 +28,7 @@ export interface RemoteOperationState {
   id: string;
   root: string;
   kind: "fetch" | "pull" | "push";
+  background: boolean;
   cancelling: boolean;
 }
 

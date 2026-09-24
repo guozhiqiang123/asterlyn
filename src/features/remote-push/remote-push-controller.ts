@@ -462,7 +462,7 @@ export class RemotePushController {
     return path;
   }
 
-  async runOperation(kind: "fetch" | "pull" | "push"): Promise<RemoteOperationResult> {
+  async runOperation(kind: "fetch" | "pull" | "push", background = false): Promise<RemoteOperationResult> {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.operation) return { status: "unavailable" };
     const policy = remotePolicy(snapshot, this.state.selectedRemote);
@@ -478,6 +478,7 @@ export class RemotePushController {
       id: operationId,
       root: snapshot.root,
       kind,
+      background,
       cancelling: false,
     };
     this.state.dialogError = null;

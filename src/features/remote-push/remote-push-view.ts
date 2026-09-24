@@ -113,8 +113,8 @@ export function renderRemoteToolbarView(
     }
   }
 
-  cancel.classList.toggle("hidden", !operation);
-  cancel.disabled = !operation || operation.cancelling;
+  cancel.classList.toggle("hidden", !operation || operation.background);
+  cancel.disabled = !operation || operation.background || operation.cancelling;
   cancel.title = operation
     ? copy.cancelOperation(copy.actionNames[operation.kind], branchName, selectedName)
     : copy.cancelRemoteOperation;

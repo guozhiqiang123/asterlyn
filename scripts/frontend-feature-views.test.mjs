@@ -114,12 +114,19 @@ test("blocked remote actions remain interactive so their exact reason can be ann
   assert.equal(blocked.elements.get("#remote-update").getAttribute("aria-disabled"), "true");
   assert.match(blocked.elements.get("#remote-update").title, /local changes first/);
 
-  state.operation = { id: "fetch-1", root: repository.root, kind: "fetch", cancelling: false };
+  state.operation = { id: "fetch-1", root: repository.root, kind: "fetch", background: false, cancelling: false };
   const fetching = remoteToolbarRoot();
   renderRemoteToolbarView(fetching.root, repository, state, false);
   assert.equal(fetching.elements.get("#remote-update").getAttribute("aria-disabled"), "true");
   assert.match(fetching.elements.get("#remote-update").title, /Fetch in progress/);
   assert.doesNotMatch(fetching.elements.get("#remote-update").title, /not an active Git repository/);
+  assert.equal(fetching.elements.get("#cancel-remote-operation").classList.contains("hidden"), false);
+  assert.equal(fetching.elements.get("#cancel-remote-operation").disabled, false);
+
+  state.operation.background = true;
+  renderRemoteToolbarView(fetching.root, repository, state, false);
+  assert.equal(fetching.elements.get("#cancel-remote-operation").classList.contains("hidden"), true);
+  assert.equal(fetching.elements.get("#cancel-remote-operation").disabled, true);
 });
 
 test("settings view keeps one selected section and bounded preference controls", () => {
@@ -940,6 +947,7 @@ function fakeElement() {
     title: "",
     classList: {
       add(...names) { names.forEach((name) => classes.add(name)); },
+      contains(name) { return classes.has(name); },
       toggle(name, force) {
         const enabled = force ?? !classes.has(name);
         if (enabled) classes.add(name);
