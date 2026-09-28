@@ -47,10 +47,16 @@ test("excluded paths survive refresh only while the change still exists", () => 
 
 test("tree projection keeps directory ancestry and exact descendant paths", () => {
   const tree = buildChangeFileTree([
-    change("src/core/a.ts"),
+    change("src/core/z.ts"),
     change("src/ui/b.ts"),
+    change("src/core/a.ts"),
     change("README.md"),
   ]);
   assert.deepEqual(tree.map((node) => node.name), ["src", "README.md"]);
-  assert.deepEqual(descendantChangePaths(tree[0]), ["src/core/a.ts", "src/ui/b.ts"]);
+  assert.deepEqual(tree[0].children[0].children.map((node) => node.name), ["a.ts", "z.ts"]);
+  assert.deepEqual(descendantChangePaths(tree[0]), [
+    "src/core/a.ts",
+    "src/core/z.ts",
+    "src/ui/b.ts",
+  ]);
 });

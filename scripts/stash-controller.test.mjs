@@ -88,6 +88,20 @@ test("stash file tree tracks collapsed folders independently from the selected f
   assert.equal(controller.state.collapsedDirectories.size, 0);
 });
 
+test("flat stash files sort by file name instead of directory path", async () => {
+  const controller = new StashController(gateway({
+    catalogs: [catalog([entry("stash@{0}", "a", "work")])],
+    readStashDetails: (_root, _repositoryId, stashOid) => Promise.resolve(detailsWithFiles(stashOid, [
+      "aardvark/zeta.ts", "zebra/alpha.ts",
+    ])),
+  }));
+  await controller.load("/repo", false);
+  controller.toggleFileView();
+
+  const html = renderStashDetails(controller.state, EN_US.stash, DEFAULT_LOCALIZATION);
+  assert.ok(html.indexOf('data-stash-file="zebra/alpha.ts"') < html.indexOf('data-stash-file="aardvark/zeta.ts"'));
+});
+
 function gateway(overrides = {}) {
   const catalogs = [...(overrides.catalogs ?? [catalog([])])];
   return {

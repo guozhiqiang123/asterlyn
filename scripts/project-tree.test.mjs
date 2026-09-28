@@ -14,7 +14,8 @@ test("project tree groups paths and sorts directories before files", () => {
   const tree = buildProjectTree([
     "README.md",
     "src/zeta.ts",
-    "src/app/main.ts",
+    "src/app/zeta.ts",
+    "src/app/alpha.ts",
     "src/alpha.ts",
     "README.md",
   ]);
@@ -33,7 +34,11 @@ test("project tree groups paths and sorts directories before files", () => {
       ["file", "zeta.ts"],
     ],
   );
-  assert.equal(tree[0].children[0].children[0].path, "src/app/main.ts");
+  assert.deepEqual(
+    tree[0].children[0].children.map((node) => node.name),
+    ["alpha.ts", "zeta.ts"],
+  );
+  assert.equal(tree[0].children[0].children[0].path, "src/app/alpha.ts");
   assert.equal(tree[0].children[0].children[0].status, "unmodified");
 });
 

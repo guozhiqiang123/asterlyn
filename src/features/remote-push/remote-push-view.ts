@@ -15,6 +15,7 @@ import {
   type CommitFileTreeNode,
 } from "../../presentation/git-presentation.ts";
 import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
+import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { formatPresentationDateTime } from "../../presentation/date-time.ts";
 import type { AppPreferences } from "../../preferences.ts";
@@ -343,7 +344,7 @@ function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview,
   if (state.pushCommitDetailsLoading) return `<div class="remote-dialog-loading compact" role="status"><span class="spinner"></span><span>${escapeHtml(copy.readingSelectedFiles)}</span></div>`;
   if (state.pushCommitDetailsError) return renderRemoteError(state.pushCommitDetailsError, localization, "remote-dialog-empty error");
   if (!reviewFiles.length) return `<div class="remote-dialog-empty">${escapeHtml(preview.filesTruncated && !state.pushSelectedCommit ? copy.pushedRangeExceeded : state.pushSelectedCommit ? copy.noSelectedCommitFiles : copy.noNetFileChanges)}</div>`;
-  if (state.pushFileView === "flat") return reviewFiles.map((file) => pushFileRow(file, file.path === state.pushSelectedFile, null, localization)).join("");
+  if (state.pushFileView === "flat") return sortFilesByName(reviewFiles).map((file) => pushFileRow(file, file.path === state.pushSelectedFile, null, localization)).join("");
   const rootExpanded = !state.pushCollapsedFileDirectories.has(".");
   return `<details class="push-file-directory push-file-root" data-push-directory="." ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<strong>${escapeHtml(basename(model.workspaceRoot ?? preview.branch))}</strong><small class="compact-file-tree-count">${escapeHtml(localization.catalog.history.fileCount(reviewFiles.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(reviewFiles).map((node) => renderPushFileTreeNode(node, 1, model)).join("") : ""}</div></details>`;
 }

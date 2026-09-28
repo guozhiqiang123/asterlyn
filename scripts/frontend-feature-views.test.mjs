@@ -308,6 +308,21 @@ test("push review outgoing file tree uses the shared compact directory chain", (
   assert.match(html, /class="compact-file-tree-count"/);
 });
 
+test("flat push review files sort by file name instead of directory path", () => {
+  const state = createRemotePushState();
+  state.dialog = "push";
+  state.pushFileView = "flat";
+  state.pushPreview = pushPreview({
+    files: [
+      { path: "aardvark/zeta.ts", originalPath: null, status: "modified" },
+      { path: "zebra/alpha.ts", originalPath: null, status: "modified" },
+    ],
+  });
+
+  const html = renderRemoteDialogContent(viewModel(state));
+  assert.ok(html.indexOf('data-push-file="zebra/alpha.ts"') < html.indexOf('data-push-file="aardvark/zeta.ts"'));
+});
+
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
   const snapshot = repositorySnapshot();
   snapshot.branches = branchFixtures();
@@ -498,6 +513,59 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(folder, /data-commit-folder-file="src\/main\.ts"/);
   assert.match(folder, />nested\/deep<\/span>/u);
   assert.match(folder, /2 changed files projected under this folder/);
+});
+
+test("flat history file lists sort by file name instead of directory path", () => {
+  const snapshot = repositorySnapshot();
+  const commit = commitFixture();
+  const files = [
+    { path: "aardvark/zeta.ts", originalPath: null, status: "modified" },
+    { path: "zebra/alpha.ts", originalPath: null, status: "modified" },
+  ];
+  const detail = renderCommitDetail({
+    snapshot,
+    commit,
+    details: { repositoryId: ".", oid: commit.oid, parentOid: "1".repeat(40), files },
+    loading: false,
+    error: null,
+    selectedFile: null,
+    fileView: "flat",
+    collapsedDirectories: new Set(),
+  });
+  const comparison = renderCommitComparisonDetail({
+    snapshot,
+    repositoryId: ".",
+    beforeOid: "1".repeat(40),
+    afterOid: "2".repeat(40),
+    details: {
+      repositoryId: ".",
+      beforeOid: "1".repeat(40),
+      afterOid: "2".repeat(40),
+      relation: "divergent",
+      files,
+    },
+    loading: false,
+    error: null,
+    selectedFile: null,
+    fileView: "flat",
+    collapsedDirectories: new Set(),
+  });
+  const folder = renderCommitFolderDetail({
+    target: {
+      workspaceRoot: "/repo", workspaceGeneration: 1, repositoryRevision: 2,
+      workspacePath: "src", repositoryId: ".", oid: "2".repeat(40),
+      parentOid: "1".repeat(40), path: "src", kind: "directory", file: null,
+      descendants: files.map((file) => ({ ...file, path: `src/${file.path}` })),
+      historyGeneration: 3,
+    },
+    selectedFile: null,
+    fileView: "flat",
+    collapsedDirectories: new Set(),
+  });
+
+  assert.ok(detail.indexOf('data-commit-file="zebra/alpha.ts"') < detail.indexOf('data-commit-file="aardvark/zeta.ts"'));
+  assert.ok(comparison.indexOf('data-comparison-file="zebra/alpha.ts"') < comparison.indexOf('data-comparison-file="aardvark/zeta.ts"'));
+  assert.ok(folder.indexOf('data-commit-folder-file="src/zebra/alpha.ts"') < folder.indexOf('data-commit-folder-file="src/aardvark/zeta.ts"'));
 });
 
 test("history path dialog mounts only expanded directory levels", () => {

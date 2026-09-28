@@ -4,6 +4,7 @@ import type {
   ProjectFile,
   ProjectIgnoredEntry,
 } from "../models";
+import { compareFileTreeNodes } from "./file-name-order.ts";
 
 export interface ProjectTreeEntry {
   path: string;
@@ -224,9 +225,6 @@ function visitProjectTree(
 }
 
 function sortTree(nodes: ProjectTreeNode[]): void {
-  nodes.sort((left, right) => {
-    if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
+  nodes.sort(compareFileTreeNodes);
   for (const node of nodes) sortTree(node.children);
 }

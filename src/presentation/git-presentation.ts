@@ -1,5 +1,6 @@
 import type { BranchSummary, CommitFileChange, CommitSummary } from "../models";
 import { commitKey, parentCommitKey } from "../history-query.ts";
+import { compareFileTreeNodes } from "./file-name-order.ts";
 
 export type CommitFileView = "tree" | "flat";
 export type CommitReferenceKind = "head" | "local" | "remote" | "tag" | "other";
@@ -299,9 +300,6 @@ export function groupRemoteBranches(branches: BranchSummary[]): RemoteBranchGrou
 }
 
 function sortCommitTree(nodes: CommitFileTreeNode[]): void {
-  nodes.sort((left, right) => {
-    if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
+  nodes.sort(compareFileTreeNodes);
   for (const node of nodes) sortCommitTree(node.children);
 }

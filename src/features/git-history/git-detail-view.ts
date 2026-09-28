@@ -21,6 +21,7 @@ import { formatPresentationDateTime } from "../../presentation/date-time.ts";
 import {
   compactDirectoryChain,
 } from "../../presentation/compact-file-tree.ts";
+import { sortFilesByName } from "../../presentation/file-name-order.ts";
 
 export interface CommitDetailViewModel {
   readonly snapshot: RepositorySnapshot;
@@ -125,7 +126,7 @@ function commitFileRows(model: CommitDetailViewModel): string {
   if (!model.details) return loadingBlock(copy.loadingChangedFiles);
   if (model.details.files.length === 0) return `<div class="group-empty">${escapeHtml(copy.noFirstParentChanges)}</div>`;
   if (model.fileView === "flat") {
-    return [...model.details.files].sort((left, right) => left.path.localeCompare(right.path)).map((file) => commitFileRow(file, file.path === model.selectedFile, null, localization)).join("");
+    return sortFilesByName(model.details.files).map((file) => commitFileRow(file, file.path === model.selectedFile, null, localization)).join("");
   }
   const rootExpanded = !model.collapsedDirectories.has(".");
   const rootName = model.snapshot.repositoryRoots.find((root) => root.id === model.commit.repositoryId)?.displayName ?? basename(model.snapshot.root);
@@ -144,8 +145,7 @@ function comparisonFileRows(model: CommitComparisonDetailViewModel): string {
     return `<div class="group-empty">${escapeHtml(copy.noComparisonChanges)}</div>`;
   }
   if (model.fileView === "flat") {
-    return [...model.details.files]
-      .sort((left, right) => left.path.localeCompare(right.path))
+    return sortFilesByName(model.details.files)
       .map((file) => comparisonFileRow(file, file.path === model.selectedFile, null, localization))
       .join("");
   }
@@ -159,8 +159,7 @@ function comparisonFileRows(model: CommitComparisonDetailViewModel): string {
 function commitFolderFileRows(model: CommitFolderDetailViewModel): string {
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   if (model.fileView === "flat") {
-    return [...model.target.descendants]
-      .sort((left, right) => left.path.localeCompare(right.path))
+    return sortFilesByName(model.target.descendants)
       .map((file) => commitFolderFileRow(
         file,
         file.path === model.selectedFile,

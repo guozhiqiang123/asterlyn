@@ -55,6 +55,21 @@ test("Changes compacts unary folders while preserving the terminal disclosure ta
   assert.match(html, />docs\/refactor\/rebuild<\/span><small[^>]*>2 files<\/small>/u);
 });
 
+test("flat Changes rows sort by file name instead of directory path", () => {
+  const rows = changeViewRows(
+    snapshot([
+      change("aardvark/zeta.ts"),
+      change("zebra/alpha.ts"),
+    ]),
+    { ...state(), fileView: "flat" },
+  );
+
+  assert.deepEqual(
+    rows.filter((row) => row.kind === "file").map((row) => row.change.path),
+    ["zebra/alpha.ts", "aardvark/zeta.ts"],
+  );
+});
+
 test("large change trees mount no more than the architecture budget", () => {
   const changes = Array.from({ length: 1_200 }, (_, index) =>
     change(`src/file-${String(index).padStart(4, "0")}.ts`),

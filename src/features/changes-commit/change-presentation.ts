@@ -1,4 +1,5 @@
 import type { ChangeKind, FileChange } from "../../models";
+import { compareFileTreeNodes } from "../../presentation/file-name-order.ts";
 
 export type ChangeFileView = "tree" | "flat";
 export type ChangeGroupId = "conflicts" | "changes" | "unversioned";
@@ -75,9 +76,6 @@ export function descendantChangePaths(node: ChangeFileTreeNode): string[] {
 }
 
 function sortChangeTree(nodes: ChangeFileTreeNode[]): void {
-  nodes.sort((left, right) => {
-    if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
+  nodes.sort(compareFileTreeNodes);
   for (const node of nodes) sortChangeTree(node.children);
 }

@@ -40,8 +40,9 @@ test("commit files project to a directory-first tree without losing file state",
   const files = [
     file("README.md", "modified"),
     file("src/zeta.ts", "deleted"),
-    file("src/app/main.ts", "added"),
+    file("src/app/zeta.ts", "added"),
     file("src/alpha.ts", "renamed"),
+    file("src/app/alpha.ts", "modified"),
   ];
   const tree = buildCommitFileTree(files);
   assert.deepEqual(
@@ -59,7 +60,11 @@ test("commit files project to a directory-first tree without losing file state",
       ["file", "zeta.ts"],
     ],
   );
-  assert.equal(tree[0].children[0].children[0].file, files[2]);
+  assert.deepEqual(
+    tree[0].children[0].children.map((node) => node.name),
+    ["alpha.ts", "zeta.ts"],
+  );
+  assert.equal(tree[0].children[0].children[1].file, files[2]);
 });
 
 test("remote refs group by remote and retain exact selectable refs", () => {

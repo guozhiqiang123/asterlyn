@@ -16,6 +16,7 @@ import {
   COMPACT_FILE_TREE_ROW_HEIGHT,
   compactDirectoryChain,
 } from "../../presentation/compact-file-tree.ts";
+import { sortFilesByName } from "../../presentation/file-name-order.ts";
 
 export const CHANGE_TREE_MOUNT_LIMIT = 200;
 export const CHANGE_TREE_ROW_HEIGHT = COMPACT_FILE_TREE_ROW_HEIGHT;
@@ -197,7 +198,7 @@ function appendGroupRows(
   rows.push({ kind: "group", group, title, changes, collapsed });
   if (collapsed) return;
   if (state.fileView === "flat") {
-    for (const change of [...changes].sort((left, right) => left.path.localeCompare(right.path))) {
+    for (const change of sortFilesByName(changes)) {
       rows.push({ kind: "file", group, change, depth: null });
     }
     return;

@@ -4,6 +4,7 @@ import type { StashCopy } from "../../localization/stash-copy.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type { ChangeKind, CommitFileChange, StashEntry } from "../../models.ts";
 import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
+import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import { buildCommitFileTree, type CommitFileTreeNode } from "../../presentation/git-presentation.ts";
 import { stashDomKey, stashKey, type StashState } from "./stash-controller.ts";
 
@@ -46,7 +47,7 @@ function stashFileRows(state: StashState, entry: StashEntry, localization: Local
   const files = state.details?.files ?? [];
   if (files.length === 0) return `<div class="stash-empty-files">${escapeHtml(localization.catalog.stash.noFiles)}</div>`;
   if (state.fileView === "flat") {
-    return [...files].sort((left, right) => left.path.localeCompare(right.path))
+    return sortFilesByName(files)
       .map((file) => stashFileRow(file, file.path === state.selectedFile, null, localization)).join("");
   }
   const expanded = !state.collapsedDirectories.has(".");
