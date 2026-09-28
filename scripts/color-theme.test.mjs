@@ -43,7 +43,11 @@ test("Diff line fills remain opaque and visibly distinct in both themes", async 
     ["light", lightBlock, 1.15],
   ]) {
     const background = colorToken(block, "--bg-deep");
-    for (const token of ["--editor-diff-added-bg", "--editor-diff-removed-bg"]) {
+    for (const token of [
+      "--editor-diff-added-bg",
+      "--editor-diff-removed-bg",
+      "--editor-diff-modified-bg",
+    ]) {
       const value = colorToken(block, token);
       assert.match(value, /^#[\da-f]{6}$/i, `${theme} ${token} must not be alpha-blended`);
       assert.ok(
@@ -85,15 +89,18 @@ test("Git Blame and Diff gutters use semantic background layers", async () => {
   assert.match(source, /var\(--editor-diff-removed-bg\)/u);
 });
 
-test("CodeMirror MergeView uses full-line semantic Diff fills without underline gradients", async () => {
+test("CodeMirror MergeView layers semantic inline fills over whole-line Diff fills", async () => {
   const source = await readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8");
   assert.match(source, /&\.cm-merge-a \.cm-changedLine, \.cm-deletedChunk/u);
   assert.match(source, /&\.cm-merge-b \.cm-changedLine, \.cm-inlineChangedLine/u);
   assert.match(
     source,
-    /&\.cm-merge-a \.cm-changedText, \.cm-deletedChunk \.cm-deletedText, &\.cm-merge-b \.cm-changedText/u,
+    /&\.cm-merge-a \.cm-changedText, &\.cm-merge-b \.cm-changedText/u,
   );
   assert.match(source, /background: "transparent"/u);
+  assert.match(source, /\.cm-source-word-modified/u);
+  assert.match(source, /\.cm-deletedChunk \.cm-deletedText/u);
+  assert.match(source, /var\(--editor-intraline-modified\)/u);
   assert.doesNotMatch(source, /cm-changedText[^}]*linear-gradient/su);
 });
 

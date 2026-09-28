@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { splitUnifiedDiff } from "../src/diff-presentation.ts";
+import { parseUnifiedDiff, splitUnifiedDiff } from "../src/diff-presentation.ts";
 
 test("source diff removes patch syntax and keeps real line numbers", () => {
   const patch = [
@@ -80,15 +80,142 @@ test("source diff exposes omitted ranges and no-newline markers", () => {
   assert.equal(split.rows[4].old.lineNumber, 30);
 });
 
-test("source diff adds conservative intraline ranges to paired replacements", () => {
+test("source diff expands replacements to presentation-oriented word ranges", () => {
   const split = splitUnifiedDiff(
     ["@@ -1 +1 @@", "-const answer = oldValue;", "+const answer = newValue;"].join(
       "\n",
     ),
   );
   assert.equal(split.rows[0].kind, "modified");
-  assert.deepEqual(split.rows[0].old.changed, [{ from: 15, to: 18 }]);
-  assert.deepEqual(split.rows[0].new.changed, [{ from: 15, to: 18 }]);
+  assert.deepEqual(split.rows[0].old.changed, [
+    { from: 15, to: 23, kind: "modified" },
+  ]);
+  assert.deepEqual(split.rows[0].new.changed, [
+    { from: 15, to: 23, kind: "modified" },
+  ]);
+});
+
+test("source diff retains multiple separated inline replacements", () => {
+  const split = splitUnifiedDiff(
+    ["@@ -1 +1 @@", "-foo = oldA + oldB", "+foo = newA + newB"].join("\n"),
+  );
+  assert.deepEqual(split.rows[0].old.changed, [
+    { from: 6, to: 10, kind: "modified" },
+    { from: 13, to: 17, kind: "modified" },
+  ]);
+  assert.deepEqual(split.rows[0].new.changed, [
+    { from: 6, to: 10, kind: "modified" },
+    { from: 13, to: 17, kind: "modified" },
+  ]);
+});
+
+test("source diff marks complete replacements and one-sided inline insertions", () => {
+  const replaced = splitUnifiedDiff(
+    ["@@ -1 +1 @@", "-abc", "+xyz"].join("\n"),
+  );
+  assert.deepEqual(replaced.rows[0].old.changed, [
+    { from: 0, to: 3, kind: "modified" },
+  ]);
+  assert.deepEqual(replaced.rows[0].new.changed, [
+    { from: 0, to: 3, kind: "modified" },
+  ]);
+
+  const inserted = splitUnifiedDiff(
+    ["@@ -1 +1 @@", "-call(foo)", "+call(foo, bar)"].join("\n"),
+  );
+  assert.deepEqual(inserted.rows[0].old.changed, []);
+  assert.deepEqual(inserted.rows[0].new.changed, [
+    { from: 8, to: 13, kind: "added" },
+  ]);
+
+  const removed = splitUnifiedDiff(
+    ["@@ -1 +1 @@", "-call(foo, bar)", "+call(foo)"].join("\n"),
+  );
+  assert.deepEqual(removed.rows[0].old.changed, [
+    { from: 8, to: 13, kind: "removed" },
+  ]);
+  assert.deepEqual(removed.rows[0].new.changed, []);
+});
+
+test("source diff keeps long and Unicode lines eligible for exact ranges", () => {
+  const prefix = "x".repeat(600);
+  const split = splitUnifiedDiff(
+    [
+      "@@ -1 +1 @@",
+      `-${prefix} oldValue 😀`,
+      `+${prefix} newValue 😎`,
+    ].join("\n"),
+  );
+  assert.deepEqual(split.rows[0].old.changed, [{
+    from: prefix.length + 1,
+    to: prefix.length + 12,
+    kind: "modified",
+  }]);
+  assert.deepEqual(split.rows[0].new.changed, [{
+    from: prefix.length + 1,
+    to: prefix.length + 12,
+    kind: "modified",
+  }]);
+});
+
+test("source diff aligns a leading inserted line before later replacements", () => {
+  const split = splitUnifiedDiff(
+    [
+      "@@ -1,2 +1,3 @@",
+      "-alpha",
+      "-beta",
+      "+intro",
+      "+alpha2",
+      "+beta2",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    split.rows.map((row) => [row.kind, row.old.text, row.new.text]),
+    [
+      ["added", "", "intro"],
+      ["modified", "alpha", "alpha2"],
+      ["modified", "beta", "beta2"],
+    ],
+  );
+  assert.deepEqual(split.rows[1].new.changed, [
+    { from: 5, to: 6, kind: "added" },
+  ]);
+});
+
+test("source diff aligns an inserted middle line without shifting later replacements", () => {
+  const split = splitUnifiedDiff(
+    [
+      "@@ -1,2 +1,3 @@",
+      "-alpha",
+      "-beta",
+      "+alpha2",
+      "+inserted middle",
+      "+beta2",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    split.rows.map((row) => [row.kind, row.old.text, row.new.text]),
+    [
+      ["modified", "alpha", "alpha2"],
+      ["added", "", "inserted middle"],
+      ["modified", "beta", "beta2"],
+    ],
+  );
+});
+
+test("unified diff keeps removed and added rows while sharing precise ranges", () => {
+  const unified = parseUnifiedDiff(
+    ["@@ -1 +1 @@", "-foo = oldA + oldB", "+foo = newA + newB"].join("\n"),
+  );
+  assert.deepEqual(unified.rows.map((row) => row.kind), ["removed", "added"]);
+  assert.deepEqual(unified.rows[0].changed, [
+    { from: 6, to: 10, kind: "modified" },
+    { from: 13, to: 17, kind: "modified" },
+  ]);
+  assert.deepEqual(unified.rows[1].changed, [
+    { from: 6, to: 10, kind: "modified" },
+    { from: 13, to: 17, kind: "modified" },
+  ]);
 });
 
 test("hunk content that resembles file markers remains source text", () => {

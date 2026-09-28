@@ -436,7 +436,10 @@ const editorThemeRules =
     "&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine": {
       backgroundColor: "var(--editor-diff-added-bg)",
     },
-    "&.cm-merge-a .cm-changedText, .cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-changedText": {
+    "&.cm-merge-a .cm-changedLine.cm-source-modified, &.cm-merge-b .cm-changedLine.cm-source-modified": {
+      backgroundColor: "var(--editor-diff-modified-bg)",
+    },
+    "&.cm-merge-a .cm-changedText, &.cm-merge-b .cm-changedText": {
       background: "transparent",
     },
     ".cm-insertedLine, .cm-deletedLine, .cm-deletedLine del": {
@@ -444,6 +447,7 @@ const editorThemeRules =
     },
     ".cm-source-added": { backgroundColor: "var(--editor-diff-added-bg)" },
     ".cm-source-removed": { backgroundColor: "var(--editor-diff-removed-bg)" },
+    ".cm-source-modified": { backgroundColor: "var(--editor-diff-modified-bg)" },
     ".cm-source-added-gutter": { backgroundColor: "var(--editor-diff-added-bg)" },
     ".cm-source-removed-gutter": { backgroundColor: "var(--editor-diff-removed-bg)" },
     ".cm-source-spacer-gutter": { backgroundColor: "var(--surface-editor-secondary)" },
@@ -475,9 +479,22 @@ const editorThemeRules =
       borderRadius: "2px",
       backgroundColor: "var(--editor-intraline-added)",
     },
-    ".cm-source-word-removed": {
+    ".cm-source-word-removed, .cm-deletedChunk .cm-deletedText": {
       borderRadius: "2px",
       backgroundColor: "var(--editor-intraline-removed)",
+    },
+    ".cm-source-word-modified": {
+      borderRadius: "2px",
+      backgroundColor: "var(--editor-intraline-modified)",
+    },
+    "&.cm-merge-a .cm-source-word-added, &.cm-merge-b .cm-source-word-added": {
+      backgroundColor: "var(--editor-intraline-added)",
+    },
+    "&.cm-merge-a .cm-source-word-removed, &.cm-merge-b .cm-source-word-removed": {
+      backgroundColor: "var(--editor-intraline-removed)",
+    },
+    "&.cm-merge-a .cm-source-word-modified, &.cm-merge-b .cm-source-word-modified": {
+      backgroundColor: "var(--editor-intraline-modified)",
     },
     ".cm-diff-current-change": {
       boxShadow: "inset 1px 0 0 var(--focus-ring-bright), inset -1px 0 0 var(--focus-ring-bright)",

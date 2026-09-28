@@ -139,9 +139,15 @@ test("editable working Diff keeps expanded state in its mount identity and runti
 });
 
 test("editable Diff uses one gutter marker system and can disable unchanged collapsing", async () => {
-  const source = await readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8");
+  const [source, highlighting] = await Promise.all([
+    readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/merge-diff-highlighting.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(source, /collapseUnchanged: this\.expandedUnchanged \? undefined/);
   assert.match(source, /\{ gutter: false \}/);
+  assert.match(source, /mergeDiffSemanticHighlighting/u);
+  assert.match(highlighting, /getChunks\(update\.state\)/u);
+  assert.match(highlighting, /cm-source-word-\$\{kind\}/u);
 });
 
 test("conflict editor keeps Ours and Theirs immutable around one synchronized Result", async () => {
@@ -151,6 +157,7 @@ test("conflict editor keeps Ours and Theirs immutable around one synchronized Re
   assert.match(source, /revertControls: "b-to-a"/);
   assert.match(source, /resultSide === "primary"/);
   assert.match(source, /target\.dispatch\(\{ changes:/);
+  assert.match(source, /mergeDiffSemanticHighlighting/u);
 });
 
 test("Diff position navigation outlines the complete current change block", async () => {

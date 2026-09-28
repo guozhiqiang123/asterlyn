@@ -1,3 +1,5 @@
+import { presentableDiff } from "@codemirror/merge";
+
 export type DiffLayout = "unified" | "split";
 
 export interface DiffPresentation {
@@ -7,9 +9,12 @@ export interface DiffPresentation {
   onSplitPercentageChange?: (value: number, committed: boolean) => void;
 }
 
+export type InlineChangeKind = "added" | "removed" | "modified";
+
 export interface TextRange {
   from: number;
   to: number;
+  kind: InlineChangeKind;
 }
 
 export type SourceDiffRowKind =
@@ -52,6 +57,9 @@ export interface UnifiedDiffDocument {
 }
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+const INLINE_DIFF_CONFIG = { scanLimit: 1_000, timeout: 50 } as const;
+const MAX_LINE_ALIGNMENT_CELLS = 4_096;
+const ALIGNMENT_GAP_SCORE = -0.45;
 
 export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
   const lines = document.split("\n");
@@ -103,16 +111,16 @@ export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
           added.push((lines[index] ?? "").slice(1));
           index += 1;
         }
-        const minLen = Math.min(removed.length, added.length);
-        const pairs: Array<{ old: TextRange[]; new: TextRange[] } | null> = [];
-        for (let i = 0; i < minLen; i += 1) {
-          const rText = removed[i];
-          const aText = added[i];
-          if (rText !== undefined && aText !== undefined) {
-            pairs.push(intralineRanges(rText, aText));
-          } else {
-            pairs.push(null);
-          }
+        const oldRanges: TextRange[][] = removed.map(() => []);
+        const newRanges: TextRange[][] = added.map(() => []);
+        for (const pair of alignChangedLines(removed, added)) {
+          if (pair.oldIndex === null || pair.newIndex === null) continue;
+          const changed = intralineRanges(
+            removed[pair.oldIndex] ?? "",
+            added[pair.newIndex] ?? "",
+          );
+          oldRanges[pair.oldIndex] = changed.old;
+          newRanges[pair.newIndex] = changed.new;
         }
         for (let i = 0; i < removed.length; i += 1) {
           rows.push({
@@ -120,7 +128,7 @@ export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
             oldLineNumber: oldLine + i,
             newLineNumber: null,
             text: removed[i] ?? "",
-            changed: pairs[i]?.old ?? [],
+            changed: oldRanges[i],
           });
         }
         oldLine += removed.length;
@@ -130,7 +138,7 @@ export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
             oldLineNumber: null,
             newLineNumber: newLine + i,
             text: added[i] ?? "",
-            changed: pairs[i]?.new ?? [],
+            changed: newRanges[i],
           });
         }
         newLine += added.length;
@@ -341,22 +349,25 @@ function appendChangedRows(
   oldStart: number,
   newStart: number,
 ): { oldCount: number; newCount: number } {
-  const count = Math.max(removed.length, added.length);
-  for (let offset = 0; offset < count; offset += 1) {
-    const oldText = removed[offset];
-    const newText = added[offset];
+  for (const pair of alignChangedLines(removed, added)) {
+    const oldText = pair.oldIndex === null ? undefined : removed[pair.oldIndex];
+    const newText = pair.newIndex === null ? undefined : added[pair.newIndex];
     const paired = oldText !== undefined && newText !== undefined;
     const changed = paired ? intralineRanges(oldText, newText) : null;
     rows.push(
       row(
         paired ? "modified" : oldText !== undefined ? "removed" : "added",
         side(
-          oldText === undefined ? null : oldStart + offset,
+          oldText === undefined || pair.oldIndex === null
+            ? null
+            : oldStart + pair.oldIndex,
           oldText ?? "",
           changed?.old,
         ),
         side(
-          newText === undefined ? null : newStart + offset,
+          newText === undefined || pair.newIndex === null
+            ? null
+            : newStart + pair.newIndex,
           newText ?? "",
           changed?.new,
         ),
@@ -386,9 +397,123 @@ function intralineRanges(
   oldText: string,
   newText: string,
 ): { old: TextRange[]; new: TextRange[] } {
-  if (oldText === newText || oldText.length > 500 || newText.length > 500) {
-    return { old: [], new: [] };
+  if (oldText === newText) return { old: [], new: [] };
+  const old: TextRange[] = [];
+  const next: TextRange[] = [];
+  for (const change of presentableDiff(oldText, newText, INLINE_DIFF_CONFIG)) {
+    const hasOld = change.toA > change.fromA;
+    const hasNew = change.toB > change.fromB;
+    const kind: InlineChangeKind = hasOld && hasNew
+      ? "modified"
+      : hasOld
+        ? "removed"
+        : "added";
+    if (hasOld) old.push({ from: change.fromA, to: change.toA, kind });
+    if (hasNew) next.push({ from: change.fromB, to: change.toB, kind });
   }
+  return { old, new: next };
+}
+
+interface ChangedLinePair {
+  oldIndex: number | null;
+  newIndex: number | null;
+}
+
+function alignChangedLines(removed: string[], added: string[]): ChangedLinePair[] {
+  if (removed.length === 0) {
+    return added.map((_, newIndex) => ({ oldIndex: null, newIndex }));
+  }
+  if (added.length === 0) {
+    return removed.map((_, oldIndex) => ({ oldIndex, newIndex: null }));
+  }
+  if (removed.length * added.length > MAX_LINE_ALIGNMENT_CELLS) {
+    return offsetLinePairs(removed.length, added.length);
+  }
+
+  const columns = added.length + 1;
+  const scores = new Float64Array((removed.length + 1) * columns);
+  const directions = new Uint8Array(scores.length);
+  for (let oldIndex = 1; oldIndex <= removed.length; oldIndex += 1) {
+    scores[oldIndex * columns] = oldIndex * ALIGNMENT_GAP_SCORE;
+    directions[oldIndex * columns] = 2;
+  }
+  for (let newIndex = 1; newIndex <= added.length; newIndex += 1) {
+    scores[newIndex] = newIndex * ALIGNMENT_GAP_SCORE;
+    directions[newIndex] = 3;
+  }
+
+  for (let oldIndex = 1; oldIndex <= removed.length; oldIndex += 1) {
+    for (let newIndex = 1; newIndex <= added.length; newIndex += 1) {
+      const cell = oldIndex * columns + newIndex;
+      let best = (scores[(oldIndex - 1) * columns + newIndex - 1] ?? Number.NEGATIVE_INFINITY)
+        + linePairScore(removed[oldIndex - 1] ?? "", added[newIndex - 1] ?? "");
+      let direction = 1;
+      const oldOnly = (scores[(oldIndex - 1) * columns + newIndex] ?? Number.NEGATIVE_INFINITY)
+        + ALIGNMENT_GAP_SCORE;
+      if (oldOnly > best) {
+        best = oldOnly;
+        direction = 2;
+      }
+      const newOnly = (scores[oldIndex * columns + newIndex - 1] ?? Number.NEGATIVE_INFINITY)
+        + ALIGNMENT_GAP_SCORE;
+      if (newOnly > best) {
+        best = newOnly;
+        direction = 3;
+      }
+      scores[cell] = best;
+      directions[cell] = direction;
+    }
+  }
+
+  const pairs: ChangedLinePair[] = [];
+  let oldIndex = removed.length;
+  let newIndex = added.length;
+  while (oldIndex > 0 || newIndex > 0) {
+    const direction = directions[oldIndex * columns + newIndex];
+    if (direction === 1) {
+      pairs.push({ oldIndex: oldIndex - 1, newIndex: newIndex - 1 });
+      oldIndex -= 1;
+      newIndex -= 1;
+    } else if (direction === 2) {
+      pairs.push({ oldIndex: oldIndex - 1, newIndex: null });
+      oldIndex -= 1;
+    } else {
+      pairs.push({ oldIndex: null, newIndex: newIndex - 1 });
+      newIndex -= 1;
+    }
+  }
+  return pairs.reverse();
+}
+
+function offsetLinePairs(oldCount: number, newCount: number): ChangedLinePair[] {
+  const pairs: ChangedLinePair[] = [];
+  const count = Math.max(oldCount, newCount);
+  for (let index = 0; index < count; index += 1) {
+    pairs.push({
+      oldIndex: index < oldCount ? index : null,
+      newIndex: index < newCount ? index : null,
+    });
+  }
+  return pairs;
+}
+
+function linePairScore(oldText: string, newText: string): number {
+  if (oldText === newText) return 1.3;
+  const oldTokens = lineTokens(oldText);
+  const newTokens = lineTokens(newText);
+  const counts = new Map<string, number>();
+  for (const token of oldTokens) counts.set(token, (counts.get(token) ?? 0) + 1);
+  let overlap = 0;
+  for (const token of newTokens) {
+    const available = counts.get(token) ?? 0;
+    if (available <= 0) continue;
+    overlap += 1;
+    counts.set(token, available - 1);
+  }
+  const tokenSimilarity = oldTokens.length + newTokens.length === 0
+    ? 0
+    : (2 * overlap) / (oldTokens.length + newTokens.length);
+
   let prefix = 0;
   const prefixLimit = Math.min(oldText.length, newText.length);
   while (prefix < prefixLimit && oldText[prefix] === newText[prefix]) prefix += 1;
@@ -400,17 +525,18 @@ function intralineRanges(
   ) {
     suffix += 1;
   }
-  if (prefix === 0 && suffix === 0) return { old: [], new: [] };
-  return {
-    old:
-      oldText.length - suffix > prefix
-        ? [{ from: prefix, to: oldText.length - suffix }]
-        : [],
-    new:
-      newText.length - suffix > prefix
-        ? [{ from: prefix, to: newText.length - suffix }]
-        : [],
-  };
+  const totalLength = oldText.length + newText.length;
+  const edgeSimilarity = totalLength === 0 ? 1 : (2 * (prefix + suffix)) / totalLength;
+  const longest = Math.max(oldText.length, newText.length);
+  const lengthSimilarity = longest === 0
+    ? 1
+    : 1 - Math.abs(oldText.length - newText.length) / longest;
+  const similarity = 0.65 * tokenSimilarity + 0.25 * edgeSimilarity + 0.1 * lengthSimilarity;
+  return 2 * similarity - 0.7;
+}
+
+function lineTokens(text: string): string[] {
+  return text.match(/[\p{Alphabetic}\p{Number}_]+|[^\s]/gu) ?? [];
 }
 
 function row(

@@ -691,12 +691,10 @@ function sourceLineDecorations(
       if (className) {
         decorations.push(Decoration.line({ class: className }).range(line.from));
       }
-      const markClass =
-        side === "old" ? "cm-source-word-removed" : "cm-source-word-added";
       for (const range of sourceSide.changed) {
         if (range.to <= range.from || range.from >= line.length) continue;
         decorations.push(
-          Decoration.mark({ class: markClass }).range(
+          Decoration.mark({ class: inlineChangeClass(range.kind) }).range(
             line.from + range.from,
             line.from + Math.min(line.length, range.to),
           ),
@@ -756,13 +754,19 @@ function sourceLineClass(row: SourceDiffRow, side: "old" | "new"): string {
   if (row.kind === "omitted") return "cm-source-omitted";
   if (row.kind === "notice") return "cm-source-notice";
   if (row[side].lineNumber === null) return "cm-source-spacer";
-  if (side === "old" && (row.kind === "removed" || row.kind === "modified")) {
+  if (row.kind === "modified") return "cm-source-modified";
+  if (side === "old" && row.kind === "removed") {
     return "cm-source-removed";
   }
-  if (side === "new" && (row.kind === "added" || row.kind === "modified")) {
+  if (side === "new" && row.kind === "added") {
     return "cm-source-added";
   }
   return "";
+}
+
+function inlineChangeClass(kind: "added" | "removed" | "modified"): string {
+  if (kind === "modified") return "cm-source-word-modified";
+  return kind === "removed" ? "cm-source-word-removed" : "cm-source-word-added";
 }
 
 function clampPercentage(value: number): number {

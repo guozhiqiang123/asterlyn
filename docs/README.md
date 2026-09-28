@@ -36,6 +36,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/foundation-hardening.md`](engineering/foundation-hardening.md) — post-CM4 feature freeze, executable boundary plan, migration sequence, and acceptance gates.
 - [`engineering/versioned-reconciliation-plan.md`](engineering/versioned-reconciliation-plan.md) — watcher/reconciliation risks, phased implementation, invariants, and acceptance matrix.
 - [`engineering/context-action-system.md`](engineering/context-action-system.md) — whole-draft audit, context-action architecture, R5 prerequisites, surface ownership, and delivery sequence.
+- [`engineering/intraline-diff-highlighting-plan.md`](engineering/intraline-diff-highlighting-plan.md) — Android Studio-style line and inline Diff semantics across editable and read-only implementations.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds and artifact trust boundary.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.

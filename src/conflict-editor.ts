@@ -32,6 +32,7 @@ import {
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
 import { linkScrollElements } from "./presentation/linked-scroll.ts";
+import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
 
@@ -286,6 +287,7 @@ export class ConflictEditor {
         : EditorView.editable.of(editable),
       diffLineNumberGutter(gutterSide),
       binding.changeIndicators?.extension ?? [],
+      mergeDiffSemanticHighlighting,
       history(), drawSelection(), highlightActiveLine(),
       highlightActiveLineGutter(), asterlynSearch(), highlightSelectionMatches(), asterlynSyntaxHighlighting,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),

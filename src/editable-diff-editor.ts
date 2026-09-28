@@ -24,6 +24,7 @@ import {
   setActiveEditableDiffBlock,
 } from "./features/files-editor/editable-diff-change-highlight.ts";
 import { linkHorizontalScroll } from "./presentation/linked-scroll.ts";
+import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
 import {
   applyExactTextChanges,
@@ -582,6 +583,7 @@ export class EditableDiffEditor {
       EditorView.editable.of(editable),
       gutterSide ? diffLineNumberGutter(gutterSide) : lineNumbers(),
       binding.changeIndicators?.extension ?? [],
+      mergeDiffSemanticHighlighting,
       activeEditableDiffBlockDecoration,
       history(),
       drawSelection(),
