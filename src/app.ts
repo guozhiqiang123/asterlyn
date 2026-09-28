@@ -76,8 +76,9 @@ import type { RemoteAuthenticationResult } from "./features/remote-push/remote-a
 import type { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
 import { createRemoteRuntime } from "./features/remote-push/create-remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
-import { bindPushDiffResize } from "./features/remote-push/push-diff-resize.ts";
-import { bindPushDialogResize } from "./features/remote-push/push-dialog-resize.ts";
+import { bindPushPreviewSplitter } from "./features/remote-push/push-preview-splitter.ts";
+import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts";
+import { discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
 import {
   pushReviewFiles,
   renderRemoteDialogContent,
@@ -367,6 +368,7 @@ export class AsterlynApp {
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
   private readonly contextMenuHost: LazyContextMenuHost;
+  private readonly dialogRuntime: ApplicationDialogRuntime;
   private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
@@ -446,6 +448,7 @@ export class AsterlynApp {
 
   constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
     this.localization = createLocalization(initialCatalog);
+    this.dialogRuntime = new ApplicationDialogRuntime(root, () => this.localization.catalog.common);
     this.contextMenuHost = new LazyContextMenuHost(document, window);
     const blameRuntime: GitBlameRuntime = {
       load: (source) => bridge.readGitBlame(
@@ -653,6 +656,7 @@ export class AsterlynApp {
         prepare: () => void this.prepareGitOperation(),
         execute: () => void this.executeGitOperation(),
         resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
+        confirmDiscard: () => this.dialogRuntime.confirm(discardConflictConfirmation(this.localization.catalog)),
         reportError: (error) => this.showError(error),
       },
       copy: () => this.localization.catalog.gitOperations,
@@ -669,6 +673,7 @@ export class AsterlynApp {
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
           list: (root) => bridge.listGitWorktreeRecoveries(root),
+          confirmUndo: (recovery) => this.dialogRuntime.confirm(undoWorktreeConfirmation(this.localization.catalog, recovery)),
           undo: async (root, recovery) => {
             if (this.state.loading || this.windowSession.workspace.state.root !== root) {
               throw new Error(this.localization.catalog.recovery.waitForOperation);
@@ -1383,7 +1388,7 @@ export class AsterlynApp {
       closePushModeMenu: () => this.remoteRuntime.push.closePushModeMenu(),
       openGitOperation: () => this.openGitOperation(),
       openGitRecoveries: () => void this.openGitRecoveries(),
-      closeGitOperation: () => this.gitOperationRuntime.close(),
+      closeGitOperation: () => void this.gitOperationRuntime.close(),
       closeRepositoryMenu: (restoreFocus) => {
         this.shellController.closeRepositoryMenu();
         this.renderRepositoryMenu();
@@ -1833,6 +1838,7 @@ export class AsterlynApp {
     this.historyListView.unmount();
     this.editorSurface.destroy();
     this.pushDiffEditor.destroy();
+    this.dialogRuntime.dispose();
   }
 
   private openSettings(): void {
@@ -3173,8 +3179,7 @@ export class AsterlynApp {
     if (!dialog || !snapshot) {
       host.classList.add("hidden");
       host.innerHTML = "";
-      bindPushDiffResize(this.root);
-      bindPushDialogResize(this.root, window.localStorage);
+      bindPushPreviewSplitter(this.root, window.localStorage);
       return;
     }
     const focusedId =
@@ -3360,8 +3365,7 @@ export class AsterlynApp {
     this.root.querySelector<HTMLElement>("#push-diff-backdrop")?.addEventListener("click", (event) => {
       if (event.target === event.currentTarget) this.closePushDiff();
     });
-    bindPushDiffResize(this.root);
-    bindPushDialogResize(this.root, window.localStorage);
+    bindPushPreviewSplitter(this.root, window.localStorage);
     this.bindPushDiffEvents();
   }
 
@@ -6740,11 +6744,16 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("[data-close-editor-preview]")
       ?.addEventListener("click", () => {
-        this.captureMountedTextEditor();
-        if (this.activeDocument().kind === "conflict-resolution" && !this.gitOperationRuntime.close()) return;
-        this.filesEditorRuntime.editor.closePreview();
-        this.imageSurface = null;
-        this.renderEditor();
+        void (async () => {
+          this.captureMountedTextEditor();
+          if (
+            this.activeDocument().kind === "conflict-resolution" &&
+            !(await this.gitOperationRuntime.close())
+          ) return;
+          this.filesEditorRuntime.editor.closePreview();
+          this.imageSurface = null;
+          this.renderEditor();
+        })();
       });
     this.bindEditorTabMenuEvents();
   }
@@ -6798,9 +6807,7 @@ export class AsterlynApp {
         this.setStatus(this.localization.catalog.editor.waitForSave, "warning");
         return;
       }
-      const save = window.confirm(
-        `${this.localization.catalog.editor.confirmCloseFile(tab.document.workspacePath)}\n\n${this.localization.catalog.editor.cancelKeepsTab}`,
-      );
+      const save = await this.dialogRuntime.confirm(saveFileBeforeCloseConfirmation(this.localization.catalog, tab.document.workspacePath));
       if (!save || !(await this.saveTextTab(tabId))) return;
     }
     if (this.filesEditorRuntime.editor.closeText(tabId)) {
@@ -6811,15 +6818,16 @@ export class AsterlynApp {
   }
 
   private async saveDirtyTabsBefore(action: string): Promise<boolean> {
-    if (this.gitOperationRuntime.controller.hasUnsavedConflict() && !this.gitOperationRuntime.close()) {
+    if (
+      this.gitOperationRuntime.controller.hasUnsavedConflict() &&
+      !(await this.gitOperationRuntime.close())
+    ) {
       return false;
     }
     this.captureMountedTextEditor();
     const dirty = dirtyTextTabs(this.editorState.session);
     if (dirty.length === 0) return true;
-    const save = window.confirm(
-      `${this.localization.catalog.common.confirmSaveBefore(dirty.length, action)}\n\n${this.localization.catalog.common.cancelKeepsWorkspace}`,
-    );
+    const save = await this.dialogRuntime.confirm(saveFilesBeforeActionConfirmation(this.localization.catalog, dirty.length, action));
     if (!save) return false;
     for (const tab of dirty) {
       if (!(await this.saveTextTab(tab.id))) return false;

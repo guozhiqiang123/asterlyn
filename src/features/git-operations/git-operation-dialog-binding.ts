@@ -10,6 +10,7 @@ export interface GitOperationDialogActions {
   prepare(): void;
   execute(): void;
   resolve(deleteFile: boolean): void;
+  confirmDiscard(): Promise<boolean>;
   reportError(error: unknown): void;
 }
 
@@ -24,6 +25,7 @@ export class GitOperationDialogBinding {
   > | null = null;
   private renderGeneration = 0;
   private focusReturn: HTMLElement | null = null;
+  private closeRequest: Promise<boolean> | null = null;
   private disposed = false;
 
   constructor(
@@ -43,9 +45,26 @@ export class GitOperationDialogBinding {
     this.controller.openSetup(kind, targets, message);
   }
 
-  close(): boolean {
+  async close(): Promise<boolean> {
+    if (this.closeRequest) return this.closeRequest;
+    const request = this.closeOnce();
+    this.closeRequest = request;
+    try {
+      return await request;
+    } finally {
+      if (this.closeRequest === request) this.closeRequest = null;
+    }
+  }
+
+  private async closeOnce(): Promise<boolean> {
     const dirty = this.controller.hasUnsavedConflict();
-    if (dirty && !window.confirm(this.copy().discardConflict)) return false;
+    const conflict = this.controller.state.conflict;
+    const conflictResult = this.controller.state.conflictResult;
+    if (dirty && !(await this.actions.confirmDiscard())) return false;
+    if (
+      this.disposed || this.controller.state.conflict !== conflict ||
+      this.controller.state.conflictResult !== conflictResult
+    ) return false;
     return this.controller.closeDialog(dirty);
   }
 
@@ -88,10 +107,10 @@ export class GitOperationDialogBinding {
 
   private bindEvents(host: HTMLElement): void {
     host.onclick = (event) => {
-      if (event.target === host) this.close();
+      if (event.target === host) void this.close();
     };
     host.querySelectorAll<HTMLButtonElement>("[data-git-operation-close]").forEach((button) => {
-      button.addEventListener("click", () => this.close());
+      button.addEventListener("click", () => void this.close());
     });
     host.querySelector<HTMLButtonElement>("[data-git-operation-back]")?.addEventListener(
       "click",

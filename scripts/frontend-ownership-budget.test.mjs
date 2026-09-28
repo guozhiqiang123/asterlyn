@@ -63,10 +63,16 @@ test("window-wide bindings have explicit listener and observer disposal", async 
     path.join(repositoryRoot, "src/shell/window-chrome-binding.ts"),
     "utf8",
   );
+  const dialogs = await readFile(
+    path.join(repositoryRoot, "src/shared/dialog-geometry.ts"),
+    "utf8",
+  );
   assert.match(shell, /AbortController/);
   assert.match(shell, /resizeObserver\?\.disconnect\(\)/);
   assert.match(chrome, /releaseResize\?\.\(\)/);
   assert.match(chrome, /releaseCloseRequest\?\.\(\)/);
+  assert.match(dialogs, /AbortController/);
+  assert.match(dialogs, /observer\?\.disconnect\(\)/);
 });
 
 test("workspace search state has one feature owner", async () => {

@@ -15,6 +15,7 @@ test("Git operation runtime owns controller notification and disposal", () => {
       prepare: () => {},
       execute: () => {},
       resolve: () => {},
+      confirmDiscard: async () => true,
       reportError: () => {},
     },
     changed: (change) => changes.push(change.reason),
@@ -38,6 +39,7 @@ test("Git operation runtime rejects late recovery-dialog activation after dispos
       prepare: () => {},
       execute: () => {},
       resolve: () => {},
+      confirmDiscard: async () => true,
       reportError: () => {},
     },
     changed: () => {},
@@ -45,6 +47,7 @@ test("Git operation runtime rejects late recovery-dialog activation after dispos
       actions: {
         activeRoot: () => "/repo",
         list: async () => [],
+        confirmUndo: async () => true,
         undo: async () => {},
       },
       copy: () => ({}),

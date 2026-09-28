@@ -6,6 +6,7 @@ export const ZH_CN = {
   locale: "zh-CN",
   common: {
     ready: "就绪", operationFailed: "操作失败", cancel: "取消", close: "关闭", retry: "重试", planned: "计划中", available: "可用",
+    confirmation: "确认操作", save: "保存", discard: "丢弃", moveDialog: "移动弹窗", resizeDialog: "调整弹窗大小",
     confirmSaveBefore: (count, action) => `在${action}前保存 ${count} 个未保存文件吗？`, cancelKeepsWorkspace: "取消将保持当前工作区打开。",
     actions: { closeApp: "关闭 Asterlyn", switchRepositories: "切换仓库", pullChanges: "拉取更改", reviewGitOperation: "审查 Git 操作", createCommit: "创建提交", changeBranches: "更改分支" },
     prepareStrategy: (strategy) => `准备${strategy}`,

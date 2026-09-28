@@ -7,9 +7,8 @@ export interface CommonCopy {
   operationFailed: string;
   cancel: string;
   close: string;
-  retry: string;
-  planned: string;
-  available: string;
+  retry: string; planned: string; available: string;
+  confirmation: string; save: string; discard: string; moveDialog: string; resizeDialog: string;
   confirmSaveBefore(count: number, action: string): string;
   cancelKeepsWorkspace: string;
   actions: Record<"closeApp" | "switchRepositories" | "pullChanges" | "reviewGitOperation" | "createCommit" | "changeBranches", string>;

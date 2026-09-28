@@ -77,7 +77,7 @@ export class GitOperationRuntime {
     this.conflictEditor?.capture();
   }
 
-  close(): boolean {
+  close(): Promise<boolean> {
     return this.binding.close();
   }
 

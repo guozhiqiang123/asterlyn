@@ -5,6 +5,7 @@ import { DEFAULT_LOCALIZATION } from "../../localization/localization.ts";
 export interface GitWorktreeRecoveryActions {
   activeRoot(): string | null;
   list(root: string): Promise<GitWorktreeRecovery[]>;
+  confirmUndo(recovery: GitWorktreeRecovery): Promise<boolean>;
   undo(root: string, recovery: GitWorktreeRecovery): Promise<void>;
 }
 
@@ -61,7 +62,7 @@ export class GitWorktreeRecoveryDialog {
         button.disabled = !recovery.canUndo;
         button.addEventListener("click", async () => {
           if (this.busy || this.actions.activeRoot() !== root) return;
-          if (!window.confirm(this.copy().confirmUndo(recovery.operation, recovery.paths.join("\n")))) return;
+          if (!(await this.actions.confirmUndo(recovery))) return;
           this.busy = true;
           for (const control of dialog.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
           try {

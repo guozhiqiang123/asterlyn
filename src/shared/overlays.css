@@ -128,6 +128,8 @@
 
 .dialog {
   --dialog-titlebar-height: 38px;
+  --dialog-geometry-min-width: 320px;
+  --dialog-geometry-min-height: 160px;
   width: min(510px, calc(100vw - 44px));
   padding: 0 18px 18px;
   border: 1px solid var(--border-strong);
@@ -142,6 +144,171 @@
   height: var(--dialog-titlebar-height);
   align-items: center;
   justify-content: space-between;
+}
+
+.dialog-geometry-managed.dialog,
+.dialog-geometry-managed.command-surface {
+  box-sizing: border-box;
+  max-width: none;
+  max-height: none;
+}
+
+.dialog-geometry-managed.dialog:not(.replacement-dialog):not(.remote-action-dialog):not(.push-diff-dialog):not(.history-selection-dialog):not(.remote-authentication-dialog) {
+  overflow: auto;
+}
+
+.dialog-geometry-managed:not(dialog) {
+  position: relative;
+}
+
+dialog.dialog-geometry-managed {
+  position: fixed;
+}
+
+.dialog-geometry-managed .dialog-heading,
+.dialog-geometry-managed .command-surface-tabs {
+  cursor: move;
+  user-select: none;
+}
+
+.dialog-geometry-managed .dialog-heading:focus-visible,
+.dialog-geometry-managed .command-surface-tabs:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.dialog-geometry-resize-handle {
+  position: absolute;
+  z-index: 20;
+  display: block;
+  touch-action: none;
+}
+
+.dialog-geometry-resize-handle.n,
+.dialog-geometry-resize-handle.s {
+  right: 10px;
+  left: 10px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.dialog-geometry-resize-handle.n { top: 0; }
+.dialog-geometry-resize-handle.s { bottom: 0; }
+
+.dialog-geometry-resize-handle.e,
+.dialog-geometry-resize-handle.w {
+  top: 10px;
+  bottom: 10px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.dialog-geometry-resize-handle.e { right: 0; }
+.dialog-geometry-resize-handle.w { left: 0; }
+
+.dialog-geometry-resize-handle.ne,
+.dialog-geometry-resize-handle.se,
+.dialog-geometry-resize-handle.sw,
+.dialog-geometry-resize-handle.nw {
+  width: 13px;
+  height: 13px;
+}
+
+.dialog-geometry-resize-handle.ne,
+.dialog-geometry-resize-handle.sw { cursor: nesw-resize; }
+.dialog-geometry-resize-handle.se,
+.dialog-geometry-resize-handle.nw { cursor: nwse-resize; }
+.dialog-geometry-resize-handle.ne,
+.dialog-geometry-resize-handle.nw { top: 0; }
+.dialog-geometry-resize-handle.se,
+.dialog-geometry-resize-handle.sw { bottom: 0; }
+.dialog-geometry-resize-handle.ne,
+.dialog-geometry-resize-handle.se { right: 0; }
+.dialog-geometry-resize-handle.nw,
+.dialog-geometry-resize-handle.sw { left: 0; }
+
+.dialog-geometry-resize-handle.se::after {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid var(--text-faint);
+  border-bottom: 1px solid var(--text-faint);
+  content: "";
+}
+
+.dialog-geometry-resize-handle.se:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.dialog-geometry-interacting,
+.dialog-geometry-interacting * {
+  user-select: none !important;
+}
+
+.command-surface {
+  --dialog-geometry-min-width: 520px;
+  --dialog-geometry-min-height: 260px;
+}
+
+.history-selection-dialog {
+  --dialog-geometry-min-width: 420px;
+  --dialog-geometry-min-height: 260px;
+}
+
+.replacement-dialog {
+  --dialog-geometry-min-width: 560px;
+  --dialog-geometry-min-height: 300px;
+}
+
+.git-operation-dialog {
+  --dialog-geometry-min-width: 480px;
+  --dialog-geometry-min-height: 240px;
+}
+
+.remote-authentication-dialog {
+  --dialog-geometry-min-width: 520px;
+  --dialog-geometry-min-height: 320px;
+}
+
+.push-dialog {
+  --dialog-geometry-min-width: 640px;
+  --dialog-geometry-min-height: 420px;
+  --dialog-geometry-default-width: 1080px;
+  --dialog-geometry-default-height: 680px;
+}
+
+.push-diff-dialog {
+  --dialog-geometry-min-width: 640px;
+  --dialog-geometry-min-height: 360px;
+}
+
+.worktree-recovery-dialog {
+  --dialog-geometry-min-width: 420px;
+  --dialog-geometry-min-height: 220px;
+}
+
+.application-confirmation-backdrop {
+  z-index: 120;
+}
+
+.application-confirmation-dialog {
+  --dialog-geometry-min-width: 360px;
+  --dialog-geometry-min-height: 180px;
+}
+
+.application-confirmation-message {
+  overflow: auto;
+  max-height: min(52vh, 420px);
+  margin: 12px 0 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .dialog h2 {

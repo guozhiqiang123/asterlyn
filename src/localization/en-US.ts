@@ -12,6 +12,7 @@ export const EN_US: LocaleCatalog = {
     retry: "Retry",
     planned: "Planned",
     available: "Available",
+    confirmation: "Confirmation", save: "Save", discard: "Discard", moveDialog: "Move dialog", resizeDialog: "Resize dialog",
     confirmSaveBefore: (count, action) => `Save ${count} unsaved ${count === 1 ? "file" : "files"} before ${action}?`,
     cancelKeepsWorkspace: "Cancel keeps the current workspace open.",
     actions: { closeApp: "closing Asterlyn", switchRepositories: "switching repositories", pullChanges: "pulling changes", reviewGitOperation: "reviewing a Git operation", createCommit: "creating the commit", changeBranches: "changing branches" },
