@@ -9,6 +9,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import type { EditorCopy } from "./localization/catalog.ts";
+import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
 
 export type EditorChangeIndicatorKind = "added" | "modified" | "deleted";
 
@@ -68,8 +69,6 @@ type IndicatorUpdate =
   | { readonly kind: "baseline"; readonly baseline: Text }
   | { readonly kind: "copy"; readonly copy: EditorChangeIndicatorCopy };
 
-const DIFF_CONFIG = { scanLimit: 1_000, timeout: 250 } as const;
-
 export function createEditorChangeIndicators(
   initialBaseline: string,
   initialCopy: EditorChangeIndicatorCopy,
@@ -83,8 +82,8 @@ export function createEditorChangeIndicators(
     create: (state) => ({
       baseline,
       chunks: documentSide === "a"
-        ? Chunk.build(state.doc, baseline, DIFF_CONFIG)
-        : Chunk.build(baseline, state.doc, DIFF_CONFIG),
+        ? Chunk.build(state.doc, baseline, LINE_AWARE_DIFF_CONFIG)
+        : Chunk.build(baseline, state.doc, LINE_AWARE_DIFF_CONFIG),
       copy: initialCopy,
     }),
     update: (value, transaction) => {
@@ -92,8 +91,8 @@ export function createEditorChangeIndicators(
         ? {
             ...value,
             chunks: documentSide === "a"
-              ? Chunk.updateA(value.chunks, transaction.newDoc, value.baseline, transaction.changes, DIFF_CONFIG)
-              : Chunk.updateB(value.chunks, value.baseline, transaction.newDoc, transaction.changes, DIFF_CONFIG),
+              ? Chunk.updateA(value.chunks, transaction.newDoc, value.baseline, transaction.changes, LINE_AWARE_DIFF_CONFIG)
+              : Chunk.updateB(value.chunks, value.baseline, transaction.newDoc, transaction.changes, LINE_AWARE_DIFF_CONFIG),
           }
         : value;
       for (const effect of transaction.effects) {
@@ -103,8 +102,8 @@ export function createEditorChangeIndicators(
             ...next,
             baseline: effect.value.baseline,
             chunks: documentSide === "a"
-              ? Chunk.build(transaction.newDoc, effect.value.baseline, DIFF_CONFIG)
-              : Chunk.build(effect.value.baseline, transaction.newDoc, DIFF_CONFIG),
+              ? Chunk.build(transaction.newDoc, effect.value.baseline, LINE_AWARE_DIFF_CONFIG)
+              : Chunk.build(effect.value.baseline, transaction.newDoc, LINE_AWARE_DIFF_CONFIG),
           };
         } else {
           next = { ...next, copy: effect.value.copy };
@@ -264,7 +263,7 @@ export function editorChangeIndicatorBlocks(
   const before = text(baseline);
   const after = text(current);
   return blocksFromChunks(
-    Chunk.build(before, after, DIFF_CONFIG),
+    Chunk.build(before, after, LINE_AWARE_DIFF_CONFIG),
     documentSide === "a" ? before : after,
     documentSide,
   );

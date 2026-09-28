@@ -42,6 +42,7 @@ import {
   editorChangeIndicatorCopy,
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
+import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -415,7 +416,7 @@ export class EditableDiffEditor {
           unifiedMergeView({
             original: this.baseContent,
             collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
-            diffConfig: { scanLimit: 1_000, timeout: 250 },
+            diffConfig: LINE_AWARE_DIFF_CONFIG,
             mergeControls: (type, action) => type === "reject"
               ? this.revertButton(action)
               : document.createElement("span"),
@@ -453,7 +454,7 @@ export class EditableDiffEditor {
       revertControls: "a-to-b",
       renderRevertControl: () => this.revertButton(),
       collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
-      diffConfig: { scanLimit: 1_000, timeout: 250 },
+      diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;

@@ -21,6 +21,7 @@ import {
   editorChangeIndicatorCopy,
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
+import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
 import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
 import {
   applyExactTextChanges,
@@ -129,7 +130,7 @@ export class ConflictEditor {
       revertControls: "a-to-b",
       renderRevertControl: () => this.directionButton("right", copy),
       collapseUnchanged: { margin: 3, minSize: 8 },
-      diffConfig: { scanLimit: 1_000, timeout: 250 },
+      diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
     this.rightMerge = new MergeView({
       parent: rightHost,
@@ -155,7 +156,7 @@ export class ConflictEditor {
       revertControls: "b-to-a",
       renderRevertControl: () => this.directionButton("left", copy),
       collapseUnchanged: { margin: 3, minSize: 8 },
-      diffConfig: { scanLimit: 1_000, timeout: 250 },
+      diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
     oursBinding.view = this.leftMerge.a;
     primaryBinding.view = this.leftMerge.b;
