@@ -307,6 +307,10 @@ const editorThemeRules =
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
       backgroundColor: "var(--editor-selection) !important",
     },
+    ".cm-selectionMatch": { backgroundColor: "var(--editor-selection-match)" },
+    ".cm-selectionMatch.cm-selectionMatch-main": {
+      backgroundColor: "var(--editor-selection)",
+    },
     ".cm-searchMatch": { backgroundColor: "var(--editor-search)", outline: "none" },
     ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--editor-search-selected)" },
     ".cm-panels": { backgroundColor: "var(--bg-panel)", color: "var(--text)", zIndex: "10" },

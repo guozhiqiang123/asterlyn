@@ -77,6 +77,7 @@
   --editor-gutter-text: #6f737b;
   --editor-active-line: #26282c80;
   --editor-selection: #214283;
+  --editor-selection-match: #2b3544;
   --editor-search: #725b19;
   --editor-search-selected: #9c7320;
   --editor-diff-added-bg: #294436;
@@ -220,6 +221,7 @@
   --editor-gutter-text: #747a84;
   --editor-active-line: #dce7f580;
   --editor-selection: #b7d2f5;
+  --editor-selection-match: #e2eaf5;
   --editor-search: #f3da85;
   --editor-search-selected: #e8bf4e;
   --editor-diff-added-bg: #cdebd5;

@@ -70,6 +70,33 @@ test("CodeMirror active line and gutter use one continuous fill", async () => {
   );
 });
 
+test("CodeMirror selection keeps the active text stronger than passive matches", async () => {
+  const [tokens, theme] = await Promise.all([
+    readFile(path.join(sourceRoot, "styles.css"), "utf8"),
+    readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8"),
+  ]);
+  const rootBlock = tokens.match(/:root \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const lightBlock = tokens.match(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  for (const [name, block] of [["dark", rootBlock], ["light", lightBlock]]) {
+    const background = colorToken(block, "--bg-deep");
+    const active = colorToken(block, "--editor-selection");
+    const passive = colorToken(block, "--editor-selection-match");
+    assert.ok(
+      contrastRatio(active, background) > contrastRatio(passive, background),
+      `${name} active selection must be more prominent than passive matches`,
+    );
+  }
+  assert.match(
+    theme,
+    /"\.cm-selectionMatch": \{ backgroundColor: "var\(--editor-selection-match\)" \}/u,
+  );
+  assert.match(
+    theme,
+    /"\.cm-selectionMatch\.cm-selectionMatch-main": \{[\s\S]*?var\(--editor-selection\)/u,
+  );
+});
+
 test("Git Blame and Diff gutters use semantic background layers", async () => {
   const source = await readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8");
   for (const className of [
