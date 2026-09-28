@@ -81,6 +81,8 @@
 
 .commit-blocker {
   overflow: hidden;
+  min-height: 13px;
+  flex-shrink: 0;
   color: var(--danger-text);
   font-size: 9px;
   line-height: 13px;

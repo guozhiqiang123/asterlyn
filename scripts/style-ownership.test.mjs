@@ -161,6 +161,13 @@ test("dialog buttons share one surface, follow the UI font size, and define dang
   assert.equal(scoped.length, 0, "the destructive surface belongs to the shared button layer only");
 });
 
+test("the Changes commit blocker keeps one complete line at the minimum splitter height", async () => {
+  const content = await readFile(new URL("../src/shared/content.css", import.meta.url), "utf8");
+  assert.match(content, /\.commit-tool \.commit-form textarea\s*\{[^}]*flex:\s*1 1 auto;/s);
+  assert.match(content, /\.commit-tool \.commit-form textarea\s*\{[^}]*min-height:\s*0;/s);
+  assert.match(content, /\.commit-blocker\s*\{[^}]*min-height:\s*13px;[^}]*flex-shrink:\s*0;[^}]*line-height:\s*13px;/s);
+});
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
