@@ -13,4 +13,4 @@ These instructions apply to the whole repository.
 
 ## Local bug-fix delivery
 
-After each bug fix in this repository passes its required checks, create a fresh native package and replace the existing local Asterlyn installation. Packaging may be delegated when eligible under the Antigravity worker rules, but Codex verifies the artifact and performs the installation. If the app is running, stop it before replacement and relaunch it afterward; the user has authorized this without a separate shutdown confirmation. Verify the installed bundle matches the accepted build, and never install an older bundle after a failed build.
+After each bug fix in this repository passes its required checks, create a fresh native package and replace the existing local Asterlyn installation. Codex verifies the artifact and performs the installation. If the app is running, stop it before replacement and relaunch it afterward; the user has authorized this without a separate shutdown confirmation. Verify the installed bundle matches the accepted build, and never install an older bundle after a failed build.
