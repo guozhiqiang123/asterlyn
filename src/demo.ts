@@ -13,6 +13,7 @@ import type {
 } from "./models";
 import { demoRemoteDeletionTarget } from "./demo-branch-mutation.ts";
 export { demoExecuteGitReset, demoExecuteRemoteMutation, demoPrepareGitReset, demoPrepareRemoteMutation } from "./demo-reviewed-mutations.ts";
+export { demoExecuteTagMutation } from "./demo-tag-mutation.ts";
 
 export const demoSnapshot: RepositorySnapshot = {
   root: "/workspace/asterlyn",

@@ -1,5 +1,6 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
+import type { TagMutationKind } from "../../models.ts";
 import type {
   ContextMenuAvailability,
   ContextMenuItem,
@@ -28,6 +29,13 @@ export interface HistoryCommitContextRuntime {
   policyOptions(target: HistoryCommitContextTarget): Omit<HistoryCommitContextPolicyOptions, "reasons">;
   openGitOperation(kind: "cherryPick" | "revert", oid: string): void;
   openBranchFromCommit(target: HistoryCommitContextTarget): void;
+  tagRemotes(target: HistoryCommitContextTarget): readonly string[];
+  openTagMutation(
+    kind: TagMutationKind,
+    target: HistoryCommitContextTarget,
+    tagName?: string,
+    remote?: string | null,
+  ): void;
   openReset(target: HistoryCommitContextTarget): void;
   blocked(reason: string): void;
   status(message: string): void;
@@ -60,9 +68,10 @@ export class HistoryCommitContextActions {
       reasons: labels,
     });
     const copyAction = commitCopyAction(OWNER_ID, labels.copyCommitId, request.target.oid);
+    const tagRemotes = this.runtime.tagRemotes(request.target);
     this.host.open(request.anchor, {
       ownerId: OWNER_ID,
-      model: historyCommitContextMenuModel(request.target, policy, this.copy()),
+      model: historyCommitContextMenuModel(request.target, policy, this.copy(), tagRemotes),
       isCurrent: () => this.runtime.current(request.target),
       invoke: async (actionId) => {
         try {
@@ -76,7 +85,7 @@ export class HistoryCommitContextActions {
             this.runtime.status(labels.copiedCommitId);
             return;
           }
-          this.invoke(actionId, request.target);
+          this.invoke(actionId, request.target, tagRemotes);
         } catch (error) {
           this.runtime.error(error);
         }
@@ -87,7 +96,11 @@ export class HistoryCommitContextActions {
     return true;
   }
 
-  private invoke(actionId: string, target: HistoryCommitContextTarget): void {
+  private invoke(
+    actionId: string,
+    target: HistoryCommitContextTarget,
+    remotes: readonly string[],
+  ): void {
     switch (actionId) {
       case `${OWNER_ID}.cherry-pick`:
         this.runtime.openGitOperation("cherryPick", target.oid);
@@ -101,7 +114,19 @@ export class HistoryCommitContextActions {
       case `${OWNER_ID}.create-branch`:
         this.runtime.openBranchFromCommit(target);
         return;
-      default: throw new Error(`Unknown History commit context action: ${actionId}`);
+      case `${OWNER_ID}.new-tag`:
+        this.runtime.openTagMutation("create", target);
+        return;
+      default: {
+        const tagAction = resolveTagAction(actionId, target, remotes);
+        if (!tagAction) throw new Error(`Unknown History commit context action: ${actionId}`);
+        this.runtime.openTagMutation(
+          tagAction.kind,
+          target,
+          tagAction.tagName,
+          tagAction.remote,
+        );
+      }
     }
   }
 }
@@ -110,6 +135,7 @@ export function historyCommitContextMenuModel(
   target: HistoryCommitContextTarget,
   policy: HistoryCommitContextPolicy,
   copy: HistoryCopy,
+  remotes: readonly string[] = [],
 ): ContextMenuModel {
   const labels = copy.commitContextMenu;
   const command = (
@@ -130,7 +156,68 @@ export function historyCommitContextMenuModel(
       ...(policy.reset ? [command("reset", labels.resetToHere, policy.reset)] : []),
       { kind: "separator" },
       command("create-branch", labels.newBranchFromCommit, policy.create),
+      command("new-tag", labels.newTag, policy.tag),
+      ...tagSubmenus(target, policy, copy, remotes),
     );
   }
   return { ariaLabel: labels.ariaLabel(target.commit.subject), items };
+}
+
+function tagSubmenus(
+  target: HistoryCommitContextTarget,
+  policy: HistoryCommitContextPolicy,
+  copy: HistoryCopy,
+  remotes: readonly string[] = [],
+): ContextMenuItem[] {
+  return commitTagNames(target).map((tagName, tagIndex) => ({
+    kind: "submenu" as const,
+    id: `${OWNER_ID}.tag-${tagIndex}`,
+    label: copy.commitContextMenu.tagMenu(tagName),
+    availability: policy.tag,
+    children: [
+      dangerCommand(`tag-${tagIndex}.delete-local`, copy.commitContextMenu.deleteLocalTag, policy.tag),
+      ...remotes.map((remote, remoteIndex) => dangerCommand(
+        `tag-${tagIndex}.delete-remote-${remoteIndex}`,
+        copy.commitContextMenu.deleteRemoteTag(remote),
+        policy.tag,
+      )),
+    ],
+  }));
+}
+
+function commitTagNames(target: HistoryCommitContextTarget): string[] {
+  return target.commit.decorations
+    .filter((value) => value.startsWith("tag: "))
+    .map((value) => value.slice("tag: ".length))
+    .filter((value, index, values) => value && values.indexOf(value) === index)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function dangerCommand(
+  id: string,
+  label: string,
+  availability: ContextMenuAvailability,
+): ContextMenuItem & { kind: "command" } {
+  return {
+    kind: "command", id: `${OWNER_ID}.${id}`, actionId: `${OWNER_ID}.${id}`,
+    label, availability, tone: "danger",
+  };
+}
+
+function resolveTagAction(
+  actionId: string,
+  target: HistoryCommitContextTarget,
+  remotes: readonly string[],
+): { kind: TagMutationKind; tagName: string; remote: string | null } | null {
+  for (const [tagIndex, tagName] of commitTagNames(target).entries()) {
+    if (actionId === `${OWNER_ID}.tag-${tagIndex}.delete-local`) {
+      return { kind: "deleteLocal", tagName, remote: null };
+    }
+    for (const [remoteIndex, remote] of remotes.entries()) {
+      if (actionId === `${OWNER_ID}.tag-${tagIndex}.delete-remote-${remoteIndex}`) {
+        return { kind: "deleteRemote", tagName, remote };
+      }
+    }
+  }
+  return null;
 }

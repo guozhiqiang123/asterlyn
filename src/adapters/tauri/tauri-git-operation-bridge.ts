@@ -11,6 +11,7 @@ import type {
   RemoteAuthenticationStatus,
   RemoteMutationPlan,
   RepositoryMutationOutcome,
+  TagMutationRequest,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
 import type { GitOperationBridge } from "../../protocol/desktop-bridge.ts";
@@ -53,6 +54,12 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_branch_mutation", {
       repositoryRoot,
       plan,
+      operationId,
+    }),
+  executeTagMutation: (repositoryRoot, request: TagMutationRequest, operationId) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_tag_mutation", {
+      repositoryRoot,
+      request,
       operationId,
     }),
   prepareRemoteMutation: (repositoryRoot, request) =>

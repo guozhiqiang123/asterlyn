@@ -100,6 +100,7 @@ export interface RepositoryIntegrationActions {
 export interface RepositoryMutationOptions extends RepositoryChangeInstallOptions {
   readonly focusConflicts?: boolean;
   readonly preferHistoryTip?: boolean;
+  readonly reconcileHistory?: boolean;
 }
 
 /**
@@ -365,7 +366,7 @@ export class RepositoryIntegrationCoordinator {
     if (plan.reloadWorkspaceCatalog) {
       this.targets.files.installWorkspace(snapshot.root, snapshot.changes);
     }
-    if (plan.updateHistory) {
+    if (plan.updateHistory && options.reconcileHistory !== false) {
       this.actions.reconcileRefreshedHistory(
         snapshot,
         options.preferHistoryTip ?? true,

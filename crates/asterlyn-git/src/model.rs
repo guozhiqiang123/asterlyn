@@ -631,6 +631,23 @@ pub enum BranchMutationKind {
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub enum TagMutationKind {
+    Create,
+    DeleteLocal,
+    DeleteRemote,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TagMutationRequest {
+    pub kind: TagMutationKind,
+    pub tag_name: String,
+    pub commit_oid: String,
+    pub remote: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum BranchMutationSourceKind {
     Local,
     Remote,

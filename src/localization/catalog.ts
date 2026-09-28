@@ -1,6 +1,6 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
-import type { BranchMutationCopy } from "./branch-mutation-copy.ts";
+import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts";
 export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
 export interface CommonCopy {
   ready: string;
@@ -887,7 +887,7 @@ export interface HistoryCopy {
   topbarBranchMenu: TopbarBranchMenuCopy;
   reset: GitResetCopy;
   branchContextMenu: BranchContextMenuCopy;
-  branchMutation: BranchMutationCopy;
+  branchMutation: BranchMutationCopy; tagMutation: TagMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
   rangeContextMenu: HistoryCommitRangeContextMenuCopy;
   commitFolderContextMenu: HistoryCommitFolderContextMenuCopy;
@@ -1085,6 +1085,7 @@ export interface HistoryCommitContextMenuCopy {
   revertCommit: string;
   resetToHere: string;
   newBranchFromCommit: string;
+  newTag: string; tagMenu(name: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;
   copiedCommitId: string;
   clipboardUnavailable: string;
   busy: string;

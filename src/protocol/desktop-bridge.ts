@@ -45,6 +45,7 @@ import type {
   RepositorySliceProject,
   RepositoryStateSlice,
   SaveTextFileResult,
+  TagMutationRequest,
   TextFileSnapshot,
   TrackedChangeScan,
   WorkingDiffBase,
@@ -314,6 +315,11 @@ export interface GitOperationBridge {
   executeBranchMutation(
     repositoryRoot: string,
     plan: BranchMutationPlan,
+    operationId: string,
+  ): Promise<RepositoryMutationOutcome>;
+  executeTagMutation(
+    repositoryRoot: string,
+    request: TagMutationRequest,
     operationId: string,
   ): Promise<RepositoryMutationOutcome>;
   prepareRemoteMutation(

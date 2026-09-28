@@ -538,16 +538,19 @@ export class AsterlynApp {
     );
     this.gitHistoryMutationRuntime = new GitHistoryMutationRuntime({
       root,
-      branch: {
-        gateway: {
-          prepare: (repositoryRoot, request) =>
-            bridge.prepareBranchMutation(repositoryRoot, request),
-          execute: (plan) => this.executeReviewedBranchMutation(plan),
-          errorMessage: (error) =>
-            localizedOperationError(error, this.localization.catalog.errors),
-        },
-        copy: () => this.localization.catalog.history.branchMutation,
-      },
+      branch: { gateway: {
+        prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
+        execute: (plan) => this.executeReviewedBranchMutation(plan),
+        errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      }, copy: () => this.localization.catalog.history.branchMutation },
+      tag: { gateway: {
+        execute: async (request) => { const copy = this.localization.catalog.history.tagMutation;
+          const succeeded = await this.runBranchMutation(
+            copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
+            (root) => bridge.executeTagMutation(root, request, `tag-mutation-${++this.branchMutationSequence}`), null, true,
+          ); if (succeeded) this.historyReadRuntime.details.applyTagMutation(request); return succeeded; },
+        errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      }, copy: () => this.localization.catalog.history.tagMutation },
       reset: { gateway: {
         prepare: (...args) => bridge.prepareGitReset(...args),
         execute: (plan, mode) => this.executeReviewedGitReset(plan, mode),
@@ -756,9 +759,7 @@ export class AsterlynApp {
           showHistory: (target) => this.showBranchContextHistory(target),
           openMutation: (kind, branch, suggestedName) => {
             const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
-            if (repositoryRoot) {
-              this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName);
-            }
+            if (repositoryRoot) this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName);
           },
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
           openRemoteAction: (kind, returnFocus) =>
@@ -795,16 +796,16 @@ export class AsterlynApp {
           },
           openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
           openBranchFromCommit: (target) => {
-            this.gitHistoryMutationRuntime.branch.open(
-              target.workspaceRoot,
-              "create",
-              {
-                repositoryId: target.repositoryId,
-                fullName: target.oid,
-                name: target.commit.shortOid,
-                oid: target.oid,
-              },
-            );
+            this.gitHistoryMutationRuntime.branch.open(target.workspaceRoot, "create", {
+              repositoryId: target.repositoryId, fullName: target.oid,
+              name: target.commit.shortOid, oid: target.oid,
+            });
+          },
+          tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
+          openTagMutation: (kind, target, tagName, remote) => {
+            this.gitHistoryMutationRuntime.tag.open({
+              repositoryRoot: target.workspaceRoot, commitOid: target.oid, commitSubject: target.commit.subject,
+            }, kind, tagName, remote);
           },
           openReset: (target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot,
             oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }),
@@ -8385,10 +8386,11 @@ export class AsterlynApp {
     loadingMessage: string,
     successMessage: string,
     mutation: (repositoryRoot: string) => Promise<RepositoryMutationOutcome>,
+    saveAction: string | null = this.localization.catalog.common.actions.changeBranches, incremental = false,
   ): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return false;
-    if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.changeBranches))) return false;
+    if (saveAction && !(await this.saveDirtyTabsBefore(saveAction))) return false;
     const operation = this.repositoryOperations.start(snapshot.root, () => mutation(snapshot.root));
     const generation = operation.generation;
     this.clearError();
@@ -8396,22 +8398,21 @@ export class AsterlynApp {
     let succeeded = false;
     let failed = false;
     this.setLoading(true, loadingMessage);
-    this.renderBottomTool();
+    if (!incremental) this.renderBottomTool();
     try {
       const completion = await operation.completion;
       if (completion.status === "stale") return false;
       if (completion.status === "failure") throw completion.error;
       const next = this.repositoryIntegration.applyMutation(completion.outcome, "gitMutation", {
-        clearInclusion: true,
-        clearSelection: true,
+        clearInclusion: true, clearSelection: true, reconcileHistory: !incremental,
       });
-      this.captureMountedTextEditor();
-      await this.filesEditorRuntime.editor.reconcileExternalPaths([]);
+      if (!incremental) this.captureMountedTextEditor();
+      if (!incremental) await this.filesEditorRuntime.editor.reconcileExternalPaths([]);
       if (!this.windowSession.matches(generation, snapshot.root)) return false;
-      this.renderWorkspace();
-      this.loadVisibleCommitDetails();
-      void this.loadProjectFiles(next.root, generation);
-      pendingRoot = next.root;
+      if (incremental) this.renderRepositorySlices(next, completion.outcome.invalidatedSlices); else this.renderWorkspace();
+      if (!incremental) this.loadVisibleCommitDetails();
+      if (!incremental) void this.loadProjectFiles(next.root, generation);
+      pendingRoot = incremental ? null : next.root;
       succeeded = true;
     } catch (error) {
       if (generation !== this.windowSession.generation) return false;
@@ -8421,7 +8422,7 @@ export class AsterlynApp {
       this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) {
         this.setLoading(false, this.localization.catalog.common.ready);
-        this.renderBottomTool();
+        if (!incremental) this.renderBottomTool();
         if (succeeded) this.setStatus(successMessage, "success");
       }
     }

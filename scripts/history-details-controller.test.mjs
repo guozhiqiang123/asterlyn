@@ -80,6 +80,38 @@ test("an identical snapshot is a silent semantic no-op", () => {
   assert.deepEqual(changes, []);
 });
 
+test("tag decorations update in place without changing history identity or selection", () => {
+  const controller = createController(gatewayWithHistory([]));
+  controller.installSnapshot("/workspace", [commit("a"), commit("b")], defaultHistoryQuery(), false);
+  const generation = controller.state.history.generation;
+  const source = controller.state.history.source;
+  const selection = controller.state.selectedCommit;
+  const changes = [];
+  controller.subscribe((change) => changes.push(change));
+
+  controller.applyTagMutation({
+    kind: "create", tagName: "release/v1", commitOid: "a", remote: null,
+  });
+
+  assert.equal(controller.state.history.generation, generation);
+  assert.equal(controller.state.history.source, source);
+  assert.equal(controller.state.selectedCommit, selection);
+  assert.deepEqual(controller.state.history.commits[0].decorations, ["tag: release/v1"]);
+  assert.deepEqual(changes, [{
+    reason: "tag-decoration", historyChanged: true, detailsChanged: true,
+  }]);
+
+  controller.applyTagMutation({
+    kind: "deleteRemote", tagName: "release/v1", commitOid: "a", remote: "origin",
+  });
+  assert.equal(changes.length, 1);
+  controller.applyTagMutation({
+    kind: "deleteLocal", tagName: "release/v1", commitOid: "a", remote: null,
+  });
+  assert.deepEqual(controller.state.history.commits[0].decorations, []);
+  assert.equal(controller.state.selectedCommit, selection);
+});
+
 test("commit detail cache avoids native reads and late detail responses are ignored", async () => {
   const detailB = deferred();
   const detailCalls = [];

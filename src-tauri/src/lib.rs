@@ -8,7 +8,7 @@ use asterlyn_git::{
     GitOperationSnapshot, GitRepository, GitResetMode, GitResetPlan, HistoryPage, HistoryQuery,
     ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
     RemoteMutationPlan, RemoteMutationRequest, RepositoryReadPlan, RepositorySliceSnapshot,
-    RepositorySnapshot, TrackedChangeScan, UntrackedScan,
+    RepositorySnapshot, TagMutationKind, TagMutationRequest, TrackedChangeScan, UntrackedScan,
 };
 use asterlyn_terminal::TerminalSessions;
 use asterlyn_workspace::{
@@ -312,6 +312,7 @@ pub fn run() {
             create_branch,
             prepare_branch_mutation,
             execute_branch_mutation,
+            execute_tag_mutation,
             prepare_remote_mutation,
             execute_remote_mutation,
             prepare_git_reset,

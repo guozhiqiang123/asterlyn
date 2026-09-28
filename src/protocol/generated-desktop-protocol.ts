@@ -72,6 +72,7 @@ export interface DesktopCommandMap {
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
   prepare_branch_mutation: { args: { repositoryRoot: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
   execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  execute_tag_mutation: { args: { repositoryRoot: string; request: Model.TagMutationRequest; operationId: string; }; result: Model.RepositoryMutationOutcome };
   prepare_remote_mutation: { args: { repositoryRoot: string; request: Model.RemoteMutationRequest; }; result: Model.RemoteMutationPlan };
   execute_remote_mutation: { args: { repositoryRoot: string; plan: Model.RemoteMutationPlan; }; result: Model.RepositoryMutationOutcome };
   prepare_git_reset: { args: { repositoryRoot: string; targetOid: string; }; result: Model.GitResetPlan };
@@ -165,6 +166,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   create_branch: "repositoryMutationOutcome",
   prepare_branch_mutation: "branchMutationPlan",
   execute_branch_mutation: "repositoryMutationOutcome",
+  execute_tag_mutation: "repositoryMutationOutcome",
   prepare_remote_mutation: "remoteMutationPlan",
   execute_remote_mutation: "repositoryMutationOutcome",
   prepare_git_reset: "gitResetPlan",

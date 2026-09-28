@@ -258,6 +258,10 @@ test("context targets survive unrelated repository revisions but reject semantic
       commits: [{ ...commit, subject: "changed" }],
     },
   }, 4), false);
+  assert.equal(historyCommitContextTargetIsCurrent(historyTarget, {
+    ...state,
+    history: { ...state.history, commits: [{ ...commit, decorations: ["tag: v1"] }] },
+  }, 4), false);
 });
 
 test("delegated binding recognizes desktop keyboard invocation and derives a row anchor", () => {

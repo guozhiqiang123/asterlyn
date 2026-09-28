@@ -17,6 +17,7 @@ import {
   demoQueryHistory,
   demoCreateBranch,
   demoExecuteBranchMutation,
+  demoExecuteTagMutation,
   demoExecuteGitReset, demoExecuteRemoteMutation,
   demoPrepareBranchMutation,
   demoPrepareGitReset, demoPrepareRemoteMutation,
@@ -55,7 +56,7 @@ import type {
   ReplacementApplyResult, ReplacementRecoverySummary,
   RepositoryMutationOutcome, RepositorySliceProject,
   RepositoryStateSlice, SaveTextFileResult,
-  TextFileSnapshot, TerminalEvent,
+  TagMutationRequest, TextFileSnapshot, TerminalEvent,
   TerminalStarted, TrackedChangeScan,
   WorkingDiffBase, WorkingTreeMutationOutcome, UntrackedScan,
   WorkspaceTextSearchOptions,
@@ -1448,6 +1449,11 @@ const demoBridge: DesktopBridge = {
     return invoke<RepositoryMutationOutcome>(
       "execute_branch_mutation", { repositoryRoot, plan, operationId },
     );
+  },
+
+  async executeTagMutation(repositoryRoot: string, request: TagMutationRequest, operationId: string): Promise<RepositoryMutationOutcome> {
+    if (!isTauri) { await demoDelay(180); browserSnapshot = demoExecuteTagMutation(browserSnapshot, request); return { snapshot: demoTrackedSnapshot(browserSnapshot), invalidatedSlices: request.kind === "deleteRemote" ? [] : ["refs", "history"] }; }
+    return invoke<RepositoryMutationOutcome>("execute_tag_mutation", { repositoryRoot, request, operationId });
   },
 
   async prepareRemoteMutation(repositoryRoot: string, request: RemoteMutationRequest): Promise<RemoteMutationPlan> {

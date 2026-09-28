@@ -24,6 +24,7 @@ export interface HistoryCommitContextPolicy {
   readonly cherryPick: ContextMenuAvailability;
   readonly revert: ContextMenuAvailability;
   readonly create: ContextMenuAvailability;
+  readonly tag: ContextMenuAvailability;
   readonly reset: ContextMenuAvailability | null;
 }
 
@@ -48,7 +49,8 @@ export function historyCommitContextPolicy(
     historyContains(options.historyCommits, options.headOid!, target.oid),
   );
   const reset = !currentBranchCommit ? null : options.busy ? busy(options.reasons.busy) : enabled();
-  return { writable, cherryPick: commitMutation, revert: commitMutation, create: mutation, reset };
+  const tag = options.busy ? busy(options.reasons.busy) : enabled();
+  return { writable, cherryPick: commitMutation, revert: commitMutation, create: mutation, tag, reset };
 }
 
 function historyContains(commits: readonly CommitSummary[], headOid: string, targetOid: string): boolean {

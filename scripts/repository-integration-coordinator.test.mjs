@@ -36,6 +36,23 @@ test("repository integration applies only declared projection slices", () => {
   fixture.dispose();
 });
 
+test("metadata mutations can install canonical history without triggering a full history reconcile", () => {
+  const fixture = integrationFixture();
+  const changed = snapshot("/repo");
+  changed.commits = [{ oid: "tagged", decorations: ["tag: v1"] }];
+
+  fixture.coordinator.applyMutation(
+    { snapshot: changed, invalidatedSlices: ["refs", "history"] },
+    "gitMutation",
+    { reconcileHistory: false },
+  );
+
+  assert.deepEqual(fixture.session.repository.state.snapshot.commits, changed.commits);
+  assert.equal(fixture.records.refreshedHistory.length, 0);
+  assert.equal(fixture.records.remote.length, 1);
+  fixture.dispose();
+});
+
 test("workspace mutation reconciliation commits exact paths and projections", () => {
   const fixture = integrationFixture();
   const changed = snapshot("/repo", [{ path: "src/renamed.ts", conflicted: false }]);

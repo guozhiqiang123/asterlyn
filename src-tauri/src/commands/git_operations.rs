@@ -271,6 +271,47 @@ pub(crate) async fn execute_branch_mutation(
 }
 
 #[tauri::command]
+pub(crate) async fn execute_tag_mutation(
+    repository_root: String,
+    request: TagMutationRequest,
+    operation_id: String,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    if request.kind == TagMutationKind::DeleteRemote {
+        git_operations
+            .run_remote(
+                repository_root,
+                operation_id,
+                "delete remote tag",
+                COMMIT_LIMIT,
+                move |repository, cancellation| {
+                    repository.execute_remote_tag_mutation(&request, cancellation)
+                },
+            )
+            .await
+            .map(|snapshot| mutation_outcome(snapshot, &[]))
+    } else {
+        git_operations
+            .run_local(repository_root, "mutate local tag", move |repository| {
+                repository.execute_local_tag_mutation(&request)?;
+                repository.tracked_snapshot(COMMIT_LIMIT).map(|snapshot| {
+                    mutation_outcome(
+                        snapshot,
+                        &[RepositoryStateSlice::Refs, RepositoryStateSlice::History],
+                    )
+                })
+            })
+            .await
+    }
+}
+
+#[tauri::command]
 pub(crate) async fn prepare_remote_mutation(
     repository_root: String,
     request: RemoteMutationRequest,

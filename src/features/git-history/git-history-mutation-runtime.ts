@@ -2,6 +2,7 @@ import type {
   BranchMutationCopy,
   HistoryCommitFileContextMenuCopy,
 } from "../../localization/catalog.ts";
+import type { TagMutationCopy } from "../../localization/tag-mutation-copy.ts";
 import { BranchMutationController, type BranchMutationGateway } from "./branch-mutation-controller.ts";
 import { BranchMutationDialogBinding } from "./branch-mutation-dialog-binding.ts";
 import {
@@ -12,6 +13,8 @@ import { CommitFileRestoreDialogBinding } from "./commit-file-restore-dialog-bin
 import type { GitResetCopy } from "../../localization/git-reviewed-copy.ts";
 import { GitResetBinding } from "./git-reset-binding.ts";
 import { GitResetController, type GitResetGateway } from "./git-reset-controller.ts";
+import { TagMutationController, type TagMutationGateway } from "./tag-mutation-controller.ts";
+import { TagMutationDialogBinding } from "./tag-mutation-dialog-binding.ts";
 
 export interface GitHistoryMutationRuntimeOptions {
   readonly root: HTMLElement;
@@ -19,6 +22,7 @@ export interface GitHistoryMutationRuntimeOptions {
     readonly gateway: BranchMutationGateway;
     readonly copy: () => BranchMutationCopy;
   };
+  readonly tag: { readonly gateway: TagMutationGateway; readonly copy: () => TagMutationCopy };
   readonly fileRestore: {
     readonly gateway: CommitFileRestoreGateway;
     readonly copy: () => HistoryCommitFileContextMenuCopy;
@@ -30,10 +34,12 @@ export interface GitHistoryMutationRuntimeOptions {
 /** Owns Git History's reviewed branch and historical-file mutation workflows. */
 export class GitHistoryMutationRuntime {
   readonly branch: BranchMutationController;
+  readonly tag: TagMutationController;
   readonly fileRestore: CommitFileRestoreController;
   readonly reset: GitResetController | null;
 
   private readonly branchBinding: BranchMutationDialogBinding;
+  private readonly tagBinding: TagMutationDialogBinding;
   private readonly fileRestoreBinding: CommitFileRestoreDialogBinding;
   private readonly resetBinding: GitResetBinding | null;
   private disposed = false;
@@ -45,6 +51,8 @@ export class GitHistoryMutationRuntime {
       this.branch,
       options.branch.copy,
     );
+    this.tag = new TagMutationController(options.tag.gateway);
+    this.tagBinding = new TagMutationDialogBinding(options.root, this.tag, options.tag.copy);
     this.fileRestore = new CommitFileRestoreController(options.fileRestore.gateway);
     this.fileRestoreBinding = new CommitFileRestoreDialogBinding(
       options.root,
@@ -60,12 +68,14 @@ export class GitHistoryMutationRuntime {
 
   render(): void {
     this.branchBinding.render();
+    this.tagBinding.render();
     this.fileRestoreBinding.render();
     this.resetBinding?.render();
   }
 
   refreshCopy(): void {
     this.branchBinding.refreshCopy();
+    this.tagBinding.refreshCopy();
     this.fileRestoreBinding.refreshCopy();
     this.resetBinding?.refreshCopy();
   }
@@ -74,9 +84,11 @@ export class GitHistoryMutationRuntime {
     if (this.disposed) return;
     this.disposed = true;
     this.branchBinding.dispose();
+    this.tagBinding.dispose();
     this.fileRestoreBinding.dispose();
     this.resetBinding?.dispose();
     this.branch.dispose();
+    this.tag.dispose();
     this.fileRestore.dispose();
     this.reset?.dispose();
   }

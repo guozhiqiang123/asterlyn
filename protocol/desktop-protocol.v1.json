@@ -68,6 +68,7 @@
     { "name": "create_branch", "args": { "repositoryRoot": "string", "name": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "prepare_branch_mutation", "args": { "repositoryRoot": "string", "request": "BranchMutationRequest" }, "result": "BranchMutationPlan", "validator": "branchMutationPlan" },
     { "name": "execute_branch_mutation", "args": { "repositoryRoot": "string", "plan": "BranchMutationPlan", "operationId": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
+    { "name": "execute_tag_mutation", "args": { "repositoryRoot": "string", "request": "TagMutationRequest", "operationId": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "prepare_remote_mutation", "args": { "repositoryRoot": "string", "request": "RemoteMutationRequest" }, "result": "RemoteMutationPlan", "validator": "remoteMutationPlan" },
     { "name": "execute_remote_mutation", "args": { "repositoryRoot": "string", "plan": "RemoteMutationPlan" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "prepare_git_reset", "args": { "repositoryRoot": "string", "targetOid": "string" }, "result": "GitResetPlan", "validator": "gitResetPlan" },

@@ -34,6 +34,13 @@ test("History status-only changes do not rebuild rows or clear selection", () =>
     historyPort(snapshotEvents),
   );
   assert.deepEqual(snapshotEvents, ["clear-range", "clear-inspection", "rows", "detail", "load", "menu"]);
+
+  const tagEvents = [];
+  routeHistoryDetailsChange(
+    { reason: "tag-decoration", historyChanged: true, detailsChanged: true },
+    historyPort(tagEvents),
+  );
+  assert.deepEqual(tagEvents, ["rows", "detail", "menu"]);
 });
 
 function historyPort(events) {

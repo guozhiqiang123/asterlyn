@@ -85,6 +85,8 @@ export function historyCommitContextTargetIsCurrent(
     commit && commit.repositoryId === target.repositoryId && commit.oid === target.oid &&
     commit.subject === target.commit.subject &&
     commit.parents.length === target.commit.parents.length &&
-    commit.parents.every((parent, index) => parent === target.commit.parents[index]),
+    commit.parents.every((parent, index) => parent === target.commit.parents[index]) &&
+    commit.decorations.length === target.commit.decorations.length &&
+    commit.decorations.every((decoration, index) => decoration === target.commit.decorations[index]),
   );
 }

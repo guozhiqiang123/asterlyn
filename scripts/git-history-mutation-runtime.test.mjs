@@ -16,6 +16,7 @@ test("Git History mutation runtime owns both reviewed dialog lifecycles", () => 
       gateway: {},
       copy: () => ({}),
     },
+    tag: { gateway: {}, copy: () => ({}) },
     fileRestore: {
       gateway: {},
       copy: () => ({}),
@@ -28,8 +29,9 @@ test("Git History mutation runtime owns both reviewed dialog lifecycles", () => 
     name: "main",
     oid: "a".repeat(40),
   });
+  runtime.tag.open({ repositoryRoot: "/repo", commitOid: "a".repeat(40), commitSubject: "A" }, "create");
   runtime.fileRestore.reset();
-  assert.equal(queries, 2);
+  assert.equal(queries, 3);
 
   runtime.dispose();
   runtime.dispose();
@@ -39,7 +41,8 @@ test("Git History mutation runtime owns both reviewed dialog lifecycles", () => 
     name: "main",
     oid: "a".repeat(40),
   });
+  runtime.tag.open({ repositoryRoot: "/repo", commitOid: "a".repeat(40), commitSubject: "A" }, "create");
   runtime.fileRestore.reset();
-  assert.equal(queries, 2);
+  assert.equal(queries, 3);
   assert.equal(runtime.fileRestore.state.dialog, null);
 });

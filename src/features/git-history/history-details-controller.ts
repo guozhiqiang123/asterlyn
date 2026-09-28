@@ -3,6 +3,7 @@ import type {
   CommitSummary,
   HistoryPage,
   HistoryQuery,
+  TagMutationRequest,
 } from "../../models.ts";
 import {
   beginHistoryQuery,
@@ -88,6 +89,7 @@ export interface HistoryDetailsChange {
     | "refresh-start"
     | "refresh-complete"
     | "refresh-error"
+    | "tag-decoration"
     | "selection"
     | "details-start"
     | "details-complete"
@@ -254,6 +256,30 @@ export class GitHistoryDetailsController {
       statusChanged,
       selectionChanged,
       detailsChanged: selectionChanged,
+    });
+  }
+
+  applyTagMutation(request: TagMutationRequest): void {
+    if (request.kind === "deleteRemote") return;
+    const decoration = `tag: ${request.tagName}`;
+    let changed = false;
+    let selectedChanged = false;
+    const commits = this.value.history.commits.map((commit) => {
+      if (commit.repositoryId !== "." || commit.oid !== request.commitOid) return commit;
+      const decorations = request.kind === "create"
+        ? commit.decorations.includes(decoration) ? commit.decorations : [...commit.decorations, decoration]
+        : commit.decorations.filter((value) => value !== decoration);
+      if (sameStrings(commit.decorations, decorations)) return commit;
+      changed = true;
+      selectedChanged = this.value.selectedCommit === commitKey(commit);
+      return { ...commit, decorations };
+    });
+    if (!changed) return;
+    this.value = { ...this.value, history: { ...this.value.history, commits } };
+    this.emit({
+      reason: "tag-decoration",
+      historyChanged: true,
+      detailsChanged: selectedChanged,
     });
   }
 

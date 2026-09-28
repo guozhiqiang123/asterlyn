@@ -27,3 +27,12 @@ export interface GitResetPlan {
   targetOid: string;
   previewToken: string;
 }
+
+export type TagMutationKind = "create" | "deleteLocal" | "deleteRemote";
+
+export interface TagMutationRequest {
+  kind: TagMutationKind;
+  tagName: string;
+  commitOid: string;
+  remote: string | null;
+}

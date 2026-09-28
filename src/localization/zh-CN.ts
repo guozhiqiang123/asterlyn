@@ -1,5 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts";
-import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts";
+import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 
 export const ZH_CN = {
@@ -364,11 +364,12 @@ export const ZH_CN = {
       busy: "另一个仓库操作仍在进行中", cleanRequired: "切换分支前请提交或移除所有工作区更改",
       targetChanged: "分支已发生变化，请重新打开菜单",
     },
-    branchMutation: ZH_CN_BRANCH_MUTATION_COPY,
+    branchMutation: ZH_CN_BRANCH_MUTATION_COPY, tagMutation: ZH_CN_TAG_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `${subject} 的提交操作`, copyCommitId: "复制提交 ID",
       cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…", resetToHere: ZH_GIT_RESET_COPY.menuItem,
-      newBranchFromCommit: "从此提交新建分支…", copiedCommitId: "已复制完整提交 ID",
+      newBranchFromCommit: "从此提交新建分支…", newTag: "新建标签…", tagMenu: (name) => `标签 ${name}`,
+      deleteLocalTag: "删除本地标签…", deleteRemoteTag: (remote) => `从 ${remote} 删除…`, copiedCommitId: "已复制完整提交 ID",
       clipboardUnavailable: "系统剪贴板不可用", busy: "另一个仓库操作仍在进行中",
       cleanRequired: "应用此提交前请提交或移除所有工作区更改",
       localBranchRequired: "更改历史前请检出现有本地分支",

@@ -1,5 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts";
-import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts";
+import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
 import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 
 export const EN_US: LocaleCatalog = {
@@ -508,11 +508,11 @@ export const EN_US: LocaleCatalog = {
       cleanRequired: "Commit or remove all working-tree changes before switching branches",
       targetChanged: "The branch changed; open its menu again",
     },
-    branchMutation: EN_US_BRANCH_MUTATION_COPY,
+    branchMutation: EN_US_BRANCH_MUTATION_COPY, tagMutation: EN_US_TAG_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `Commit actions for ${subject}`,
       copyCommitId: "Copy Commit ID", cherryPick: "Cherry-pick…", revertCommit: "Revert Commit…", resetToHere: EN_GIT_RESET_COPY.menuItem,
-      newBranchFromCommit: "New Branch from This Commit…", copiedCommitId: "Full commit ID copied",
+      newBranchFromCommit: "New Branch from This Commit…", newTag: "New Tag…", tagMenu: (name) => `Tag ${name}`, deleteLocalTag: "Delete Local Tag…", deleteRemoteTag: (remote) => `Delete from ${remote}…`, copiedCommitId: "Full commit ID copied",
       clipboardUnavailable: "The system clipboard is unavailable",
       busy: "Another repository operation is still in progress",
       cleanRequired: "Commit or remove all working-tree changes before applying this commit",
