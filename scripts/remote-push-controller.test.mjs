@@ -588,7 +588,6 @@ test("push dialog view excludes origin/HEAD and origin from branch dropdown and 
     branches: [
       { name: "main", fullName: "refs/heads/main", kind: "local" },
       { name: "origin", fullName: "refs/remotes/origin/HEAD", kind: "remote" },
-      { name: "origin/main", fullName: "refs/remotes/origin/main", kind: "remote" },
       { name: "origin/feature-x", fullName: "refs/remotes/origin/feature-x", kind: "remote" },
     ],
   });
@@ -613,11 +612,14 @@ test("push dialog view excludes origin/HEAD and origin from branch dropdown and 
   assert.match(branchOptionsHtml, /data-error=/);
   // Verify feature-x is present
   assert.match(branchOptionsHtml, /<option value="feature-x"/);
+  // New destinations keep the standalone badge without duplicating "New" in the option label.
+  assert.match(branchOptionsHtml, /<option value="main" selected>main<\/option>/);
+  assert.doesNotMatch(branchOptionsHtml, /main \(New\)/);
+  assert.match(html, /class="push-branch-badge new">New<\/span>/);
   // Verify origin and HEAD are NOT present as branch choices
   assert.doesNotMatch(branchOptionsHtml, /<option value="origin"/);
   assert.doesNotMatch(branchOptionsHtml, /<option value="HEAD"/);
 
   controller.dispose();
 });
-
 

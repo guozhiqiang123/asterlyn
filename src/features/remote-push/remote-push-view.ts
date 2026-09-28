@@ -315,9 +315,7 @@ function renderPushRoute(model: RemotePushDialogViewModel, preview: PushPreview 
   const branchOptions = [
     `<option value="__new__" data-editable="branch" data-placeholder="${escapeAttribute(copy.newBranchPlaceholder)}" data-error="${escapeAttribute(copy.invalidBranchName)}">${escapeHtml(copy.newBranchOption)}</option>`,
     ...candidates.map((candidate) => {
-      const isNew = !existingRemoteBranches.has(candidate);
-      const label = isNew ? `${candidate} (${copy.newBadge})` : candidate;
-      return `<option value="${escapeAttribute(candidate)}" ${candidate === destinationBranch ? "selected" : ""}>${escapeHtml(label)}</option>`;
+      return `<option value="${escapeAttribute(candidate)}" ${candidate === destinationBranch ? "selected" : ""}>${escapeHtml(candidate)}</option>`;
     }),
   ].join("");
   const branchControl = renderSelectControl(`<select id="push-branch-select" aria-label="${escapeAttribute(copy.remoteBranch)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${branchOptions}</select>`);
