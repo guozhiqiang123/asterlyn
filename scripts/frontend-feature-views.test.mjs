@@ -289,6 +289,25 @@ test("push review compacts unary file directories around branching points", () =
   assert.doesNotMatch(collapsed, />assets<\/span>|>java\/com\/example<\/span>/);
 });
 
+test("push review outgoing file tree uses the shared compact directory chain", () => {
+  const state = createRemotePushState();
+  state.dialog = "push";
+  state.pushPreview = pushPreview({
+    files: [
+      { path: "docs/benchmarks/chain-a.md", originalPath: null, status: "modified" },
+      { path: "docs/design/interaction.md", originalPath: null, status: "modified" },
+      { path: "src/features/remote-push/view.ts", originalPath: null, status: "modified" },
+    ],
+  });
+  const html = renderRemoteDialogContent(viewModel(state));
+  assert.match(html, /class="push-file-list compact-file-tree"/);
+  assert.match(html, /<span>src\/features\/remote-push<\/span>/);
+  assert.match(html, /data-push-directory="src\/features\/remote-push"/);
+  assert.doesNotMatch(html, /data-push-directory="src"[\s>]/);
+  assert.match(html, /<span>docs<\/span>/);
+  assert.match(html, /class="compact-file-tree-count"/);
+});
+
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
   const snapshot = repositorySnapshot();
   snapshot.branches = branchFixtures();
@@ -298,13 +317,26 @@ test("branch navigation keeps repository hierarchy and selection in feature-owne
     selectedRepositoryIds: new Set(),
     selectedRefs: new Map([[".:refs%2Fheads%2Fmain", { repositoryId: ".", fullName: "refs/heads/main" }]]),
     collapsedGroups: new Set(),
+    collapsedRemoteGroups: new Set(),
   });
 
   assert.match(html, />Local</);
   assert.match(html, />Remote</);
   assert.match(html, /remote-ref-group/);
+  assert.match(html, /data-remote-group-toggle="origin" aria-expanded="true"/);
   assert.match(html, /origin/);
   assert.match(html, /branch-row[^>]*selected/);
+
+  const collapsed = renderBranchNavigation({
+    snapshot,
+    query: "",
+    selectedRepositoryIds: new Set(),
+    selectedRefs: new Map(),
+    collapsedGroups: new Set(),
+    collapsedRemoteGroups: new Set(["origin"]),
+  });
+  assert.match(collapsed, /data-remote-group-toggle="origin" aria-expanded="false"/);
+  assert.match(collapsed, /<div role="group" hidden>/);
 });
 
 test("branch selection is a synchronous projection of the active ref scope", () => {
@@ -317,6 +349,7 @@ test("branch selection is a synchronous projection of the active ref scope", () 
     query: "",
     selectedRepositoryIds: new Set(),
     collapsedGroups: new Set(),
+    collapsedRemoteGroups: new Set(),
   };
 
   assert.equal(branchIsSelected(main, { ...base, selectedRefs: new Map() }), false);
@@ -788,7 +821,7 @@ test("editor tab strip and menu omit ephemeral text tabs while preserving origin
   assert.match(diffTabs, /data-editor-tab="1"/);
   assert.match(diffTabs, /data-editor-tab="3"/);
   assert.match(diffTabs, /data-editor-preview/);
-  assert.match(diffTabs, /hidden-2\.ts<small>Diff<\/small>/);
+  assert.match(diffTabs, /<span class="editor-tab-label">hidden-2\.ts<\/span><small>Diff<\/small>/);
 
   assert.doesNotMatch(diffMenu, /data-editor-menu-tab-index="0"/);
   assert.doesNotMatch(diffMenu, /data-editor-menu-tab-index="2"/);

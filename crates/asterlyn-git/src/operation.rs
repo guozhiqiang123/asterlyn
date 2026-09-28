@@ -228,15 +228,11 @@ impl GitRepository {
 
     pub fn read_conflict_content(&self, path: &str) -> Result<GitConflictContent, GitError> {
         let relative = validate_operation_path(path)?;
-        let active = self
-            .operation_snapshot()?
-            .ok_or_else(|| GitError::UnsafeOperation {
-                operation: "read conflict".to_string(),
-                message: "Git reports no active operation".to_string(),
-                blockers: Vec::new(),
-            })?;
-        let conflict = active
-            .conflicts
+        // The unmerged index is the source of truth for conflicts. In particular,
+        // `git stash pop` can leave stage 1/2/3 entries without creating merge,
+        // rebase, or cherry-pick operation metadata.
+        let conflicts = self.operation_conflicts()?;
+        let conflict = conflicts
             .iter()
             .find(|candidate| candidate.path == path)
             .ok_or_else(|| GitError::InvalidInput {
@@ -1526,6 +1522,47 @@ mod tests {
                 .expect("continue merge")
                 .is_none()
         );
+        assert_eq!(
+            fs::read_to_string(fixture.path().join("shared.txt")).unwrap(),
+            "resolved\n"
+        );
+    }
+
+    #[test]
+    fn stash_pop_conflict_is_reconstructed_and_resolved_without_operation_metadata() {
+        let fixture = initialized_fixture();
+        fs::write(fixture.path().join("shared.txt"), "base\n").unwrap();
+        commit_all(&fixture, "base");
+        fs::write(fixture.path().join("shared.txt"), "stashed\n").unwrap();
+        git(&fixture, &["stash", "push", "-m", "conflicting stash"]);
+        fs::write(fixture.path().join("shared.txt"), "current\n").unwrap();
+        commit_all(&fixture, "current change");
+
+        let pop = Command::new("git")
+            .arg("-C")
+            .arg(fixture.path())
+            .args(["stash", "pop"])
+            .output()
+            .unwrap();
+        assert!(
+            !pop.status.success(),
+            "stash pop should leave an unmerged index"
+        );
+
+        let repository = GitRepository::open(fixture.path()).expect("open repository");
+        assert!(repository.operation_snapshot().unwrap().is_none());
+        let conflict = repository
+            .read_conflict_content("shared.txt")
+            .expect("read standalone conflict");
+        assert_eq!(conflict.base.as_deref(), Some("base\n"));
+        assert_eq!(conflict.ours.as_deref(), Some("current\n"));
+        assert_eq!(conflict.theirs.as_deref(), Some("stashed\n"));
+
+        let operation = repository
+            .resolve_conflict("shared.txt", &conflict.revision_token, Some("resolved\n"))
+            .expect("resolve standalone conflict");
+        assert!(operation.is_none());
+        assert!(repository.operation_conflicts().unwrap().is_empty());
         assert_eq!(
             fs::read_to_string(fixture.path().join("shared.txt")).unwrap(),
             "resolved\n"

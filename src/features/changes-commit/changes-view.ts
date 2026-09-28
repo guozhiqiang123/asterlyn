@@ -237,9 +237,9 @@ function renderChangeRow(
   const position = `aria-posinset="${index + 1}" aria-setsize="${rowCount}"`;
   if (row.kind === "group") {
     return `<div class="change-group virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}" data-change-group="${row.group}">
-      <div class="group-header">
+      <div class="group-header" data-change-disclosure="group:${row.group}">
         <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
-        <button class="change-tree-toggle" type="button" data-change-disclosure="group:${row.group}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
+        <button class="change-tree-toggle" type="button" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 11)}</span></button>
         <span class="group-title">${escapeHtml(row.title)}<b>${escapeHtml(copy.fileCount(row.changes.length))}</b></span>
       </div>
     </div>`;

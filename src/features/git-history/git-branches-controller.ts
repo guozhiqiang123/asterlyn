@@ -5,6 +5,7 @@ import { matchingLogicalBranches } from "../../presentation/git-presentation.ts"
 export interface GitBranchesState {
   query: string;
   collapsedGroups: Set<BranchSummary["kind"]>;
+  collapsedRemoteGroups: Set<string>;
   selectedBranch: string | null;
 }
 
@@ -16,6 +17,7 @@ export class GitBranchesController {
   readonly state: GitBranchesState = {
     query: "",
     collapsedGroups: new Set(),
+    collapsedRemoteGroups: new Set(),
     selectedBranch: null,
   };
 
@@ -29,6 +31,15 @@ export class GitBranchesController {
       return false;
     }
     this.state.collapsedGroups.add(kind);
+    return true;
+  }
+
+  toggleRemoteGroup(name: string): boolean {
+    if (this.state.collapsedRemoteGroups.has(name)) {
+      this.state.collapsedRemoteGroups.delete(name);
+      return false;
+    }
+    this.state.collapsedRemoteGroups.add(name);
     return true;
   }
 

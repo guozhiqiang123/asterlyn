@@ -32,6 +32,10 @@ test("change rows preserve groups and expanded directory hierarchy", () => {
   );
   assert.match(renderChangeNavigation(current, state()), /style="--tree-depth:1"[^>]*data-change-path="new.txt"/);
   assert.match(renderChangeNavigation(current, state()), /data-change-group="unversioned"/);
+  assert.match(
+    renderChangeNavigation(current, state()),
+    /class="group-header" data-change-disclosure="group:conflicts"/,
+  );
 });
 
 test("Changes compacts unary folders while preserving the terminal disclosure target", () => {

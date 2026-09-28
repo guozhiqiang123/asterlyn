@@ -1300,10 +1300,7 @@ export class AsterlynApp {
           const source = this.filesEditorRuntime.files.fileForWorkspacePath(target.workspacePath);
           return {
             sourceAvailable: Boolean(source && !source.readOnly),
-            conflictAvailable: Boolean(
-              target.change.conflicted &&
-              snapshot?.operation?.conflicts.some((conflict) => conflict.path === target.path)
-            ),
+            conflictAvailable: Boolean(target.change.conflicted && snapshot),
             mutationBusy: this.state.loading || this.changesState.mutation !== null ||
               this.workspaceTrashRuntime.controller.busy,
             trashAvailable: !bridge.isDemo,
@@ -4737,6 +4734,7 @@ export class AsterlynApp {
       selectedRepositoryIds: this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
       selectedRefs: this.gitHistoryPresentationRuntime.filterState.historyRefs,
       collapsedGroups: this.gitHistoryPresentationRuntime.branches.state.collapsedGroups,
+      collapsedRemoteGroups: this.gitHistoryPresentationRuntime.branches.state.collapsedRemoteGroups,
       localization: this.localization,
     };
   }
@@ -4804,9 +4802,9 @@ export class AsterlynApp {
         );
       });
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-change-disclosure]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const key = button.dataset.changeDisclosure;
+    this.root.querySelectorAll<HTMLElement>("[data-change-disclosure]").forEach((control) => {
+      control.addEventListener("click", () => {
+        const key = control.dataset.changeDisclosure;
         if (!key) return;
         const expanded = !this.changesState.collapsedDirectories.has(key);
         this.changesRuntime.controller.setDirectoryExpanded(key, !expanded);
@@ -4817,7 +4815,7 @@ export class AsterlynApp {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         const path = button.dataset.resolveConflict;
-        if (path) this.gitOperationRuntime.openConflict(path);
+        if (path) this.openChangeConflict(path);
       });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-git-operation-action]").forEach((button) => {
@@ -4895,7 +4893,14 @@ export class AsterlynApp {
     restoreFocus: boolean,
   ): void {
     const path = row.dataset.changePath;
-    if (!path || !this.windowSession.repository.state.snapshot) return;
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!path || !snapshot) return;
+    const change = snapshot.changes.find((candidate) => candidate.path === path);
+    if (change?.conflicted) {
+      this.openChangeConflict(path);
+      if (restoreFocus) this.focusChangeRow(path);
+      return;
+    }
     this.changesRuntime.controller.selectChange(path);
     if (this.changesState.selectedChange && this.windowSession.repository.state.snapshot) {
       this.activateDiffPreview({
@@ -5653,6 +5658,22 @@ export class AsterlynApp {
           this.bindBranchEvents();
           this.root
             .querySelector<HTMLButtonElement>(`[data-branch-group-toggle="${kind}"]`)
+            ?.focus();
+        });
+      });
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-remote-group-toggle]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const name = button.dataset.remoteGroupToggle;
+          if (!name) return;
+          this.gitHistoryPresentationRuntime.branches.toggleRemoteGroup(name);
+          this.query("#branch-navigation-body").innerHTML =
+            this.renderBranchNavigation(this.windowSession.repository.state.snapshot!);
+          this.renderBranchCount(this.windowSession.repository.state.snapshot!);
+          this.bindBranchEvents();
+          this.root
+            .querySelector<HTMLButtonElement>(`[data-remote-group-toggle="${CSS.escape(name)}"]`)
             ?.focus();
         });
       });
@@ -6803,6 +6824,7 @@ export class AsterlynApp {
     }>,
     imageDiff: boolean,
   ): string {
+    const path = document.kind === "working-diff" ? document.selection.path : document.path;
     const textReady = !imageDiff && (
       document.kind === "working-diff"
         ? this.changesState.workingPatch !== null
@@ -6814,6 +6836,7 @@ export class AsterlynApp {
     );
     return renderEditorDiffControls({
       imageDiff,
+      layoutLocked: isMarkdownPath(path),
       textReady,
       previousFile: this.adjacentDiffPath(document, -1),
       nextFile: this.adjacentDiffPath(document, 1),
@@ -7739,6 +7762,10 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     const selected = snapshot ? this.selectedChangeModel(snapshot) : null;
     if (!snapshot || !selected) return;
+    if (selected.conflicted) {
+      this.openChangeConflict(selected.path);
+      return;
+    }
     this.changesRuntime.controller.selectChange(selected.path);
     this.activateDiffPreview({
       kind: "working-diff",
@@ -7747,6 +7774,14 @@ export class AsterlynApp {
     });
     this.renderEditor();
     this.loadSelectedDiff();
+  }
+
+  private openChangeConflict(path: string): void {
+    const snapshot = this.windowSession.repository.state.snapshot;
+    const conflict = snapshot?.changes.find((change) => change.path === path && change.conflicted);
+    if (!snapshot || !conflict || !this.changesRuntime.controller.selectConflict(path)) return;
+    this.markChangeSelection(path);
+    this.gitOperationRuntime.openConflict(path);
   }
 
   private openChangesContextDiff(target: ChangesFileContextTarget): void {

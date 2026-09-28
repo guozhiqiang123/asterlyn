@@ -111,6 +111,36 @@ test("conflict resolution sends the opened revision token and edited result", as
   controller.dispose();
 });
 
+test("worktree conflicts can be opened and resolved without an active Git operation", async () => {
+  const calls = [];
+  const controller = new GitOperationController(gateway({
+    async readConflictContent(root, path) {
+      assert.deepEqual([root, path], ["/repo", "stash-conflict.txt"]);
+      return {
+        path, base: "base\n", ours: "ours\n", theirs: "stashed\n",
+        worktree: "markers\n", binary: false, revisionToken: "stash-revision",
+      };
+    },
+    async resolveConflict(...args) {
+      calls.push(args);
+      return operationOutcome(null);
+    },
+  }));
+  const repository = snapshot("/repo", null);
+  repository.changes = [conflictedChange("stash-conflict.txt")];
+  controller.installSnapshot(repository);
+
+  assert.equal(await controller.openConflict("stash-conflict.txt"), true);
+  controller.setConflictResult("merged stash content\n");
+  const result = await controller.resolveConflict(false);
+
+  assert.equal(result.status, "success");
+  assert.deepEqual(calls[0], [
+    "/repo", "stash-conflict.txt", "stash-revision", "merged stash content\n",
+  ]);
+  controller.dispose();
+});
+
 test("operation target parsing preserves explicit order and removes blank lines", () => {
   assert.deepEqual(operationTargets(" first \n\nsecond\r\n third "), [
     "first",
@@ -173,6 +203,13 @@ function operationOutcome(operation) {
     tracked: { root: "/repo", changes: [] },
     operation,
     invalidatedSlices: ["openDocuments", "workingTree", "operation"],
+  };
+}
+
+function conflictedChange(path) {
+  return {
+    path, originalPath: null, indexStatus: "unmerged", worktreeStatus: "unmerged",
+    conflicted: true, submodule: false,
   };
 }
 

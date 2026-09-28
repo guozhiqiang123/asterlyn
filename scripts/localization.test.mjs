@@ -120,7 +120,7 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
 
   const localization = createLocalization(catalog);
   const branches = renderBranchNavigation({
-    snapshot: { branches: [] }, query: "", selectedRepositoryIds: new Set(), selectedRefs: new Map(), collapsedGroups: new Set(), localization,
+    snapshot: { branches: [] }, query: "", selectedRepositoryIds: new Set(), selectedRefs: new Map(), collapsedGroups: new Set(), collapsedRemoteGroups: new Set(), localization,
   });
   assert.match(branches, /没有引用/);
   const history = renderHistoryList({

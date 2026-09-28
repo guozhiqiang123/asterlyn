@@ -48,9 +48,9 @@ export function changesContextPolicy(
     : options.sourceAvailable
       ? enabled()
       : blocked(options.reasons.sourceUnavailable);
-  const conflict = options.conflictAvailable
-    ? enabled()
-    : blocked(options.reasons.conflictUnavailable);
+  const conflict = !options.conflictAvailable
+    ? blocked(options.reasons.conflictUnavailable)
+    : mutation;
   const restore = !changeSupportsRestore(options.snapshot, target)
     ? blocked(options.reasons.restoreUnavailable)
     : mutation;

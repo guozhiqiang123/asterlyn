@@ -256,6 +256,7 @@ function branchModel(model: HistoryNavigationViewModel): BranchNavigationViewMod
     selectedRepositoryIds: model.repositoryIds,
     selectedRefs: model.refs,
     collapsedGroups: new Set(),
+    collapsedRemoteGroups: new Set(),
     localization: model.localization,
   };
 }

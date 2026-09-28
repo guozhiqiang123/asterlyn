@@ -14,9 +14,9 @@ import {
   buildCommitFileTree,
   type CommitFileTreeNode,
 } from "../../presentation/git-presentation.ts";
+import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { formatPresentationDateTime } from "../../presentation/date-time.ts";
-import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,

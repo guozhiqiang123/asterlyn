@@ -39,7 +39,20 @@ test("an edited conflict draft blocks replacing the editor with another conflict
   assert.equal(harness.statuses().at(-1), EN_US.gitOperations.discardConflict);
 });
 
-function runtimeHarness(controller) {
+test("a stash-pop worktree conflict opens the three-pane editor without operation metadata", async () => {
+  const repository = snapshot();
+  repository.operation = null;
+  const controller = new GitOperationController(gateway());
+  controller.installSnapshot(repository);
+  const harness = runtimeHarness(controller, repository);
+
+  await harness.runtime.open("one.txt");
+
+  assert.equal(controller.state.conflict?.path, "one.txt");
+  assert.equal(harness.active().kind, "conflict-resolution");
+});
+
+function runtimeHarness(controller, repository = snapshot()) {
   let active = { kind: "welcome" };
   let renders = 0;
   const statuses = [];
@@ -48,7 +61,7 @@ function runtimeHarness(controller) {
     controller,
     editor: { closePreview() { active = { kind: "welcome" }; } },
     surface: { flushConflict() { return null; } },
-    snapshot: () => snapshot(),
+    snapshot: () => repository,
     activeDocument: () => active,
     activate(document) { active = document; },
     renderEditor() { renders += 1; },

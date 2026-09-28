@@ -17,6 +17,7 @@ export interface BranchNavigationViewModel {
   readonly selectedRepositoryIds: ReadonlySet<string>;
   readonly selectedRefs: ReadonlyMap<string, unknown>;
   readonly collapsedGroups: ReadonlySet<BranchSummary["kind"]>;
+  readonly collapsedRemoteGroups: ReadonlySet<string>;
   readonly localization?: Localization;
 }
 
@@ -116,7 +117,10 @@ function renderRemoteBranches(
   branches: BranchSummary[],
   model: BranchNavigationViewModel,
 ): string {
-  return groupRemoteBranches(branches).map((group) => `<section class="remote-ref-group"><div class="remote-root-row">${icon("chevron", 11)}${icon("folder", 14)}<span>${escapeHtml(group.name)}</span><small>${group.branches.length}</small></div><div role="group">${group.branches.map(({ branch, displayName }) => branchRow(branch, model, displayName, true)).join("")}</div></section>`).join("");
+  return groupRemoteBranches(branches).map((group) => {
+    const collapsed = model.collapsedRemoteGroups.has(group.name);
+    return `<section class="remote-ref-group"><button class="remote-root-row" type="button" data-remote-group-toggle="${escapeAttribute(group.name)}" aria-expanded="${!collapsed}">${icon("chevron", 11)}${icon("folder", 14)}<span>${escapeHtml(group.name)}</span><small>${group.branches.length}</small></button><div role="group" ${collapsed ? "hidden" : ""}>${group.branches.map(({ branch, displayName }) => branchRow(branch, model, displayName, true)).join("")}</div></section>`;
+  }).join("");
 }
 
 function branchRow(

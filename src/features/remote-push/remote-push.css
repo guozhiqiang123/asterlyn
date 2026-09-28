@@ -391,11 +391,11 @@
   display: grid;
   min-width: 0;
   width: 100%;
-  grid-template-columns: 16px 17px minmax(0, 1fr) minmax(0, 0.8fr);
+  grid-template-columns: 21px 18px minmax(0, 1fr) minmax(0, 0.8fr);
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-height: var(--compact-file-tree-row-height, 25px);
-  padding: 0 6px;
+  padding: 1px 5px;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -406,8 +406,8 @@
 }
 
 .push-file-row[style] {
-  grid-template-columns: 16px 17px minmax(0, 1fr);
-  padding-left: calc(6px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
+  grid-template-columns: 21px 18px minmax(0, 1fr);
+  padding-left: calc(5px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
 }
 
 .push-file-row > span:nth-child(3),
@@ -436,9 +436,9 @@
   min-width: max-content;
   height: var(--compact-file-tree-row-height, 25px);
   align-items: center;
-  gap: 5px;
-  padding: 0 6px 0 calc(5px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
-  border-radius: 4px;
+  gap: 4px;
+  padding: 0 6px 0 calc(4px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
+  border-radius: 3px;
   color: var(--text-soft);
   cursor: default;
   font-size: 10px;

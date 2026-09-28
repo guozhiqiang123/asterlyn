@@ -30,6 +30,7 @@ export interface EditorTabMenuViewModel {
 
 export interface DiffControlsViewModel {
   readonly imageDiff: boolean;
+  readonly layoutLocked?: boolean;
   readonly textReady: boolean;
   readonly previousFile: string | null;
   readonly nextFile: string | null;
@@ -61,7 +62,7 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
     const active = editorDocumentKey(model.document) === editorDocumentKey(document);
     const path = document.kind === "working-diff" ? document.selection.path : "path" in document ? document.path : copy.diff;
     return `<div class="editor-tab preview ${previewStatusClass(document, model.statusClass)} ${active ? "active" : ""}" role="tab" aria-selected="${active}">
-      <button class="editor-tab-target" type="button" data-editor-pinned-preview-index="${index}"><span class="editor-tab-file-icon">${icon("changes", 14)}</span>${escapeHtml(basename(path))}<small>${copy.diff}</small></button>
+      <button class="editor-tab-target" type="button" data-editor-pinned-preview-index="${index}"><span class="editor-tab-file-icon">${icon("changes", 14)}</span><span class="editor-tab-label">${escapeHtml(basename(path))}</span><small>${copy.diff}</small></button>
       <button class="editor-tab-close" type="button" data-close-editor-pinned-preview-index="${index}" aria-label="${escapeAttribute(copy.closePreview(copy.diff))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
     </div>`;
   }).join("");
@@ -78,7 +79,7 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
       : copy.diff;
   const previewTab = preview && !pinnedKeys.has(editorDocumentKey(preview))
     ? `<div class="editor-tab preview ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${model.session.active.kind === "preview"}">
-        <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" || preview.kind === "historical-file" || preview.kind === "conflict-resolution" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
+        <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" || preview.kind === "historical-file" || preview.kind === "conflict-resolution" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-label">${escapeHtml(basename(previewPath ?? previewLabel))}</span><small>${previewLabel}</small></button>
         <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="${escapeAttribute(copy.closePreview(previewLabel))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
       </div>`
     : "";
@@ -142,8 +143,8 @@ export function renderDiffControls(model: DiffControlsViewModel): string {
       <button class="compact-icon-button ${model.expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${escapeAttribute(model.expanded ? copy.collapseUnchanged : copy.expandUnchanged)}" title="${escapeAttribute(model.expanded ? copy.collapseUnchanged : copy.expandUnchanged)}" aria-pressed="${model.expanded}" ${model.textReady ? "" : "disabled"}>${icon(model.expanded ? "collapse" : "expand", 15)}</button>
     </div>
     ${model.imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="${escapeAttribute(copy.diffPresentation)}">
-      <button type="button" data-diff-layout="unified" aria-pressed="${model.preferences.diffLayout === "unified"}" title="${escapeAttribute(copy.unifiedTitle)}">${escapeHtml(copy.unified)}</button>
-      <button type="button" data-diff-layout="split" aria-pressed="${model.preferences.diffLayout === "split"}" title="${escapeAttribute(copy.sideBySideTitle)}">${escapeHtml(copy.sideBySide)}</button>
+      <button type="button" data-diff-layout="unified" aria-pressed="${model.preferences.diffLayout === "unified"}" title="${escapeAttribute(copy.unifiedTitle)}" ${model.layoutLocked ? "disabled" : ""}>${escapeHtml(copy.unified)}</button>
+      <button type="button" data-diff-layout="split" aria-pressed="${model.preferences.diffLayout === "split"}" title="${escapeAttribute(copy.sideBySideTitle)}" ${model.layoutLocked ? "disabled" : ""}>${escapeHtml(copy.sideBySide)}</button>
       <button type="button" data-diff-whitespace aria-pressed="${model.preferences.showWhitespace}" title="${escapeAttribute(copy.whitespaceTitle)}">${escapeHtml(copy.whitespace)}</button>
     </div>`}
   </div>`;

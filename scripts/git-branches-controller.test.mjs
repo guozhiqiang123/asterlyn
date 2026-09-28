@@ -57,6 +57,8 @@ test("branch presentation state is feature-owned and reconciles removed refs", (
   controller.setQuery("topic");
   assert.equal(controller.toggleGroup("remote"), true);
   assert.equal(controller.toggleGroup("remote"), false);
+  assert.equal(controller.toggleRemoteGroup("origin"), true);
+  assert.equal(controller.toggleRemoteGroup("origin"), false);
   const state = snapshot();
   controller.setSelectedBranch(branchKey(state.branches[1]));
   assert.equal(controller.selected(state)?.name, "topic");

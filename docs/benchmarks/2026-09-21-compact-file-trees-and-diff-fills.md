@@ -2,19 +2,19 @@
 
 - **Date:** 2026-09-21
 - **Status:** locally accepted; installed native system-Trash behavior remains a manual platform check
-- **Scope:** shared compact file-tree projection, CodeMirror Merge full-line backgrounds, and persistent Unversioned Trash review mounting
+- **Scope:** shared compact file-tree projection, full-line MergeView backgrounds, and persistent Unversioned Trash review mounting
 
 ## Accepted behavior
 
-- Project Files, Changes, commit details, commit comparisons, and projected commit-folder details use
-  one pure `compactDirectoryChain` projection. A consecutive unary directory chain such as
-  `docs/refactor/rebuild` occupies one row; branching stops compaction. The terminal directory owns
-  disclosure and context actions, while Project Files still recognizes an intermediate represented
-  path for selection, reveal, focus, and scroll targeting.
-- All three primary file-tree surfaces use a 25-pixel shared row-height constant and a 12-pixel
-  indentation token. Directory rows include localized recursive file counts. Project file and folder
-  labels use the same configured UI size. Project and Changes virtualization calculations consume the
-  same row-height constant used by CSS.
+- Project Files, Changes, commit details, commit comparisons, projected commit-folder details, and the
+  Push review dialog's outgoing-file tree use one pure `compactDirectoryChain` projection. A
+  consecutive unary directory chain such as `docs/refactor/rebuild` occupies one row; branching stops
+  compaction. The terminal directory owns disclosure and context actions, while Project Files still
+  recognizes an intermediate represented path for selection, reveal, focus, and scroll targeting.
+- Every file-tree surface, including the Push review dialog, uses a 25-pixel shared row-height constant
+  and a 12-pixel indentation token. Directory rows include localized recursive file counts. Project
+  file and folder labels use the same configured UI size. Project and Changes virtualization
+  calculations consume the same row-height constant used by CSS.
 - CodeMirror Merge changed lines use the existing opaque semantic added and removed backgrounds.
   The package's default intraline underline gradient is disabled, while syntax foreground colors and
   full-line state remain visible. The one shared editor theme covers editable, historical, and

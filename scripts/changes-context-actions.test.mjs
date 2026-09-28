@@ -85,6 +85,13 @@ test("policy explains conflicts, deleted sources, restore limits, demo Trash and
   assert.equal(result.conflict.reason, labels.conflictUnavailable);
   assert.equal(result.restore.reason, labels.restoreUnavailable);
 
+  const busyConflict = changesContextPolicy(target({ conflicted: true }), {
+    snapshot: current, sourceAvailable: true, conflictAvailable: true,
+    mutationBusy: true, trashAvailable: true, reasons: labels,
+  });
+  assert.equal(busyConflict.conflict.kind, "busy");
+  assert.equal(busyConflict.conflict.label, labels.mutationBusy);
+
   const untracked = target({ worktreeStatus: "untracked" });
   assert.equal(changesHistoryIntent(untracked, snapshot([untracked.change])), null);
   assert.equal(changesContextPolicy(untracked, {

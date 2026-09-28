@@ -93,6 +93,7 @@ export class GitOperationController {
   private readonly gateway: GitOperationGateway;
   private readonly listeners = new Set<Listener>();
   private messages: GitOperationCopy;
+  private conflictPaths = new Set<string>();
   private generation = 0;
   private requestSequence = 0;
   private disposed = false;
@@ -121,22 +122,24 @@ export class GitOperationController {
     const keepConflictDraft = this.hasUnsavedConflict();
     this.state.repositoryRoot = snapshot?.root ?? null;
     this.state.operation = snapshot?.operation ?? null;
+    this.conflictPaths = new Set([
+      ...(snapshot?.changes.filter((change) => change.conflicted).map((change) => change.path) ?? []),
+      ...(snapshot?.operation?.conflicts.map((conflict) => conflict.path) ?? []),
+    ]);
     if (rootChanged) {
       this.generation += 1;
       this.requestSequence += 1;
       this.resetDialog();
     } else if (!keepConflictDraft && !this.state.operation && previous) {
       this.resetDialog();
-    } else if (this.state.operation && this.state.conflict) {
-      const remains = this.state.operation.conflicts.some(
-        (conflict) => conflict.path === this.state.conflict?.path,
-      );
+    } else if (this.state.conflict) {
+      const remains = this.conflictPaths.has(this.state.conflict.path);
       if (!remains && !keepConflictDraft) {
         this.state.conflict = null;
         this.state.conflictResult = "";
       }
     }
-    if (!rootChanged && keepConflictDraft && !this.state.operation?.conflicts.some((item) => item.path === this.state.conflict?.path)) {
+    if (!rootChanged && keepConflictDraft && !this.conflictPaths.has(this.state.conflict?.path ?? "")) {
       this.state.error = this.messages.conflictChangedExternally;
     }
     this.emit({
@@ -239,7 +242,7 @@ export class GitOperationController {
     const root = this.state.repositoryRoot;
     if (!root || this.state.loading) return false;
     if (this.hasUnsavedConflict()) return this.state.conflict?.path === path;
-    if (!this.state.operation?.conflicts.some((conflict) => conflict.path === path)) return false;
+    if (!this.conflictPaths.has(path)) return false;
     const generation = this.generation;
     const request = ++this.requestSequence;
     this.state.loading = "conflict";

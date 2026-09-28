@@ -99,6 +99,30 @@
   padding-left: 30px;
 }
 
+/* Keep each remote hierarchy level on its own visual column: group -> remote -> branch. */
+.branch-navigation .remote-root-row {
+  width: 100%;
+  padding-left: 29px;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  font: inherit;
+  text-align: left;
+}
+
+.branch-navigation .remote-root-row > .icon:first-child {
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+}
+
+.branch-navigation .remote-root-row[aria-expanded="true"] > .icon:first-child {
+  transform: rotate(90deg);
+}
+
+.branch-navigation .branch-row.nested {
+  padding-left: 46px;
+}
+
 .branch-name {
   overflow: hidden;
   text-overflow: ellipsis;

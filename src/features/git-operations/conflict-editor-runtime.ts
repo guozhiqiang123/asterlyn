@@ -57,7 +57,8 @@ export class ConflictEditorRuntime {
   async open(path: string): Promise<void> {
     const { controller } = this.options;
     const snapshot = this.options.snapshot();
-    if (!snapshot?.operation?.conflicts.some((conflict) => conflict.path === path)) return;
+    if (!snapshot?.changes.some((change) => change.path === path && change.conflicted) &&
+      !snapshot?.operation?.conflicts.some((conflict) => conflict.path === path)) return;
     if (controller.hasUnsavedConflict() && controller.state.conflict?.path !== path) {
       this.options.status(this.options.copy().discardConflict);
       return;
