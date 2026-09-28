@@ -11,6 +11,7 @@ import {
 } from "./demo-text-search";
 import { demoWorkingDiffBase } from "./demo-working-diff.ts";
 import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
+import { demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
   demoCommitDiff,
@@ -33,20 +34,13 @@ import {
   demoUnstage,
 } from "../../demo";
 import type {
-  BranchMutationPlan, BranchMutationRequest,
-  CommitComparisonDetails, CommitComparisonDiffResult,
-  CommitDetails, CommitDiffResult,
-  CommitFileChange, CommitFilePreview,
-  CommitFileComparison, CommitFileRestorePreview,
-  CommitSelectedResult, DiffResult,
-  FileChange, FileRestoreApplyResult,
-  FileRestoreRecoverySummary, RestoreChangesPlan,
-  GitWorktreeRecovery, GitConflictContent,
-  GitBlameResult, GitOperationAction,
-  GitOperationKind, GitOperationMutationOutcome,
-  GitOperationPlan, GitOperationSnapshot,
-  GitResetMode, GitResetPlan,
-  HistoryQuery, HistoryPage,
+  BranchMutationPlan, BranchMutationRequest, CommitComparisonDetails, CommitComparisonDiffResult,
+  CommitDetails, CommitDiffResult, CommitFileChange, CommitFilePreview,
+  CommitFileComparison, CommitFileRestorePreview, CommitSelectedResult, DiffResult,
+  FileChange, FileRestoreApplyResult, FileRestoreRecoverySummary, RestoreChangesPlan,
+  GitWorktreeRecovery, GitConflictContent, GitBlameResult, GitOperationAction,
+  GitOperationKind, GitOperationMutationOutcome, GitOperationPlan, GitOperationSnapshot,
+  GitResetMode, GitResetPlan, HistoryQuery, HistoryPage,
   ImageDiffPreview, ImagePreview,
   ProjectFileList, ProjectWindowMatch,
   ProjectWindowOpenResult, OpenedProject,
@@ -780,6 +774,10 @@ const demoBridge: DesktopBridge = {
     });
   },
 
+  readStashCatalog: async () => { await demoDelay(120); return demoStashCatalog(); },
+  readStashDetails: async (_root, repositoryId, stashOid) => { await demoDelay(120); return demoStashDetails(repositoryId, stashOid); },
+  readStashDiff: async (_root, repositoryId, stashOid, path) => { await demoDelay(90); return demoStashDiff(repositoryId, stashOid, path); },
+
   async readCommitComparisonDetails(
     repositoryRoot: string,
     repositoryId: string,
@@ -1455,6 +1453,8 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) { await demoDelay(180); browserSnapshot = demoExecuteTagMutation(browserSnapshot, request); if (request.kind === "checkout") return completeDemoMutation(); return { snapshot: demoTrackedSnapshot(browserSnapshot), invalidatedSlices: request.kind === "push" || request.kind === "deleteRemote" ? [] : ["refs", "history"] }; }
     return invoke<RepositoryMutationOutcome>("execute_tag_mutation", { repositoryRoot, request, operationId });
   },
+
+  executeStashMutation: async (_root, request) => { await demoDelay(180); return demoExecuteStashMutation(browserSnapshot, request); },
 
   async prepareRemoteMutation(repositoryRoot: string, request: RemoteMutationRequest): Promise<RemoteMutationPlan> {
     if (!isTauri) return demoPrepareRemoteMutation(browserSnapshot, request);

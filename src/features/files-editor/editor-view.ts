@@ -15,12 +15,14 @@ import { EN_US } from "../../localization/en-US.ts";
 export interface EditorTabsViewModel {
   readonly session: EditorSession;
   readonly document: EditorDocument;
+  readonly pinnedPreviews?: readonly NonNullable<EditorSession["preview"]>[];
   readonly statusClass: (workspacePath: string) => string;
   readonly copy?: EditorCopy;
 }
 
 export interface EditorTabMenuViewModel {
   readonly session: EditorSession;
+  readonly pinnedPreviews?: readonly NonNullable<EditorSession["preview"]>[];
   readonly open: boolean;
   readonly statusClass: (workspacePath: string) => string;
   readonly copy?: EditorCopy;
@@ -53,6 +55,16 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
       <button class="editor-tab-close" type="button" data-close-editor-tab-index="${index}" aria-label="${escapeAttribute(copy.closeFile(basename(tab.document.workspacePath)))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
     </div>`;
   }).join("");
+  const pinnedPreviews = model.pinnedPreviews ?? [];
+  const pinnedKeys = new Set(pinnedPreviews.map(editorDocumentKey));
+  const pinnedTabs = pinnedPreviews.map((document, index) => {
+    const active = editorDocumentKey(model.document) === editorDocumentKey(document);
+    const path = document.kind === "working-diff" ? document.selection.path : "path" in document ? document.path : copy.diff;
+    return `<div class="editor-tab preview ${previewStatusClass(document, model.statusClass)} ${active ? "active" : ""}" role="tab" aria-selected="${active}">
+      <button class="editor-tab-target" type="button" data-editor-pinned-preview-index="${index}"><span class="editor-tab-file-icon">${icon("changes", 14)}</span>${escapeHtml(basename(path))}<small>${copy.diff}</small></button>
+      <button class="editor-tab-close" type="button" data-close-editor-pinned-preview-index="${index}" aria-label="${escapeAttribute(copy.closePreview(copy.diff))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
+    </div>`;
+  }).join("");
   const preview = model.session.preview;
   const previewPath = preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
   const previewLabel = preview?.kind === "project-image"
@@ -64,13 +76,13 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
       : preview?.kind === "historical-file-comparison"
         ? copy.historicalComparison
       : copy.diff;
-  const previewTab = preview
+  const previewTab = preview && !pinnedKeys.has(editorDocumentKey(preview))
     ? `<div class="editor-tab preview ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${model.session.active.kind === "preview"}">
         <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" || preview.kind === "historical-file" || preview.kind === "conflict-resolution" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span>${escapeHtml(basename(previewPath ?? previewLabel))}<small>${previewLabel}</small></button>
         <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="${escapeAttribute(copy.closePreview(previewLabel))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
       </div>`
     : "";
-  return textTabs || previewTab ? `${textTabs}${previewTab}` : `<span class="editor-tab active">${escapeHtml(copy.welcome)}</span>`;
+  return textTabs || pinnedTabs || previewTab ? `${textTabs}${pinnedTabs}${previewTab}` : `<span class="editor-tab active">${escapeHtml(copy.welcome)}</span>`;
 }
 
 export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
@@ -81,6 +93,14 @@ export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
     const active = model.session.active.kind === "text" && model.session.active.id === tab.id;
     const dirty = isTextTabDirty(tab);
     return `<button class="editor-tab-menu-item ${model.statusClass(tab.document.workspacePath)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-tab-index="${index}" title="${escapeAttribute(tab.document.workspacePath)}"><span class="editor-tab-menu-glyph">${fileTypeIcon(tab.document.workspacePath)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(tab.document.workspacePath))}</strong><small>${escapeHtml(tab.document.workspacePath)}</small></span>${dirty ? `<span class="editor-dirty-dot" aria-label="${escapeAttribute(copy.unsaved)}"></span>` : ""}${active ? icon("check", 14) : ""}</button>`;
+  }).join("");
+  const pinnedPreviews = model.pinnedPreviews ?? [];
+  const pinnedKeys = new Set(pinnedPreviews.map(editorDocumentKey));
+  const pinnedItems = pinnedPreviews.map((document, index) => {
+    const active = model.session.active.kind === "preview" && model.session.preview !== null &&
+      editorDocumentKey(model.session.preview) === editorDocumentKey(document);
+    const path = document.kind === "working-diff" ? document.selection.path : "path" in document ? document.path : copy.diffPreview;
+    return `<button class="editor-tab-menu-item ${previewStatusClass(document, model.statusClass)} ${active ? "active" : ""}" type="button" role="menuitem" data-editor-menu-pinned-preview-index="${index}" title="${escapeAttribute(path)}"><span class="editor-tab-menu-glyph">${icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(path))}</strong><small>${copy.diffPreview}</small></span>${active ? icon("check", 14) : ""}</button>`;
   }).join("");
   const preview = model.session.preview;
   const previewPath = preview?.kind === "working-diff" ? preview.selection.path : preview?.path;
@@ -93,10 +113,10 @@ export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
         : preview?.kind === "historical-file-comparison"
           ? copy.historicalComparison
       : copy.diffPreview;
-  const previewItem = preview
+  const previewItem = preview && !pinnedKeys.has(editorDocumentKey(preview))
     ? `<button class="editor-tab-menu-item ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "project-image" || preview.kind === "historical-file" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${model.session.active.kind === "preview" ? icon("check", 14) : ""}</button>`
     : "";
-  return `${textItems}${previewItem}`;
+  return `${textItems}${pinnedItems}${previewItem}`;
 }
 
 export function renderMarkdownModeControls(tab: TextTabState | null, copy: EditorCopy = EN_US.editor): string {

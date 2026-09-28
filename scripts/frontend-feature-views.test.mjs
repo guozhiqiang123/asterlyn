@@ -40,7 +40,7 @@ import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../sr
 
 test("shell view follows persisted activity order and exposes stable feature hosts", () => {
   const shell = new ShellController(memoryStorage());
-  shell.setActivityOrder(["changes", "files", "branches", "terminal"]);
+  shell.setActivityOrder(["changes", "files", "branches", "stash", "terminal"]);
   const html = renderShellView({
     shell: shell.state,
     workspaceOpen: true,
@@ -51,9 +51,11 @@ test("shell view follows persisted activity order and exposes stable feature hos
 
   assert.ok(html.indexOf('data-tool="changes"') < html.indexOf('data-tool="files"'));
   assert.match(html, /data-tool="terminal"/);
+  assert.match(html, /data-tool="stash"/);
+  assert.match(html, /id="stash-tool-grid"/);
   assert.match(html, /id="terminal-tool-host"/);
   assert.match(html, /id="terminal-header-actions"/);
-  assert.match(html, /id="hide-bottom-tool"/);
+  assert.match(html, /class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool"/);
   assert.match(html, /id="changes-restore-review-dialog"/);
   for (const host of [
     "navigator-header", "navigator-body", "content-body", "history-navigation-body",
@@ -643,6 +645,25 @@ test("active Diff preview renders Diff tab without exposing ephemeral backing te
   assert.match(menu, /data-editor-menu-preview/);
   assert.match(menu, /feature\.ts/);
   assert.match(menu, /<small>Diff preview<\/small>/);
+});
+
+test("a pinned stash Diff owns a persistent editor tab instead of duplicating the replaceable preview", () => {
+  const document = {
+    kind: "commit-diff",
+    repositoryRoot: "/workspace/repository",
+    repositoryId: ".",
+    oid: "a".repeat(40),
+    path: "src/stashed.ts",
+  };
+  const session = { textTabs: [], preview: document, active: { kind: "preview" } };
+  const tabs = renderEditorTabs({ session, document, pinnedPreviews: [document], statusClass: () => "" });
+  const menu = renderEditorTabMenu({ session, pinnedPreviews: [document], open: true, statusClass: () => "" });
+
+  assert.match(tabs, /data-editor-pinned-preview-index="0"/);
+  assert.match(tabs, /data-close-editor-pinned-preview-index="0"/);
+  assert.doesNotMatch(tabs, /data-editor-preview/);
+  assert.match(menu, /data-editor-menu-pinned-preview-index="0"/);
+  assert.doesNotMatch(menu, /data-editor-menu-preview/);
 });
 
 test("editor tab strip and menu omit ephemeral text tabs while preserving original indices for visible tabs", () => {

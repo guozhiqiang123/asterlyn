@@ -322,6 +322,37 @@ pub(crate) async fn execute_tag_mutation(
 }
 
 #[tauri::command]
+pub(crate) async fn execute_stash_mutation(
+    repository_root: String,
+    request: StashMutationRequest,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    let metadata_only = matches!(
+        request.kind,
+        StashMutationKind::Drop | StashMutationKind::Clear
+    );
+    git_operations
+        .run_local(repository_root, "mutate stash", move |repository| {
+            repository.execute_stash_mutation(&request)?;
+            repository.tracked_snapshot(COMMIT_LIMIT).map(|snapshot| {
+                let invalidated = if metadata_only {
+                    Vec::new()
+                } else {
+                    complete_repository_slices()
+                };
+                mutation_outcome(snapshot, &invalidated)
+            })
+        })
+        .await
+}
+
+#[tauri::command]
 pub(crate) async fn prepare_remote_mutation(
     repository_root: String,
     request: RemoteMutationRequest,

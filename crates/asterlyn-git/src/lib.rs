@@ -19,8 +19,9 @@ pub use model::{
     ProjectIgnoredEntry, PushMode, PushPreview, PushTagMode, PushTagSummary,
     RemoteAuthenticationStatus, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan,
     RemoteMutationRequest, RemoteSummary, RemoteTransport, RepositoryReadPlan,
-    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, TagMutationKind,
-    TagMutationRequest, TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
+    RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, StashCatalog, StashEntry,
+    StashMutationKind, StashMutationRequest, TagMutationKind, TagMutationRequest,
+    TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
 };
 pub use process::CancellationToken;
 pub use repository::GitRepository;

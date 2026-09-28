@@ -15,6 +15,7 @@ import type {
   PushPreview,
   RepositorySliceProject,
   RepositoryStateSlice,
+  StashCatalog,
   TrackedChangeScan,
   UntrackedScan,
   WorkingDiffBase,
@@ -57,6 +58,29 @@ export const tauriGitReadBridge: GitReadBridge = {
       repositoryId,
       commitOid,
     }),
+  readStashCatalog: (repositoryRoot) =>
+    invokeDesktopCommand<StashCatalog>("read_stash_catalog", { repositoryRoot }),
+  readStashDetails: (repositoryRoot, repositoryId, stashOid) =>
+    invokeDesktopCommand<CommitDetails>("read_stash_details", {
+      repositoryRoot,
+      repositoryId,
+      stashOid,
+    }),
+  readStashDiff: (
+    repositoryRoot,
+    repositoryId,
+    stashOid,
+    path,
+    originalPath,
+    expandedUnchanged = false,
+  ) => invokeDesktopCommand<CommitDiffResult>("read_stash_diff", {
+    repositoryRoot,
+    repositoryId,
+    stashOid,
+    path,
+    originalPath,
+    expandedUnchanged,
+  }),
   readCommitComparisonDetails: (repositoryRoot, repositoryId, beforeOid, afterOid) =>
     invokeDesktopCommand<CommitComparisonDetails>("read_commit_comparison_details", {
       repositoryRoot,

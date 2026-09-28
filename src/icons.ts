@@ -37,6 +37,7 @@ const paths: Record<string, string> = {
   eye: '<path d="M3 12s3.4-6 9-6 9 6 9 6-3.4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/>',
   tag: '<path d="M4 5v6.5L12.5 20 20 12.5 11.5 4H5a1 1 0 0 0-1 1Z"/><circle cx="8" cy="8" r="1"/>',
+  stash: '<path d="M4 7h16v13H4zM3 4h18v3H3z"/><path d="M9 11h6M12 11v5m0 0-2.5-2.5M12 16l2.5-2.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   chevron: '<path d="m9 7 5 5-5 5"/>',

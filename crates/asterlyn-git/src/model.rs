@@ -562,6 +562,46 @@ pub struct CommitDiffResult {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct StashEntry {
+    pub repository_id: String,
+    pub reference: String,
+    pub oid: String,
+    pub parent_oid: String,
+    pub authored_at: i64,
+    pub subject: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StashCatalog {
+    pub entries: Vec<StashEntry>,
+    pub truncated_repository_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum StashMutationKind {
+    Apply,
+    Pop,
+    Drop,
+    Clear,
+    Branch,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StashMutationRequest {
+    pub kind: StashMutationKind,
+    pub repository_id: String,
+    pub reference: Option<String>,
+    pub oid: Option<String>,
+    pub reinstate_index: bool,
+    pub branch_name: Option<String>,
+    pub expected_oids: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitComparisonDiffResult {
     pub repository_id: String,
     pub before_oid: String,

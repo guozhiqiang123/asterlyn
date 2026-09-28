@@ -64,6 +64,7 @@ import { commitFileContextPolicy } from "./features/git-history/commit-file-cont
 import { GitHistoryContextRuntime } from "./features/git-history/git-history-context-runtime.ts";
 import { GitHistoryMutationRuntime } from "./features/git-history/git-history-mutation-runtime.ts";
 import { GitHistoryPresentationRuntime } from "./features/git-history/git-history-presentation-runtime.ts";
+import { StashRuntime } from "./features/git-stash/stash-runtime.ts";
 import {
   isRemoteUpdateStrategyAvailable,
   resolveRemoteUpdateActivation,
@@ -184,6 +185,7 @@ import { clearNavigatorRootTarget, navigatorHeaderHost, renderChangesNavigatorHe
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
+import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
 import { primaryShortcut } from "./shell/window-chrome";
 import { WindowSession } from "./application/window-session";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
@@ -368,6 +370,7 @@ export class AsterlynApp {
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
   private readonly contextMenuHost: LazyContextMenuHost;
+  private readonly stashRuntime: StashRuntime;
   private readonly dialogRuntime: ApplicationDialogRuntime;
   private readonly historyListView = new GitHistoryListView();
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
@@ -398,7 +401,7 @@ export class AsterlynApp {
   private readonly activityRailBinding: ActivityRailBinding;
   private readonly shellEventBinding: ShellEventBinding;
   private readonly windowChromeBinding: WindowChromeBinding;
-  private splitterDisposers: Array<() => void> = [];
+  private readonly workbenchLayoutRuntime: WorkbenchLayoutRuntime;
   private commitDetailSplitterDisposer: (() => void) | null = null;
   private comparisonDetailFocus: "swap" | "retry" | null = null;
   private changeCommitSplitterDisposer: (() => void) | null = null;
@@ -450,6 +453,41 @@ export class AsterlynApp {
     this.localization = createLocalization(initialCatalog);
     this.dialogRuntime = new ApplicationDialogRuntime(root, () => this.localization.catalog.common);
     this.contextMenuHost = new LazyContextMenuHost(document, window);
+    this.stashRuntime = new StashRuntime(root, this.contextMenuHost, {
+      readStashCatalog: (...args) => bridge.readStashCatalog(...args),
+      readStashDetails: (...args) => bridge.readStashDetails(...args),
+      readStashDiff: (...args) => bridge.readStashDiff(...args),
+      executeStashMutation: (...args) => bridge.executeStashMutation(...args),
+    }, {
+      copy: () => this.localization.catalog.stash,
+      common: () => this.localization.catalog.common,
+      localization: () => this.localization,
+      workspaceRoot: () => this.windowSession.repository.state.snapshot?.root ?? null,
+      visible: () => this.shellState.layout.bottomTool === "stash",
+      busy: () => this.state.loading || this.stashRuntime.controller.state.loading,
+      clean: () => {
+        const snapshot = this.windowSession.repository.state.snapshot;
+        return Boolean(snapshot && this.branchSafety(snapshot).ready && dirtyTextTabs(this.editorState.session).length === 0);
+      },
+      confirm: (request) => this.dialogRuntime.confirm(request),
+      runMutation: (request, metadataOnly, progress, completed) => this.runBranchMutation(
+        progress, completed, (repositoryRoot) => bridge.executeStashMutation(repositoryRoot, request),
+        metadataOnly ? null : progress, metadataOnly,
+      ),
+      openDiff: (document) => {
+        this.activateDiffPreview(document);
+        this.renderEditor();
+        void this.stashRuntime.loadDiff(document, workingDiffExpanded(document, this.expandedUnchangedDiffKey));
+      },
+      closeDiff: (document) => {
+        const preview = this.editorState.session.preview;
+        if (preview && editorDocumentKey(preview) === editorDocumentKey(document)) this.filesEditorRuntime.editor.closePreview();
+      },
+      activeDocument: () => this.activeDocument(),
+      renderEditor: () => this.renderEditor(),
+      status: (message, kind) => this.setStatus(message, kind),
+      error: (error) => this.showError(error),
+    });
     const blameRuntime: GitBlameRuntime = {
       load: (source) => bridge.readGitBlame(
         source.repositoryRoot,
@@ -502,6 +540,7 @@ export class AsterlynApp {
       settingsChanged: (change) => this.handleSettingsControllerChange(change),
     });
     this.shellController = new ShellController(window.localStorage);
+    this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),
       error: (error) => this.showError(error),
@@ -1783,7 +1822,7 @@ export class AsterlynApp {
     for (const tool of this.shellState.activityOrder) {
       const button = this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       if (!button) continue;
-      const toolLabel = { files: copy.files, branches: copy.branches, changes: copy.changes, terminal: copy.terminal }[tool];
+      const toolLabel = { files: copy.files, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", toolLabel);
       text(`[data-tool="${tool}"] span`, toolLabel);
     }
@@ -1818,6 +1857,8 @@ export class AsterlynApp {
     this.changesContextRuntime.dispose();
     this.unversionedTrashRuntime.dispose();
     this.gitHistoryContextRuntime.dispose();
+    this.stashRuntime.dispose();
+    this.workbenchLayoutRuntime.dispose();
     this.projectFilesContextRuntime.dispose();
     this.workspaceTrashRuntime.dispose();
     this.projectFilesOperationRuntime.dispose();
@@ -2185,6 +2226,7 @@ export class AsterlynApp {
         clearSelection: true,
       });
       this.gitHistoryPresentationRuntime.resetWorkspace();
+      this.stashRuntime.clear();
       this.closeHistoryDialogHost();
       this.historyReadRuntime.comparison.clear();
       this.historyReadRuntime.historicalFile.clear();
@@ -2199,7 +2241,7 @@ export class AsterlynApp {
         this.shellController.setLayout({
           ...this.shellState.layout,
           leftTool: "files",
-          bottomTool: this.shellState.layout.bottomTool === "branches"
+          bottomTool: this.shellState.layout.bottomTool === "branches" || this.shellState.layout.bottomTool === "stash"
             ? null
             : this.shellState.layout.bottomTool,
         });
@@ -2211,6 +2253,9 @@ export class AsterlynApp {
       this.renderWorkspace();
       if (snapshot && this.shellState.layout.bottomTool === "branches") {
         this.loadVisibleCommitDetails();
+      }
+      if (snapshot && this.shellState.layout.bottomTool === "stash") {
+        void this.stashRuntime.load(snapshot.root, false);
       }
       void this.loadProjectFiles(opened.root, generation);
       void this.loadReplacementRecoveries(opened.root, generation);
@@ -2273,6 +2318,7 @@ export class AsterlynApp {
     }
     if (pendingRoot && generation === this.windowSession.generation) {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "manualRefresh");
+      if (this.shellState.layout.bottomTool === "stash") void this.stashRuntime.load(pendingRoot, true);
     }
   }
 
@@ -3719,18 +3765,22 @@ export class AsterlynApp {
       (tool !== "files" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
     ) return;
     this.shellController.reduceLayout(
-      tool === "branches" || tool === "terminal"
+      tool === "branches" || tool === "stash" || tool === "terminal"
         ? { type: "toggle-bottom-tool", tool }
         : { type: "toggle-left-tool", tool },
     );
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
-    if ((tool === "branches" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
+    if ((tool === "branches" || tool === "stash" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
       this.renderBottomTool();
       if (tool === "branches") this.loadVisibleCommitDetails();
+      if (tool === "stash") {
+        const root = this.windowSession.repository.state.snapshot?.root;
+        if (root) this.stashRuntime.activate(root);
+      }
     } else if (tool === "terminal") {
       this.terminalPanel.hide();
-    } else if (tool !== "branches" && this.shellState.layout.leftTool === tool) {
+    } else if ((tool === "files" || tool === "changes") && this.shellState.layout.leftTool === tool) {
       this.renderLeftTool();
     }
   }
@@ -3748,14 +3798,14 @@ export class AsterlynApp {
       const enabled = Boolean(this.windowSession.workspace.state.root &&
         (tool === "files" || tool === "terminal" || this.windowSession.repository.state.snapshot));
       const active =
-        tool === "branches" || tool === "terminal"
+        tool === "branches" || tool === "stash" || tool === "terminal"
           ? this.shellState.layout.bottomTool === tool
           : this.shellState.layout.leftTool === tool;
       button.classList.toggle("active", active);
       button.classList.toggle("unavailable", !enabled);
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
-      const label = { files: copy.files, branches: copy.branches, changes: copy.changes, terminal: copy.terminal }[tool];
+      const label = { files: copy.files, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", label);
       const labelNode = button.querySelector("span");
       if (labelNode) labelNode.textContent = label;
@@ -3768,178 +3818,19 @@ export class AsterlynApp {
   }
 
   private bindWorkbenchSplitters(): void {
-    for (const dispose of this.splitterDisposers) dispose();
-    this.splitterDisposers = [
-      attachSplitter(this.query("#left-splitter"), {
-        orientation: "vertical",
-        getValue: () => this.shellState.layout.leftWidth,
-        getRange: () => ({
-          minimum: WORKBENCH_LIMITS.leftMin,
-          maximum: Math.max(
-            WORKBENCH_LIMITS.leftMin,
-            this.query("#workbench").clientWidth -
-              WORKBENCH_LIMITS.editorMin -
-              WORKBENCH_LIMITS.separatorSize,
-          ),
-        }),
-        onChange: (value) => this.resizeWorkbench("leftWidth", value),
-        onDragStateChange: (dragging) => {
-          this.query("#workbench").classList.toggle(
-            "resizing-left-tool",
-            dragging,
-          );
-        },
-        onCommit: () => this.persistWorkbenchLayout(),
-        onReset: () =>
-          this.resizeWorkbench("leftWidth", WORKBENCH_LAYOUT_DEFAULTS.leftWidth),
-      }),
-      attachSplitter(this.query("#bottom-splitter"), {
-        orientation: "horizontal",
-        direction: -1,
-        getValue: () => this.shellState.layout.bottomHeight,
-        getRange: () => ({
-          minimum: WORKBENCH_LIMITS.bottomMin,
-          maximum: Math.max(
-            WORKBENCH_LIMITS.bottomMin,
-            this.query("#workbench").clientHeight -
-              WORKBENCH_LIMITS.editorHeightMin -
-              WORKBENCH_LIMITS.separatorSize,
-          ),
-        }),
-        onChange: (value) => this.resizeWorkbench("bottomHeight", value),
-        onCommit: () => this.persistWorkbenchLayout(),
-        onReset: () =>
-          this.resizeWorkbench(
-            "bottomHeight",
-            WORKBENCH_LAYOUT_DEFAULTS.bottomHeight,
-          ),
-      }),
-      attachSplitter(this.query("#branch-tree-splitter"), {
-        orientation: "vertical",
-        getValue: () => this.shellState.layout.branchTreeWidth,
-        getRange: () => ({
-          minimum: WORKBENCH_LIMITS.branchTreeMin,
-          maximum: Math.max(
-            WORKBENCH_LIMITS.branchTreeMin,
-            this.query("#git-tool-grid").clientWidth -
-              WORKBENCH_LIMITS.branchCommitMin -
-              WORKBENCH_LIMITS.branchDetailsMin -
-              WORKBENCH_LIMITS.separatorSize * 2,
-          ),
-        }),
-        onChange: (value) => this.resizeWorkbench("branchTreeWidth", value),
-        onDragStateChange: (dragging) => {
-          this.query("#git-tool-grid").classList.toggle("resizing-columns", dragging);
-        },
-        onCommit: () => this.persistWorkbenchLayout(),
-        onReset: () =>
-          this.resizeWorkbench(
-            "branchTreeWidth",
-            WORKBENCH_LAYOUT_DEFAULTS.branchTreeWidth,
-          ),
-      }),
-      attachSplitter(this.query("#branch-details-splitter"), {
-        orientation: "vertical",
-        direction: -1,
-        getValue: () => this.shellState.layout.branchDetailsWidth,
-        getRange: () => ({
-          minimum: WORKBENCH_LIMITS.branchDetailsMin,
-          maximum: Math.max(
-            WORKBENCH_LIMITS.branchDetailsMin,
-            this.query("#git-tool-grid").clientWidth -
-              this.shellState.layout.branchTreeWidth -
-              WORKBENCH_LIMITS.branchCommitMin -
-              WORKBENCH_LIMITS.separatorSize * 2,
-          ),
-        }),
-        onChange: (value) => this.resizeWorkbench("branchDetailsWidth", value),
-        onDragStateChange: (dragging) => {
-          this.query("#git-tool-grid").classList.toggle("resizing-columns", dragging);
-        },
-        onCommit: () => this.persistWorkbenchLayout(),
-        onReset: () =>
-          this.resizeWorkbench(
-            "branchDetailsWidth",
-            WORKBENCH_LAYOUT_DEFAULTS.branchDetailsWidth,
-          ),
-      }),
-    ];
+    this.workbenchLayoutRuntime.bind();
   }
 
-  private resizeWorkbench(
-    dimension:
-      | "leftWidth"
-      | "bottomHeight"
-      | "branchTreeWidth"
-      | "branchDetailsWidth"
-      | "commitSummaryHeight"
-      | "changesCommitHeight"
-      | "diffBeforePercent",
-    value: number,
-  ): void {
-    this.shellController.reduceLayout({
-      type: "resize",
-      dimension,
-      value,
-    });
-    const property = {
-      leftWidth: "--left-tool-width",
-      bottomHeight: "--bottom-tool-height",
-      branchTreeWidth: "--branch-tree-width",
-      branchDetailsWidth: "--branch-details-width",
-      commitSummaryHeight: "--commit-summary-height",
-      changesCommitHeight: "--changes-commit-height",
-      diffBeforePercent: null,
-    }[dimension];
-    if (property) {
-      this.query("#workbench").style.setProperty(
-        property,
-        `${this.shellState.layout[dimension]}px`,
-      );
-    }
-    if (dimension === "leftWidth" || dimension === "bottomHeight") {
-      this.scheduleEditorMeasure();
-    }
+  private resizeWorkbench(dimension: WorkbenchResizeDimension, value: number): void {
+    this.workbenchLayoutRuntime.resize(dimension, value);
   }
 
   private persistWorkbenchLayout(): void {
-    this.shellController.persistLayout();
+    this.workbenchLayoutRuntime.persist();
   }
 
   private applyWorkbenchLayout(persist: boolean): void {
-    const workbench = this.query("#workbench");
-    this.shellController.clampLayout(workbench.clientWidth, workbench.clientHeight);
-    workbench.style.setProperty("--left-tool-width", `${this.shellState.layout.leftWidth}px`);
-    workbench.style.setProperty(
-      "--bottom-tool-height",
-      `${this.shellState.layout.bottomHeight}px`,
-    );
-    workbench.style.setProperty(
-      "--branch-tree-width",
-      `${this.shellState.layout.branchTreeWidth}px`,
-    );
-    workbench.style.setProperty(
-      "--branch-details-width",
-      `${this.shellState.layout.branchDetailsWidth}px`,
-    );
-    workbench.style.setProperty(
-      "--commit-summary-height",
-      `${this.shellState.layout.commitSummaryHeight}px`,
-    );
-    workbench.style.setProperty(
-      "--changes-commit-height",
-      `${this.shellState.layout.changesCommitHeight}px`,
-    );
-    const leftOpen = this.shellState.layout.leftTool !== null;
-    const bottomOpen = this.shellState.layout.bottomTool !== null;
-    workbench.classList.toggle("left-tool-open", leftOpen);
-    workbench.classList.toggle("bottom-tool-open", bottomOpen);
-    this.query("#left-tool").toggleAttribute("hidden", !leftOpen);
-    this.query("#left-splitter").toggleAttribute("hidden", !leftOpen);
-    this.query("#bottom-tool").toggleAttribute("hidden", !bottomOpen);
-    this.query("#bottom-splitter").toggleAttribute("hidden", !bottomOpen);
-    if (persist) this.persistWorkbenchLayout();
-    this.scheduleEditorMeasure();
+    this.workbenchLayoutRuntime.apply(persist);
   }
 
   private scheduleEditorMeasure(): void {
@@ -4189,22 +4080,30 @@ export class AsterlynApp {
     const operations = this.query<HTMLButtonElement>("#git-operation-open");
     const terminalActions = this.query("#terminal-header-actions");
     const git = this.query("#git-tool-grid");
+    const stash = this.query("#stash-tool-grid");
     const terminal = this.query("#terminal-tool-host");
     const isTerminal = tool === "terminal";
-    title.textContent = isTerminal ? copy.terminal : "Git";
-    hide.setAttribute("aria-label", isTerminal ? copy.hideTerminal : copy.hideGit);
-    hide.title = isTerminal ? copy.hideTerminal : copy.hideGit;
-    operations.classList.toggle("hidden", isTerminal);
+    const isStash = tool === "stash";
+    title.textContent = isTerminal ? copy.terminal : isStash ? copy.stash : "Git";
+    const hideLabel = isTerminal ? copy.hideTerminal : isStash ? copy.hideStash : copy.hideGit;
+    hide.setAttribute("aria-label", hideLabel);
+    hide.title = hideLabel;
+    operations.classList.toggle("hidden", isTerminal || isStash);
     terminalActions.classList.toggle("hidden", !isTerminal);
-    git.classList.toggle("hidden", isTerminal);
+    git.classList.toggle("hidden", isTerminal || isStash);
+    stash.classList.toggle("hidden", !isStash);
     terminal.classList.toggle("hidden", !isTerminal);
-    this.query("#bottom-tool").setAttribute("aria-label", isTerminal ? copy.terminal : copy.branchesAndLog);
+    this.query("#bottom-tool").setAttribute("aria-label", isTerminal ? copy.terminal : isStash ? copy.stash : copy.branchesAndLog);
     if (isTerminal) {
       if (workspaceRoot) this.terminalPanel.activate(workspaceRoot);
       return;
     }
     this.terminalPanel.hide();
     if (!snapshot) return;
+    if (isStash) {
+      this.stashRuntime.render();
+      return;
+    }
     this.renderBranchPane(snapshot);
     this.renderHistoryPane();
     this.renderGitDetailPane(snapshot);
@@ -5865,6 +5764,7 @@ export class AsterlynApp {
     const tabsMarkup = renderEditorTabsView({
       session: this.editorState.session,
       document,
+      pinnedPreviews: this.stashRuntime.pinnedDocuments(),
       statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
       copy: this.localization.catalog.editor,
     });
@@ -6073,10 +5973,11 @@ export class AsterlynApp {
       this.renderEditor();
       return;
     }
+    const stashDiff = this.stashRuntime.isDiff(document);
     const commit = snapshot.commits.find((item) => item.oid === document.oid);
     const copy = this.localization.catalog.editor;
     const shortOid = commit?.shortOid ?? document.oid.slice(0, 8);
-    const imageDiff = isImagePreviewPath(document.path);
+    const imageDiff = !stashDiff && isImagePreviewPath(document.path);
     header.innerHTML = `
       ${renderContentHeading(basename(document.path), document.path)}
       <div class="header-actions">${this.diffControls(document, imageDiff)}<code class="oid">${escapeHtml(shortOid)}</code></div>
@@ -6086,7 +5987,25 @@ export class AsterlynApp {
       this.renderImageDiff(document, () => void this.loadSelectedCommitDiff());
       return;
     }
-    if (this.gitHistoryPresentationRuntime.detailState.commitPatchLoading) {
+    if (stashDiff && this.stashRuntime.controller.state.patchLoading) {
+      this.showEditorHtml(
+        editorDocumentContentKey(document, `stash-loading:${this.stashRuntime.controller.state.patchVersion}`),
+        renderEditorLoadingBlock(copy.loadingCommitPatch),
+      );
+    } else if (stashDiff && this.stashRuntime.controller.state.patchError) {
+      this.showEditorHtml(
+        editorDocumentContentKey(document, `stash-error:${this.stashRuntime.controller.state.patchVersion}`),
+        renderEditorRetryState(copy.patchLoadFailed, this.stashRuntime.controller.state.patchError, "retry-stash-patch", "changes", copy),
+      );
+      this.query("#retry-stash-patch").addEventListener("click", () => { void this.stashRuntime.loadDiff(document, workingDiffExpanded(document, this.expandedUnchangedDiffKey)); });
+    } else if (stashDiff && this.stashRuntime.controller.state.patch) {
+      this.mountEditorDiff(
+        editorDocumentContentKey(document, `stash-patch:${this.stashRuntime.controller.state.patchVersion}`),
+        this.stashRuntime.controller.state.patch.patch || copy.noTextualDiff,
+        document.path,
+        this.diffBlameSources(document),
+      );
+    } else if (this.gitHistoryPresentationRuntime.detailState.commitPatchLoading) {
       this.showEditorHtml(
         editorDocumentContentKey(document, "loading"),
         renderEditorLoadingBlock(copy.loadingCommitPatch),
@@ -6426,6 +6345,9 @@ export class AsterlynApp {
       return this.unavailableDiffBlame(unavailable);
     }
     if (document.kind === "commit-diff") {
+      if (this.stashRuntime.isDiff(document)) {
+        return this.unavailableDiffBlame(this.localization.catalog.editor.gitBlameFileUnavailable);
+      }
       const file = this.historyState.details?.files.find(
         (candidate) => candidate.path === document.path,
       ) ?? { path: document.path, originalPath: null, status: "modified" as const };
@@ -6646,6 +6568,7 @@ export class AsterlynApp {
     menu.classList.toggle("hidden", !this.shellState.editorTabMenuOpen);
     menu.innerHTML = renderEditorTabMenuView({
       session: this.editorState.session,
+      pinnedPreviews: this.stashRuntime.pinnedDocuments(),
       open: this.shellState.editorTabMenuOpen,
       statusClass: (workspacePath) => this.editorTabFileStatusClass(workspacePath),
       copy: this.localization.catalog.editor,
@@ -6676,6 +6599,32 @@ export class AsterlynApp {
         this.renderEditor();
         this.revealActiveEditorTab();
       });
+    this.bindPinnedStashTabEvents();
+  }
+
+  private bindPinnedStashTabEvents(): void {
+    const pinned = this.stashRuntime.pinnedDocuments();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-editor-pinned-preview-index], [data-editor-menu-pinned-preview-index]").forEach((button) => {
+      button.onclick = () => {
+        const index = Number(button.dataset.editorPinnedPreviewIndex ?? button.dataset.editorMenuPinnedPreviewIndex);
+        const document = pinned[index];
+        if (!document) return;
+        this.shellController.closeEditorTabMenu();
+        this.captureMountedTextEditor();
+        void this.stashRuntime.activatePinned(document).then((activated) => {
+          if (activated) { this.renderLeftTool(); this.revealActiveEditorTab(); }
+        });
+      };
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-close-editor-pinned-preview-index]").forEach((button) => {
+      button.onclick = () => {
+        const document = pinned[Number(button.dataset.closeEditorPinnedPreviewIndex)];
+        if (!document || !this.stashRuntime.unpin(document)) return;
+        const preview = this.editorState.session.preview;
+        if (preview && editorDocumentKey(preview) === editorDocumentKey(document)) this.filesEditorRuntime.editor.closePreview();
+        this.renderEditor();
+      };
+    });
   }
 
   private editorTabFileStatusClass(workspacePath: string): string {
@@ -6858,7 +6807,9 @@ export class AsterlynApp {
       document.kind === "working-diff"
         ? this.changesState.workingPatch !== null
         : document.kind === "commit-diff"
-          ? this.gitHistoryPresentationRuntime.detailState.commitPatch !== null
+          ? this.stashRuntime.isDiff(document)
+            ? this.stashRuntime.controller.state.patch !== null
+            : this.gitHistoryPresentationRuntime.detailState.commitPatch !== null
           : this.gitHistoryPresentationRuntime.detailState.comparisonPatch !== null
     );
     return renderEditorDiffControls({
@@ -6939,6 +6890,10 @@ export class AsterlynApp {
       return;
     }
     if (document.kind === "commit-diff") {
+      if (this.stashRuntime.isDiff(document)) {
+        this.stashRuntime.selectAdjacent(path);
+        return;
+      }
       if (this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder") this.selectCommitFolderFile(path, false);
       else this.selectCommitFile(path, false);
       return;
@@ -6964,6 +6919,7 @@ export class AsterlynApp {
   private commitDiffFileRange(
     document: Extract<EditorDocument, { kind: "commit-diff" }>,
   ): readonly CommitFileChange[] {
+    if (this.stashRuntime.isDiff(document)) return this.stashRuntime.files();
     const folder = this.gitHistoryPresentationRuntime.folderDiff.state.target;
     if (
       this.gitHistoryPresentationRuntime.detailState.gitDetail === "folder" &&
@@ -7007,7 +6963,10 @@ export class AsterlynApp {
     const key = editorDocumentKey(document);
     this.expandedUnchangedDiffKey = this.expandedUnchangedDiffKey === key ? null : key;
     if (document.kind === "working-diff") void this.loadSelectedDiff();
-    else if (document.kind === "commit-diff") void this.loadSelectedCommitDiff();
+    else if (document.kind === "commit-diff") {
+      if (this.stashRuntime.isDiff(document)) void this.stashRuntime.loadDiff(document, workingDiffExpanded(document, this.expandedUnchangedDiffKey));
+      else void this.loadSelectedCommitDiff();
+    }
     else void this.loadSelectedComparisonDiff();
   }
 
@@ -7097,6 +7056,12 @@ export class AsterlynApp {
   }
 
   private async loadSelectedCommitDiff(restoreFocus = false): Promise<void> {
+    const active = this.activeDocument();
+    if (active.kind === "commit-diff" && this.stashRuntime.isDiff(active)) {
+      await this.stashRuntime.loadDiff(active, workingDiffExpanded(active, this.expandedUnchangedDiffKey));
+      if (restoreFocus) this.root.querySelector<HTMLButtonElement>(`[data-stash-file="${CSS.escape(active.path)}"]`)?.focus();
+      return;
+    }
     const snapshot = this.windowSession.repository.state.snapshot;
     const details = this.historyState.details;
     const file = details ? this.selectedCommitFile(details) : null;

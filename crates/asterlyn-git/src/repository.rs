@@ -19,8 +19,9 @@ use crate::model::{
     PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus,
     RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest,
     RemoteSummary, RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot,
-    RepositorySnapshot, SelectedCommitResult, TagMutationKind, TagMutationRequest,
-    TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
+    RepositorySnapshot, SelectedCommitResult, StashCatalog, StashEntry, StashMutationKind,
+    StashMutationRequest, TagMutationKind, TagMutationRequest, TrackedChangeScan, UntrackedScan,
+    UntrackedState, WorkingDiffBaseVersion,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
@@ -45,6 +46,8 @@ const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
 const MAX_PUSH_PREVIEW_FILES: usize = 20_000;
 const MAX_PUSH_PREVIEW_FILE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PUSH_TAGS: usize = 1_000;
+const MAX_STASH_ENTRIES_PER_ROOT: usize = 500;
+const STASH_CATALOG_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 
 fn diff_context_argument(expanded_unchanged: bool) -> OsString {
     let lines = if expanded_unchanged {
@@ -576,6 +579,30 @@ impl GitRepository {
             .into_iter()
             .map(|root| root.descriptor)
             .collect())
+    }
+
+    pub fn stash_catalog(&self) -> Result<StashCatalog, GitError> {
+        let mut entries = Vec::new();
+        let mut truncated_repository_ids = Vec::new();
+        for root in self.discovered_roots()? {
+            let (mut root_entries, truncated) =
+                root.repository.root_stash_entries(&root.descriptor.id)?;
+            entries.append(&mut root_entries);
+            if truncated {
+                truncated_repository_ids.push(root.descriptor.id);
+            }
+        }
+        entries.sort_by(|left, right| {
+            right
+                .authored_at
+                .cmp(&left.authored_at)
+                .then_with(|| left.repository_id.cmp(&right.repository_id))
+                .then_with(|| left.reference.cmp(&right.reference))
+        });
+        Ok(StashCatalog {
+            entries,
+            truncated_repository_ids,
+        })
     }
 
     pub fn commit_history(
@@ -1745,6 +1772,42 @@ impl GitRepository {
         })
     }
 
+    pub fn repository_stash_details(
+        &self,
+        repository_id: &str,
+        oid: &str,
+    ) -> Result<CommitDetails, GitError> {
+        validate_object_id(oid)?;
+        let root = self.resolve_history_root(repository_id)?;
+        root.repository.require_visible_stash_oid(oid)?;
+        let (output, truncated) = root.repository.run_read_owned_bounded(
+            "read stash file list",
+            vec![
+                OsString::from("stash"),
+                OsString::from("show"),
+                OsString::from("--include-untracked"),
+                OsString::from("--name-status"),
+                OsString::from("-z"),
+                OsString::from("-M"),
+                OsString::from("-C"),
+                OsString::from(oid),
+            ],
+            COMMIT_FILE_LIST_LIMIT_BYTES + 1,
+        )?;
+        let files = parse_bounded_commit_files(
+            output,
+            truncated,
+            "stash file list",
+            "the stash changed-file list",
+        )?;
+        Ok(CommitDetails {
+            repository_id: root.descriptor.id,
+            oid: oid.to_string(),
+            parent_oid: root.repository.first_parent(oid)?,
+            files,
+        })
+    }
+
     pub fn repository_commit_details(
         &self,
         repository_id: &str,
@@ -2032,6 +2095,96 @@ impl GitRepository {
         original_path: Option<&str>,
     ) -> Result<CommitDiffResult, GitError> {
         self.repository_commit_diff_with_unchanged(repository_id, oid, path, original_path, false)
+    }
+
+    pub fn repository_stash_diff(
+        &self,
+        repository_id: &str,
+        oid: &str,
+        path: &str,
+        original_path: Option<&str>,
+        expanded_unchanged: bool,
+    ) -> Result<CommitDiffResult, GitError> {
+        validate_object_id(oid)?;
+        validate_relative_path(path)?;
+        if let Some(original_path) = original_path {
+            validate_relative_path(original_path)?;
+        }
+        let root = self.resolve_history_root(repository_id)?;
+        let details = self.repository_stash_details(repository_id, oid)?;
+        let selected = details
+            .files
+            .iter()
+            .find(|file| file.path == path && file.original_path.as_deref() == original_path)
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "stash file".to_string(),
+                message: "select an exact file from the current stash details".to_string(),
+            })?;
+        let first_parent = format!("{oid}^1");
+        let mut args = vec![
+            OsString::from("diff"),
+            OsString::from("--patch"),
+            OsString::from("--no-ext-diff"),
+            OsString::from("--no-color"),
+            diff_context_argument(expanded_unchanged),
+            OsString::from("-M"),
+            OsString::from("-C"),
+            OsString::from(&first_parent),
+            OsString::from(oid),
+            OsString::from("--"),
+        ];
+        if let Some(original_path) = selected.original_path.as_deref() {
+            args.push(OsString::from(original_path));
+        }
+        args.push(OsString::from(&selected.path));
+        let (mut output, mut output_truncated) = root.repository.run_read_owned_bounded(
+            "read stash file diff",
+            args,
+            DIFF_LIMIT_BYTES + 1,
+        )?;
+        // `git stash --include-untracked` stores untracked files in the third
+        // parent rather than the stash commit tree. A tracked addition already
+        // produced a patch above; only an empty added-file patch needs this
+        // exact third-parent fallback.
+        if output.stdout.is_empty() && selected.status == ChangeKind::Added {
+            let untracked_parent = format!("{oid}^3");
+            let mut untracked_args = vec![
+                OsString::from("diff"),
+                OsString::from("--patch"),
+                OsString::from("--no-ext-diff"),
+                OsString::from("--no-color"),
+                diff_context_argument(expanded_unchanged),
+                OsString::from("-M"),
+                OsString::from("-C"),
+                OsString::from(&first_parent),
+                OsString::from(untracked_parent),
+                OsString::from("--"),
+            ];
+            if let Some(original_path) = selected.original_path.as_deref() {
+                untracked_args.push(OsString::from(original_path));
+            }
+            untracked_args.push(OsString::from(&selected.path));
+            (output, output_truncated) = root.repository.run_read_owned_bounded(
+                "read untracked stash file diff",
+                untracked_args,
+                DIFF_LIMIT_BYTES + 1,
+            )?;
+        }
+        let mut patch = output.stdout;
+        let binary = patch.windows(15).any(|window| window == b"Binary files ");
+        let truncated = output_truncated || patch.len() > DIFF_LIMIT_BYTES;
+        if truncated {
+            patch.truncate(DIFF_LIMIT_BYTES);
+            patch.extend_from_slice(b"\n\n[Diff truncated at 4 MiB]\n");
+        }
+        Ok(CommitDiffResult {
+            repository_id: root.descriptor.id,
+            oid: oid.to_string(),
+            path: selected.path.clone(),
+            patch: String::from_utf8_lossy(&patch).into_owned(),
+            binary,
+            truncated,
+        })
     }
 
     pub fn repository_commit_diff_with_unchanged(
@@ -2946,6 +3099,141 @@ impl GitRepository {
                 OsString::from(name),
             ],
         )?;
+        Ok(())
+    }
+
+    pub fn execute_stash_mutation(&self, request: &StashMutationRequest) -> Result<(), GitError> {
+        let root = self.resolve_history_root(&request.repository_id)?;
+        root.repository.execute_root_stash_mutation(request)
+    }
+
+    fn execute_root_stash_mutation(&self, request: &StashMutationRequest) -> Result<(), GitError> {
+        self.ensure_no_repository_operation("mutate stash")?;
+        if request.kind == StashMutationKind::Clear {
+            if request.reference.is_some()
+                || request.oid.is_some()
+                || request.branch_name.is_some()
+                || request.reinstate_index
+            {
+                return Err(invalid_stash_mutation(
+                    "clear accepts only the reviewed stash object list",
+                ));
+            }
+            let (current, truncated) = self.root_stash_entries(&request.repository_id)?;
+            if truncated {
+                return Err(invalid_stash_mutation(
+                    "the stash catalog is truncated and cannot be cleared safely",
+                ));
+            }
+            let current_oids = current
+                .iter()
+                .map(|entry| entry.oid.clone())
+                .collect::<Vec<_>>();
+            if current_oids.is_empty() || current_oids != request.expected_oids {
+                return Err(stale_stash_mutation(
+                    "the stash list changed after review; refresh and try again",
+                ));
+            }
+            self.run_mutation(
+                "clear reviewed stashes",
+                vec![OsString::from("stash"), OsString::from("clear")],
+            )?;
+            return Ok(());
+        }
+        if !request.expected_oids.is_empty() {
+            return Err(invalid_stash_mutation(
+                "only clear accepts a reviewed stash object list",
+            ));
+        }
+        let reference = request
+            .reference
+            .as_deref()
+            .ok_or_else(|| invalid_stash_mutation("select a stash entry"))?;
+        validate_stash_reference(reference)?;
+        let oid = request
+            .oid
+            .as_deref()
+            .ok_or_else(|| invalid_stash_mutation("select a stash object"))?;
+        validate_object_id(oid)?;
+        let resolved = self.resolve_commit(reference, "revalidate selected stash")?;
+        if resolved != oid {
+            return Err(stale_stash_mutation(
+                "the selected stash position now names a different object",
+            ));
+        }
+        match request.kind {
+            StashMutationKind::Apply | StashMutationKind::Pop => {
+                if request.branch_name.is_some() {
+                    return Err(invalid_stash_mutation(
+                        "Apply and Pop cannot name a new branch",
+                    ));
+                }
+                let operation = if request.kind == StashMutationKind::Apply {
+                    "apply stash"
+                } else {
+                    "pop stash"
+                };
+                self.ensure_clean_worktree(operation)?;
+                let mut args = vec![
+                    OsString::from("stash"),
+                    OsString::from(if request.kind == StashMutationKind::Apply {
+                        "apply"
+                    } else {
+                        "pop"
+                    }),
+                    OsString::from("--quiet"),
+                ];
+                if request.reinstate_index {
+                    args.push(OsString::from("--index"));
+                }
+                args.push(OsString::from(reference));
+                self.run_mutation(operation, args)?;
+            }
+            StashMutationKind::Drop => {
+                if request.reinstate_index || request.branch_name.is_some() {
+                    return Err(invalid_stash_mutation(
+                        "Drop cannot restore the index or create a branch",
+                    ));
+                }
+                self.run_mutation(
+                    "drop reviewed stash",
+                    vec![
+                        OsString::from("stash"),
+                        OsString::from("drop"),
+                        OsString::from("--quiet"),
+                        OsString::from(reference),
+                    ],
+                )?;
+            }
+            StashMutationKind::Branch => {
+                if request.reinstate_index {
+                    return Err(invalid_stash_mutation(
+                        "git stash branch restores the recorded index automatically",
+                    ));
+                }
+                let name = request
+                    .branch_name
+                    .as_deref()
+                    .ok_or_else(|| invalid_stash_mutation("enter a new branch name"))?;
+                let name = self.validate_branch_name(name)?;
+                if self.local_branch_exists(&format!("refs/heads/{name}"))? {
+                    return Err(invalid_stash_mutation(&format!(
+                        "branch '{name}' already exists"
+                    )));
+                }
+                self.ensure_clean_worktree("create branch from stash")?;
+                self.run_mutation(
+                    "create branch from reviewed stash",
+                    vec![
+                        OsString::from("stash"),
+                        OsString::from("branch"),
+                        OsString::from(name),
+                        OsString::from(reference),
+                    ],
+                )?;
+            }
+            StashMutationKind::Clear => unreachable!(),
+        }
         Ok(())
     }
 
@@ -5226,6 +5514,41 @@ impl GitRepository {
         }
     }
 
+    fn root_stash_entries(&self, repository_id: &str) -> Result<(Vec<StashEntry>, bool), GitError> {
+        if !self.reference_exists("refs/stash")? {
+            return Ok((Vec::new(), false));
+        }
+        let (output, output_truncated) = self.run_read_owned_bounded(
+            "read stash catalog",
+            vec![
+                OsString::from("reflog"),
+                OsString::from("show"),
+                OsString::from(format!("-n{}", MAX_STASH_ENTRIES_PER_ROOT + 1)),
+                OsString::from("--format=%H%x00%P%x00%ct%x00%gs%x1e"),
+                OsString::from("refs/stash"),
+            ],
+            STASH_CATALOG_LIMIT_BYTES,
+        )?;
+        let mut entries = parse_stash_entries(&output.stdout, repository_id)?;
+        let truncated = output_truncated || entries.len() > MAX_STASH_ENTRIES_PER_ROOT;
+        entries.truncate(MAX_STASH_ENTRIES_PER_ROOT);
+        for (index, entry) in entries.iter_mut().enumerate() {
+            entry.reference = format!("stash@{{{index}}}");
+        }
+        Ok((entries, truncated))
+    }
+
+    fn require_visible_stash_oid(&self, oid: &str) -> Result<(), GitError> {
+        let (entries, _) = self.root_stash_entries(".")?;
+        if entries.iter().any(|entry| entry.oid == oid) {
+            Ok(())
+        } else {
+            Err(stale_stash_mutation(
+                "the selected stash is no longer present in the current bounded catalog",
+            ))
+        }
+    }
+
     fn ensure_clean_worktree(&self, operation: &str) -> Result<(), GitError> {
         let status = self.run_read(
             "preflight working tree",
@@ -5907,6 +6230,36 @@ fn validate_paths(paths: &[String]) -> Result<Vec<OsString>, GitError> {
         .collect()
 }
 
+fn validate_stash_reference(reference: &str) -> Result<(), GitError> {
+    let index = reference
+        .strip_prefix("stash@{")
+        .and_then(|value| value.strip_suffix('}'));
+    if index.is_some_and(|value| {
+        !value.is_empty()
+            && value.bytes().all(|byte| byte.is_ascii_digit())
+            && value.parse::<usize>().is_ok()
+    }) {
+        Ok(())
+    } else {
+        Err(invalid_stash_mutation("select a canonical stash@{n} entry"))
+    }
+}
+
+fn invalid_stash_mutation(message: &str) -> GitError {
+    GitError::InvalidInput {
+        field: "stash mutation".to_string(),
+        message: message.to_string(),
+    }
+}
+
+fn stale_stash_mutation(message: &str) -> GitError {
+    GitError::UnsafeOperation {
+        operation: "mutate stash".to_string(),
+        message: message.to_string(),
+        blockers: Vec::new(),
+    }
+}
+
 fn validate_commit_message(message: &str) -> Result<&str, GitError> {
     let message = message.trim();
     if message.is_empty() {
@@ -6081,6 +6434,54 @@ fn parse_bounded_commit_files(
         ));
     }
     Ok(files)
+}
+
+fn parse_stash_entries(input: &[u8], repository_id: &str) -> Result<Vec<StashEntry>, GitError> {
+    let mut entries = Vec::new();
+    for raw_record in input.split(|byte| *byte == 0x1e) {
+        let record = raw_record
+            .strip_prefix(b"\n")
+            .unwrap_or(raw_record)
+            .strip_suffix(b"\n")
+            .unwrap_or(raw_record.strip_prefix(b"\n").unwrap_or(raw_record));
+        if record.is_empty() {
+            continue;
+        }
+        let fields = record.splitn(4, |byte| *byte == 0).collect::<Vec<_>>();
+        if fields.len() != 4 {
+            return Err(GitError::Parse {
+                context: "stash catalog".to_string(),
+                message: "a stash reflog record had an unexpected field count".to_string(),
+            });
+        }
+        let oid = String::from_utf8_lossy(fields[0]).trim().to_string();
+        validate_object_id(&oid)?;
+        let parent_oid = String::from_utf8_lossy(fields[1])
+            .split_ascii_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        validate_object_id(&parent_oid)?;
+        let authored_at = String::from_utf8_lossy(fields[2])
+            .trim()
+            .parse::<i64>()
+            .map_err(|_| GitError::Parse {
+                context: "stash catalog".to_string(),
+                message: "a stash reflog record had an invalid timestamp".to_string(),
+            })?;
+        let subject = String::from_utf8_lossy(fields[3])
+            .trim_end_matches(['\r', '\n'])
+            .to_string();
+        entries.push(StashEntry {
+            repository_id: repository_id.to_string(),
+            reference: String::new(),
+            oid,
+            parent_oid,
+            authored_at,
+            subject,
+        });
+    }
+    Ok(entries)
 }
 
 fn commit_file_list_limit_error(field: &str, message: &str) -> GitError {
@@ -6742,6 +7143,142 @@ mod tests {
             &["config", "user.email", "test@asterlyn.invalid"],
         );
         directory
+    }
+
+    fn stash_request(kind: StashMutationKind, entry: &StashEntry) -> StashMutationRequest {
+        StashMutationRequest {
+            kind,
+            repository_id: entry.repository_id.clone(),
+            reference: Some(entry.reference.clone()),
+            oid: Some(entry.oid.clone()),
+            reinstate_index: false,
+            branch_name: None,
+            expected_oids: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn lists_diffs_applies_and_pops_exact_stashes() {
+        let directory = fixture();
+        fs::write(directory.path().join("tracked.txt"), "base\n").unwrap();
+        git(directory.path(), &["add", "tracked.txt"]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        fs::write(directory.path().join("tracked.txt"), "stashed\n").unwrap();
+        fs::write(directory.path().join("untracked.txt"), "untracked\n").unwrap();
+        git(
+            directory.path(),
+            &["stash", "push", "--include-untracked", "-m", "first stash"],
+        );
+        let repository = GitRepository::open(directory.path()).unwrap();
+
+        let catalog = repository.stash_catalog().expect("stash catalog");
+        assert_eq!(catalog.entries.len(), 1);
+        assert!(catalog.truncated_repository_ids.is_empty());
+        let entry = catalog.entries[0].clone();
+        assert_eq!(entry.repository_id, ".");
+        assert_eq!(entry.reference, "stash@{0}");
+        assert!(entry.subject.contains("first stash"));
+
+        let details = repository
+            .repository_stash_details(".", &entry.oid)
+            .expect("stash details");
+        assert!(details.files.iter().any(|file| file.path == "tracked.txt"));
+        assert!(
+            details
+                .files
+                .iter()
+                .any(|file| file.path == "untracked.txt")
+        );
+        let patch = repository
+            .repository_stash_diff(".", &entry.oid, "tracked.txt", None, false)
+            .expect("stash diff");
+        assert!(patch.patch.contains("+stashed"));
+        let untracked_patch = repository
+            .repository_stash_diff(".", &entry.oid, "untracked.txt", None, false)
+            .expect("untracked stash diff");
+        assert!(untracked_patch.patch.contains("+untracked"));
+
+        repository
+            .execute_stash_mutation(&stash_request(StashMutationKind::Apply, &entry))
+            .expect("apply exact stash");
+        assert_eq!(
+            fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+            "stashed\n"
+        );
+        assert_eq!(repository.stash_catalog().unwrap().entries.len(), 1);
+        git(directory.path(), &["reset", "--hard"]);
+        git(directory.path(), &["clean", "-fd"]);
+
+        let current = repository.stash_catalog().unwrap().entries[0].clone();
+        repository
+            .execute_stash_mutation(&stash_request(StashMutationKind::Pop, &current))
+            .expect("pop exact stash");
+        assert!(repository.stash_catalog().unwrap().entries.is_empty());
+        assert_eq!(
+            fs::read_to_string(directory.path().join("untracked.txt")).unwrap(),
+            "untracked\n"
+        );
+    }
+
+    #[test]
+    fn stash_mutations_reject_stale_positions_and_clear_only_the_reviewed_list() {
+        let directory = fixture();
+        fs::write(directory.path().join("tracked.txt"), "base\n").unwrap();
+        git(directory.path(), &["add", "tracked.txt"]);
+        git(directory.path(), &["commit", "-m", "base"]);
+        fs::write(directory.path().join("tracked.txt"), "first\n").unwrap();
+        git(directory.path(), &["stash", "push", "-m", "first"]);
+        let repository = GitRepository::open(directory.path()).unwrap();
+        let first = repository.stash_catalog().unwrap().entries[0].clone();
+
+        fs::write(directory.path().join("tracked.txt"), "second\n").unwrap();
+        git(directory.path(), &["stash", "push", "-m", "second"]);
+        assert!(matches!(
+            repository.execute_stash_mutation(&stash_request(StashMutationKind::Drop, &first)),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+
+        let catalog = repository.stash_catalog().unwrap();
+        let reviewed_oids = catalog
+            .entries
+            .iter()
+            .map(|entry| entry.oid.clone())
+            .collect::<Vec<_>>();
+        let selected = catalog.entries[0].clone();
+        let clear = StashMutationRequest {
+            kind: StashMutationKind::Clear,
+            repository_id: ".".to_string(),
+            reference: None,
+            oid: None,
+            reinstate_index: false,
+            branch_name: None,
+            expected_oids: reviewed_oids,
+        };
+        repository
+            .execute_stash_mutation(&clear)
+            .expect("clear reviewed stashes");
+        assert!(repository.stash_catalog().unwrap().entries.is_empty());
+
+        fs::write(directory.path().join("tracked.txt"), "branch\n").unwrap();
+        git(directory.path(), &["stash", "push", "-m", "branch stash"]);
+        let entry = repository.stash_catalog().unwrap().entries[0].clone();
+        let mut branch = stash_request(StashMutationKind::Branch, &entry);
+        branch.branch_name = Some("from-stash".to_string());
+        repository
+            .execute_stash_mutation(&branch)
+            .expect("branch from exact stash");
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "from-stash"
+        );
+        assert!(repository.stash_catalog().unwrap().entries.is_empty());
+        assert_eq!(
+            fs::read_to_string(directory.path().join("tracked.txt")).unwrap(),
+            "branch\n"
+        );
+
+        // Keep the compiler honest that the selected identity used above is still exact.
+        assert!(!selected.oid.is_empty());
     }
 
     fn history_ref(full_name: &str) -> HistoryRef {

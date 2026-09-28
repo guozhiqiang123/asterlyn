@@ -1,6 +1,6 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
-import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts";
+import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts";
 export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
 export interface CommonCopy {
   ready: string;
@@ -53,8 +53,7 @@ export interface ShellCopy {
   toolWindows: string;
   version(name: string, version: string): string;
   files: string;
-  branches: string;
-  changes: string;
+  branches: string; changes: string; stash: string;
   terminal: string;
   toolReorder(label: string): string;
   openFolderFirst: string;
@@ -77,7 +76,7 @@ export interface ShellCopy {
   prepareGitOperation: string;
   gitOperations: string;
   recoverChanges: string;
-  hideGit: string;
+  hideGit: string; hideStash: string;
   hideTerminal: string;
   commitLog: string;
   gitDetails: string;
@@ -1192,7 +1191,7 @@ export interface LocaleCatalog {
   readonly common: CommonCopy;
   readonly temporal: TemporalCopy;
   readonly shell: ShellCopy;
-  readonly terminal: TerminalCopy;
+  readonly stash: StashCopy; readonly terminal: TerminalCopy;
   readonly settings: SettingsCopy;
   readonly navigation: NavigationCopy;
   readonly projectFiles: ProjectFilesCopy;

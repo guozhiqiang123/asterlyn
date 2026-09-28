@@ -1,6 +1,7 @@
 import type { LocaleCatalog } from "./catalog.ts";
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
+import { ZH_CN_STASH_COPY } from "./stash-copy.ts";
 
 export const ZH_CN = {
   locale: "zh-CN",
@@ -26,14 +27,14 @@ export const ZH_CN = {
     refreshProject: "刷新项目", refreshShortcut: "刷新（Ctrl/Cmd+R）", openSettings: "打开设置", settings: "设置",
     windowControls: "窗口控制", minimizeWindow: "最小化窗口", minimize: "最小化", maximizeWindow: "最大化窗口", maximize: "最大化",
     restoreWindow: "还原窗口", restore: "还原", closeWindow: "关闭窗口", toolWindows: "工具窗口",
-    version: (name, version) => `${name} 版本 ${version}`, files: "文件", branches: "分支", changes: "更改", terminal: "终端",
+    version: (name, version) => `${name} 版本 ${version}`, files: "文件", branches: "分支", changes: "更改", stash: "贮藏", terminal: "终端",
     toolReorder: (label) => `${label} — 拖动可排序`, openFolderFirst: "请先打开项目文件夹 — 拖动可排序",
     gitUnavailableReorder: "此文件夹无法使用 Git — 拖动可排序", genericTool: "工具窗口", leftToolWindow: "左侧工具窗口",
     hideFiles: "隐藏文件工具窗口", hideChanges: "隐藏更改工具窗口", waitingForProject: "正在等待项目", resizeLeft: "调整左侧工具窗口大小", editor: "编辑器",
     welcome: "欢迎", showOpenFiles: "显示已打开文件", openFiles: "已打开文件", editorName: (name) => `${name} 编辑器`,
     openFolder: "打开项目文件夹", openFolderDetail: "可浏览普通文件夹；当所选文件夹为仓库根目录时，还可使用 Git 工具。",
     resizeGit: "调整 Git 工具窗口大小", branchesAndLog: "分支与日志", prepareGitOperation: "准备合并、拣选、变基或压缩操作",
-    gitOperations: "Git 操作…", recoverChanges: "恢复本地更改", hideGit: "隐藏 Git 工具窗口", hideTerminal: "隐藏终端工具窗口",
+    gitOperations: "Git 操作…", recoverChanges: "恢复本地更改", hideGit: "隐藏 Git 工具窗口", hideStash: "隐藏贮藏工具窗口", hideTerminal: "隐藏终端工具窗口",
     commitLog: "提交日志",
     gitDetails: "Git 详情", resizeBranchTree: "调整分支树大小", resizeGitDetails: "调整 Git 详情大小",
     returnToWorkbench: "返回工作台", backToWorkbench: "返回工作台", settingsGroups: "设置分组",
@@ -48,6 +49,7 @@ export const ZH_CN = {
     projectOpenedInNewWindow: "项目已在新窗口中打开",
     projectFocusedInExistingWindow: "项目已打开，现有窗口已切换到前台",
   },
+  stash: ZH_CN_STASH_COPY,
   terminal: {
     notRunning: "没有活动会话",
     starting: "正在启动终端…",

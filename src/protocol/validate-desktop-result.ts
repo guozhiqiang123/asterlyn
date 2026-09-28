@@ -107,6 +107,13 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "repositorySnapshot":
       assert(isRepositorySnapshot(value), command, "expected a repository snapshot");
       break;
+    case "stashCatalog": {
+      const result = record(value, command); arrays(result, command, "entries", "truncatedRepositoryIds"); assertStringArray(result.truncatedRepositoryIds, command, "truncatedRepositoryIds");
+      for (const entryValue of result.entries as unknown[]) {
+        const entry = record(entryValue, command); strings(entry, command, "repositoryId", "reference", "oid", "parentOid", "subject"); numbers(entry, command, "authoredAt");
+      }
+      break;
+    }
     case "nullableGitOperationSnapshot":
       assert(
         value === null || isGitOperationSnapshot(value),

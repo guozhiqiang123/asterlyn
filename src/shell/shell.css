@@ -426,6 +426,7 @@
   --bottom-tool-height: 340px;
   --branch-tree-width: 270px;
   --branch-details-width: 320px;
+  --stash-list-width: 420px;
   --commit-summary-height: 145px;
   --changes-commit-height: 230px;
   display: grid;

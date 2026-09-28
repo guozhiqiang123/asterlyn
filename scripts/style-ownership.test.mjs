@@ -27,6 +27,7 @@ const ownedStyles = [
   ["features/git-history/git-reset.css", "main.ts"],
   ["features/git-history/commit-file-restore.css", "main.ts"],
   ["features/git-history/details.css", "main.ts"],
+  ["features/git-stash/stash.css", "main.ts"],
   ["features/remote-push/remote-push.css", "main.ts"],
   ["features/remote-push/push-dialog-layout.css", "main.ts"],
   ["features/remote-push/remote-authentication.css", "main.ts"],
@@ -86,6 +87,15 @@ test("native macOS chrome keeps the trailing settings action inset from the wind
   assert.match(
     source,
     /\.platform-macos-native \.topbar-actions\s*\{[^}]*padding-right:\s*8px;/s,
+  );
+});
+
+test("bottom tool close stays right-aligned when feature actions are hidden", async () => {
+  const source = await readFile(new URL("../src/shared/layout.css", import.meta.url), "utf8");
+  assert.match(source, /\.bottom-tool-hide\s*\{[^}]*margin-left:\s*auto;/s);
+  assert.match(
+    source,
+    /\.terminal-header-actions:not\(\.hidden\)\s*\+\s*\.git-operation-open\.hidden\s*\+\s*\.bottom-tool-hide\s*\{[^}]*margin-left:\s*0;/s,
   );
 });
 

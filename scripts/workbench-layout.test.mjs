@@ -77,6 +77,7 @@ test("layout persistence excludes unrelated session state", () => {
     "diffBeforePercent",
     "leftTool",
     "leftWidth",
+    "stashListWidth",
     "version",
   ]);
 });

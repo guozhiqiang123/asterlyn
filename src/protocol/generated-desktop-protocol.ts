@@ -47,6 +47,9 @@ export interface DesktopCommandMap {
   read_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.TextFileSnapshot };
   save_text_file: { args: { repositoryRoot: string; repositoryId: string; path: string; expectedRevision: string; content: string; utf8Bom: boolean; requestId: string; }; result: Model.SaveTextFileResult };
   read_commit_details: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; }; result: Model.CommitDetails };
+  read_stash_catalog: { args: { repositoryRoot: string; }; result: Model.StashCatalog };
+  read_stash_details: { args: { repositoryRoot: string; repositoryId: string; stashOid: string; }; result: Model.CommitDetails };
+  read_stash_diff: { args: { repositoryRoot: string; repositoryId: string; stashOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitDiffResult };
   read_commit_comparison_details: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; }; result: Model.CommitComparisonDetails };
   read_commit_file: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; selected: Model.CommitFileChange; }; result: Model.CommitFilePreview };
   compare_commit_file_to_current: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; selected: Model.CommitFileChange; currentContent: string | null; expectedCurrentRevision: string | null; }; result: Model.CommitFileComparison };
@@ -73,6 +76,7 @@ export interface DesktopCommandMap {
   prepare_branch_mutation: { args: { repositoryRoot: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
   execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
   execute_tag_mutation: { args: { repositoryRoot: string; request: Model.TagMutationRequest; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  execute_stash_mutation: { args: { repositoryRoot: string; request: Model.StashMutationRequest; }; result: Model.RepositoryMutationOutcome };
   prepare_remote_mutation: { args: { repositoryRoot: string; request: Model.RemoteMutationRequest; }; result: Model.RemoteMutationPlan };
   execute_remote_mutation: { args: { repositoryRoot: string; plan: Model.RemoteMutationPlan; }; result: Model.RepositoryMutationOutcome };
   prepare_git_reset: { args: { repositoryRoot: string; targetOid: string; }; result: Model.GitResetPlan };
@@ -141,6 +145,9 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_text_file: "textFileSnapshot",
   save_text_file: "saveTextFileResult",
   read_commit_details: "commitDetails",
+  read_stash_catalog: "stashCatalog",
+  read_stash_details: "commitDetails",
+  read_stash_diff: "commitDiffResult",
   read_commit_comparison_details: "commitComparisonDetails",
   read_commit_file: "commitFilePreview",
   compare_commit_file_to_current: "commitFileComparison",
@@ -167,6 +174,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   prepare_branch_mutation: "branchMutationPlan",
   execute_branch_mutation: "repositoryMutationOutcome",
   execute_tag_mutation: "repositoryMutationOutcome",
+  execute_stash_mutation: "repositoryMutationOutcome",
   prepare_remote_mutation: "remoteMutationPlan",
   execute_remote_mutation: "repositoryMutationOutcome",
   prepare_git_reset: "gitResetPlan",

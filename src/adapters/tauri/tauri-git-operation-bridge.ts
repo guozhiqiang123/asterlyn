@@ -11,6 +11,7 @@ import type {
   RemoteAuthenticationStatus,
   RemoteMutationPlan,
   RepositoryMutationOutcome,
+  StashMutationRequest,
   TagMutationRequest,
   WorkingTreeMutationOutcome,
 } from "../../models.ts";
@@ -61,6 +62,11 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       request,
       operationId,
+    }),
+  executeStashMutation: (repositoryRoot, request: StashMutationRequest) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_stash_mutation", {
+      repositoryRoot,
+      request,
     }),
   prepareRemoteMutation: (repositoryRoot, request) =>
     invokeDesktopCommand<RemoteMutationPlan>("prepare_remote_mutation", { repositoryRoot, request }),

@@ -1,5 +1,5 @@
 export type LeftTool = "files" | "changes" | null;
-export type BottomTool = "branches" | "terminal" | null;
+export type BottomTool = "branches" | "stash" | "terminal" | null;
 
 export interface WorkbenchLayout {
   version: 1;
@@ -9,6 +9,7 @@ export interface WorkbenchLayout {
   bottomHeight: number;
   branchTreeWidth: number;
   branchDetailsWidth: number;
+  stashListWidth: number;
   commitSummaryHeight: number;
   changesCommitHeight: number;
   diffBeforePercent: number;
@@ -24,6 +25,7 @@ export type WorkbenchLayoutAction =
         | "bottomHeight"
         | "branchTreeWidth"
         | "branchDetailsWidth"
+        | "stashListWidth"
         | "commitSummaryHeight"
         | "changesCommitHeight"
         | "diffBeforePercent";
@@ -45,6 +47,7 @@ export const WORKBENCH_LAYOUT_DEFAULTS: WorkbenchLayout = Object.freeze({
   bottomHeight: 340,
   branchTreeWidth: 270,
   branchDetailsWidth: 320,
+  stashListWidth: 420,
   commitSummaryHeight: 145,
   changesCommitHeight: 230,
   diffBeforePercent: 50,
@@ -58,6 +61,8 @@ export const WORKBENCH_LIMITS = Object.freeze({
   branchTreeMin: 190,
   branchCommitMin: 320,
   branchDetailsMin: 230,
+  stashListMin: 260,
+  stashFilesMin: 320,
   commitFilesMin: 80,
   commitSummaryMin: 90,
   changesFilesMin: 110,
@@ -162,6 +167,14 @@ export function clampWorkbenchLayout(
       WORKBENCH_LIMITS.branchDetailsMin,
       maximumDetails,
     ),
+    stashListWidth: clamp(
+      finiteOr(layout.stashListWidth, WORKBENCH_LAYOUT_DEFAULTS.stashListWidth),
+      WORKBENCH_LIMITS.stashListMin,
+      Math.max(
+        WORKBENCH_LIMITS.stashListMin,
+        width - WORKBENCH_LIMITS.stashFilesMin - WORKBENCH_LIMITS.separatorSize,
+      ),
+    ),
     commitSummaryHeight: clamp(
       finiteOr(
         layout.commitSummaryHeight,
@@ -238,7 +251,7 @@ function isLeftTool(value: unknown): value is LeftTool {
 }
 
 function isBottomTool(value: unknown): value is BottomTool {
-  return value === null || value === "branches" || value === "terminal";
+  return value === null || value === "branches" || value === "stash" || value === "terminal";
 }
 
 function finiteOr(value: number, fallback: number): number {

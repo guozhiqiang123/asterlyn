@@ -18,17 +18,19 @@ pub(crate) use commit_file_restore::{
 pub(crate) use git_operations::{
     cancel_remote_operation, commit_changes, configure_remote_ssh, create_branch,
     execute_branch_mutation, execute_git_operation, execute_git_reset, execute_remote_mutation,
-    execute_tag_mutation, fetch_remote, prepare_branch_mutation, prepare_git_operation,
-    prepare_git_reset, prepare_remote_mutation, pull_current, push_current, read_conflict_content,
-    read_git_operation, read_push_file_commit, read_push_preview, read_remote_authentication,
-    resolve_conflict, revert_changes, run_git_operation_action, stage_paths,
-    store_remote_https_credential, switch_branch, trash_untracked_paths, unstage_paths,
+    execute_stash_mutation, execute_tag_mutation, fetch_remote, prepare_branch_mutation,
+    prepare_git_operation, prepare_git_reset, prepare_remote_mutation, pull_current, push_current,
+    read_conflict_content, read_git_operation, read_push_file_commit, read_push_preview,
+    read_remote_authentication, resolve_conflict, revert_changes, run_git_operation_action,
+    stage_paths, store_remote_https_credential, switch_branch, trash_untracked_paths,
+    unstage_paths,
 };
 pub(crate) use git_reads::{
     cancel_untracked_scan, compare_commit_file_to_current, read_commit_comparison_details,
     read_commit_comparison_diff, read_commit_details, read_commit_diff, read_commit_file,
-    read_diff, read_git_blame, read_history_page, read_local_diff, read_tracked_changes,
-    read_working_diff_base, scan_untracked,
+    read_diff, read_git_blame, read_history_page, read_local_diff, read_stash_catalog,
+    read_stash_details, read_stash_diff, read_tracked_changes, read_working_diff_base,
+    scan_untracked,
 };
 pub(crate) use image::{
     read_commit_comparison_image_diff, read_commit_image_diff, read_image_file,

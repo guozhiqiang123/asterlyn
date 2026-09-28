@@ -1,6 +1,6 @@
 import type { LocaleCatalog } from "./catalog.ts";
 import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
-import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
+import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts"; import { EN_US_STASH_COPY } from "./stash-copy.ts";
 
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
@@ -60,8 +60,7 @@ export const EN_US: LocaleCatalog = {
     version: (name, version) => `${name} version ${version}`,
     files: "Files",
     branches: "Branches",
-    changes: "Changes",
-    terminal: "Terminal",
+    changes: "Changes", stash: "Stash", terminal: "Terminal",
     toolReorder: (label) => `${label} — drag to reorder`,
     openFolderFirst: "Open a project folder first — drag to reorder",
     gitUnavailableReorder: "Git is unavailable for this folder — drag to reorder",
@@ -83,7 +82,7 @@ export const EN_US: LocaleCatalog = {
     prepareGitOperation: "Prepare a Merge, Cherry-pick, Rebase, or Squash operation",
     gitOperations: "Git operations…",
     recoverChanges: "Recover local changes",
-    hideGit: "Hide Git tool window",
+    hideGit: "Hide Git tool window", hideStash: "Hide Stash tool window",
     hideTerminal: "Hide Terminal tool window",
     commitLog: "Commit log",
     gitDetails: "Git details",
@@ -115,6 +114,7 @@ export const EN_US: LocaleCatalog = {
     projectOpenedInNewWindow: "Project opened in a new window",
     projectFocusedInExistingWindow: "Project is already open; its window was brought forward",
   },
+  stash: EN_US_STASH_COPY,
   terminal: {
     notRunning: "No active session",
     starting: "Starting terminal…",

@@ -45,6 +45,8 @@ import type {
   RepositorySliceProject,
   RepositoryStateSlice,
   SaveTextFileResult,
+  StashCatalog,
+  StashMutationRequest,
   TagMutationRequest,
   TextFileSnapshot,
   TrackedChangeScan,
@@ -194,6 +196,20 @@ export interface GitReadBridge {
     repositoryId: string,
     commitOid: string,
   ): Promise<CommitDetails>;
+  readStashCatalog(repositoryRoot: string): Promise<StashCatalog>;
+  readStashDetails(
+    repositoryRoot: string,
+    repositoryId: string,
+    stashOid: string,
+  ): Promise<CommitDetails>;
+  readStashDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    stashOid: string,
+    path: string,
+    originalPath: string | null,
+    expandedUnchanged?: boolean,
+  ): Promise<CommitDiffResult>;
   readCommitComparisonDetails(
     repositoryRoot: string,
     repositoryId: string,
@@ -321,6 +337,10 @@ export interface GitOperationBridge {
     repositoryRoot: string,
     request: TagMutationRequest,
     operationId: string,
+  ): Promise<RepositoryMutationOutcome>;
+  executeStashMutation(
+    repositoryRoot: string,
+    request: StashMutationRequest,
   ): Promise<RepositoryMutationOutcome>;
   prepareRemoteMutation(
     repositoryRoot: string,

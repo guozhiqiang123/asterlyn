@@ -218,7 +218,7 @@
   margin-left: auto;
 }
 
-.terminal-header-actions + .git-operation-open.hidden + .bottom-tool-hide {
+.terminal-header-actions:not(.hidden) + .git-operation-open.hidden + .bottom-tool-hide {
   margin-left: 0;
 }
 

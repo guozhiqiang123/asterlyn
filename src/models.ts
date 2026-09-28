@@ -244,7 +244,7 @@ export interface CommitDiffResult {
   binary: boolean;
   truncated: boolean;
 }
-
+export type { StashCatalog, StashEntry, StashMutationKind, StashMutationRequest } from "./stash-models.ts";
 export interface CommitComparisonDiffResult {
   repositoryId: string;
   beforeOid: string;
