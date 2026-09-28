@@ -50,6 +50,29 @@ test("local and remote tag deletion remain explicit reviewed actions", async () 
   ]);
 });
 
+test("checkout and single-tag push show explicit non-destructive reviews", async () => {
+  const requests = [];
+  const controller = new TagMutationController({
+    execute: async (request) => { requests.push(request); return true; },
+    errorMessage: String,
+  });
+  controller.open(target, "checkout", "v1.0");
+  const checkout = renderTagMutationDialog(controller.state, EN_US_TAG_MUTATION_COPY);
+  assert.match(checkout, /detached HEAD state/);
+  assert.match(checkout, /class="primary-button"/);
+  await controller.submit();
+
+  controller.open(target, "push", "v1.0", "origin");
+  const push = renderTagMutationDialog(controller.state, EN_US_TAG_MUTATION_COPY);
+  assert.match(push, /Push only this exact tag/);
+  assert.match(push, /<code>origin<\/code>/);
+  await controller.submit();
+  assert.deepEqual(requests, [
+    { kind: "checkout", tagName: "v1.0", commitOid: target.commitOid, remote: null },
+    { kind: "push", tagName: "v1.0", commitOid: target.commitOid, remote: "origin" },
+  ]);
+});
+
 test("failed tag mutations keep the review open with the localized error", async () => {
   const controller = new TagMutationController({
     execute: async () => { throw new Error("remote moved"); },

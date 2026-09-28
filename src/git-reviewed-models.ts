@@ -28,7 +28,7 @@ export interface GitResetPlan {
   previewToken: string;
 }
 
-export type TagMutationKind = "create" | "deleteLocal" | "deleteRemote";
+export type TagMutationKind = "create" | "checkout" | "push" | "deleteLocal" | "deleteRemote";
 
 export interface TagMutationRequest {
   kind: TagMutationKind;

@@ -2951,7 +2951,12 @@ impl GitRepository {
 
     pub fn execute_local_tag_mutation(&self, request: &TagMutationRequest) -> Result<(), GitError> {
         self.ensure_no_repository_operation("mutate tag")?;
-        if request.remote.is_some() || request.kind == TagMutationKind::DeleteRemote {
+        if request.remote.is_some()
+            || matches!(
+                request.kind,
+                TagMutationKind::Push | TagMutationKind::DeleteRemote
+            )
+        {
             return Err(invalid_tag_mutation(
                 "local tag mutations cannot name a remote",
             ));
@@ -2980,6 +2985,18 @@ impl GitRepository {
                     ],
                 )?;
             }
+            TagMutationKind::Checkout => {
+                self.verify_local_tag_target(&full_ref, &commit_oid)?;
+                self.ensure_clean_worktree("check out tag")?;
+                self.run_mutation(
+                    "check out exact tag commit",
+                    vec![
+                        OsString::from("switch"),
+                        OsString::from("--detach"),
+                        OsString::from(commit_oid),
+                    ],
+                )?;
+            }
             TagMutationKind::DeleteLocal => {
                 let tag_object_oid = self.verify_local_tag_target(&full_ref, &commit_oid)?;
                 self.run_mutation(
@@ -2992,7 +3009,7 @@ impl GitRepository {
                     ],
                 )?;
             }
-            TagMutationKind::DeleteRemote => unreachable!(),
+            TagMutationKind::Push | TagMutationKind::DeleteRemote => unreachable!(),
         }
         Ok(())
     }
@@ -3002,12 +3019,16 @@ impl GitRepository {
         request: &TagMutationRequest,
         cancellation: &CancellationToken,
     ) -> Result<(), GitError> {
-        self.ensure_no_repository_operation("delete remote tag")?;
-        if request.kind != TagMutationKind::DeleteRemote {
-            return Err(invalid_tag_mutation(
-                "the remote executor accepts only remote tag deletion",
-            ));
-        }
+        let operation = match request.kind {
+            TagMutationKind::Push => "push tag",
+            TagMutationKind::DeleteRemote => "delete remote tag",
+            _ => {
+                return Err(invalid_tag_mutation(
+                    "the remote executor accepts only tag push or remote deletion",
+                ));
+            }
+        };
+        self.ensure_no_repository_operation(operation)?;
         let remote = request
             .remote
             .as_deref()
@@ -3020,10 +3041,10 @@ impl GitRepository {
                 "the selected commit no longer resolves to the reviewed object",
             ));
         }
-        self.verify_local_tag_target(&full_ref, &commit_oid)?;
+        let local_object_oid = self.verify_local_tag_target(&full_ref, &commit_oid)?;
         let peeled_ref = format!("{full_ref}^{{}}");
         let output = self.run_remote_operation(
-            "read remote tag before deletion",
+            "read remote tag before mutation",
             &remote.name,
             vec![
                 OsString::from("ls-remote"),
@@ -3036,8 +3057,41 @@ impl GitRepository {
             false,
             false,
         )?;
-        let (remote_object_oid, remote_commit_oid) =
-            parse_remote_tag(&output.stdout, &full_ref, &peeled_ref)?;
+        let remote_tag = parse_remote_tag_optional(&output.stdout, &full_ref, &peeled_ref)?;
+        if request.kind == TagMutationKind::Push {
+            if let Some((remote_object_oid, remote_commit_oid)) = remote_tag.as_ref() {
+                if remote_object_oid == &local_object_oid && remote_commit_oid == &commit_oid {
+                    return Ok(());
+                }
+                return Err(stale_tag_mutation(
+                    "the remote tag already exists with different content",
+                ));
+            }
+            self.run_remote_operation(
+                "push exact tag",
+                &remote.name,
+                vec![
+                    OsString::from("-c"),
+                    OsString::from("push.followTags=false"),
+                    OsString::from("push"),
+                    OsString::from("--porcelain"),
+                    OsString::from("--no-progress"),
+                    OsString::from("--no-mirror"),
+                    OsString::from("--no-follow-tags"),
+                    OsString::from("--no-signed"),
+                    OsString::from("--"),
+                    OsString::from(&remote.name),
+                    OsString::from(format!("{local_object_oid}:{full_ref}")),
+                ],
+                cancellation,
+                false,
+                true,
+            )?;
+            return Ok(());
+        }
+        let (remote_object_oid, remote_commit_oid) = remote_tag.ok_or_else(|| {
+            invalid_tag_mutation("the selected tag does not exist on this remote")
+        })?;
         if remote_commit_oid != commit_oid {
             return Err(stale_tag_mutation(
                 "the remote tag points to a different commit",
@@ -6071,11 +6125,11 @@ fn branch_mutation_token(fields: &[&str]) -> String {
     mutation_token("asterlyn-branch-mutation-v1", fields)
 }
 
-fn parse_remote_tag(
+fn parse_remote_tag_optional(
     output: &[u8],
     full_ref: &str,
     peeled_ref: &str,
-) -> Result<(String, String), GitError> {
+) -> Result<Option<(String, String)>, GitError> {
     let mut object_oid = None;
     let mut commit_oid = None;
     for line in String::from_utf8_lossy(output).lines() {
@@ -6092,9 +6146,10 @@ fn parse_remote_tag(
             commit_oid = Some(oid.to_string());
         }
     }
-    let object_oid = object_oid
-        .ok_or_else(|| invalid_tag_mutation("the selected tag does not exist on this remote"))?;
-    Ok((object_oid.clone(), commit_oid.unwrap_or(object_oid)))
+    let Some(object_oid) = object_oid else {
+        return Ok(None);
+    };
+    Ok(Some((object_oid.clone(), commit_oid.unwrap_or(object_oid))))
 }
 
 fn mutation_token(prefix: &str, fields: &[&str]) -> String {
@@ -8717,6 +8772,101 @@ mod tests {
             &["show-ref", "--verify", "--quiet", "refs/tags/release/v1"]
         ));
         assert!(directory.path().join("pending.txt").exists());
+    }
+
+    #[test]
+    fn checks_out_the_exact_local_tag_only_with_a_clean_worktree() {
+        let directory = fixture();
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let tagged_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(directory.path(), &["tag", "release/v1", &tagged_oid]);
+        commit_file(directory.path(), "next.txt", "next\n", "Next");
+        fs::write(directory.path().join("pending.txt"), "pending\n").expect("dirty fixture");
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = TagMutationRequest {
+            kind: TagMutationKind::Checkout,
+            tag_name: "release/v1".to_string(),
+            commit_oid: tagged_oid.clone(),
+            remote: None,
+        };
+
+        assert!(matches!(
+            repository.execute_local_tag_mutation(&request),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            "main"
+        );
+
+        fs::remove_file(directory.path().join("pending.txt")).expect("clean fixture");
+        repository
+            .execute_local_tag_mutation(&request)
+            .expect("exact tagged commit is checked out");
+        assert_eq!(
+            git_stdout(directory.path(), &["rev-parse", "HEAD"]),
+            tagged_oid
+        );
+        assert_eq!(
+            git_stdout(directory.path(), &["branch", "--show-current"]),
+            ""
+        );
+    }
+
+    #[test]
+    fn pushes_one_exact_tag_without_overwriting_different_remote_content() {
+        let directory = fixture();
+        let remote = tempfile::tempdir().unwrap();
+        git(remote.path(), &["init", "--bare"]);
+        commit_file(directory.path(), "base.txt", "base\n", "Base");
+        let tagged_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(
+            directory.path(),
+            &["tag", "-a", "v1.0", "-m", "Release", &tagged_oid],
+        );
+        let tag_object_oid = git_stdout(directory.path(), &["rev-parse", "refs/tags/v1.0"]);
+        git(
+            directory.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = TagMutationRequest {
+            kind: TagMutationKind::Push,
+            tag_name: "v1.0".to_string(),
+            commit_oid: tagged_oid,
+            remote: Some("origin".to_string()),
+        };
+
+        repository
+            .execute_remote_tag_mutation(&request, &CancellationToken::new())
+            .expect("the exact tag is pushed");
+        assert_eq!(
+            git_stdout(remote.path(), &["rev-parse", "refs/tags/v1.0"]),
+            tag_object_oid
+        );
+        repository
+            .execute_remote_tag_mutation(&request, &CancellationToken::new())
+            .expect("an identical remote tag is a no-op");
+
+        commit_file(directory.path(), "later.txt", "later\n", "Later");
+        let other_oid = git_stdout(directory.path(), &["rev-parse", "HEAD"]);
+        git(
+            directory.path(),
+            &[
+                "push",
+                "--force",
+                "origin",
+                &format!("{other_oid}:refs/tags/v1.0"),
+            ],
+        );
+        assert!(matches!(
+            repository.execute_remote_tag_mutation(&request, &CancellationToken::new()),
+            Err(GitError::UnsafeOperation { .. })
+        ));
+        assert_eq!(
+            git_stdout(remote.path(), &["rev-parse", "refs/tags/v1.0"]),
+            other_oid
+        );
     }
 
     #[test]

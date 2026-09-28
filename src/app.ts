@@ -544,11 +544,10 @@ export class AsterlynApp {
         errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.branchMutation },
       tag: { gateway: {
-        execute: async (request) => { const copy = this.localization.catalog.history.tagMutation;
-          const succeeded = await this.runBranchMutation(
-            copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
-            (root) => bridge.executeTagMutation(root, request, `tag-mutation-${++this.branchMutationSequence}`), null, true,
-          ); if (succeeded) this.historyReadRuntime.details.applyTagMutation(request); return succeeded; },
+        execute: async (request) => { const copy = this.localization.catalog.history.tagMutation; const checkout = request.kind === "checkout";
+          const succeeded = await this.runBranchMutation(copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
+            (root) => bridge.executeTagMutation(root, request, `tag-mutation-${++this.branchMutationSequence}`), checkout ? this.localization.catalog.common.actions.changeBranches : null, !checkout);
+          if (succeeded) this.historyReadRuntime.details.applyTagMutation(request); return succeeded; },
         errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.tagMutation },
       reset: { gateway: {
@@ -764,6 +763,8 @@ export class AsterlynApp {
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
           openRemoteAction: (kind, returnFocus) =>
             this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
+          tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
+          openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
         },
         commit: {
           ...contextFeedback,

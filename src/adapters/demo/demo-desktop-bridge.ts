@@ -1452,7 +1452,7 @@ const demoBridge: DesktopBridge = {
   },
 
   async executeTagMutation(repositoryRoot: string, request: TagMutationRequest, operationId: string): Promise<RepositoryMutationOutcome> {
-    if (!isTauri) { await demoDelay(180); browserSnapshot = demoExecuteTagMutation(browserSnapshot, request); return { snapshot: demoTrackedSnapshot(browserSnapshot), invalidatedSlices: request.kind === "deleteRemote" ? [] : ["refs", "history"] }; }
+    if (!isTauri) { await demoDelay(180); browserSnapshot = demoExecuteTagMutation(browserSnapshot, request); if (request.kind === "checkout") return completeDemoMutation(); return { snapshot: demoTrackedSnapshot(browserSnapshot), invalidatedSlices: request.kind === "push" || request.kind === "deleteRemote" ? [] : ["refs", "history"] }; }
     return invoke<RepositoryMutationOutcome>("execute_tag_mutation", { repositoryRoot, request, operationId });
   },
 

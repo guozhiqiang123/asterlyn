@@ -5,6 +5,7 @@ import type { BranchContextTarget } from "./branch-context-binding.ts";
 export interface BranchContextPolicyReasons {
   readonly busy: string;
   readonly cleanRequired: string;
+  readonly localBranchRequired: string;
 }
 
 export interface BranchContextPolicyOptions {
@@ -27,6 +28,10 @@ export interface BranchContextPolicy {
   readonly delete: ContextMenuAvailability;
   readonly update: ContextMenuAvailability;
   readonly push: ContextMenuAvailability;
+  readonly currentBranchName: string | null;
+  readonly tagCheckout: ContextMenuAvailability;
+  readonly tagIntegrate: ContextMenuAvailability;
+  readonly tagMutation: ContextMenuAvailability;
 }
 
 export function branchContextPolicy(
@@ -53,6 +58,12 @@ export function branchContextPolicy(
     : trackingLocals.length === 1 && !trackingLocals[0]!.current
       ? trackingLocals[0]!
       : null;
+  const currentBranchName = snapshot.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
+    ? snapshot.branch.head
+    : null;
+  const tagIntegrate = !currentBranchName
+    ? blocked(options.reasons.localBranchRequired)
+    : cleanMutation;
   return {
     writable,
     switchTarget,
@@ -64,6 +75,10 @@ export function branchContextPolicy(
     delete: mutation,
     update: options.updateBlocked ? blocked(options.updateBlocked) : mutation,
     push: options.pushBlocked ? blocked(options.pushBlocked) : mutation,
+    currentBranchName,
+    tagCheckout: cleanMutation,
+    tagIntegrate,
+    tagMutation: mutation,
   };
 }
 

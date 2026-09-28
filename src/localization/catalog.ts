@@ -1056,7 +1056,7 @@ export interface HistoryCopy {
 }
 
 export interface BranchContextMenuCopy {
-  ariaLabel(name: string): string;
+  ariaLabel(name: string): string; tagAriaLabel(name: string): string;
   viewHistory: string;
   switchTo(name: string): string;
   checkoutRemote: string;
@@ -1066,15 +1066,15 @@ export interface BranchContextMenuCopy {
   update: string;
   push: string;
   rename: string;
-  copyBranch: string;
+  copyBranch: string; copyTag: string;
   shortName: string;
   fullReference: string;
-  deleteLocal: string;
+  deleteLocal: string; checkoutTag: string; mergeTagInto(tag: string, branch: string | null): string; pushTagTo(remote: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;
   copiedShort: string;
   copiedFull: string;
   clipboardUnavailable: string;
   busy: string;
-  cleanRequired: string;
+  cleanRequired: string; localBranchRequired: string;
   targetChanged: string;
 }
 

@@ -17,7 +17,7 @@ export function demoExecuteTagMutation(
   const existing = snapshot.branches.find((candidate) =>
     candidate.repositoryId === "." && candidate.kind === "tag" && candidate.fullName === fullName
   );
-  if (request.kind === "deleteRemote") {
+  if (request.kind === "push" || request.kind === "deleteRemote") {
     if (!existing) throw new Error("The selected local tag no longer exists.");
     const remote = snapshot.remotes.find((candidate) => candidate.name === request.remote);
     if (!remote?.pushSupported) throw new Error("Select a configured push-capable remote.");
@@ -36,6 +36,17 @@ export function demoExecuteTagMutation(
   }
   if (!existing || existing.oid !== request.commitOid) {
     throw new Error("The selected local tag changed; open its menu again.");
+  }
+  if (request.kind === "checkout") {
+    if (snapshot.changes.length > 0) {
+      throw new Error("Commit or remove all working-tree changes before checking out this tag.");
+    }
+    next.branch = {
+      head: null, oid: request.commitOid, upstream: null, upstreamRemote: null, upstreamRef: null,
+      ahead: 0, behind: 0, detached: true, unborn: false,
+    };
+    next.branches = next.branches.map((candidate) => ({ ...candidate, current: false }));
+    return next;
   }
   next.branches = next.branches.filter((candidate) => candidate.fullName !== fullName);
   nextCommit.decorations = nextCommit.decorations.filter((value) => value !== `tag: ${name}`);

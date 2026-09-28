@@ -106,6 +106,13 @@ test("tag decorations update in place without changing history identity or selec
   });
   assert.equal(changes.length, 1);
   controller.applyTagMutation({
+    kind: "push", tagName: "release/v1", commitOid: "a", remote: "origin",
+  });
+  controller.applyTagMutation({
+    kind: "checkout", tagName: "release/v1", commitOid: "a", remote: null,
+  });
+  assert.equal(changes.length, 1);
+  controller.applyTagMutation({
     kind: "deleteLocal", tagName: "release/v1", commitOid: "a", remote: null,
   });
   assert.deepEqual(controller.state.history.commits[0].decorations, []);

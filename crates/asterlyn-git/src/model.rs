@@ -633,6 +633,8 @@ pub enum BranchMutationKind {
 #[serde(rename_all = "camelCase")]
 pub enum TagMutationKind {
     Create,
+    Checkout,
+    Push,
     DeleteLocal,
     DeleteRemote,
 }

@@ -507,6 +507,14 @@ Exact-ref branch foundations and reviewed Revert landed before the Branches and 
 surfaces now reuse current Update/Push/Merge/Rebase/Cherry-pick review entry points and keep menu
 construction free of native work.
 
+The 2026-09-28 Tag-row extension adds detached checkout, reviewed Merge routing, exact single-Tag
+push, and local/remote deletion to the Branches provider while intentionally omitting Working Tree
+comparison. Remote writes remain explicit per push-capable remote; Tag push never overwrites a
+different remote object, and remote deletion retains the local Tag. Local Tag decoration changes
+continue through slice-stable incremental reconciliation, while checkout performs a complete
+authoritative reconciliation because it changes `HEAD`. Evidence:
+[`Tag context-action acceptance`](../benchmarks/2026-09-28-tag-context-actions.md).
+
 ### CM4 — History range and commit-detail menus
 
 Status: **locally accepted on 2026-09-19**. Evidence:

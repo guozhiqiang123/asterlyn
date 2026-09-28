@@ -260,7 +260,7 @@ export class GitHistoryDetailsController {
   }
 
   applyTagMutation(request: TagMutationRequest): void {
-    if (request.kind === "deleteRemote") return;
+    if (request.kind !== "create" && request.kind !== "deleteLocal") return;
     const decoration = `tag: ${request.tagName}`;
     let changed = false;
     let selectedChanged = false;

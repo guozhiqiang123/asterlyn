@@ -19,6 +19,10 @@ const remote = (name = "origin/main", repositoryId = ".") => ({
   repositoryId, kind: "remote", fullName: `refs/remotes/${name}`, name, current: false,
   upstream: null, tracking: null, oid: oid("c"), subject: name, committedAt: 1,
 });
+const tag = (name = "v1.0", repositoryId = ".") => ({
+  repositoryId, kind: "tag", fullName: `refs/tags/${name}`, name, current: false,
+  upstream: null, tracking: null, oid: oid("d"), subject: name, committedAt: 1,
+});
 const snapshot = (branches) => ({
   root: "/repo", gitDir: "/repo/.git",
   repositoryRoots: [{ id: ".", relativePath: ".", displayName: "repo", kind: "main" }],
@@ -91,6 +95,67 @@ test("remote tracking relationship switches the exact local branch and logical r
   ]);
 });
 
+test("tag menu exposes detached checkout, merge, exact remote push, and local or remote deletion", async () => {
+  const selectedTag = tag("release/v1");
+  const currentSnapshot = snapshot([local("main", true), selectedTag]);
+  currentSnapshot.remotes = [
+    { name: "origin", url: "file:///origin", fetchSupported: true, pushSupported: true },
+  ];
+  const selectedTarget = target(selectedTag);
+  const policy = branchContextPolicy(selectedTarget, currentSnapshot, options);
+  const model = branchContextMenuModel(
+    selectedTarget,
+    policy,
+    branchCopyActions(selectedTag, EN_US.history.branchContextMenu),
+    EN_US.history,
+    ["origin"],
+  );
+  assert.deepEqual(contextMenuModelErrors(model), []);
+  assert.deepEqual(ids(model), [
+    "git-branches.context-actions.tag-checkout",
+    "git-branches.context-actions.tag-merge",
+    "git-branches.context-actions.tag-push-0",
+    "git-branches.context-actions.tag-delete-local",
+    "git-branches.context-actions.tag-delete-remote-0",
+  ]);
+  assert.equal(model.items.some((item) => item.kind !== "separator" && item.label.includes("Working Tree")), false);
+
+  const events = [];
+  let session;
+  const provider = new BranchContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => true,
+      highlight: () => {},
+      snapshot: () => currentSnapshot,
+      policyOptions: () => ({ ...options }),
+      showHistory: () => {},
+      openMutation: () => {},
+      openGitOperation: (kind, name) => events.push(["operation", kind, name]),
+      openRemoteAction: () => {},
+      tagRemotes: () => ["origin"],
+      openTagMutation: (kind, selected, remoteName) =>
+        events.push(["tag", kind, selected.branch.fullName, remoteName ?? null]),
+      blocked: () => {}, status: () => {}, error: () => {},
+    },
+    () => EN_US.history,
+  );
+  provider.open({ target: selectedTarget, anchor: { x: 1, y: 2 }, trigger: {}, restoreFocus() {} });
+  await session.invoke("git-branches.context-actions.tag-checkout");
+  await session.invoke("git-branches.context-actions.tag-merge");
+  await session.invoke("git-branches.context-actions.tag-push-0");
+  await session.invoke("git-branches.context-actions.tag-delete-local");
+  await session.invoke("git-branches.context-actions.tag-delete-remote-0");
+  assert.deepEqual(events, [
+    ["tag", "checkout", selectedTag.fullName, null],
+    ["operation", "merge", selectedTag.fullName],
+    ["tag", "push", selectedTag.fullName, "origin"],
+    ["tag", "deleteLocal", selectedTag.fullName, null],
+    ["tag", "deleteRemote", selectedTag.fullName, "origin"],
+  ]);
+});
+
 test("provider opens without executing and routes history, copy, and reviewed mutations", async () => {
   const branch = local("topic");
   const currentSnapshot = snapshot([local("main", true), branch]);
@@ -107,6 +172,8 @@ test("provider opens without executing and routes history, copy, and reviewed mu
       openMutation: (kind, selected, name) => events.push(["mutation", kind, selected.fullName, name]),
       openGitOperation: (kind, name) => events.push(["operation", kind, name]),
       openRemoteAction: (kind) => events.push(["remote", kind]),
+      tagRemotes: () => [],
+      openTagMutation: () => {},
       blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]),
       error: (error) => events.push(["error", error]),

@@ -180,6 +180,13 @@ test("feature target resolvers reject stale display labels and retain exact iden
   assert.equal(resolveBranchContextTarget(
     snapshot, 4, 12, new Set(["."]), branch.name,
   ), null);
+  const tag = {
+    ...branch, kind: "tag", current: false, name: "v1.0", fullName: "refs/tags/v1.0",
+  };
+  const taggedSnapshot = { ...snapshot, branches: [branch, tag] };
+  assert.equal(resolveBranchContextTarget(
+    taggedSnapshot, 4, 12, new Set(["."]), branchKey(tag),
+  )?.branch.fullName, tag.fullName);
 });
 
 test("History and commit-detail targets bind object, query generation and exact path", () => {

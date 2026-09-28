@@ -60,7 +60,7 @@ export function resolveBranchContextTarget(
   key: string,
 ): BranchContextTarget | null {
   const branch = snapshot?.branches.find((candidate) => branchKey(candidate) === key);
-  if (!snapshot || !branch || branch.kind === "tag") return null;
+  if (!snapshot || !branch) return null;
   const activeRoots = effectiveHistoryRootIds(
     snapshot.repositoryRoots.map((root) => root.id),
     selectedRepositoryIds,

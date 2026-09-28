@@ -283,12 +283,20 @@ pub(crate) async fn execute_tag_mutation(
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
         .into_owned();
-    if request.kind == TagMutationKind::DeleteRemote {
+    if matches!(
+        request.kind,
+        TagMutationKind::Push | TagMutationKind::DeleteRemote
+    ) {
+        let operation = if request.kind == TagMutationKind::Push {
+            "push tag"
+        } else {
+            "delete remote tag"
+        };
         git_operations
             .run_remote(
                 repository_root,
                 operation_id,
-                "delete remote tag",
+                operation,
                 COMMIT_LIMIT,
                 move |repository, cancellation| {
                     repository.execute_remote_tag_mutation(&request, cancellation)
@@ -301,10 +309,12 @@ pub(crate) async fn execute_tag_mutation(
             .run_local(repository_root, "mutate local tag", move |repository| {
                 repository.execute_local_tag_mutation(&request)?;
                 repository.tracked_snapshot(COMMIT_LIMIT).map(|snapshot| {
-                    mutation_outcome(
-                        snapshot,
-                        &[RepositoryStateSlice::Refs, RepositoryStateSlice::History],
-                    )
+                    let invalidated = if request.kind == TagMutationKind::Checkout {
+                        complete_repository_slices()
+                    } else {
+                        vec![RepositoryStateSlice::Refs, RepositoryStateSlice::History]
+                    };
+                    mutation_outcome(snapshot, &invalidated)
                 })
             })
             .await

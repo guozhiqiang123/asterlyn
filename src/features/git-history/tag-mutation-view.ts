@@ -14,8 +14,11 @@ export function renderTagMutationDialog(
   const input = dialog.kind === "create"
     ? `<label for="tag-mutation-name">${escapeHtml(copy.tagName)}</label><input id="tag-mutation-name" name="name" type="text" value="${escapeAttribute(dialog.tagName)}" autocomplete="off" spellcheck="false" aria-invalid="${Boolean(dialog.error)}" ${dialog.busy ? "disabled" : ""}/>`
     : `<div class="branch-mutation-review"><ul><li><span>${escapeHtml(copy.tagName)}</span><code>${escapeHtml(dialog.tagName)}</code></li><li><span>${escapeHtml(copy.commit)}</span><code>${escapeHtml(dialog.target.commitOid)}</code></li>${dialog.remote ? `<li><span>${escapeHtml(copy.remote)}</span><code>${escapeHtml(dialog.remote)}</code></li>` : ""}</ul></div>`;
-  const action = dialog.kind === "create" ? copy.create : copy.delete;
-  return `<section class="dialog branch-mutation-dialog tag-mutation-dialog" role="${dialog.kind === "create" ? "dialog" : "alertdialog"}" aria-modal="true" aria-labelledby="tag-mutation-title" aria-describedby="tag-mutation-description">${heading}<p id="tag-mutation-description">${escapeHtml(copy.descriptions[dialog.kind])}</p>${source}${error}<form id="tag-mutation-form" class="branch-mutation-form">${input}<div class="dialog-actions"><button class="secondary-button" data-tag-mutation-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="${dialog.kind === "create" ? "primary-button" : "danger-button"}" type="submit" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? copy.working : action)}</button></div></form></section>`;
+  const action = dialog.kind === "create" ? copy.create
+    : dialog.kind === "checkout" ? copy.checkout
+      : dialog.kind === "push" ? copy.push : copy.delete;
+  const destructive = dialog.kind === "deleteLocal" || dialog.kind === "deleteRemote";
+  return `<section class="dialog branch-mutation-dialog tag-mutation-dialog" role="${dialog.kind === "create" ? "dialog" : "alertdialog"}" aria-modal="true" aria-labelledby="tag-mutation-title" aria-describedby="tag-mutation-description">${heading}<p id="tag-mutation-description">${escapeHtml(copy.descriptions[dialog.kind])}</p>${source}${error}<form id="tag-mutation-form" class="branch-mutation-form">${input}<div class="dialog-actions"><button class="secondary-button" data-tag-mutation-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="${destructive ? "danger-button" : "primary-button"}" type="submit" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? copy.working : action)}</button></div></form></section>`;
 }
 
 function localError(error: string, copy: TagMutationCopy): string {

@@ -1,6 +1,11 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
-import type { BranchMutationKind, BranchSummary, RepositorySnapshot } from "../../models.ts";
+import type {
+  BranchMutationKind,
+  BranchSummary,
+  RepositorySnapshot,
+  TagMutationKind,
+} from "../../models.ts";
 import type {
   ContextMenuAvailability,
   ContextMenuItem,
@@ -37,6 +42,12 @@ export interface BranchContextRuntime {
   ): void;
   openGitOperation(kind: "merge" | "rebase", fullName: string): void;
   openRemoteAction(kind: "pull" | "push", returnFocus: HTMLElement): void | Promise<void>;
+  tagRemotes(target: BranchContextTarget): readonly string[];
+  openTagMutation(
+    kind: TagMutationKind,
+    target: BranchContextTarget,
+    remote?: string | null,
+  ): void;
   blocked(reason: string): void;
   status(message: string): void;
   error(error: unknown): void;
@@ -70,9 +81,10 @@ export class BranchContextActions {
       reasons: labels,
     });
     const copyActions = branchCopyActions(request.target.branch, labels);
+    const tagRemotes = this.runtime.tagRemotes(request.target);
     this.host.open(request.anchor, {
       ownerId: OWNER_ID,
-      model: branchContextMenuModel(request.target, policy, copyActions, this.copy()),
+      model: branchContextMenuModel(request.target, policy, copyActions, this.copy(), tagRemotes),
       isCurrent: () => this.runtime.current(request.target),
       invoke: async (actionId) => {
         try {
@@ -86,7 +98,7 @@ export class BranchContextActions {
             this.runtime.status(actionId.endsWith("copy-short") ? labels.copiedShort : labels.copiedFull);
             return;
           }
-          await this.invoke(actionId, request, policy);
+          await this.invoke(actionId, request, policy, tagRemotes);
         } catch (error) {
           this.runtime.error(error);
         }
@@ -102,6 +114,7 @@ export class BranchContextActions {
     actionId: string,
     request: DelegatedContextRequest<BranchContextTarget>,
     policy: BranchContextPolicy,
+    tagRemotes: readonly string[],
   ): Promise<void> {
     const target = request.target;
     switch (actionId) {
@@ -127,7 +140,23 @@ export class BranchContextActions {
         return this.runtime.openMutation("rename", target.branch, target.branch.name);
       case `${OWNER_ID}.delete`:
         return this.runtime.openMutation("delete", target.branch, "");
-      default: throw new Error(`Unknown Branches context action: ${actionId}`);
+      case `${OWNER_ID}.tag-checkout`:
+        return this.runtime.openTagMutation("checkout", target);
+      case `${OWNER_ID}.tag-merge`:
+        return this.runtime.openGitOperation("merge", target.branch.fullName);
+      case `${OWNER_ID}.tag-delete-local`:
+        return this.runtime.openTagMutation("deleteLocal", target);
+      default: {
+        for (const [index, remote] of tagRemotes.entries()) {
+          if (actionId === `${OWNER_ID}.tag-push-${index}`) {
+            return this.runtime.openTagMutation("push", target, remote);
+          }
+          if (actionId === `${OWNER_ID}.tag-delete-remote-${index}`) {
+            return this.runtime.openTagMutation("deleteRemote", target, remote);
+          }
+        }
+        throw new Error(`Unknown Branches context action: ${actionId}`);
+      }
     }
   }
 }
@@ -137,6 +166,7 @@ export function branchContextMenuModel(
   policy: BranchContextPolicy,
   copyActions: readonly TextCopyAction[],
   copy: HistoryCopy,
+  tagRemotes: readonly string[] = [],
 ): ContextMenuModel {
   const labels = copy.branchContextMenu;
   const command = (
@@ -152,6 +182,45 @@ export function branchContextMenuModel(
     availability,
     ...(tone === "danger" ? { tone } : {}),
   });
+  if (target.branch.kind === "tag") {
+    const items: ContextMenuItem[] = [];
+    if (policy.writable) {
+      items.push(
+        command("tag-checkout", labels.checkoutTag, policy.tagCheckout),
+        command(
+          "tag-merge",
+          labels.mergeTagInto(target.branch.name, policy.currentBranchName),
+          policy.tagIntegrate,
+        ),
+        ...tagRemotes.map((remote, index) =>
+          command(`tag-push-${index}`, labels.pushTagTo(remote), policy.tagMutation)
+        ),
+        { kind: "separator" },
+        command("tag-delete-local", labels.deleteLocalTag, policy.tagMutation, "danger"),
+        ...tagRemotes.map((remote, index) =>
+          command(
+            `tag-delete-remote-${index}`,
+            labels.deleteRemoteTag(remote),
+            policy.tagMutation,
+            "danger",
+          )
+        ),
+      );
+    } else {
+      items.push(
+        command("history", labels.viewHistory, ENABLED),
+        { kind: "separator" },
+        {
+          kind: "submenu",
+          id: `${OWNER_ID}.copy`,
+          label: labels.copyTag,
+          availability: ENABLED,
+          children: copyActions.map(copyCommandItem),
+        },
+      );
+    }
+    return { ariaLabel: labels.tagAriaLabel(target.branch.name), items };
+  }
   const items: ContextMenuItem[] = [command("history", labels.viewHistory, ENABLED)];
   if (policy.writable) {
     if (policy.switchTarget) {
