@@ -7,6 +7,8 @@ const chooserSources = [
   "src/adapters/demo/demo-desktop-bridge.ts",
 ];
 
+const macOSInfoPlist = "src-tauri/Info.plist";
+
 test("native directory choosers leave their chrome to the operating system locale", async () => {
   for (const sourcePath of chooserSources) {
     const source = await readFile(sourcePath, "utf8");
@@ -22,4 +24,28 @@ test("native directory choosers leave their chrome to the operating system local
       `${sourcePath} must not replace the operating system's localized dialog title`,
     );
   }
+});
+
+test("macOS bundles allow native dialogs to use the system language", async () => {
+  const source = await readFile(macOSInfoPlist, "utf8");
+
+  assert.match(
+    source,
+    /<key>CFBundleAllowMixedLocalizations<\/key>\s*<true\s*\/>/,
+    `${macOSInfoPlist} must let AppKit load localized system dialog resources`,
+  );
+
+  const declaredLocalizations = source.match(
+    /<key>CFBundleLocalizations<\/key>\s*<array>([\s\S]*?)<\/array>/,
+  );
+  assert.ok(
+    declaredLocalizations,
+    `${macOSInfoPlist} must declare the languages handled by the application`,
+  );
+  assert.match(declaredLocalizations[1], /<string>en<\/string>/);
+  assert.match(
+    declaredLocalizations[1],
+    /<string>zh-Hans<\/string>/,
+    `${macOSInfoPlist} must advertise Simplified Chinese so AppKit does not fall back to English`,
+  );
 });
