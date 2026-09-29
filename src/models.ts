@@ -148,6 +148,7 @@ export interface CommitDetails {
   oid: string;
   parentOid: string | null;
   files: CommitFileChange[];
+  containingBranches: BranchSummary[];
 }
 
 export interface CommitComparisonDetails {

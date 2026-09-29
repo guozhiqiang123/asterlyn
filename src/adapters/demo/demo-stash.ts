@@ -33,6 +33,7 @@ export function demoStashDetails(repositoryId: string, stashOid: string): Commit
   return {
     repositoryId, oid: stashOid, parentOid: stash.parentOid,
     files: structuredClone(demoCommitDetails(demoSnapshot.commits[0]?.oid ?? "").files),
+    containingBranches: [],
   };
 }
 

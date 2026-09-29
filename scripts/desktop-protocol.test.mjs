@@ -165,6 +165,18 @@ test("desktop response validation accepts representative valid payloads", () => 
   );
   assert.equal(validateDesktopResult("close_terminal", true), true);
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
+  const commitDetails = {
+    repositoryId: ".",
+    oid: "2".repeat(40),
+    parentOid: "1".repeat(40),
+    files: [],
+    containingBranches: [],
+  };
+  assert.deepEqual(validateDesktopResult("read_commit_details", commitDetails), commitDetails);
+  assert.throws(
+    () => validateDesktopResult("read_commit_details", { ...commitDetails, containingBranches: null }),
+    /containingBranches/u,
+  );
   assert.deepEqual(
     validateDesktopResult("read_commit_comparison_details", {
       repositoryId: ".",

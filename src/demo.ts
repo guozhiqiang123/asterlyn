@@ -350,6 +350,7 @@ export function demoCommitDetails(oid: string): CommitDetails {
     oid,
     parentOid: commit?.parents[0] ?? null,
     files,
+    containingBranches: demoSnapshot.branches.filter((branch) => branch.kind !== "tag"),
   };
 }
 

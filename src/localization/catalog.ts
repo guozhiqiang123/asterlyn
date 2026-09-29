@@ -1024,7 +1024,7 @@ export interface HistoryCopy {
   emptyTree: string;
   noNamedRefs: string;
   refsSummary(count: number, summary: string): string;
-  showAll: string;
+  showAll: string; branchesContainingCommit(count: number): string; noBranchesContainCommit: string; showBranches: string; hideBranches: string;
   firstParentComparison: string;
   comparedWith(value: string): string;
   unknownTime: string;

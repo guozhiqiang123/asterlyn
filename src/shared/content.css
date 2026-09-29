@@ -500,6 +500,42 @@
   font-weight: 500;
 }
 
+.commit-branch-containment {
+  margin-top: 9px;
+}
+
+.commit-branch-containment > summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 9px;
+  list-style: none;
+}
+
+.commit-branch-containment > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commit-branch-containment > summary b {
+  color: var(--info-text);
+  font-weight: 500;
+}
+
+.commit-branch-containment[open] .when-collapsed,
+.commit-branch-containment:not([open]) .when-expanded {
+  display: none;
+}
+
+.commit-no-branches {
+  display: block;
+  margin-top: 9px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
 .commit-no-references,
 .commit-comparison {
   display: block;

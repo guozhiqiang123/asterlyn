@@ -653,7 +653,7 @@ export const EN_US: LocaleCatalog = {
     operationsUsingCommit: "Operations using this commit", cherryPick: "Cherry-pick", squashAfterThis: "Squash commits after this",
     commitMessageAndDetails: "Commit message and details", authoredOn: "on", emptyTree: "Empty tree",
     noNamedRefs: "No named refs point to this commit", refsSummary: (count, summary) => `In ${count} refs: ${summary}…`,
-    showAll: "Show all", firstParentComparison: "First-parent comparison", comparedWith: (value) => `Compared with ${value}`,
+    showAll: "Show all", branchesContainingCommit: (count) => `In ${count} ${count === 1 ? "branch" : "branches"}`, noBranchesContainCommit: "No branches contain this commit", showBranches: "Show", hideBranches: "Hide", firstParentComparison: "First-parent comparison", comparedWith: (value) => `Compared with ${value}`,
     unknownTime: "Unknown time", referenceKinds: { head: "Head", local: "Local", remote: "Remote", tag: "Tag", other: "Other" },
     countOfCommits: (filtered, total, scope) => `${filtered} of ${total} commits in ${scope}`, refreshing: "Refreshing…",
     logicalRefsCount: (visible, total) => `${visible} of ${total} logical refs`, applyCount: (count) => `Apply ${count}`,

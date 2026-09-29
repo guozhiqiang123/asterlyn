@@ -134,6 +134,7 @@ export class GitHistoryDetailsController {
   private detailsSequence = 0;
   private topRefreshArmed = false;
   private topRefreshAt = 0;
+  private referencesVersion = "";
   private disposed = false;
 
   constructor(gateway: HistoryDetailsGateway, options: GitHistoryDetailsControllerOptions) {
@@ -181,6 +182,7 @@ export class GitHistoryDetailsController {
   clear(query: HistoryQuery = emptyQuery()): void {
     const selectionChanged = this.value.selectedCommit !== null;
     this.invalidateRequests();
+    this.referencesVersion = "";
     this.value = {
       ...this.value,
       history: emptyRefHistory(),
@@ -202,6 +204,7 @@ export class GitHistoryDetailsController {
     commits: CommitSummary[],
     query: HistoryQuery,
     preferTip = false,
+    referencesVersion = "",
   ): void {
     const previous = this.value;
     const normalizedQuery = normalizeHistoryQuery(query);
@@ -228,15 +231,18 @@ export class GitHistoryDetailsController {
       !sameCommitSummaries(previous.history.commits, commits);
     const statusChanged = previous.loadingMore || previous.refreshing ||
       previous.pagingError !== null || previous.hasMore !== hasMore;
+    const referencesChanged = this.referencesVersion !== referencesVersion;
     if (
       !historyChanged &&
       !selectionChanged &&
       !statusChanged &&
+      !referencesChanged &&
       historyQueryKey(previous.query) === historyQueryKey(normalizedQuery)
     ) return;
     this.pageSequence += 1;
     this.topRefreshArmed = false;
-    if (selectionChanged) this.detailsSequence += 1;
+    if (selectionChanged || referencesChanged) this.detailsSequence += 1;
+    this.referencesVersion = referencesVersion;
     this.value = {
       ...previous,
       history: installSnapshotHistory(previous.history, root, commits),
@@ -248,14 +254,14 @@ export class GitHistoryDetailsController {
       refreshing: false,
       pagingError: null,
       pagingRetry: null,
-      ...(selectionChanged ? emptyDetails() : {}),
+      ...(selectionChanged || referencesChanged ? emptyDetails() : {}),
     };
     this.emit({
       reason: "snapshot",
       historyChanged,
       statusChanged,
       selectionChanged,
-      detailsChanged: selectionChanged,
+      detailsChanged: selectionChanged || referencesChanged,
     });
   }
 
@@ -587,7 +593,12 @@ export class GitHistoryDetailsController {
     commit: CommitSummary,
   ): Promise<void> {
     const key = commitKey(commit);
-    const cacheKey = detailsCacheKey(root, commit.repositoryId, commit.oid);
+    const cacheKey = detailsCacheKey(
+      root,
+      commit.repositoryId,
+      commit.oid,
+      this.referencesVersion,
+    );
     const cached = this.detailsCache.get(cacheKey);
     const sequence = ++this.detailsSequence;
     if (cached) {
@@ -769,8 +780,13 @@ function emptyQuery(): HistoryQuery {
   };
 }
 
-function detailsCacheKey(root: string, repositoryId: string, oid: string): string {
-  return `${root}\u0000${repositoryId}\u0000${oid}`;
+function detailsCacheKey(
+  root: string,
+  repositoryId: string,
+  oid: string,
+  referencesVersion: string,
+): string {
+  return `${root}\u0000${repositoryId}\u0000${oid}\u0000${referencesVersion}`;
 }
 
 function errorMessage(error: unknown): string {

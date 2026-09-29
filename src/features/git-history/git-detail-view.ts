@@ -282,7 +282,25 @@ function commitInspector(model: CommitDetailViewModel): string {
   }).join("");
   const summary = references.slice(0, 3).map((reference) => reference.label).join(", ");
   const authoredAt = commit.authoredAt ? formatPresentationDateTime(commit.authoredAt, localization) : copy.unknownTime;
-  return `<section class="commit-information" aria-label="${escapeAttribute(copy.commitMessageAndDetails)}"><h2>${escapeHtml(commit.subject)}</h2><p class="commit-authorship"><code title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.shortOid)}</code><span>${escapeHtml(commit.authorName)}</span><span class="commit-email">&lt;${escapeHtml(commit.authorEmail)}&gt;</span><span>${escapeHtml(copy.authoredOn)}</span><time datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></p>${snapshot.repositoryRoots.length > 1 ? `<span class="commit-comparison">${escapeHtml(copy.gitRoot(snapshot.repositoryRoots.find((root) => root.id === commit.repositoryId)?.relativePath ?? commit.repositoryId))}</span>` : ""}${references.length === 0 ? `<span class="commit-no-references">${escapeHtml(copy.noNamedRefs)}</span>` : references.length <= 3 ? `<div class="commit-reference-list">${rows}</div>` : `<details class="commit-reference-overflow"><summary><span>${escapeHtml(copy.refsSummary(references.length, summary))}</span><b>${escapeHtml(copy.showAll)}</b></summary><div class="commit-reference-list">${rows}</div></details>`}<span class="commit-comparison" title="${escapeAttribute(copy.firstParentComparison)}">${escapeHtml(copy.comparedWith(comparison))}</span></section>`;
+  return `<section class="commit-information" aria-label="${escapeAttribute(copy.commitMessageAndDetails)}"><h2>${escapeHtml(commit.subject)}</h2><p class="commit-authorship"><code title="${escapeAttribute(commit.oid)}">${escapeHtml(commit.shortOid)}</code><span>${escapeHtml(commit.authorName)}</span><span class="commit-email">&lt;${escapeHtml(commit.authorEmail)}&gt;</span><span>${escapeHtml(copy.authoredOn)}</span><time datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></p>${snapshot.repositoryRoots.length > 1 ? `<span class="commit-comparison">${escapeHtml(copy.gitRoot(snapshot.repositoryRoots.find((root) => root.id === commit.repositoryId)?.relativePath ?? commit.repositoryId))}</span>` : ""}${references.length === 0 ? `<span class="commit-no-references">${escapeHtml(copy.noNamedRefs)}</span>` : references.length <= 3 ? `<div class="commit-reference-list">${rows}</div>` : `<details class="commit-reference-overflow"><summary><span>${escapeHtml(copy.refsSummary(references.length, summary))}</span><b>${escapeHtml(copy.showAll)}</b></summary><div class="commit-reference-list">${rows}</div></details>`}${commitBranchContainment(details, localization)}<span class="commit-comparison" title="${escapeAttribute(copy.firstParentComparison)}">${escapeHtml(copy.comparedWith(comparison))}</span></section>`;
+}
+
+function commitBranchContainment(
+  details: CommitDetails | null,
+  localization: Localization,
+): string {
+  if (!details) return "";
+  const copy = localization.catalog.history;
+  const branches = (details.containingBranches ?? []).filter((branch) => branch.kind !== "tag");
+  if (branches.length === 0) {
+    return `<span class="commit-no-branches">${escapeHtml(copy.noBranchesContainCommit)}</span>`;
+  }
+  const rows = branches.map((branch) => {
+    const kind = branch.current ? "head" : branch.kind;
+    const label = branch.current ? `HEAD → ${branch.name}` : branch.name;
+    return `<span class="commit-reference ${kind}" title="${escapeAttribute(copy.referenceKinds[kind])}: ${escapeAttribute(branch.name)}">${icon(kind === "head" ? "head" : "branch", 12)}<span>${escapeHtml(label)}</span></span>`;
+  }).join("");
+  return `<details class="commit-branch-containment" open><summary><span>${escapeHtml(copy.branchesContainingCommit(branches.length))}</span><b class="when-collapsed">${escapeHtml(copy.showBranches)}</b><b class="when-expanded">${escapeHtml(copy.hideBranches)}</b></summary><div class="commit-reference-list">${rows}</div></details>`;
 }
 
 function loadingBlock(label: string): string {

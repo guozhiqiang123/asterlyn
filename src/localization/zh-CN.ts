@@ -513,7 +513,7 @@ export const ZH_CN = {
     operationsUsingCommit: "使用此提交的操作", cherryPick: "拣选", squashAfterThis: "压缩此提交之后的提交",
     commitMessageAndDetails: "提交消息和详情", authoredOn: "提交于", emptyTree: "空树",
     noNamedRefs: "没有命名引用指向此提交", refsSummary: (count, summary) => `位于 ${count} 个引用中：${summary}…`,
-    showAll: "显示全部", firstParentComparison: "第一父提交比较", comparedWith: (value) => `比较基准：${value}`,
+    showAll: "显示全部", branchesContainingCommit: (count) => `包含此提交的 ${count} 个分支`, noBranchesContainCommit: "没有分支包含此提交", showBranches: "显示", hideBranches: "隐藏", firstParentComparison: "第一父提交比较", comparedWith: (value) => `比较基准：${value}`,
     unknownTime: "时间未知", referenceKinds: { head: "HEAD", local: "本地", remote: "远程", tag: "标签", other: "其他" },
     countOfCommits: (filtered, total, scope) => `${scope}中显示 ${filtered}/${total} 个提交`, refreshing: "正在刷新…",
     logicalRefsCount: (visible, total) => `显示 ${visible}/${total} 个逻辑引用`, applyCount: (count) => `应用 ${count}`,

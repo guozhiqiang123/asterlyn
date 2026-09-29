@@ -151,6 +151,33 @@ test("commit detail cache avoids native reads and late detail responses are igno
   assert.equal(detailCalls.length, 2);
 });
 
+test("branch reference changes invalidate cached commit containment", async () => {
+  let reads = 0;
+  const gateway = {
+    async readHistoryPage() {
+      throw new Error("history not expected");
+    },
+    async readCommitDetails(_root, _repositoryId, oid) {
+      reads += 1;
+      return details(oid, [`read-${reads}.txt`]);
+    },
+  };
+  const controller = createController(gateway);
+  const commits = [commit("a")];
+  controller.installSnapshot("/workspace", commits, defaultHistoryQuery(), false, "refs-v1");
+  controller.ensureSelectedDetails("/workspace");
+  await settle();
+  assert.equal(reads, 1);
+  assert.equal(controller.state.selectedFile, "read-1.txt");
+
+  controller.installSnapshot("/workspace", commits, defaultHistoryQuery(), false, "refs-v2");
+  assert.equal(controller.state.details, null);
+  controller.ensureSelectedDetails("/workspace");
+  await settle();
+  assert.equal(reads, 2);
+  assert.equal(controller.state.selectedFile, "read-2.txt");
+});
+
 test("dispose invalidates requests and removes listeners", async () => {
   const response = deferred();
   const controller = createController(gatewayWithHistory([response.promise]));
@@ -258,5 +285,6 @@ function details(oid, files) {
     ...commit(oid),
     parentOid: null,
     files: files.map((path) => ({ path, originalPath: null, status: "modified" })),
+    containingBranches: [],
   };
 }

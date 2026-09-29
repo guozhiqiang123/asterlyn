@@ -645,7 +645,7 @@ function assertCommitDetails(value: unknown, command: DesktopCommandName): void 
   const result = record(value, command);
   strings(result, command, "repositoryId", "oid");
   nullableStrings(result, command, "parentOid");
-  arrays(result, command, "files");
+  arrays(result, command, "files", "containingBranches");
 }
 
 function assertReplacementRecovery(

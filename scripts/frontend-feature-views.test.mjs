@@ -471,6 +471,7 @@ test("history dialogs and commit details render without the application shell", 
         { path: "docs/refactor/rebuild/README.md", originalPath: null, status: "added" },
         { path: "docs/refactor/rebuild/notes.md", originalPath: null, status: "modified" },
       ],
+      containingBranches: snapshot.branches,
     },
     loading: false,
     error: null,
@@ -516,6 +517,10 @@ test("history dialogs and commit details render without the application shell", 
   assert.match(dialog, /data-history-dialog-ref/);
   assert.match(detail, /src\/main\.ts|main\.ts/);
   assert.match(detail, /Compared with 1111111111/);
+  assert.match(detail, /In 2 branches/);
+  assert.match(detail, /HEAD → main/);
+  assert.match(detail, /origin\/main/);
+  assert.match(detail, /class="when-expanded">Hide<\/b>/);
   assert.match(detail, />docs\/refactor\/rebuild<\/span>/u);
   assert.doesNotMatch(detail, /data-start-git-operation="(?:cherryPick|squash)"/);
   assert.match(comparison, /Net changed files/);

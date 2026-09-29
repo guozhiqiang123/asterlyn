@@ -509,6 +509,8 @@ pub struct CommitDetails {
     pub oid: String,
     pub parent_oid: Option<String>,
     pub files: Vec<CommitFileChange>,
+    #[serde(default)]
+    pub containing_branches: Vec<BranchSummary>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

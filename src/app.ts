@@ -30,6 +30,7 @@ import {
   type GitHistoryDetailsState,
   type HistoryDetailsChange,
 } from "./features/git-history/history-details-controller";
+import { historyReferencesVersion } from "./features/git-history/history-reference-version.ts";
 import { GitHistoryReadRuntime } from "./features/git-history/git-history-read-runtime.ts";
 import { routeHistoryDetailsChange } from "./features/git-history/history-change-router.ts";
 import type { HistoryFilterDialog } from "./features/git-history/history-filter-controller";
@@ -7669,6 +7670,7 @@ export class AsterlynApp {
       snapshot.commits,
       this.activeHistoryQuery(),
       preferTip,
+      historyReferencesVersion(snapshot.branches),
     );
   }
 

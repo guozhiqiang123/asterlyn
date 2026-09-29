@@ -32,6 +32,8 @@ use crate::process::{
     CancellableOutput, CancellationToken, GitRunner, GitStdin, join_stream, read_stream_bounded,
 };
 
+mod commit_details;
+
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_COMMIT_FILE_CHANGES: usize = 20_000;
@@ -1715,103 +1717,6 @@ impl GitRepository {
             before,
             after,
         })
-    }
-
-    pub fn commit_details(&self, oid: &str) -> Result<CommitDetails, GitError> {
-        validate_object_id(oid)?;
-        let parent_oid = self.first_parent(oid)?;
-        let (output, truncated) = if let Some(parent) = &parent_oid {
-            self.run_read_owned_bounded(
-                "read commit file list",
-                vec![
-                    OsString::from("diff"),
-                    OsString::from("--no-ext-diff"),
-                    OsString::from("--name-status"),
-                    OsString::from("-z"),
-                    OsString::from("-M"),
-                    OsString::from("-C"),
-                    OsString::from(parent),
-                    OsString::from(oid),
-                ],
-                COMMIT_FILE_LIST_LIMIT_BYTES + 1,
-            )?
-        } else {
-            self.run_read_owned_bounded(
-                "read root commit file list",
-                vec![
-                    OsString::from("diff-tree"),
-                    OsString::from("--root"),
-                    OsString::from("--no-commit-id"),
-                    OsString::from("--name-status"),
-                    OsString::from("-z"),
-                    OsString::from("-r"),
-                    OsString::from("-M"),
-                    OsString::from("-C"),
-                    OsString::from(oid),
-                ],
-                COMMIT_FILE_LIST_LIMIT_BYTES + 1,
-            )?
-        };
-        let files = parse_bounded_commit_files(
-            output,
-            truncated,
-            "commit file list",
-            "the changed-file list",
-        )?;
-
-        Ok(CommitDetails {
-            repository_id: ".".to_string(),
-            oid: oid.to_string(),
-            parent_oid,
-            files,
-        })
-    }
-
-    pub fn repository_stash_details(
-        &self,
-        repository_id: &str,
-        oid: &str,
-    ) -> Result<CommitDetails, GitError> {
-        validate_object_id(oid)?;
-        let root = self.resolve_history_root(repository_id)?;
-        root.repository.require_visible_stash_oid(oid)?;
-        let (output, truncated) = root.repository.run_read_owned_bounded(
-            "read stash file list",
-            vec![
-                OsString::from("stash"),
-                OsString::from("show"),
-                OsString::from("--include-untracked"),
-                OsString::from("--name-status"),
-                OsString::from("-z"),
-                OsString::from("-M"),
-                OsString::from("-C"),
-                OsString::from(oid),
-            ],
-            COMMIT_FILE_LIST_LIMIT_BYTES + 1,
-        )?;
-        let files = parse_bounded_commit_files(
-            output,
-            truncated,
-            "stash file list",
-            "the stash changed-file list",
-        )?;
-        Ok(CommitDetails {
-            repository_id: root.descriptor.id,
-            oid: oid.to_string(),
-            parent_oid: root.repository.first_parent(oid)?,
-            files,
-        })
-    }
-
-    pub fn repository_commit_details(
-        &self,
-        repository_id: &str,
-        oid: &str,
-    ) -> Result<CommitDetails, GitError> {
-        let root = self.resolve_history_root(repository_id)?;
-        let mut details = root.repository.commit_details(oid)?;
-        details.repository_id = root.descriptor.id;
-        Ok(details)
     }
 
     pub fn commit_file_version(
@@ -8502,12 +8407,31 @@ mod tests {
             ])
             .expect("initial files stage");
         let root_oid = repository.commit("Root").expect("root commit succeeds");
+        git(directory.path(), &["branch", "release/root", &root_oid]);
+        git(
+            directory.path(),
+            &["update-ref", "refs/remotes/origin/release/root", &root_oid],
+        );
+        git(directory.path(), &["tag", "root-tag", &root_oid]);
 
         let root = repository
             .commit_details(&root_oid)
             .expect("root details load");
         assert_eq!(root.parent_oid, None);
         assert_eq!(root.files.len(), 3);
+        assert_eq!(
+            root.containing_branches
+                .iter()
+                .map(|branch| branch.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["main", "release/root", "origin/release/root"]
+        );
+        assert!(root.containing_branches[0].current);
+        assert!(
+            root.containing_branches
+                .iter()
+                .all(|branch| branch.name != "root-tag")
+        );
         assert!(
             root.files
                 .iter()
@@ -8540,6 +8464,14 @@ mod tests {
         let details = repository.commit_details(&oid).expect("details load");
         assert_eq!(details.parent_oid.as_deref(), Some(root_oid.as_str()));
         assert_eq!(details.files.len(), 4);
+        assert_eq!(
+            details
+                .containing_branches
+                .iter()
+                .map(|branch| branch.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["main"]
+        );
         assert_eq!(
             details
                 .files
