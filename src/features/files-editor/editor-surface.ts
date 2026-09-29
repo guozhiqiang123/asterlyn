@@ -1,4 +1,4 @@
-import type { DiffPresentation } from "../../diff-presentation.ts";
+import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { GitConflictContent, ImageDiffPreview, ImagePreview } from "../../models.ts";
 import { attachSplitter } from "../../presentation/splitter.ts";
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument, type ProjectImageDocument } from "../../editor-document.ts";
@@ -250,6 +250,7 @@ export class EditorSurface {
   renderImageDiff(
     document: DiffDocument,
     imageState: ImageSurfaceState | null,
+    sideLabels: DiffSideLabels,
     beforeTransition: () => void,
     retry: () => void,
   ): void {
@@ -270,11 +271,11 @@ export class EditorSurface {
     }
     if (!surface.diff) return;
     const before = surface.diff.before
-      ? imagePreviewCard(surface.diff.before, this.copy.before, this.copy)
-      : emptyImageSide(this.copy.before, this.copy.fileDidNotExist);
+      ? imagePreviewCard(surface.diff.before, sideLabels.before, this.copy)
+      : emptyImageSide(sideLabels.before, this.copy.fileDidNotExist);
     const after = surface.diff.after
-      ? imagePreviewCard(surface.diff.after, this.copy.after, this.copy)
-      : emptyImageSide(this.copy.after, this.copy.fileRemoved);
+      ? imagePreviewCard(surface.diff.after, sideLabels.after, this.copy)
+      : emptyImageSide(sideLabels.after, this.copy.fileRemoved);
     this.showHtml(
       editorDocumentContentKey(document, `image-diff:${surface.version}`),
       `<section class="image-diff-surface" aria-label="${escapeHtml(this.copy.imageDiff)}">${before}${after}</section>`,
@@ -289,6 +290,7 @@ export class EditorSurface {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
     beforeTransition: () => void,
   ): void {
@@ -311,7 +313,7 @@ export class EditorSurface {
       body.classList.add("diff-surface");
     }
     const body = this.query("#content-body");
-    this.diffEditor.mount(body, patch, path, preferences, presentation, blameSources, scroll);
+    this.diffEditor.mount(body, patch, path, preferences, presentation, sideLabels, blameSources, scroll);
     this.mountedEditorKey = key;
   }
 
@@ -321,6 +323,7 @@ export class EditorSurface {
     tab: TextTabState,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    sideLabels: DiffSideLabels,
     expandedUnchanged: boolean,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
@@ -355,6 +358,7 @@ export class EditorSurface {
       tab.document.path,
       preferences,
       presentation,
+      sideLabels,
       expandedUnchanged,
       (content) => {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
@@ -496,14 +500,15 @@ export class EditorSurface {
   renderReadOnlyImageDiff(
     key: string,
     diff: ImageDiffPreview,
+    sideLabels: DiffSideLabels,
     beforeTransition: () => void,
   ): void {
     const before = diff.before
-      ? imagePreviewCard(diff.before, this.copy.before, this.copy)
-      : emptyImageSide(this.copy.before, this.copy.fileDidNotExist);
+      ? imagePreviewCard(diff.before, sideLabels.before, this.copy)
+      : emptyImageSide(sideLabels.before, this.copy.fileDidNotExist);
     const after = diff.after
-      ? imagePreviewCard(diff.after, this.copy.after, this.copy)
-      : emptyImageSide(this.copy.after, this.copy.fileRemoved);
+      ? imagePreviewCard(diff.after, sideLabels.after, this.copy)
+      : emptyImageSide(sideLabels.after, this.copy.fileRemoved);
     this.showHtml(
       key,
       `<section class="image-diff-surface" aria-label="${escapeHtml(this.copy.imageDiff)}">${before}${after}</section>`,

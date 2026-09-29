@@ -82,6 +82,7 @@ import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts
 import { discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
 import {
   pushReviewFiles,
+  pushDiffSideLabels,
   renderRemoteDialogContent,
   renderRemoteToolbarView,
 } from "./features/remote-push/remote-push-view";
@@ -207,7 +208,7 @@ import { createAppState } from "./app-state";
 import { WorkspaceWatchCoordinator } from "./application/workspace-watch-coordinator";
 import { browserRuntimeScheduler, browserWindowFocusPort } from "./adapters/browser/browser-runtime";
 import { workspaceWatchBridge } from "./workspace-watch-bridge";
-import type { DiffLayout, DiffPresentation } from "./diff-presentation";
+import type { DiffLayout, DiffPresentation, DiffSideLabels } from "./diff-presentation";
 import {
   editorDocumentKey,
   editorDocumentContentKey,
@@ -243,6 +244,14 @@ import {
 import {
   nextPushCommitSelection,
 } from "./features/remote-push/push-review";
+import {
+  commitDiffBlameSources,
+  comparisonDiffBlameSources,
+  editorDiffSideLabels,
+  historicalDiffSideLabels,
+  unavailableBlame,
+  unavailableDiffBlame,
+} from "./features/files-editor/diff-context.ts";
 import type { ActivityTool } from "./shell/activity-order";
 import { isMarkdownPath } from "./features/files-editor/markdown-format";
 import {
@@ -3516,11 +3525,14 @@ export class AsterlynApp {
       state.file.path,
       this.settingsState.preferences,
       this.diffPresentation(),
-      this.commitDiffBlameSources(
+      pushDiffSideLabels(this.remoteState, this.localization.catalog.editor),
+      commitDiffBlameSources(
+        this.windowSession.repository.state.snapshot,
         this.windowSession.workspace.state.root,
         state.repositoryId,
         state.oid,
         state.file,
+        this.localization.catalog.editor,
       ),
     );
   }
@@ -5900,6 +5912,7 @@ export class AsterlynApp {
         surface: this.editorSurface, document, state: this.changesState,
         tab: workingDiffTextTab(this.editorState.session, document, this.filesState.files),
         preferences: this.settingsState.preferences, presentation: this.diffPresentation(), expandedUnchanged: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
+        sideLabels: this.diffSideLabels(document),
         beforeTransition: () => this.captureMountedTextEditor(),
         onContentChange: (tabId, content) => this.handleEditorContentChange(tabId, content),
         onRevert: (tabId) => void this.saveTextTab(tabId),
@@ -5916,6 +5929,7 @@ export class AsterlynApp {
           this.changesState.workingPatch.patch ||
             copy.noTextualDiff,
           selected.path,
+          this.diffSideLabels(document),
           this.diffBlameSources(document),
         );
       } else if (this.changesState.workingPatchLoading) {
@@ -5983,6 +5997,7 @@ export class AsterlynApp {
           ),
           this.gitHistoryPresentationRuntime.detailState.comparisonPatch.patch || copy.noTextualDiff,
           document.path,
+          this.diffSideLabels(document),
           this.diffBlameSources(document),
         );
       }
@@ -6024,6 +6039,7 @@ export class AsterlynApp {
         editorDocumentContentKey(document, `stash-patch:${this.stashRuntime.controller.state.patchVersion}`),
         this.stashRuntime.controller.state.patch.patch || copy.noTextualDiff,
         document.path,
+        this.diffSideLabels(document),
         this.diffBlameSources(document),
       );
     } else if (this.gitHistoryPresentationRuntime.detailState.commitPatchLoading) {
@@ -6056,6 +6072,7 @@ export class AsterlynApp {
         ),
         this.gitHistoryPresentationRuntime.detailState.commitPatch.patch || copy.noTextualDiff,
         document.path,
+        this.diffSideLabels(document),
         this.diffBlameSources(document),
       );
     }
@@ -6166,6 +6183,7 @@ export class AsterlynApp {
           `historical-comparison-image:${comparison.blobOid}:${comparison.currentRevision}`,
         ),
         comparison.image,
+        historicalDiffSideLabels(document, currentLabel, copy),
         () => this.captureMountedTextEditor(),
       );
       return;
@@ -6178,7 +6196,11 @@ export class AsterlynApp {
         ),
         comparison.patch || copy.noTextualDiff,
         document.path,
-        this.unavailableDiffBlame(copy.historicalComparisonBlameUnavailable),
+        historicalDiffSideLabels(document, currentLabel, copy),
+        unavailableDiffBlame(
+          copy.historicalComparisonBlameUnavailable,
+          copy.gitBlameRequiresSplit,
+        ),
       );
     }
   }
@@ -6272,6 +6294,7 @@ export class AsterlynApp {
     this.editorSurface.renderImageDiff(
       document,
       this.imageSurface,
+      this.diffSideLabels(document),
       () => this.captureMountedTextEditor(),
       retry,
     );
@@ -6281,6 +6304,7 @@ export class AsterlynApp {
     key: string,
     patch: string,
     path: string,
+    sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
   ): void {
     this.editorSurface.mountDiff(
@@ -6289,9 +6313,41 @@ export class AsterlynApp {
       path,
       this.settingsState.preferences,
       this.diffPresentation(),
+      sideLabels,
       blameSources,
       () => this.captureMountedTextEditor(),
     );
+  }
+
+  private diffSideLabels(
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
+  ): DiffSideLabels {
+    const copy = this.localization.catalog.editor;
+    return editorDiffSideLabels(document, copy, {
+      headOid: this.changesState.workingDiffBase?.headOid ?? null,
+      parentOid: document.kind === "commit-diff" ? this.commitDiffParentOid(document) : null,
+    });
+  }
+
+  private commitDiffParentOid(
+    document: Extract<EditorDocument, { kind: "commit-diff" }>,
+  ): string | null {
+    if (this.stashRuntime.isDiff(document)) {
+      return this.stashRuntime.controller.state.entries.find((entry) =>
+        entry.repositoryId === document.repositoryId && entry.oid === document.oid
+      )?.parentOid ?? this.stashRuntime.controller.state.details?.parentOid ?? null;
+    }
+    const details = this.historyState.details;
+    if (
+      details?.repositoryId === document.repositoryId &&
+      details.oid === document.oid
+    ) return details.parentOid;
+    const folder = this.gitHistoryPresentationRuntime.folderDiff.state.target;
+    return folder?.repositoryId === document.repositoryId && folder.oid === document.oid
+      ? folder.parentOid
+      : null;
   }
 
   private mountTextEditor(key: string, tab: TextTabState): void {
@@ -6324,10 +6380,10 @@ export class AsterlynApp {
       snapshot.root !== document.repositoryRoot ||
       !snapshot.repositoryRoots.some((root) => root.id === document.repositoryId)
     ) {
-      return this.unavailableBlame(this.localization.catalog.editor.gitBlameRequiresGit);
+      return unavailableBlame(this.localization.catalog.editor.gitBlameRequiresGit);
     }
     if (isTextTabDirty(tab) || tab.saveRequest !== null) {
-      return this.unavailableBlame(
+      return unavailableBlame(
         this.localization.catalog.editor.gitBlameRequiresSavedFile,
       );
     }
@@ -6339,7 +6395,7 @@ export class AsterlynApp {
       )
     );
     if (untracked) {
-      return this.unavailableBlame(
+      return unavailableBlame(
         this.localization.catalog.editor.gitBlameRequiresTrackedFile,
       );
     }
@@ -6363,33 +6419,45 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
     if (!snapshot || snapshot.root !== document.repositoryRoot) {
-      return this.unavailableDiffBlame(unavailable);
+      return unavailableDiffBlame(unavailable, this.localization.catalog.editor.gitBlameRequiresSplit);
     }
     if (document.kind === "commit-diff") {
       if (this.stashRuntime.isDiff(document)) {
-        return this.unavailableDiffBlame(this.localization.catalog.editor.gitBlameFileUnavailable);
+        return unavailableDiffBlame(
+          this.localization.catalog.editor.gitBlameFileUnavailable,
+          this.localization.catalog.editor.gitBlameRequiresSplit,
+        );
       }
       const file = this.historyState.details?.files.find(
         (candidate) => candidate.path === document.path,
       ) ?? { path: document.path, originalPath: null, status: "modified" as const };
-      return this.commitDiffBlameSources(
+      return commitDiffBlameSources(
+        snapshot,
         document.repositoryRoot,
         document.repositoryId,
         document.oid,
         file,
+        this.localization.catalog.editor,
       );
     }
     if (document.kind === "commit-comparison-diff") {
       const file = this.historyReadRuntime.comparison.state.details?.files.find(
         (candidate) => candidate.path === document.path,
       ) ?? { path: document.path, originalPath: null, status: "modified" as const };
-      return this.comparisonDiffBlameSources(document, file);
+      return comparisonDiffBlameSources(
+        snapshot,
+        document,
+        file,
+        this.localization.catalog.editor,
+      );
     }
 
     const change = snapshot.changes.find(
       (candidate) => candidate.path === document.selection.path,
     );
-    if (!change || !snapshot.branch.oid) return this.unavailableDiffBlame(unavailable);
+    if (!change || !snapshot.branch.oid) {
+      return unavailableDiffBlame(unavailable, this.localization.catalog.editor.gitBlameRequiresSplit);
+    }
     const absent = this.localization.catalog.editor.gitBlameFileUnavailable;
     const beforeUnavailable = change.indexStatus === "added" ||
       change.indexStatus === "untracked" ||
@@ -6401,7 +6469,7 @@ export class AsterlynApp {
       change.worktreeStatus === "untracked";
     return {
       old: beforeUnavailable
-        ? this.unavailableBlame(absent)
+        ? unavailableBlame(absent)
         : {
             source: {
               repositoryRoot: document.repositoryRoot,
@@ -6413,9 +6481,9 @@ export class AsterlynApp {
             unavailableReason: null,
           },
       new: afterUnavailable
-        ? this.unavailableBlame(absent)
+        ? unavailableBlame(absent)
         : afterUntracked
-          ? this.unavailableBlame(
+          ? unavailableBlame(
               this.localization.catalog.editor.gitBlameRequiresTrackedFile,
             )
         : {
@@ -6430,106 +6498,6 @@ export class AsterlynApp {
           },
       unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
     };
-  }
-
-  private commitDiffBlameSources(
-    repositoryRoot: string | null,
-    repositoryId: string | null,
-    oid: string | null,
-    file: CommitFileChange,
-  ): DiffGitBlameSources {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
-    if (
-      !repositoryRoot ||
-      !repositoryId ||
-      !oid ||
-      !snapshot ||
-      snapshot.root !== repositoryRoot ||
-      !snapshot.repositoryRoots.some((root) => root.id === repositoryId)
-    ) return this.unavailableDiffBlame(unavailable);
-
-    const absent = this.localization.catalog.editor.gitBlameFileUnavailable;
-    return {
-      old: file.status === "added"
-        ? this.unavailableBlame(absent)
-        : {
-            source: {
-              repositoryRoot,
-              repositoryId,
-              path: file.originalPath ?? file.path,
-              commitOid: oid,
-              parent: true,
-            },
-            unavailableReason: null,
-          },
-      new: file.status === "deleted"
-        ? this.unavailableBlame(absent)
-        : {
-            source: {
-              repositoryRoot,
-              repositoryId,
-              path: file.path,
-              commitOid: oid,
-              parent: false,
-            },
-            unavailableReason: null,
-          },
-      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
-    };
-  }
-
-  private comparisonDiffBlameSources(
-    document: Extract<EditorDocument, { kind: "commit-comparison-diff" }>,
-    file: CommitFileChange,
-  ): DiffGitBlameSources {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const unavailable = this.localization.catalog.editor.gitBlameRequiresGit;
-    if (
-      !snapshot ||
-      snapshot.root !== document.repositoryRoot ||
-      !snapshot.repositoryRoots.some((root) => root.id === document.repositoryId)
-    ) return this.unavailableDiffBlame(unavailable);
-    const absent = this.localization.catalog.editor.gitBlameFileUnavailable;
-    return {
-      old: file.status === "added"
-        ? this.unavailableBlame(absent)
-        : {
-            source: {
-              repositoryRoot: document.repositoryRoot,
-              repositoryId: document.repositoryId,
-              path: file.originalPath ?? file.path,
-              commitOid: document.beforeOid,
-              parent: false,
-            },
-            unavailableReason: null,
-          },
-      new: file.status === "deleted"
-        ? this.unavailableBlame(absent)
-        : {
-            source: {
-              repositoryRoot: document.repositoryRoot,
-              repositoryId: document.repositoryId,
-              path: file.path,
-              commitOid: document.afterOid,
-              parent: false,
-            },
-            unavailableReason: null,
-          },
-      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
-    };
-  }
-
-  private unavailableDiffBlame(reason: string): DiffGitBlameSources {
-    return {
-      old: this.unavailableBlame(reason),
-      new: this.unavailableBlame(reason),
-      unifiedReason: this.localization.catalog.editor.gitBlameRequiresSplit,
-    };
-  }
-
-  private unavailableBlame(reason: string): GitBlameAvailability {
-    return { source: null, unavailableReason: reason };
   }
 
   private handleEditorContentChange(tabId: string, content: string): void {

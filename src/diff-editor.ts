@@ -29,6 +29,7 @@ import {
   parseUnifiedDiff,
   splitUnifiedDiff,
   type DiffPresentation,
+  type DiffSideLabels,
   type SourceDiffRow,
   type UnifiedDiffRow,
 } from "./diff-presentation";
@@ -40,6 +41,7 @@ import {
   type DiffChangeBlock,
   type DiffDirection,
 } from "./features/files-editor/diff-navigation";
+import { createDiffSideLabels, createDiffUnifiedLabel, createReadOnlyDiffPane } from "./features/files-editor/diff-side-labels.ts";
 import {
   asterlynEditorTheme,
   asterlynSyntaxHighlighting,
@@ -70,6 +72,7 @@ import {
   unifiedOverviewBlocks,
   type DiffOverviewBlock,
 } from "./diff-overview-ruler";
+import { removeOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -124,6 +127,7 @@ export class DiffEditor {
     layout: "split",
     showWhitespace: false,
   };
+  private sideLabels: DiffSideLabels = { before: "Before", after: "After" };
   private splitDispose: (() => void) | null = null;
   private scrollDispose: (() => void) | null = null;
   private changeBlocks: DiffChangeBlock[] = [];
@@ -154,6 +158,7 @@ export class DiffEditor {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
@@ -166,6 +171,7 @@ export class DiffEditor {
     this.sourcePath = path;
     this.editorPreferences = { ...preferences };
     this.presentation = { ...presentation };
+    this.sideLabels = { ...sideLabels };
     this.blameSources = blameSources;
     this.render();
     if (scroll) {
@@ -279,7 +285,14 @@ export class DiffEditor {
     if (this.presentation.layout === "unified") {
       const unified = parseUnifiedDiff(this.sourceDocument);
       this.changeBlocks = unifiedDiffChangeBlocks(unified.rows);
-      const view = this.createView(parent, unified.document, undefined, undefined, unified.rows);
+      const grid = window.document.createElement("div");
+      grid.className = "diff-unified-grid";
+      grid.append(createDiffUnifiedLabel(this.sideLabels, window.document));
+      const host = window.document.createElement("div");
+      host.className = "diff-editor-host";
+      grid.append(host);
+      parent.append(grid);
+      const view = this.createView(host, unified.document, undefined, undefined, unified.rows);
       this.views.push(view);
       const blocks = unifiedOverviewBlocks(unified.rows, view);
       if (blocks.length > 0) {
@@ -294,12 +307,17 @@ export class DiffEditor {
     grid.className = "diff-split-grid";
     let splitPercentage = clampPercentage(this.presentation.splitPercentage ?? 50);
     grid.style.setProperty("--diff-before-width", `${splitPercentage}%`);
-    const oldHost = this.createPane(grid, "Before · bounded patch", "old");
+    grid.append(createDiffSideLabels(this.sideLabels, window.document));
+    const oldHost = createReadOnlyDiffPane(
+      grid, this.sideLabels.before, "old", window.document,
+    );
     const divider = window.document.createElement("div");
     divider.className = "workbench-splitter vertical diff-splitter";
     divider.setAttribute("aria-label", "Resize Diff sides");
     grid.append(divider);
-    const newHost = this.createPane(grid, "After · bounded patch", "new");
+    const newHost = createReadOnlyDiffPane(
+      grid, this.sideLabels.after, "new", window.document,
+    );
     parent.append(grid);
     this.splitDispose = attachSplitter(divider, {
       orientation: "vertical",
@@ -335,21 +353,6 @@ export class DiffEditor {
     if (blocks.length > 0) {
       this.ruler = renderOverviewRuler(parent, newView.state.doc.lines, blocks, onSelect);
     }
-  }
-
-  private createPane(
-    parent: HTMLElement,
-    label: string,
-    side: "old" | "new",
-  ): HTMLElement {
-    const pane = window.document.createElement("section");
-    pane.className = `diff-pane diff-pane-${side}`;
-    pane.setAttribute("aria-label", `${label} side of patch`);
-    const host = window.document.createElement("div");
-    host.className = "diff-editor-host";
-    pane.append(host);
-    parent.append(pane);
-    return host;
   }
 
   private createView(
@@ -638,7 +641,7 @@ export class DiffEditor {
     this.scrollDispose = null;
     this.splitDispose?.();
     this.splitDispose = null;
-    this.ruler?.remove();
+    removeOverviewRuler(this.ruler);
     this.ruler = null;
     for (const view of this.views) view.destroy();
     this.views.length = 0;

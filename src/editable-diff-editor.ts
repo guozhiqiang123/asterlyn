@@ -25,7 +25,7 @@ import {
 } from "./features/files-editor/editable-diff-change-highlight.ts";
 import { linkHorizontalScroll } from "./presentation/linked-scroll.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
-import type { DiffPresentation } from "./diff-presentation.ts";
+import type { DiffPresentation, DiffSideLabels } from "./diff-presentation.ts";
 import {
   applyExactTextChanges,
   computeTextChange,
@@ -42,6 +42,7 @@ import {
   editorChangeIndicatorCopy,
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
+import { createDiffSideLabels, createDiffUnifiedLabel, syncDiffSideLabels } from "./features/files-editor/diff-side-labels.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
 import { icon } from "./icons.ts";
 
@@ -99,6 +100,7 @@ export class EditableDiffEditor {
   private baseContent = "";
   private path = "";
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
+  private sideLabels: DiffSideLabels = { before: "Before", after: "After" };
   private expandedUnchanged = false;
   private preferences: AppPreferences | null = null;
   private theme: EffectiveTheme = "dark";
@@ -150,6 +152,7 @@ export class EditableDiffEditor {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    sideLabels: DiffSideLabels,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
     interactions?: EditableDiffInteractions,
@@ -169,6 +172,8 @@ export class EditableDiffEditor {
       this.onChange = onChange;
       this.interactions = interactions ?? null;
       this.preferences = { ...preferences };
+      this.sideLabels = { ...sideLabels };
+      this.syncSideLabels();
       this.setPreferences(preferences);
 
       const baseChanged = this.baseContent !== baseContent;
@@ -231,6 +236,7 @@ export class EditableDiffEditor {
     this.path = path;
     this.preferences = { ...preferences };
     this.presentation = { ...presentation };
+    this.sideLabels = { ...sideLabels };
     this.expandedUnchanged = expandedUnchanged;
     this.onChange = onChange;
     this.interactions = interactions ?? null;
@@ -430,6 +436,7 @@ export class EditableDiffEditor {
     this.revertObserver = null;
     parent.replaceChildren();
     if (this.presentation.layout === "unified") {
+      parent.append(createDiffUnifiedLabel(this.sideLabels));
       const binding = this.binding();
       const state = EditorState.create({
         doc: this.exactContent.text,
@@ -478,6 +485,7 @@ export class EditableDiffEditor {
       collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
+    this.mergeView.dom.prepend(createDiffSideLabels(this.sideLabels));
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
@@ -565,6 +573,10 @@ export class EditableDiffEditor {
     };
   }
 
+  private syncSideLabels(): void {
+    syncDiffSideLabels(this.parent, this.sideLabels);
+  }
+
   private extensions(
     binding: ViewBinding,
     editable: boolean,
@@ -583,6 +595,7 @@ export class EditableDiffEditor {
         {
           gutterSide,
           overview: comparison.overview,
+          overviewFooterScrollbar: comparison.overview,
           documentSide: comparison.documentSide,
         },
       );

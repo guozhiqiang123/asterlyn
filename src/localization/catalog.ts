@@ -399,8 +399,8 @@ export interface EditorCopy {
   imageSurface: string;
   loadingImageDiff: string;
   imageDiffFailed: string;
-  before: string;
-  after: string;
+  before: string; after: string;
+  workingTree: string; index: string; emptyTree: string;
   fileDidNotExist: string;
   fileRemoved: string;
   imageDiff: string;

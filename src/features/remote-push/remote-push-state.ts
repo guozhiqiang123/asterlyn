@@ -16,6 +16,7 @@ import type {
 export interface PushDiffState {
   repositoryId: string | null;
   oid: string | null;
+  parentOid: string | null;
   file: CommitFileChange;
   patch: CommitDiffResult | null;
   image: ImageDiffPreview | null;

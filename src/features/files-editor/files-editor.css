@@ -743,14 +743,26 @@
   min-width: 0;
   min-height: 0;
   grid-template-columns: minmax(0, var(--diff-before-width, 50%)) 5px minmax(0, 1fr);
+  grid-template-rows: 27px minmax(0, 1fr);
 }
 
 .diff-pane {
   min-width: 0;
   min-height: 0;
+  grid-row: 2;
+}
+
+.diff-pane-old {
+  grid-column: 1;
+}
+
+.diff-pane-new {
+  grid-column: 3;
 }
 
 .diff-splitter {
+  grid-column: 2;
+  grid-row: 2;
   height: 100%;
   background: var(--surface-inset-strong);
 }

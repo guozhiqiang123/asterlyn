@@ -1,7 +1,7 @@
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument } from "../../editor-document.ts";
 import type { DiffResult, ProjectFile, WorkingDiffBase } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
-import type { DiffPresentation } from "../../diff-presentation.ts";
+import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { EditorSurface } from "./editor-surface.ts";
 import { activeTextTab, textTab, type EditorSession, type TextTabState } from "./editor-session.ts";
 
@@ -86,6 +86,7 @@ export function mountEditableWorkingDiff(options: {
   tab: TextTabState | null;
   preferences: AppPreferences;
   presentation: DiffPresentation;
+  sideLabels: DiffSideLabels;
   expandedUnchanged: boolean;
   beforeTransition: () => void;
   onContentChange: (tabId: string, content: string) => void;
@@ -104,6 +105,7 @@ export function mountEditableWorkingDiff(options: {
     tab,
     options.preferences,
     options.presentation,
+    options.sideLabels,
     options.expandedUnchanged,
     options.beforeTransition,
     options.onContentChange,

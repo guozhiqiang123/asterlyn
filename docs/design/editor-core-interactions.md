@@ -236,6 +236,21 @@ Because CodeMirror constructs the first split editor before its sibling exists, 
 performs one guarded post-mount refresh for that first pane; both panes therefore receive the same
 exact intraline ranges instead of leaving the first pane with only CodeMirror's coarse row fill.
 
+Every Diff surface identifies both sources in a renderer-owned header. Split labels live inside the
+same grid or scroll viewport as the two editor panes, so the label divider, action gutter, and editor
+divider cannot drift when a vertical scrollbar appears. Unified mode retains the same identities in
+one range label. Working changes use `HEAD` and Working Tree/Index semantics; replacement previews
+use Before and After; commit, comparison, stash, and push reviews show the corresponding eight-digit
+Git object IDs on both sides. Historical-to-workspace comparisons combine the historical short ID
+with the current disk or unsaved-buffer identity. Conflict and image comparisons retain their
+existing source captions, with image history captions receiving the same revision identities.
+
+Change overview rulers also use one renderer-owned attachment contract across text, read-only Diff,
+editable Diff, Replace, Push, and conflict surfaces. The contract marks the actual positioning
+container, reserves one shared 14-pixel vertical-scrollbar clearance, and adds the shared footer
+clearance only when a Diff owns an external horizontal scrollbar. Feature dialogs must not restate
+the ruler's absolute positioning or scrollbar offsets in local CSS.
+
 ### E3.1 Markdown-mode memory and conflict destination — 2026-09-12
 
 Markdown presentation choice is now bounded profile state rather than incidental active-tab state. A versioned store remembers Source, Split, or Preview for up to 128 root-qualified documents and records the last-used mode as the default for newly opened Markdown files. Existing editor sessions still own the live mode and source buffer; storage failure, malformed data, or an unknown mode falls back safely without changing content, dirty state, or save behavior. Only document identity and presentation choice persist—drafts, rendered HTML, split ratios, and editor state do not.

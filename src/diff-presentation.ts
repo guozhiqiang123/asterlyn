@@ -9,6 +9,23 @@ export interface DiffPresentation {
   onSplitPercentageChange?: (value: number, committed: boolean) => void;
 }
 
+export interface DiffSideLabels {
+  before: string;
+  after: string;
+}
+
+export function identifyDiffSides(
+  before: string,
+  after: string,
+  beforeIdentity?: string | null,
+  afterIdentity?: string | null,
+): DiffSideLabels {
+  return {
+    before: beforeIdentity ? `${before} · ${beforeIdentity}` : before,
+    after: afterIdentity ? `${after} · ${afterIdentity}` : after,
+  };
+}
+
 export type InlineChangeKind = "added" | "removed" | "modified";
 
 export interface TextRange {

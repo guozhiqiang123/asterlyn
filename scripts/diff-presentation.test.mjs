@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseUnifiedDiff, splitUnifiedDiff } from "../src/diff-presentation.ts";
+import { identifyDiffSides, parseUnifiedDiff, splitUnifiedDiff } from "../src/diff-presentation.ts";
+
+test("Diff side labels preserve semantic roles and exact revisions", () => {
+  assert.deepEqual(
+    identifyDiffSides("Before", "After", "12345678", "abcdef01"),
+    { before: "Before · 12345678", after: "After · abcdef01" },
+  );
+  assert.deepEqual(
+    identifyDiffSides("Before", "After"),
+    { before: "Before", after: "After" },
+  );
+});
 
 test("source diff removes patch syntax and keeps real line numbers", () => {
   const patch = [

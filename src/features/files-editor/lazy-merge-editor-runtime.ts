@@ -1,5 +1,5 @@
 import type { ConflictEditor } from "../../conflict-editor.ts";
-import type { DiffPresentation } from "../../diff-presentation.ts";
+import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { EditableDiffEditor, EditableDiffInteractions } from "../../editable-diff-editor.ts";
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import type { GitConflictContent } from "../../models.ts";
@@ -13,6 +13,7 @@ interface EditableDiffMount {
   path: string;
   preferences: AppPreferences;
   presentation: DiffPresentation;
+  sideLabels: DiffSideLabels;
   expandedUnchanged: boolean;
   onChange: (content: string) => void;
   interactions?: EditableDiffInteractions;
@@ -60,6 +61,7 @@ export class LazyEditableDiffEditor {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    sideLabels: DiffSideLabels,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
     interactions?: EditableDiffInteractions,
@@ -72,6 +74,7 @@ export class LazyEditableDiffEditor {
       path,
       preferences,
       presentation,
+      sideLabels,
       expandedUnchanged,
       onChange,
       interactions,
@@ -164,6 +167,7 @@ export class LazyEditableDiffEditor {
       mount.path,
       this.preferences ?? mount.preferences,
       this.presentation,
+      mount.sideLabels,
       mount.expandedUnchanged,
       mount.onChange,
       mount.interactions,

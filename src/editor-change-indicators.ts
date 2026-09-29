@@ -10,6 +10,7 @@ import {
 } from "@codemirror/view";
 import type { EditorCopy } from "./localization/catalog.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
+import { attachOverviewRuler, removeOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
 
 export type EditorChangeIndicatorKind = "added" | "modified" | "deleted";
 
@@ -45,6 +46,7 @@ export interface EditorChangeIndicatorOptions {
   readonly gutter?: boolean;
   readonly gutterSide?: "before" | "after";
   readonly overview?: boolean;
+  readonly overviewFooterScrollbar?: boolean;
   /** Which side of the comparison is represented by the editor document. */
   readonly documentSide?: "a" | "b";
 }
@@ -177,9 +179,7 @@ export function createEditorChangeIndicators(
       private attach(): void {
         const mergeView = this.view.dom.closest<HTMLElement>(".cm-mergeView");
         const target = mergeView?.parentElement ?? this.view.dom;
-        if (this.ruler.parentElement !== target) {
-          target.append(this.ruler);
-        }
+        attachOverviewRuler(target, this.ruler, options.overviewFooterScrollbar === true);
       }
 
       update(update: ViewUpdate): void {
@@ -189,7 +189,7 @@ export function createEditorChangeIndicators(
       }
 
       destroy(): void {
-        this.ruler.remove();
+        removeOverviewRuler(this.ruler);
       }
 
       private render(): void {

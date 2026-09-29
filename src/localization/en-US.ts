@@ -330,7 +330,7 @@ export const EN_US: LocaleCatalog = {
     imageAlt: (label, path) => `${label} image for ${path}`,
     renderingMarkdown: "Rendering Markdown…", renderingMarkdownDetail: "The editor remains available while the preview engine loads.",
     tryAgain: "Try again", loadingImage: "Loading image preview…", imageFailed: "Could not preview image", imageSurface: "Image preview",
-    loadingImageDiff: "Loading image Diff…", imageDiffFailed: "Could not preview image Diff", before: "Before", after: "After",
+    loadingImageDiff: "Loading image Diff…", imageDiffFailed: "Could not preview image Diff", before: "Before", after: "After", workingTree: "Working Tree", index: "Index", emptyTree: "Empty Tree",
     fileDidNotExist: "File did not exist", fileRemoved: "File was removed", imageDiff: "Image Diff",
     markdownSource: "Markdown source editor", resizeMarkdown: "Resize Markdown source and preview", markdownPreview: "Markdown preview",
     largePreviewPaused: "Preview paused for this large file",

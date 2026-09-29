@@ -189,7 +189,7 @@
 }
 
 .replacement-tool-comparison {
-  grid-template-rows: 34px auto minmax(0, 1fr);
+  grid-template-rows: 34px minmax(0, 1fr);
 }
 
 .replacement-tool-toolbar,
@@ -237,30 +237,6 @@
   padding: 3px 9px;
 }
 
-.replacement-tool-side-labels {
-  display: grid;
-  min-height: 21px;
-  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-chrome);
-  color: var(--text-faint);
-  font-size: max(9px, calc(var(--ui-font-size, 13px) - 3px));
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.replacement-tool-side-labels > span:first-child,
-.replacement-tool-side-labels > span:last-child {
-  padding-inline: 10px;
-}
-
-.replacement-tool-side-labels > span:nth-child(2) {
-  align-self: stretch;
-  border-inline: 1px solid var(--border);
-}
-
 .replacement-tool-diff {
   overflow: hidden;
   min-width: 0;
@@ -270,14 +246,16 @@
 .replacement-tool-diff.editable-diff-surface {
   position: relative;
   display: flex;
+  --diff-action-gutter-width: 36px;
   flex-direction: column;
 }
 
 .replacement-tool-diff.editable-diff-surface > .cm-editor,
 .replacement-tool-diff.editable-diff-surface > .cm-mergeView {
-  height: 100%;
+  height: auto;
   min-width: 0;
   min-height: 0;
+  flex: 1 1 0;
 }
 
 .replacement-tool-diff.editable-diff-surface > .cm-mergeView {
@@ -298,6 +276,12 @@
 .replacement-tool-diff.editable-diff-surface .cm-mergeViewEditors {
   min-width: 0;
   min-height: 100%;
+}
+
+.replacement-tool-diff.editable-diff-surface .cm-mergeView > .diff-side-labels {
+  position: sticky;
+  top: 0;
+  grid-template-columns: minmax(0, 1fr) var(--diff-action-gutter-width) minmax(0, 1fr);
 }
 
 .replacement-tool-diff.editable-diff-surface .cm-mergeViewEditor {

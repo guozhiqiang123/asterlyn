@@ -1,4 +1,4 @@
-import type { DiffPresentation } from "../../diff-presentation.ts";
+import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { DiffEditor } from "../../diff-editor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../preferences.ts";
@@ -32,6 +32,7 @@ type DiffMount = {
   path: string;
   preferences: AppPreferences;
   presentation: DiffPresentation;
+  sideLabels: DiffSideLabels;
   blameSources: DiffGitBlameSources;
   restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
 };
@@ -328,10 +329,11 @@ export class LazyDiffEditor {
     path: string,
     preferences: AppPreferences,
     presentation: DiffPresentation,
+    sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
-    const mount = { parent, document, path, preferences, presentation, blameSources, restoredScroll };
+    const mount = { parent, document, path, preferences, presentation, sideLabels, blameSources, restoredScroll };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
@@ -343,6 +345,7 @@ export class LazyDiffEditor {
         path,
         this.preferences ?? preferences,
         this.presentation,
+        sideLabels,
         blameSources,
         restoredScroll,
       );
@@ -363,6 +366,7 @@ export class LazyDiffEditor {
         mount.path,
         this.preferences ?? mount.preferences,
         this.presentation,
+        mount.sideLabels,
         mount.blameSources,
         mount.restoredScroll,
       );

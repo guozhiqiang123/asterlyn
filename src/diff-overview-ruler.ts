@@ -5,6 +5,7 @@ import {
   splitChangeBlocks,
   unifiedDiffChangeBlocks,
 } from "./features/files-editor/diff-navigation";
+import { attachOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
 
 export interface DiffOverviewBlock {
   kind: "added" | "modified" | "deleted";
@@ -105,7 +106,7 @@ export function renderOverviewRuler(
     ruler.appendChild(marker);
   }
 
-  parent.appendChild(ruler);
+  attachOverviewRuler(parent, ruler, true);
   return ruler;
 }
 

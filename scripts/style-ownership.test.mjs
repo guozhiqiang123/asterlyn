@@ -19,6 +19,7 @@ const ownedStyles = [
   ["features/files-editor/project-files.css", "main.ts"],
   ["features/files-editor/files-editor.css", "main.ts"],
   ["features/files-editor/editable-diff.css", "main.ts"],
+  ["features/files-editor/change-overview.css", "main.ts"],
   ["features/files-editor/workspace-search.css", "main.ts"],
   ["features/files-editor/workspace-replacement-tool.css", "main.ts"],
   ["features/git-history/git-history.css", "main.ts"],
@@ -243,6 +244,49 @@ test("replacement window owns one horizontal scrollbar and compact patch control
   assert.match(replacement, /\.replacement-tool-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0, var\(--replacement-list-width\)\) 5px minmax\(0, 1fr\);/s);
   assert.match(replacement, /\.replacement-tool-summary input\s*\{[^}]*border:\s*1px solid var\(--border-strong\);[^}]*border-radius:\s*5px;/s);
   assert.match(replacement, /\.replacement-tool-summary input:focus\s*\{[^}]*border-color:\s*var\(--focus-ring\);[^}]*box-shadow:\s*0 0 0 1px var\(--focus-ring\);/s);
+});
+
+test("Diff side labels share the editor grid instead of approximating its divider", async () => {
+  const [editor, editable, labels, filesCss, replacementView, replacementCss] = await Promise.all([
+    readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/diff-side-labels.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/files-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/workspace-replacement-presentation-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/workspace-replacement-tool.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /grid\.append\(createDiffSideLabels\(this\.sideLabels, window\.document\)\)/u);
+  assert.match(editable, /this\.mergeView\.dom\.prepend\(createDiffSideLabels\(this\.sideLabels\)\)/u);
+  assert.match(labels, /header\.append\(before, divider, after\)/u);
+  assert.match(filesCss, /\.diff-split-grid\s*\{[^}]*grid-template-columns:[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\);/s);
+  const editableCss = await readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8");
+  assert.match(editableCss, /\.diff-side-labels\s*\{[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width, 5px\)/s);
+  assert.doesNotMatch(replacementView, /replacement-tool-side-labels/u);
+  assert.match(replacementCss, /--diff-action-gutter-width:\s*36px;/u);
+  assert.match(replacementCss, /\.cm-mergeView > \.diff-side-labels\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width\)/s);
+});
+
+test("every change overview ruler shares one scrollbar-clearance surface", async () => {
+  const [surface, indicators, attachment, overview, editable, push, conflict, theme] = await Promise.all([
+    readFile(new URL("../src/features/files-editor/change-overview.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/editor-change-indicators.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/change-overview-surface.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/diff-overview-ruler.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/remote-push/push-dialog-layout.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(surface, /--change-overview-right-clearance:\s*14px;/u);
+  assert.match(surface, /\.cm-change-overview-surface\.cm-change-overview-footer-clearance\s*\{[^}]*--change-overview-bottom-clearance:\s*12px;/s);
+  assert.match(surface, /right:\s*var\(--change-overview-right-clearance\);/u);
+  assert.match(indicators, /attachOverviewRuler\(target, this\.ruler, options\.overviewFooterScrollbar === true\)/u);
+  assert.match(attachment, /target\.classList\.toggle\(OVERVIEW_SURFACE_CLASS, rulers\.length > 0\)/u);
+  assert.match(overview, /attachOverviewRuler\(parent, ruler, true\)/u);
+  assert.match(editable, /overviewFooterScrollbar:\s*comparison\.overview/u);
+  for (const legacy of [push, conflict, theme]) {
+    assert.doesNotMatch(legacy, /cm-change-overview-ruler/u);
+  }
 });
 
 test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {

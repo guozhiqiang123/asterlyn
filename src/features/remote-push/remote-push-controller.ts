@@ -421,6 +421,7 @@ export class RemotePushController {
     this.state.pushDiff = {
       repositoryId: null,
       oid: null,
+      parentOid: null,
       file: selectedFile,
       patch: null,
       image: null,
@@ -450,6 +451,7 @@ export class RemotePushController {
       this.state.pushDiff = {
         repositoryId: details.repositoryId,
         oid: details.oid,
+        parentOid: details.parentOid,
         file,
         patch: null,
         image: null,

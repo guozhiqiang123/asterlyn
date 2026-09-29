@@ -26,6 +26,7 @@ import {
 } from "../src/features/files-editor/workspace-navigation-view.ts";
 import { createRemotePushState } from "../src/features/remote-push/remote-push-state.ts";
 import {
+  pushDiffSideLabels,
   renderRemoteDialogContent,
   renderRemoteToolbarView,
 } from "../src/features/remote-push/remote-push-view.ts";
@@ -307,6 +308,18 @@ test("push review outgoing file tree uses the shared compact directory chain", (
   assert.doesNotMatch(html, /data-push-directory="src"[\s>]/);
   assert.match(html, /<span>docs<\/span>/);
   assert.match(html, /class="compact-file-tree-count"/);
+});
+
+test("Push Diff identifies both committed revisions", () => {
+  const before = "a".repeat(40);
+  const after = "b".repeat(40);
+  assert.deepEqual(pushDiffSideLabels({
+    pushDiff: { repositoryId: ".", oid: after, parentOid: before },
+    pushPreview: null,
+  }, EN_US.editor), {
+    before: "Before · aaaaaaaa",
+    after: "After · bbbbbbbb",
+  });
 });
 
 test("flat push review files sort by file name instead of directory path", () => {

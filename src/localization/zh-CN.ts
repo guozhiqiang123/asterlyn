@@ -214,6 +214,7 @@ export const ZH_CN = {
     renderingMarkdown: "正在渲染 Markdown…", renderingMarkdownDetail: "预览引擎加载期间仍可使用编辑器。",
     tryAgain: "重试", loadingImage: "正在加载图像预览…", imageFailed: "无法预览图像", imageSurface: "图像预览",
     loadingImageDiff: "正在加载图像差异…", imageDiffFailed: "无法预览图像差异", before: "之前", after: "之后",
+    workingTree: "工作树", index: "暂存区", emptyTree: "空树",
     fileDidNotExist: "文件原先不存在", fileRemoved: "文件已删除", imageDiff: "图像差异",
     markdownSource: "Markdown 源码编辑器", resizeMarkdown: "调整 Markdown 源码与预览的大小", markdownPreview: "Markdown 预览",
     largePreviewPaused: "此大文件的预览已暂停",

@@ -1,13 +1,62 @@
+.diff-side-labels {
+  display: grid;
+  z-index: 5;
+  min-width: 0;
+  min-height: 27px;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: minmax(0, var(--diff-before-width, 50%)) var(--diff-action-gutter-width, 5px) minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.diff-side-labels strong,
+.diff-unified-label {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--text-faint);
+  font-size: max(9px, calc(var(--ui-font-size, 13px) - 3px));
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.diff-side-labels > span {
+  align-self: stretch;
+  border-inline: 1px solid var(--border);
+}
+
+.diff-unified-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 27px minmax(0, 1fr);
+}
+
+.diff-unified-label {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
 .content-body.editable-diff-surface {
   position: relative;
   display: flex;
+  --diff-action-gutter-width: 32px;
   flex-direction: column;
 }
 
 .content-body.editable-diff-surface > .cm-editor {
-  height: 100%;
+  height: auto;
   min-width: 0;
   min-height: 0;
+  flex: 1 1 0;
 }
 
 .content-body.editable-diff-surface .cm-mergeView {
@@ -21,6 +70,12 @@
 .content-body.editable-diff-surface .cm-mergeViewEditors {
   min-width: 0;
   min-height: 100%;
+}
+
+.content-body.editable-diff-surface .cm-mergeView > .diff-side-labels {
+  position: sticky;
+  top: 0;
+  grid-template-columns: minmax(0, 1fr) var(--diff-action-gutter-width) minmax(0, 1fr);
 }
 
 .content-body.editable-diff-surface .cm-mergeViewEditor {
@@ -112,49 +167,6 @@
   border-left: 1px solid var(--border);
 }
 
-.content-body.diff-surface > .cm-change-overview-ruler,
-.content-body.editable-diff-surface > .cm-change-overview-ruler {
-  position: absolute;
-  z-index: 8;
-  top: 2px;
-  right: 14px;
-  bottom: 12px;
-  width: 5px;
-  pointer-events: none;
-}
-
-.cm-change-overview-marker {
-  position: absolute;
-  right: 0;
-  width: 5px;
-  min-width: 0;
-  min-height: 5px;
-  padding: 0;
-  border: 0;
-  border-radius: 1px;
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.cm-change-overview-marker:hover,
-.cm-change-overview-marker:focus-visible {
-  width: 7px;
-  outline: 1px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
-.cm-change-overview-marker.cm-change-added {
-  background-color: var(--file-added);
-}
-
-.cm-change-overview-marker.cm-change-modified {
-  background-color: var(--file-modified);
-}
-
-.cm-change-overview-marker.cm-change-deleted {
-  background-color: var(--file-deleted);
-}
-
 .content-body.editable-diff-surface .cm-changeGutter {
   width: 5px;
   min-width: 5px;
@@ -168,4 +180,3 @@
   min-width: 5px;
   padding: 0;
 }
-
