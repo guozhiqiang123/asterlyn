@@ -34,6 +34,7 @@ type DiffMount = {
   presentation: DiffPresentation;
   sideLabels: DiffSideLabels;
   blameSources: DiffGitBlameSources;
+  onExpandUnchanged: () => void;
   restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
 };
 
@@ -331,9 +332,20 @@ export class LazyDiffEditor {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
+    onExpandUnchanged: () => void,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
-    const mount = { parent, document, path, preferences, presentation, sideLabels, blameSources, restoredScroll };
+    const mount = {
+      parent,
+      document,
+      path,
+      preferences,
+      presentation,
+      sideLabels,
+      blameSources,
+      onExpandUnchanged,
+      restoredScroll,
+    };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
@@ -347,6 +359,7 @@ export class LazyDiffEditor {
         this.presentation,
         sideLabels,
         blameSources,
+        onExpandUnchanged,
         restoredScroll,
       );
       return;
@@ -368,6 +381,7 @@ export class LazyDiffEditor {
         this.presentation,
         mount.sideLabels,
         mount.blameSources,
+        mount.onExpandUnchanged,
         mount.restoredScroll,
       );
     });

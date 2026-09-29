@@ -36,6 +36,7 @@ import {
 import { attachSplitter } from "./presentation/splitter";
 import { linkScrollElements } from "./presentation/linked-scroll";
 import {
+  handleOmittedDiffExpansion,
   splitChangeBlocks,
   unifiedDiffChangeBlocks,
   type DiffChangeBlock,
@@ -58,8 +59,11 @@ import {
   type DiffGitBlameSources,
   type GitBlameCopy,
   type GitBlameRuntime,
-  type GitBlameSource,
 } from "./features/files-editor/editor-gutter.ts";
+import {
+  applyEditorPreferences,
+  sameBlameSource,
+} from "./features/files-editor/editor-runtime-shared.ts";
 import {
   DEFAULT_APP_PREFERENCES,
   type AppPreferences,
@@ -142,6 +146,7 @@ export class DiffEditor {
     new: { result: null, loading: false, generation: 0 },
   };
   private ruler: HTMLDivElement | null = null;
+  private onExpandUnchanged: (() => void) | null = null;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -160,6 +165,7 @@ export class DiffEditor {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
+    onExpandUnchanged: () => void,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const isSamePath = this.parent === parent || this.sourcePath === path;
@@ -173,6 +179,7 @@ export class DiffEditor {
     this.presentation = { ...presentation };
     this.sideLabels = { ...sideLabels };
     this.blameSources = blameSources;
+    this.onExpandUnchanged = onExpandUnchanged;
     this.render();
     if (scroll) {
       this.restoreScroll(scroll, previousLayout === this.presentation.layout);
@@ -393,6 +400,12 @@ export class DiffEditor {
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
       activeDiffBlockDecoration,
+      EditorView.domEventHandlers({
+        click: (event) => handleOmittedDiffExpansion(
+          event.target,
+          () => this.onExpandUnchanged?.(),
+        ),
+      }),
       keymap.of([
         ...searchKeymap,
         {
@@ -660,24 +673,10 @@ export class DiffEditor {
     this.languageStatus = "loading";
     this.changeBlocks = [];
     this.activeChangeStart = null;
+    this.onExpandUnchanged = null;
     this.resetBlame();
     this.blameSources = unavailableDiffBlameSources(this.blameCopy.gitBlameRequiresSplit);
   }
-}
-
-function applyEditorPreferences(
-  view: EditorView,
-  preferences: AppPreferences,
-): void {
-  view.dom.style.setProperty("--editor-font-size", `${preferences.editorFontSize}px`);
-  view.dom.style.setProperty(
-    "--editor-line-height",
-    preferences.editorLineHeight.toString(),
-  );
-  view.dom.style.setProperty(
-    "--editor-letter-spacing",
-    `${preferences.editorLetterSpacing}px`,
-  );
 }
 
 function sourceLineDecorations(
@@ -782,18 +781,4 @@ function unavailableDiffBlameSources(reason: string): DiffGitBlameSources {
     new: { source: null, unavailableReason: reason },
     unifiedReason: reason,
   };
-}
-
-function sameBlameSource(
-  left: GitBlameSource | null,
-  right: GitBlameSource | null,
-): boolean {
-  return left === right || Boolean(
-    left && right &&
-      left.repositoryRoot === right.repositoryRoot &&
-      left.repositoryId === right.repositoryId &&
-      left.path === right.path &&
-      left.commitOid === right.commitOid &&
-      left.parent === right.parent,
-  );
 }

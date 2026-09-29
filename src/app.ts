@@ -3534,14 +3534,15 @@ export class AsterlynApp {
         state.file,
         this.localization.catalog.editor,
       ),
+      () => {
+        if (!this.remoteState.pushDiff?.expandedUnchanged) {
+          void this.remoteRuntime.push.togglePushDiffUnchangedLines();
+        }
+      },
     );
   }
 
   private bindPushDiffEvents(): void {
-    this.root.querySelector<HTMLElement>("#push-diff-editor-host")?.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".cm-source-omitted")) return;
-      if (!this.remoteState.pushDiff?.expandedUnchanged) void this.remoteRuntime.push.togglePushDiffUnchangedLines();
-    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-push-diff-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const action = button.dataset.pushDiffAction;
@@ -6315,6 +6316,7 @@ export class AsterlynApp {
       this.diffPresentation(),
       sideLabels,
       blameSources,
+      () => this.expandDiffUnchangedLines(),
       () => this.captureMountedTextEditor(),
     );
   }
@@ -6959,6 +6961,17 @@ export class AsterlynApp {
       else void this.loadSelectedCommitDiff();
     }
     else void this.loadSelectedComparisonDiff();
+  }
+
+  private expandDiffUnchangedLines(): void {
+    const document = this.activeDocument();
+    if (
+      document.kind !== "working-diff" &&
+      document.kind !== "commit-diff" &&
+      document.kind !== "commit-comparison-diff"
+    ) return;
+    if (workingDiffExpanded(document, this.expandedUnchangedDiffKey)) return;
+    this.toggleDiffUnchangedLines();
   }
 
   private syncDiffControls(): void {

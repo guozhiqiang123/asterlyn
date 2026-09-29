@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   adjacentDiffItem,
+  handleOmittedDiffExpansion,
   splitChangeBlocks,
   splitChangeStartLines,
   unifiedChangeBlocks,
@@ -56,6 +57,34 @@ test("file navigation stops at collection boundaries", () => {
   assert.equal(adjacentDiffItem(files, "a", -1), null);
   assert.equal(adjacentDiffItem(files, "c", 1), null);
   assert.equal(adjacentDiffItem(files, "missing", 1), null);
+});
+
+test("clicking an omitted Diff row expands it exactly once", () => {
+  let expansions = 0;
+  const omitted = {
+    closest(selector) {
+      return selector === ".cm-source-omitted" ? this : null;
+    },
+  };
+  const ordinary = { closest() { return null; } };
+
+  assert.equal(handleOmittedDiffExpansion(ordinary, () => { expansions += 1; }), false);
+  assert.equal(handleOmittedDiffExpansion(null, () => { expansions += 1; }), false);
+  assert.equal(handleOmittedDiffExpansion(omitted, () => { expansions += 1; }), true);
+  assert.equal(expansions, 1);
+});
+
+test("read-only Diff keeps the omitted-row expansion callback wired end to end", async () => {
+  const [editor, lazy, surface, app] = await Promise.all([
+    readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/lazy-editor-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editor-surface.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /EditorView\.domEventHandlers\(\{[\s\S]*handleOmittedDiffExpansion/u);
+  assert.match(lazy, /onExpandUnchanged:\s*\(\) => void/u);
+  assert.match(surface, /onExpandUnchanged:\s*\(\) => void/u);
+  assert.match(app, /\(\) => this\.expandDiffUnchangedLines\(\)/u);
 });
 
 test("Diff document identities isolate source kind, side, repository, and revision", () => {

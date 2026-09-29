@@ -159,5 +159,5 @@ function repositoryAvailable(
 }
 
 function shortRevision(oid: string): string {
-  return oid.slice(0, 8);
+  return oid.slice(0, 8).toLowerCase();
 }

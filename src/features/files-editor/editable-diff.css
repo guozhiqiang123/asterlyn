@@ -31,6 +31,10 @@
   border-inline: 1px solid var(--border);
 }
 
+.diff-side-revision {
+  text-transform: lowercase;
+}
+
 .diff-unified-grid {
   display: grid;
   width: 100%;

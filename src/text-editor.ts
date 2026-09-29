@@ -46,6 +46,10 @@ import {
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
 import type { EditorCopy } from "./localization/catalog.ts";
+import {
+  applyEditorPreferences,
+  sameBlameSource,
+} from "./features/files-editor/editor-runtime-shared.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -733,20 +737,6 @@ function afterNextEditorPaint(): Promise<void> {
   });
 }
 
-function sameBlameSource(
-  left: GitBlameSource | null,
-  right: GitBlameSource | null,
-): boolean {
-  return left === right || Boolean(
-    left && right &&
-      left.repositoryRoot === right.repositoryRoot &&
-      left.repositoryId === right.repositoryId &&
-      left.path === right.path &&
-      left.commitOid === right.commitOid &&
-      left.parent === right.parent,
-  );
-}
-
 function createFoldMarker(open: boolean): HTMLElement {
   const marker = document.createElement("span");
   marker.className = `asterlyn-fold-marker ${open ? "open" : "closed"}`;
@@ -754,19 +744,4 @@ function createFoldMarker(open: boolean): HTMLElement {
   marker.setAttribute("aria-hidden", "true");
   marker.innerHTML = `<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="${open ? "M3.5 5.5 8 10l4.5-4.5" : "M5.5 3.5 10 8l-4.5 4.5"}" /></svg>`;
   return marker;
-}
-
-function applyEditorPreferences(
-  view: EditorView,
-  preferences: AppPreferences,
-): void {
-  view.dom.style.setProperty("--editor-font-size", `${preferences.editorFontSize}px`);
-  view.dom.style.setProperty(
-    "--editor-line-height",
-    preferences.editorLineHeight.toString(),
-  );
-  view.dom.style.setProperty(
-    "--editor-letter-spacing",
-    `${preferences.editorLetterSpacing}px`,
-  );
 }

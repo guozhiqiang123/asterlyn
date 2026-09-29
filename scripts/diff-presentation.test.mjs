@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { identifyDiffSides, parseUnifiedDiff, splitUnifiedDiff } from "../src/diff-presentation.ts";
+import { editorDiffSideLabels } from "../src/features/files-editor/diff-context.ts";
+import { diffSideLabelParts } from "../src/features/files-editor/diff-side-labels.ts";
 
 test("Diff side labels preserve semantic roles and exact revisions", () => {
   assert.deepEqual(
@@ -11,6 +13,34 @@ test("Diff side labels preserve semantic roles and exact revisions", () => {
   assert.deepEqual(
     identifyDiffSides("Before", "After"),
     { before: "Before", after: "After" },
+  );
+});
+
+test("Diff side labels keep Git short revisions lowercase under uppercase chrome", () => {
+  assert.deepEqual(
+    editorDiffSideLabels({
+      kind: "commit-diff",
+      repositoryRoot: "/repo",
+      repositoryId: ".",
+      oid: "ABCDEF0123456789",
+      path: "file.ts",
+    }, {
+      before: "Before",
+      after: "After",
+      emptyTree: "Empty Tree",
+    }, {
+      headOid: null,
+      parentOid: "FEDCBA9876543210",
+    }),
+    { before: "Before · fedcba98", after: "After · abcdef01" },
+  );
+  assert.deepEqual(
+    diffSideLabelParts("Before · HEAD ABCDEF01"),
+    { prefix: "Before · HEAD ", revision: "abcdef01" },
+  );
+  assert.deepEqual(
+    diffSideLabelParts("After · Working Tree"),
+    { prefix: "After · Working Tree", revision: null },
   );
 });
 

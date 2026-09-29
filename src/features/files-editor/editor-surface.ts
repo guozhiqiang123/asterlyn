@@ -292,6 +292,7 @@ export class EditorSurface {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
+    onExpandUnchanged: () => void,
     beforeTransition: () => void,
   ): void {
     if (this.mountedEditorKey === key) {
@@ -313,7 +314,17 @@ export class EditorSurface {
       body.classList.add("diff-surface");
     }
     const body = this.query("#content-body");
-    this.diffEditor.mount(body, patch, path, preferences, presentation, sideLabels, blameSources, scroll);
+    this.diffEditor.mount(
+      body,
+      patch,
+      path,
+      preferences,
+      presentation,
+      sideLabels,
+      blameSources,
+      onExpandUnchanged,
+      scroll,
+    );
     this.mountedEditorKey = key;
   }
 

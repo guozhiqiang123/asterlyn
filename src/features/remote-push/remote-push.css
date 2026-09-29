@@ -663,7 +663,9 @@
 .push-diff-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 3;
+  /* The Push preview uses the shared splitter at z-index 4. This nested modal
+     must own the complete parent surface so the splitter cannot paint through it. */
+  z-index: 5;
   display: grid;
   padding: 12px;
   place-items: center;

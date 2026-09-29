@@ -54,6 +54,18 @@ export function adjacentDiffItem<T>(
   return items[index + direction] ?? null;
 }
 
+export function handleOmittedDiffExpansion(
+  target: EventTarget | null,
+  expand: () => void,
+): boolean {
+  const candidate = target as (EventTarget & {
+    closest?: (selector: string) => unknown;
+  }) | null;
+  if (!candidate?.closest?.(".cm-source-omitted")) return false;
+  expand();
+  return true;
+}
+
 function groupedBlocks(changed: readonly boolean[]): DiffChangeBlock[] {
   const blocks: DiffChangeBlock[] = [];
   let start: number | null = null;

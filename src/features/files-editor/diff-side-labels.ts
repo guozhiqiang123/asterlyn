@@ -7,11 +7,11 @@ export function createDiffSideLabels(
   const header = owner.createElement("header");
   header.className = "diff-side-labels";
   const before = owner.createElement("strong");
-  before.textContent = labels.before;
+  setDiffSideLabel(before, labels.before);
   const divider = owner.createElement("span");
   divider.setAttribute("aria-hidden", "true");
   const after = owner.createElement("strong");
-  after.textContent = labels.after;
+  setDiffSideLabel(after, labels.after);
   header.append(before, divider, after);
   return header;
 }
@@ -22,7 +22,7 @@ export function createDiffUnifiedLabel(
 ): HTMLElement {
   const header = owner.createElement("header");
   header.className = "diff-unified-label";
-  header.textContent = unifiedLabel(labels);
+  setUnifiedDiffSideLabel(header, labels);
   return header;
 }
 
@@ -31,10 +31,10 @@ export function syncDiffSideLabels(
   labels: DiffSideLabels,
 ): void {
   const sides = parent?.querySelectorAll<HTMLElement>(".diff-side-labels strong");
-  if (sides?.[0]) sides[0].textContent = labels.before;
-  if (sides?.[1]) sides[1].textContent = labels.after;
+  if (sides?.[0]) setDiffSideLabel(sides[0], labels.before);
+  if (sides?.[1]) setDiffSideLabel(sides[1], labels.after);
   const unified = parent?.querySelector<HTMLElement>(".diff-unified-label");
-  if (unified) unified.textContent = unifiedLabel(labels);
+  if (unified) setUnifiedDiffSideLabel(unified, labels);
 }
 
 export function createReadOnlyDiffPane(
@@ -53,6 +53,34 @@ export function createReadOnlyDiffPane(
   return host;
 }
 
-function unifiedLabel(labels: DiffSideLabels): string {
-  return `${labels.before} → ${labels.after}`;
+export function diffSideLabelParts(label: string): {
+  prefix: string;
+  revision: string | null;
+} {
+  const match = /^(.*?)([0-9a-f]{7,40})$/iu.exec(label);
+  return match
+    ? { prefix: match[1] ?? "", revision: (match[2] ?? "").toLowerCase() }
+    : { prefix: label, revision: null };
+}
+
+function setDiffSideLabel(target: HTMLElement, label: string): void {
+  target.replaceChildren();
+  appendDiffSideLabel(target, label);
+}
+
+function setUnifiedDiffSideLabel(target: HTMLElement, labels: DiffSideLabels): void {
+  target.replaceChildren();
+  appendDiffSideLabel(target, labels.before);
+  target.append(target.ownerDocument.createTextNode(" → "));
+  appendDiffSideLabel(target, labels.after);
+}
+
+function appendDiffSideLabel(target: HTMLElement, label: string): void {
+  const parts = diffSideLabelParts(label);
+  target.append(target.ownerDocument.createTextNode(parts.prefix));
+  if (parts.revision === null) return;
+  const revision = target.ownerDocument.createElement("span");
+  revision.className = "diff-side-revision";
+  revision.textContent = parts.revision;
+  target.append(revision);
 }

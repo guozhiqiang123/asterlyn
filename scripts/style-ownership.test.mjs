@@ -180,6 +180,25 @@ test("Push mode remains one aligned split action with a visible native-scale che
   assert.match(source, /\.push-split-action \.push-mode-chevron\s*\{/u);
 });
 
+test("Push Diff covers the parent preview splitter", async () => {
+  const [push, shell] = await Promise.all([
+    readFile(new URL("../src/features/remote-push/remote-push.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/shell/shell.css", import.meta.url), "utf8"),
+  ]);
+  const splitterLayer = Number(
+    shell.match(/\.workbench-splitter\s*\{[^}]*z-index:\s*(\d+);/s)?.[1],
+  );
+  const diffLayer = Number(
+    push.match(/\.push-diff-backdrop\s*\{[^}]*z-index:\s*(\d+);/s)?.[1],
+  );
+  assert.ok(Number.isFinite(splitterLayer), "the shared splitter must declare its layer");
+  assert.ok(Number.isFinite(diffLayer), "the nested Push Diff must declare its layer");
+  assert.ok(
+    diffLayer > splitterLayer,
+    "the nested Push Diff must paint above the parent preview splitter",
+  );
+});
+
 test("both project search fields keep one query field with flat in-field option segments", async () => {
   const [shell, search, history] = await Promise.all([
     readFile(new URL("../src/shell/shell.css", import.meta.url), "utf8"),
@@ -261,6 +280,7 @@ test("Diff side labels share the editor grid instead of approximating its divide
   assert.match(filesCss, /\.diff-split-grid\s*\{[^}]*grid-template-columns:[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\);/s);
   const editableCss = await readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8");
   assert.match(editableCss, /\.diff-side-labels\s*\{[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width, 5px\)/s);
+  assert.match(editableCss, /\.diff-side-revision\s*\{[^}]*text-transform:\s*lowercase;/s);
   assert.doesNotMatch(replacementView, /replacement-tool-side-labels/u);
   assert.match(replacementCss, /--diff-action-gutter-width:\s*36px;/u);
   assert.match(replacementCss, /\.cm-mergeView > \.diff-side-labels\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width\)/s);
