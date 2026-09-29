@@ -34,6 +34,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
 - [`engineering/architecture-refactoring.md`](engineering/architecture-refactoring.md) — current architecture audit, target boundaries, migration order, and refactoring gates.
 - [`engineering/foundation-hardening.md`](engineering/foundation-hardening.md) — post-CM4 feature freeze, executable boundary plan, migration sequence, and acceptance gates.
+- [`engineering/2026-09-29-audit-remediation-plan.md`](engineering/2026-09-29-audit-remediation-plan.md) — ordered credential, workspace-recovery, terminal-flow-control, lifecycle, and ownership hardening plan.
+- [`benchmarks/2026-09-29-architecture-audit-remediation.md`](benchmarks/2026-09-29-architecture-audit-remediation.md) — AR1–AR5 implementation, fault evidence, full local validation, performance bounds, and remaining release limits.
 - [`engineering/versioned-reconciliation-plan.md`](engineering/versioned-reconciliation-plan.md) — watcher/reconciliation risks, phased implementation, invariants, and acceptance matrix.
 - [`engineering/context-action-system.md`](engineering/context-action-system.md) — whole-draft audit, context-action architecture, R5 prerequisites, surface ownership, and delivery sequence.
 - [`engineering/intraline-diff-highlighting-plan.md`](engineering/intraline-diff-highlighting-plan.md) — Android Studio-style line and inline Diff semantics across editable and read-only implementations.

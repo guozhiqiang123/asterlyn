@@ -1,3 +1,4 @@
+mod credential;
 mod error;
 mod model;
 mod operation;

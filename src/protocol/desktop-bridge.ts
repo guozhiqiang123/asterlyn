@@ -114,6 +114,12 @@ export interface WorkspaceBridge {
   listWorkspaceMutationRecoveries(
     repositoryRoot: string,
   ): Promise<WorkspaceMutationRecoverySummary[]>;
+  rollbackWorkspaceMutation(repositoryRoot: string, recoveryId: string): Promise<void>;
+  finalizeWorkspaceMutation(repositoryRoot: string, recoveryId: string): Promise<void>;
+  acknowledgeWorkspaceMutationRecovery(
+    repositoryRoot: string,
+    recoveryId: string,
+  ): Promise<void>;
   searchWorkspaceText(
     repositoryRoot: string,
     requestId: string,

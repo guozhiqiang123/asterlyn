@@ -164,6 +164,65 @@ pub(crate) async fn list_workspace_mutation_recoveries(
 }
 
 #[tauri::command]
+pub(crate) async fn rollback_workspace_mutation(
+    repository_root: String,
+    recovery_id: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+    app: tauri::AppHandle,
+) -> Result<(), WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let writes = writes.inner().clone();
+    let recovery_root = workspace_mutation_recovery_root(&app)?;
+    run_workspace_blocking("rollback workspace mutation", move || {
+        rollback_workspace_mutation_recovery(&root, &recovery_root, &recovery_id, &writes)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn finalize_workspace_mutation(
+    repository_root: String,
+    recovery_id: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+    app: tauri::AppHandle,
+) -> Result<(), WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let writes = writes.inner().clone();
+    let recovery_root = workspace_mutation_recovery_root(&app)?;
+    run_workspace_blocking("finalize workspace mutation", move || {
+        finalize_workspace_mutation_recovery(&root, &recovery_root, &recovery_id, &writes)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn acknowledge_workspace_mutation_recovery(
+    repository_root: String,
+    recovery_id: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+    app: tauri::AppHandle,
+) -> Result<(), WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let writes = writes.inner().clone();
+    let recovery_root = workspace_mutation_recovery_root(&app)?;
+    run_workspace_blocking("acknowledge workspace mutation recovery", move || {
+        acknowledge_workspace_mutation_recovery_application(
+            &root,
+            &recovery_root,
+            &recovery_id,
+            &writes,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn search_workspace_text(
     repository_root: String,
     request_id: String,

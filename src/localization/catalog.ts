@@ -120,7 +120,7 @@ export interface TerminalCopy {
   clear: string;
   cleared: string;
   close: string;
-  closed: string;
+  closed: string; outputTruncated(bytes: number): string;
 }
 
 export interface SettingsCopy {
@@ -323,20 +323,20 @@ export interface ProjectFilesCopy {
     trashFileDetail(path: string): string; trashMultipleDetail(count: number): string;
     trashFolderDetail(entries: number, bytes: number, hidden: number): string;
     invalidName: string;
-    unsafeSource: string;
-    sourceChanged: string;
-    trashBlocked: string;
-    destinationExists: string;
-    operationFailed: string;
-    copiedEntry: string;
-    cutEntry: string;
-    createdFile: string;
-    stagedCreatedFile: string;
-    leftCreatedFileUntracked: string;
-    stageCreatedFileFailed: string;
-    renamedEntry: string;
-    pastedEntry: string;
-    trashedEntry: string;
+    unsafeSource: string; sourceChanged: string;
+    trashBlocked: string; destinationExists: string;
+    operationFailed: string; copiedEntry: string;
+    cutEntry: string; createdFile: string;
+    stagedCreatedFile: string; leftCreatedFileUntracked: string;
+    stageCreatedFileFailed: string; renamedEntry: string;
+    pastedEntry: string; trashedEntry: string;
+    recoveryTitle: string; recoveryDetail: string;
+    recoveryClose: string; recoveryRollback: string;
+    recoveryFinalize: string; recoveryAcknowledge: string;
+    recoveryWorking: string; recoveryResolved: string;
+    recoveryFailed: string; recoveryDirty: string;
+    recoveryCount(count: number): string; recoveryPhase(phase: string): string;
+    recoveryState: Record<"missing" | "matchesReviewed" | "changedOrUnknown", string>;
   };
 }
 

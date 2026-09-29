@@ -3,6 +3,7 @@ import type { TerminalBridge } from "../../protocol/terminal.ts";
 
 const MAX_INPUT_CHUNK_BYTES = 64 * 1024;
 const MAX_STARTUP_OUTPUT_BYTES = 256 * 1024;
+const MAX_STARTUP_EVENTS = 64;
 
 export type TerminalStatus = "idle" | "starting" | "running" | "exited" | "error";
 
@@ -31,7 +32,10 @@ type TerminalGateway = Pick<
 >;
 
 type StateListener = (change: TerminalChange) => void;
-type OutputListener = (bytes: Uint8Array) => void;
+export type TerminalOutputFrame =
+  | { readonly kind: "output"; readonly bytes: Uint8Array }
+  | { readonly kind: "truncated"; readonly omittedBytes: number };
+type OutputListener = (frame: TerminalOutputFrame) => void;
 
 /** Owns one bounded terminal session without publishing high-frequency output to application state. */
 export class TerminalController {
@@ -45,6 +49,7 @@ export class TerminalController {
   private lastOutputSequence = 0;
   private startupEvents: TerminalEvent[] = [];
   private startupOutputBytes = 0;
+  private startupOmittedBytes = 0;
   private inputQueue: string[] = [];
   private inputFlushQueued = false;
   private inputTail = Promise.resolve();
@@ -104,8 +109,19 @@ export class TerminalController {
       this.value = startedState(root, started);
       this.emit("started");
       const startupEvents = this.startupEvents;
+      const startupOmittedBytes = this.startupOmittedBytes;
       this.startupEvents = [];
       this.startupOutputBytes = 0;
+      this.startupOmittedBytes = 0;
+      if (startupOmittedBytes > 0) {
+        this.outputListeners.forEach((listener) =>
+          listener({ kind: "truncated", omittedBytes: startupOmittedBytes })
+        );
+        const firstSequence = startupEvents.find((event) =>
+          event.kind === "output" || event.kind === "truncated"
+        )?.sequence;
+        if (firstSequence) this.lastOutputSequence = firstSequence - 1;
+      }
       startupEvents.forEach((event) => this.acceptEvent(event));
     } catch (error) {
       if (this.isCurrent(generation, root)) this.fail(error);
@@ -189,20 +205,26 @@ export class TerminalController {
   private acceptEvent(event: TerminalEvent): void {
     if (this.disposed) return;
     if (this.value.status === "starting" && !this.value.sessionId) {
-      const byteLength = event.kind === "output" ? decodedByteLength(event.dataBase64) : 0;
-      if (this.startupOutputBytes + byteLength <= MAX_STARTUP_OUTPUT_BYTES) {
-        this.startupEvents.push(event);
-        this.startupOutputBytes += byteLength;
-      }
+      this.bufferStartupEvent(event);
       return;
     }
     if (event.sessionId !== this.value.sessionId) return;
-    if (event.kind === "output") {
+    if (event.kind === "output" || event.kind === "truncated") {
       if (event.sequence <= this.lastOutputSequence) return;
+      if (event.sequence !== this.lastOutputSequence + 1) {
+        this.fail(new Error("Terminal output transport lost an event."));
+        return;
+      }
       this.lastOutputSequence = event.sequence;
+      if (event.kind === "truncated") {
+        this.outputListeners.forEach((listener) =>
+          listener({ kind: "truncated", omittedBytes: event.omittedBytes })
+        );
+        return;
+      }
       try {
         const bytes = decodeBase64(event.dataBase64);
-        this.outputListeners.forEach((listener) => listener(bytes));
+        this.outputListeners.forEach((listener) => listener({ kind: "output", bytes }));
       } catch (error) {
         this.fail(error);
       }
@@ -219,6 +241,30 @@ export class TerminalController {
       return;
     }
     this.fail(new Error(event.message));
+  }
+
+  private bufferStartupEvent(event: TerminalEvent): void {
+    this.startupEvents.push(event);
+    if (event.kind === "output") {
+      this.startupOutputBytes += decodedByteLength(event.dataBase64);
+    }
+    while (
+      this.startupEvents.length > MAX_STARTUP_EVENTS ||
+      this.startupOutputBytes > MAX_STARTUP_OUTPUT_BYTES
+    ) {
+      const index = this.startupEvents.findIndex((candidate) =>
+        candidate.kind === "output" || candidate.kind === "truncated"
+      );
+      if (index < 0) break;
+      const [discarded] = this.startupEvents.splice(index, 1);
+      if (discarded?.kind === "output") {
+        const bytes = decodedByteLength(discarded.dataBase64);
+        this.startupOutputBytes = Math.max(0, this.startupOutputBytes - bytes);
+        this.startupOmittedBytes += bytes;
+      } else if (discarded?.kind === "truncated") {
+        this.startupOmittedBytes += discarded.omittedBytes;
+      }
+    }
   }
 
   private flushInput(): void {
@@ -256,6 +302,7 @@ export class TerminalController {
     this.lastOutputSequence = 0;
     this.startupEvents = [];
     this.startupOutputBytes = 0;
+    this.startupOmittedBytes = 0;
     this.inputQueue = [];
     this.inputFlushQueued = false;
     this.pendingResize = null;

@@ -53,6 +53,10 @@ export interface WorkspaceTrashRuntime<TTarget extends WorkspaceTrashTarget> {
   isTargetCurrent(target: TTarget): boolean;
   completed(targets: readonly TTarget[], outcome: WorkspaceMutationOutcome): void;
   reconciliationFailed?(error: unknown): void;
+  recoveryRequired?(
+    identity: WorkspaceMutationIdentity,
+    outcome: WorkspaceMutationOutcome,
+  ): void | Promise<void>;
   status(message: string): void;
   error(error: unknown): void;
 }
@@ -213,6 +217,9 @@ export class WorkspaceTrashController<TTarget extends WorkspaceTrashTarget> {
       }
       this.value = { planningTarget: null, dialog: null };
       this.emit();
+      if ("outcome" in execution && execution.outcome.recoveryId) {
+        void this.runtime.recoveryRequired?.(identity, execution.outcome);
+      }
       this.runtime.error(new Error(executionFailure(execution, this.messages())));
       return;
     }

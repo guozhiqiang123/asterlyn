@@ -42,7 +42,10 @@ export class TerminalPanel {
         this.feedback.error(new Error(change.state.error));
       }
     });
-    this.releaseOutput = this.controller.subscribeOutput((bytes) => this.view.write(bytes));
+    this.releaseOutput = this.controller.subscribeOutput((frame) => {
+      if (frame.kind === "output") this.view.write(frame.bytes);
+      else this.view.write(new TextEncoder().encode(this.copy.outputTruncated(frame.omittedBytes)));
+    });
   }
 
   installWorkspace(root: string): void {

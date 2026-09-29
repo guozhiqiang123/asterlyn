@@ -61,7 +61,8 @@ export class ProjectFilesOperationBinding {
     if (!host) return;
     const open = this.controller.state.dialog !== null;
     if (open && !this.dialogWasOpen) {
-      const target = this.controller.state.dialog?.target;
+      const dialog = this.controller.state.dialog;
+      const target = dialog && "target" in dialog ? dialog.target : null;
       const targetRow = target
         ? Array.from(this.root.querySelectorAll<HTMLElement>("[data-project-node]"))
           .find((element) => element.dataset.projectNode === target.workspacePath) ?? null
@@ -94,6 +95,18 @@ export class ProjectFilesOperationBinding {
         void this.controller.resolveCreatedFileStaging(
           button.dataset.projectFilesStageChoice === "stage",
         );
+      }),
+    );
+    host.querySelectorAll<HTMLButtonElement>("[data-workspace-mutation-recovery-action]").forEach(
+      (button) => button.addEventListener("click", () => {
+        const recoveryId = button.dataset.workspaceMutationRecoveryId;
+        const action = button.dataset.workspaceMutationRecoveryAction;
+        if (
+          recoveryId &&
+          (action === "rollback" || action === "finalize" || action === "acknowledge")
+        ) {
+          void this.controller.resolveRecovery(recoveryId, action);
+        }
       }),
     );
     const input = host.querySelector<HTMLInputElement>("#project-files-paste-name");

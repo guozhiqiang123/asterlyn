@@ -32,6 +32,13 @@ enum TerminalEventPayload {
         sequence: u64,
         data_base64: String,
     },
+    #[serde(rename = "truncated")]
+    Truncated {
+        protocol_version: u8,
+        session_id: String,
+        sequence: u64,
+        omitted_bytes: u64,
+    },
     #[serde(rename = "exited")]
     Exited {
         protocol_version: u8,
@@ -62,7 +69,9 @@ pub(crate) fn start_terminal(
     let event_window = window.clone();
     let sink = std::sync::Arc::new(move |event| {
         let payload = map_terminal_event(event);
-        let _ = event_window.emit(TERMINAL_EVENT_NAME, payload);
+        event_window
+            .emit(TERMINAL_EVENT_NAME, payload)
+            .map_err(|error| error.to_string())
     });
     let started = sessions
         .start(window.label(), &root, cols, rows, sink)
@@ -133,6 +142,16 @@ fn map_terminal_event(event: TerminalEvent) -> TerminalEventPayload {
             sequence,
             data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
         },
+        TerminalEvent::OutputTruncated {
+            session_id,
+            sequence,
+            omitted_bytes,
+        } => TerminalEventPayload::Truncated {
+            protocol_version: TERMINAL_PROTOCOL_VERSION,
+            session_id,
+            sequence,
+            omitted_bytes,
+        },
         TerminalEvent::Exited {
             session_id,
             exit_code,
@@ -171,5 +190,20 @@ mod tests {
         assert_eq!(value["sessionId"], "terminal-7");
         assert_eq!(value["sequence"], 3);
         assert_eq!(value["dataBase64"], "AP9B");
+    }
+
+    #[test]
+    fn truncation_payload_preserves_sequence_and_omitted_byte_count() {
+        let payload = map_terminal_event(TerminalEvent::OutputTruncated {
+            session_id: "terminal-7".to_string(),
+            sequence: 4,
+            omitted_bytes: 65_536,
+        });
+        let value = serde_json::to_value(payload).expect("serialize event");
+        assert_eq!(value["protocolVersion"], 1);
+        assert_eq!(value["kind"], "truncated");
+        assert_eq!(value["sessionId"], "terminal-7");
+        assert_eq!(value["sequence"], 4);
+        assert_eq!(value["omittedBytes"], 65_536);
     }
 }

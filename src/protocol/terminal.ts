@@ -19,11 +19,16 @@ export function parseTerminalEvent(value: unknown): TerminalEvent {
     throw new Error("Terminal event has no session identity.");
   }
   if (value.kind === "output") {
-    if (!Number.isSafeInteger(value.sequence) || (value.sequence as number) < 1) {
-      throw new Error("Terminal output has an invalid sequence.");
-    }
+    assertOutputSequence(value.sequence);
     if (typeof value.dataBase64 !== "string") {
       throw new Error("Terminal output has invalid data.");
+    }
+    return value as TerminalEvent;
+  }
+  if (value.kind === "truncated") {
+    assertOutputSequence(value.sequence);
+    if (!Number.isSafeInteger(value.omittedBytes) || (value.omittedBytes as number) < 1) {
+      throw new Error("Terminal truncation has an invalid omitted byte count.");
     }
     return value as TerminalEvent;
   }
@@ -43,6 +48,12 @@ export function parseTerminalEvent(value: unknown): TerminalEvent {
     return value as TerminalEvent;
   }
   throw new Error("Terminal event has an unknown kind.");
+}
+
+function assertOutputSequence(value: unknown): void {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new Error("Terminal output has an invalid sequence.");
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

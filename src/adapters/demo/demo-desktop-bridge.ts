@@ -539,14 +539,10 @@ const demoBridge: DesktopBridge = {
     return invoke<void>("cancel_workspace_mutation", { repositoryRoot, planId });
   },
 
-  async listWorkspaceMutationRecoveries(
-    repositoryRoot: string,
-  ): Promise<WorkspaceMutationRecoverySummary[]> {
-    if (!isTauri) return [];
-    return invoke<WorkspaceMutationRecoverySummary[]>("list_workspace_mutation_recoveries", {
-      repositoryRoot,
-    });
-  },
+  async listWorkspaceMutationRecoveries(repositoryRoot: string): Promise<WorkspaceMutationRecoverySummary[]> { return isTauri ? invoke<WorkspaceMutationRecoverySummary[]>("list_workspace_mutation_recoveries", { repositoryRoot }) : []; },
+  async rollbackWorkspaceMutation(repositoryRoot: string, recoveryId: string): Promise<void> { if (isTauri) await invoke<void>("rollback_workspace_mutation", { repositoryRoot, recoveryId }); },
+  async finalizeWorkspaceMutation(repositoryRoot: string, recoveryId: string): Promise<void> { if (isTauri) await invoke<void>("finalize_workspace_mutation", { repositoryRoot, recoveryId }); },
+  async acknowledgeWorkspaceMutationRecovery(repositoryRoot: string, recoveryId: string): Promise<void> { if (isTauri) await invoke<void>("acknowledge_workspace_mutation_recovery", { repositoryRoot, recoveryId }); },
 
   async searchWorkspaceText(
     repositoryRoot: string,

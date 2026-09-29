@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
@@ -17,8 +17,12 @@ pub const MIN_ROWS: u16 = 2;
 pub const MAX_ROWS: u16 = 300;
 pub const MAX_INPUT_BYTES: usize = 64 * 1024;
 const OUTPUT_CHUNK_BYTES: usize = 16 * 1024;
+pub const MAX_OUTPUT_FRAME_BYTES: usize = 64 * 1024;
+pub const MAX_OUTPUT_QUEUE_BYTES: usize = 256 * 1024;
+pub const MAX_OUTPUT_QUEUE_FRAMES: usize = 16;
 
-pub type TerminalEventSink = Arc<dyn Fn(TerminalEvent) + Send + Sync + 'static>;
+pub type TerminalEventSink =
+    Arc<dyn Fn(TerminalEvent) -> Result<(), String> + Send + Sync + 'static>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminalStarted {
@@ -33,6 +37,11 @@ pub enum TerminalEvent {
         session_id: String,
         sequence: u64,
         bytes: Vec<u8>,
+    },
+    OutputTruncated {
+        session_id: String,
+        sequence: u64,
+        omitted_bytes: u64,
     },
     Exited {
         session_id: String,
@@ -78,7 +87,7 @@ struct TerminalSession {
     root: PathBuf,
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
-    killer: Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>,
+    killer: Arc<Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>>,
     alive: Arc<AtomicBool>,
 }
 
@@ -94,7 +103,7 @@ impl TerminalSession {
 impl Drop for TerminalSession {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::Release);
-        if let Ok(killer) = self.killer.get_mut() {
+        if let Ok(mut killer) = self.killer.lock() {
             let _ = killer.kill();
         }
     }
@@ -222,6 +231,8 @@ impl TerminalSessions {
     }
 
     pub fn remove_owner_if_root_changed(&self, owner: &str, next_root: &Path) {
+        let next_root =
+            std::fs::canonicalize(next_root).unwrap_or_else(|_| next_root.to_path_buf());
         let session = self.sessions.lock().ok().and_then(|mut sessions| {
             let should_remove = sessions
                 .get(owner)
@@ -269,6 +280,101 @@ struct ShellProgram {
     display_name: String,
 }
 
+#[derive(Default)]
+struct OutputQueueState {
+    frames: VecDeque<Vec<u8>>,
+    queued_bytes: usize,
+    omitted_bytes: u64,
+    closed: bool,
+    failure: Option<String>,
+}
+
+#[derive(Default)]
+struct OutputQueue {
+    state: Mutex<OutputQueueState>,
+    available: Condvar,
+}
+
+enum OutputQueueItem {
+    Frame { bytes: Vec<u8>, omitted_bytes: u64 },
+    Failed(String),
+    Closed,
+}
+
+impl OutputQueue {
+    fn push(&self, mut bytes: Vec<u8>) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if state.closed || bytes.is_empty() {
+            return;
+        }
+        if bytes.len() > MAX_OUTPUT_QUEUE_BYTES {
+            let omitted = bytes.len() - MAX_OUTPUT_QUEUE_BYTES;
+            bytes.drain(..omitted);
+            state.omitted_bytes = state.omitted_bytes.saturating_add(omitted as u64);
+        }
+        while state.frames.len() >= MAX_OUTPUT_QUEUE_FRAMES
+            || state.queued_bytes.saturating_add(bytes.len()) > MAX_OUTPUT_QUEUE_BYTES
+        {
+            let Some(discarded) = state.frames.pop_front() else {
+                break;
+            };
+            state.queued_bytes = state.queued_bytes.saturating_sub(discarded.len());
+            state.omitted_bytes = state.omitted_bytes.saturating_add(discarded.len() as u64);
+        }
+        if let Some(last) = state.frames.back_mut()
+            && last.len().saturating_add(bytes.len()) <= MAX_OUTPUT_FRAME_BYTES
+        {
+            last.extend_from_slice(&bytes);
+            state.queued_bytes = state.queued_bytes.saturating_add(bytes.len());
+        } else {
+            state.queued_bytes = state.queued_bytes.saturating_add(bytes.len());
+            state.frames.push_back(bytes);
+        }
+        self.available.notify_one();
+    }
+
+    fn finish(&self, failure: Option<String>) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if state.closed {
+            return;
+        }
+        state.closed = true;
+        state.failure = failure;
+        self.available.notify_all();
+    }
+
+    fn next(&self) -> OutputQueueItem {
+        let Ok(state) = self.state.lock() else {
+            return OutputQueueItem::Failed("terminal output queue lock was poisoned".into());
+        };
+        let mut state = state;
+        loop {
+            if let Some(bytes) = state.frames.pop_front() {
+                state.queued_bytes = state.queued_bytes.saturating_sub(bytes.len());
+                let omitted_bytes = std::mem::take(&mut state.omitted_bytes);
+                return OutputQueueItem::Frame {
+                    bytes,
+                    omitted_bytes,
+                };
+            }
+            if state.closed {
+                return state
+                    .failure
+                    .take()
+                    .map_or(OutputQueueItem::Closed, OutputQueueItem::Failed);
+            }
+            let Ok(next) = self.available.wait(state) else {
+                return OutputQueueItem::Failed("terminal output queue lock was poisoned".into());
+            };
+            state = next;
+        }
+    }
+}
+
 fn spawn_session(
     id: &str,
     root: &Path,
@@ -309,74 +415,164 @@ fn spawn_session(
             operation: "open terminal input",
             message: error.to_string(),
         })?;
-    let killer = child.clone_killer();
+    let killer = Arc::new(Mutex::new(child.clone_killer()));
     let alive = Arc::new(AtomicBool::new(true));
     let reader_alive = Arc::clone(&alive);
-    let event_id = id.to_string();
-    let output_sink = Arc::clone(&sink);
-    let output_thread = thread::Builder::new()
-        .name(format!("{id}-output"))
+    let output_queue = Arc::new(OutputQueue::default());
+    let reader_queue = Arc::clone(&output_queue);
+    let reader_thread = match thread::Builder::new()
+        .name(format!("{id}-reader"))
         .spawn(move || {
-            let mut sequence = 0_u64;
             let mut buffer = vec![0_u8; OUTPUT_CHUNK_BYTES];
             loop {
                 match reader.read(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(read) => {
-                        sequence += 1;
-                        output_sink(TerminalEvent::Output {
-                            session_id: event_id.clone(),
-                            sequence,
-                            bytes: buffer[..read].to_vec(),
-                        });
+                    Ok(0) => {
+                        reader_queue.finish(None);
+                        break;
                     }
-                    Err(_error) if !reader_alive.load(Ordering::Acquire) => break,
+                    Ok(read) => reader_queue.push(buffer[..read].to_vec()),
+                    Err(_error) if !reader_alive.load(Ordering::Acquire) => {
+                        reader_queue.finish(None);
+                        break;
+                    }
                     Err(error) => {
-                        output_sink(TerminalEvent::ReaderFailed {
-                            session_id: event_id.clone(),
-                            message: error.to_string(),
-                        });
+                        reader_queue.finish(Some(error.to_string()));
                         break;
                     }
                 }
             }
-        })
-        .map_err(|error| TerminalError::Io {
-            operation: "start terminal output reader",
-            message: error.to_string(),
-        })?;
+        }) {
+        Ok(thread) => thread,
+        Err(error) => {
+            alive.store(false, Ordering::Release);
+            if let Ok(mut killer) = killer.lock() {
+                let _ = killer.kill();
+            }
+            return Err(TerminalError::Io {
+                operation: "start terminal output reader",
+                message: error.to_string(),
+            });
+        }
+    };
+
+    let event_id = id.to_string();
+    let output_sink = Arc::clone(&sink);
+    let pump_alive = Arc::clone(&alive);
+    let pump_killer = Arc::clone(&killer);
+    let pump_queue = Arc::clone(&output_queue);
+    let output_thread = match thread::Builder::new()
+        .name(format!("{id}-output"))
+        .spawn(move || {
+            let mut sequence = 0_u64;
+            loop {
+                let delivered = match pump_queue.next() {
+                    OutputQueueItem::Frame {
+                        bytes,
+                        omitted_bytes,
+                    } => {
+                        if omitted_bytes > 0 {
+                            sequence = sequence.saturating_add(1);
+                            if output_sink(TerminalEvent::OutputTruncated {
+                                session_id: event_id.clone(),
+                                sequence,
+                                omitted_bytes,
+                            })
+                            .is_err()
+                            {
+                                false
+                            } else {
+                                sequence = sequence.saturating_add(1);
+                                output_sink(TerminalEvent::Output {
+                                    session_id: event_id.clone(),
+                                    sequence,
+                                    bytes,
+                                })
+                                .is_ok()
+                            }
+                        } else {
+                            sequence = sequence.saturating_add(1);
+                            output_sink(TerminalEvent::Output {
+                                session_id: event_id.clone(),
+                                sequence,
+                                bytes,
+                            })
+                            .is_ok()
+                        }
+                    }
+                    OutputQueueItem::Failed(message) => output_sink(TerminalEvent::ReaderFailed {
+                        session_id: event_id.clone(),
+                        message,
+                    })
+                    .is_ok(),
+                    OutputQueueItem::Closed => break,
+                };
+                if !delivered {
+                    pump_alive.store(false, Ordering::Release);
+                    if let Ok(mut killer) = pump_killer.lock() {
+                        let _ = killer.kill();
+                    }
+                    break;
+                }
+            }
+        }) {
+        Ok(thread) => thread,
+        Err(error) => {
+            alive.store(false, Ordering::Release);
+            if let Ok(mut killer) = killer.lock() {
+                let _ = killer.kill();
+            }
+            output_queue.finish(None);
+            let _ = reader_thread.join();
+            return Err(TerminalError::Io {
+                operation: "start terminal output pump",
+                message: error.to_string(),
+            });
+        }
+    };
 
     let exit_id = id.to_string();
     let exit_alive = Arc::clone(&alive);
-    thread::Builder::new()
+    let monitor = thread::Builder::new()
         .name(format!("{id}-wait"))
         .spawn(move || {
             let status = child.wait();
             exit_alive.store(false, Ordering::Release);
+            let _ = reader_thread.join();
+            output_queue.finish(None);
             let _ = output_thread.join();
             match status {
-                Ok(status) => sink(TerminalEvent::Exited {
-                    session_id: exit_id,
-                    exit_code: status.exit_code(),
-                    signal: status.signal().map(str::to_string),
-                }),
-                Err(error) => sink(TerminalEvent::ReaderFailed {
-                    session_id: exit_id,
-                    message: format!("wait for terminal shell: {error}"),
-                }),
+                Ok(status) => {
+                    let _ = sink(TerminalEvent::Exited {
+                        session_id: exit_id,
+                        exit_code: status.exit_code(),
+                        signal: status.signal().map(str::to_string),
+                    });
+                }
+                Err(error) => {
+                    let _ = sink(TerminalEvent::ReaderFailed {
+                        session_id: exit_id,
+                        message: format!("wait for terminal shell: {error}"),
+                    });
+                }
             }
-        })
-        .map_err(|error| TerminalError::Io {
+        });
+    if let Err(error) = monitor {
+        alive.store(false, Ordering::Release);
+        if let Ok(mut killer) = killer.lock() {
+            let _ = killer.kill();
+        }
+        return Err(TerminalError::Io {
             operation: "start terminal process monitor",
             message: error.to_string(),
-        })?;
+        });
+    }
 
     Ok(TerminalSession {
         id: id.to_string(),
         root: root.to_path_buf(),
         master: Mutex::new(pair.master),
         writer: Mutex::new(writer),
-        killer: Mutex::new(killer),
+        killer,
         alive,
     })
 }
@@ -478,6 +674,33 @@ mod tests {
     }
 
     #[test]
+    fn output_queue_is_bounded_and_reports_the_discarded_prefix_once() {
+        let queue = OutputQueue::default();
+        for marker in 0_u8..32 {
+            queue.push(vec![marker; OUTPUT_CHUNK_BYTES]);
+        }
+        queue.finish(None);
+        let state = queue.state.lock().unwrap();
+        assert!(state.frames.len() <= MAX_OUTPUT_QUEUE_FRAMES);
+        assert!(state.queued_bytes <= MAX_OUTPUT_QUEUE_BYTES);
+        drop(state);
+
+        let OutputQueueItem::Frame {
+            bytes,
+            omitted_bytes,
+        } = queue.next()
+        else {
+            panic!("bounded queue must retain output");
+        };
+        assert_eq!(omitted_bytes, MAX_OUTPUT_QUEUE_BYTES as u64);
+        assert_eq!(bytes.first().copied(), Some(16));
+        let OutputQueueItem::Frame { omitted_bytes, .. } = queue.next() else {
+            panic!("bounded queue must retain its tail");
+        };
+        assert_eq!(omitted_bytes, 0);
+    }
+
+    #[test]
     fn invalid_owner_is_rejected_before_process_creation() {
         let sessions = TerminalSessions::default();
         let root = tempfile::tempdir().expect("temporary root");
@@ -487,7 +710,7 @@ mod tests {
                 root.path(),
                 DEFAULT_COLS,
                 DEFAULT_ROWS,
-                Arc::new(|_| {}),
+                Arc::new(|_| Ok(())),
             )
             .expect_err("invalid owner must fail");
         assert!(matches!(error, TerminalError::InvalidInput(_)));
@@ -508,6 +731,7 @@ mod tests {
                 30,
                 Arc::new(move |event| {
                     let _ = sender.send(event);
+                    Ok(())
                 }),
             )
             .expect("terminal starts");
@@ -535,6 +759,7 @@ mod tests {
                     TerminalEvent::ReaderFailed { message, .. } => {
                         panic!("terminal reader failed: {message}")
                     }
+                    TerminalEvent::OutputTruncated { .. } => {}
                 }
             }
         }
@@ -558,7 +783,7 @@ mod tests {
                 root.path(),
                 DEFAULT_COLS,
                 DEFAULT_ROWS,
-                Arc::new(|_| {}),
+                Arc::new(|_| Ok(())),
             )
             .expect("terminal starts");
         assert!(matches!(
@@ -567,7 +792,7 @@ mod tests {
                 root.path(),
                 DEFAULT_COLS,
                 DEFAULT_ROWS,
-                Arc::new(|_| {})
+                Arc::new(|_| Ok(()))
             ),
             Err(TerminalError::AlreadyRunning)
         ));
@@ -594,7 +819,7 @@ mod tests {
                 root.path(),
                 DEFAULT_COLS,
                 DEFAULT_ROWS,
-                Arc::new(|_| {}),
+                Arc::new(|_| Ok(())),
             )
             .expect("replacement terminal starts");
         assert!(
@@ -607,5 +832,33 @@ mod tests {
             sessions.write("window-a", &replacement.session_id, b"pwd\n"),
             Err(TerminalError::SessionNotFound)
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_symlink_alias_retains_the_same_terminal_owner() {
+        use std::os::unix::fs::symlink;
+
+        let sessions = TerminalSessions::default();
+        let parent = tempfile::tempdir().expect("temporary parent");
+        let root = parent.path().join("root");
+        let alias = parent.path().join("root-alias");
+        std::fs::create_dir(&root).expect("create terminal root");
+        symlink(&root, &alias).expect("create root alias");
+        let started = sessions
+            .start(
+                "window-alias",
+                &root,
+                DEFAULT_COLS,
+                DEFAULT_ROWS,
+                Arc::new(|_| Ok(())),
+            )
+            .expect("terminal starts");
+
+        sessions.remove_owner_if_root_changed("window-alias", &alias);
+        assert!(sessions.has_session("window-alias", &started.session_id));
+        sessions
+            .close("window-alias", &started.session_id)
+            .expect("close aliased session");
     }
 }

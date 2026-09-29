@@ -30,6 +30,12 @@ export interface WorkspaceMutationGateway {
   listWorkspaceMutationRecoveries(
     repositoryRoot: string,
   ): Promise<WorkspaceMutationRecoverySummary[]>;
+  rollbackWorkspaceMutation(repositoryRoot: string, recoveryId: string): Promise<void>;
+  finalizeWorkspaceMutation(repositoryRoot: string, recoveryId: string): Promise<void>;
+  acknowledgeWorkspaceMutationRecovery(
+    repositoryRoot: string,
+    recoveryId: string,
+  ): Promise<void>;
 }
 
 export interface WorkspaceMutationEditorPort {
@@ -271,6 +277,18 @@ export class WorkspaceMutationCoordinator {
 
   listRecoveries(repositoryRoot: string): Promise<WorkspaceMutationRecoverySummary[]> {
     return this.gateway.listWorkspaceMutationRecoveries(repositoryRoot);
+  }
+
+  rollbackRecovery(repositoryRoot: string, recoveryId: string): Promise<void> {
+    return this.gateway.rollbackWorkspaceMutation(repositoryRoot, recoveryId);
+  }
+
+  finalizeRecovery(repositoryRoot: string, recoveryId: string): Promise<void> {
+    return this.gateway.finalizeWorkspaceMutation(repositoryRoot, recoveryId);
+  }
+
+  acknowledgeRecovery(repositoryRoot: string, recoveryId: string): Promise<void> {
+    return this.gateway.acknowledgeWorkspaceMutationRecovery(repositoryRoot, recoveryId);
   }
 
   dispose(): void {

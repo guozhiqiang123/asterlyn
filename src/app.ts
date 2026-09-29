@@ -129,7 +129,7 @@ import {
   projectFilesContextPolicy,
   projectFilesHistoryIntent,
 } from "./features/files-editor/project-files-context-policy.ts";
-import { ProjectFilesOperationRuntime } from "./features/files-editor/project-files-operation-runtime.ts";
+import { createProjectFilesRecoveryRuntime, projectFilesOperationMessages, ProjectFilesOperationRuntime } from "./features/files-editor/project-files-operation-runtime.ts";
 import { createBrowserTextClipboardAdapter } from "./adapters/browser/browser-text-clipboard-adapter.ts";
 import { localizedOperationError } from "./localization/error-message";
 import {
@@ -369,7 +369,7 @@ const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
 ];
 
 export class AsterlynApp {
-  private localization: Localization;
+  private disposed = false; private localization: Localization;
   private localeRequestGeneration = 0;
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
@@ -1072,6 +1072,8 @@ export class AsterlynApp {
           this.showError(error);
           void this.refresh();
         },
+        recoveryRequired: (identity) =>
+          this.projectFilesOperationRuntime.controller.loadRecoveries(identity, true),
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
@@ -1201,27 +1203,16 @@ export class AsterlynApp {
         stageCreatedFile: (workspacePath) => createdFileStaging.stage(workspacePath),
         completed: (action, target, destination, outcome) =>
           this.completeProjectFilesOperation(action, target, destination, outcome),
+        ...createProjectFilesRecoveryRuntime({
+          captureEditor: () => this.captureMountedTextEditor(),
+          textTabs: () => this.editorState.session.textTabs,
+          reconcileExternalPaths: (paths) => this.filesEditorRuntime.editor.reconcileExternalPaths(paths),
+          reconcileMutation: (identity, outcome) => this.workspaceMutations.reconcile(identity, outcome),
+        }),
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
-      messages: () => {
-        const labels = this.localization.catalog.projectFiles.contextMenu;
-        return {
-          invalidName: labels.invalidName,
-          unsafeSource: labels.unsafeSource,
-          sourceChanged: labels.sourceChanged,
-          destinationExists: labels.destinationExists,
-          operationFailed: labels.operationFailed,
-          copied: labels.copiedEntry,
-          cut: labels.cutEntry,
-          created: labels.createdFile,
-          stagedCreated: labels.stagedCreatedFile,
-          leftCreatedUntracked: labels.leftCreatedFileUntracked,
-          stageCreatedFailed: labels.stageCreatedFileFailed,
-          renamed: labels.renamedEntry,
-          pasted: labels.pastedEntry,
-        };
-      },
+      messages: () => projectFilesOperationMessages(this.localization.catalog.projectFiles.contextMenu),
       trash: {
         busy: () => this.workspaceTrashRuntime.controller.busy,
         request: (target) => this.workspaceTrashRuntime.controller.request(target),
@@ -1492,7 +1483,7 @@ export class AsterlynApp {
       focusHistoryFilter: () => this.focusHistoryFilter(),
       openEditorFind: () => this.editorSurface.openFindReplace(),
       captureEditor: () => this.captureMountedTextEditor(),
-      disposeFeatures: () => this.disposeFeatures(),
+      disposeFeatures: () => this.dispose(),
     });
     this.windowChromeBinding = new WindowChromeBinding(root, {
       captureEditor: () => this.captureMountedTextEditor(),
@@ -1891,7 +1882,10 @@ export class AsterlynApp {
     this.root.querySelector<HTMLButtonElement>(`[data-tool="${focusTool}"]`)?.focus();
   }
 
-  private disposeFeatures(): void {
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.shellEventBinding.dispose();
     if (this.projectTreeScrollFrame !== null) cancelAnimationFrame(this.projectTreeScrollFrame);
     if (this.changeTreeScrollFrame !== null) cancelAnimationFrame(this.changeTreeScrollFrame);
     this.projectTreeScrollFrame = null;
@@ -2307,6 +2301,7 @@ export class AsterlynApp {
         void this.stashRuntime.load(snapshot.root, false);
       }
       void this.loadProjectFiles(opened.root, generation);
+      void this.projectFilesOperationRuntime.controller.loadRecoveries({ root: opened.root, generation }, true);
       void this.loadReplacementRecoveries(opened.root, generation);
       if (snapshot) void this.gitHistoryMutationRuntime.fileRestore.loadRecoveries(opened.root, true);
       pendingRoot = snapshot?.root ?? null;
@@ -4249,6 +4244,11 @@ export class AsterlynApp {
   private bindProjectEvents(): void {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (!workspaceRoot) return;
+    this.root
+      .querySelector<HTMLButtonElement>("[data-workspace-mutation-recovery-open]")
+      ?.addEventListener("click", () =>
+        this.projectFilesOperationRuntime.controller.openRecoveryDialog()
+      );
     this.root
       .querySelector<HTMLButtonElement>("#retry-project-files")
       ?.addEventListener("click", () => {

@@ -1,5 +1,7 @@
 import type {
   WorkspaceEntryInspection,
+  WorkspaceMutationRecoveryAction,
+  WorkspaceMutationRecoverySummary,
   WorkspaceMutationOperation,
   WorkspaceMutationOutcome,
 } from "../../models.ts";
@@ -46,12 +48,19 @@ export type ProjectFilesOperationDialog =
       remember: boolean;
       error: string | null;
       busy: boolean;
+    }
+  | {
+      readonly kind: "recovery";
     };
 
 export interface ProjectFilesOperationState {
   readonly inlineEdit: ProjectFilesInlineEdit | null;
   readonly dialog: ProjectFilesOperationDialog | null;
   readonly busyPath: string | null;
+  readonly recoveryIdentity: WorkspaceMutationIdentity | null;
+  readonly recoveries: readonly WorkspaceMutationRecoverySummary[];
+  readonly recoveryBusy: { readonly id: string; readonly action: WorkspaceMutationRecoveryAction } | null;
+  readonly recoveryError: string | null;
 }
 
 export interface ProjectFilesOperationMessages {
@@ -68,6 +77,19 @@ export interface ProjectFilesOperationMessages {
   readonly stageCreatedFailed: string;
   readonly renamed: string;
   readonly pasted: string;
+  readonly recoveryTitle: string;
+  readonly recoveryDetail: string;
+  readonly recoveryClose: string;
+  readonly recoveryRollback: string;
+  readonly recoveryFinalize: string;
+  readonly recoveryAcknowledge: string;
+  readonly recoveryWorking: string;
+  readonly recoveryResolved: string;
+  readonly recoveryFailed: string;
+  readonly recoveryDirty: string;
+  recoveryCount(count: number): string;
+  recoveryPhase(phase: string): string;
+  recoveryState(state: "missing" | "matchesReviewed" | "changedOrUnknown"): string;
 }
 
 export interface ProjectFilesOperationGateway {
@@ -86,6 +108,10 @@ export interface ProjectFilesMutationPort {
     planId: string,
   ): Promise<WorkspaceMutationExecutionResult>;
   cancel(): void;
+  listRecoveries(repositoryRoot: string): Promise<WorkspaceMutationRecoverySummary[]>;
+  rollbackRecovery(repositoryRoot: string, recoveryId: string): Promise<void>;
+  finalizeRecovery(repositoryRoot: string, recoveryId: string): Promise<void>;
+  acknowledgeRecovery(repositoryRoot: string, recoveryId: string): Promise<void>;
 }
 
 export interface ProjectFilesTrashPort {
@@ -107,6 +133,12 @@ export interface ProjectFilesOperationRuntime {
     destination: string | null,
     outcome: WorkspaceMutationOutcome,
   ): void;
+  recoveryBlocked(paths: readonly string[], action: WorkspaceMutationRecoveryAction): boolean;
+  reconcileRecovery(
+    identity: WorkspaceMutationIdentity,
+    recovery: WorkspaceMutationRecoverySummary,
+    action: WorkspaceMutationRecoveryAction,
+  ): Promise<void>;
   status(message: string): void;
   error(error: unknown): void;
 }
@@ -119,6 +151,10 @@ export class ProjectFilesOperationController {
     inlineEdit: null,
     dialog: null,
     busyPath: null,
+    recoveryIdentity: null,
+    recoveries: [],
+    recoveryBusy: null,
+    recoveryError: null,
   };
   private readonly listeners = new Set<Listener>();
   private disposed = false;
@@ -268,9 +304,16 @@ export class ProjectFilesOperationController {
     if (this.value.inlineEdit !== edit) return;
     const outcome = completedOutcome(execution);
     if (!outcome) {
-      edit.busy = false;
-      edit.error = executionFailure(execution, this.messages());
-      this.emit();
+      if ("outcome" in execution && execution.outcome.recoveryId) {
+        this.value = { ...this.value, inlineEdit: null };
+        this.emit();
+        await this.loadRecoveries(identity, true);
+        this.runtime.error(new Error(executionFailure(execution, this.messages())));
+      } else {
+        edit.busy = false;
+        edit.error = executionFailure(execution, this.messages());
+        this.emit();
+      }
       return;
     }
     this.value = { ...this.value, inlineEdit: null };
@@ -377,6 +420,9 @@ export class ProjectFilesOperationController {
     this.value = { ...this.value, busyPath: null, dialog: null };
     this.emit();
     if (!outcome) {
+      if ("outcome" in execution && execution.outcome.recoveryId) {
+        await this.loadRecoveries(identity, true);
+      }
       this.runtime.error(new Error(executionFailure(execution, this.messages())));
       return;
     }
@@ -444,8 +490,92 @@ export class ProjectFilesOperationController {
     }
   }
 
+  async loadRecoveries(identity: WorkspaceMutationIdentity, open: boolean): Promise<void> {
+    if (this.disposed || !this.sameIdentity(identity)) return;
+    try {
+      const recoveries = await this.mutations.listRecoveries(identity.root);
+      if (!this.sameIdentity(identity)) return;
+      this.value = {
+        ...this.value,
+        recoveryIdentity: { ...identity },
+        recoveries,
+        recoveryError: null,
+        dialog: open && recoveries.length > 0 ? { kind: "recovery" } : this.value.dialog,
+      };
+      if (recoveries.length === 0 && this.value.dialog?.kind === "recovery") {
+        this.value = { ...this.value, dialog: null };
+      }
+      this.emit();
+    } catch (error) {
+      if (!this.sameIdentity(identity)) return;
+      this.value = { ...this.value, recoveryError: this.messages().recoveryFailed };
+      this.emit();
+      this.runtime.error(error);
+    }
+  }
+
+  openRecoveryDialog(): void {
+    const identity = this.value.recoveryIdentity;
+    if (!identity || !this.sameIdentity(identity) || this.value.recoveries.length === 0) return;
+    this.value = { ...this.value, dialog: { kind: "recovery" }, recoveryError: null };
+    this.emit();
+  }
+
+  async resolveRecovery(
+    recoveryId: string,
+    action: WorkspaceMutationRecoveryAction,
+  ): Promise<void> {
+    const identity = this.value.recoveryIdentity;
+    const recovery = this.value.recoveries.find((item) => item.recoveryId === recoveryId);
+    if (
+      !identity || !recovery || !this.sameIdentity(identity) || this.value.recoveryBusy ||
+      !recovery.supportedActions.includes(action)
+    ) return;
+    const paths = recoveryPaths(recovery);
+    if (this.runtime.recoveryBlocked(paths, action)) {
+      this.value = { ...this.value, recoveryError: this.messages().recoveryDirty };
+      this.emit();
+      return;
+    }
+    const busy = { id: recoveryId, action } as const;
+    this.value = { ...this.value, recoveryBusy: busy, recoveryError: null };
+    this.emit();
+    try {
+      if (action === "rollback") {
+        await this.mutations.rollbackRecovery(identity.root, recoveryId);
+      } else if (action === "finalize") {
+        await this.mutations.finalizeRecovery(identity.root, recoveryId);
+      } else {
+        await this.mutations.acknowledgeRecovery(identity.root, recoveryId);
+      }
+      if (!this.sameIdentity(identity) || this.value.recoveryBusy !== busy) return;
+      await this.runtime.reconcileRecovery(identity, recovery, action);
+      if (!this.sameIdentity(identity) || this.value.recoveryBusy !== busy) return;
+      const recoveries = await this.mutations.listRecoveries(identity.root);
+      if (!this.sameIdentity(identity) || this.value.recoveryBusy !== busy) return;
+      this.value = {
+        ...this.value,
+        recoveries,
+        recoveryBusy: null,
+        recoveryError: null,
+        dialog: recoveries.length > 0 ? { kind: "recovery" } : null,
+      };
+      this.emit();
+      this.runtime.status(this.messages().recoveryResolved);
+    } catch (error) {
+      if (!this.sameIdentity(identity) || this.value.recoveryBusy !== busy) return;
+      this.value = {
+        ...this.value,
+        recoveryBusy: null,
+        recoveryError: this.messages().recoveryFailed,
+      };
+      this.emit();
+      this.runtime.error(error);
+    }
+  }
+
   closeDialog(): void {
-    if (!this.value.dialog || this.value.dialog.busy) return;
+    if (!this.value.dialog || ("busy" in this.value.dialog && this.value.dialog.busy)) return;
     this.value = { ...this.value, dialog: null, busyPath: null };
     this.emit();
   }
@@ -454,7 +584,15 @@ export class ProjectFilesOperationController {
     if (this.disposed) return;
     this.mutations.cancel();
     this.clipboard.clear();
-    this.value = { inlineEdit: null, dialog: null, busyPath: null };
+    this.value = {
+      inlineEdit: null,
+      dialog: null,
+      busyPath: null,
+      recoveryIdentity: null,
+      recoveries: [],
+      recoveryBusy: null,
+      recoveryError: null,
+    };
     this.emit();
   }
 
@@ -615,6 +753,12 @@ function executionFailure(
   if ("outcome" in result && result.outcome.error) return result.outcome.error;
   if (result.status === "failure" && result.error instanceof Error) return result.error.message;
   return messages.operationFailed;
+}
+
+function recoveryPaths(recovery: WorkspaceMutationRecoverySummary): string[] {
+  const paths = recovery.sourceStates.map((state) => state.path);
+  if (recovery.destination) paths.push(recovery.destination);
+  return Array.from(new Set(paths));
 }
 
 function targetFromEdit(

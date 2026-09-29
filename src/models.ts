@@ -501,26 +501,10 @@ export interface TerminalStarted {
 }
 
 export type TerminalEvent =
-  | {
-      protocolVersion: 1;
-      kind: "output";
-      sessionId: string;
-      sequence: number;
-      dataBase64: string;
-    }
-  | {
-      protocolVersion: 1;
-      kind: "exited";
-      sessionId: string;
-      exitCode: number;
-      signal: string | null;
-    }
-  | {
-      protocolVersion: 1;
-      kind: "error";
-      sessionId: string;
-      message: string;
-    };
+  | { protocolVersion: 1; kind: "output"; sessionId: string; sequence: number; dataBase64: string }
+  | { protocolVersion: 1; kind: "truncated"; sessionId: string; sequence: number; omittedBytes: number }
+  | { protocolVersion: 1; kind: "exited"; sessionId: string; exitCode: number; signal: string | null }
+  | { protocolVersion: 1; kind: "error"; sessionId: string; message: string };
 
 export interface ImagePreview {
   path: string;
@@ -738,23 +722,21 @@ export interface WorkspacePathRemap {
 }
 
 export interface WorkspaceMutationOutcome {
-  planId: string;
-  status: WorkspaceMutationStatus;
-  affectedPaths: string[];
-  pathRemaps: WorkspacePathRemap[];
-  invalidatedSlices: WorkspaceMutationInvalidation[];
-  recoveryId: string | null;
+  planId: string; status: WorkspaceMutationStatus;
+  affectedPaths: string[]; pathRemaps: WorkspacePathRemap[];
+  invalidatedSlices: WorkspaceMutationInvalidation[]; recoveryId: string | null;
   error: string | null;
 }
 
 export interface WorkspaceMutationRecoverySummary {
-  recoveryId: string;
-  workspaceRoot: string;
-  operation: WorkspaceMutationOperation;
-  phase: string;
-  destination: string | null;
-  sourceHold: string | null;
+  recoveryId: string; workspaceRoot: string;
+  operation: WorkspaceMutationOperation; phase: string;
+  sourceStates: WorkspaceMutationRecoveryPathState[]; destination: string | null;
+  destinationState: WorkspaceMutationRecoveryPathStateKind | null; heldSourceState: WorkspaceMutationRecoveryPathStateKind | null; supportedActions: WorkspaceMutationRecoveryAction[];
 }
+export type WorkspaceMutationRecoveryAction = "rollback" | "finalize" | "acknowledge";
+export type WorkspaceMutationRecoveryPathStateKind = "missing" | "matchesReviewed" | "changedOrUnknown";
+export interface WorkspaceMutationRecoveryPathState { path: string; state: WorkspaceMutationRecoveryPathStateKind; }
 
 export type ReplacementRecoveryStatus = "applied" | "rolledBack" | "needsRecovery";
 export type ReplacementFileState = "original" | "replaced" | "conflict" | "unavailable";

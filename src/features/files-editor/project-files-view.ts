@@ -78,6 +78,9 @@ export function renderProjectNavigation(
     ? `<div class="project-virtual-spacer" aria-hidden="true" style="height:${bottomCount * PROJECT_TREE_ROW_HEIGHT}px"></div>`
     : "";
   const notices = [
+    (operations?.recoveries?.length ?? 0) > 0
+      ? `<div class="project-tree-notice warning"><span>!</span><button class="secondary-button" data-workspace-mutation-recovery-open type="button">${escapeHtml(copy.contextMenu.recoveryCount(operations!.recoveries.length))}</button></div>`
+      : "",
     state.loading
       ? `<div class="project-tree-notice"><span class="spinner"></span><span>${escapeHtml(copy.refreshingFiles)}</span></div>`
       : "",

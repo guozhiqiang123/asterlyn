@@ -30,8 +30,10 @@ pub(crate) use workspace_document::{read_authorized_text_file, save_authorized_t
 pub(crate) use workspace_document::{read_session_text_file, save_session_text_file};
 pub(crate) use workspace_mutation::{
     WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
-    execute_workspace_mutation_plan, inspect_workspace_entry_inventory,
+    acknowledge_workspace_mutation_recovery, execute_workspace_mutation_plan,
+    finalize_workspace_mutation_recovery, inspect_workspace_entry_inventory,
     load_workspace_mutation_recoveries, prepare_workspace_mutation_plan,
+    rollback_workspace_mutation_recovery,
 };
 pub use workspace_replacement::WORKSPACE_REPLACEMENT_LIMITS;
 pub(crate) use workspace_replacement::{

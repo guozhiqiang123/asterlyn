@@ -24,7 +24,9 @@ pub use file_restore::{
 };
 pub use mutation_execution::{
     WorkspaceMutationCancellationToken, WorkspaceMutationInvalidation, WorkspaceMutationOutcome,
-    WorkspaceMutationRecoverySummary, WorkspaceMutationStatus, WorkspacePathRemap,
+    WorkspaceMutationRecoveryAction, WorkspaceMutationRecoveryPathState,
+    WorkspaceMutationRecoveryPathStateKind, WorkspaceMutationRecoverySummary,
+    WorkspaceMutationStatus, WorkspacePathRemap,
 };
 
 pub use replacement::{

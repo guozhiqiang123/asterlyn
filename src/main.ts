@@ -35,7 +35,11 @@ import { BRAND } from "./brand";
 import type { LocaleCatalog } from "./localization/catalog.ts";
 import { ThemedSelectHost } from "./shared/themed-select-host.ts";
 
-export function startApplication(catalog: LocaleCatalog): void {
+interface ApplicationRuntime { dispose(): void; }
+let activeRuntime: ApplicationRuntime | null = null;
+
+export function startApplication(catalog: LocaleCatalog): ApplicationRuntime {
+  activeRuntime?.dispose();
   document.title = BRAND.name;
   document
     .querySelector<HTMLMetaElement>('meta[name="description"]')
@@ -44,7 +48,21 @@ export function startApplication(catalog: LocaleCatalog): void {
   const root = document.querySelector<HTMLElement>("#app");
   if (!root) throw new Error("Application root was not found.");
 
-  new ThemedSelectHost(document, window);
+  const themedSelects = new ThemedSelectHost(document, window);
   const app = new AsterlynApp(root, catalog);
+  let disposed = false;
+  const runtime: ApplicationRuntime = {
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      window.removeEventListener("pagehide", runtime.dispose);
+      themedSelects.dispose();
+      app.dispose();
+      if (activeRuntime === runtime) activeRuntime = null;
+    },
+  };
+  activeRuntime = runtime;
+  window.addEventListener("pagehide", runtime.dispose, { once: true });
   void app.start();
+  return runtime;
 }

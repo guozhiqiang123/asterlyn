@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "sourceReviewThreshold": 1500,
+  "sourceOwnership": {
+    "crates/asterlyn-git/src/operation.rs": {
+      "owner": "reviewed and recoverable Git operation domain",
+      "maximumLines": 2232,
+      "disposition": "cohesive operation lifecycle; extract per-operation executors before adding another workflow"
+    },
+    "crates/asterlyn-git/src/repository.rs": {
+      "owner": "Git repository query and mutation capability",
+      "maximumLines": 10316,
+      "disposition": "AR5 extracted credential policy into credential.rs; extract remote synchronization before adding remote behavior"
+    },
+    "crates/asterlyn-workspace/src/mutation_execution.rs": {
+      "owner": "durable workspace mutation execution and recovery",
+      "maximumLines": 2360,
+      "disposition": "newly reviewed recovery boundary; extract manifest persistence before adding another mutation kind"
+    },
+    "crates/asterlyn-workspace/src/search.rs": {
+      "owner": "bounded workspace search and replacement planning",
+      "maximumLines": 1856,
+      "disposition": "cohesive bounded search capability; extract replacement planning before adding another query mode"
+    }
+  }
+}

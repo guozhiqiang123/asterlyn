@@ -33,6 +33,19 @@ test("terminal protocol accepts versioned output, exit, and failure events", () 
     sessionId: "terminal-1",
     message: "reader failed",
   }).kind, "error");
+  assert.deepEqual(parseTerminalEvent({
+    protocolVersion: 1,
+    kind: "truncated",
+    sessionId: "terminal-1",
+    sequence: 2,
+    omittedBytes: 65536,
+  }), {
+    protocolVersion: 1,
+    kind: "truncated",
+    sessionId: "terminal-1",
+    sequence: 2,
+    omittedBytes: 65536,
+  });
 });
 
 test("terminal protocol rejects stale and malformed event payloads", () => {
@@ -49,5 +62,15 @@ test("terminal protocol rejects stale and malformed event payloads", () => {
       dataBase64: "",
     }),
     /invalid sequence/,
+  );
+  assert.throws(
+    () => parseTerminalEvent({
+      protocolVersion: 1,
+      kind: "truncated",
+      sessionId: "terminal-1",
+      sequence: 1,
+      omittedBytes: 0,
+    }),
+    /invalid omitted byte count/,
   );
 });

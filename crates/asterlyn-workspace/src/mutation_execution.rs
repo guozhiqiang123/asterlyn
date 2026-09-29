@@ -8,8 +8,8 @@ use std::sync::{
 
 use crate::{
     Workspace, WorkspaceEntryInventory, WorkspaceEntryKind, WorkspaceError,
-    WorkspaceMutationOperation, WorkspaceMutationPlan, file_identity::opened_file_matches_path,
-    sync_directory, validate_relative_path,
+    WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationPlan,
+    file_identity::opened_file_matches_path, sync_directory, validate_relative_path,
 };
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -57,8 +57,34 @@ pub struct WorkspaceMutationRecoverySummary {
     pub workspace_root: String,
     pub operation: WorkspaceMutationOperation,
     pub phase: String,
+    pub source_states: Vec<WorkspaceMutationRecoveryPathState>,
     pub destination: Option<String>,
-    pub source_hold: Option<String>,
+    pub destination_state: Option<WorkspaceMutationRecoveryPathStateKind>,
+    pub held_source_state: Option<WorkspaceMutationRecoveryPathStateKind>,
+    pub supported_actions: Vec<WorkspaceMutationRecoveryAction>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspaceMutationRecoveryAction {
+    Rollback,
+    Finalize,
+    Acknowledge,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspaceMutationRecoveryPathStateKind {
+    Missing,
+    MatchesReviewed,
+    ChangedOrUnknown,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceMutationRecoveryPathState {
+    pub path: String,
+    pub state: WorkspaceMutationRecoveryPathStateKind,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -91,9 +117,18 @@ struct MutationRecoveryManifest {
     recovery_id: String,
     workspace_root: String,
     operation: WorkspaceMutationOperation,
+    #[serde(default)]
     fingerprint: Option<String>,
+    #[serde(default)]
+    inventory: Option<WorkspaceEntryInventory>,
+    #[serde(default)]
+    inventories: Vec<WorkspaceEntryInventory>,
+    #[serde(default)]
+    limits: WorkspaceMutationLimits,
     phase: String,
+    #[serde(default)]
     destination: Option<String>,
+    #[serde(default)]
     source_hold: Option<String>,
 }
 
@@ -298,19 +333,499 @@ impl Workspace {
                         message: format!("invalid workspace mutation recovery: {error}"),
                     }
                 })?;
-            if manifest.workspace_root == self.root().to_string_lossy() {
-                summaries.push(WorkspaceMutationRecoverySummary {
-                    recovery_id: manifest.recovery_id,
-                    workspace_root: manifest.workspace_root,
-                    operation: manifest.operation,
-                    phase: manifest.phase,
-                    destination: manifest.destination,
-                    source_hold: manifest.source_hold,
+            if !matches!(manifest.version, 1 | 2) {
+                return Err(WorkspaceError::InvalidMutation {
+                    message: format!(
+                        "unsupported workspace mutation recovery version {}",
+                        manifest.version
+                    ),
                 });
+            }
+            if manifest.workspace_root == self.root().to_string_lossy() {
+                summaries.push(self.summarize_mutation_recovery(&manifest));
             }
         }
         summaries.sort_by(|left, right| left.recovery_id.cmp(&right.recovery_id));
         Ok(summaries)
+    }
+
+    pub fn rollback_mutation_recovery(
+        &self,
+        recovery_root: &Path,
+        recovery_id: &str,
+    ) -> Result<(), WorkspaceError> {
+        let Some(mut journal) = MutationJournal::load(self.root(), recovery_root, recovery_id)?
+        else {
+            return Ok(());
+        };
+        journal.require_current_schema()?;
+        let inventory = journal.manifest.primary_inventory()?.clone();
+        match journal.manifest.operation.clone() {
+            WorkspaceMutationOperation::Copy { destination, .. } => {
+                match self.observe_inventory(&destination, &inventory, journal.manifest.limits) {
+                    WorkspaceMutationRecoveryPathStateKind::Missing => {}
+                    WorkspaceMutationRecoveryPathStateKind::MatchesReviewed => {
+                        self.remove_verified_workspace_entry(&destination, inventory.source.kind)?;
+                    }
+                    WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown => {
+                        return Err(recovery_conflict(
+                            "the copy destination no longer matches the reviewed entry",
+                        ));
+                    }
+                }
+                journal.remove()
+            }
+            WorkspaceMutationOperation::Move {
+                source,
+                destination,
+            } => self.rollback_move_recovery(&mut journal, &source, &destination, &inventory),
+            WorkspaceMutationOperation::CreateFile { .. }
+            | WorkspaceMutationOperation::Trash { .. } => Err(recovery_conflict(
+                "this workspace mutation cannot be rolled back automatically",
+            )),
+        }
+    }
+
+    pub fn finalize_mutation_recovery(
+        &self,
+        recovery_root: &Path,
+        recovery_id: &str,
+    ) -> Result<(), WorkspaceError> {
+        let Some(mut journal) = MutationJournal::load(self.root(), recovery_root, recovery_id)?
+        else {
+            return Ok(());
+        };
+        journal.require_current_schema()?;
+        let inventory = journal.manifest.primary_inventory()?.clone();
+        match journal.manifest.operation.clone() {
+            WorkspaceMutationOperation::Copy { destination, .. } => {
+                if self.observe_inventory(&destination, &inventory, journal.manifest.limits)
+                    != WorkspaceMutationRecoveryPathStateKind::MatchesReviewed
+                {
+                    return Err(recovery_conflict(
+                        "the copy destination is not the reviewed entry",
+                    ));
+                }
+                journal.remove()
+            }
+            WorkspaceMutationOperation::Move {
+                source,
+                destination,
+            } => self.finalize_move_recovery(&mut journal, &source, &destination, &inventory),
+            WorkspaceMutationOperation::CreateFile { .. }
+            | WorkspaceMutationOperation::Trash { .. } => Err(recovery_conflict(
+                "this workspace mutation cannot be finalized automatically",
+            )),
+        }
+    }
+
+    pub fn acknowledge_mutation_recovery(
+        &self,
+        recovery_root: &Path,
+        recovery_id: &str,
+    ) -> Result<(), WorkspaceError> {
+        let Some(journal) = MutationJournal::load(self.root(), recovery_root, recovery_id)? else {
+            return Ok(());
+        };
+        if journal
+            .validated_source_hold(self.root())?
+            .is_some_and(|path| path.exists())
+        {
+            return Err(recovery_conflict(
+                "held source data must be rolled back or finalized before acknowledgement",
+            ));
+        }
+        journal.remove()
+    }
+
+    fn summarize_mutation_recovery(
+        &self,
+        manifest: &MutationRecoveryManifest,
+    ) -> WorkspaceMutationRecoverySummary {
+        let source_paths = manifest.operation.trash_sources();
+        let source_paths = if source_paths.is_empty() {
+            match &manifest.operation {
+                WorkspaceMutationOperation::Copy { source, .. }
+                | WorkspaceMutationOperation::Move { source, .. } => vec![source.clone()],
+                _ => Vec::new(),
+            }
+        } else {
+            source_paths
+        };
+        let source_states = source_paths
+            .iter()
+            .map(|path| WorkspaceMutationRecoveryPathState {
+                path: path.clone(),
+                state: manifest.inventory_for_source(path).map_or(
+                    WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown,
+                    |inventory| {
+                        if matches!(
+                            &manifest.operation,
+                            WorkspaceMutationOperation::Trash { .. }
+                        ) {
+                            self.observe_trash_inventory(path, inventory, manifest.limits)
+                        } else {
+                            self.observe_inventory(path, inventory, manifest.limits)
+                        }
+                    },
+                ),
+            })
+            .collect::<Vec<_>>();
+        let destination_state = manifest.destination.as_deref().map(|destination| {
+            manifest.primary_inventory().map_or(
+                WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown,
+                |inventory| self.observe_inventory(destination, inventory, manifest.limits),
+            )
+        });
+        let held_source_state = manifest.source_hold.as_deref().map(|_| {
+            manifest
+                .primary_inventory()
+                .ok()
+                .and_then(|inventory| {
+                    manifest
+                        .validated_source_hold(self.root())
+                        .ok()
+                        .flatten()
+                        .map(|path| {
+                            self.observe_absolute_inventory(&path, inventory, manifest.limits)
+                        })
+                })
+                .unwrap_or(WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown)
+        });
+        let mut supported_actions = Vec::new();
+        if manifest.version == 2 {
+            match &manifest.operation {
+                WorkspaceMutationOperation::Copy { .. } => {
+                    if matches!(
+                        destination_state,
+                        Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+                            | Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed)
+                    ) {
+                        supported_actions.push(WorkspaceMutationRecoveryAction::Rollback);
+                    }
+                    if destination_state
+                        == Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed)
+                    {
+                        supported_actions.push(WorkspaceMutationRecoveryAction::Finalize);
+                    }
+                }
+                WorkspaceMutationOperation::Move { .. } => {
+                    if self.move_recovery_can_rollback(
+                        &source_states,
+                        destination_state,
+                        held_source_state,
+                    ) {
+                        supported_actions.push(WorkspaceMutationRecoveryAction::Rollback);
+                    }
+                    if self.move_recovery_can_finalize(
+                        &source_states,
+                        destination_state,
+                        held_source_state,
+                    ) {
+                        supported_actions.push(WorkspaceMutationRecoveryAction::Finalize);
+                    }
+                }
+                WorkspaceMutationOperation::CreateFile { .. }
+                | WorkspaceMutationOperation::Trash { .. } => {}
+            }
+        }
+        if held_source_state.is_none()
+            || held_source_state == Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+        {
+            supported_actions.push(WorkspaceMutationRecoveryAction::Acknowledge);
+        }
+        WorkspaceMutationRecoverySummary {
+            recovery_id: manifest.recovery_id.clone(),
+            workspace_root: manifest.workspace_root.clone(),
+            operation: manifest.operation.clone(),
+            phase: manifest.phase.clone(),
+            source_states,
+            destination: manifest.destination.clone(),
+            destination_state,
+            held_source_state,
+            supported_actions,
+        }
+    }
+
+    fn rollback_move_recovery(
+        &self,
+        journal: &mut MutationJournal,
+        source: &str,
+        destination: &str,
+        inventory: &WorkspaceEntryInventory,
+    ) -> Result<(), WorkspaceError> {
+        let source_path = self.root().join(validate_relative_path(source)?);
+        let destination_path = self.root().join(validate_relative_path(destination)?);
+        if same_entry(&source_path, &destination_path) {
+            let hold = create_recovery_hold(&source_path, ".asterlyn-case-rollback-")?;
+            let hold_path = hold.join("entry");
+            journal.update("rollback-case-hold-created", Some(path_string(&hold_path)?))?;
+            fs::rename(&destination_path, &hold_path)
+                .map_err(|error| execution_io("hold case-only move destination", error))?;
+            journal.update(
+                "rollback-case-destination-held",
+                Some(path_string(&hold_path)?),
+            )?;
+            fs::rename(&hold_path, &source_path)
+                .map_err(|error| execution_io("restore case-only move source", error))?;
+            let _ = fs::remove_dir(&hold);
+            sync_parent(&source_path)?;
+            return journal.remove();
+        }
+
+        let source_state = self.observe_inventory(source, inventory, journal.manifest.limits);
+        let destination_state =
+            self.observe_inventory(destination, inventory, journal.manifest.limits);
+        if source_state == WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown
+            || destination_state == WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown
+        {
+            return Err(recovery_conflict(
+                "move rollback stopped because a workspace path changed",
+            ));
+        }
+        let hold = journal.validated_source_hold(self.root())?;
+        if let Some(hold_path) = hold.filter(|path| path.exists()) {
+            if self.observe_absolute_inventory(&hold_path, inventory, journal.manifest.limits)
+                != WorkspaceMutationRecoveryPathStateKind::MatchesReviewed
+                || source_state != WorkspaceMutationRecoveryPathStateKind::Missing
+            {
+                return Err(recovery_conflict(
+                    "move rollback stopped because held source data changed",
+                ));
+            }
+            if destination_state == WorkspaceMutationRecoveryPathStateKind::MatchesReviewed {
+                self.remove_verified_workspace_entry(destination, inventory.source.kind)?;
+                journal.update("rollback-destination-removed", None)?;
+            }
+            fs::rename(&hold_path, &source_path)
+                .map_err(|error| execution_io("restore held move source", error))?;
+            sync_parent(&source_path)?;
+            if let Some(directory) = hold_path.parent() {
+                let _ = fs::remove_dir(directory);
+            }
+            return journal.remove();
+        }
+        match (source_state, destination_state) {
+            (
+                WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+                WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+            ) => self.remove_verified_workspace_entry(destination, inventory.source.kind)?,
+            (
+                WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+                WorkspaceMutationRecoveryPathStateKind::Missing,
+            ) => {}
+            (
+                WorkspaceMutationRecoveryPathStateKind::Missing,
+                WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+            ) => {
+                fs::rename(&destination_path, &source_path)
+                    .map_err(|error| execution_io("restore move source", error))?;
+                sync_parent(&source_path)?;
+            }
+            _ => {
+                return Err(recovery_conflict(
+                    "move rollback could not locate an intact reviewed entry",
+                ));
+            }
+        }
+        journal.remove()
+    }
+
+    fn finalize_move_recovery(
+        &self,
+        journal: &mut MutationJournal,
+        source: &str,
+        destination: &str,
+        inventory: &WorkspaceEntryInventory,
+    ) -> Result<(), WorkspaceError> {
+        if self.observe_inventory(destination, inventory, journal.manifest.limits)
+            != WorkspaceMutationRecoveryPathStateKind::MatchesReviewed
+        {
+            return Err(recovery_conflict(
+                "move finalization stopped because the destination changed",
+            ));
+        }
+        let source_path = self.root().join(validate_relative_path(source)?);
+        let destination_path = self.root().join(validate_relative_path(destination)?);
+        if same_entry(&source_path, &destination_path) {
+            return journal.remove();
+        }
+        let source_state = self.observe_inventory(source, inventory, journal.manifest.limits);
+        if source_state == WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown {
+            return Err(recovery_conflict(
+                "move finalization stopped because the source changed",
+            ));
+        }
+        if let Some(hold_path) = journal
+            .validated_source_hold(self.root())?
+            .filter(|path| path.exists())
+        {
+            if self.observe_absolute_inventory(&hold_path, inventory, journal.manifest.limits)
+                != WorkspaceMutationRecoveryPathStateKind::MatchesReviewed
+                || source_state != WorkspaceMutationRecoveryPathStateKind::Missing
+            {
+                return Err(recovery_conflict(
+                    "move finalization stopped because held source data changed",
+                ));
+            }
+            remove_entry(&hold_path, inventory.source.kind)
+                .map_err(|error| execution_io("remove finalized held move source", error))?;
+            if let Some(directory) = hold_path.parent() {
+                let _ = fs::remove_dir(directory);
+            }
+        } else if source_state == WorkspaceMutationRecoveryPathStateKind::MatchesReviewed {
+            let hold = create_recovery_hold(&source_path, ".asterlyn-move-finalize-")?;
+            let hold_path = hold.join("entry");
+            journal.update(
+                "finalize-source-hold-created",
+                Some(path_string(&hold_path)?),
+            )?;
+            fs::rename(&source_path, &hold_path)
+                .map_err(|error| execution_io("hold finalized move source", error))?;
+            journal.update("finalize-source-held", Some(path_string(&hold_path)?))?;
+            remove_entry(&hold_path, inventory.source.kind)
+                .map_err(|error| execution_io("remove finalized move source", error))?;
+            let _ = fs::remove_dir(&hold);
+            sync_parent(&source_path)?;
+        }
+        journal.remove()
+    }
+
+    fn observe_inventory(
+        &self,
+        workspace_path: &str,
+        expected: &WorkspaceEntryInventory,
+        limits: WorkspaceMutationLimits,
+    ) -> WorkspaceMutationRecoveryPathStateKind {
+        let Ok(relative) = validate_relative_path(workspace_path) else {
+            return WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown;
+        };
+        let absolute = self.root().join(relative);
+        match fs::symlink_metadata(&absolute) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                WorkspaceMutationRecoveryPathStateKind::Missing
+            }
+            Err(_) => WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown,
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown
+            }
+            Ok(_) => self
+                .inspect_entry(workspace_path, limits)
+                .ok()
+                .filter(|actual| relocated_inventory_matches(expected, actual))
+                .map_or(
+                    WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown,
+                    |_| WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+                ),
+        }
+    }
+
+    fn observe_trash_inventory(
+        &self,
+        workspace_path: &str,
+        expected: &WorkspaceEntryInventory,
+        limits: WorkspaceMutationLimits,
+    ) -> WorkspaceMutationRecoveryPathStateKind {
+        let Ok(relative) = validate_relative_path(workspace_path) else {
+            return WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown;
+        };
+        match fs::symlink_metadata(self.root().join(relative)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                WorkspaceMutationRecoveryPathStateKind::Missing
+            }
+            Err(_) => WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown,
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown
+            }
+            Ok(_) => self
+                .inspect_trash_entry(workspace_path, limits)
+                .ok()
+                .filter(|actual| {
+                    actual.source == expected.source && actual.fingerprint == expected.fingerprint
+                })
+                .map_or(
+                    WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown,
+                    |_| WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+                ),
+        }
+    }
+
+    fn observe_absolute_inventory(
+        &self,
+        absolute: &Path,
+        expected: &WorkspaceEntryInventory,
+        limits: WorkspaceMutationLimits,
+    ) -> WorkspaceMutationRecoveryPathStateKind {
+        if !absolute.starts_with(self.root()) {
+            return WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown;
+        }
+        let Ok(relative) = absolute.strip_prefix(self.root()) else {
+            return WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown;
+        };
+        let Some(workspace_path) = relative.to_str().map(|path| path.replace('\\', "/")) else {
+            return WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown;
+        };
+        self.observe_inventory(&workspace_path, expected, limits)
+    }
+
+    fn remove_verified_workspace_entry(
+        &self,
+        workspace_path: &str,
+        kind: WorkspaceEntryKind,
+    ) -> Result<(), WorkspaceError> {
+        let absolute = self.root().join(validate_relative_path(workspace_path)?);
+        remove_entry(&absolute, kind)
+            .map_err(|error| execution_io("remove verified workspace mutation entry", error))?;
+        sync_parent(&absolute)
+    }
+
+    fn move_recovery_can_rollback(
+        &self,
+        source_states: &[WorkspaceMutationRecoveryPathState],
+        destination_state: Option<WorkspaceMutationRecoveryPathStateKind>,
+        held_source_state: Option<WorkspaceMutationRecoveryPathStateKind>,
+    ) -> bool {
+        let source = source_states.first().map(|state| state.state);
+        let destination_safe = matches!(
+            destination_state,
+            Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+                | Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed)
+        );
+        destination_safe
+            && match held_source_state {
+                Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed) => {
+                    source == Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+                }
+                Some(WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown) => false,
+                _ => matches!(
+                    source,
+                    Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+                        | Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed)
+                ),
+            }
+    }
+
+    fn move_recovery_can_finalize(
+        &self,
+        source_states: &[WorkspaceMutationRecoveryPathState],
+        destination_state: Option<WorkspaceMutationRecoveryPathStateKind>,
+        held_source_state: Option<WorkspaceMutationRecoveryPathStateKind>,
+    ) -> bool {
+        if destination_state != Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed) {
+            return false;
+        }
+        let source = source_states.first().map(|state| state.state);
+        match held_source_state {
+            Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed) => {
+                source == Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+            }
+            Some(WorkspaceMutationRecoveryPathStateKind::ChangedOrUnknown) => false,
+            _ => matches!(
+                source,
+                Some(WorkspaceMutationRecoveryPathStateKind::Missing)
+                    | Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed)
+            ),
+        }
     }
 
     fn execute_create(
@@ -391,7 +906,7 @@ impl Workspace {
         match result {
             Ok(()) => {
                 let verified = self.inspect_entry(destination, plan.limits)?;
-                if verified.fingerprint != inventory.fingerprint {
+                if !relocated_inventory_matches(&inventory, &verified) {
                     journal.update("destination-verification-failed", None)?;
                     return Ok(outcome(
                         plan,
@@ -459,7 +974,7 @@ impl Workspace {
             ));
         }
         let verified = self.inspect_entry(destination, plan.limits)?;
-        if verified.fingerprint != inventory.fingerprint {
+        if !relocated_inventory_matches(&inventory, &verified) {
             journal.update("move-destination-verification-failed", None)?;
             return Ok(outcome(
                 plan,
@@ -573,7 +1088,7 @@ impl Workspace {
         }
         let _ = fs::remove_dir(hold_directory);
         let verified = self.inspect_entry(destination, plan.limits)?;
-        if verified.fingerprint != inventory.fingerprint {
+        if !relocated_inventory_matches(&inventory, &verified) {
             journal.update("case-move-verification-failed", None)?;
             return Ok(outcome(
                 plan,
@@ -681,6 +1196,66 @@ struct MutationJournal {
     manifest: MutationRecoveryManifest,
 }
 
+impl MutationRecoveryManifest {
+    fn primary_inventory(&self) -> Result<&WorkspaceEntryInventory, WorkspaceError> {
+        self.inventory
+            .as_ref()
+            .or_else(|| self.inventories.first())
+            .ok_or_else(|| recovery_conflict("the recovery record has no reviewed inventory"))
+    }
+
+    fn inventory_for_source(&self, source: &str) -> Option<&WorkspaceEntryInventory> {
+        self.inventory
+            .iter()
+            .chain(self.inventories.iter())
+            .find(|inventory| inventory.source.workspace_path == source)
+    }
+
+    fn validated_source_hold(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Option<PathBuf>, WorkspaceError> {
+        let Some(raw) = &self.source_hold else {
+            return Ok(None);
+        };
+        let path = PathBuf::from(raw);
+        if !path.is_absolute()
+            || !path.starts_with(workspace_root)
+            || path.file_name() != Some("entry".as_ref())
+        {
+            return Err(recovery_conflict(
+                "the recovery source hold path is invalid",
+            ));
+        }
+        let Some(directory) = path.parent() else {
+            return Err(recovery_conflict(
+                "the recovery source hold path has no parent",
+            ));
+        };
+        let valid_prefix = directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.starts_with(".asterlyn-move-")
+                    || name.starts_with(".asterlyn-case-move-")
+                    || name.starts_with(".asterlyn-case-rollback-")
+            });
+        let source_parent = match &self.operation {
+            WorkspaceMutationOperation::Move { source, .. } => workspace_root
+                .join(validate_relative_path(source)?)
+                .parent()
+                .map(Path::to_path_buf),
+            _ => None,
+        };
+        if !valid_prefix || directory.parent().map(Path::to_path_buf) != source_parent {
+            return Err(recovery_conflict(
+                "the recovery source hold path is outside its source parent",
+            ));
+        }
+        Ok(Some(path))
+    }
+}
+
 impl MutationJournal {
     fn create(
         workspace_root: &Path,
@@ -702,11 +1277,14 @@ impl MutationJournal {
             directory,
             path,
             manifest: MutationRecoveryManifest {
-                version: 1,
+                version: 2,
                 recovery_id: plan.plan_id.clone(),
                 workspace_root: workspace_root.to_string_lossy().into_owned(),
                 operation: plan.operation.clone(),
                 fingerprint: inventory.map(|value| value.fingerprint.clone()),
+                inventory: plan.inventory.clone(),
+                inventories: plan.inventories.clone(),
+                limits: plan.limits,
                 phase: "prepared".into(),
                 destination,
                 source_hold: None,
@@ -714,6 +1292,66 @@ impl MutationJournal {
         };
         journal.persist_new()?;
         Ok(journal)
+    }
+
+    fn load(
+        workspace_root: &Path,
+        recovery_root: &Path,
+        recovery_id: &str,
+    ) -> Result<Option<Self>, WorkspaceError> {
+        validate_recovery_id(recovery_id)?;
+        let directory = mutation_recovery_directory(recovery_root);
+        let path = directory.join(format!("{recovery_id}.json"));
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(execution_io("inspect workspace mutation recovery", error)),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(recovery_conflict(
+                "the workspace mutation recovery is not a regular file",
+            ));
+        }
+        let bytes = fs::read(&path)
+            .map_err(|error| execution_io("read workspace mutation recovery", error))?;
+        let manifest: MutationRecoveryManifest =
+            serde_json::from_slice(&bytes).map_err(|error| WorkspaceError::InvalidMutation {
+                message: format!("invalid workspace mutation recovery: {error}"),
+            })?;
+        if manifest.recovery_id != recovery_id
+            || manifest.workspace_root != workspace_root.to_string_lossy()
+        {
+            return Err(recovery_conflict(
+                "the workspace mutation recovery identity does not match this workspace",
+            ));
+        }
+        if !matches!(manifest.version, 1 | 2) {
+            return Err(recovery_conflict(
+                "the workspace mutation recovery version is unsupported",
+            ));
+        }
+        Ok(Some(Self {
+            directory,
+            path,
+            manifest,
+        }))
+    }
+
+    fn require_current_schema(&self) -> Result<(), WorkspaceError> {
+        if self.manifest.version == 2 {
+            Ok(())
+        } else {
+            Err(recovery_conflict(
+                "this legacy recovery record requires manual review and acknowledgement",
+            ))
+        }
+    }
+
+    fn validated_source_hold(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Option<PathBuf>, WorkspaceError> {
+        self.manifest.validated_source_hold(workspace_root)
     }
 
     fn update(&mut self, phase: &str, source_hold: Option<String>) -> Result<(), WorkspaceError> {
@@ -763,7 +1401,7 @@ impl MutationJournal {
         sync_directory(&self.directory)
     }
 
-    fn remove(self) -> Result<(), WorkspaceError> {
+    fn remove(&self) -> Result<(), WorkspaceError> {
         match fs::remove_file(&self.path) {
             Ok(()) => sync_directory(&self.directory),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -1049,6 +1687,79 @@ fn path_string(path: &Path) -> Result<String, WorkspaceError> {
         .ok_or_else(|| WorkspaceError::UnsupportedFile {
             message: "workspace mutation recovery paths must be UTF-8".into(),
         })
+}
+
+fn create_recovery_hold(source: &Path, prefix: &str) -> Result<PathBuf, WorkspaceError> {
+    tempfile::Builder::new()
+        .prefix(prefix)
+        .tempdir_in(
+            source
+                .parent()
+                .ok_or_else(|| WorkspaceError::InvalidMutation {
+                    message: "workspace mutation source has no parent".into(),
+                })?,
+        )
+        .map(|directory| directory.keep())
+        .map_err(|error| execution_io("create workspace mutation recovery hold", error))
+}
+
+fn sync_parent(path: &Path) -> Result<(), WorkspaceError> {
+    path.parent()
+        .ok_or_else(|| WorkspaceError::InvalidMutation {
+            message: "workspace mutation entry has no parent".into(),
+        })
+        .and_then(sync_directory)
+}
+
+fn relocated_inventory_matches(
+    expected: &WorkspaceEntryInventory,
+    actual: &WorkspaceEntryInventory,
+) -> bool {
+    if expected.fingerprint != actual.fingerprint
+        || expected.source.kind != actual.source.kind
+        || expected.source.mode != actual.source.mode
+        || expected.source.byte_length != actual.source.byte_length
+        || expected.total_bytes != actual.total_bytes
+        || expected.entries.len() != actual.entries.len()
+        || expected.truncated != actual.truncated
+    {
+        return false;
+    }
+    let expected_root = Path::new(&expected.source.workspace_path);
+    let actual_root = Path::new(&actual.source.workspace_path);
+    expected
+        .entries
+        .iter()
+        .zip(&actual.entries)
+        .all(|(left, right)| {
+            let left_suffix = Path::new(&left.workspace_path).strip_prefix(expected_root);
+            let right_suffix = Path::new(&right.workspace_path).strip_prefix(actual_root);
+            left_suffix.ok() == right_suffix.ok()
+                && left.kind == right.kind
+                && left.revision == right.revision
+                && left.mode == right.mode
+                && left.byte_length == right.byte_length
+        })
+}
+
+fn validate_recovery_id(recovery_id: &str) -> Result<(), WorkspaceError> {
+    if recovery_id.is_empty()
+        || recovery_id.len() > 200
+        || !recovery_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(WorkspaceError::InvalidMutation {
+            message: "workspace mutation recovery ID is invalid".into(),
+        });
+    }
+    Ok(())
+}
+
+fn recovery_conflict(message: &str) -> WorkspaceError {
+    WorkspaceError::InvalidMutation {
+        message: message.into(),
+    }
 }
 
 fn execution_io(operation: &str, error: std::io::Error) -> WorkspaceError {
@@ -1344,6 +2055,284 @@ mod tests {
                 .len(),
             1
         );
+        let summary = workspace
+            .list_mutation_recoveries(recovery.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(
+            summary.supported_actions,
+            vec![WorkspaceMutationRecoveryAction::Acknowledge]
+        );
+        assert_eq!(
+            summary.source_states,
+            vec![
+                WorkspaceMutationRecoveryPathState {
+                    path: "one".into(),
+                    state: WorkspaceMutationRecoveryPathStateKind::Missing,
+                },
+                WorkspaceMutationRecoveryPathState {
+                    path: "two".into(),
+                    state: WorkspaceMutationRecoveryPathStateKind::MatchesReviewed,
+                },
+            ]
+        );
+        workspace
+            .acknowledge_mutation_recovery(recovery.path(), "trash-partial")
+            .unwrap();
+        workspace
+            .acknowledge_mutation_recovery(recovery.path(), "trash-partial")
+            .unwrap();
+        assert!(
+            workspace
+                .list_mutation_recoveries(recovery.path())
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn copy_recovery_rolls_back_only_an_unchanged_reviewed_destination() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("source"), b"reviewed").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_copy(
+                "copy-recovery",
+                "source",
+                "destination",
+                WorkspaceCollisionPolicy::Cancel,
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        let inventory = plan.inventory.as_ref().unwrap();
+        workspace
+            .copy_inventory_exclusive(inventory, "source", "destination")
+            .unwrap();
+        let mut journal =
+            MutationJournal::create(workspace.root(), recovery.path(), &plan, Some(inventory))
+                .unwrap();
+        journal.update("copy-failed", None).unwrap();
+
+        let summary = workspace
+            .list_mutation_recoveries(recovery.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(
+            summary.destination_state,
+            Some(WorkspaceMutationRecoveryPathStateKind::MatchesReviewed)
+        );
+        assert!(
+            summary
+                .supported_actions
+                .contains(&WorkspaceMutationRecoveryAction::Rollback)
+        );
+        workspace
+            .rollback_mutation_recovery(recovery.path(), "copy-recovery")
+            .unwrap();
+        workspace
+            .rollback_mutation_recovery(recovery.path(), "copy-recovery")
+            .unwrap();
+        assert!(!directory.path().join("destination").exists());
+        assert_eq!(
+            fs::read(directory.path().join("source")).unwrap(),
+            b"reviewed"
+        );
+    }
+
+    #[test]
+    fn copy_recovery_refuses_to_remove_a_changed_destination() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("source"), b"reviewed").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_copy(
+                "copy-changed",
+                "source",
+                "destination",
+                WorkspaceCollisionPolicy::Cancel,
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        let inventory = plan.inventory.as_ref().unwrap();
+        workspace
+            .copy_inventory_exclusive(inventory, "source", "destination")
+            .unwrap();
+        MutationJournal::create(workspace.root(), recovery.path(), &plan, Some(inventory)).unwrap();
+        fs::write(directory.path().join("destination"), b"user change").unwrap();
+
+        let summary = workspace
+            .list_mutation_recoveries(recovery.path())
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(
+            summary.supported_actions,
+            vec![WorkspaceMutationRecoveryAction::Acknowledge]
+        );
+        assert!(
+            workspace
+                .rollback_mutation_recovery(recovery.path(), "copy-changed")
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(directory.path().join("destination")).unwrap(),
+            b"user change"
+        );
+        assert_eq!(
+            workspace
+                .list_mutation_recoveries(recovery.path())
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn move_recovery_can_finalize_a_verified_destination_and_remove_the_source() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("source"), b"reviewed").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_move(
+                "move-finalize",
+                "source",
+                "destination",
+                WorkspaceCollisionPolicy::Cancel,
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        let inventory = plan.inventory.as_ref().unwrap();
+        workspace
+            .copy_inventory_exclusive(inventory, "source", "destination")
+            .unwrap();
+        let mut journal =
+            MutationJournal::create(workspace.root(), recovery.path(), &plan, Some(inventory))
+                .unwrap();
+        journal.update("destination-installed", None).unwrap();
+
+        workspace
+            .finalize_mutation_recovery(recovery.path(), "move-finalize")
+            .unwrap();
+        workspace
+            .finalize_mutation_recovery(recovery.path(), "move-finalize")
+            .unwrap();
+        assert!(!directory.path().join("source").exists());
+        assert_eq!(
+            fs::read(directory.path().join("destination")).unwrap(),
+            b"reviewed"
+        );
+        assert!(
+            workspace
+                .list_mutation_recoveries(recovery.path())
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn move_recovery_rolls_back_an_intact_held_source_without_exposing_its_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("source"), b"reviewed").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_move(
+                "move-held",
+                "source",
+                "destination",
+                WorkspaceCollisionPolicy::Cancel,
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        let inventory = plan.inventory.as_ref().unwrap();
+        workspace
+            .copy_inventory_exclusive(inventory, "source", "destination")
+            .unwrap();
+        let source_path = workspace.root().join("source");
+        let hold_directory = create_recovery_hold(&source_path, ".asterlyn-move-test-").unwrap();
+        let hold_path = hold_directory.join("entry");
+        let mut journal =
+            MutationJournal::create(workspace.root(), recovery.path(), &plan, Some(inventory))
+                .unwrap();
+        fs::rename(&source_path, &hold_path).unwrap();
+        journal
+            .update("source-held", Some(path_string(&hold_path).unwrap()))
+            .unwrap();
+        let held_inventory = workspace
+            .inspect_entry(
+                hold_path
+                    .strip_prefix(workspace.root())
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        assert!(
+            relocated_inventory_matches(inventory, &held_inventory),
+            "reviewed={inventory:?} held={held_inventory:?}"
+        );
+
+        let serialized_summary =
+            serde_json::to_string(&workspace.list_mutation_recoveries(recovery.path()).unwrap()[0])
+                .unwrap();
+        assert!(!serialized_summary.contains(hold_path.to_string_lossy().as_ref()));
+        assert!(!serialized_summary.contains("source_hold"));
+        assert!(
+            serialized_summary.contains("rollback"),
+            "unexpected held-source recovery summary: {serialized_summary}"
+        );
+        assert!(serialized_summary.contains("finalize"));
+        assert!(!serialized_summary.contains("acknowledge"));
+
+        workspace
+            .rollback_mutation_recovery(recovery.path(), "move-held")
+            .unwrap();
+        assert_eq!(
+            fs::read(directory.path().join("source")).unwrap(),
+            b"reviewed"
+        );
+        assert!(!directory.path().join("destination").exists());
+        assert!(!hold_path.exists());
+    }
+
+    #[test]
+    fn unknown_recovery_schema_fails_closed_without_removing_evidence() {
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("source"), b"reviewed").unwrap();
+        let workspace = Workspace::open(directory.path()).unwrap();
+        let plan = workspace
+            .plan_copy(
+                "future-schema",
+                "source",
+                "destination",
+                WorkspaceCollisionPolicy::Cancel,
+                WorkspaceMutationLimits::default(),
+            )
+            .unwrap();
+        let mut journal = MutationJournal::create(
+            workspace.root(),
+            recovery.path(),
+            &plan,
+            plan.inventory.as_ref(),
+        )
+        .unwrap();
+        journal.manifest.version = 99;
+        journal.persist().unwrap();
+
+        assert!(workspace.list_mutation_recoveries(recovery.path()).is_err());
+        assert!(
+            workspace
+                .rollback_mutation_recovery(recovery.path(), "future-schema")
+                .is_err()
+        );
+        assert!(journal.path.exists());
     }
 
     #[cfg(unix)]

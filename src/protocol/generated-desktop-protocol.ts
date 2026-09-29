@@ -36,6 +36,9 @@ export interface DesktopCommandMap {
   execute_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: Model.WorkspaceMutationOutcome };
   cancel_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: void };
   list_workspace_mutation_recoveries: { args: { repositoryRoot: string; }; result: Array<Model.WorkspaceMutationRecoverySummary> };
+  rollback_workspace_mutation: { args: { repositoryRoot: string; recoveryId: string; }; result: void };
+  finalize_workspace_mutation: { args: { repositoryRoot: string; recoveryId: string; }; result: void };
+  acknowledge_workspace_mutation_recovery: { args: { repositoryRoot: string; recoveryId: string; }; result: void };
   search_workspace_text: { args: { repositoryRoot: string; requestId: string; query: string; options: Model.WorkspaceTextSearchOptions; }; result: Model.WorkspaceTextSearchReport };
   cancel_workspace_text_search: { args: { repositoryRoot: string; requestId: string; }; result: void };
   preview_workspace_replacement: { args: { repositoryRoot: string; planId: string; query: string; replacement: string; options: Model.WorkspaceTextSearchOptions; }; result: Model.WorkspaceReplacementPreview };
@@ -134,6 +137,9 @@ export const DESKTOP_RESULT_VALIDATORS: {
   execute_workspace_mutation: "workspaceMutationOutcome",
   cancel_workspace_mutation: "void",
   list_workspace_mutation_recoveries: "workspaceMutationRecoveryList",
+  rollback_workspace_mutation: "void",
+  finalize_workspace_mutation: "void",
+  acknowledge_workspace_mutation_recovery: "void",
   search_workspace_text: "workspaceTextSearchReport",
   cancel_workspace_text_search: "void",
   preview_workspace_replacement: "workspaceReplacementPreview",

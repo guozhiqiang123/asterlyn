@@ -54,6 +54,15 @@ export const tauriWorkspaceBridge: WorkspaceBridge = {
       "list_workspace_mutation_recoveries",
       { repositoryRoot },
     ),
+  rollbackWorkspaceMutation: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<void>("rollback_workspace_mutation", { repositoryRoot, recoveryId }),
+  finalizeWorkspaceMutation: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<void>("finalize_workspace_mutation", { repositoryRoot, recoveryId }),
+  acknowledgeWorkspaceMutationRecovery: (repositoryRoot, recoveryId) =>
+    invokeDesktopCommand<void>("acknowledge_workspace_mutation_recovery", {
+      repositoryRoot,
+      recoveryId,
+    }),
   searchWorkspaceText: (repositoryRoot, requestId, query, options) =>
     invokeDesktopCommand<WorkspaceTextSearchReport>("search_workspace_text", {
       repositoryRoot,

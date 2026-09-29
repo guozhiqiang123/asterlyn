@@ -218,6 +218,48 @@ pub(crate) fn load_workspace_mutation_recoveries(
     Workspace::open(root)?.list_mutation_recoveries(recovery_root)
 }
 
+pub(crate) fn rollback_workspace_mutation_recovery(
+    root: &Path,
+    recovery_root: &Path,
+    recovery_id: &str,
+    writes: &WorkspaceWriteRegistry,
+) -> Result<(), WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "rollback workspace mutation".into(),
+        message: "workspace-write lock was poisoned".into(),
+    })?;
+    Workspace::open(root)?.rollback_mutation_recovery(recovery_root, recovery_id)
+}
+
+pub(crate) fn finalize_workspace_mutation_recovery(
+    root: &Path,
+    recovery_root: &Path,
+    recovery_id: &str,
+    writes: &WorkspaceWriteRegistry,
+) -> Result<(), WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "finalize workspace mutation".into(),
+        message: "workspace-write lock was poisoned".into(),
+    })?;
+    Workspace::open(root)?.finalize_mutation_recovery(recovery_root, recovery_id)
+}
+
+pub(crate) fn acknowledge_workspace_mutation_recovery(
+    root: &Path,
+    recovery_root: &Path,
+    recovery_id: &str,
+    writes: &WorkspaceWriteRegistry,
+) -> Result<(), WorkspaceError> {
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+        operation: "acknowledge workspace mutation recovery".into(),
+        message: "workspace-write lock was poisoned".into(),
+    })?;
+    Workspace::open(root)?.acknowledge_mutation_recovery(recovery_root, recovery_id)
+}
+
 #[derive(Clone)]
 pub(crate) struct StoredWorkspaceMutationPlan {
     root: PathBuf,

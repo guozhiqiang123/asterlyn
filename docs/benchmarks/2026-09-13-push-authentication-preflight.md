@@ -11,8 +11,11 @@ The backend retains the full remote URL. The frontend receives only the remote n
 sanitized host, credential/helper availability, and an optional generated SSH Push URL. A submitted
 token is written to `git credential approve` through stdin, its temporary input buffer is cleared,
 and no token is added to application state, preferences, repository files, logs, or command-line
-arguments. An explicit Save action may configure an installed platform-secure Git credential helper
-for that repository. SSH setup changes only the remote's Push URL and preserves its Fetch URL.
+arguments. After the 2026-09-29 hardening, Save ignores repository/user helper configuration,
+discovers only an installed platform-secure helper, resets the helper chain for the child process,
+and installs that one helper explicitly. Unsupported, shell, plaintext-store, or locally raced helper
+configuration never receives the token. SSH setup changes only the remote's Push URL and preserves
+its Fetch URL.
 
 The authentication controller owns request identity, modal state, save/configure progress, and stale
 completion rejection. Recheck keeps the existing modal mounted while the credential lookup is in

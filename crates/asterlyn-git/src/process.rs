@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -71,6 +71,7 @@ pub(crate) struct BoundedOutput {
 pub(crate) struct GitRunner<'a> {
     repository_root: &'a Path,
     profile: GitProcessProfile,
+    credential_helper: Option<OsString>,
 }
 
 impl<'a> GitRunner<'a> {
@@ -78,6 +79,7 @@ impl<'a> GitRunner<'a> {
         Self {
             repository_root,
             profile: GitProcessProfile::Standard,
+            credential_helper: None,
         }
     }
 
@@ -85,6 +87,18 @@ impl<'a> GitRunner<'a> {
         Self {
             repository_root,
             profile: GitProcessProfile::Remote,
+            credential_helper: None,
+        }
+    }
+
+    pub(crate) fn remote_with_credential_helper(
+        repository_root: &'a Path,
+        credential_helper: impl Into<OsString>,
+    ) -> Self {
+        Self {
+            repository_root,
+            profile: GitProcessProfile::Remote,
+            credential_helper: Some(credential_helper.into()),
         }
     }
 
@@ -92,6 +106,7 @@ impl<'a> GitRunner<'a> {
         Self {
             repository_root,
             profile: GitProcessProfile::Operation,
+            credential_helper: None,
         }
     }
 
@@ -115,7 +130,9 @@ impl<'a> GitRunner<'a> {
                     .env("GIT_EDITOR", "true")
                     .env("GIT_SEQUENCE_EDITOR", "true");
             }
-            GitProcessProfile::Remote => harden_remote_command(&mut command),
+            GitProcessProfile::Remote => {
+                harden_remote_command(&mut command, self.credential_helper.as_deref())
+            }
         }
         command
     }
@@ -299,18 +316,25 @@ impl<'a> GitRunner<'a> {
     }
 }
 
-fn harden_remote_command(command: &mut Command) {
+fn harden_remote_command(command: &mut Command, credential_helper: Option<&OsStr>) {
     command
         .arg("-c")
         .arg("credential.interactive=never")
         .arg("-c")
         .arg("core.askPass=")
+        .arg("-c")
+        .arg("credential.helper=")
         .env("GCM_INTERACTIVE", "Never")
         .env("SSH_ASKPASS_REQUIRE", "never")
         .env_remove("GIT_ASKPASS")
         .env_remove("SSH_ASKPASS")
         .env_remove("GIT_CONFIG_PARAMETERS")
         .stdin(Stdio::null());
+    if let Some(helper) = credential_helper {
+        let mut setting = OsString::from("credential.helper=");
+        setting.push(helper);
+        command.arg("-c").arg(setting);
+    }
     for (key, _) in std::env::vars_os() {
         if should_remove_remote_environment(key.as_os_str()) {
             command.env_remove(key);
@@ -561,6 +585,8 @@ mod tests {
                 "credential.interactive=never",
                 "-c",
                 "core.askPass=",
+                "-c",
+                "credential.helper=",
             ]
             .into_iter()
             .map(OsString::from)
@@ -580,6 +606,25 @@ mod tests {
             environment_value(&command, "GIT_CONFIG_PARAMETERS"),
             Some(None)
         );
+    }
+
+    #[test]
+    fn remote_runner_installs_only_an_explicit_credential_helper_after_reset() {
+        let command =
+            GitRunner::remote_with_credential_helper(Path::new("repo"), "osxkeychain").command();
+        let args = command
+            .get_args()
+            .map(OsStr::to_os_string)
+            .collect::<Vec<_>>();
+        assert!(args.windows(4).any(|arguments| {
+            arguments
+                == [
+                    OsString::from("-c"),
+                    OsString::from("credential.helper="),
+                    OsString::from("-c"),
+                    OsString::from("credential.helper=osxkeychain"),
+                ]
+        }));
     }
 
     #[test]

@@ -58,6 +58,11 @@ process probe confirms one shell process is added on first activation and remove
 See [`Terminal T1 acceptance evidence`](../benchmarks/2026-09-14-terminal-t1.md) for the absolute
 results, limitations, and deferred installed-package checks.
 
+The 2026-09-29 hardening adds a 256 KiB/16-frame native output queue with 64 KiB delivery frames.
+Pressure retains a bounded tail and emits a typed omitted-byte marker before retained output;
+sequence gaps and WebView delivery failures fail the session instead of silently losing an
+unbounded stream. Startup buffering uses the same explicit truncation semantics.
+
 ## Deferred phases
 
 ### T2 — Daily terminal controls

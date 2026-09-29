@@ -63,6 +63,9 @@ Performance budgets are guardrails. They may change only through a documented de
   only shrink and carries a removal phase. Every transitional `src/workbench` module has exactly
   one named owner, one destination outside that directory, and a scheduled migration phase; an
   unclassified module cannot be added there.
+- Architecture tests also inventory every production Rust source above 1,500 lines. Each has one
+  named capability owner, a non-growing ceiling, and a concrete cohesive extraction boundary that
+  must be used before unrelated behavior is added.
 - The main production frontend chunk should remain below 500 kB uncompressed. A temporary breach
   is accepted during the migration only when the build records the warning and the next extraction
   keeps optional feature code behind a lazy boundary.
