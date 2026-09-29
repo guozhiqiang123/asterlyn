@@ -7,10 +7,10 @@ import {
   demoDocumentSearchPreview,
   demoPatternRanges,
   demoSearchPreview,
-  safePrefixUtf16,
 } from "./demo-text-search";
 import { demoWorkingDiffBase } from "./demo-working-diff.ts";
 import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
+import { demoWorkspaceReplacementDiff } from "./demo-workspace-replacement-diff.ts";
 import { demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
@@ -54,8 +54,7 @@ import type {
   TerminalStarted, TrackedChangeScan,
   WorkingDiffBase, WorkingTreeMutationOutcome, UntrackedScan,
   WorkspaceTextSearchOptions,
-  WorkspaceTextSearchReport,
-  WorkspaceReplacementPreview,
+  WorkspaceTextSearchReport, WorkspaceReplacementPreview,
   WorkspaceCollisionPolicy,
   WorkspaceMutationOperation,
   WorkspaceMutationOutcome,
@@ -76,10 +75,8 @@ const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
 let browserGitEnabled = true;
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
-const cancelledDemoScans = new Set<string>();
-const cancelledDemoRemoteOperations = new Set<string>();
-const cancelledDemoSearches = new Set<string>();
-const cancelledDemoReplacements = new Set<string>();
+const cancelledDemoScans = new Set<string>(), cancelledDemoRemoteOperations = new Set<string>();
+const cancelledDemoSearches = new Set<string>(), cancelledDemoReplacements = new Set<string>();
 const demoReplacementPlans = new Map<string, DemoReplacementPlan>();
 const demoReplacementRecoveries = new Map<string, DemoReplacementRecovery>();
 const demoCommitFileRestorePlans = new Map<string, DemoCommitFileRestorePlan>();
@@ -620,6 +617,9 @@ const demoBridge: DesktopBridge = {
       selectedPaths,
     });
   },
+
+  readWorkspaceReplacementDiff: (_repositoryRoot, planId, workspacePath, expanded) =>
+    demoWorkspaceReplacementDiff(demoReplacementPlans.get(planId), workspacePath, expanded),
 
   async cancelWorkspaceReplacement(
     repositoryRoot: string,
@@ -2191,7 +2191,13 @@ function demoReplacementPreview(
     if (!file) continue;
     const replacementContent = demoReplaceLineLocal(file.content, query, replacement, options);
     if (replacementContent === file.content) continue;
-    const [beforePreview, afterPreview] = demoChangePreview(file.content, replacementContent);
+    const occurrences = report.matches
+      .filter((match) => match.workspacePath === workspacePath)
+      .map((match) => ({
+        line: match.line,
+        beforePreview: match.preview,
+        afterPreview: demoReplaceLineLocal(match.preview, query, replacement, options),
+      }));
     files.push({
       workspacePath,
       originalContent: file.content,
@@ -2206,8 +2212,7 @@ function demoReplacementPreview(
       matchCount,
       byteDelta:
         encoder.encode(replacementContent).length - encoder.encode(file.content).length,
-      beforePreview,
-      afterPreview,
+      occurrences,
     });
   }
   if (previews.length === 0) {
@@ -2353,19 +2358,4 @@ function demoDominantSeparator(content: string): string {
   const counts = new Map<string, number>();
   for (const separator of separators) counts.set(separator, (counts.get(separator) ?? 0) + 1);
   return [...counts].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "\n";
-}
-
-function demoChangePreview(before: string, after: string): [string, string] {
-  let offset = 0;
-  while (offset < before.length && offset < after.length && before[offset] === after[offset]) {
-    offset += 1;
-  }
-  const line = (value: string) => {
-    const start = Math.max(value.lastIndexOf("\n", offset - 1), value.lastIndexOf("\r", offset - 1)) + 1;
-    const endings = [value.indexOf("\n", offset), value.indexOf("\r", offset)].filter((index) => index >= 0);
-    const end = endings.length > 0 ? Math.min(...endings) : value.length;
-    const text = value.slice(start, end);
-    return text.length > 320 ? `${safePrefixUtf16(text, 320)}…` : text;
-  };
-  return [line(before), line(after)];
 }

@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use asterlyn_git::ProjectFile;
+use asterlyn_git::{ProjectFile, bounded_text_diff, bounded_text_diff_expanded};
 use asterlyn_workspace::{
     PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
     ReplacementLimits, ReplacementRecoverySummary, SearchCancellationToken, SearchCandidate,
@@ -22,8 +23,8 @@ pub const WORKSPACE_REPLACEMENT_LIMITS: ReplacementLimits = ReplacementLimits {
 #[derive(Clone)]
 pub(crate) struct StoredReplacementPlan {
     root: PathBuf,
-    plan: PreparedWorkspaceReplacement,
-    files: Vec<AuthorizedReplacementFile>,
+    plan: Arc<PreparedWorkspaceReplacement>,
+    files: Arc<Vec<AuthorizedReplacementFile>>,
 }
 
 impl StoredReplacementPlan {
@@ -33,6 +34,45 @@ impl StoredReplacementPlan {
 
     pub(crate) fn plan_id(&self) -> &str {
         self.plan.plan_id()
+    }
+
+    pub(crate) fn diff(
+        &self,
+        workspace_path: &str,
+        expanded: bool,
+    ) -> Result<WorkspaceReplacementDiff, WorkspaceError> {
+        if !self
+            .files
+            .iter()
+            .any(|file| file.workspace_path == workspace_path)
+        {
+            return Err(WorkspaceError::NotAuthorized {
+                message: "replacement comparison is outside the authorized project catalog"
+                    .to_string(),
+            });
+        }
+        let comparison = self.plan.comparison(workspace_path)?;
+        let compare = if expanded {
+            bounded_text_diff_expanded
+        } else {
+            bounded_text_diff
+        };
+        let diff = compare(
+            &comparison.workspace_path,
+            &comparison.before,
+            &comparison.after,
+        )
+        .map_err(|error| WorkspaceError::Io {
+            operation: "compare replacement plan snapshots".to_string(),
+            message: error.to_string(),
+        })?;
+        Ok(WorkspaceReplacementDiff {
+            workspace_path: comparison.workspace_path,
+            patch: diff.patch,
+            truncated: diff.truncated,
+            original_content: comparison.before,
+            proposed_content: comparison.after,
+        })
     }
 }
 
@@ -61,8 +101,25 @@ pub(crate) struct WorkspaceReplacementFilePreview {
     pub(crate) workspace_path: String,
     pub(crate) match_count: usize,
     pub(crate) byte_delta: i64,
+    pub(crate) occurrences: Vec<WorkspaceReplacementOccurrencePreview>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceReplacementOccurrencePreview {
+    pub(crate) line: usize,
     pub(crate) before_preview: String,
     pub(crate) after_preview: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceReplacementDiff {
+    pub(crate) workspace_path: String,
+    pub(crate) patch: String,
+    pub(crate) truncated: bool,
+    pub(crate) original_content: String,
+    pub(crate) proposed_content: String,
 }
 
 pub(crate) fn prepare_authorized_replacement(
@@ -124,8 +181,8 @@ pub(crate) fn prepare_authorized_replacement(
     Ok((
         StoredReplacementPlan {
             root: Workspace::open(root)?.root().to_path_buf(),
-            plan,
-            files: authorized_files,
+            plan: Arc::new(plan),
+            files: Arc::new(authorized_files),
         },
         preview,
     ))
@@ -141,8 +198,15 @@ fn map_replacement_preview(
         workspace_path: file.workspace_path.clone(),
         match_count: preview.match_count,
         byte_delta: preview.byte_delta,
-        before_preview: preview.before_preview.clone(),
-        after_preview: preview.after_preview.clone(),
+        occurrences: preview
+            .occurrences
+            .iter()
+            .map(|occurrence| WorkspaceReplacementOccurrencePreview {
+                line: occurrence.line,
+                before_preview: occurrence.before_preview.clone(),
+                after_preview: occurrence.after_preview.clone(),
+            })
+            .collect(),
     }
 }
 

@@ -42,6 +42,7 @@ export interface DesktopCommandMap {
   search_workspace_text: { args: { repositoryRoot: string; requestId: string; query: string; options: Model.WorkspaceTextSearchOptions; }; result: Model.WorkspaceTextSearchReport };
   cancel_workspace_text_search: { args: { repositoryRoot: string; requestId: string; }; result: void };
   preview_workspace_replacement: { args: { repositoryRoot: string; planId: string; query: string; replacement: string; options: Model.WorkspaceTextSearchOptions; }; result: Model.WorkspaceReplacementPreview };
+  read_workspace_replacement_diff: { args: { repositoryRoot: string; planId: string; workspacePath: string; expanded: boolean; }; result: Model.WorkspaceReplacementDiff };
   apply_workspace_replacement: { args: { repositoryRoot: string; planId: string; selectedPaths: Array<string>; }; result: Model.ReplacementApplyResult };
   cancel_workspace_replacement: { args: { repositoryRoot: string; operationId: string; }; result: void };
   list_workspace_replacement_recoveries: { args: { repositoryRoot: string; }; result: Array<Model.ReplacementRecoverySummary> };
@@ -143,6 +144,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   search_workspace_text: "workspaceTextSearchReport",
   cancel_workspace_text_search: "void",
   preview_workspace_replacement: "workspaceReplacementPreview",
+  read_workspace_replacement_diff: "workspaceReplacementDiff",
   apply_workspace_replacement: "replacementApplyResult",
   cancel_workspace_replacement: "void",
   list_workspace_replacement_recoveries: "replacementRecoveryList",

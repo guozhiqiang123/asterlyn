@@ -150,6 +150,13 @@ test("editable Diff uses one gutter marker system and can disable unchanged coll
   assert.match(highlighting, /cm-source-word-\$\{kind\}/u);
 });
 
+test("editable Diff control synchronization cannot feed its own MutationObserver", async () => {
+  const source = await readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(button\.textContent !== control\.label\) button\.textContent = control\.label;/u);
+  assert.match(source, /if \(button\.title !== control\.title\) button\.title = control\.title;/u);
+  assert.match(source, /if \(button\.disabled !== disabled\) button\.disabled = disabled;/u);
+});
+
 test("conflict editor keeps Ours and Theirs immutable around one synchronized Result", async () => {
   const source = await readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8");
   assert.equal(source.match(/new MergeView\(/g)?.length, 2);

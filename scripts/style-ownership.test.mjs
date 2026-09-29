@@ -20,6 +20,7 @@ const ownedStyles = [
   ["features/files-editor/files-editor.css", "main.ts"],
   ["features/files-editor/editable-diff.css", "main.ts"],
   ["features/files-editor/workspace-search.css", "main.ts"],
+  ["features/files-editor/workspace-replacement-tool.css", "main.ts"],
   ["features/git-history/git-history.css", "main.ts"],
   ["features/git-history/history.css", "main.ts"],
   ["features/git-history/branches.css", "main.ts"],
@@ -148,6 +149,13 @@ test("command-surface Find action keeps breathing room from hints and dialog edg
   assert.match(shell, /\.command-surface-footer\s*\{[^}]*padding:\s*4px 12px;/s);
   assert.match(search, /\.command-surface-footer-actions\s*\{[^}]*gap:\s*16px;/s);
   assert.match(search, /\.command-surface-find-button\s*\{[^}]*height:\s*28px;[^}]*padding:\s*0 12px;/s);
+});
+
+test("replacement preview keeps matched text in the surrounding line flow", async () => {
+  const search = await readFile(new URL("../src/features/files-editor/workspace-search.css", import.meta.url), "utf8");
+  assert.match(search, /\.replacement-comparison code\s*\{[^}]*display:\s*block;/s);
+  assert.doesNotMatch(search, /\.replacement-comparison code\s*\{[^}]*display:\s*grid;/s);
+  assert.match(search, /\.replacement-comparison code span\s*\{[^}]*display:\s*block;/s);
 });
 
 test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {

@@ -1,6 +1,10 @@
 import type {
   ReplacementApplyResult,
   ReplacementRecoverySummary,
+  SaveTextFileResult,
+  TextFileSnapshot,
+  WorkspaceReplacementDiff,
+  WorkspaceReplacementFilePreview,
   WorkspaceReplacementPreview,
   WorkspaceTextSearchOptions,
 } from "../../models.ts";
@@ -44,6 +48,42 @@ export interface WorkspaceReplacementOperations {
   listRecoveries(repositoryRoot: string): Promise<ReplacementRecoverySummary[]>;
   rollback(repositoryRoot: string, recoveryId: string): Promise<ReplacementApplyResult>;
   finalize(repositoryRoot: string, recoveryId: string): Promise<void>;
+  readReplacementDiff(
+    repositoryRoot: string,
+    planId: string,
+    workspacePath: string,
+    expanded: boolean,
+  ): Promise<WorkspaceReplacementDiff>;
+  readReplacementFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+  ): Promise<TextFileSnapshot>;
+  saveReplacementFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+    expectedRevision: string,
+    content: string,
+    utf8Bom: boolean,
+    requestId: string,
+  ): Promise<SaveTextFileResult>;
+}
+
+export interface WorkspaceReplacementFileSession {
+  readonly planId: string;
+  readonly repositoryRoot: string;
+  readonly repositoryId: string;
+  readonly path: string;
+  readonly workspacePath: string;
+  readonly originalContent: string;
+  readonly proposedContent: string;
+  readonly content: string;
+  readonly persistedContent: string;
+  readonly utf8Bom: boolean;
+  readonly revision: string;
+  readonly status: "ready" | "saving" | "error";
+  readonly error: string | null;
 }
 
 export interface WorkspaceReplacementControllerState {
@@ -78,6 +118,10 @@ export type WorkspaceReplacementRecoveryOutcome =
 export class WorkspaceReplacementController {
   private readonly operations: WorkspaceReplacementOperations;
   private value: WorkspaceReplacementControllerState = initialState();
+  private readonly fileSessions = new Map<string, WorkspaceReplacementFileSession>();
+  private readonly fileSessionLoads = new Map<string, Promise<WorkspaceReplacementFileSession | null>>();
+  private fileLoadGeneration = 0;
+  private saveSequence = 0;
 
   constructor(operations: WorkspaceReplacementOperations) {
     this.operations = operations;
@@ -89,6 +133,7 @@ export class WorkspaceReplacementController {
 
   reset(): void {
     this.cancelActive();
+    this.clearFileSessions();
     this.value = {
       replacement: createWorkspaceReplacementState(),
       text: this.value.text,
@@ -108,6 +153,7 @@ export class WorkspaceReplacementController {
   invalidatePreview(): boolean {
     if (this.value.replacement.status === "applying") return false;
     this.cancelActive();
+    this.clearFileSessions();
     this.value = {
       ...this.value,
       replacement: closeReplacementPreview(this.value.replacement),
@@ -121,46 +167,86 @@ export class WorkspaceReplacementController {
     search: WorkspaceSearchRequest,
     describeError: (error: unknown) => string,
   ): Promise<boolean> {
+    return this.runPreview(identity, search.query, search.options, "preview", describeError);
+  }
+
+  async refreshPreview(
+    identity: WorkspaceOperationIdentity,
+    describeError: (error: unknown) => string,
+  ): Promise<boolean> {
+    const request = this.value.replacement.request;
+    if (!request) return false;
+    return this.runPreview(identity, request.query, request.options, this.value.dialog, describeError);
+  }
+
+  private async runPreview(
+    identity: WorkspaceOperationIdentity,
+    query: string,
+    options: WorkspaceTextSearchOptions,
+    dialog: WorkspaceReplacementDialog,
+    describeError: (error: unknown) => string,
+  ): Promise<boolean> {
+    this.clearFileSessions();
+    const preferredSelection = this.value.replacement.preview
+      ? new Set(this.value.replacement.selectedPaths)
+      : undefined;
     this.cancelActive();
     const operation = this.operations.startReplacementPreview(
       identity,
-      search.query,
+      query,
       this.value.text,
-      search.options,
+      options,
     );
     const started = beginReplacementPreview(
       this.value.replacement,
       identity.generation,
       identity.root,
       operation.operationId,
-      search.query,
+      query,
       this.value.text,
-      search.options,
+      options,
     );
     this.value = {
       ...this.value,
       replacement: started.state,
-      dialog: "preview",
+      dialog,
     };
     const completion = await operation.completion;
     if (completion.status === "stale") return false;
     const previous = this.value.replacement;
     const replacement = completion.status === "success"
-      ? completeReplacementPreview(previous, started.request, completion.value)
+      ? completeReplacementPreview(previous, started.request, completion.value, preferredSelection)
       : failReplacement(previous, started.request, describeError(completion.error));
     if (replacement === previous) return false;
     this.value = { ...this.value, replacement };
     return true;
   }
 
+  hidePreview(): void {
+    if (this.value.dialog === "preview" && this.value.replacement.status === "ready") {
+      this.value = { ...this.value, dialog: null };
+    }
+  }
+
+  showPreview(): void {
+    if (this.value.replacement.status === "ready" && this.value.replacement.preview) {
+      this.value = { ...this.value, dialog: "preview" };
+    }
+  }
+
   selectAll(selected: boolean): void {
-    this.value = {
-      ...this.value,
-      replacement: selectAllReplacementFiles(this.value.replacement, selected),
-    };
+    const replacement = selectAllReplacementFiles(this.value.replacement, selected);
+    if (selected) {
+      const selectedPaths = new Set(replacement.selectedPaths);
+      for (const path of this.changedSessionPaths()) selectedPaths.delete(path);
+      this.value = { ...this.value, replacement: { ...replacement, selectedPaths } };
+    } else {
+      this.value = { ...this.value, replacement };
+    }
   }
 
   toggleFile(workspacePath: string): void {
+    if (this.changedSessionPaths().has(workspacePath)) return;
     this.value = {
       ...this.value,
       replacement: toggleReplacementFile(this.value.replacement, workspacePath),
@@ -169,6 +255,7 @@ export class WorkspaceReplacementController {
 
   closeDialog(): void {
     this.cancelActive();
+    this.clearFileSessions();
     this.value = {
       ...this.value,
       replacement: closeReplacementPreview(this.value.replacement),
@@ -236,7 +323,146 @@ export class WorkspaceReplacementController {
       ),
       dialog: completion.value.status === "rolledBack" ? null : "recovery",
     };
+    this.clearFileSessions();
     return { status: "success", request, selectedPaths, result: completion.value };
+  }
+
+  fileSession(workspacePath: string): WorkspaceReplacementFileSession | null {
+    return this.fileSessions.get(workspacePath) ?? null;
+  }
+
+  changedSessionPaths(): ReadonlySet<string> {
+    return new Set(Array.from(this.fileSessions.values())
+      .filter((session) => session.content !== session.originalContent || session.persistedContent !== session.originalContent)
+      .map((session) => session.workspacePath));
+  }
+
+  loadFileSession(
+    file: WorkspaceReplacementFilePreview,
+    describeError: (error: unknown) => string,
+  ): Promise<WorkspaceReplacementFileSession | null> {
+    const request = this.value.replacement.request;
+    const preview = this.value.replacement.preview;
+    if (!request || !preview || !preview.files.some((candidate) => candidate.workspacePath === file.workspacePath)) {
+      return Promise.resolve(null);
+    }
+    const existing = this.fileSessions.get(file.workspacePath);
+    if (existing?.planId === preview.planId) return Promise.resolve(existing);
+    const loadKey = `${preview.planId}\0${file.workspacePath}`;
+    const active = this.fileSessionLoads.get(loadKey);
+    if (active) return active;
+    const generation = this.fileLoadGeneration;
+    const load = this.readFileSession(file, request.repositoryRoot, preview.planId, generation, existing, describeError)
+      .finally(() => {
+        if (this.fileSessionLoads.get(loadKey) === load) this.fileSessionLoads.delete(loadKey);
+      });
+    this.fileSessionLoads.set(loadKey, load);
+    return load;
+  }
+
+  private async readFileSession(
+    file: WorkspaceReplacementFilePreview,
+    repositoryRoot: string,
+    planId: string,
+    generation: number,
+    existing: WorkspaceReplacementFileSession | undefined,
+    describeError: (error: unknown) => string,
+  ): Promise<WorkspaceReplacementFileSession | null> {
+    try {
+      const [comparison, snapshot] = await Promise.all([
+        this.operations.readReplacementDiff(repositoryRoot, planId, file.workspacePath, false),
+        this.operations.readReplacementFile(repositoryRoot, file.repositoryId, file.path),
+      ]);
+      if (
+        generation !== this.fileLoadGeneration ||
+        this.value.replacement.preview?.planId !== planId
+      ) return null;
+      const session: WorkspaceReplacementFileSession = {
+        planId,
+        repositoryRoot,
+        repositoryId: file.repositoryId,
+        path: file.path,
+        workspacePath: file.workspacePath,
+        originalContent: comparison.originalContent,
+        proposedContent: comparison.proposedContent,
+        content: snapshot.content,
+        persistedContent: snapshot.content,
+        utf8Bom: snapshot.utf8Bom,
+        revision: snapshot.revision,
+        status: "ready",
+        error: null,
+      };
+      this.fileSessions.set(file.workspacePath, session);
+      return session;
+    } catch (error) {
+      if (generation !== this.fileLoadGeneration) return null;
+      const failed = existing ? { ...existing, status: "error" as const, error: describeError(error) } : null;
+      if (failed) this.fileSessions.set(file.workspacePath, failed);
+      return failed;
+    }
+  }
+
+  updateFileContent(workspacePath: string, content: string): WorkspaceReplacementFileSession | null {
+    const session = this.fileSessions.get(workspacePath);
+    if (!session || session.status === "saving" || session.content === content) return session ?? null;
+    const next = { ...session, content, status: "ready" as const, error: null };
+    this.fileSessions.set(workspacePath, next);
+    if (content !== session.originalContent) {
+      const selectedPaths = new Set(this.value.replacement.selectedPaths);
+      selectedPaths.delete(workspacePath);
+      this.value = { ...this.value, replacement: { ...this.value.replacement, selectedPaths } };
+    }
+    return next;
+  }
+
+  async saveFileSession(
+    workspacePath: string,
+    describeError: (error: unknown) => string,
+  ): Promise<{ status: "saved"; session: WorkspaceReplacementFileSession } | { status: "failure"; error: unknown } | { status: "stale" }> {
+    const session = this.fileSessions.get(workspacePath);
+    if (!session || session.status === "saving") return { status: "stale" };
+    if (session.content === session.persistedContent) return { status: "saved", session };
+    const saving = { ...session, status: "saving" as const, error: null };
+    this.fileSessions.set(workspacePath, saving);
+    const requestId = `replacement-file-save-${Date.now()}-${++this.saveSequence}`;
+    try {
+      const result = await this.operations.saveReplacementFile(
+        session.repositoryRoot,
+        session.repositoryId,
+        session.path,
+        session.revision,
+        session.content,
+        session.utf8Bom,
+        requestId,
+      );
+      if (this.fileSessions.get(workspacePath) !== saving) return { status: "stale" };
+      const saved: WorkspaceReplacementFileSession = {
+        ...saving,
+        persistedContent: saving.content,
+        revision: result.revision,
+        status: "ready",
+        error: null,
+      };
+      this.fileSessions.set(workspacePath, saved);
+      if (saved.persistedContent !== saved.originalContent) {
+        const selectedPaths = new Set(this.value.replacement.selectedPaths);
+        selectedPaths.delete(workspacePath);
+        this.value = {
+          ...this.value,
+          replacement: { ...this.value.replacement, selectedPaths },
+        };
+      }
+      return { status: "saved", session: saved };
+    } catch (error) {
+      if (this.fileSessions.get(workspacePath) === saving) {
+        this.fileSessions.set(workspacePath, {
+          ...saving,
+          status: "error",
+          error: describeError(error),
+        });
+      }
+      return { status: "failure", error };
+    }
   }
 
   async loadRecoveries(
@@ -310,6 +536,7 @@ export class WorkspaceReplacementController {
 
   dispose(): void {
     this.cancelActive();
+    this.clearFileSessions();
   }
 
   private cancelActive(): void {
@@ -318,6 +545,12 @@ export class WorkspaceReplacementController {
       replacement.request &&
       ["previewing", "ready", "applying"].includes(replacement.status)
     ) this.operations.cancelReplacement();
+  }
+
+  private clearFileSessions(): void {
+    this.fileLoadGeneration += 1;
+    this.fileSessionLoads.clear();
+    this.fileSessions.clear();
   }
 }
 

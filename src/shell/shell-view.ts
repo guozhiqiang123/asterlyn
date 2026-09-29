@@ -80,6 +80,7 @@ export function renderShellView(model: ShellViewModel): string {
           </div>
           <div class="terminal-tool-host hidden" id="terminal-tool-host" role="region" aria-label="${escapeHtml(copy.terminal)}"></div>
           <div class="find-tool-host hidden" id="find-tool-host" role="region"></div>
+          <div class="replacement-tool-host hidden" id="replacement-tool-host" role="region"></div>
         </section>
       </section>
       <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">
@@ -107,16 +108,18 @@ export function renderShellView(model: ShellViewModel): string {
 }
 
 function activityButton(tool: ActivityTool, model: ShellViewModel, copy: ShellCopy): string {
-  const labels = { files: copy.files, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal } as const;
-  const icons = { files: "folder", branches: "branch", changes: "changes", stash: "stash", terminal: "terminal" } as const;
-  const active = tool === "branches" || tool === "stash" || tool === "terminal"
-    ? model.shell.layout.bottomTool === tool
-    : model.shell.layout.leftTool === tool;
-  const enabled = model.workspaceOpen && (tool === "files" || tool === "terminal" || model.gitAvailable);
+  const labels = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal } as const;
+  const icons = { files: "folder", search: "search", branches: "branch", changes: "changes", stash: "stash", terminal: "terminal" } as const;
+  const active = tool === "search"
+    ? model.shell.layout.bottomTool === "find" || model.shell.layout.bottomTool === "replace"
+    : tool === "branches" || tool === "stash" || tool === "terminal"
+      ? model.shell.layout.bottomTool === tool
+      : model.shell.layout.leftTool === tool;
+  const enabled = model.workspaceOpen && (tool === "files" || tool === "search" || tool === "terminal" || model.gitAvailable);
   const label = labels[tool];
   const title = enabled
     ? copy.toolReorder(label)
-    : tool === "files" || tool === "terminal"
+    : tool === "files" || tool === "search" || tool === "terminal"
       ? copy.openFolderFirst
       : copy.gitUnavailableReorder;
   return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown">${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;

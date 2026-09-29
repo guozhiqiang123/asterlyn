@@ -20,6 +20,7 @@ export interface FindResultsRuntimeOptions {
   readonly activeRepositoryRoot: () => string | null;
   readonly activeFilePath: () => string | null;
   readonly locateCurrentFile: () => void;
+  readonly openSearch: () => void;
   readonly openPanel: () => void;
   readonly openFile: (repositoryRoot: string, file: ProjectFile) => Promise<void>;
   readonly openMatch: (repositoryRoot: string, match: WorkspaceTextSearchMatch) => Promise<void>;
@@ -101,6 +102,8 @@ export class FindResultsRuntime {
   }
 
   private bindResults(host: HTMLElement): void {
+    host.querySelector<HTMLButtonElement>("[data-find-search]")
+      ?.addEventListener("click", this.options.openSearch);
     host.querySelectorAll<HTMLButtonElement>("[data-find-result]").forEach((button) => {
       button.addEventListener("mousemove", () => this.selectText(button, false));
       button.addEventListener("click", () => {

@@ -37,8 +37,9 @@ pub(crate) use workspace_mutation::{
 };
 pub use workspace_replacement::WORKSPACE_REPLACEMENT_LIMITS;
 pub(crate) use workspace_replacement::{
-    WorkspaceReplacementPreview, apply_authorized_replacement, finalize_replacement,
-    list_replacement_recoveries, prepare_authorized_replacement, rollback_replacement,
+    WorkspaceReplacementDiff, WorkspaceReplacementPreview, apply_authorized_replacement,
+    finalize_replacement, list_replacement_recoveries, prepare_authorized_replacement,
+    rollback_replacement,
 };
 pub use workspace_search::WORKSPACE_SEARCH_LIMITS;
 pub(crate) use workspace_search::{WorkspaceTextSearchReport, search_authorized_workspace};

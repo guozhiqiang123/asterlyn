@@ -115,7 +115,7 @@ export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
         const newRanges: TextRange[][] = added.map(() => []);
         for (const pair of alignChangedLines(removed, added)) {
           if (pair.oldIndex === null || pair.newIndex === null) continue;
-          const changed = intralineRanges(
+          const changed = pairedTextChangeRanges(
             removed[pair.oldIndex] ?? "",
             added[pair.newIndex] ?? "",
           );
@@ -353,7 +353,7 @@ function appendChangedRows(
     const oldText = pair.oldIndex === null ? undefined : removed[pair.oldIndex];
     const newText = pair.newIndex === null ? undefined : added[pair.newIndex];
     const paired = oldText !== undefined && newText !== undefined;
-    const changed = paired ? intralineRanges(oldText, newText) : null;
+    const changed = paired ? pairedTextChangeRanges(oldText, newText) : null;
     rows.push(
       row(
         paired ? "modified" : oldText !== undefined ? "removed" : "added",
@@ -393,7 +393,7 @@ function appendNoNewlineRows(
   );
 }
 
-function intralineRanges(
+export function pairedTextChangeRanges(
   oldText: string,
   newText: string,
 ): { old: TextRange[]; new: TextRange[] } {

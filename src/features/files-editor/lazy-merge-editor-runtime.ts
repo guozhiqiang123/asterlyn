@@ -1,6 +1,6 @@
 import type { ConflictEditor } from "../../conflict-editor.ts";
 import type { DiffPresentation } from "../../diff-presentation.ts";
-import type { EditableDiffEditor } from "../../editable-diff-editor.ts";
+import type { EditableDiffEditor, EditableDiffInteractions } from "../../editable-diff-editor.ts";
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import type { GitConflictContent } from "../../models.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
@@ -15,7 +15,7 @@ interface EditableDiffMount {
   presentation: DiffPresentation;
   expandedUnchanged: boolean;
   onChange: (content: string) => void;
-  onRevert?: () => void;
+  interactions?: EditableDiffInteractions;
   restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
 }
 
@@ -62,7 +62,7 @@ export class LazyEditableDiffEditor {
     presentation: DiffPresentation,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
-    onRevert?: () => void,
+    interactions?: EditableDiffInteractions,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const mount = {
@@ -74,7 +74,7 @@ export class LazyEditableDiffEditor {
       presentation,
       expandedUnchanged,
       onChange,
-      onRevert,
+      interactions,
       restoredScroll,
     };
     this.pendingMount = mount;
@@ -166,7 +166,7 @@ export class LazyEditableDiffEditor {
       this.presentation,
       mount.expandedUnchanged,
       mount.onChange,
-      mount.onRevert,
+      mount.interactions,
       mount.restoredScroll,
     );
   }

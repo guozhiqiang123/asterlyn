@@ -76,6 +76,7 @@ export function completeReplacementPreview(
   state: WorkspaceReplacementState,
   request: WorkspaceReplacementRequest,
   preview: WorkspaceReplacementPreview,
+  preferredSelection?: ReadonlySet<string>,
 ): WorkspaceReplacementState {
   if (!matchesReplacementRequest(state, request) || preview.planId !== request.operationId) {
     return state;
@@ -84,7 +85,9 @@ export function completeReplacementPreview(
     ...state,
     status: "ready",
     preview,
-    selectedPaths: new Set(preview.files.map((file) => file.workspacePath)),
+    selectedPaths: new Set(preview.files
+      .map((file) => file.workspacePath)
+      .filter((path) => preferredSelection === undefined || preferredSelection.has(path))),
     error: null,
   };
 }

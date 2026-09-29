@@ -26,4 +26,4 @@ pub use model::{
 };
 pub use process::CancellationToken;
 pub use repository::GitRepository;
-pub use text_diff::{BoundedTextDiff, bounded_text_diff};
+pub use text_diff::{BoundedTextDiff, bounded_text_diff, bounded_text_diff_expanded};

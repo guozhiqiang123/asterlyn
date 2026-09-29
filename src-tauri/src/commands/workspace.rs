@@ -351,6 +351,24 @@ pub(crate) async fn apply_workspace_replacement(
 }
 
 #[tauri::command]
+pub(crate) async fn read_workspace_replacement_diff(
+    repository_root: String,
+    plan_id: String,
+    workspace_path: String,
+    expanded: bool,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    replacements: State<'_, WorkspaceReplacementRegistry>,
+) -> Result<WorkspaceReplacementDiff, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let stored = replacements.plan(window.label(), &root, &plan_id)?;
+    run_workspace_blocking("read replacement comparison", move || {
+        stored.diff(&workspace_path, expanded)
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) fn cancel_workspace_replacement(
     repository_root: String,
     operation_id: String,

@@ -2,6 +2,9 @@ import type {
   ReplacementApplyResult,
   ReplacementRecoverySummary,
   WorkspaceReplacementPreview,
+  WorkspaceReplacementDiff,
+  SaveTextFileResult,
+  TextFileSnapshot,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
 } from "../models.ts";
@@ -21,6 +24,12 @@ export interface WorkspaceOperationGateway {
     replacement: string,
     options: WorkspaceTextSearchOptions,
   ): Promise<WorkspaceReplacementPreview>;
+  readWorkspaceReplacementDiff(
+    repositoryRoot: string,
+    planId: string,
+    workspacePath: string,
+    expanded: boolean,
+  ): Promise<WorkspaceReplacementDiff>;
   applyWorkspaceReplacement(
     repositoryRoot: string,
     planId: string,
@@ -35,6 +44,16 @@ export interface WorkspaceOperationGateway {
     recoveryId: string,
   ): Promise<ReplacementApplyResult>;
   finalizeWorkspaceReplacement(repositoryRoot: string, recoveryId: string): Promise<void>;
+  readTextFile(repositoryRoot: string, repositoryId: string, path: string): Promise<TextFileSnapshot>;
+  saveTextFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+    expectedRevision: string,
+    content: string,
+    utf8Bom: boolean,
+    requestId: string,
+  ): Promise<SaveTextFileResult>;
 }
 
 export interface WorkspaceOperationIdentity {
@@ -167,6 +186,43 @@ export class WorkspaceOperationCoordinator {
 
   finalize(repositoryRoot: string, recoveryId: string): Promise<void> {
     return this.gateway.finalizeWorkspaceReplacement(repositoryRoot, recoveryId);
+  }
+
+  readReplacementDiff(
+    repositoryRoot: string,
+    planId: string,
+    workspacePath: string,
+    expanded: boolean,
+  ): Promise<WorkspaceReplacementDiff> {
+    return this.gateway.readWorkspaceReplacementDiff(repositoryRoot, planId, workspacePath, expanded);
+  }
+
+  readReplacementFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+  ): Promise<TextFileSnapshot> {
+    return this.gateway.readTextFile(repositoryRoot, repositoryId, path);
+  }
+
+  saveReplacementFile(
+    repositoryRoot: string,
+    repositoryId: string,
+    path: string,
+    expectedRevision: string,
+    content: string,
+    utf8Bom: boolean,
+    requestId: string,
+  ): Promise<SaveTextFileResult> {
+    return this.gateway.saveTextFile(
+      repositoryRoot,
+      repositoryId,
+      path,
+      expectedRevision,
+      content,
+      utf8Bom,
+      requestId,
+    );
   }
 
   private async complete<T>(

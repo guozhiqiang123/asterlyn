@@ -369,8 +369,8 @@ export const EN_US: LocaleCatalog = {
     unexpectedEditorError: "Unexpected editor-session error", unexpectedProjectFilesError: "Unexpected project-files error",
   },
   replacement: {
-    safeWorkspaceEdit: "Safe workspace edit", preparingPreview: "Preparing replacement preview",
-    rereadingFiles: "Re-reading the Git-authorized files…", cancel: "Cancel", previewUnavailable: "Replacement preview unavailable",
+    safeWorkspaceEdit: "Safe workspace edit", replaceLabel: "Replace", withLabel: "With", replacementMapping: "Reviewed replacement mapping", updatePreview: "Update Preview", previewChanged: "The replacement text changed. Update the preview before reviewing or applying it.", openInWindow: "Open in Replace Window",
+    replaceWindow: "Replace", hideReplaceWindow: "Hide Replace window", reviewAndApply: "Review and Apply", loadingComparison: "Loading the reviewed file comparison…", comparisonUnavailable: "The reviewed comparison could not be loaded.", noReplacementPreview: "Create a replacement preview to inspect full-file changes.", preparingPreview: "Preparing replacement preview", rereadingFiles: "Re-reading the Git-authorized files…", cancel: "Cancel", previewUnavailable: "Replacement preview unavailable",
     close: "Close", createNewSearch: "Create a new search and preview.", sameSize: "same size",
     byteDelta: (value) => `${value > 0 ? "+" : ""}${value} B`, matches: (count) => `${count} ${count === 1 ? "match" : "matches"}`,
     blockedFile: "save or unselect the open edited file", comparisonFor: (path) => `Before and after preview for ${path}`,
@@ -392,7 +392,7 @@ export const EN_US: LocaleCatalog = {
     inspectionFailed: "Replacement recovery could not be inspected",
     rollbackBlocked: (paths) => `Save or close edited recovery files before rollback: ${paths}`,
     externalChangesPreserved: "Some files changed outside Asterlyn and were preserved; recovery still needs review",
-    changesKept: "Replacement changes kept", originalsRestored: "Replacement originals restored",
+    changesKept: "Replacement changes kept", originalsRestored: "Replacement originals restored", search: "Search", treeView: "Show as tree", flatView: "Show as flat list", expandAll: "Expand all folders", collapseAll: "Collapse all folders", saveFile: "Save file", savedFile: "Saved", unsavedFile: "Unsaved changes", replacePatch: "Replace", rollbackPatch: "Rollback", updatePatch: "Update", saveBeforeReplace: "Save or roll back manual edits before applying another replacement",
   },
   changes: {
     contextMenu: {

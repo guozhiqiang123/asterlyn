@@ -16,7 +16,7 @@ export function renderFindResults(
 ): string {
   const snapshot = state.snapshot;
   if (!snapshot) {
-    return `<div class="find-results-empty"><span>${icon("search", 24)}</span><strong>${escapeHtml(catalog.navigation.noFindResults)}</strong><p>${escapeHtml(catalog.navigation.noFindResultsDetail)}</p></div>`;
+    return `<div class="find-results-empty"><span>${icon("search", 24)}</span><strong>${escapeHtml(catalog.navigation.noFindResults)}</strong><p>${escapeHtml(catalog.navigation.noFindResultsDetail)}</p><button class="primary-button" data-find-search type="button">${escapeHtml(catalog.shell.search)}</button></div>`;
   }
   if (snapshot.kind !== "workspace") return renderFindFiles(state, snapshot, catalog);
   const rows = snapshot.report.matches.map((match, index) =>

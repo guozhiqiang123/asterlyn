@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
-import { MergeView, getChunks, getOriginalDoc, goToNextChunk, goToPreviousChunk, originalDocChangeEffect, unifiedMergeView } from "@codemirror/merge";
+import { MergeView, getChunks, getOriginalDoc, goToNextChunk, goToPreviousChunk, originalDocChangeEffect, unifiedMergeView, type Chunk } from "@codemirror/merge";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
 import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -66,6 +66,20 @@ interface DiffScrollbars {
   resizeObserver: ResizeObserver;
 }
 
+export interface EditableDiffControlPresentation {
+  readonly label: string;
+  readonly title: string;
+  readonly disabled?: boolean;
+}
+
+export interface EditableDiffInteractions {
+  readonly control?: (chunk: Chunk, index: number) => EditableDiffControlPresentation;
+  readonly unifiedControl?: EditableDiffControlPresentation;
+  readonly activate?: (chunk: Chunk | null, index: number) => void;
+  readonly revert?: (content: string) => void;
+  readonly save?: (content: string) => void;
+}
+
 /**
  * A worktree Diff adapter. The repository side is immutable and the current
  * side projects the existing editor-session buffer. It never writes a file;
@@ -88,13 +102,14 @@ export class EditableDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private onChange: (content: string) => void = () => undefined;
-  private onRevert: (() => void) | null = null;
+  private interactions: EditableDiffInteractions | null = null;
   private copy: EditorCopy;
   private scrollDispose: (() => void) | null = null;
   private diffScrollbars: DiffScrollbars | null = null;
   private changePending = false;
   private changeFrame: number | null = null;
   private synchronizing = false;
+  private revertObserver: MutationObserver | null = null;
 
   constructor(copy: EditorCopy) {
     this.copy = copy;
@@ -135,7 +150,7 @@ export class EditableDiffEditor {
     presentation: DiffPresentation,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
-    onRevert?: () => void,
+    interactions?: EditableDiffInteractions,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const isSamePath = this.path === path;
@@ -150,7 +165,7 @@ export class EditableDiffEditor {
       const scroll = restoredScroll ?? this.captureScroll();
       this.flushChanges();
       this.onChange = onChange;
-      this.onRevert = onRevert ?? null;
+      this.interactions = interactions ?? null;
       this.preferences = { ...preferences };
       this.setPreferences(preferences);
 
@@ -199,6 +214,7 @@ export class EditableDiffEditor {
         this.synchronizing = false;
       }
       if (baseChanged || contentChanged) this.clearActiveChangeHighlights();
+      this.syncRevertControls();
       this.restoreScroll(scroll, true);
       return;
     }
@@ -215,7 +231,7 @@ export class EditableDiffEditor {
     this.presentation = { ...presentation };
     this.expandedUnchanged = expandedUnchanged;
     this.onChange = onChange;
-    this.onRevert = onRevert ?? null;
+    this.interactions = interactions ?? null;
     this.render();
     if (scroll) {
       this.restoreScroll(scroll, previousLayout === this.presentation.layout);
@@ -386,7 +402,9 @@ export class EditableDiffEditor {
     this.unifiedView = null;
     this.bindings = [];
     this.parent = null;
-    this.onRevert = null;
+    this.interactions = null;
+    this.revertObserver?.disconnect();
+    this.revertObserver = null;
   }
 
   private releaseScrollLink(): void {
@@ -406,6 +424,8 @@ export class EditableDiffEditor {
     this.mergeView = null;
     this.unifiedView = null;
     this.bindings = [];
+    this.revertObserver?.disconnect();
+    this.revertObserver = null;
     parent.replaceChildren();
     if (this.presentation.layout === "unified") {
       const binding = this.binding();
@@ -459,6 +479,7 @@ export class EditableDiffEditor {
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
+    this.observeRevertControls();
     // Both panes keep their own horizontal scroller under one shared vertical scroller, so their
     // horizontal offsets are linked explicitly.
     const disposeAB = linkHorizontalScroll(
@@ -593,7 +614,13 @@ export class EditableDiffEditor {
       asterlynSearch(),
       highlightSelectionMatches(),
       asterlynSyntaxHighlighting,
-      keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),
+      keymap.of([
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...searchKeymap,
+        { key: "Mod-f", run: openSearchPanel },
+        { key: "Mod-s", run: () => this.requestSave() },
+      ]),
       editable ? EditorView.updateListener.of((update) => this.onDocUpdate(update)) : [],
     ];
   }
@@ -619,7 +646,7 @@ export class EditableDiffEditor {
     this.updateScrollbars();
     if (isRevert) {
       this.flushChanges();
-      this.onRevert?.();
+      this.interactions?.revert?.(this.content());
       return;
     }
     if (this.changeFrame !== null) return;
@@ -664,8 +691,77 @@ export class EditableDiffEditor {
     button.textContent = "↩";
     button.title = this.copy.revertDiffChange;
     button.setAttribute("aria-label", this.copy.revertDiffChange);
+    const unified = action ? this.interactions?.unifiedControl : null;
+    if (unified) {
+      button.textContent = unified.label;
+      button.title = unified.title;
+      button.setAttribute("aria-label", unified.title);
+      button.disabled = unified.disabled === true;
+    }
     if (action) button.addEventListener("mousedown", action);
+    button.addEventListener("mousedown", (event) => {
+      if (!this.mergeView) {
+        if (button.disabled) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        this.interactions?.activate?.(null, -1);
+        return;
+      }
+      const index = Number(button.dataset.chunk);
+      const chunk = Number.isInteger(index) ? getChunks(this.mergeView.b.state)?.chunks[index] : null;
+      if (!chunk) return;
+      const control = this.interactions?.control?.(chunk, index);
+      if (control?.disabled) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      this.interactions?.activate?.(chunk, index);
+    }, true);
     return button;
+  }
+
+  private requestSave(): boolean {
+    if (!this.interactions?.save) return false;
+    this.flushChanges();
+    this.interactions.save(this.content());
+    return true;
+  }
+
+  private observeRevertControls(): void {
+    if (!this.mergeView) return;
+    this.revertObserver?.disconnect();
+    this.revertObserver = new MutationObserver(() => this.syncRevertControls());
+    this.revertObserver.observe(this.mergeView.dom, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-chunk"],
+    });
+    window.requestAnimationFrame(() => this.syncRevertControls());
+  }
+
+  private syncRevertControls(): void {
+    const merge = this.mergeView;
+    const controls = this.interactions;
+    if (!merge || !controls?.control) return;
+    const chunks = getChunks(merge.b.state)?.chunks ?? [];
+    merge.dom.querySelectorAll<HTMLButtonElement>(".cm-merge-revert > button[data-chunk]")
+      .forEach((button) => {
+        const index = Number(button.dataset.chunk);
+        const chunk = chunks[index];
+        if (!chunk) return;
+        const control = controls.control!(chunk, index);
+        if (button.textContent !== control.label) button.textContent = control.label;
+        if (button.title !== control.title) button.title = control.title;
+        if (button.getAttribute("aria-label") !== control.title) {
+          button.setAttribute("aria-label", control.title);
+        }
+        const disabled = control.disabled === true;
+        if (button.disabled !== disabled) button.disabled = disabled;
+      });
   }
 
   private loadLanguage(): void {

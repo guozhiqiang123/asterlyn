@@ -138,10 +138,10 @@ import {
   commandSurfaceResultLabel,
   renderCommandSurface as renderCommandSurfaceView,
   renderCommandSurfaceResults as renderCommandSurfaceResultsView,
-  renderWorkspaceReplacementDialog as renderWorkspaceReplacementDialogView,
   type CommandSurfaceViewModel,
 } from "./features/files-editor/workspace-navigation-view";
 import { FindResultsRuntime } from "./features/files-editor/find-results-runtime.ts";
+import { WorkspaceReplacementPresentationRuntime } from "./features/files-editor/workspace-replacement-presentation-runtime.ts";
 import {
   EditorSurface,
   type ImageSurfaceState,
@@ -397,7 +397,7 @@ export class AsterlynApp {
   private commandSurfaceCommands: readonly NavigationCommand[] = [];
   private commandSurfaceResultsFrame: number | null = null;
   private readonly workspaceSearchDebouncer = new WorkspaceSearchDebouncer();
-  private readonly findResultsRuntime: FindResultsRuntime;
+  private readonly findResultsRuntime: FindResultsRuntime; private readonly replacementPresentationRuntime: WorkspaceReplacementPresentationRuntime;
   private readonly bottomToolRuntime: BottomToolRuntime;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
@@ -535,8 +535,10 @@ export class AsterlynApp {
         if (snapshot.theme !== previous.theme) {
           this.editorSurface.setTheme(snapshot.theme);
           this.pushDiffEditor.setTheme(snapshot.theme);
+          this.replacementPresentationRuntime.setTheme(snapshot.theme);
           this.editorSurface.requestMeasure();
           this.pushDiffEditor.requestMeasure();
+          this.replacementPresentationRuntime.requestMeasure();
         }
         if (snapshot.locale !== previous.locale) {
           this.contextMenuHost.close();
@@ -557,6 +559,7 @@ export class AsterlynApp {
       activeRepositoryRoot: () => this.windowSession.workspace.state.root,
       activeFilePath: () => { const root = this.windowSession.workspace.state.root; return root ? activeProjectWorkspacePath(root, this.activeDocument(), this.filesState.files) : null; },
       locateCurrentFile: () => this.locateCurrentProjectFile(),
+      openSearch: () => this.openCommandSurface("workspace"),
       openPanel: () => {
         this.dismissCommandSurface();
         this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "find" });
@@ -571,7 +574,7 @@ export class AsterlynApp {
     this.bottomToolRuntime = new BottomToolRuntime(root, {
       tool: () => this.shellState.layout.bottomTool,
       shellCopy: () => this.localShellCopy(),
-      navigationCopy: () => this.localization.catalog.navigation,
+      navigationCopy: () => this.localization.catalog.navigation, replacementCopy: () => this.localization.catalog.replacement,
       workspaceRoot: () => this.windowSession.workspace.state.root,
       gitAvailable: () => this.windowSession.repository.state.snapshot !== null,
       activateTerminal: (workspaceRoot) => this.terminalPanel.activate(workspaceRoot),
@@ -584,7 +587,7 @@ export class AsterlynApp {
         this.renderGitDetailPane(snapshot);
       },
       renderStash: () => this.stashRuntime.render(),
-      renderFind: () => this.findResultsRuntime.render(),
+      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(),
     });
     this.historyReadRuntime = new GitHistoryReadRuntime(
       {
@@ -724,6 +727,22 @@ export class AsterlynApp {
         editorChanged: (change) => this.handleEditorSessionChange(change), changeBaselineChanged: () => queueMicrotask(() => this.renderEditor()),
       },
     );
+    this.replacementPresentationRuntime = new WorkspaceReplacementPresentationRuntime(root, {
+      controller: this.filesEditorRuntime.replacement,
+      copy: () => this.localization.catalog.replacement, editorCopy: () => this.localization.catalog.editor,
+      blockedOpenPaths: () => new Set(this.editorState.session.textTabs.filter((tab) => isTextTabDirty(tab) || tab.saveRequest !== null).map((tab) => tab.document.workspacePath)),
+      commandSurfaceOpen: () => this.filesEditorRuntime.commands.state.mode !== null,
+      close: () => this.closeWorkspaceReplacementDialog(), cancel: () => this.requestWorkspaceReplacementCancellation(), apply: () => void this.applyWorkspaceReplacement(),
+      updatePreview: () => void this.refreshWorkspaceReplacementPreview(), openWindow: () => this.openWorkspaceReplacementWindow(),
+      resolveRecovery: (id, action) => void this.resolveWorkspaceReplacementRecovery(id, action),
+      review: () => { this.filesEditorRuntime.replacement.showPreview(); this.renderWorkspaceReplacementDialog(); }, search: () => this.openCommandSurface("workspace"),
+      fileSaved: async (workspacePath) => { const root = this.windowSession.workspace.state.root;
+        if (root) { await this.reloadReplacementFiles([workspacePath]); await this.refreshWorkspaceAfterReplacement(root, this.windowSession.generation); } },
+      preferences: () => this.settingsState.preferences, presentation: () => this.diffPresentation(),
+      setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
+      describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
+    });
+    this.replacementPresentationRuntime.setTheme(this.settingsPresentationRuntime.presentation.snapshot.theme); this.replacementPresentationRuntime.setPhrases(this.localization.catalog.editorPhrases);
     this.gitOperationRuntime = new GitOperationRuntime({
       root,
       gateway: {
@@ -1445,7 +1464,7 @@ export class AsterlynApp {
       hideBottomTool: () => {
         const tool = this.shellState.layout.bottomTool;
         if (tool) {
-          if (tool === "find") {
+          if (tool === "find" || tool === "replace") {
             this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
             this.applyWorkbenchLayout(true);
             this.renderActivityRail();
@@ -1732,6 +1751,8 @@ export class AsterlynApp {
       this.editorSurface.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setPhrases(catalog.editorPhrases);
       this.pushDiffEditor.setBlameCopy(catalog.editor);
+      this.replacementPresentationRuntime.setPhrases(catalog.editorPhrases);
+      this.replacementPresentationRuntime.setEditorCopy(catalog.editor);
       document
         .querySelector<HTMLMetaElement>('meta[name="description"]')
         ?.setAttribute("content", catalog.documentDescription);
@@ -1858,7 +1879,7 @@ export class AsterlynApp {
     for (const tool of this.shellState.activityOrder) {
       const button = this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       if (!button) continue;
-      const toolLabel = { files: copy.files, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
+      const toolLabel = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", toolLabel);
       text(`[data-tool="${tool}"] span`, toolLabel);
     }
@@ -1910,6 +1931,7 @@ export class AsterlynApp {
     this.remoteRuntime.dispose();
     this.changesRuntime.dispose();
     this.filesEditorRuntime.dispose();
+    this.replacementPresentationRuntime.dispose();
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.settingsPresentationRuntime.dispose();
@@ -2143,6 +2165,7 @@ export class AsterlynApp {
     ) {
       this.editorSurface.setDiffPresentation(this.diffPresentation());
       this.pushDiffEditor.setPresentation(this.diffPresentation());
+      this.replacementPresentationRuntime.setPresentation(this.diffPresentation());
       this.syncDiffControls();
       this.syncPushDiffControls();
     }
@@ -2162,11 +2185,14 @@ export class AsterlynApp {
       `${this.settingsState.preferences.uiFontSize}px`,
     );
     this.editorSurface.setPreferences(this.settingsState.preferences);
+    this.replacementPresentationRuntime.setPreferences(this.settingsState.preferences);
     const theme = this.settingsPresentationRuntime.presentation.snapshot.theme;
     this.editorSurface.setTheme(theme);
     this.pushDiffEditor.setTheme(theme);
+    this.replacementPresentationRuntime.setTheme(theme);
     this.editorSurface.setPhrases(this.localization.catalog.editorPhrases);
     this.pushDiffEditor.setPhrases(this.localization.catalog.editorPhrases);
+    this.replacementPresentationRuntime.setPhrases(this.localization.catalog.editorPhrases);
     this.terminalPanel.refreshAppearance();
   }
 
@@ -2856,73 +2882,30 @@ export class AsterlynApp {
       searchRequest,
       (error) => localizedOperationError(error, this.localization.catalog.errors),
     );
-    this.renderWorkspaceReplacementDialog();
-    if (await completion) this.renderWorkspaceReplacementDialog();
+    const render = () => { this.renderWorkspaceReplacementDialog(); if (this.shellState.layout.bottomTool === "replace") this.bottomToolRuntime.render(); };
+    render(); if (await completion) render();
   }
 
-  private renderWorkspaceReplacementDialog(): void {
-    const host = this.query("#workspace-replacement-dialog");
-    const replacementState = this.filesEditorRuntime.replacement.state;
-    const mode = replacementState.dialog;
-    host.classList.toggle("hidden", mode === null);
-    const blockedOpenPaths = new Set(
-      this.editorState.session.textTabs
-        .filter((tab) => isTextTabDirty(tab) || tab.saveRequest !== null)
-        .map((tab) => tab.document.workspacePath),
-    );
-    host.innerHTML = renderWorkspaceReplacementDialogView({
-      dialog: mode,
-      replacement: replacementState.replacement,
-      recoveryBusy: replacementState.recoveryBusy,
-      blockedOpenPaths,
-      copy: this.localization.catalog.replacement,
-    });
-    if (mode) this.bindWorkspaceReplacementDialogEvents();
-  }
-  private bindWorkspaceReplacementDialogEvents(): void {
-    this.root.querySelectorAll<HTMLButtonElement>("[data-replacement-close]").forEach((button) => {
-      button.addEventListener("click", () => this.closeWorkspaceReplacementDialog());
-    });
-    this.root
-      .querySelector<HTMLButtonElement>("#replacement-cancel-operation")
-      ?.addEventListener("click", () => this.requestWorkspaceReplacementCancellation());
-    this.root
-      .querySelector<HTMLInputElement>("#replacement-select-all")
-      ?.addEventListener("change", (event) => {
-        this.filesEditorRuntime.replacement.selectAll(
-          (event.currentTarget as HTMLInputElement).checked,
-        );
-        this.renderWorkspaceReplacementDialog();
-      });
-    this.root.querySelectorAll<HTMLInputElement>("[data-replacement-file]").forEach((checkbox) => {
-      checkbox.addEventListener("change", () => {
-        const path = checkbox.dataset.replacementFile;
-        if (!path) return;
-        this.filesEditorRuntime.replacement.toggleFile(path);
-        this.renderWorkspaceReplacementDialog();
-      });
-    });
-    this.root
-      .querySelector<HTMLButtonElement>("#replacement-apply")
-      ?.addEventListener("click", () => void this.applyWorkspaceReplacement());
-    this.root.querySelectorAll<HTMLButtonElement>("[data-recovery-rollback]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const id = button.dataset.recoveryRollback;
-        if (id) void this.resolveWorkspaceReplacementRecovery(id, "rollback");
-      });
-    });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-recovery-keep]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const id = button.dataset.recoveryKeep;
-        if (id) void this.resolveWorkspaceReplacementRecovery(id, "keep");
-      });
-    });
+  private renderWorkspaceReplacementDialog(): void { this.replacementPresentationRuntime.renderDialog(); }
+
+  private async refreshWorkspaceReplacementPreview(): Promise<void> {
+    const workspaceRoot = this.windowSession.workspace.state.root;
+    if (!workspaceRoot) return;
+    const completion = this.filesEditorRuntime.replacement.refreshPreview({ root: workspaceRoot,
+      generation: this.windowSession.generation }, (error) => localizedOperationError(error, this.localization.catalog.errors));
+    const render = () => { this.renderWorkspaceReplacementDialog(); if (this.shellState.layout.bottomTool === "replace") this.bottomToolRuntime.render(); };
+    render(); if (await completion) render();
   }
 
-  private closeWorkspaceReplacementDialog(): void {
-    this.filesEditorRuntime.replacement.closeDialog();
-    this.renderWorkspaceReplacementDialog();
+  private openWorkspaceReplacementWindow(): void {
+    this.filesEditorRuntime.replacement.hidePreview(); this.renderWorkspaceReplacementDialog();
+    this.dismissCommandSurface(); this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "replace" });
+    this.applyWorkbenchLayout(true); this.renderActivityRail();
+    this.bottomToolRuntime.render();
   }
+
+  private closeWorkspaceReplacementDialog(): void { this.filesEditorRuntime.replacement.closeDialog(); this.renderWorkspaceReplacementDialog();
+    if (this.shellState.layout.bottomTool === "replace") this.bottomToolRuntime.render(); }
 
   private requestWorkspaceReplacementCancellation(): void {
     const outcome = this.filesEditorRuntime.replacement.requestCancellation(
@@ -2952,6 +2935,7 @@ export class AsterlynApp {
       );
       this.setStatus(this.localization.catalog.replacement.blockedStatus, "warning");
       this.renderWorkspaceReplacementDialog();
+      if (this.shellState.layout.bottomTool === "replace") this.bottomToolRuntime.render();
       return;
     }
     const completion = this.filesEditorRuntime.replacement.apply(
@@ -2978,6 +2962,7 @@ export class AsterlynApp {
         );
       }
       this.renderWorkspaceReplacementDialog();
+      if (this.shellState.layout.bottomTool === "replace") this.bottomToolRuntime.render();
       return;
     }
     await this.loadReplacementRecoveries(workspaceRoot, this.windowSession.generation);
@@ -3811,8 +3796,21 @@ export class AsterlynApp {
   private toggleTool(tool: ActivityTool): void {
     if (
       !this.windowSession.workspace.state.root ||
-      (tool !== "files" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
+      (tool !== "files" && tool !== "search" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
     ) return;
+    if (tool === "search") {
+      const current = this.shellState.layout.bottomTool;
+      const next = current === "find" || current === "replace"
+        ? null
+        : this.filesEditorRuntime.replacement.state.replacement.status === "ready"
+          ? "replace"
+          : "find";
+      this.shellController.setLayout({ ...this.shellState.layout, bottomTool: next });
+      this.applyWorkbenchLayout(true);
+      this.renderActivityRail();
+      if (next) this.bottomToolRuntime.render();
+      return;
+    }
     this.shellController.reduceLayout(
       tool === "branches" || tool === "stash" || tool === "terminal"
         ? { type: "toggle-bottom-tool", tool }
@@ -3845,22 +3843,24 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       const tool = button.dataset.tool as ActivityTool;
       const enabled = Boolean(this.windowSession.workspace.state.root &&
-        (tool === "files" || tool === "terminal" || this.windowSession.repository.state.snapshot));
+        (tool === "files" || tool === "search" || tool === "terminal" || this.windowSession.repository.state.snapshot));
       const active =
-        tool === "branches" || tool === "stash" || tool === "terminal"
-          ? this.shellState.layout.bottomTool === tool
-          : this.shellState.layout.leftTool === tool;
+        tool === "search"
+          ? this.shellState.layout.bottomTool === "find" || this.shellState.layout.bottomTool === "replace"
+          : tool === "branches" || tool === "stash" || tool === "terminal"
+            ? this.shellState.layout.bottomTool === tool
+            : this.shellState.layout.leftTool === tool;
       button.classList.toggle("active", active);
       button.classList.toggle("unavailable", !enabled);
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
-      const label = { files: copy.files, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
+      const label = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", label);
       const labelNode = button.querySelector("span");
       if (labelNode) labelNode.textContent = label;
       button.title = enabled
         ? copy.toolReorder(label || copy.genericTool)
-        : tool === "files" || tool === "terminal"
+        : tool === "files" || tool === "search" || tool === "terminal"
           ? copy.openFolderFirst
           : copy.gitUnavailableReorder;
     });

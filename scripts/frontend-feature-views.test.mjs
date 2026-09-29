@@ -637,6 +637,25 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   assert.match(replacementHtml, /Replacement preview unavailable/);
   assert.match(replacementHtml, /Preview expired/);
 
+  const ready = createWorkspaceReplacementState();
+  ready.status = "ready";
+  ready.request = { operationId: "replace-1", query: "abc", replacement: "def" };
+  ready.preview = { planId: "replace-1", totalMatches: 2, skippedCount: 0, files: [{
+    workspacePath: "src/app.ts", matchCount: 2, byteDelta: 0,
+    occurrences: [{ line: 7, beforePreview: "const abc = 1", afterPreview: "const def = 1" },
+      { line: 9, beforePreview: "return abc", afterPreview: "return def" }],
+  }] };
+  ready.selectedPaths = new Set(["src/app.ts"]);
+  const readyHtml = renderWorkspaceReplacementDialog({ dialog: "preview", replacement: ready,
+    replacementText: "def", recoveryBusy: null, blockedOpenPaths: new Set() });
+  assert.match(readyHtml, /id="replacement-dialog-text"[^>]*value="def"/);
+  assert.match(readyHtml, /replacement-inline old[^>]*>abc</);
+  assert.match(readyHtml, /replacement-inline new[^>]*>def</);
+  assert.match(readyHtml, /#1 · L7/);
+  assert.match(readyHtml, /#2 · L9/);
+  assert.match(readyHtml, /id="replacement-open-window"/);
+  assert.match(readyHtml, />Open in Replace Window</);
+
   const textSearchHtml = renderCommandSurface({
     commandSurface: openCommandSurface(createCommandSurfaceState(), "workspace"),
     workspaceOpen: true,

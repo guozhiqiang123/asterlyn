@@ -236,7 +236,6 @@ impl WorkspaceReplacementRegistry {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn plan(
         &self,
         window_label: &str,

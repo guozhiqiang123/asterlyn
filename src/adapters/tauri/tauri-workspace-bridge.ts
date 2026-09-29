@@ -6,6 +6,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
   WorkspaceReplacementPreview,
+  WorkspaceReplacementDiff,
   WorkspaceMutationOutcome,
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
@@ -79,6 +80,13 @@ export const tauriWorkspaceBridge: WorkspaceBridge = {
       query,
       replacement,
       options,
+    }),
+  readWorkspaceReplacementDiff: (repositoryRoot, planId, workspacePath, expanded) =>
+    invokeDesktopCommand<WorkspaceReplacementDiff>("read_workspace_replacement_diff", {
+      repositoryRoot,
+      planId,
+      workspacePath,
+      expanded,
     }),
   applyWorkspaceReplacement: (repositoryRoot, planId, selectedPaths) =>
     invokeDesktopCommand<ReplacementApplyResult>("apply_workspace_replacement", {

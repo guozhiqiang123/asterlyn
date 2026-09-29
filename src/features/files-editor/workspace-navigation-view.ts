@@ -21,6 +21,7 @@ import {
 import type { WorkspaceReplacementState } from "./workspace-replacement.ts";
 import type { NavigationCopy, ReplacementCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import { pairedTextChangeRanges, type TextRange } from "../../diff-presentation.ts";
 
 export interface CommandSurfaceViewModel {
   readonly commandSurface: CommandSurfaceState;
@@ -41,6 +42,7 @@ export interface WorkspaceReplacementViewModel {
   readonly replacement: WorkspaceReplacementState;
   readonly recoveryBusy: { id: string; action: "keep" | "rollback" } | null;
   readonly blockedOpenPaths: ReadonlySet<string>;
+  readonly replacementText: string;
   readonly copy?: ReplacementCopy;
 }
 
@@ -133,20 +135,29 @@ export function renderWorkspaceReplacementDialog(
   const selectedFiles = preview.files.filter((file) => selected.has(file.workspacePath));
   const selectedMatches = selectedFiles.reduce((total, file) => total + file.matchCount, 0);
   const applying = replacement.status === "applying";
+  const replacementText = model.replacementText ?? replacement.request?.replacement ?? "";
+  const draftChanged = replacementText !== replacement.request?.replacement;
   const allSelected = selected.size === preview.files.length;
   const rows = preview.files.map((file) => {
     const checked = selected.has(file.workspacePath);
     const blocked = model.blockedOpenPaths.has(file.workspacePath);
     const delta = file.byteDelta === 0 ? copy.sameSize : copy.byteDelta(file.byteDelta);
-    return `<article class="replacement-file ${checked ? "selected" : ""}">
+    const occurrences = file.occurrences.map((occurrence, index) => {
+      const changed = pairedTextChangeRanges(occurrence.beforePreview, occurrence.afterPreview);
+      return `<div class="replacement-occurrence">
+        <div class="replacement-occurrence-line">#${index + 1} · L${occurrence.line}</div>
+        <div class="replacement-comparison" aria-label="${escapeAttribute(copy.comparisonFor(`${file.workspacePath}:${occurrence.line}`))}">
+          <code class="before"><span>${escapeHtml(copy.before)}</span>${highlightReplacementText(occurrence.beforePreview, changed.old, "old")}</code>
+          <code class="after"><span>${escapeHtml(copy.after)}</span>${highlightReplacementText(occurrence.afterPreview, changed.new, "new")}</code>
+        </div>
+      </div>`;
+    }).join("");
+    return `<article class="replacement-file ${checked ? "selected" : ""}" data-replacement-card="${escapeAttribute(file.workspacePath)}">
       <label class="replacement-file-heading">
         <input type="checkbox" data-replacement-file="${escapeAttribute(file.workspacePath)}" ${checked ? "checked" : ""} ${applying ? "disabled" : ""} />
         <span><strong>${escapeHtml(file.workspacePath)}</strong><small>${escapeHtml(copy.matches(file.matchCount))} · ${escapeHtml(delta)}${blocked ? ` · ${escapeHtml(copy.blockedFile)}` : ""}</small></span>
       </label>
-      <div class="replacement-comparison" aria-label="${escapeAttribute(copy.comparisonFor(file.workspacePath))}">
-        <code class="before"><span>${escapeHtml(copy.before)}</span>${escapeHtml(file.beforePreview)}</code>
-        <code class="after"><span>${escapeHtml(copy.after)}</span>${escapeHtml(file.afterPreview)}</code>
-      </div>
+      <div class="replacement-occurrences">${occurrences}</div>
     </article>`;
   }).join("");
   const warning = preview.skippedCount > 0
@@ -154,15 +165,34 @@ export function renderWorkspaceReplacementDialog(
     : "";
   return `<section class="dialog replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="replacement-dialog-title">
     <div class="dialog-heading"><h2 id="replacement-dialog-title">${escapeHtml(copy.reviewTitle)}</h2>${applying ? "" : `<button class="icon-button" data-replacement-close type="button" aria-label="${escapeAttribute(copy.close)}">${icon("close", 17)}</button>`}</div>
+    <div class="replacement-mapping" role="group" aria-label="${escapeAttribute(copy.replacementMapping)}">
+      <label><span>${escapeHtml(copy.replaceLabel)}</span><input type="text" value="${escapeAttribute(replacement.request?.query ?? "")}" readonly /></label>
+      <span class="replacement-mapping-arrow" aria-hidden="true">→</span>
+      <label><span>${escapeHtml(copy.withLabel)}</span><input id="replacement-dialog-text" type="text" value="${escapeAttribute(replacementText)}" ${applying ? "disabled" : ""} /></label>
+      <button class="secondary-button" id="replacement-update-preview" type="button" ${draftChanged && !applying ? "" : "disabled"}>${escapeHtml(copy.updatePreview)}</button>
+    </div>
+    <div class="replacement-draft-warning ${draftChanged ? "" : "hidden"}" role="status">${escapeHtml(copy.previewChanged)}</div>
     <p>${escapeHtml(copy.reviewedSummary(preview.totalMatches, preview.files.length))}</p>
     ${replacement.error ? `<div class="replacement-error" role="alert">${escapeHtml(replacement.error)}</div>` : ""}
     ${warning}
     <label class="replacement-select-all"><input id="replacement-select-all" type="checkbox" ${allSelected ? "checked" : ""} ${applying ? "disabled" : ""} /> ${escapeHtml(copy.selectAll)}</label>
     <div class="replacement-file-list">${rows}</div>
     <div class="dialog-actions">
-      ${applying ? `<button class="secondary-button" id="replacement-cancel-operation" type="button">${escapeHtml(copy.cancelAndRestore)}</button><button class="primary-button" type="button" disabled><span class="spinner"></span> ${escapeHtml(copy.applying)}</button>` : `<button class="secondary-button" data-replacement-close type="button">${escapeHtml(copy.cancel)}</button><button class="primary-button" id="replacement-apply" type="button" ${selected.size > 0 ? "" : "disabled"}>${escapeHtml(copy.applySelection(selectedMatches, selected.size))}</button>`}
+      ${applying ? `<button class="secondary-button" id="replacement-cancel-operation" type="button">${escapeHtml(copy.cancelAndRestore)}</button><button class="primary-button" type="button" disabled><span class="spinner"></span> ${escapeHtml(copy.applying)}</button>` : `<button class="secondary-button" data-replacement-close type="button">${escapeHtml(copy.cancel)}</button><button class="secondary-button" id="replacement-open-window" type="button" ${draftChanged ? "disabled" : ""}>${escapeHtml(copy.openInWindow)}</button><button class="primary-button" id="replacement-apply" type="button" ${selected.size > 0 && !draftChanged ? "" : "disabled"}>${escapeHtml(copy.applySelection(selectedMatches, selected.size))}</button>`}
     </div>
   </section>`;
+}
+
+function highlightReplacementText(text: string, ranges: readonly TextRange[], side: "old" | "new"): string {
+  if (ranges.length === 0) return escapeHtml(text);
+  let offset = 0;
+  let result = "";
+  for (const range of ranges) {
+    result += escapeHtml(text.slice(offset, range.from));
+    result += `<mark class="replacement-inline ${side}">${escapeHtml(text.slice(range.from, range.to))}</mark>`;
+    offset = range.to;
+  }
+  return result + escapeHtml(text.slice(offset));
 }
 
 function commandSurfaceTab(

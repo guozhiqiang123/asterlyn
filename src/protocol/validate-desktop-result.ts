@@ -371,6 +371,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       numbers(result, command, "totalMatches", "skippedCount");
       break;
     }
+    case "workspaceReplacementDiff": {
+      const result = record(value, command);
+      strings(result, command, "workspacePath", "patch", "originalContent", "proposedContent");
+      booleans(result, command, "truncated");
+      break;
+    }
     case "replacementApplyResult":
       assertReplacementRecovery(value, command, true);
       break;

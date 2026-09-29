@@ -637,6 +637,11 @@ export interface WorkspaceReplacementFilePreview {
   workspacePath: string;
   matchCount: number;
   byteDelta: number;
+  occurrences: WorkspaceReplacementOccurrencePreview[];
+}
+
+export interface WorkspaceReplacementOccurrencePreview {
+  line: number;
   beforePreview: string;
   afterPreview: string;
 }
@@ -647,6 +652,14 @@ export interface WorkspaceReplacementPreview {
   totalMatches: number;
   skippedCount: number;
   coverageReasons: SearchCoverageReason[];
+}
+
+export interface WorkspaceReplacementDiff {
+  workspacePath: string;
+  patch: string;
+  truncated: boolean;
+  originalContent: string;
+  proposedContent: string;
 }
 
 export type WorkspaceEntryKind = "file" | "directory";

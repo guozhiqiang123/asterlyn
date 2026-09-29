@@ -40,8 +40,9 @@ use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
     PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
     WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
-    WorkspaceReplacementPreview, WorkspaceReplacementRegistry, WorkspaceSearchRegistry,
-    WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    WorkspaceReplacementDiff, WorkspaceReplacementPreview, WorkspaceReplacementRegistry,
+    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
+    WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
     finalize_replacement, finalize_workspace_mutation_recovery, inspect_workspace_entry_inventory,
@@ -280,6 +281,7 @@ pub fn run() {
             search_workspace_text,
             cancel_workspace_text_search,
             preview_workspace_replacement,
+            read_workspace_replacement_diff,
             apply_workspace_replacement,
             cancel_workspace_replacement,
             list_workspace_replacement_recoveries,
@@ -668,6 +670,11 @@ mod tests {
         assert_eq!(preview.total_matches, 2);
         assert_eq!(preview.files.len(), 2);
         assert!(preview.files.iter().all(|file| file.repository_id == "."));
+        let reviewed_diff = stored
+            .diff("tracked.txt", false)
+            .expect("reviewed replacement diff");
+        assert!(reviewed_diff.patch.contains("-needle tracked"));
+        assert!(reviewed_diff.patch.contains("+found tracked"));
 
         let writes = WorkspaceWriteRegistry::default();
         let applied = apply_authorized_replacement(

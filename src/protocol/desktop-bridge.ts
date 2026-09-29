@@ -54,6 +54,7 @@ import type {
   WorkingTreeMutationOutcome,
   UntrackedScan,
   WorkspaceReplacementPreview,
+  WorkspaceReplacementDiff,
   WorkspaceCollisionPolicy,
   WorkspaceMutationOperation,
   WorkspaceMutationOutcome,
@@ -134,6 +135,12 @@ export interface WorkspaceBridge {
     replacement: string,
     options: WorkspaceTextSearchOptions,
   ): Promise<WorkspaceReplacementPreview>;
+  readWorkspaceReplacementDiff(
+    repositoryRoot: string,
+    planId: string,
+    workspacePath: string,
+    expanded: boolean,
+  ): Promise<WorkspaceReplacementDiff>;
   applyWorkspaceReplacement(
     repositoryRoot: string,
     planId: string,

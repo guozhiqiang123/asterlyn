@@ -58,6 +58,10 @@ test("left and bottom tools toggle independently", () => {
     tool: "find",
   });
   assert.equal(findReplacesBranches.bottomTool, "find");
+  const replaceReplacesFind = reduceWorkbenchLayout(findReplacesBranches, {
+    type: "toggle-bottom-tool", tool: "replace",
+  });
+  assert.equal(replaceReplacesFind.bottomTool, "replace");
 });
 
 test("malformed and unknown persisted layouts reset safely", () => {
@@ -72,6 +76,10 @@ test("malformed and unknown persisted layouts reset safely", () => {
     bottomTool: "find",
   })));
   assert.equal(find.bottomTool, "find");
+  const replace = loadWorkbenchLayout(memoryStorage(JSON.stringify({
+    ...WORKBENCH_LAYOUT_DEFAULTS, bottomTool: "replace",
+  })));
+  assert.equal(replace.bottomTool, "replace");
 });
 
 test("layout persistence excludes unrelated session state", () => {

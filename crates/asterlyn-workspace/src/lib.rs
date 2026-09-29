@@ -30,9 +30,9 @@ pub use mutation_execution::{
 };
 
 pub use replacement::{
-    PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFilePreview,
-    ReplacementFileState, ReplacementLimits, ReplacementRecoveryStatus, ReplacementRecoverySummary,
-    WorkspaceReplacementPreview,
+    PreparedWorkspaceReplacement, ReplacementApplyResult, ReplacementFileComparison,
+    ReplacementFilePreview, ReplacementFileState, ReplacementLimits, ReplacementOccurrencePreview,
+    ReplacementRecoveryStatus, ReplacementRecoverySummary, WorkspaceReplacementPreview,
 };
 pub use search::{
     SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchMode,

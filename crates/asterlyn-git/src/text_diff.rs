@@ -22,6 +22,23 @@ pub fn bounded_text_diff(
     before: &str,
     after: &str,
 ) -> Result<BoundedTextDiff, GitError> {
+    bounded_text_diff_with_context(path, before, after, "3")
+}
+
+pub fn bounded_text_diff_expanded(
+    path: &str,
+    before: &str,
+    after: &str,
+) -> Result<BoundedTextDiff, GitError> {
+    bounded_text_diff_with_context(path, before, after, "2147483647")
+}
+
+fn bounded_text_diff_with_context(
+    path: &str,
+    before: &str,
+    after: &str,
+    context: &str,
+) -> Result<BoundedTextDiff, GitError> {
     validate_label(path)?;
     validate_text_input(before)?;
     validate_text_input(after)?;
@@ -40,7 +57,7 @@ pub fn bounded_text_diff(
                 "--no-textconv",
                 "--no-color",
                 "--text",
-                "--unified=3",
+                &format!("--unified={context}"),
                 "--",
                 "before",
                 "after",
@@ -173,5 +190,19 @@ mod tests {
             bounded_text_diff("large.txt", &"x".repeat(TEXT_INPUT_LIMIT_BYTES + 1), ""),
             Err(GitError::InvalidInput { .. })
         ));
+    }
+
+    #[test]
+    fn expanded_text_diff_restores_context_hidden_by_the_default_patch() {
+        let before = (1..=20)
+            .map(|line| format!("line {line}\n"))
+            .collect::<String>();
+        let after = before.replace("line 10\n", "changed 10\n");
+        let collapsed = bounded_text_diff("context.txt", &before, &after).expect("collapsed diff");
+        let expanded =
+            bounded_text_diff_expanded("context.txt", &before, &after).expect("expanded diff");
+        assert!(!collapsed.patch.contains(" line 1\n"));
+        assert!(expanded.patch.contains(" line 1\n"));
+        assert!(expanded.patch.contains(" line 20\n"));
     }
 }

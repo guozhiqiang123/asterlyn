@@ -360,10 +360,10 @@ export class EditorSurface {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
         onContentChange(tab.id, content);
       },
-      onRevert ? () => {
+      onRevert ? { revert: () => {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
         onRevert(tab.id);
-      } : undefined,
+      } } : undefined,
       scroll,
     );
     this.mountedEditorKey = key;

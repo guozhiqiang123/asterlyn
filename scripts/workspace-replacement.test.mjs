@@ -38,8 +38,8 @@ const preview = {
   skippedCount: 0,
   coverageReasons: [],
   files: [
-    { repositoryId: ".", path: "src/a.ts", workspacePath: "src/a.ts", matchCount: 2, byteDelta: 1, beforePreview: "needle", afterPreview: "found" },
-    { repositoryId: ".", path: "src/b.ts", workspacePath: "src/b.ts", matchCount: 1, byteDelta: 0, beforePreview: "needle", afterPreview: "found" },
+    { repositoryId: ".", path: "src/a.ts", workspacePath: "src/a.ts", matchCount: 2, byteDelta: 1, occurrences: [{ line: 1, beforePreview: "needle", afterPreview: "found" }, { line: 2, beforePreview: "needle", afterPreview: "found" }] },
+    { repositoryId: ".", path: "src/b.ts", workspacePath: "src/b.ts", matchCount: 1, byteDelta: 0, occurrences: [{ line: 1, beforePreview: "needle", afterPreview: "found" }] },
   ],
 };
 

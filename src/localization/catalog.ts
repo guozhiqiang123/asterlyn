@@ -463,10 +463,10 @@ export interface EditorCopy {
 }
 
 export interface ReplacementCopy {
-  safeWorkspaceEdit: string;
-  preparingPreview: string;
-  rereadingFiles: string;
-  cancel: string;
+  safeWorkspaceEdit: string; replaceLabel: string; withLabel: string; replacementMapping: string;
+  updatePreview: string; previewChanged: string; openInWindow: string; replaceWindow: string; hideReplaceWindow: string; reviewAndApply: string;
+  loadingComparison: string; comparisonUnavailable: string; noReplacementPreview: string;
+  preparingPreview: string; rereadingFiles: string; cancel: string;
   previewUnavailable: string;
   close: string;
   createNewSearch: string;
@@ -508,7 +508,7 @@ export interface ReplacementCopy {
   rollbackBlocked(paths: string): string;
   externalChangesPreserved: string;
   changesKept: string;
-  originalsRestored: string;
+  originalsRestored: string; search: string; treeView: string; flatView: string; expandAll: string; collapseAll: string; saveFile: string; savedFile: string; unsavedFile: string; replacePatch: string; rollbackPatch: string; updatePatch: string; saveBeforeReplace: string;
 }
 
 export interface ChangesCopy {

@@ -9,6 +9,9 @@ use regex::{Regex, RegexBuilder};
 
 use super::{UTF8_BOM, Workspace, WorkspaceError, revision};
 
+mod replacement_preview;
+pub(crate) use replacement_preview::{LineReplacementPreview, replace_text_line_local};
+
 const CANCELLATION_CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Default)]
@@ -559,47 +562,6 @@ enum SearchMatcher {
     },
 }
 
-pub(crate) fn replace_text_line_local(
-    content: &str,
-    query: &str,
-    replacement: &str,
-    options: &SearchOptions,
-    cancellation: &SearchCancellationToken,
-    limits: SearchLimits,
-) -> Result<(String, usize), WorkspaceError> {
-    if options.new_line {
-        return Err(WorkspaceError::InvalidReplacement {
-            message:
-                "multi-line search is read-only; turn off New line before previewing replacement"
-                    .to_string(),
-        });
-    }
-    let matcher = SearchMatcher::compile(
-        query,
-        options.mode,
-        options.case_sensitive,
-        options.whole_word,
-        false,
-        cancellation,
-        limits,
-    )?;
-    let normalized_replacement = replacement.replace("\r\n", "\n").replace('\r', "\n");
-    let separator = dominant_separator(content);
-    let file_replacement = normalized_replacement.replace('\n', separator);
-    let mut output = String::with_capacity(content.len());
-    let mut match_count = 0;
-
-    for line in source_lines(content) {
-        check_cancelled(cancellation)?;
-        let (replaced, count) = matcher.replace_all(line.text, &file_replacement, cancellation)?;
-        match_count += count;
-        output.push_str(&replaced);
-        output.push_str(line.separator);
-    }
-    check_cancelled(cancellation)?;
-    Ok((output, match_count))
-}
-
 struct SourceLine<'source> {
     text: &'source str,
     separator: &'source str,
@@ -754,17 +716,23 @@ impl SearchMatcher {
         text: &str,
         replacement: &str,
         cancellation: &SearchCancellationToken,
-    ) -> Result<(String, usize), WorkspaceError> {
+    ) -> Result<(String, Vec<AppliedReplacement>), WorkspaceError> {
         let mut output = String::with_capacity(text.len());
         let mut cursor = 0;
-        let mut count = 0;
+        let mut matches = Vec::new();
         match self {
             Self::Literal(query) => {
                 for (from, to) in literal_ranges(text, query, cancellation, usize::MAX)? {
                     output.push_str(&text[cursor..from]);
+                    let after_from = output.len();
                     output.push_str(replacement);
+                    matches.push(AppliedReplacement {
+                        before_from: from,
+                        before_to: to,
+                        after_from,
+                        after_to: output.len(),
+                    });
                     cursor = to;
-                    count += 1;
                 }
             }
             Self::Regex {
@@ -781,19 +749,32 @@ impl SearchMatcher {
                         continue;
                     }
                     output.push_str(&text[cursor..found.start()]);
+                    let after_from = output.len();
                     if *expand_captures {
                         captures.expand(replacement, &mut output);
                     } else {
                         output.push_str(replacement);
                     }
+                    matches.push(AppliedReplacement {
+                        before_from: found.start(),
+                        before_to: found.end(),
+                        after_from,
+                        after_to: output.len(),
+                    });
                     cursor = found.end();
-                    count += 1;
                 }
             }
         }
         output.push_str(&text[cursor..]);
-        Ok((output, count))
+        Ok((output, matches))
     }
+}
+
+struct AppliedReplacement {
+    before_from: usize,
+    before_to: usize,
+    after_from: usize,
+    after_to: usize,
 }
 
 fn whole_word_match(text: &str, from: usize, to: usize) -> bool {

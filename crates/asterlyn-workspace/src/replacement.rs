@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::search::replace_text_line_local;
+use super::search::{LineReplacementPreview, replace_text_line_local};
 use super::{
     SaveTextFileRequest, SearchCancellationToken, SearchCandidate, SearchCoverageReason,
     SearchLimits, SearchOptions, Workspace, WorkspaceError, decode_snapshot, encode_text,
@@ -30,6 +30,13 @@ pub struct ReplacementFilePreview {
     pub workspace_path: String,
     pub match_count: usize,
     pub byte_delta: i64,
+    pub occurrences: Vec<ReplacementOccurrencePreview>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplacementOccurrencePreview {
+    pub line: usize,
     pub before_preview: String,
     pub after_preview: String,
 }
@@ -51,6 +58,13 @@ pub struct PreparedWorkspaceReplacement {
     preview: WorkspaceReplacementPreview,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplacementFileComparison {
+    pub workspace_path: String,
+    pub before: String,
+    pub after: String,
+}
+
 impl PreparedWorkspaceReplacement {
     pub fn plan_id(&self) -> &str {
         &self.plan_id
@@ -62,6 +76,28 @@ impl PreparedWorkspaceReplacement {
 
     pub fn workspace_paths(&self) -> impl Iterator<Item = &str> {
         self.files.iter().map(|file| file.workspace_path.as_str())
+    }
+
+    pub fn comparison(
+        &self,
+        workspace_path: &str,
+    ) -> Result<ReplacementFileComparison, WorkspaceError> {
+        let file = self
+            .files
+            .iter()
+            .find(|file| file.workspace_path == workspace_path)
+            .ok_or_else(|| WorkspaceError::InvalidReplacement {
+                message: "replacement comparison is outside the reviewed plan".to_string(),
+            })?;
+        let before =
+            super::decode_utf8_text(&file.original_bytes, file.original_bytes.len().max(1))?;
+        let after =
+            super::decode_utf8_text(&file.replacement_bytes, file.replacement_bytes.len().max(1))?;
+        Ok(ReplacementFileComparison {
+            workspace_path: file.workspace_path.clone(),
+            before: before.content,
+            after: after.content,
+        })
     }
 }
 
@@ -228,14 +264,16 @@ impl Workspace {
                     current_revision: snapshot.revision,
                 });
             }
-            let (replacement_content, actual_matches) = replace_text_line_local(
+            let (replacement_content, occurrences) = replace_text_line_local(
                 &snapshot.content,
                 query,
                 replacement,
                 options,
                 cancellation,
                 search_limits,
+                replacement_limits.max_preview_utf16,
             )?;
+            let actual_matches = occurrences.len();
             if actual_matches != *expected_matches {
                 return Err(WorkspaceError::Conflict {
                     current_revision: snapshot.revision,
@@ -265,17 +303,20 @@ impl Workspace {
                     ),
                 });
             }
-            let (before_preview, after_preview) = change_preview(
-                &snapshot.content,
-                &replacement_content,
-                replacement_limits.max_preview_utf16,
-            );
             previews.push(ReplacementFilePreview {
                 workspace_path: candidate.workspace_path.clone(),
                 match_count: actual_matches,
                 byte_delta: replacement_bytes.len() as i64 - original_bytes.len() as i64,
-                before_preview,
-                after_preview,
+                occurrences: occurrences
+                    .into_iter()
+                    .map(
+                        |preview: LineReplacementPreview| ReplacementOccurrencePreview {
+                            line: preview.line,
+                            before_preview: preview.before,
+                            after_preview: preview.after,
+                        },
+                    )
+                    .collect(),
             });
             prepared_files.push(PreparedReplacementFile {
                 workspace_path: candidate.workspace_path.clone(),
@@ -621,51 +662,6 @@ fn selected_plan_files<'plan>(
         });
     }
     Ok(files)
-}
-
-fn change_preview(before: &str, after: &str, max_utf16: usize) -> (String, String) {
-    let common_chars = before
-        .chars()
-        .zip(after.chars())
-        .take_while(|(left, right)| left == right)
-        .count();
-    let before_byte = before
-        .char_indices()
-        .nth(common_chars)
-        .map_or(before.len(), |(index, _)| index);
-    let after_byte = after
-        .char_indices()
-        .nth(common_chars)
-        .map_or(after.len(), |(index, _)| index);
-    (
-        preview_line(before, before_byte, max_utf16),
-        preview_line(after, after_byte, max_utf16),
-    )
-}
-
-fn preview_line(content: &str, offset: usize, max_utf16: usize) -> String {
-    let start = content[..offset]
-        .rfind(['\r', '\n'])
-        .map_or(0, |index| index + 1);
-    let end = content[offset..]
-        .find(['\r', '\n'])
-        .map_or(content.len(), |index| offset + index);
-    let line = &content[start..end];
-    let mut utf16 = 0;
-    let mut byte_end = 0;
-    for character in line.chars() {
-        let width = character.len_utf16();
-        if utf16 + width > max_utf16 {
-            break;
-        }
-        utf16 += width;
-        byte_end += character.len_utf8();
-    }
-    let mut preview = line[..byte_end].to_string();
-    if byte_end < line.len() {
-        preview.push('…');
-    }
-    preview
 }
 
 fn check_cancelled(cancellation: &SearchCancellationToken) -> Result<(), WorkspaceError> {
@@ -1049,6 +1045,18 @@ mod tests {
         let planned = plan(&workspace, "replace-one", super::super::SearchMode::Literal);
         assert_eq!(planned.preview.total_matches, 3);
         assert_eq!(planned.preview.files.len(), 2);
+        let first = planned
+            .preview
+            .files
+            .iter()
+            .find(|file| file.workspace_path == "one.txt")
+            .expect("first file preview");
+        assert_eq!(first.occurrences.len(), 2);
+        assert_eq!(first.occurrences[0].line, 1);
+        assert_eq!(first.occurrences[1].line, 3);
+        assert!(first.occurrences.iter().all(|preview| {
+            preview.before_preview.contains("needle") && preview.after_preview.contains("found")
+        }));
 
         let result = workspace
             .apply_replacement_plan(
