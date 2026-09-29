@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   WORKBENCH_LAYOUT_DEFAULTS,
   WORKBENCH_LAYOUT_KEY,
+  WORKBENCH_LIMITS,
   clampWorkbenchLayout,
   loadWorkbenchLayout,
   reduceWorkbenchLayout,
@@ -97,6 +98,7 @@ test("layout persistence excludes unrelated session state", () => {
     "diffBeforePercent",
     "leftTool",
     "leftWidth",
+    "replacementListWidth",
     "stashListWidth",
     "version",
   ]);
@@ -117,12 +119,38 @@ test("viewport clamping preserves usable editor and branch columns", () => {
     { width: 1_100, height: 700 },
   );
   assert.equal(clamped.leftWidth, 715);
-  assert.equal(clamped.bottomHeight, 485);
+  assert.equal(clamped.bottomHeight, 575);
   assert.equal(clamped.branchTreeWidth, 540);
   assert.equal(clamped.branchDetailsWidth, 230);
-  assert.equal(clamped.commitSummaryHeight, 370);
+  assert.equal(clamped.commitSummaryHeight, 460);
   assert.equal(clamped.changesCommitHeight, 585);
   assert.equal(clamped.diffBeforePercent, 75);
+});
+
+test("all leading side panes share the compact global minimum", () => {
+  const clamped = clampWorkbenchLayout(
+    {
+      ...WORKBENCH_LAYOUT_DEFAULTS,
+      leftWidth: 0,
+      branchTreeWidth: 0,
+      stashListWidth: 0,
+      replacementListWidth: 0,
+    },
+    { width: 1_100, height: 700 },
+  );
+  assert.equal(WORKBENCH_LIMITS.sidePaneMin, 160);
+  assert.equal(clamped.leftWidth, 160);
+  assert.equal(clamped.branchTreeWidth, 160);
+  assert.equal(clamped.stashListWidth, 160);
+  assert.equal(clamped.replacementListWidth, 160);
+});
+
+test("older v1 layouts gain newly shared pane dimensions", () => {
+  const { replacementListWidth: _removed, ...olderLayout } = WORKBENCH_LAYOUT_DEFAULTS;
+  assert.equal(
+    loadWorkbenchLayout(memoryStorage(JSON.stringify(olderLayout))).replacementListWidth,
+    WORKBENCH_LAYOUT_DEFAULTS.replacementListWidth,
+  );
 });
 
 test("splitter values honor direction and range", () => {

@@ -9,6 +9,7 @@ export type WorkbenchResizeDimension = keyof Pick<
   | "branchTreeWidth"
   | "branchDetailsWidth"
   | "stashListWidth"
+  | "replacementListWidth"
   | "commitSummaryHeight"
   | "changesCommitHeight"
   | "diffBeforePercent"
@@ -30,9 +31,9 @@ export class WorkbenchLayoutRuntime {
         orientation: "vertical",
         getValue: () => this.layout.leftWidth,
         getRange: () => ({
-          minimum: WORKBENCH_LIMITS.leftMin,
+          minimum: WORKBENCH_LIMITS.sidePaneMin,
           maximum: Math.max(
-            WORKBENCH_LIMITS.leftMin,
+            WORKBENCH_LIMITS.sidePaneMin,
             this.query("#workbench").clientWidth - WORKBENCH_LIMITS.editorMin - WORKBENCH_LIMITS.separatorSize,
           ),
         }),
@@ -60,9 +61,9 @@ export class WorkbenchLayoutRuntime {
         orientation: "vertical",
         getValue: () => this.layout.branchTreeWidth,
         getRange: () => ({
-          minimum: WORKBENCH_LIMITS.branchTreeMin,
+          minimum: WORKBENCH_LIMITS.sidePaneMin,
           maximum: Math.max(
-            WORKBENCH_LIMITS.branchTreeMin,
+            WORKBENCH_LIMITS.sidePaneMin,
             this.query("#git-tool-grid").clientWidth - WORKBENCH_LIMITS.branchCommitMin -
               WORKBENCH_LIMITS.branchDetailsMin - WORKBENCH_LIMITS.separatorSize * 2,
           ),
@@ -93,9 +94,9 @@ export class WorkbenchLayoutRuntime {
         orientation: "vertical",
         getValue: () => this.layout.stashListWidth,
         getRange: () => ({
-          minimum: WORKBENCH_LIMITS.stashListMin,
+          minimum: WORKBENCH_LIMITS.sidePaneMin,
           maximum: Math.max(
-            WORKBENCH_LIMITS.stashListMin,
+            WORKBENCH_LIMITS.sidePaneMin,
             this.query("#stash-tool-grid").clientWidth - WORKBENCH_LIMITS.stashFilesMin - WORKBENCH_LIMITS.separatorSize,
           ),
         }),
@@ -114,12 +115,15 @@ export class WorkbenchLayoutRuntime {
       branchTreeWidth: "--branch-tree-width",
       branchDetailsWidth: "--branch-details-width",
       stashListWidth: "--stash-list-width",
+      replacementListWidth: "--replacement-list-width",
       commitSummaryHeight: "--commit-summary-height",
       changesCommitHeight: "--changes-commit-height",
       diffBeforePercent: null,
     }[dimension];
     if (property) this.query("#workbench").style.setProperty(property, `${this.layout[dimension]}px`);
-    if (dimension === "leftWidth" || dimension === "bottomHeight") this.requestEditorMeasure();
+    if (dimension === "leftWidth" || dimension === "bottomHeight" || dimension === "replacementListWidth") {
+      this.requestEditorMeasure();
+    }
   }
 
   persist(): void { this.shell.persistLayout(); }
@@ -133,10 +137,12 @@ export class WorkbenchLayoutRuntime {
       ["--branch-tree-width", this.layout.branchTreeWidth],
       ["--branch-details-width", this.layout.branchDetailsWidth],
       ["--stash-list-width", this.layout.stashListWidth],
+      ["--replacement-list-width", this.layout.replacementListWidth],
       ["--commit-summary-height", this.layout.commitSummaryHeight],
       ["--changes-commit-height", this.layout.changesCommitHeight],
     ];
     for (const [property, value] of sizes) workbench.style.setProperty(property, `${value}px`);
+    workbench.style.setProperty("--workbench-editor-row-min-height", `${WORKBENCH_LIMITS.editorHeightMin}px`);
     const leftOpen = this.layout.leftTool !== null;
     const bottomOpen = this.layout.bottomTool !== null;
     workbench.classList.toggle("left-tool-open", leftOpen);

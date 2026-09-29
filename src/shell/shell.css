@@ -427,6 +427,8 @@
   --branch-tree-width: 270px;
   --branch-details-width: 320px;
   --stash-list-width: 420px;
+  --replacement-list-width: 420px;
+  --workbench-editor-row-min-height: 120px;
   --commit-summary-height: 145px;
   --changes-commit-height: 230px;
   display: grid;
@@ -438,7 +440,7 @@
 }
 
 .workbench.bottom-tool-open {
-  grid-template-rows: minmax(210px, 1fr) 5px var(--bottom-tool-height);
+  grid-template-rows: minmax(var(--workbench-editor-row-min-height), 1fr) 5px var(--bottom-tool-height);
 }
 
 .tool-window[hidden],

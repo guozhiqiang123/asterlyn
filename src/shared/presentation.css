@@ -139,6 +139,15 @@
 .compact-file-tree {
   --compact-file-tree-row-height: 25px;
   --compact-file-tree-indent: 12px;
+  --compact-file-tree-row-gap: 4px;
+  --compact-file-tree-row-padding-inline: 7px;
+  --compact-file-tree-row-leading: 6px;
+  --compact-file-tree-file-leading: 22px;
+  --compact-file-tree-row-radius: 3px;
+  --compact-file-tree-font-size: var(--ui-font-size, 13px);
+  --compact-file-tree-font-weight: 400;
+  --compact-file-tree-color: var(--text-soft);
+  --compact-file-tree-hover: var(--bg-hover);
 }
 
 .compact-file-tree-count {

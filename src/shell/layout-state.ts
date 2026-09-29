@@ -10,6 +10,7 @@ export interface WorkbenchLayout {
   branchTreeWidth: number;
   branchDetailsWidth: number;
   stashListWidth: number;
+  replacementListWidth: number;
   commitSummaryHeight: number;
   changesCommitHeight: number;
   diffBeforePercent: number;
@@ -26,6 +27,7 @@ export type WorkbenchLayoutAction =
         | "branchTreeWidth"
         | "branchDetailsWidth"
         | "stashListWidth"
+        | "replacementListWidth"
         | "commitSummaryHeight"
         | "changesCommitHeight"
         | "diffBeforePercent";
@@ -48,20 +50,19 @@ export const WORKBENCH_LAYOUT_DEFAULTS: WorkbenchLayout = Object.freeze({
   branchTreeWidth: 270,
   branchDetailsWidth: 320,
   stashListWidth: 420,
+  replacementListWidth: 420,
   commitSummaryHeight: 145,
   changesCommitHeight: 230,
   diffBeforePercent: 50,
 });
 
 export const WORKBENCH_LIMITS = Object.freeze({
-  leftMin: 220,
+  sidePaneMin: 160,
   editorMin: 380,
   bottomMin: 220,
-  editorHeightMin: 210,
-  branchTreeMin: 190,
+  editorHeightMin: 120,
   branchCommitMin: 320,
   branchDetailsMin: 230,
-  stashListMin: 260,
   stashFilesMin: 320,
   commitFilesMin: 80,
   commitSummaryMin: 90,
@@ -109,7 +110,7 @@ export function clampWorkbenchLayout(
   const width = finiteOr(viewport.width, 0);
   const height = finiteOr(viewport.height, 0);
   const maximumLeft = Math.max(
-    WORKBENCH_LIMITS.leftMin,
+    WORKBENCH_LIMITS.sidePaneMin,
     width - WORKBENCH_LIMITS.editorMin - WORKBENCH_LIMITS.separatorSize,
   );
   const maximumBottom = Math.max(
@@ -122,14 +123,14 @@ export function clampWorkbenchLayout(
     maximumBottom,
   );
   const availableBranchWidth = Math.max(
-    WORKBENCH_LIMITS.branchTreeMin +
+    WORKBENCH_LIMITS.sidePaneMin +
       WORKBENCH_LIMITS.branchCommitMin +
       WORKBENCH_LIMITS.branchDetailsMin +
       WORKBENCH_LIMITS.separatorSize * 2,
     width,
   );
   const maximumTree = Math.max(
-    WORKBENCH_LIMITS.branchTreeMin,
+    WORKBENCH_LIMITS.sidePaneMin,
     availableBranchWidth -
       WORKBENCH_LIMITS.branchCommitMin -
       WORKBENCH_LIMITS.branchDetailsMin -
@@ -137,7 +138,7 @@ export function clampWorkbenchLayout(
   );
   const branchTreeWidth = clamp(
     finiteOr(layout.branchTreeWidth, WORKBENCH_LAYOUT_DEFAULTS.branchTreeWidth),
-    WORKBENCH_LIMITS.branchTreeMin,
+    WORKBENCH_LIMITS.sidePaneMin,
     maximumTree,
   );
   const maximumDetails = Math.max(
@@ -154,7 +155,7 @@ export function clampWorkbenchLayout(
     bottomTool: isBottomTool(layout.bottomTool) ? layout.bottomTool : null,
     leftWidth: clamp(
       finiteOr(layout.leftWidth, WORKBENCH_LAYOUT_DEFAULTS.leftWidth),
-      WORKBENCH_LIMITS.leftMin,
+      WORKBENCH_LIMITS.sidePaneMin,
       maximumLeft,
     ),
     bottomHeight,
@@ -169,10 +170,21 @@ export function clampWorkbenchLayout(
     ),
     stashListWidth: clamp(
       finiteOr(layout.stashListWidth, WORKBENCH_LAYOUT_DEFAULTS.stashListWidth),
-      WORKBENCH_LIMITS.stashListMin,
+      WORKBENCH_LIMITS.sidePaneMin,
       Math.max(
-        WORKBENCH_LIMITS.stashListMin,
+        WORKBENCH_LIMITS.sidePaneMin,
         width - WORKBENCH_LIMITS.stashFilesMin - WORKBENCH_LIMITS.separatorSize,
+      ),
+    ),
+    replacementListWidth: clamp(
+      finiteOr(
+        layout.replacementListWidth,
+        WORKBENCH_LAYOUT_DEFAULTS.replacementListWidth,
+      ),
+      WORKBENCH_LIMITS.sidePaneMin,
+      Math.max(
+        WORKBENCH_LIMITS.sidePaneMin,
+        width - WORKBENCH_LIMITS.editorMin - WORKBENCH_LIMITS.separatorSize,
       ),
     ),
     commitSummaryHeight: clamp(
