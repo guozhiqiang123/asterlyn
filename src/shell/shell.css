@@ -586,7 +586,7 @@
   overflow: hidden;
   width: min(760px, calc(100vw - 54px));
   max-height: min(650px, calc(100vh - 110px));
-  grid-template-rows: 34px minmax(43px, auto) minmax(0, 1fr) 27px;
+  grid-template-rows: 34px minmax(43px, auto) minmax(0, 1fr) 36px;
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   background: var(--bg-panel);
@@ -595,7 +595,7 @@
 
 .command-surface.workspace-mode {
   width: min(860px, calc(100vw - 54px));
-  grid-template-rows: 34px minmax(43px, auto) auto minmax(0, 1fr) 27px;
+  grid-template-rows: 34px minmax(43px, auto) auto minmax(0, 1fr) 36px;
 }
 
 .command-surface-tabs {
@@ -780,7 +780,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 0 8px;
+  padding: 4px 12px;
   border-top: 1px solid var(--border);
   background: var(--surface-chrome);
   color: var(--text-faint);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { openCommandSurface, createCommandSurfaceState } from "../src/features/files-editor/navigation.ts";
-import { renderCommandSurfaceResults } from "../src/features/files-editor/workspace-navigation-view.ts";
+import { renderCommandSurface, renderCommandSurfaceResults } from "../src/features/files-editor/workspace-navigation-view.ts";
 import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/features/files-editor/workspace-search.ts";
 
 function model(mode, query, overrides = {}) {
@@ -127,6 +127,15 @@ test("Text keeps the exact preview range and zero-width marker highlighted", () 
   assert.match(html, /<span class="search-result-location" title="src\/components\/app\.component\.ts:27">app\.component\.ts:27<\/span>/);
   assert.doesNotMatch(html, /app\.component\.ts:27:\d+/);
   assert.match(html, /<code>x <mark class="command-result-match">&lt;needle&amp;&gt;<\/mark> y<\/code>/);
+  const surface = renderCommandSurface(model("workspace", "<needle&>", {
+    workspaceSearch: search, searchRequestIsCurrent: true,
+  }));
+  assert.match(surface, /id="command-surface-result-count"[^>]*>1 match<\/span>/);
+  assert.match(surface, /id="command-surface-open-find"/);
+  assert.doesNotMatch(
+    surface.match(/<button[^>]*id="command-surface-open-find"[^>]*>/)?.[0] ?? "",
+    /disabled/,
+  );
   match.previewToUtf16 = from;
   const zeroWidth = renderCommandSurfaceResults("workspace", 0, model("workspace", "^", {
     workspaceSearch: search, searchRequestIsCurrent: true,

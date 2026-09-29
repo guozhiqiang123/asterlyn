@@ -79,6 +79,7 @@ export function renderShellView(model: ShellViewModel): string {
             <section class="stash-pane stash-detail-pane"><div id="stash-detail-body"></div></section>
           </div>
           <div class="terminal-tool-host hidden" id="terminal-tool-host" role="region" aria-label="${escapeHtml(copy.terminal)}"></div>
+          <div class="find-tool-host hidden" id="find-tool-host" role="region"></div>
         </section>
       </section>
       <section class="settings-page hidden" id="settings-page" aria-labelledby="settings-page-title">

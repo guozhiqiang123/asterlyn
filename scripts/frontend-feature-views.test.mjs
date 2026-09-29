@@ -54,6 +54,7 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.match(html, /data-tool="stash"/);
   assert.match(html, /id="stash-tool-grid"/);
   assert.match(html, /id="terminal-tool-host"/);
+  assert.match(html, /id="find-tool-host"/);
   assert.match(html, /id="terminal-header-actions"/);
   assert.match(html, /class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool"/);
   assert.match(html, /id="changes-restore-review-dialog"/);
@@ -630,6 +631,9 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   assert.doesNotMatch(commandHtml, /Enter to search/);
   assert.match(commandHtml, /app\.ts/);
   assert.match(commandHtml, /<small>src<\/small>/);
+  assert.match(commandHtml, /1 matching file/);
+  assert.match(commandHtml, /id="command-surface-open-find"/);
+  assert.doesNotMatch(commandHtml.match(/<button[^>]*id="command-surface-open-find"[^>]*>/)?.[0] ?? "", /disabled/);
   assert.match(replacementHtml, /Replacement preview unavailable/);
   assert.match(replacementHtml, /Preview expired/);
 
@@ -643,6 +647,18 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   });
   assert.equal((textSearchHtml.match(/data-workspace-search-option=/g) ?? []).length, 3);
   assert.equal((textSearchHtml.match(/data-search-insert="new-line"/g) ?? []).length, 1);
+  assert.match(textSearchHtml, /id="command-surface-open-find"[^>]*disabled/);
+
+  const recentHtml = renderCommandSurface({
+    commandSurface: openCommandSurface(createCommandSurfaceState(), "recent"),
+    workspaceOpen: true, filesLoading: false,
+    files: [{ repositoryId: ".", path: "src/recent.ts", workspacePath: "src/recent.ts" }],
+    commands: [], workspaceSearch: createWorkspaceSearchState(),
+    workspaceSearchControls: createWorkspaceSearchControls(), searchRequestIsCurrent: false,
+    replacementText: "", replacementRecoveryCount: 0,
+  });
+  assert.match(recentHtml, /id="command-surface-open-find"/);
+  assert.doesNotMatch(recentHtml.match(/<button[^>]*id="command-surface-open-find"[^>]*>/)?.[0] ?? "", /disabled/);
 
   const commandPaletteHtml = renderCommandSurface({
     commandSurface: openCommandSurface(createCommandSurfaceState(), "commands"),
@@ -653,6 +669,7 @@ test("workspace navigation and replacement previews are feature-owned", () => {
     replacementText: "", replacementRecoveryCount: 0,
   });
   assert.doesNotMatch(commandPaletteHtml, /data-workspace-search-option=|data-search-insert=/);
+  assert.doesNotMatch(commandPaletteHtml, /id="command-surface-open-find"/);
 });
 
 test("editor chrome renders tabs, Markdown modes, menu, and Diff controls independently", () => {

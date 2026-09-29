@@ -54,6 +54,19 @@ export function commandSurfaceResultCount(model: CommandSurfaceViewModel): numbe
   return 0;
 }
 
+export function commandSurfaceResultLabel(model: CommandSurfaceViewModel): string {
+  const mode = model.commandSurface.mode;
+  if (!mode) return "";
+  const copy = model.copy ?? EN_US.navigation;
+  return copy.resultCount(mode, commandSurfaceResultCount(model));
+}
+
+export function commandSurfaceCanOpenFind(model: CommandSurfaceViewModel): boolean {
+  const mode = model.commandSurface.mode;
+  return commandSurfaceResultCount(model) > 0 && mode !== null && mode !== "commands" &&
+    (mode !== "workspace" || workspaceSearchHasCurrentResults(model));
+}
+
 export function renderCommandSurface(model: CommandSurfaceViewModel): string {
   const mode = model.commandSurface.mode;
   if (!mode) return "";
@@ -63,6 +76,7 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
   const title = copy.titles[mode];
   const queryOptions = mode !== "commands";
   return `<section class="command-surface ${mode === "workspace" ? "workspace-mode" : ""}" role="dialog" aria-modal="true" aria-labelledby="command-surface-title">
+    <h2 class="visually-hidden" id="command-surface-title">${escapeHtml(title)}</h2>
     <div class="command-surface-tabs" role="tablist" aria-label="${escapeAttribute(copy.navigationMode)}">
       ${commandSurfaceTab("files", copy.tabs.files, model)}
       ${commandSurfaceTab("recent", copy.tabs.recent, model)}
@@ -86,8 +100,8 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
       ${renderCommandSurfaceResults(mode, selected, model)}
     </div>
     <footer class="command-surface-footer">
-      <span id="command-surface-title">${escapeHtml(copy.hints[mode])}</span>
-      <span><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>
+      <span id="command-surface-result-count" title="${escapeAttribute(copy.hints[mode])}">${escapeHtml(commandSurfaceResultLabel(model))}</span>
+      <span class="command-surface-footer-actions"><span><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>${mode !== "commands" ? `<button class="secondary-button command-surface-find-button" id="command-surface-open-find" type="button" ${commandSurfaceCanOpenFind(model) ? "" : "disabled"}>${escapeHtml(copy.openInFindWindow)}</button>` : ""}</span>
     </footer>
   </section>`;
 }
@@ -249,7 +263,7 @@ function renderWorkspaceSearchResults(selected: number, model: CommandSurfaceVie
   return `${rows}<div class="workspace-search-summary">${escapeHtml(formatLocalizedWorkspaceSearchCoverage(search.report, copy))}</div>`;
 }
 
-function formatLocalizedWorkspaceSearchCoverage(report: WorkspaceTextSearchReport, copy: NavigationCopy): string {
+export function formatLocalizedWorkspaceSearchCoverage(report: WorkspaceTextSearchReport, copy: NavigationCopy): string {
   const size = report.bytesRead < 1024
     ? `${report.bytesRead} B`
     : report.bytesRead < 1024 * 1024
@@ -308,6 +322,13 @@ function renderWorkspaceSearchResult(
   selected: number,
   copy: NavigationCopy,
 ): string {
+  return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">${renderWorkspaceSearchMatchContent(match, copy)}</button>`;
+}
+
+export function renderWorkspaceSearchMatchContent(
+  match: WorkspaceTextSearchMatch,
+  copy: NavigationCopy,
+): string {
   const before = match.preview.slice(0, match.previewFromUtf16);
   const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
   const after = match.preview.slice(match.previewToUtf16);
@@ -316,10 +337,8 @@ function renderWorkspaceSearchResult(
     : `<mark class="command-result-match zero-width" aria-label="${escapeAttribute(copy.zeroWidthMatch)}" title="${escapeAttribute(copy.zeroWidthMatch)}">│</mark>`;
   const location = `${basename(match.workspacePath)}:${match.line}`;
   const fullLocation = `${match.workspacePath}:${match.line}`;
-  return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
-    <span class="search-result-location" title="${escapeAttribute(fullLocation)}">${escapeHtml(location)}</span>
-    <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>
-  </button>`;
+  return `<span class="search-result-location" title="${escapeAttribute(fullLocation)}">${escapeHtml(location)}</span>
+    <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>`;
 }
 
 function clipHighlightRanges(

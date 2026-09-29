@@ -1,6 +1,6 @@
 # ADR-0005: Bounded navigation and workspace search
 
-- **Status:** Accepted through E2.3; revised search controls accepted 2026-09-21; ignored-file mutability superseded by ADR-0017 on 2026-09-23
+- **Status:** Accepted through E2.3; revised search controls accepted 2026-09-21; ignored-file mutability superseded by ADR-0017 on 2026-09-23; persistent result window accepted 2026-09-28
 - **Date:** 2026-09-09
 
 ## Context
@@ -58,6 +58,8 @@ Search tasks have a request ID and cancellation token. Opening a newer workspace
 
 **Amendment, 2026-09-23.** Result rows in all four modes show the characters that matched the current query. Files and Recent highlight the same path occurrence or ordered fuzzy subsequence used by their quick-open matcher, split across the displayed directory and basename when needed. Commands highlight their label or detail; when a match depends on a hidden alias or command ID, that matching field is also shown in the row. Workspace Text keeps its exact preview-relative match range and zero-width marker. Ordinary matches emphasize the glyphs without a filled background; the zero-width marker remains a narrow colored caret. Highlighting is escaped presentation over existing results: it does not change ranking, search requests, selection, or navigation, and an empty query adds no marks.
 
+**Amendment, 2026-09-28.** Files, Recent, and Workspace Text show their current result count in the command-surface footer and can copy the exact visible result set into the persistent bottom Find window. Closing the transient surface invalidates its live query state but does not mutate that Find snapshot. Files and Recent retain authorized project identities only, support name-sorted flat and directory-tree projections, locate the active file in the Files tool window, and expand or collapse the selected folder; opening a row repeats the ordinary project-file authorization path. Workspace Text retains the bounded report and its revision-qualified UTF-16 locations; opening a row repeats the existing stale-result checks and scrolls the selected source range into view. Commands remain transient because they are actions rather than source results. A repository switch clears the snapshot, and no result index, disk persistence, or new read authority is introduced.
+
 The query row follows the textarea's measured height when New line is clicked or multiline text is entered or pasted. The bordered field grows with the text up to its 124px cap; longer queries scroll inside the field without covering the results.
 
 The active editor's Find field follows the same visible interaction: its New line button inserts an actual line break at the caret, the textarea grows to the same 124px cap, and CodeMirror updates matches as the query or case, word, and regex options change. Both search surfaces use square segmented option buttons flush with the field's right inner edge. The editor's sticky search panel stays below application dialogs, so an open global search remains visually and interactively above it.
@@ -84,4 +86,4 @@ The navigation surface can be removed without changing repository or file format
 
 ## Deferred work
 
-Persistent indexing, ignored-file replacement, cross-line replacement, multi-root result grouping controls, match-level replacement selection, symbol search, replacement editing after preview, and search-result persistence remain later slices.
+Persistent indexing, ignored-file replacement, cross-line replacement, multi-root result grouping controls, match-level replacement selection, symbol search, replacement editing after preview, and cross-session search-result persistence remain later slices.

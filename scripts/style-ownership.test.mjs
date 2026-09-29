@@ -142,6 +142,14 @@ test("both project search fields keep one query field with flat in-field option 
   assert.match(history, /\.history-mode-button\s*\{[^}]*border-left:\s*1px solid var\(--border\);[^}]*border-radius:\s*0;/s);
 });
 
+test("command-surface Find action keeps breathing room from hints and dialog edges", async () => {
+  const shell = await readFile(new URL("../src/shell/shell.css", import.meta.url), "utf8");
+  const search = await readFile(new URL("../src/features/files-editor/workspace-search.css", import.meta.url), "utf8");
+  assert.match(shell, /\.command-surface-footer\s*\{[^}]*padding:\s*4px 12px;/s);
+  assert.match(search, /\.command-surface-footer-actions\s*\{[^}]*gap:\s*16px;/s);
+  assert.match(search, /\.command-surface-find-button\s*\{[^}]*height:\s*28px;[^}]*padding:\s*0 12px;/s);
+});
+
 test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {
   const [theme, diff, editor] = await Promise.all([
     readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),

@@ -227,6 +227,7 @@ export interface NavigationCopy {
   filterIgnoredFiles: string;
   navigate: string;
   open: string;
+  resultCount(mode: "files" | "recent" | "workspace" | "commands", count: number): string; openInFindWindow: string; findWindow: string; hideFindWindow: string; findResultsAria: string; noFindResults: string; noFindResultsDetail: string;
   workspaceSearchOptions: string;
   include: string;
   includeAria: string;
@@ -267,7 +268,7 @@ export interface NavigationCopy {
 }
 
 export interface ProjectFilesCopy {
-  locateCurrentFile: string;
+  locateCurrentFile: string; flatList: string; directoryTree: string; showAs(view: string): string;
   expandSelectedFolder: string;
   collapseSelectedFolder: string;
   loadingProjectFiles: string;

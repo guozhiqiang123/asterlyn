@@ -134,11 +134,14 @@ import { createBrowserTextClipboardAdapter } from "./adapters/browser/browser-te
 import { localizedOperationError } from "./localization/error-message";
 import {
   commandSurfaceResultCount as commandSurfaceViewResultCount,
+  commandSurfaceCanOpenFind,
+  commandSurfaceResultLabel,
   renderCommandSurface as renderCommandSurfaceView,
   renderCommandSurfaceResults as renderCommandSurfaceResultsView,
   renderWorkspaceReplacementDialog as renderWorkspaceReplacementDialogView,
   type CommandSurfaceViewModel,
 } from "./features/files-editor/workspace-navigation-view";
+import { FindResultsRuntime } from "./features/files-editor/find-results-runtime.ts";
 import {
   EditorSurface,
   type ImageSurfaceState,
@@ -163,6 +166,7 @@ import {
   renderProjectNavigation,
   renderProjectToolbar,
 } from "./features/files-editor/project-files-view";
+import { BottomToolRuntime } from "./shell/bottom-tool-runtime.ts";
 import {
   type EditorSessionChange,
   type EditorSessionState,
@@ -393,6 +397,8 @@ export class AsterlynApp {
   private commandSurfaceCommands: readonly NavigationCommand[] = [];
   private commandSurfaceResultsFrame: number | null = null;
   private readonly workspaceSearchDebouncer = new WorkspaceSearchDebouncer();
+  private readonly findResultsRuntime: FindResultsRuntime;
+  private readonly bottomToolRuntime: BottomToolRuntime;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private recentRepositoryValidationGeneration = 0;
@@ -544,6 +550,41 @@ export class AsterlynApp {
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),
       error: (error) => this.showError(error),
+    });
+    this.findResultsRuntime = new FindResultsRuntime(root, {
+      copy: () => this.localization.catalog,
+      source: () => ({ mode: this.filesEditorRuntime.commands.state.mode, repositoryRoot: this.windowSession.workspace.state.root, query: this.filesEditorRuntime.commands.state.query, files: this.commandSurfaceFiles, searchRepositoryRoot: this.filesEditorRuntime.search.state.search.request?.repositoryRoot ?? null, report: this.filesEditorRuntime.search.state.search.report, searchCurrent: this.workspaceSearchHasCurrentResults() }),
+      activeRepositoryRoot: () => this.windowSession.workspace.state.root,
+      activeFilePath: () => { const root = this.windowSession.workspace.state.root; return root ? activeProjectWorkspacePath(root, this.activeDocument(), this.filesState.files) : null; },
+      locateCurrentFile: () => this.locateCurrentProjectFile(),
+      openPanel: () => {
+        this.dismissCommandSurface();
+        this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "find" });
+        this.applyWorkbenchLayout(true);
+        this.renderActivityRail();
+        this.bottomToolRuntime.render();
+      },
+      openFile: (repositoryRoot, file) => this.openProjectFile(repositoryRoot, file),
+      openMatch: (repositoryRoot, match) => this.openProjectFile(repositoryRoot, match, match),
+      wrongWorkspace: () => this.setStatus(this.localization.catalog.editor.wrongWorkspace, "warning"),
+    });
+    this.bottomToolRuntime = new BottomToolRuntime(root, {
+      tool: () => this.shellState.layout.bottomTool,
+      shellCopy: () => this.localShellCopy(),
+      navigationCopy: () => this.localization.catalog.navigation,
+      workspaceRoot: () => this.windowSession.workspace.state.root,
+      gitAvailable: () => this.windowSession.repository.state.snapshot !== null,
+      activateTerminal: (workspaceRoot) => this.terminalPanel.activate(workspaceRoot),
+      hideTerminal: () => this.terminalPanel.hide(),
+      renderGit: () => {
+        const snapshot = this.windowSession.repository.state.snapshot;
+        if (!snapshot) return;
+        this.renderBranchPane(snapshot);
+        this.renderHistoryPane();
+        this.renderGitDetailPane(snapshot);
+      },
+      renderStash: () => this.stashRuntime.render(),
+      renderFind: () => this.findResultsRuntime.render(),
     });
     this.historyReadRuntime = new GitHistoryReadRuntime(
       {
@@ -1413,8 +1454,15 @@ export class AsterlynApp {
       hideBottomTool: () => {
         const tool = this.shellState.layout.bottomTool;
         if (tool) {
-          this.toggleTool(tool);
-          this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`)?.focus();
+          if (tool === "find") {
+            this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
+            this.applyWorkbenchLayout(true);
+            this.renderActivityRail();
+            this.query<HTMLButtonElement>("#command-center-button").focus();
+          } else {
+            this.toggleTool(tool);
+            this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`)?.focus();
+          }
         }
       },
       hideLeftTool: () => {
@@ -1711,7 +1759,7 @@ export class AsterlynApp {
     this.renderStatus(this.windowSession.repository.state.snapshot);
     if (this.windowSession.workspace.state.root) this.renderEditor();
     if (this.shellState.layout.leftTool) this.renderLeftTool();
-    this.relocalizeBottomTool();
+    this.bottomToolRuntime.relocalize();
     if (this.filesEditorRuntime.commands.state.mode) this.renderCommandSurface();
     if (this.filesEditorRuntime.replacement.state.dialog) {
       this.renderWorkspaceReplacementDialog();
@@ -2224,6 +2272,10 @@ export class AsterlynApp {
       });
       this.gitHistoryPresentationRuntime.resetWorkspace();
       this.stashRuntime.clear();
+      this.findResultsRuntime.clear();
+      if (this.shellState.layout.bottomTool === "find") {
+        this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null }, true);
+      }
       this.closeHistoryDialogHost();
       this.historyReadRuntime.comparison.clear();
       this.historyReadRuntime.historicalFile.clear();
@@ -2486,6 +2538,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#workspace-replacement-preview")
       ?.addEventListener("click", () => void this.previewWorkspaceReplacement());
+    this.findResultsRuntime.bindCommandSurface();
     this.root
       .querySelector<HTMLButtonElement>("#workspace-recovery-open")
       ?.addEventListener("click", () => {
@@ -2567,6 +2620,10 @@ export class AsterlynApp {
         ? `command-result-${this.filesEditorRuntime.commands.state.selectedIndex}`
         : "",
     );
+    const resultCount = this.root.querySelector<HTMLElement>("#command-surface-result-count");
+    if (resultCount) resultCount.textContent = commandSurfaceResultLabel(model);
+    const findButton = this.root.querySelector<HTMLButtonElement>("#command-surface-open-find");
+    if (findButton) findButton.disabled = !commandSurfaceCanOpenFind(model);
     this.bindCommandSurfaceResultEvents();
     this.revealCommandSurfaceSelection();
   }
@@ -3769,7 +3826,7 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     if ((tool === "branches" || tool === "stash" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
-      this.renderBottomTool();
+      this.bottomToolRuntime.render();
       if (tool === "branches") this.loadVisibleCommitDetails();
       if (tool === "stash") {
         const root = this.windowSession.repository.state.snapshot?.root;
@@ -3843,7 +3900,7 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(false);
     this.renderActivityRail();
     this.renderLeftTool();
-    this.renderBottomTool();
+    this.bottomToolRuntime.render();
     this.renderEditor();
     this.renderStatus(snapshot);
     this.gitHistoryMutationRuntime.render();
@@ -4066,67 +4123,6 @@ export class AsterlynApp {
     }
   }
 
-  private renderBottomTool(): void {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const workspaceRoot = this.windowSession.workspace.state.root;
-    const tool = this.shellState.layout.bottomTool;
-    if (!tool) return;
-    const copy = this.localShellCopy();
-    const title = this.query("#bottom-tool-title");
-    const hide = this.query<HTMLButtonElement>("#hide-bottom-tool");
-    const operations = this.query<HTMLButtonElement>("#git-operation-open");
-    const terminalActions = this.query("#terminal-header-actions");
-    const git = this.query("#git-tool-grid");
-    const stash = this.query("#stash-tool-grid");
-    const terminal = this.query("#terminal-tool-host");
-    const isTerminal = tool === "terminal";
-    const isStash = tool === "stash";
-    title.textContent = isTerminal ? copy.terminal : isStash ? copy.stash : "Git";
-    const hideLabel = isTerminal ? copy.hideTerminal : isStash ? copy.hideStash : copy.hideGit;
-    hide.setAttribute("aria-label", hideLabel);
-    hide.title = hideLabel;
-    operations.classList.toggle("hidden", isTerminal || isStash);
-    terminalActions.classList.toggle("hidden", !isTerminal);
-    git.classList.toggle("hidden", isTerminal || isStash);
-    stash.classList.toggle("hidden", !isStash);
-    terminal.classList.toggle("hidden", !isTerminal);
-    this.query("#bottom-tool").setAttribute("aria-label", isTerminal ? copy.terminal : isStash ? copy.stash : copy.branchesAndLog);
-    if (isTerminal) {
-      if (workspaceRoot) this.terminalPanel.activate(workspaceRoot);
-      return;
-    }
-    this.terminalPanel.hide();
-    if (!snapshot) return;
-    if (isStash) {
-      this.stashRuntime.render();
-      return;
-    }
-    this.renderBranchPane(snapshot);
-    this.renderHistoryPane();
-    this.renderGitDetailPane(snapshot);
-  }
-
-  private relocalizeBottomTool(): void {
-    const branch = this.root.querySelector<HTMLElement>("#branch-navigation-body");
-    const history = this.root.querySelector<HTMLElement>("#history-results");
-    const detail = this.root.querySelector<HTMLElement>("#git-detail-body");
-    const scroll = {
-      branchTop: branch?.scrollTop ?? 0,
-      branchLeft: branch?.scrollLeft ?? 0,
-      historyTop: history?.scrollTop ?? 0,
-      historyLeft: history?.scrollLeft ?? 0,
-      detailTop: detail?.scrollTop ?? 0,
-      detailLeft: detail?.scrollLeft ?? 0,
-    };
-    this.renderBottomTool();
-    const nextBranch = this.root.querySelector<HTMLElement>("#branch-navigation-body");
-    const nextHistory = this.root.querySelector<HTMLElement>("#history-results");
-    const nextDetail = this.root.querySelector<HTMLElement>("#git-detail-body");
-    if (nextBranch) { nextBranch.scrollTop = scroll.branchTop; nextBranch.scrollLeft = scroll.branchLeft; }
-    if (nextHistory) { nextHistory.scrollTop = scroll.historyTop; nextHistory.scrollLeft = scroll.historyLeft; }
-    if (nextDetail) { nextDetail.scrollTop = scroll.detailTop; nextDetail.scrollLeft = scroll.detailLeft; }
-  }
-
   private renderBranchPane(snapshot: RepositorySnapshot): void {
     if (this.shellState.layout.bottomTool !== "branches") return;
     this.query("#branch-navigation-body").innerHTML =
@@ -4246,7 +4242,7 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
     this.historyReadRuntime.details.loadQuery(snapshot.root, this.activeHistoryQuery());
-    this.renderBottomTool();
+    this.bottomToolRuntime.render();
     queueMicrotask(() => this.root.querySelector<HTMLElement>("#history-results")?.focus());
   }
 
@@ -4348,6 +4344,10 @@ export class AsterlynApp {
     if (!this.filesEditorRuntime.files.revealFile(activePath)) {
       this.setStatus(this.localization.catalog.editor.outsideProjectTree, "warning");
       return;
+    }
+    if (this.shellState.layout.leftTool !== "files") {
+      this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" });
+      this.applyWorkbenchLayout(true); this.renderActivityRail();
     }
     const targetIndex = projectTreeRows(
       this.projectTree(),
@@ -4536,7 +4536,7 @@ export class AsterlynApp {
       this.setStatus(message, "warning");
       return;
     }
-    this.dismissCommandSurface();
+    if (this.filesEditorRuntime.commands.state.mode) this.dismissCommandSurface();
     this.renderEditor();
     queueMicrotask(() => {
       if (!this.editorSurface.selectRange(match.fromUtf16, match.toUtf16)) {
@@ -8399,7 +8399,7 @@ export class AsterlynApp {
     let succeeded = false;
     let failed = false;
     this.setLoading(true, loadingMessage);
-    if (!incremental) this.renderBottomTool();
+    if (!incremental) this.bottomToolRuntime.render();
     try {
       const completion = await operation.completion;
       if (completion.status === "stale") return false;
@@ -8423,7 +8423,7 @@ export class AsterlynApp {
       this.windowSession.completeTransition(generation);
       if (generation === this.windowSession.generation) {
         this.setLoading(false, this.localization.catalog.common.ready);
-        if (!incremental) this.renderBottomTool();
+        if (!incremental) this.bottomToolRuntime.render();
         if (succeeded) this.setStatus(successMessage, "success");
       }
     }
