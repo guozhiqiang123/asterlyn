@@ -78,7 +78,8 @@ function renderFindFileRow(
   tree: boolean,
 ): string {
   const directory = dirname(workspacePath);
-  return `<button class="find-file-row file ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" role="${tree ? "treeitem" : "option"}" style="--tree-depth:${depth}" aria-selected="${selected}" data-find-path="${escapeAttribute(workspacePath)}" data-find-kind="file" title="${escapeAttribute(workspacePath)}"><span class="find-file-glyph">${fileTypeIcon(workspacePath)}</span><span class="find-file-name">${escapeHtml(basename(workspacePath))}</span>${tree ? "" : `<span class="find-file-directory">${escapeHtml(directory)}</span>`}</button>`;
+  const disclosureSpacer = tree ? '<span class="find-tree-disclosure-spacer" aria-hidden="true"></span>' : "";
+  return `<button class="find-file-row file ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" role="${tree ? "treeitem" : "option"}" style="--tree-depth:${depth}" aria-selected="${selected}" data-find-path="${escapeAttribute(workspacePath)}" data-find-kind="file" title="${escapeAttribute(workspacePath)}">${disclosureSpacer}<span class="find-file-glyph">${fileTypeIcon(workspacePath)}</span><span class="find-file-name">${escapeHtml(basename(workspacePath))}</span>${tree ? "" : `<span class="find-file-directory">${escapeHtml(directory)}</span>`}</button>`;
 }
 
 function findSummary(query: string, detail: string): string {

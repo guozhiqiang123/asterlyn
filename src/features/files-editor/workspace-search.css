@@ -288,7 +288,7 @@
 }
 
 .find-file-row.file.tree-row {
-  grid-template-columns: 17px minmax(0, 1fr);
+  grid-template-columns: 14px 17px minmax(0, 1fr);
 }
 
 .find-file-row.file.flat-row {
