@@ -1,5 +1,5 @@
-import type { Extension, Range, Text } from "@codemirror/state";
-import { getChunks } from "@codemirror/merge";
+import { StateEffect, type Extension, type Range, type Text } from "@codemirror/state";
+import { getChunks, getOriginalDoc, mergeViewSiblings, type Change } from "@codemirror/merge";
 import {
   Decoration,
   EditorView,
@@ -7,9 +7,12 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
+import { lineAwareDiff } from "./features/files-editor/line-aware-diff.ts";
 
 type MergeSide = "a" | "b" | null;
 type MergeChunks = NonNullable<ReturnType<typeof getChunks>>["chunks"];
+const exactChangeCache = new WeakMap<Text, WeakMap<Text, readonly Change[]>>();
+const refreshSemanticHighlighting = StateEffect.define<null>();
 
 /**
  * Paint Asterlyn's semantic line and inline layers on CodeMirror's live Diff chunks.
@@ -25,13 +28,24 @@ export const mergeDiffSemanticHighlighting: Extension = ViewPlugin.fromClass(cla
     this.chunks = state?.chunks ?? null;
     this.side = state?.side ?? null;
     this.decorations = buildDecorations(view);
+    // MergeView creates pane A before pane B. Pane A therefore cannot resolve its sibling while
+    // its plugins are being constructed. Refresh it once the complete MergeView has been mounted,
+    // otherwise only pane B receives the exact intraline decorations.
+    if (this.side !== null && !mergeDocuments(view, this.side)) {
+      queueMicrotask(() => {
+        if (view.dom.isConnected) view.dispatch({ effects: refreshSemanticHighlighting.of(null) });
+      });
+    }
   }
 
   update(update: ViewUpdate): void {
     const state = getChunks(update.state);
     const chunks = state?.chunks ?? null;
     const side = state?.side ?? null;
-    if (update.docChanged || chunks !== this.chunks || side !== this.side) {
+    const refresh = update.transactions.some((transaction) =>
+      transaction.effects.some((effect) => effect.is(refreshSemanticHighlighting)),
+    );
+    if (refresh || update.docChanged || chunks !== this.chunks || side !== this.side) {
       this.chunks = chunks;
       this.side = side;
       this.decorations = buildDecorations(update.view);
@@ -47,49 +61,57 @@ function buildDecorations(view: EditorView): DecorationSet {
   const ranges: Array<Range<Decoration>> = [];
   const doc = view.state.doc;
 
-  for (const chunk of merge.chunks) {
-    const hasA = chunk.toA > chunk.fromA;
-    const hasB = chunk.toB > chunk.fromB;
-    if (!hasA || !hasB) continue;
-
-    if (merge.side === "a" || merge.side === "b") {
-      const from = merge.side === "a" ? chunk.fromA : chunk.fromB;
-      const end = merge.side === "a" ? chunk.endA : chunk.endB;
-      addModifiedLines(doc, from, end, ranges);
-    }
-
-    for (const change of chunk.changes) {
-      const oldChanged = change.toA > change.fromA;
-      const newChanged = change.toB > change.fromB;
-      const kind = merge.side === null
-        ? "added"
-        : oldChanged && newChanged
-          ? "modified"
-          : merge.side === "a"
-            ? "removed"
-            : "added";
-      const from = merge.side === "a"
-        ? chunk.fromA + change.fromA
-        : chunk.fromB + change.fromB;
-      const to = merge.side === "a"
-        ? chunk.fromA + change.toA
-        : chunk.fromB + change.toB;
-      addInlineRanges(doc, from, to, `cm-source-word-${kind}`, ranges);
-    }
+  const documents = mergeDocuments(view, merge.side);
+  if (documents) for (const change of exactChanges(documents.a, documents.b)) {
+    const oldChanged = change.toA > change.fromA;
+    const newChanged = change.toB > change.fromB;
+    const kind = oldChanged && newChanged
+      ? "modified"
+      : merge.side === "a"
+        ? "removed"
+        : "added";
+    const from = merge.side === "a" ? change.fromA : change.fromB;
+    const to = merge.side === "a" ? change.toA : change.toB;
+    if (kind === "modified") addModifiedLines(doc, from, to, ranges);
+    addInlineRanges(doc, from, to, `cm-source-word-${kind}`, ranges);
   }
 
   return Decoration.set(ranges, true);
 }
 
+function mergeDocuments(
+  view: EditorView,
+  side: MergeSide,
+): { a: Text; b: Text } | null {
+  if (side !== null) {
+    const siblings = mergeViewSiblings(view);
+    return siblings?.a && siblings.b
+      ? { a: siblings.a.state.doc, b: siblings.b.state.doc }
+      : null;
+  }
+  return { a: getOriginalDoc(view.state), b: view.state.doc };
+}
+
+function exactChanges(a: Text, b: Text): readonly Change[] {
+  let byAfter = exactChangeCache.get(a);
+  if (!byAfter) exactChangeCache.set(a, byAfter = new WeakMap());
+  let changes = byAfter.get(b);
+  if (!changes) {
+    changes = lineAwareDiff(a.toString(), b.toString());
+    byAfter.set(b, changes);
+  }
+  return changes;
+}
+
 function addModifiedLines(
   doc: Text,
   from: number,
-  end: number,
+  to: number,
   ranges: Array<Range<Decoration>>,
 ): void {
-  if (from > doc.length || end < from) return;
+  if (from >= to || from > doc.length) return;
   const firstLine = doc.lineAt(Math.min(from, doc.length)).number;
-  const lastLine = doc.lineAt(Math.min(end, doc.length)).number;
+  const lastLine = doc.lineAt(Math.min(to - 1, doc.length)).number;
   for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber += 1) {
     ranges.push(
       Decoration.line({ class: "cm-source-modified" }).range(doc.line(lineNumber).from),

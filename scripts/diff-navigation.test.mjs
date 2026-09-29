@@ -147,12 +147,19 @@ test("editable Diff uses one gutter marker system and can disable unchanged coll
   assert.match(source, /\{ gutter: false \}/);
   assert.match(source, /mergeDiffSemanticHighlighting/u);
   assert.match(highlighting, /getChunks\(update\.state\)/u);
+  assert.match(highlighting, /lineAwareDiff\(a\.toString\(\), b\.toString\(\)\)/u);
+  assert.match(highlighting, /mergeViewSiblings\(view\)/u);
   assert.match(highlighting, /cm-source-word-\$\{kind\}/u);
+  assert.match(highlighting, /MergeView creates pane A before pane B/u);
+  assert.match(highlighting, /refreshSemanticHighlighting\.of\(null\)/u);
+  assert.match(highlighting, /siblings\?\.a && siblings\.b/u);
 });
 
 test("editable Diff control synchronization cannot feed its own MutationObserver", async () => {
   const source = await readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8");
-  assert.match(source, /if \(button\.textContent !== control\.label\) button\.textContent = control\.label;/u);
+  assert.match(source, /button\.dataset\.controlIcon !== controlIcon \|\| button\.dataset\.controlLabel !== control\.label/u);
+  assert.match(source, /button\.dataset\.controlIcon = controlIcon;/u);
+  assert.match(source, /button\.dataset\.controlLabel = control\.label;/u);
   assert.match(source, /if \(button\.title !== control\.title\) button\.title = control\.title;/u);
   assert.match(source, /if \(button\.disabled !== disabled\) button\.disabled = disabled;/u);
 });

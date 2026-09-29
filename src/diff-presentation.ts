@@ -414,12 +414,12 @@ export function pairedTextChangeRanges(
   return { old, new: next };
 }
 
-interface ChangedLinePair {
+export interface ChangedLinePair {
   oldIndex: number | null;
   newIndex: number | null;
 }
 
-function alignChangedLines(removed: string[], added: string[]): ChangedLinePair[] {
+export function alignChangedLines(removed: string[], added: string[]): ChangedLinePair[] {
   if (removed.length === 0) {
     return added.map((_, newIndex) => ({ oldIndex: null, newIndex }));
   }
@@ -532,7 +532,7 @@ function linePairScore(oldText: string, newText: string): number {
     ? 1
     : 1 - Math.abs(oldText.length - newText.length) / longest;
   const similarity = 0.65 * tokenSimilarity + 0.25 * edgeSimilarity + 0.1 * lengthSimilarity;
-  return 2 * similarity - 0.7;
+  return 2 * similarity - 1;
 }
 
 function lineTokens(text: string): string[] {

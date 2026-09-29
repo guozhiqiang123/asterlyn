@@ -40,6 +40,98 @@ test("line-aware diff preserves precise inline ranges inside changed lines", () 
   assert.equal(after.slice(changes[0].fromB, changes[0].toB), "new");
 });
 
+test("line-aware diff preserves an unchanged identifier suffix after unequal replacement", () => {
+  const before = 'oid: "0123456789abcdef",\n';
+  const after = 'oid: "0123456789textxyzdef",\n';
+  const changes = lineAwareDiff(before, after);
+
+  assert.equal(applyChanges(before, after, changes), after);
+  assert.equal(changes.length, 1);
+  assert.equal(before.slice(changes[0].fromA, changes[0].toA), "abc");
+  assert.equal(after.slice(changes[0].fromB, changes[0].toB), "textxyz");
+});
+
+test("line-aware diff pairs adjacent CSS declarations before highlighting changed values", () => {
+  const before = [
+    ".commit-file-glyph {",
+    "  display: grid;",
+    "  width: 18px;",
+    "  height: 18px;",
+    "  place-items: center;",
+    "}",
+  ].join("\n");
+  const after = [
+    ".commit-file-glyph {",
+    "  display: grid;",
+    "  width: 17px;",
+    "  height: 17px;",
+    "  place-items: center;",
+    "}",
+  ].join("\n");
+  const changes = lineAwareDiff(before, after);
+
+  assert.equal(applyChanges(before, after, changes), after);
+  assert.deepEqual(changes.map((change) => ({
+    old: before.slice(change.fromA, change.toA),
+    next: after.slice(change.fromB, change.toB),
+  })), [
+    { old: "8", next: "7" },
+    { old: "8", next: "7" },
+  ]);
+});
+
+test("line-aware diff keeps CSS property names stable when values have different lengths", () => {
+  const before = [
+    "  gap: 4px;",
+    "  border-radius: 3px;",
+    "  color: var(--text-soft);",
+  ].join("\n");
+  const after = [
+    "  gap: var(--compact-file-tree-row-gap);",
+    "  border-radius: var(--compact-file-tree-row-radius);",
+    "  color: var(--compact-file-tree-color);",
+  ].join("\n");
+  const changes = lineAwareDiff(before, after);
+
+  assert.equal(applyChanges(before, after, changes), after);
+  for (const change of changes) {
+    assert.doesNotMatch(before.slice(change.fromA, change.toA), /gap:|border-radius:|color:/u);
+    assert.doesNotMatch(after.slice(change.fromB, change.toB), /gap:|border-radius:|color:/u);
+  }
+});
+
+test("line-aware diff pairs a rewritten signature before independent added methods", () => {
+  const before = [
+    "async listWorkspaceMutationRecoveries(",
+    "  repositoryRoot: string,",
+    "): Promise<Recovery[]> {",
+    "  if (!isTauri) return [];",
+    "  return invoke(repositoryRoot);",
+    "}",
+    "async searchWorkspaceText() {}",
+  ].join("\n");
+  const after = [
+    "async listWorkspaceMutationRecoveries(repositoryRoot: string): Promise<Recovery[]>;",
+    "async rollbackWorkspaceMutation(repositoryRoot: string): Promise<void>;",
+    "async finalizeWorkspaceMutation(repositoryRoot: string): Promise<void>;",
+    "async acknowledgeWorkspaceMutationRecovery(repositoryRoot: string): Promise<void>;",
+    "async searchWorkspaceText() {}",
+  ].join("\n");
+  const changes = lineAwareDiff(before, after);
+
+  assert.equal(applyChanges(before, after, changes), after);
+  assert.equal(changes.some((change) =>
+    before.slice(change.fromA, change.toA).includes("listWorkspaceMutationRecoveries") ||
+    after.slice(change.fromB, change.toB).includes("listWorkspaceMutationRecoveries")
+  ), false);
+  assert.ok(changes.some((change) =>
+    change.fromA === change.toA && after.slice(change.fromB, change.toB).includes("rollbackWorkspaceMutation")
+  ));
+  assert.ok(changes.some((change) =>
+    change.fromB === change.toB && before.slice(change.fromA, change.toA).includes("if (!isTauri)")
+  ));
+});
+
 test("line-aware diff remains exact with repeated lines and missing final newlines", () => {
   const before = "start\nrepeat\nrepeat\nold\nend";
   const after = "start\nrepeat\nnew\nrepeat\nend\n";

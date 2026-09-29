@@ -222,6 +222,20 @@ Added and removed rows use opaque semantic fills in both themes rather than alph
 meaning into the editor canvas. The dark fills keep at least 1.4:1 separation from the canvas while
 the existing syntax colors, intraline emphasis, and current-change perimeter remain independent.
 
+Editable, replacement, and conflict Diff surfaces keep CodeMirror's presentable chunks for folding,
+navigation, and patch actions, but do not reuse their word-expanded ranges as semantic color truth.
+Coloring is derived from the exact line-aware changes: unequal replacements preserve common
+identifier suffixes, and bounded changed blocks align one-to-three-line groups by identifier-token
+similarity, stable leading/trailing text, and matching property keys before character comparison.
+This keeps unchanged declaration names such as `width:`, `height:`, and `padding:` outside the
+intraline fill even when their values have very different lengths. Weakly related lines remain
+explicit additions/removals instead of being painted as one coarse modified block. Exact change
+arrays are cached by immutable
+CodeMirror documents so both split panes share the same bounded computation.
+Because CodeMirror constructs the first split editor before its sibling exists, the semantic layer
+performs one guarded post-mount refresh for that first pane; both panes therefore receive the same
+exact intraline ranges instead of leaving the first pane with only CodeMirror's coarse row fill.
+
 ### E3.1 Markdown-mode memory and conflict destination — 2026-09-12
 
 Markdown presentation choice is now bounded profile state rather than incidental active-tab state. A versioned store remembers Source, Split, or Preview for up to 128 root-qualified documents and records the last-used mode as the default for newly opened Markdown files. Existing editor sessions still own the live mode and source buffer; storage failure, malformed data, or an unknown mode falls back safely without changing content, dirty state, or save behavior. Only document identity and presentation choice persist—drafts, rendered HTML, split ratios, and editor state do not.
