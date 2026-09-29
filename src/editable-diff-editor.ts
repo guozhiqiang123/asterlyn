@@ -43,6 +43,7 @@ import {
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
+import { icon } from "./icons.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -69,6 +70,7 @@ interface DiffScrollbars {
 export interface EditableDiffControlPresentation {
   readonly label: string;
   readonly title: string;
+  readonly icon?: "forward" | "revert" | "sync";
   readonly disabled?: boolean;
 }
 
@@ -688,16 +690,13 @@ export class EditableDiffEditor {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "editable-diff-revert";
-    button.textContent = "↩";
-    button.title = this.copy.revertDiffChange;
-    button.setAttribute("aria-label", this.copy.revertDiffChange);
+    this.applyControlPresentation(button, {
+      label: this.copy.revertDiffChange,
+      title: this.copy.revertDiffChange,
+      icon: "revert",
+    });
     const unified = action ? this.interactions?.unifiedControl : null;
-    if (unified) {
-      button.textContent = unified.label;
-      button.title = unified.title;
-      button.setAttribute("aria-label", unified.title);
-      button.disabled = unified.disabled === true;
-    }
+    if (unified) this.applyControlPresentation(button, unified);
     if (action) button.addEventListener("mousedown", action);
     button.addEventListener("mousedown", (event) => {
       if (!this.mergeView) {
@@ -754,14 +753,25 @@ export class EditableDiffEditor {
         const chunk = chunks[index];
         if (!chunk) return;
         const control = controls.control!(chunk, index);
-        if (button.textContent !== control.label) button.textContent = control.label;
-        if (button.title !== control.title) button.title = control.title;
-        if (button.getAttribute("aria-label") !== control.title) {
-          button.setAttribute("aria-label", control.title);
-        }
-        const disabled = control.disabled === true;
-        if (button.disabled !== disabled) button.disabled = disabled;
+        this.applyControlPresentation(button, control);
       });
+  }
+
+  private applyControlPresentation(
+    button: HTMLButtonElement,
+    control: EditableDiffControlPresentation,
+  ): void {
+    const controlIcon = control.icon ?? "";
+    if (button.dataset.controlIcon !== controlIcon || button.dataset.controlLabel !== control.label) {
+      if (control.icon) button.innerHTML = icon(control.icon, 15);
+      else button.textContent = control.label;
+      button.dataset.controlIcon = controlIcon;
+      button.dataset.controlLabel = control.label;
+    }
+    if (button.title !== control.title) button.title = control.title;
+    if (button.getAttribute("aria-label") !== control.title) button.setAttribute("aria-label", control.title);
+    const disabled = control.disabled === true;
+    if (button.disabled !== disabled) button.disabled = disabled;
   }
 
   private loadLanguage(): void {

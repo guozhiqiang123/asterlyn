@@ -740,7 +740,7 @@ export class AsterlynApp {
         if (root) { await this.reloadReplacementFiles([workspacePath]); await this.refreshWorkspaceAfterReplacement(root, this.windowSession.generation); } },
       preferences: () => this.settingsState.preferences, presentation: () => this.diffPresentation(),
       setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
-      describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      fileListWidth: () => this.shellState.layout.replacementListWidth, resizeFileList: (width) => this.resizeWorkbench("replacementListWidth", width), persistLayout: () => this.persistWorkbenchLayout(), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
     });
     this.replacementPresentationRuntime.setTheme(this.settingsPresentationRuntime.presentation.snapshot.theme); this.replacementPresentationRuntime.setPhrases(this.localization.catalog.editorPhrases);
     this.gitOperationRuntime = new GitOperationRuntime({
@@ -2894,7 +2894,7 @@ export class AsterlynApp {
     const completion = this.filesEditorRuntime.replacement.refreshPreview({ root: workspaceRoot,
       generation: this.windowSession.generation }, (error) => localizedOperationError(error, this.localization.catalog.errors));
     const render = () => { this.renderWorkspaceReplacementDialog(); if (this.shellState.layout.bottomTool === "replace") this.bottomToolRuntime.render(); };
-    render(); if (await completion) render();
+    if (await completion) render();
   }
 
   private openWorkspaceReplacementWindow(): void {

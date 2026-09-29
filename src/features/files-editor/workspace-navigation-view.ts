@@ -169,7 +169,6 @@ export function renderWorkspaceReplacementDialog(
       <label><span>${escapeHtml(copy.replaceLabel)}</span><input type="text" value="${escapeAttribute(replacement.request?.query ?? "")}" readonly /></label>
       <span class="replacement-mapping-arrow" aria-hidden="true">→</span>
       <label><span>${escapeHtml(copy.withLabel)}</span><input id="replacement-dialog-text" type="text" value="${escapeAttribute(replacementText)}" ${applying ? "disabled" : ""} /></label>
-      <button class="secondary-button" id="replacement-update-preview" type="button" ${draftChanged && !applying ? "" : "disabled"}>${escapeHtml(copy.updatePreview)}</button>
     </div>
     <div class="replacement-draft-warning ${draftChanged ? "" : "hidden"}" role="status">${escapeHtml(copy.previewChanged)}</div>
     <p>${escapeHtml(copy.reviewedSummary(preview.totalMatches, preview.files.length))}</p>

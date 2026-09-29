@@ -252,7 +252,7 @@ export const ZH_CN = {
   },
   replacement: {
     safeWorkspaceEdit: "安全工作区编辑", replaceLabel: "替换", withLabel: "替换为", replacementMapping: "已检查的替换映射",
-    updatePreview: "更新预览", previewChanged: "替换内容已更改，请先更新预览再检查或应用。", openInWindow: "在替换窗口中打开",
+    previewChanged: "停止输入后将自动更新预览。", openInWindow: "在替换窗口中打开",
     replaceWindow: "替换", hideReplaceWindow: "隐藏替换窗口", reviewAndApply: "检查并应用",
     loadingComparison: "正在加载已检查的完整文件对比…", comparisonUnavailable: "无法加载已检查的对比。", noReplacementPreview: "请先创建替换预览，再检查完整文件变更。",
     preparingPreview: "正在准备替换预览", rereadingFiles: "正在重新读取 Git 授权的文件…",
@@ -276,7 +276,7 @@ export const ZH_CN = {
     externalChangesPreserved: "部分文件已在 Asterlyn 外部更改并被保留；仍需检查恢复记录",
     changesKept: "已保留替换更改", originalsRestored: "已恢复替换前的原始内容",
     search: "搜索", treeView: "以文件树显示", flatView: "以平铺列表显示", expandAll: "展开所有文件夹", collapseAll: "折叠所有文件夹",
-    saveFile: "保存文件", savedFile: "已保存", unsavedFile: "有未保存的更改", replacePatch: "替换", rollbackPatch: "回滚", updatePatch: "更新",
+    saveFile: "保存文件", savedFile: "已保存", unsavedFile: "有未保存的更改", replacePatch: "替换", rollbackPatch: "回滚", updatePatch: "更新", resizeFileList: "调整替换文件列表宽度",
     saveBeforeReplace: "应用下一处替换前，请先保存或回滚手动编辑",
   },
   changes: {
