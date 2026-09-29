@@ -146,6 +146,21 @@ impl<'a> GitRunner<'a> {
         self.wait(child)
     }
 
+    pub(crate) fn output_with_index<I, S>(
+        &self,
+        args: I,
+        index_file: &Path,
+    ) -> std::io::Result<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut command = self.command();
+        command.args(args).env("GIT_INDEX_FILE", index_file);
+        let child = self.spawn_command(command, GitStdin::Inherit)?;
+        self.wait(child)
+    }
+
     pub(crate) fn wait(&self, child: Child) -> std::io::Result<Output> {
         match self.profile {
             GitProcessProfile::Standard | GitProcessProfile::Operation => {
@@ -162,6 +177,10 @@ impl<'a> GitRunner<'a> {
     {
         let mut command = self.command();
         command.args(args);
+        self.spawn_command(command, stdin)
+    }
+
+    fn spawn_command(&self, mut command: Command, stdin: GitStdin) -> std::io::Result<Child> {
         match stdin {
             GitStdin::Inherit => {}
             GitStdin::Null => {

@@ -130,6 +130,34 @@ pub(crate) async fn commit_changes(
 }
 
 #[tauri::command]
+pub(crate) async fn stash_changes(
+    repository_root: String,
+    message: String,
+    selected: Vec<FileChange>,
+    keep_index: bool,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "stash selected changes",
+            move |repository| {
+                repository.stash_selected(&message, &selected, keep_index)?;
+                repository
+                    .tracked_snapshot(COMMIT_LIMIT)
+                    .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+            },
+        )
+        .await
+}
+
+#[tauri::command]
 pub(crate) async fn revert_changes(
     repository_root: String,
     plan: RestoreChangesPlan,

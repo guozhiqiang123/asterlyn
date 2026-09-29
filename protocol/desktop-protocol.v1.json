@@ -67,6 +67,7 @@
     { "name": "trash_untracked_paths", "args": { "repositoryRoot": "string", "paths": "array:string" }, "result": "WorkingTreeMutationOutcome", "validator": "workingTreeMutationOutcome" },
     { "name": "unstage_paths", "args": { "repositoryRoot": "string", "paths": "array:string" }, "result": "WorkingTreeMutationOutcome", "validator": "workingTreeMutationOutcome" },
     { "name": "commit_changes", "args": { "repositoryRoot": "string", "message": "string", "selected": "array:FileChange" }, "result": "CommitSelectedResult", "validator": "commitSelectedResult" },
+    { "name": "stash_changes", "args": { "repositoryRoot": "string", "message": "string", "selected": "array:FileChange", "keepIndex": "boolean" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "prepare_restore_changes", "args": { "repositoryRoot": "string", "selected": "array:FileChange" }, "result": "RestoreChangesPlan", "validator": "restoreChangesPlan" },
     { "name": "list_git_worktree_recoveries", "args": { "repositoryRoot": "string" }, "result": "array:GitWorktreeRecovery", "validator": "gitWorktreeRecoveries" },
     { "name": "undo_git_worktree_recovery", "args": { "repositoryRoot": "string", "recoveryId": "string" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },

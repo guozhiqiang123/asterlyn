@@ -2,6 +2,8 @@ import { demoCommitDetails, demoCommitDiff, demoSnapshot, demoTrackedSnapshot } 
 import type {
   CommitDetails,
   CommitDiffResult,
+  CommitFileChange,
+  FileChange,
   RepositoryMutationOutcome,
   RepositorySnapshot,
   StashCatalog,
@@ -23,6 +25,7 @@ let stashes: StashEntry[] = [
     subject: "On main: experiment with diff navigation",
   },
 ];
+const createdStashFiles = new Map<string, CommitFileChange[]>();
 
 export function demoStashCatalog(): StashCatalog {
   return { entries: structuredClone(stashes), truncatedRepositoryIds: [] };
@@ -32,7 +35,7 @@ export function demoStashDetails(repositoryId: string, stashOid: string): Commit
   const stash = exactStash(repositoryId, stashOid);
   return {
     repositoryId, oid: stashOid, parentOid: stash.parentOid,
-    files: structuredClone(demoCommitDetails(demoSnapshot.commits[0]?.oid ?? "").files),
+    files: structuredClone(createdStashFiles.get(stashOid) ?? demoCommitDetails(demoSnapshot.commits[0]?.oid ?? "").files),
     containingBranches: [],
   };
 }
@@ -66,6 +69,43 @@ export function demoExecuteStashMutation(
     invalidatedSlices: request.kind === "drop" || request.kind === "clear"
       ? [] : ["workingTree", "head", "refs", "history"],
   };
+}
+
+export function demoCreateStash(
+  snapshot: RepositorySnapshot,
+  message: string,
+  selected: FileChange[],
+  keepIndex: boolean,
+): RepositorySnapshot {
+  const paths = new Set(selected.map((change) => change.path));
+  const byPath = new Map(snapshot.changes.map((change) => [change.path, change]));
+  const current = selected.map((requested) => {
+    const actual = byPath.get(requested.path);
+    if (!actual || JSON.stringify(actual) !== JSON.stringify(requested)) stale();
+    return actual;
+  });
+  const removable = current.filter((change) =>
+    !keepIndex || (change.worktreeStatus !== "unmodified" && change.worktreeStatus !== "ignored")
+  );
+  if (removable.length === 0) throw new Error("Clear Keep staged changes to stash this selection.");
+  const oid = `stash${Date.now().toString(16)}`.padEnd(40, "0").slice(0, 40);
+  stashes.unshift({
+    repositoryId: ".", reference: "stash@{0}", oid,
+    parentOid: snapshot.branch.oid ?? "", authoredAt: Math.floor(Date.now() / 1000),
+    subject: message.trim() || `WIP on ${snapshot.branch.head ?? "HEAD"}`,
+  });
+  createdStashFiles.set(oid, selected.map((change) => ({
+    path: change.path, originalPath: change.originalPath,
+    status: change.worktreeStatus !== "unmodified" ? change.worktreeStatus : change.indexStatus,
+  })));
+  stashes = stashes.map((entry, index) => ({ ...entry, reference: `stash@{${index}}` }));
+  const next = structuredClone(snapshot);
+  next.changes = next.changes.flatMap((change) => {
+    if (!paths.has(change.path)) return [change];
+    if (!keepIndex || change.indexStatus === "unmodified" || change.indexStatus === "ignored") return [];
+    return [{ ...change, worktreeStatus: "unmodified" as const }];
+  });
+  return next;
 }
 
 function exactStash(repositoryId: string, stashOid: string): StashEntry {

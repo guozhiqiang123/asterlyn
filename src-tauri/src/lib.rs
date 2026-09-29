@@ -315,6 +315,7 @@ pub fn run() {
             trash_untracked_paths,
             unstage_paths,
             commit_changes,
+            stash_changes,
             revert_changes,
             prepare_restore_changes,
             list_git_worktree_recoveries,

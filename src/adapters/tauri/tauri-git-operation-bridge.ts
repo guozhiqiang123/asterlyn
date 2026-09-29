@@ -31,6 +31,13 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       message,
       selected,
     }),
+  stashChanges: (repositoryRoot, message, selected, keepIndex) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("stash_changes", {
+      repositoryRoot,
+      message,
+      selected,
+      keepIndex,
+    }),
   prepareRestoreChanges: (repositoryRoot, selected) =>
     invokeDesktopCommand<RestoreChangesPlan>("prepare_restore_changes", { repositoryRoot, selected }),
   listGitWorktreeRecoveries: (repositoryRoot) =>

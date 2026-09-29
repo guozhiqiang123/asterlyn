@@ -328,6 +328,12 @@ export interface GitOperationBridge {
     message: string,
     selected: FileChange[],
   ): Promise<CommitSelectedResult>;
+  stashChanges(
+    repositoryRoot: string,
+    message: string,
+    selected: FileChange[],
+    keepIndex: boolean,
+  ): Promise<RepositoryMutationOutcome>;
   revertChanges(
     repositoryRoot: string,
     plan: RestoreChangesPlan,

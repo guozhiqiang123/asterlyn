@@ -71,6 +71,7 @@ export interface DesktopCommandMap {
   trash_untracked_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
+  stash_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; keepIndex: boolean; }; result: Model.RepositoryMutationOutcome };
   prepare_restore_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RestoreChangesPlan };
   list_git_worktree_recoveries: { args: { repositoryRoot: string; }; result: Array<Model.GitWorktreeRecovery> };
   undo_git_worktree_recovery: { args: { repositoryRoot: string; recoveryId: string; }; result: Model.RepositoryMutationOutcome };
@@ -173,6 +174,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   trash_untracked_paths: "workingTreeMutationOutcome",
   unstage_paths: "workingTreeMutationOutcome",
   commit_changes: "commitSelectedResult",
+  stash_changes: "repositoryMutationOutcome",
   prepare_restore_changes: "restoreChangesPlan",
   list_git_worktree_recoveries: "gitWorktreeRecoveries",
   undo_git_worktree_recovery: "repositoryMutationOutcome",

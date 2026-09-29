@@ -11,7 +11,7 @@ import {
 import { demoWorkingDiffBase } from "./demo-working-diff.ts";
 import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
 import { demoWorkspaceReplacementDiff } from "./demo-workspace-replacement-diff.ts";
-import { demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
+import { demoCreateStash, demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
   demoCommitDiff,
@@ -1339,6 +1339,15 @@ const demoBridge: DesktopBridge = {
       message,
       selected,
     });
+  },
+
+  async stashChanges(repositoryRoot, message, selected, keepIndex) {
+    if (!isTauri) {
+      await demoDelay(260);
+      browserSnapshot = demoCreateStash(browserSnapshot, message, selected, keepIndex);
+      return completeDemoMutation();
+    }
+    return invoke<RepositoryMutationOutcome>("stash_changes", { repositoryRoot, message, selected, keepIndex });
   },
 
   async prepareRestoreChanges(repositoryRoot: string, selected: FileChange[]): Promise<RestoreChangesPlan> {
