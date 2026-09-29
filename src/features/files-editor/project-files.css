@@ -12,25 +12,22 @@
   min-width: 0;
   height: var(--compact-file-tree-row-height);
   align-items: center;
-  gap: 4px;
-  padding: 0 7px 0 calc(6px + var(--tree-depth) * var(--compact-file-tree-indent));
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline) 0 calc(var(--compact-file-tree-row-leading) + var(--tree-depth) * var(--compact-file-tree-indent));
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--compact-file-tree-row-radius);
   background: transparent;
   color: inherit;
   cursor: default;
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
   list-style: none;
   text-align: left;
   white-space: nowrap;
 }
 
-.project-directory > summary,
-.project-directory-row {
-  font-size: var(--ui-font-size, 13px);
-}
-
 :where(.project-directory, .project-file-row) {
-  color: var(--text-soft);
+  color: var(--compact-file-tree-color);
 }
 
 .project-node-row.selected {
@@ -45,7 +42,7 @@
 .project-directory > summary:hover,
 .project-directory-row:hover,
 .project-file-row:hover {
-  background: var(--bg-hover);
+  background: var(--compact-file-tree-hover);
   color: var(--text);
 }
 
@@ -76,8 +73,7 @@
 }
 
 .project-file-row {
-  padding-left: calc(22px + var(--tree-depth) * var(--compact-file-tree-indent));
-  font-size: var(--ui-font-size, 13px);
+  padding-left: calc(var(--compact-file-tree-file-leading) + var(--tree-depth) * var(--compact-file-tree-indent));
 }
 
 .project-file-glyph {

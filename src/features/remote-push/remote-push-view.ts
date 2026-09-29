@@ -346,7 +346,7 @@ function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview,
   if (!reviewFiles.length) return `<div class="remote-dialog-empty">${escapeHtml(preview.filesTruncated && !state.pushSelectedCommit ? copy.pushedRangeExceeded : state.pushSelectedCommit ? copy.noSelectedCommitFiles : copy.noNetFileChanges)}</div>`;
   if (state.pushFileView === "flat") return sortFilesByName(reviewFiles).map((file) => pushFileRow(file, file.path === state.pushSelectedFile, null, localization)).join("");
   const rootExpanded = !state.pushCollapsedFileDirectories.has(".");
-  return `<details class="push-file-directory push-file-root" data-push-directory="." ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<strong>${escapeHtml(basename(model.workspaceRoot ?? preview.branch))}</strong><small class="compact-file-tree-count">${escapeHtml(localization.catalog.history.fileCount(reviewFiles.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(reviewFiles).map((node) => renderPushFileTreeNode(node, 1, model)).join("") : ""}</div></details>`;
+  return `<details class="push-file-directory push-file-root" data-push-directory="." ${rootExpanded ? "open" : ""}><summary style="--tree-depth:0"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span>${escapeHtml(basename(model.workspaceRoot ?? preview.branch))}</span><small class="compact-file-tree-count">${escapeHtml(localization.catalog.history.fileCount(reviewFiles.length))}</small></summary><div role="group">${rootExpanded ? buildCommitFileTree(reviewFiles).map((node) => renderPushFileTreeNode(node, 1, model)).join("") : ""}</div></details>`;
 }
 
 function pushFileToolbar(model: RemotePushDialogViewModel, selected: boolean): string {
@@ -364,7 +364,7 @@ function renderPushFileTreeNode(node: CommitFileTreeNode, depth: number, model: 
     const localization = model.localization ?? DEFAULT_LOCALIZATION;
     const expanded = !state.pushCollapsedFileDirectories.has(chain.terminal.path);
     const count = localization.catalog.history.fileCount(chain.fileCount);
-    return `<details class="push-file-directory" data-push-directory="${escapeAttribute(chain.terminal.path)}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}" title="${escapeAttribute(chain.terminal.path)}"><span class="tree-chevron">${icon("chevron", 11)}</span>${icon("folder", 14)}<span>${escapeHtml(chain.label)}</span><small class="compact-file-tree-count">${escapeHtml(count)}</small></summary><div role="group">${expanded ? chain.terminal.children.map((child) => renderPushFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
+    return `<details class="push-file-directory" data-push-directory="${escapeAttribute(chain.terminal.path)}" ${expanded ? "open" : ""}><summary style="--tree-depth:${depth}" title="${escapeAttribute(chain.terminal.path)}"><span class="tree-chevron">${icon("chevron", 12)}</span>${icon("folder", 15)}<span>${escapeHtml(chain.label)}</span><small class="compact-file-tree-count">${escapeHtml(count)}</small></summary><div role="group">${expanded ? chain.terminal.children.map((child) => renderPushFileTreeNode(child, depth + 1, model)).join("") : ""}</div></details>`;
   }
   const file = node.file!;
   return pushFileRow(file, file.path === state.pushSelectedFile, depth, model.localization ?? DEFAULT_LOCALIZATION);

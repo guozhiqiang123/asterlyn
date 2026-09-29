@@ -56,7 +56,7 @@ test("Files and Recent snapshots support tree, flat, external locate, and select
   assert.match(renderFindHeaderActions(controller.state, EN_US, "src/alpha/app.ts"), /data-find-action="locate"/);
 
   const tree = renderFindResults(controller.state, EN_US);
-  assert.match(tree, /find-file-list tree/);
+  assert.match(tree, /find-file-list compact-file-tree tree/);
   assert.match(tree, /data-find-kind="directory"/);
   assert.match(tree, /find-tree-disclosure-spacer/);
   assert.ok(tree.indexOf("docs") < tree.indexOf("src"));
@@ -67,7 +67,7 @@ test("Files and Recent snapshots support tree, flat, external locate, and select
 
   assert.equal(controller.toggleFileView(), true);
   const flat = renderFindResults(controller.state, EN_US);
-  assert.match(flat, /find-file-list flat/);
+  assert.match(flat, /find-file-list compact-file-tree flat/);
   assert.doesNotMatch(flat, /find-tree-disclosure-spacer/);
   assert.ok(flat.indexOf("alpha.md") < flat.indexOf("app.ts"));
   assert.ok(flat.indexOf("app.ts") < flat.indexOf("index.ts"));

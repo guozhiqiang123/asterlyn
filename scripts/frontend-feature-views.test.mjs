@@ -567,6 +567,9 @@ test("flat history file lists sort by file name instead of directory path", () =
   assert.ok(detail.indexOf('data-commit-file="zebra/alpha.ts"') < detail.indexOf('data-commit-file="aardvark/zeta.ts"'));
   assert.ok(comparison.indexOf('data-comparison-file="zebra/alpha.ts"') < comparison.indexOf('data-comparison-file="aardvark/zeta.ts"'));
   assert.ok(folder.indexOf('data-commit-folder-file="src/zebra/alpha.ts"') < folder.indexOf('data-commit-folder-file="src/aardvark/zeta.ts"'));
+  assert.match(detail, /class="commit-file-list compact-file-tree flat"/);
+  assert.match(comparison, /class="commit-file-list compact-file-tree flat"/);
+  assert.match(folder, /class="commit-file-list compact-file-tree flat"/);
 });
 
 test("history path dialog mounts only expanded directory levels", () => {
@@ -655,6 +658,7 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   assert.match(readyHtml, /#2 · L9/);
   assert.match(readyHtml, /id="replacement-open-window"/);
   assert.match(readyHtml, />Open in Replace Window</);
+  assert.doesNotMatch(readyHtml, /replacement-update-preview|Update Preview/);
 
   const textSearchHtml = renderCommandSurface({
     commandSurface: openCommandSurface(createCommandSurfaceState(), "workspace"),

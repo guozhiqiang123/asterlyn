@@ -101,14 +101,68 @@ test("bottom tool close stays right-aligned when feature actions are hidden", as
 });
 
 test("project folders use the same configured UI scale as files", async () => {
-  const source = await readFile(
-    new URL("../src/features/files-editor/project-files.css", import.meta.url),
-    "utf8",
-  );
+  const [source, shared] = await Promise.all([
+    readFile(new URL("../src/features/files-editor/project-files.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/presentation.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(shared, /--compact-file-tree-font-size:\s*var\(--ui-font-size, 13px\);/u);
   assert.match(
     source,
-    /\.project-directory > summary,\s*\.project-directory-row\s*\{[^}]*font-size:\s*var\(--ui-font-size, 13px\);/s,
+    /\.project-directory > summary,[^{]*\{[^}]*font-size:\s*var\(--compact-file-tree-font-size\);/s,
   );
+});
+
+test("every file tree surface opts into the shared compact density and typography", async () => {
+  const [
+    projectView,
+    changesView,
+    findView,
+    replacementRuntime,
+    historyView,
+    historyDialog,
+    stashView,
+    pushView,
+    changesCss,
+    findCss,
+    historyCss,
+    pushCss,
+  ] = await Promise.all([
+    readFile(new URL("../src/features/files-editor/project-files-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/changes-commit/changes-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/find-results-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/workspace-replacement-presentation-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-history/git-detail-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-history/history-dialog-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-stash/stash-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/remote-push/remote-push-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/changes-commit/changes-commit.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/workspace-search.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-history/history.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/remote-push/remote-push.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(projectView, /project-tree compact-file-tree/u);
+  assert.match(changesView, /change-list compact-file-tree/u);
+  assert.match(findView, /find-file-list compact-file-tree/u);
+  assert.match(replacementRuntime, /replacement-tool-file-list compact-file-tree/u);
+  assert.match(historyView, /commit-file-list compact-file-tree/u);
+  assert.match(historyDialog, /history-path-tree compact-file-tree/u);
+  assert.match(stashView, /stash-files commit-file-list compact-file-tree/u);
+  assert.match(pushView, /push-file-list compact-file-tree/u);
+
+  for (const [name, css, selector] of [
+    ["Changes", changesCss, ".change-directory-row"],
+    ["Find", findCss, ".find-file-row"],
+    ["history path filter", historyCss, ".history-path-tree-row"],
+    ["Push", pushCss, ".push-file-row"],
+  ]) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(
+      css,
+      new RegExp(`${escaped}[^\\{]*\\{[^}]*height:\\s*var\\(--compact-file-tree-row-height\\);[^}]*font-size:\\s*var\\(--compact-file-tree-font-size\\);[^}]*font-weight:\\s*var\\(--compact-file-tree-font-weight\\);`, "s"),
+      `${name} file rows must consume the shared tree tokens`,
+    );
+  }
 });
 
 test("Push mode remains one aligned split action with a visible native-scale chevron", async () => {
@@ -156,6 +210,39 @@ test("replacement preview keeps matched text in the surrounding line flow", asyn
   assert.match(search, /\.replacement-comparison code\s*\{[^}]*display:\s*block;/s);
   assert.doesNotMatch(search, /\.replacement-comparison code\s*\{[^}]*display:\s*grid;/s);
   assert.match(search, /\.replacement-comparison code span\s*\{[^}]*display:\s*block;/s);
+});
+
+test("replacement window owns one horizontal scrollbar and compact patch controls", async () => {
+  const [replacement, runtime, shared, project, history] = await Promise.all([
+    readFile(
+      new URL("../src/features/files-editor/workspace-replacement-tool.css", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/features/files-editor/workspace-replacement-presentation-runtime.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../src/shared/presentation.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/project-files.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-history/details.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(replacement, /\.cm-mergeView \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
+  assert.match(replacement, /\.cm-scroller::\-webkit-scrollbar\s*\{[^}]*display:\s*none;/s);
+  assert.match(replacement, /\.cm-merge-revert\s*\{[^}]*width:\s*36px;[^}]*flex:\s*0 0 36px;/s);
+  assert.match(replacement, /\.editable-diff-revert\s*\{[^}]*width:\s*28px;[^}]*height:\s*26px;/s);
+  assert.match(shared, /\.compact-file-tree\s*\{[^}]*--compact-file-tree-row-height:\s*25px;[^}]*--compact-file-tree-row-gap:\s*4px;[^}]*--compact-file-tree-font-size:\s*var\(--ui-font-size, 13px\);[^}]*--compact-file-tree-font-weight:\s*400;/s);
+  assert.match(project, /\.project-directory > summary,[^{]*\{[^}]*gap:\s*var\(--compact-file-tree-row-gap\);[^}]*font-size:\s*var\(--compact-file-tree-font-size\);[^}]*font-weight:\s*var\(--compact-file-tree-font-weight\);/s);
+  assert.match(replacement, /\.replacement-tool-file\s*\{[^}]*height:\s*var\(--compact-file-tree-row-height\);[^}]*color:\s*var\(--compact-file-tree-color\);[^}]*font-size:\s*var\(--compact-file-tree-font-size\);[^}]*font-weight:\s*var\(--compact-file-tree-font-weight\);/s);
+  assert.match(history, /\.commit-file-row\s*\{[^}]*height:\s*var\(--compact-file-tree-row-height\);[^}]*gap:\s*var\(--compact-file-tree-row-gap\);[^}]*font-size:\s*var\(--compact-file-tree-font-size\);[^}]*font-weight:\s*var\(--compact-file-tree-font-weight\);/s);
+  assert.match(history, /\.commit-file-directory > summary\s*\{[^}]*font-size:\s*var\(--compact-file-tree-font-size\);[^}]*font-weight:\s*var\(--compact-file-tree-font-weight\);/s);
+  assert.match(replacement, /\.replacement-node-label\s*\{[^}]*font-weight:\s*inherit;/s);
+  assert.ok(runtime.indexOf('id="replacement-tool-review"') < runtime.indexOf('id="replacement-tool-save"'));
+  assert.match(runtime, /replacement-tool-save hidden/);
+  assert.match(runtime, /save\.classList\.toggle\("hidden", !dirty\)/u);
+  assert.equal((runtime.match(/replacement-tool-file-list compact-file-tree/g) ?? []).length, 2);
+  assert.match(replacement, /\.replacement-tool-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0, var\(--replacement-list-width\)\) 5px minmax\(0, 1fr\);/s);
+  assert.match(replacement, /\.replacement-tool-summary input\s*\{[^}]*border:\s*1px solid var\(--border-strong\);[^}]*border-radius:\s*5px;/s);
+  assert.match(replacement, /\.replacement-tool-summary input:focus\s*\{[^}]*border-color:\s*var\(--focus-ring\);[^}]*box-shadow:\s*0 0 0 1px var\(--focus-ring\);/s);
 });
 
 test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {

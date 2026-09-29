@@ -252,43 +252,44 @@
 }
 
 .find-file-list {
-  padding: 4px 6px 8px;
+  padding: 3px 4px 10px;
 }
 
 .find-file-row {
   display: grid;
   width: 100%;
-  min-height: 27px;
+  height: var(--compact-file-tree-row-height);
   align-items: center;
-  gap: 7px;
-  padding: 2px 8px 2px calc(8px + var(--tree-depth, 0) * 16px);
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline) 0 calc(var(--compact-file-tree-row-leading) + var(--tree-depth, 0) * var(--compact-file-tree-indent));
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--compact-file-tree-row-radius);
   background: transparent;
-  color: var(--text-soft);
+  color: var(--compact-file-tree-color);
   cursor: pointer;
-  font: inherit;
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
   text-align: left;
 }
 
 .find-file-row:hover,
 .find-file-row:focus-visible {
-  background: var(--bg-hover);
+  background: var(--compact-file-tree-hover);
+  color: var(--text);
   outline: 0;
 }
 
 .find-file-row.selected {
   background: var(--selection-bg);
-  color: var(--text);
+  color: var(--selection-text);
 }
 
 .find-file-row.directory {
-  grid-template-columns: 14px 17px minmax(0, 1fr) auto;
-  font-weight: 620;
+  grid-template-columns: 12px 17px minmax(0, 1fr) auto;
 }
 
 .find-file-row.file.tree-row {
-  grid-template-columns: 14px 17px minmax(0, 1fr);
+  grid-template-columns: 12px 17px minmax(0, 1fr);
 }
 
 .find-file-row.file.flat-row {
@@ -307,7 +308,7 @@
 .find-file-row.directory small,
 .find-file-directory {
   color: var(--text-faint);
-  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
+  font-size: max(9px, calc(var(--ui-font-size, 13px) - 3px));
 }
 
 .find-file-row .tree-chevron {
@@ -362,7 +363,7 @@
 
 .replacement-mapping {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: end;
   gap: 8px;
   margin-top: 10px;

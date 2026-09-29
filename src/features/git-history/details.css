@@ -91,52 +91,64 @@
 .commit-file-list {
   overflow: auto;
   min-height: 0;
-  padding: 2px 3px;
+  padding: 3px 4px 10px;
+}
+
+.commit-file-tree {
+  min-width: max-content;
 }
 
 .commit-file-row {
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: var(--compact-file-tree-row-height, 25px);
-  grid-template-columns: 21px 18px minmax(0, 1fr);
+  height: var(--compact-file-tree-row-height);
+  grid-template-columns: 18px 17px minmax(0, 1fr);
   align-items: center;
-  padding: 1px 5px;
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline);
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--compact-file-tree-row-radius);
   background: transparent;
-  color: var(--text);
   cursor: default;
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
   text-align: left;
 }
 
+:where(.commit-file-row) {
+  color: var(--compact-file-tree-color);
+}
+
 .commit-file-row.tree-row {
-  padding-left: calc(5px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
+  padding-left: calc(var(--compact-file-tree-row-leading) + var(--tree-depth) * var(--compact-file-tree-indent));
 }
 
 .commit-file-glyph {
   display: grid;
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   place-items: center;
 }
 
-.commit-file-row .file-name,
-.commit-file-row .file-directory {
-  line-height: 18px;
+.commit-file-row .file-name {
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
+  line-height: normal;
 }
 
 .commit-file-directory > summary {
   display: flex;
   min-width: max-content;
-  height: var(--compact-file-tree-row-height, 25px);
+  height: var(--compact-file-tree-row-height);
   align-items: center;
-  gap: 4px;
-  padding: 0 6px 0 calc(4px + var(--tree-depth) * var(--compact-file-tree-indent, 12px));
-  border-radius: 3px;
-  color: var(--text-soft);
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline) 0 calc(var(--compact-file-tree-row-leading) + var(--tree-depth) * var(--compact-file-tree-indent));
+  border-radius: var(--compact-file-tree-row-radius);
+  color: var(--compact-file-tree-color);
   cursor: default;
-  font-size: 10px;
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
   list-style: none;
 }
 
@@ -145,7 +157,8 @@
 }
 
 .commit-file-directory > summary:hover {
-  background: var(--bg-hover);
+  background: var(--compact-file-tree-hover);
+  color: var(--text);
 }
 
 .commit-file-directory > summary.context-target {
@@ -168,11 +181,12 @@
 }
 
 .commit-file-root > summary {
-  font-weight: 620;
+  font-weight: var(--compact-file-tree-font-weight);
 }
 
 .commit-file-row:hover:not(.selected) {
-  background: var(--bg-hover);
+  background: var(--compact-file-tree-hover);
+  color: var(--text);
 }
 
 .commit-file-row.context-target {
@@ -183,6 +197,7 @@
 
 .commit-file-row.selected {
   background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .commit-file-origin {

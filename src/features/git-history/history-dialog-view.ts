@@ -70,7 +70,7 @@ function renderPathTreeDialog(model: HistoryDialogViewModel): string {
     const children = rootChildren.get(root.id) ?? [];
     return `<section class="history-path-tree-root"><h3>${icon("folder", 14)}${escapeHtml(root.displayName)}<small>${escapeHtml(root.relativePath)}</small></h3>${children.length > 0 ? children.map((node) => renderPathTreeNode(node, 0, model)).join("") : `<div class="history-dialog-empty">${escapeHtml(copy.noTrackedPaths)}</div>`}</section>`;
   }).join("");
-  return `<section class="dialog history-selection-dialog history-path-tree-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">${heading(copy.selectPathsToFilter, localization)}<div class="history-path-tree" role="tree" aria-label="${escapeAttribute(copy.trackedRepositoryPaths)}">${roots}</div><div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-clear>${escapeHtml(copy.clear)}</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-history-dialog-cancel>${escapeHtml(localization.catalog.common.cancel)}</button><button class="primary-button" type="button" data-history-dialog-apply>${escapeHtml(copy.applyCount(localization.number.format(model.pathDraft.size)))}</button></div></section>`;
+  return `<section class="dialog history-selection-dialog history-path-tree-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">${heading(copy.selectPathsToFilter, localization)}<div class="history-path-tree compact-file-tree" role="tree" aria-label="${escapeAttribute(copy.trackedRepositoryPaths)}">${roots}</div><div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-clear>${escapeHtml(copy.clear)}</button><span class="dialog-spacer"></span><button class="secondary-button" type="button" data-history-dialog-cancel>${escapeHtml(localization.catalog.common.cancel)}</button><button class="primary-button" type="button" data-history-dialog-apply>${escapeHtml(copy.applyCount(localization.number.format(model.pathDraft.size)))}</button></div></section>`;
 }
 
 function renderPathTreeNode(
@@ -82,7 +82,7 @@ function renderPathTreeNode(
   const selected = model.pathDraft.has(key);
   const name = node.path.split("/").at(-1) ?? node.path;
   if (!node.directory) {
-    return `<label class="history-path-tree-row file" role="treeitem" style="--tree-depth:${depth}"><span class="tree-chevron"></span><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" data-history-repository="${escapeAttribute(node.repositoryId)}" data-history-path="${escapeAttribute(node.path)}" ${selected ? "checked" : ""} />${icon("file", 13)}<span>${escapeHtml(name)}</span></label>`;
+    return `<label class="history-path-tree-row file" role="treeitem" style="--tree-depth:${depth}"><span class="tree-chevron"></span><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" data-history-repository="${escapeAttribute(node.repositoryId)}" data-history-path="${escapeAttribute(node.path)}" ${selected ? "checked" : ""} />${icon("file", 15)}<span>${escapeHtml(name)}</span></label>`;
   }
   const expanded = model.expandedTreePaths.has(key);
   const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
@@ -90,7 +90,7 @@ function renderPathTreeNode(
     ? historyPathChildren(model.files, node.repositoryId, node.path)
         .map((child) => renderPathTreeNode(child, depth + 1, model)).join("")
     : "";
-  return `<div class="history-path-tree-node" role="treeitem" aria-expanded="${expanded}"><div class="history-path-tree-row directory" style="--tree-depth:${depth}"><button type="button" data-history-tree-toggle="${escapeAttribute(key)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}">${icon("chevron", 11)}</button><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" data-history-repository="${escapeAttribute(node.repositoryId)}" data-history-path="${escapeAttribute(node.path)}" ${selected ? "checked" : ""} />${icon("folder", 13)}<span>${escapeHtml(name)}</span></div>${expanded ? `<div role="group">${children}</div>` : ""}</div>`;
+  return `<div class="history-path-tree-node" role="treeitem" aria-expanded="${expanded}"><div class="history-path-tree-row directory" style="--tree-depth:${depth}"><button type="button" data-history-tree-toggle="${escapeAttribute(key)}" aria-label="${escapeAttribute(expanded ? copy.collapsePath(node.path) : copy.expandPath(node.path))}">${icon("chevron", 12)}</button><input type="checkbox" data-history-dialog-path="${escapeAttribute(key)}" data-history-repository="${escapeAttribute(node.repositoryId)}" data-history-path="${escapeAttribute(node.path)}" ${selected ? "checked" : ""} />${icon("folder", 15)}<span>${escapeHtml(name)}</span></div>${expanded ? `<div role="group">${children}</div>` : ""}</div>`;
 }
 
 function heading(title: string, localization: Localization): string {

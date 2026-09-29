@@ -51,8 +51,8 @@
   height: var(--compact-file-tree-row-height);
   grid-template-columns: 18px 15px minmax(0, 1fr);
   justify-content: initial;
-  gap: 4px;
-  padding: 0 7px;
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline);
   cursor: default;
   text-transform: none;
 }
@@ -101,22 +101,25 @@
   height: var(--compact-file-tree-row-height);
   grid-template-columns: 18px 15px 18px minmax(90px, 1fr) auto;
   align-items: center;
-  gap: 3px;
-  padding: 0 7px 0 calc(6px + var(--tree-depth) * var(--compact-file-tree-indent));
-  border-radius: 3px;
-  color: var(--text-soft);
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline) 0 calc(var(--compact-file-tree-row-leading) + var(--tree-depth) * var(--compact-file-tree-indent));
+  border-radius: var(--compact-file-tree-row-radius);
+  color: var(--compact-file-tree-color);
   cursor: default;
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
 }
 
 .change-directory > summary:hover,
 .change-directory-row:hover {
-  background: var(--bg-hover);
+  background: var(--compact-file-tree-hover);
+  color: var(--text);
 }
 
 .change-directory > summary small,
 .change-directory-row small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: max(9px, calc(var(--ui-font-size, 13px) - 3px));
 }
 
 .change-virtual-spacer {
@@ -127,8 +130,17 @@
 .change-row {
   grid-template-columns: 18px 18px 18px minmax(90px, 1fr) auto;
   min-height: var(--compact-file-tree-row-height);
-  gap: 3px;
-  padding: 1px 7px 1px calc(6px + var(--tree-depth, 0) * var(--compact-file-tree-indent));
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline) 0 calc(var(--compact-file-tree-row-leading) + var(--tree-depth, 0) * var(--compact-file-tree-indent));
+  border-radius: var(--compact-file-tree-row-radius);
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
+}
+
+.change-row .file-name {
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
+  line-height: normal;
 }
 
 .change-row.primary {

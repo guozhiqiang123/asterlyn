@@ -67,7 +67,7 @@ function renderFindFiles(
   const label = catalog.navigation.resultCount(snapshot.kind, snapshot.files.length);
   return `<section class="find-results-panel find-file-results" aria-label="${escapeAttribute(catalog.navigation.findWindow)}">
     ${findSummary(snapshot.query || catalog.navigation.tabs[snapshot.kind], label)}
-    <div class="find-results-list find-file-list ${state.fileView}" role="${state.fileView === "tree" ? "tree" : "listbox"}" tabindex="0" aria-label="${escapeAttribute(catalog.navigation.findResultsAria)}">${rows}</div>
+    <div class="find-results-list find-file-list compact-file-tree ${state.fileView}" role="${state.fileView === "tree" ? "tree" : "listbox"}" tabindex="0" aria-label="${escapeAttribute(catalog.navigation.findResultsAria)}">${rows}</div>
   </section>`;
 }
 

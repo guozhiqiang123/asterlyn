@@ -711,27 +711,31 @@
 
 .history-path-tree {
   margin-top: 12px;
-  padding: 4px 0 8px;
+  padding: 3px 4px 10px;
 }
 
 .history-path-tree-row {
   display: grid;
-  min-height: 25px;
-  grid-template-columns: 18px 18px 18px minmax(0, 1fr);
+  height: var(--compact-file-tree-row-height);
+  grid-template-columns: 12px 18px 17px minmax(0, 1fr);
   align-items: center;
-  padding: 0 8px 0 calc(8px + var(--tree-depth) * 15px);
-  color: var(--text-soft);
-  font-size: 10px;
+  gap: var(--compact-file-tree-row-gap);
+  padding: 0 var(--compact-file-tree-row-padding-inline) 0 calc(var(--compact-file-tree-row-leading) + var(--tree-depth) * var(--compact-file-tree-indent));
+  border-radius: var(--compact-file-tree-row-radius);
+  color: var(--compact-file-tree-color);
+  font-size: var(--compact-file-tree-font-size);
+  font-weight: var(--compact-file-tree-font-weight);
 }
 
 .history-path-tree-row:hover,
 .history-path-tree-row:focus-within {
-  background: var(--bg-hover);
+  background: var(--compact-file-tree-hover);
+  color: var(--text);
 }
 
 .history-path-tree-row > button {
   display: grid;
-  width: 18px;
+  width: 12px;
   height: 20px;
   place-items: center;
   padding: 0;
@@ -754,5 +758,5 @@
 }
 
 .history-path-tree-row.file > .tree-chevron {
-  width: 18px;
+  width: 12px;
 }

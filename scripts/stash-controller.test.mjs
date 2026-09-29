@@ -69,7 +69,7 @@ test("stash views expose list identity, changed files, and direct Apply/Pop acti
 
   controller.toggleFileView();
   const flatDetail = renderStashDetails(controller.state, EN_US.stash, DEFAULT_LOCALIZATION);
-  assert.match(flatDetail, /commit-file-list flat/);
+  assert.match(flatDetail, /commit-file-list compact-file-tree flat/);
   assert.doesNotMatch(flatDetail, /data-stash-file-directory=/);
 });
 
