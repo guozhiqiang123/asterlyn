@@ -22,7 +22,6 @@ test("production presentation code has no unreviewed English UI literals", async
 
 const REVIEWED_LITERALS = [
   // Keystroke notation and repository syntax are language-neutral technical text.
-  { file: "app.ts", kind: "html-text", text: "Ctrl/Cmd + Enter" },
   { file: "workspace-navigation-view.ts", kind: "html-text", text: "Enter" },
   { file: "workspace-navigation-view.ts", kind: "html-text", text: "Esc" },
   { file: "workspace-navigation-view.ts", kind: "attribute", text: "src/**, **/*.ts" },

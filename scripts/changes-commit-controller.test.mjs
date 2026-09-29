@@ -142,6 +142,47 @@ test("commit sends only included files and clears its message after success", as
   assert.equal(controller.state.commitMessage, "");
 });
 
+test("stash accepts an optional shared message and sends only included files", async () => {
+  const calls = [];
+  const controller = new ChangesCommitController(gateway({
+    async stashChanges(_root, message, changes, keepIndex) {
+      calls.push({ message, paths: changes.map(({ path }) => path), keepIndex });
+      return { snapshot: snapshot([]), invalidatedSlices: ["workingTree"] };
+    },
+  }));
+  controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
+  controller.setPathsIncluded(["b.txt"], false);
+
+  const result = await controller.stash();
+  assert.equal(result.status, "success");
+  assert.deepEqual(calls, [{ message: "", paths: ["a.txt"], keepIndex: false }]);
+  assert.equal(controller.state.commitMessage, "");
+});
+
+test("keep-staged stash is a one-shot variant requiring staged and removable selected work", async () => {
+  const calls = [];
+  const controller = new ChangesCommitController(gateway({
+    async stashChanges(_root, _message, _changes, keepIndex) {
+      calls.push(keepIndex);
+      return { snapshot: snapshot([]), invalidatedSlices: ["workingTree"] };
+    },
+  }));
+  controller.installSnapshot(snapshot([change("staged.txt", "modified", "unmodified")]));
+  assert.equal(controller.hasIncludedStagedChanges(), true);
+  assert.equal(controller.canStash(), true);
+  assert.equal(controller.canStash(true), false);
+
+  controller.installSnapshot(snapshot([change("mixed.txt", "modified", "modified")]));
+  assert.equal(controller.canStash(true), true);
+  assert.equal((await controller.stash(true)).status, "success");
+  assert.deepEqual(calls, [true]);
+
+  controller.installSnapshot(snapshot([change("working.txt")]));
+  assert.equal(controller.hasIncludedStagedChanges(), false);
+  assert.equal(controller.canStash(), true);
+  assert.equal(controller.canStash(true), false);
+});
+
 test("repository replacement invalidates an in-flight revert", async () => {
   const reverted = deferred();
   const controller = new ChangesCommitController(gateway({ revertResponse: reverted.promise }));
@@ -181,6 +222,9 @@ function gateway(overrides = {}) {
     async commitChanges() {
       return { oid: "new", snapshot: snapshot([]), refreshError: null, verificationWarning: null };
     },
+    async stashChanges() {
+      return { snapshot: snapshot([]), invalidatedSlices: ["workingTree"] };
+    },
     ...overrides,
   };
 }
@@ -210,12 +254,12 @@ function snapshot(changes, root = "/repo") {
   };
 }
 
-function change(path) {
+function change(path, indexStatus = "unmodified", worktreeStatus = "modified") {
   return {
     path,
     originalPath: null,
-    indexStatus: "unmodified",
-    worktreeStatus: "modified",
+    indexStatus,
+    worktreeStatus,
     conflicted: false,
     submodule: false,
   };

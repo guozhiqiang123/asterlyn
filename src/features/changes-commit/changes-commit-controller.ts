@@ -5,6 +5,7 @@ import type {
   FileChange,
   RestoreChangesPlan,
   ImageDiffPreview,
+  RepositoryMutationOutcome,
   RepositorySnapshot,
   WorkingDiffBase,
   WorkingTreeMutationOutcome,
@@ -31,7 +32,7 @@ export interface ChangesCommitState {
   workingPatchLoading: boolean;
   workingPatchError: string | null;
   workingPatchVersion: number;
-  mutation: "revert" | "commit" | null;
+  mutation: "revert" | "commit" | "stash" | null;
 }
 
 export type ChangesCommitChangeReason =
@@ -82,6 +83,12 @@ export interface ChangesCommitGateway {
     message: string,
     changes: FileChange[],
   ): Promise<CommitSelectedResult>;
+  stashChanges(
+    repositoryRoot: string,
+    message: string,
+    changes: FileChange[],
+    keepIndex: boolean,
+  ): Promise<RepositoryMutationOutcome>;
 }
 
 export interface SnapshotInstallOptions {
@@ -282,6 +289,24 @@ export class ChangesCommitController {
     this.emit({ reason: "message", composerChanged: true });
   }
 
+  hasIncludedStagedChanges(): boolean {
+    return this.includedChanges().some(hasStagedChange);
+  }
+
+  canStash(keepStagedChanges = false): boolean {
+    const snapshot = this.snapshot;
+    const selected = this.includedChanges();
+    return Boolean(
+      snapshot && selected.length > 0 &&
+      !snapshot.changes.some((change) => change.conflicted) &&
+      !selected.some((change) => change.submodule) &&
+      (!keepStagedChanges || (
+        selected.some(hasStagedChange) && selected.some(hasUnstagedOrUntrackedChange)
+      )) &&
+      !this.state.mutation,
+    );
+  }
+
   canCommit(): boolean {
     const snapshot = this.snapshot;
     const selected = this.includedChanges();
@@ -441,6 +466,36 @@ export class ChangesCommitController {
     }
   }
 
+  async stash(keepStagedChanges = false): Promise<ChangesMutationResult<RepositoryMutationOutcome>> {
+    const snapshot = this.snapshot;
+    const selected = this.includedChanges();
+    if (!snapshot || !this.canStash(keepStagedChanges) || this.state.mutation) return { status: "unavailable" };
+    const sequence = ++this.mutationSequence;
+    const generation = this.repositoryGeneration;
+    this.state.mutation = "stash";
+    this.emit({ reason: "mutation-start", composerChanged: true });
+    try {
+      const result = await this.gateway.stashChanges(
+        snapshot.root, this.state.commitMessage.trim(), selected, keepStagedChanges,
+      );
+      if (!this.mutationRequestMatches(sequence, generation, snapshot.root, "stash")) {
+        return { status: "stale" };
+      }
+      this.state.commitMessage = "";
+      return { status: "success", value: result };
+    } catch (error) {
+      if (!this.mutationRequestMatches(sequence, generation, snapshot.root, "stash")) {
+        return { status: "stale" };
+      }
+      return { status: "failure", error };
+    } finally {
+      if (this.mutationRequestMatches(sequence, generation, snapshot.root, "stash")) {
+        this.state.mutation = null;
+        this.emit({ reason: "mutation-complete", composerChanged: true });
+      }
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -481,7 +536,7 @@ export class ChangesCommitController {
     sequence: number,
     generation: number,
     root: string,
-    kind: "revert" | "commit",
+    kind: "revert" | "commit" | "stash",
   ): boolean {
     return !this.disposed &&
       sequence === this.mutationSequence &&
@@ -512,6 +567,14 @@ export function createChangesCommitState(fileView: ChangeFileView): ChangesCommi
     workingPatchVersion: 0,
     mutation: null,
   };
+}
+
+function hasUnstagedOrUntrackedChange(change: FileChange): boolean {
+  return change.worktreeStatus !== "unmodified" && change.worktreeStatus !== "ignored";
+}
+
+function hasStagedChange(change: FileChange): boolean {
+  return change.indexStatus !== "unmodified" && change.indexStatus !== "ignored";
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {

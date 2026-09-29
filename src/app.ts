@@ -708,6 +708,7 @@ export class AsterlynApp {
         revertChanges: (...args) => bridge.revertChanges(...args),
         prepareRestoreChanges: (...args) => bridge.prepareRestoreChanges(...args),
         commitChanges: (...args) => bridge.commitChanges(...args),
+        stashChanges: (...args) => bridge.stashChanges(...args),
       },
       initialFileView: loadChangeFileView(window.localStorage),
       messages: initialCatalog.changes,
@@ -4084,7 +4085,7 @@ export class AsterlynApp {
       this.changeTreeWindowStart = changeWindow?.start ?? 0;
       body.innerHTML = `<div class="changes-tool-layout"><div class="changes-tool-navigation">${renderGitOperationBanner(snapshot.operation, this.localization.catalog.gitOperations)}${renderChangeNavigation(snapshot, this.changesState, scrollTop, body.clientHeight, this.localization.catalog.changes)}</div><div class="workbench-splitter horizontal changes-commit-splitter" id="changes-commit-splitter" aria-label="${escapeAttribute(this.localization.catalog.changes.resizeCommit)}"></div>${this.renderCommitComposer(snapshot)}</div>`;
       this.bindChangeEvents();
-      this.bindCommitComposer(snapshot);
+      this.bindCommitComposer();
       this.bindChangeCommitSplitter();
       if (preserveScroll) {
         const results = body.querySelector<HTMLElement>("#change-results");
@@ -7862,44 +7863,32 @@ export class AsterlynApp {
     const conflict = snapshot.changes.some((change) => change.conflicted);
     const submodule = included.some((change) => change.submodule);
     const blockedMessage = conflict
-      ? copy.resolveBeforeCommit
+      ? copy.resolveBeforeAction
       : submodule
         ? copy.excludeSubmodules
         : included.length === 0
-          ? copy.selectFileToCommit
+          ? copy.selectFile
           : "";
-    const disabled =
-      included.length === 0 ||
-      conflict ||
-      submodule ||
-      this.changesState.commitMessage.trim().length === 0 ||
-      this.state.loading;
     return `
       <section class="commit-tool" id="commit-tool" aria-label="${escapeAttribute(copy.createCommit)}">
         <div class="commit-form">
           <label for="commit-message">${escapeHtml(copy.commitMessage)}</label>
-          <textarea id="commit-message" placeholder="${escapeAttribute(copy.commitMessage)}">${escapeHtml(this.changesState.commitMessage)}</textarea>
-          <div class="commit-hint"><span>Ctrl/Cmd + Enter</span><span>${this.changesState.commitMessage.trim().length}/72</span></div>
+          <textarea id="commit-message" placeholder="${escapeAttribute(copy.messagePlaceholder)}">${escapeHtml(this.changesState.commitMessage)}</textarea>
+          <div class="commit-hint"><span>${escapeHtml(copy.messageRequirement)}</span><span>${this.changesState.commitMessage.trim().length}/72</span></div>
           ${blockedMessage ? `<div class="commit-blocker" role="status">${escapeHtml(blockedMessage)}</div>` : ""}
-          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitButton)}</button><button class="secondary-button commit-button" id="commit-and-push-button" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(copy.commitAndPushButton)}</button></div>
+          <div class="commit-actions"><button class="primary-button commit-button" id="commit-button" type="button" title="${escapeAttribute(copy.commitButton)}" ${!this.changesRuntime.controller.canCommit() || this.state.loading ? "disabled" : ""}><span class="commit-button-label">${escapeHtml(copy.commitButton)}</span></button><button class="primary-button stash-primary-action" id="stash-changes-button" type="button" title="${escapeAttribute(copy.stashButton)}" ${!this.changesRuntime.controller.canStash() || this.state.loading ? "disabled" : ""}><span class="commit-button-label">${escapeHtml(copy.stashButton)}</span></button></div>
         </div>
       </section>`;
   }
 
-  private bindCommitComposer(snapshot: RepositorySnapshot): void {
-    const included = includedChanges(snapshot.changes, this.changesState.excludedPaths);
-    const blocked =
-      snapshot.changes.some((change) => change.conflicted) ||
-      included.some((change) => change.submodule);
+  private bindCommitComposer(): void {
     const textarea = this.root.querySelector<HTMLTextAreaElement>("#commit-message");
     const button = this.root.querySelector<HTMLButtonElement>("#commit-button");
-    const commitAndPushButton = this.root.querySelector<HTMLButtonElement>("#commit-and-push-button");
+    const stashButton = this.root.querySelector<HTMLButtonElement>("#stash-changes-button");
     textarea?.addEventListener("input", () => {
       this.changesRuntime.controller.setCommitMessage(textarea.value);
-      const disabled = textarea.value.trim().length === 0 || included.length === 0 || blocked;
-      for (const action of [button, commitAndPushButton]) {
-        if (action) action.disabled = disabled;
-      }
+      if (button) button.disabled = !this.changesRuntime.controller.canCommit();
+      if (stashButton) stashButton.disabled = !this.changesRuntime.controller.canStash();
       const counter = textarea.parentElement?.querySelector(
         ".commit-hint span:last-child",
       );
@@ -7908,11 +7897,11 @@ export class AsterlynApp {
     textarea?.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
-        if (!button?.disabled) void this.commit(false);
+        if (!button?.disabled) void this.commit();
       }
     });
-    button?.addEventListener("click", () => void this.commit(false));
-    commitAndPushButton?.addEventListener("click", () => void this.commit(true));
+    button?.addEventListener("click", () => void this.commit());
+    stashButton?.addEventListener("click", () => void this.stashChanges());
   }
 
   private refreshCommitComposer(): void {
@@ -7920,7 +7909,7 @@ export class AsterlynApp {
     const current = this.root.querySelector<HTMLElement>("#commit-tool");
     if (!snapshot || !current) return;
     current.outerHTML = this.renderCommitComposer(snapshot);
-    this.bindCommitComposer(snapshot);
+    this.bindCommitComposer();
   }
 
   private bindChangeCommitSplitter(): void {
@@ -8250,7 +8239,7 @@ export class AsterlynApp {
     }
   }
 
-  private async commit(pushAfter: boolean): Promise<void> {
+  private async commit(): Promise<void> {
     this.captureMountedTextEditor();
     if (dirtyTextTabs(this.editorState.session).length > 0) {
       if (await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.createCommit)) {
@@ -8261,18 +8250,10 @@ export class AsterlynApp {
     }
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || !this.changesRuntime.controller.canCommit() || this.state.loading) return;
-    if (pushAfter) {
-      const blocked = this.remoteActionBlockedReason("push");
-      if (blocked) {
-        this.showWarning(this.localization.catalog.changes.commitAndPushUnavailable(blocked));
-        return;
-      }
-    }
     const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
     let pendingRoot: string | null = null;
     let refreshAfter = false;
     let commitFailure: unknown = null;
-    let openPushReview = false;
     this.setLoading(true, this.localization.catalog.changes.creatingCommit);
     try {
       const outcome = await this.changesRuntime.controller.commit();
@@ -8292,7 +8273,6 @@ export class AsterlynApp {
           this.renderWorkspace();
           this.loadVisibleCommitDetails();
           pendingRoot = next.root;
-          openPushReview = pushAfter && !result.verificationWarning && !result.refreshError;
         } else {
           refreshAfter = true;
         }
@@ -8318,23 +8298,41 @@ export class AsterlynApp {
     } else if (pendingRoot && generation === this.windowSession.generation) {
       void this.windowSession.scanUntracked(pendingRoot, generation, true, "gitMutation");
     }
-    if (openPushReview && generation === this.windowSession.generation) {
-      const blocked = this.remoteActionBlockedReason("push");
-      if (blocked) {
-        this.showWarning(this.localization.catalog.changes.commitCreatedPushUnavailable(blocked));
-        return;
+  }
+
+  private async stashChanges(): Promise<void> {
+    this.captureMountedTextEditor();
+    if (dirtyTextTabs(this.editorState.session).length > 0) {
+      if (await this.saveDirtyTabsBefore(this.localization.catalog.changes.stashButton)) {
+        await this.refresh();
+        this.setStatus(this.localization.catalog.changes.filesSavedReview, "warning");
       }
-      const anchor = this.root.querySelector<HTMLElement>("#commit-and-push-button")
-        ?? this.root.querySelector<HTMLElement>("#remote-push");
-      if (!anchor || !this.openRemoteDialog("push", anchor)) {
-        this.showWarning(
-          this.localization.catalog.changes.commitCreatedPushUnavailable(
-            this.localization.catalog.remote.actionStateChanged(
-              this.localization.catalog.remote.actionNames.push,
-            ),
-          ),
-        );
+      return;
+    }
+    const snapshot = this.windowSession.repository.state.snapshot;
+    if (!snapshot || !this.changesRuntime.controller.canStash() || this.state.loading) return;
+    const generation = this.windowSession.beginTransition({ reconciliationBarrier: true });
+    let failed: unknown = null;
+    this.setLoading(true, this.localization.catalog.changes.stashingChanges);
+    try {
+      const outcome = await this.changesRuntime.controller.stash();
+      if (generation !== this.windowSession.generation || outcome.status === "stale") return;
+      if (outcome.status === "failure") failed = outcome.error;
+      else if (outcome.status === "success") {
+        this.repositoryIntegration.applyMutation(outcome.value, "gitMutation");
+        this.renderWorkspace();
+        this.setStatus(this.localization.catalog.changes.changesStashed, "success");
       }
+    } finally {
+      this.windowSession.completeTransition(generation);
+      if (generation === this.windowSession.generation) this.setLoading(false, this.localization.catalog.common.ready);
+    }
+    if (failed && generation === this.windowSession.generation) {
+      await this.refresh();
+      this.showError(failed);
+    } else if (generation === this.windowSession.generation) {
+      void this.windowSession.scanUntracked(snapshot.root, generation, true, "gitMutation");
+      void this.stashRuntime.load(snapshot.root, true);
     }
   }
 
