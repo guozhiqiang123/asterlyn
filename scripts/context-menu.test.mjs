@@ -199,3 +199,15 @@ test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", 
   assert.match(app, /new LazyContextMenuHost\(document, window\)/u);
   assert.match(app, /this\.contextMenuHost\.dispose\(\)/u);
 });
+
+test("context-menu secondary text wraps in full instead of being clipped", async () => {
+  const css = await readFile(
+    new URL("../src/shared/context-menu/context-menu.css", import.meta.url),
+    "utf8",
+  );
+  const rule = css.match(/\.context-menu-secondary-text\s*\{[^}]*\}/su)?.[0];
+  assert.ok(rule);
+  assert.match(rule, /overflow-wrap:\s*anywhere/u);
+  assert.match(rule, /white-space:\s*pre-wrap/u);
+  assert.doesNotMatch(rule, /max-height|overflow:\s*hidden|text-overflow/u);
+});

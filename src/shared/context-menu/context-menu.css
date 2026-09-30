@@ -83,13 +83,11 @@
 
 .context-menu-secondary-text {
   min-width: 0;
-  max-height: 2.6em;
-  overflow: hidden;
   color: inherit;
   font: max(10px, calc(var(--ui-font-size, 13px) - 2px))/1.3 ui-monospace, monospace;
   opacity: 0.68;
-  text-overflow: ellipsis;
-  white-space: pre;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .context-menu-heading {

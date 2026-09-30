@@ -469,9 +469,9 @@ members of a `Copy Path` group.
 
 The menu action model gains an optional presentation-only secondary-text field. The shared host
 renders it beneath the action label, exposes the complete value as hover text, and keeps the value
-in the button's accessible name. Long single paths are visually truncated without changing the
-clipboard payload. Multi-selection previews retain the payload's newline-separated paths and are
-visually bounded so they cannot make the submenu consume the viewport.
+in the button's accessible name. Long single paths wrap within the submenu instead of being
+truncated. Multi-selection previews retain every newline-separated path in full; when their total
+height exceeds the viewport, the existing bounded menu scroll owns navigation without hiding text.
 
 Acceptance:
 
@@ -480,16 +480,16 @@ Acceptance:
   newline payloads remain byte-for-byte identical between preview and clipboard write;
 - the shared host renders the secondary line only when provided, escapes it through DOM text
   assignment, and supplies the full value through native hover text;
-- long and multi-line previews retain keyboard focus, type-ahead behavior, menu edge placement, and
-  the one-submenu-depth contract;
+- long and multi-line previews remain fully visible through wrapping and menu scrolling while
+  retaining keyboard focus, type-ahead behavior, edge placement, and the one-submenu-depth contract;
 - focused context-action tests, the full frontend suite, TypeScript checking, production build, and
   installed macOS rendered smoke verification pass before local acceptance.
 
-Acceptance evidence: all 770 frontend tests, TypeScript checking, and the production frontend build
+Acceptance evidence: all 771 frontend tests, TypeScript checking, and the production frontend build
 passed. The release macOS arm64 application and its installed `/Applications/Asterlyn.app` copy
 both passed strict code-signature verification and rendered-shell smoke checks. The distributable
-archive is `Asterlyn-copy-path-preview-20260930-macos-arm64.zip`; the replaced installation remains
-recoverable from the user's Trash.
+archive is `Asterlyn-copy-path-full-preview-20260930-macos-arm64.zip`; the replaced installation
+remains recoverable from the user's Trash.
 
 ### R5 — Workspace mutation foundation
 
