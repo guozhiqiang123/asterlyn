@@ -878,7 +878,7 @@ export class AsterlynApp {
           snapshot: this.windowSession.repository.state.snapshot,
           workspaceGeneration: this.windowSession.generation,
           repositoryRevision: this.windowSession.repository.state.revision,
-          selectedRepositoryIds: this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds,
+          selectedRepositoryIds: this.gitHistoryPresentationRuntime.filterState.historyRepositoryIds, selectedBranchKey: this.gitHistoryPresentationRuntime.branches.state.selectedBranch,
         }),
         history: () => ({
           state: this.historyState,

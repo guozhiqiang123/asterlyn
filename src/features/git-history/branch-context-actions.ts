@@ -1,4 +1,5 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
+import type { BranchContextCommandAction } from "../../application/commands/history-command-ids.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
 import type {
   BranchMutationKind,
@@ -110,6 +111,54 @@ export class BranchContextActions {
     return true;
   }
 
+  commandAvailability(
+    action: BranchContextCommandAction,
+    target: BranchContextTarget,
+  ): ContextMenuAvailability {
+    const snapshot = this.runtime.snapshot();
+    if (!snapshot || !this.runtime.current(target)) return blocked(this.copy().branchContextMenu.targetChanged);
+    const policy = branchContextPolicy(target, snapshot, {
+      ...this.runtime.policyOptions(target), reasons: this.copy().branchContextMenu,
+    });
+    if (action === "ref-history") return ENABLED;
+    if (action === "branch-switch") return target.branch.kind !== "tag" && policy.switchTarget
+      ? policy.switch : blocked(this.copy().branchContextMenu.targetChanged);
+    if (action === "branch-checkout-remote") return target.branch.kind === "remote" && policy.remoteCheckout
+      ? policy.switch : blocked(this.copy().branchContextMenu.targetChanged);
+    if (action === "branch-create") return target.branch.kind !== "tag" && policy.writable
+      ? policy.create : blocked(this.copy().branchContextMenu.targetChanged);
+    if (action === "branch-merge" || action === "branch-rebase") {
+      return target.branch.kind !== "tag" && !target.branch.current && policy.writable
+        ? policy.integrate : blocked(this.copy().branchContextMenu.targetChanged);
+    }
+    if (action === "branch-rename") return target.branch.kind === "local" && policy.writable
+      ? policy.rename : blocked(this.copy().branchContextMenu.targetChanged);
+    if (action === "branch-delete") return target.branch.kind === "local" && !target.branch.current && policy.writable
+      ? policy.delete : blocked(this.copy().branchContextMenu.targetChanged);
+    if (target.branch.kind !== "tag" || !policy.writable) return blocked(this.copy().branchContextMenu.targetChanged);
+    if (action === "tag-checkout") return policy.tagCheckout;
+    if (action === "tag-merge") return policy.tagIntegrate;
+    return policy.tagMutation;
+  }
+
+  executeCommand(action: BranchContextCommandAction, target: BranchContextTarget): void {
+    const availability = this.commandAvailability(action, target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    const snapshot = this.runtime.snapshot();
+    if (!snapshot) return;
+    const policy = branchContextPolicy(target, snapshot, {
+      ...this.runtime.policyOptions(target), reasons: this.copy().branchContextMenu,
+    });
+    try {
+      this.invokeCommand(action, target, policy);
+    } catch (error) {
+      this.runtime.error(error);
+    }
+  }
+
   private async invoke(
     actionId: string,
     request: DelegatedContextRequest<BranchContextTarget>,
@@ -117,35 +166,14 @@ export class BranchContextActions {
     tagRemotes: readonly string[],
   ): Promise<void> {
     const target = request.target;
+    const commandAction = commandActionForMenuId(actionId);
+    if (commandAction) {
+      this.invokeCommand(commandAction, target, policy);
+      return;
+    }
     switch (actionId) {
-      case `${OWNER_ID}.history`: return this.runtime.showHistory(target);
-      case `${OWNER_ID}.switch`:
-        if (policy.switchTarget) this.runtime.openMutation("switch", policy.switchTarget, "");
-        return;
-      case `${OWNER_ID}.checkout-remote`:
-        return this.runtime.openMutation(
-          "checkoutRemote",
-          target.branch,
-          suggestedLocalName(target.branch.name),
-        );
-      case `${OWNER_ID}.create`:
-        return this.runtime.openMutation("create", target.branch, "");
-      case `${OWNER_ID}.merge`:
-        return this.runtime.openGitOperation("merge", target.branch.fullName);
-      case `${OWNER_ID}.rebase`:
-        return this.runtime.openGitOperation("rebase", target.branch.fullName);
       case `${OWNER_ID}.update`: return this.runtime.openRemoteAction("pull", request.trigger);
       case `${OWNER_ID}.push`: return this.runtime.openRemoteAction("push", request.trigger);
-      case `${OWNER_ID}.rename`:
-        return this.runtime.openMutation("rename", target.branch, target.branch.name);
-      case `${OWNER_ID}.delete`:
-        return this.runtime.openMutation("delete", target.branch, "");
-      case `${OWNER_ID}.tag-checkout`:
-        return this.runtime.openTagMutation("checkout", target);
-      case `${OWNER_ID}.tag-merge`:
-        return this.runtime.openGitOperation("merge", target.branch.fullName);
-      case `${OWNER_ID}.tag-delete-local`:
-        return this.runtime.openTagMutation("deleteLocal", target);
       default: {
         for (const [index, remote] of tagRemotes.entries()) {
           if (actionId === `${OWNER_ID}.tag-push-${index}`) {
@@ -157,6 +185,29 @@ export class BranchContextActions {
         }
         throw new Error(`Unknown Branches context action: ${actionId}`);
       }
+    }
+  }
+
+  private invokeCommand(
+    action: BranchContextCommandAction,
+    target: BranchContextTarget,
+    policy: BranchContextPolicy,
+  ): void {
+    switch (action) {
+      case "ref-history": return this.runtime.showHistory(target);
+      case "branch-switch":
+        if (policy.switchTarget) this.runtime.openMutation("switch", policy.switchTarget, "");
+        return;
+      case "branch-checkout-remote":
+        return this.runtime.openMutation("checkoutRemote", target.branch, suggestedLocalName(target.branch.name));
+      case "branch-create": return this.runtime.openMutation("create", target.branch, "");
+      case "branch-merge": return this.runtime.openGitOperation("merge", target.branch.fullName);
+      case "branch-rebase": return this.runtime.openGitOperation("rebase", target.branch.fullName);
+      case "branch-rename": return this.runtime.openMutation("rename", target.branch, target.branch.name);
+      case "branch-delete": return this.runtime.openMutation("delete", target.branch, "");
+      case "tag-checkout": return this.runtime.openTagMutation("checkout", target);
+      case "tag-merge": return this.runtime.openGitOperation("merge", target.branch.fullName);
+      case "tag-delete-local": return this.runtime.openTagMutation("deleteLocal", target);
     }
   }
 }
@@ -282,4 +333,24 @@ export function branchCopyActions(
 function suggestedLocalName(remoteName: string): string {
   const separator = remoteName.indexOf("/");
   return separator >= 0 ? remoteName.slice(separator + 1) : remoteName;
+}
+
+function blocked(reason: string): ContextMenuAvailability {
+  return { kind: "blocked", reason };
+}
+
+function commandActionForMenuId(actionId: string): BranchContextCommandAction | null {
+  return ({
+    [`${OWNER_ID}.history`]: "ref-history",
+    [`${OWNER_ID}.switch`]: "branch-switch",
+    [`${OWNER_ID}.checkout-remote`]: "branch-checkout-remote",
+    [`${OWNER_ID}.create`]: "branch-create",
+    [`${OWNER_ID}.merge`]: "branch-merge",
+    [`${OWNER_ID}.rebase`]: "branch-rebase",
+    [`${OWNER_ID}.rename`]: "branch-rename",
+    [`${OWNER_ID}.delete`]: "branch-delete",
+    [`${OWNER_ID}.tag-checkout`]: "tag-checkout",
+    [`${OWNER_ID}.tag-merge`]: "tag-merge",
+    [`${OWNER_ID}.tag-delete-local`]: "tag-delete-local",
+  } as Record<string, BranchContextCommandAction>)[actionId] ?? null;
 }

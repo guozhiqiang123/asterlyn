@@ -43,6 +43,17 @@ export const HISTORY_CONTEXT_COMMANDS: readonly HistoryContextCommandDefinition[
   context(HISTORY_COMMANDS.showFolderChanges, "folder-show-changes", (copy) => copy.commitFolderContextMenu.showChanges, "history focused folder changes"),
   context(HISTORY_COMMANDS.revealFolder, "folder-reveal", (copy) => copy.commitFolderContextMenu.revealInFiles, "history reveal focused folder files"),
   context(HISTORY_COMMANDS.folderHistory, "folder-history", (copy) => copy.commitFolderContextMenu.historyUpToCommit, "history focused folder path up to commit"),
+  context(HISTORY_COMMANDS.refHistory, "ref-history", (copy) => copy.branchContextMenu.viewHistory, "git selected branch tag reference history"),
+  context(HISTORY_COMMANDS.switchBranch, "branch-switch", (copy) => copy.branchMutation.titles.switch, "git switch selected local branch"),
+  context(HISTORY_COMMANDS.checkoutRemoteBranch, "branch-checkout-remote", (copy) => copy.branchMutation.titles.checkoutRemote, "git checkout selected remote branch"),
+  context(HISTORY_COMMANDS.createBranch, "branch-create", (copy) => copy.branchMutation.titles.create, "git create branch from selected reference"),
+  context(HISTORY_COMMANDS.renameBranch, "branch-rename", (copy) => copy.branchMutation.titles.rename, "git rename selected local branch"),
+  context(HISTORY_COMMANDS.mergeBranch, "branch-merge", (copy) => copy.branchContextMenu.mergeIntoCurrent, "git merge selected branch into current"),
+  context(HISTORY_COMMANDS.rebaseBranch, "branch-rebase", (copy) => copy.branchContextMenu.rebaseCurrentOnto, "git rebase current onto selected branch"),
+  context(HISTORY_COMMANDS.deleteBranch, "branch-delete", (copy) => copy.branchMutation.titles.delete, "git delete selected local branch"),
+  context(HISTORY_COMMANDS.checkoutTag, "tag-checkout", (copy) => copy.tagMutation.titles.checkout, "git checkout selected tag detached head"),
+  context(HISTORY_COMMANDS.mergeTag, "tag-merge", (copy) => copy.branchContextMenu.mergeIntoCurrent, "git merge selected tag into current branch"),
+  context(HISTORY_COMMANDS.deleteLocalTag, "tag-delete-local", (copy) => copy.tagMutation.titles.deleteLocal, "git delete selected local tag"),
 ];
 
 function history(

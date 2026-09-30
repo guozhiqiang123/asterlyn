@@ -31,6 +31,15 @@ function catalog() {
       expandChangedFolders: "Expand changed folders",
       collapseChangedFolders: "Collapse changed folders",
       swapComparisonSides: "Swap comparison sides",
+      branchContextMenu: {
+        viewHistory: "View history", mergeIntoCurrent: "Merge into current",
+        rebaseCurrentOnto: "Rebase current onto selected",
+      },
+      branchMutation: { titles: {
+        switch: "Switch Branch", checkoutRemote: "Check Out Remote Branch",
+        create: "Create Branch", rename: "Rename Branch", delete: "Delete Branch",
+      } },
+      tagMutation: { titles: { checkout: "Check Out Tag", deleteLocal: "Delete Local Tag" } },
     },
     settings: { keybindings: { historyRequired: "History required" } },
   };
@@ -58,6 +67,7 @@ test("History commands invoke the current rendered controls and expose live avai
 
   assert.equal(registry.get(HISTORY_COMMANDS.toggleRegex).title(), "Use regular expression");
   assert.equal(registry.get(HISTORY_COMMANDS.openPathFilter).title(), "Filter by paths or roots");
+  assert.equal(registry.get(HISTORY_COMMANDS.switchBranch).title(), "Switch Branch");
   assert.equal(registry.get(HISTORY_COMMANDS.toggleFileView).availability().enabled, true);
   await registry.get(HISTORY_COMMANDS.toggleRegex).execute("keyboard");
   await registry.get(HISTORY_COMMANDS.openPathFilter).execute("palette");

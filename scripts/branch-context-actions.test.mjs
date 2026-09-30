@@ -193,4 +193,13 @@ test("provider opens without executing and routes history, copy, and reviewed mu
     ["operation", "merge", branch.fullName],
     ["mutation", "rename", branch.fullName, branch.name],
   ]);
+
+  assert.deepEqual(provider.commandAvailability("branch-merge", target(branch)), { kind: "enabled" });
+  assert.equal(provider.commandAvailability("tag-checkout", target(branch)).kind, "blocked");
+  provider.executeCommand("branch-merge", target(branch));
+  provider.executeCommand("branch-delete", target(branch));
+  assert.deepEqual(events.slice(-2), [
+    ["operation", "merge", branch.fullName],
+    ["mutation", "delete", branch.fullName, ""],
+  ]);
 });

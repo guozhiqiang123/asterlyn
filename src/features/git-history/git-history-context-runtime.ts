@@ -1,12 +1,19 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
-import type { HistoryContextCommandAction } from "../../application/commands/history-command-ids.ts";
+import type {
+  BranchContextCommandAction,
+  HistoryContextCommandAction,
+} from "../../application/commands/history-command-ids.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
 import type { RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import type { CommitFileView } from "../../presentation/git-presentation.ts";
 import { TopbarBranchMenuBinding } from "./topbar-branch-menu.ts";
 import { BranchContextActions, type BranchContextRuntime } from "./branch-context-actions.ts";
-import { BranchContextBinding } from "./branch-context-binding.ts";
+import {
+  BranchContextBinding,
+  resolveBranchContextTarget,
+  type BranchContextTarget,
+} from "./branch-context-binding.ts";
 import {
   CommitDetailContextBinding,
   resolveCommitDetailContextTarget,
@@ -44,6 +51,7 @@ export interface GitHistoryContextSources {
     readonly workspaceGeneration: number;
     readonly repositoryRevision: number;
     readonly selectedRepositoryIds: ReadonlySet<string>;
+    readonly selectedBranchKey: string | null;
   };
   history(): {
     readonly state: GitHistoryDetailsState;
@@ -91,6 +99,7 @@ export class GitHistoryContextRuntime {
   private readonly root: HTMLElement;
   private readonly copy: () => HistoryCopy;
   private readonly sources: GitHistoryContextSources;
+  private readonly branchActions: BranchContextActions;
   private readonly rangeActions: HistoryCommitRangeContextActions;
   private readonly folderActions: CommitFolderContextActions;
   private readonly fileActions: CommitFileContextActions;
@@ -105,15 +114,15 @@ export class GitHistoryContextRuntime {
     this.sources = sources;
     this.loadMoreHistory = options.loadMoreHistory;
     this.unavailableReason = options.unavailableReason;
-    const branchActions = new BranchContextActions(host, clipboard, ports.branch, copy);
+    this.branchActions = new BranchContextActions(host, clipboard, ports.branch, copy);
     const commitActions = new HistoryCommitContextActions(host, clipboard, ports.commit, copy);
     this.rangeActions = new HistoryCommitRangeContextActions(host, clipboard, ports.range, copy);
     this.folderActions = new CommitFolderContextActions(host, clipboard, ports.folder, copy);
     this.fileActions = new CommitFileContextActions(host, clipboard, ports.file, copy);
 
     this.bindings = [
-      new BranchContextBinding(root, sources.branch, (request) => branchActions.open(request)),
-      new TopbarBranchMenuBinding(root, host, branchActions, sources.branch, copy, options.manageRemotes),
+      new BranchContextBinding(root, sources.branch, (request) => this.branchActions.open(request)),
+      new TopbarBranchMenuBinding(root, host, this.branchActions, sources.branch, copy, options.manageRemotes),
       new HistoryContextBinding(root, sources.history, (request) => {
         const range = resolveHistoryCommitRangeTarget(
           request.target,
@@ -155,7 +164,9 @@ export class GitHistoryContextRuntime {
     }
     const target = this.commandTarget(action);
     if (!target) return { enabled: false, reason: this.copy().commitHistory };
-    const availability = action === "compare-selection"
+    const availability = isBranchCommand(action)
+      ? this.branchActions.commandAvailability(action, target as BranchContextTarget)
+      : action === "compare-selection"
       ? this.rangeActions.commandAvailability(target as HistoryCommitRangeTarget)
       : action.startsWith("file-")
         ? this.fileActions.commandAvailability(
@@ -180,7 +191,9 @@ export class GitHistoryContextRuntime {
     if (action === "load-more") { await this.loadMoreHistory(); return; }
     const target = this.commandTarget(action);
     if (!target) return;
-    if (action === "compare-selection") {
+    if (isBranchCommand(action)) {
+      this.branchActions.executeCommand(action, target as BranchContextTarget);
+    } else if (action === "compare-selection") {
       this.rangeActions.executeCompareCommand(target as HistoryCommitRangeTarget);
     } else if (action.startsWith("file-")) {
       this.fileActions.executeCommand(
@@ -207,7 +220,16 @@ export class GitHistoryContextRuntime {
 
   private commandTarget(
     action: Exclude<HistoryContextCommandAction, "load-more">,
-  ): CommitDetailContextTarget | HistoryCommitRangeTarget | null {
+  ): BranchContextTarget | CommitDetailContextTarget | HistoryCommitRangeTarget | null {
+    if (isBranchCommand(action)) {
+      const source = this.sources.branch();
+      return source.selectedBranchKey
+        ? resolveBranchContextTarget(
+            source.snapshot, source.workspaceGeneration, source.repositoryRevision,
+            source.selectedRepositoryIds, source.selectedBranchKey,
+          )
+        : null;
+    }
     if (action === "compare-selection") {
       const source = this.sources.history();
       const selection = this.sources.currentRangeSelection();
@@ -240,4 +262,10 @@ export class GitHistoryContextRuntime {
         )
       : null;
   }
+}
+
+function isBranchCommand(
+  action: HistoryContextCommandAction,
+): action is BranchContextCommandAction {
+  return action === "ref-history" || action.startsWith("branch-") || action.startsWith("tag-");
 }

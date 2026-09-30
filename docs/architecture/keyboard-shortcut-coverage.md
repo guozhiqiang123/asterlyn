@@ -178,11 +178,12 @@ without Asterlyn claiming common editor or terminal keys.
 | Restore file from selected commit | destructive | `history.file.restore` | **Custom**, unassigned and confirmed |
 | Show selected file history up to the commit | navigation | `history.file.history` | **Custom** |
 | Show folder changes / reveal in Files / path history | navigation | `history.folder.changes`, `history.folder.reveal`, `history.folder.history` | **Custom**; folder commands use the focused directory |
-| Show branch/tag history | navigation | `git.ref.history` | **Gap** |
-| Switch/checkout/create/rename branch | write | `git.branch.switch`, `.checkoutRemote`, `.create`, `.rename` | **Gap** |
-| Merge/rebase selected ref | write | `git.branch.merge`, `.rebase` | **Gap**, reviewed Git-operation route only |
-| Delete local branch | destructive | `git.branch.delete` | **Gap**, unassigned and confirmed |
-| Checkout/merge/push/delete tag | write/destructive | `git.tag.checkout`, `.merge`, `.push`, `.deleteLocal`, `.deleteRemote` | **Gap**, mutations unassigned and confirmed |
+| Show branch/tag history | navigation | `git.ref.history` | **Custom**; exact current ref is revalidated |
+| Switch/checkout/create/rename branch | write | `git.branch.switch`, `git.branch.checkoutRemote`, `git.branch.create`, `git.branch.rename` | **Custom** |
+| Merge/rebase selected ref | write | `git.branch.merge`, `git.branch.rebase` | **Custom**, reviewed Git-operation route only |
+| Delete local branch | destructive | `git.branch.delete` | **Custom**, unassigned and confirmed |
+| Checkout/merge/delete local tag | write/destructive | `git.tag.checkout`, `git.tag.merge`, `git.tag.deleteLocal` | **Custom**, destructive action unassigned and confirmed |
+| Push/delete tag on selected remote | network write/destructive | `git.tag.push`, `git.tag.deleteRemote` | **Gap**, requires selected-remote adapter; unassigned and confirmed |
 | Copy ref names and paths | read | selection-specific copy commands | **Gap** |
 
 Dynamic branch, tag, commit, and file identities never enter persisted keybindings as arguments. A

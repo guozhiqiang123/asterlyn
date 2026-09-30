@@ -1,10 +1,17 @@
 import { commandId } from "./command-service.ts";
 
+export type BranchContextCommandAction =
+  | "ref-history"
+  | "branch-switch" | "branch-checkout-remote" | "branch-create" | "branch-rename"
+  | "branch-merge" | "branch-rebase" | "branch-delete"
+  | "tag-checkout" | "tag-merge" | "tag-delete-local";
+
 export type HistoryContextCommandAction =
   | "load-more" | "compare-selection"
   | "file-show-diff" | "file-open-historical" | "file-compare-current"
   | "file-open-current" | "file-restore" | "file-history"
-  | "folder-show-changes" | "folder-reveal" | "folder-history";
+  | "folder-show-changes" | "folder-reveal" | "folder-history"
+  | BranchContextCommandAction;
 
 export const HISTORY_COMMANDS = {
   toggleRegex: commandId("history.filter.regex.toggle"),
@@ -29,4 +36,15 @@ export const HISTORY_COMMANDS = {
   showFolderChanges: commandId("history.folder.changes"),
   revealFolder: commandId("history.folder.reveal"),
   folderHistory: commandId("history.folder.history"),
+  refHistory: commandId("git.ref.history"),
+  switchBranch: commandId("git.branch.switch"),
+  checkoutRemoteBranch: commandId("git.branch.checkoutRemote"),
+  createBranch: commandId("git.branch.create"),
+  renameBranch: commandId("git.branch.rename"),
+  mergeBranch: commandId("git.branch.merge"),
+  rebaseBranch: commandId("git.branch.rebase"),
+  deleteBranch: commandId("git.branch.delete"),
+  checkoutTag: commandId("git.tag.checkout"),
+  mergeTag: commandId("git.tag.merge"),
+  deleteLocalTag: commandId("git.tag.deleteLocal"),
 } as const;
