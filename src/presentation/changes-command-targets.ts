@@ -38,6 +38,9 @@ export const CHANGES_CONTEXT_COMMANDS: readonly ChangesContextCommandDefinition[
   changesContext(CHANGES_COMMANDS.trash, "trash", (copy) => copy.contextMenu.trash, "trash delete selected untracked file"),
   changesContext(CHANGES_COMMANDS.resolveConflict, "resolve", (copy) => copy.contextMenu.resolveConflict, "resolve selected merge conflict", '[data-change-path].primary [data-resolve-conflict]'),
   changesContext(CHANGES_COMMANDS.showHistory, "history", (copy) => copy.contextMenu.gitHistory, "selected path git history log"),
+  changesContext(CHANGES_COMMANDS.copyName, "copy-name", (copy) => copy.contextMenu.fileName, "copy selected change file name"),
+  changesContext(CHANGES_COMMANDS.copyRelativePath, "copy-relative-path", (copy) => copy.contextMenu.relativePath, "copy selected change relative path"),
+  changesContext(CHANGES_COMMANDS.copyAbsolutePath, "copy-absolute-path", (copy) => copy.contextMenu.absolutePath, "copy selected change absolute path"),
   changesContext(CHANGES_COMMANDS.stageAllUnversioned, "stage-all", (copy) => copy.contextMenu.stageAllUnversioned, "stage add all unversioned files"),
   changesContext(CHANGES_COMMANDS.trashAllUnversioned, "trash-all", (copy) => copy.contextMenu.trashAllUnversioned, "trash delete all unversioned files"),
 ];

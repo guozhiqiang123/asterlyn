@@ -162,7 +162,7 @@ test("command routing reuses context policy and revalidates the exact target", a
   let included = true;
   const provider = new ChangesContextActions(
     { open() {}, close() {} },
-    { async writeText() { return { status: "copied" }; } },
+    { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
     {
       current: () => current,
       select: () => true,
@@ -195,8 +195,14 @@ test("command routing reuses context policy and revalidates the exact target", a
   assert.equal(provider.commandAvailability("trash", untracked).kind, "enabled");
   await provider.executeCommand("include", ordinary);
   await provider.executeCommand("source", ordinary);
+  await provider.executeCommand("copy-name", ordinary);
+  await provider.executeCommand("copy-relative-path", ordinary);
+  await provider.executeCommand("copy-absolute-path", ordinary);
   await provider.executeCommand("stage-all", group);
-  assert.deepEqual(events, [["include", false], ["source"], ["stage-all"]]);
+  assert.deepEqual(events, [
+    ["include", false], ["source"], ["copy", "app.ts"], ["copy", "src/app.ts"],
+    ["copy", "/repo/src/app.ts"], ["stage-all"],
+  ]);
 
   current = false;
   await provider.executeCommand("restore", ordinary);

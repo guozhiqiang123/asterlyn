@@ -153,6 +153,7 @@ without Asterlyn claiming common editor or terminal keys.
 | Move selected untracked path to Trash | destructive | `changes.selection.trash` | **Custom**, unassigned and confirmed |
 | Resolve selected conflict | write | `changes.selection.conflict.resolve` | **Custom** |
 | Show selected path history | navigation | `changes.selection.history` | **Custom** |
+| Copy selected change name, relative path, absolute path | read | `changes.selection.copyName`, `changes.selection.copyRelativePath`, `changes.selection.copyAbsolutePath` | **Custom** |
 | Toggle tree/flat view | presentation | `changes.view.toggle` | **Custom** |
 | Expand/collapse all Changes folders | presentation | `changes.folders.expandAll`, `changes.folders.collapseAll` | **Custom** |
 | Stage all Unversioned / Trash all Unversioned | write/destructive | `changes.unversioned.stageAll`, `changes.unversioned.trashAll` | **Custom**; Trash remains unassigned and confirmed |

@@ -25,6 +25,9 @@ function catalog() {
         trash: "Move to Trash",
         resolveConflict: "Resolve Conflict",
         gitHistory: "Git History",
+        fileName: "File Name",
+        relativePath: "Relative Path",
+        absolutePath: "Absolute Path",
         stageAllUnversioned: "Stage All Unversioned Files",
         trashAllUnversioned: "Move All Unversioned Files to Trash",
       },
@@ -69,10 +72,11 @@ test("Changes commands reuse enabled controls and the exact current-selection ad
   await registry.get(CHANGES_COMMANDS.refresh).execute("keyboard");
   await registry.get(CHANGES_COMMANDS.commit).execute("palette");
   await registry.get(CHANGES_COMMANDS.openSource).execute("keyboard");
+  await registry.get(CHANGES_COMMANDS.copyRelativePath).execute("keyboard");
   await registry.get(CHANGES_COMMANDS.trashAllUnversioned).execute("keyboard");
   assert.equal(refresh.clicks, 1);
   assert.equal(commit.clicks, 1);
-  assert.deepEqual(actions, ["source", "trash-all"]);
+  assert.deepEqual(actions, ["source", "copy-relative-path", "trash-all"]);
 
   refresh.disabled = true;
   selectionEnabled = false;

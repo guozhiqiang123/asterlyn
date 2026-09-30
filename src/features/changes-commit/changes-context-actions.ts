@@ -29,6 +29,7 @@ const ENABLED = { kind: "enabled" } as const;
 
 export type ChangesContextCommandAction =
   | "include" | "diff" | "source" | "resolve" | "restore" | "trash" | "history"
+  | "copy-name" | "copy-relative-path" | "copy-absolute-path"
   | "stage-all" | "trash-all";
 
 export interface ChangesContextRuntime {
@@ -98,16 +99,7 @@ export class ChangesContextActions {
       isCurrent: () => this.runtime.current(target),
       invoke: async (actionId) => {
         try {
-          const text = textForCopyAction(pathActions, actionId);
-          if (text !== null) {
-            const result = await this.clipboard.writeText(text);
-            if (result.status === "failure") {
-              this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
-              return;
-            }
-            this.runtime.status(copyPathFeedback(actionId, labels));
-            return;
-          }
+          if (await this.copyPath(actionId, target, pathActions)) return;
           await this.invoke(actionId, target);
         } catch (error) {
           this.runtime.error(error);
@@ -134,6 +126,7 @@ export class ChangesContextActions {
     if (action === "stage-all" || action === "trash-all") {
       return { kind: "blocked", reason: this.copy().contextMenu.operationsUnavailable };
     }
+    if (action.startsWith("copy-")) return ENABLED;
     const policy = changesContextPolicy(target, {
       snapshot: this.runtime.snapshot(),
       ...this.runtime.policyOptions(target),
@@ -172,10 +165,30 @@ export class ChangesContextActions {
         this.runtime.blocked(this.copy().contextMenu.targetChanged);
         return;
       }
+      if (action.startsWith("copy-") && await this.copyPath(`${OWNER_ID}.${action}`, target)) return;
       await this.invoke(`${OWNER_ID}.${action}`, target);
     } catch (error) {
       this.runtime.error(error);
     }
+  }
+
+  private async copyPath(
+    actionId: string,
+    target: ChangesFileContextTarget,
+    actions = workspacePathCopyActions(OWNER_ID, target, {
+      copy: this.copy().contextMenu.copyPath,
+      fileName: this.copy().contextMenu.fileName,
+      relativePath: this.copy().contextMenu.relativePath,
+      absolutePath: this.copy().contextMenu.absolutePath,
+    }),
+  ): Promise<boolean> {
+    const labels = this.copy().contextMenu;
+    const text = textForCopyAction(actions, actionId);
+    if (text === null) return false;
+    const result = await this.clipboard.writeText(text);
+    if (result.status === "failure") this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+    else this.runtime.status(copyPathFeedback(actionId, labels));
+    return true;
   }
 
   private openGroup(
