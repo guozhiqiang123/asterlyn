@@ -40,7 +40,10 @@ test("Find results commands follow the visible file snapshot and current selecti
 test("Search commands register stable metadata and delegate execution", async () => {
   const registry = new CommandRegistry();
   const actions = [];
+  const preview = { disabled: false, clicks: 0, click() { this.clicks += 1; }, getAttribute: () => null };
+  const apply = { disabled: false, clicks: 0, click() { this.clicks += 1; }, getAttribute: () => null };
   const release = registerSearchCommands(registry, {
+    root: { querySelector: (selector) => selector === "#workspace-replacement-preview" ? preview : selector === "#replacement-apply" ? apply : null },
     catalog: () => EN_US,
     searchCommandAvailability: () => ({ enabled: true }),
     executeSearchCommand: (action) => actions.push(action),
@@ -48,7 +51,11 @@ test("Search commands register stable metadata and delegate execution", async ()
 
   assert.equal(registry.get(SEARCH_COMMANDS.locateCurrent).title(), EN_US.projectFiles.locateCurrentFile);
   assert.ok(registry.get(SEARCH_COMMANDS.toggleResultsView).userBindingScopes.includes("workbench"));
+  assert.deepEqual(registry.get(SEARCH_COMMANDS.applyReplacement).userBindingScopes, ["dialog"]);
+  await registry.get(SEARCH_COMMANDS.previewReplacement).execute("keyboard");
+  await registry.get(SEARCH_COMMANDS.applyReplacement).execute("keyboard");
   await registry.get(SEARCH_COMMANDS.collapseResults).execute("keyboard");
+  assert.deepEqual([preview.clicks, apply.clicks], [1, 1]);
   assert.deepEqual(actions, ["collapse-results"]);
   release();
   assert.deepEqual(registry.list(), []);

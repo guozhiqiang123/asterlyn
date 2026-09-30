@@ -4,6 +4,8 @@ export type SearchCommandAction =
   | "locate-current" | "toggle-results-view" | "expand-results" | "collapse-results";
 
 export const SEARCH_COMMANDS = {
+  previewReplacement: commandId("search.replace.preview"),
+  applyReplacement: commandId("search.replace.apply"),
   locateCurrent: commandId("search.results.locateCurrent"),
   toggleResultsView: commandId("search.results.view.toggle"),
   expandResults: commandId("search.results.expand"),

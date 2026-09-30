@@ -25,12 +25,34 @@ export const SEARCH_COMMAND_DEFINITIONS: readonly SearchCommandDefinition[] = [
   search(SEARCH_COMMANDS.collapseResults, "collapse-results", (catalog) => catalog.projectFiles.collapseSelectedFolder, "find results collapse selected folder", '[data-find-action="collapse"]'),
 ];
 
-export const SEARCH_SHORTCUT_TARGETS: readonly DomCommandDefinition[] = SEARCH_COMMAND_DEFINITIONS.map((definition) => ({
-  id: definition.id, category: "workspace", selector: definition.presentationSelector,
+export const SEARCH_REPLACEMENT_DOM_COMMANDS: readonly DomCommandDefinition[] = [
+  {
+    id: SEARCH_COMMANDS.previewReplacement, category: "workspace",
+    selector: "#workspace-replacement-preview", scopes: ["workbench", "input"],
+    title: (catalog) => catalog.navigation.previewReplace,
+    detail: (catalog) => catalog.replacement.safeWorkspaceEdit,
+    keywords: "search replace preview review workspace files",
+    blockedReason: (catalog) => catalog.settings.keybindings.workspaceRequired,
+  },
+  {
+    id: SEARCH_COMMANDS.applyReplacement, category: "workspace",
+    selector: "#replacement-apply", scopes: ["dialog"],
+    title: (catalog) => catalog.replacement.reviewAndApply,
+    detail: (catalog) => catalog.replacement.safeWorkspaceEdit,
+    keywords: "search replace apply reviewed selected files",
+    blockedReason: (catalog) => catalog.replacement.previewUnavailable,
+  },
+];
+
+export const SEARCH_SHORTCUT_TARGETS: readonly DomCommandDefinition[] = [
+  ...SEARCH_REPLACEMENT_DOM_COMMANDS,
+  ...SEARCH_COMMAND_DEFINITIONS.map((definition) => ({
+  id: definition.id, category: "workspace" as const, selector: definition.presentationSelector,
   scopes: definition.scopes, title: definition.title, detail: definition.detail,
   keywords: definition.keywords,
   blockedReason: (catalog: LocaleCatalog) => catalog.settings.keybindings.bottomToolRequired,
-}));
+  })),
+];
 
 function search(
   id: CommandId,

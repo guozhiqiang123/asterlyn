@@ -2526,7 +2526,7 @@ export class AsterlynApp {
     model = this.commandSurfaceViewModel();
     const selected = this.filesEditorRuntime.commands.state.selectedIndex;
     host.innerHTML = renderCommandSurfaceView(model);
-    this.bindCommandSurfaceEvents();
+    this.bindCommandSurfaceEvents(); this.refreshShortcutPresentation();
     if (focusInput) focusCommandSurfaceQuery(this.root);
     queueMicrotask(() => {
       this.root
@@ -2902,7 +2902,7 @@ export class AsterlynApp {
     render(); if (await completion) render();
   }
 
-  private renderWorkspaceReplacementDialog(): void { this.replacementPresentationRuntime.renderDialog(); }
+  private renderWorkspaceReplacementDialog(): void { this.replacementPresentationRuntime.renderDialog(); this.refreshShortcutPresentation(); }
 
   private async refreshWorkspaceReplacementPreview(): Promise<void> {
     const workspaceRoot = this.windowSession.workspace.state.root;

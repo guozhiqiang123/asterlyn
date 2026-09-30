@@ -114,8 +114,8 @@ without Asterlyn claiming common editor or terminal keys.
 | Move through and activate results | navigation | Arrow keys, Enter, pointer selection | **Local** |
 | Toggle case, whole-word, regex, ignored-files options | presentation | focused search-field controls | **Local**; typing context owns these options |
 | Insert a query line break | editing | focused query control | **Local** |
-| Preview workspace replacement | write | `search.replace.preview` | **Gap** |
-| Apply reviewed replacement | write | `search.replace.apply` | **Gap**, must preserve review/recovery |
+| Preview workspace replacement | write | `search.replace.preview` | **Custom** |
+| Apply reviewed replacement | write | `search.replace.apply` | **Custom**, preserves review/recovery and remains dialog-scoped |
 | Open/close Find results tool | presentation | `workbench.tool.search.toggle` | **Custom** |
 | Locate current file in Find results | navigation | `search.results.locateCurrent` | **Custom** |
 | Toggle tree/flat results | presentation | `search.results.view.toggle` | **Custom** |
