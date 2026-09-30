@@ -58,6 +58,8 @@ function runtimeOptions(overrides = {}) {
     toggleTool: () => undefined,
     hideLeftTool: () => undefined,
     hideBottomTool: () => undefined,
+    changesCommandAvailability: () => ({ enabled: false, reason: "Changes required" }),
+    executeChangesCommand: () => undefined,
     ...overrides,
   };
 }

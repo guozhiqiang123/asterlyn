@@ -593,6 +593,7 @@ export class AsterlynApp {
       openSettings: () => this.openSettings(), closeSettings: () => this.closeSettings(),
       toggleTool: (tool) => this.toggleTool(tool),
       hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(),
+      changesCommandAvailability: (action) => this.changesContextRuntime.commandAvailability(action), executeChangesCommand: (action) => this.changesContextRuntime.executeCommand(action),
       scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
       pending: (active) => {
         const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
@@ -1393,8 +1394,7 @@ export class AsterlynApp {
       source: () => ({
         snapshot: this.windowSession.repository.state.snapshot,
         workspaceGeneration: this.windowSession.generation,
-        repositoryId: ".",
-        repositoryRevision: this.windowSession.repository.state.revision,
+        repositoryId: ".", repositoryRevision: this.windowSession.repository.state.revision, selectedPath: this.changesState.selectedChange?.path ?? null,
       }),
       actions: {
         current: (target) => this.isChangesContextTargetCurrent(target),
@@ -4896,7 +4896,7 @@ export class AsterlynApp {
         if (target) this.selectChangeRow(target, true);
       });
     });
-    this.syncChangeInclusionUi();
+    this.syncChangeInclusionUi(); this.refreshShortcutPresentation();
   }
 
   private handleChangeTreeScroll(results: HTMLElement): void {
@@ -4968,6 +4968,7 @@ export class AsterlynApp {
         ? this.localization.catalog.changes.selectTrackedToRestore
         : this.localization.catalog.changes.restoreToHead;
     }
+    this.refreshShortcutPresentation();
   }
 
   private setChangePathsIncluded(paths: string[], included: boolean): void {
@@ -7919,7 +7920,7 @@ export class AsterlynApp {
       }
     });
     button?.addEventListener("click", () => void this.commit());
-    stashButton?.addEventListener("click", () => void this.stashChanges());
+    stashButton?.addEventListener("click", () => void this.stashChanges()); this.refreshShortcutPresentation();
   }
 
   private refreshCommitComposer(): void {

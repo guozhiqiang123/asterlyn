@@ -27,6 +27,10 @@ export const CHANGES_CONTEXT_OWNER_ID = "changes.context-actions";
 const OWNER_ID = CHANGES_CONTEXT_OWNER_ID;
 const ENABLED = { kind: "enabled" } as const;
 
+export type ChangesContextCommandAction =
+  | "include" | "diff" | "source" | "resolve" | "restore" | "trash" | "history"
+  | "stage-all" | "trash-all";
+
 export interface ChangesContextRuntime {
   current(target: ChangesContextTarget): boolean;
   select(target: ChangesFileContextTarget): boolean;
@@ -113,6 +117,65 @@ export class ChangesContextActions {
       restoreFocus: request.restoreFocus,
     });
     return true;
+  }
+
+  commandAvailability(
+    action: ChangesContextCommandAction,
+    target: ChangesContextTarget,
+  ): ContextMenuAvailability {
+    if (target.kind === "group") {
+      const policy = this.runtime.groupPolicy(target);
+      return action === "stage-all"
+        ? policy.stage
+        : action === "trash-all"
+          ? policy.trash
+          : { kind: "blocked", reason: this.copy().contextMenu.operationsUnavailable };
+    }
+    if (action === "stage-all" || action === "trash-all") {
+      return { kind: "blocked", reason: this.copy().contextMenu.operationsUnavailable };
+    }
+    const policy = changesContextPolicy(target, {
+      snapshot: this.runtime.snapshot(),
+      ...this.runtime.policyOptions(target),
+    });
+    if (action === "include") return policy.include;
+    if (action === "diff") return ENABLED;
+    if (action === "source") return policy.source;
+    if (action === "resolve") return policy.conflict;
+    if (action === "restore") return policy.restore;
+    if (action === "history") return policy.history;
+    return target.change.worktreeStatus === "untracked" || target.change.indexStatus === "untracked"
+      ? policy.trash
+      : { kind: "blocked", reason: this.copy().contextMenu.operationsUnavailable };
+  }
+
+  async executeCommand(
+    action: ChangesContextCommandAction,
+    target: ChangesContextTarget,
+  ): Promise<void> {
+    if (!this.runtime.current(target)) {
+      this.runtime.blocked(this.copy().contextMenu.targetChanged);
+      return;
+    }
+    const availability = this.commandAvailability(action, target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    try {
+      if (target.kind === "group") {
+        if (action === "stage-all") await this.runtime.stageAll(target);
+        else if (action === "trash-all") await this.runtime.trashAll(target);
+        return;
+      }
+      if (!this.runtime.select(target)) {
+        this.runtime.blocked(this.copy().contextMenu.targetChanged);
+        return;
+      }
+      await this.invoke(`${OWNER_ID}.${action}`, target);
+    } catch (error) {
+      this.runtime.error(error);
+    }
   }
 
   private openGroup(

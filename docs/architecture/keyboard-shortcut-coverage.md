@@ -145,19 +145,19 @@ without Asterlyn claiming common editor or terminal keys.
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Refresh Changes | read | `changes.refresh` | **Gap**; routes through canonical project refresh |
-| Include/exclude selected path in commit | write selection | `changes.selection.include.toggle` | **Gap** |
-| Open selected working Diff | navigation | `changes.selection.diff.open` | **Gap** |
-| Jump to selected source file | navigation | `changes.selection.source.open` | **Gap** |
-| Restore selected tracked change to `HEAD` | destructive | `changes.selection.restore` | **Gap**, unassigned and confirmed/recoverable |
-| Move selected untracked path to Trash | destructive | `changes.selection.trash` | **Gap**, unassigned and confirmed |
-| Resolve selected conflict | write | `changes.selection.conflict.resolve` | **Gap** |
-| Show selected path history | navigation | `changes.selection.history` | **Gap** |
-| Toggle tree/flat view | presentation | `changes.view.toggle` | **Gap** |
-| Expand/collapse all Changes folders | presentation | `changes.folders.expandAll`, `.collapseAll` | **Gap** |
-| Stage all Unversioned / Trash all Unversioned | write/destructive | `changes.unversioned.stageAll`, `.trashAll` | **Gap**; Trash remains unassigned and confirmed |
-| Commit included files | write | `changes.commit.create` | **Gap**, target default Primary+Enter while commit message is focused |
-| Stash included changes | write | `changes.stash.create` | **Gap** |
+| Refresh Changes | read | `changes.refresh` | **Custom**; routes through canonical project refresh |
+| Include/exclude selected path in commit | write selection | `changes.selection.include.toggle` | **Custom** |
+| Open selected working Diff | navigation | `changes.selection.diff.open` | **Custom** |
+| Jump to selected source file | navigation | `changes.selection.source.open` | **Custom** |
+| Restore selected tracked change to `HEAD` | destructive | `changes.selection.restore` | **Custom**, unassigned and confirmed/recoverable |
+| Move selected untracked path to Trash | destructive | `changes.selection.trash` | **Custom**, unassigned and confirmed |
+| Resolve selected conflict | write | `changes.selection.conflict.resolve` | **Custom** |
+| Show selected path history | navigation | `changes.selection.history` | **Custom** |
+| Toggle tree/flat view | presentation | `changes.view.toggle` | **Custom** |
+| Expand/collapse all Changes folders | presentation | `changes.folders.expandAll`, `changes.folders.collapseAll` | **Custom** |
+| Stage all Unversioned / Trash all Unversioned | write/destructive | `changes.unversioned.stageAll`, `changes.unversioned.trashAll` | **Custom**; Trash remains unassigned and confirmed |
+| Commit included files | write | `changes.commit.create` | **Custom**; Primary+Enter remains **Local** while the commit message is focused |
+| Stash included changes | write | `changes.stash.create` | **Custom** |
 | Select row, disclose group/directory, edit commit message | navigation/editing | list/tree/input behavior | **Local** |
 
 ## 7. Branches, tags, History, and commit details
@@ -221,7 +221,7 @@ selection command resolves and revalidates the current exact target when invoked
 | Review recoverable operations | navigation | `git.operation.recovery.open` | **Gap** |
 | Prepare Merge/Cherry-pick/Rebase/Squash | write | launcher/form controls | **Local** until a complete exact plan exists |
 | Execute, Continue, Skip, Abort | destructive/write | reviewed operation dialog/banner | **Local**; no global default and no bypass of confirmation |
-| Open selected conflict resolution | write | `changes.selection.conflict.resolve` | **Gap** |
+| Open selected conflict resolution | write | `changes.selection.conflict.resolve` | **Custom** |
 | Select Base/Ours/Theirs, save resolution | editing/write | conflict editor controls | **Local** until promoted through a stable active-conflict adapter |
 
 ## 11. Terminal

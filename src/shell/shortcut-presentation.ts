@@ -2,6 +2,7 @@ import type { CommandFocusScope } from "../application/commands/command-service.
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
 import type { KeybindingController } from "../features/keybindings/keybinding-controller.ts";
 import type { LocaleCatalog } from "../localization/catalog.ts";
+import { CHANGES_SHORTCUT_TARGETS } from "../presentation/changes-command-targets.ts";
 import { FILES_EDITOR_DOM_COMMANDS } from "../presentation/files-editor-command-targets.ts";
 import type { ActivityTool } from "./activity-order.ts";
 
@@ -101,11 +102,14 @@ export function refreshWorkbenchShortcutPresentation(
   }
   refreshHideShortcut(root, keybindings, "#hide-left-tool", WORKBENCH_COMMANDS.hideLeftTool);
   refreshHideShortcut(root, keybindings, "#hide-bottom-tool", WORKBENCH_COMMANDS.hideBottomTool);
-  for (const definition of FILES_EDITOR_DOM_COMMANDS) {
+  for (const definition of [...FILES_EDITOR_DOM_COMMANDS, ...CHANGES_SHORTCUT_TARGETS]) {
     const button = root.querySelector<HTMLElement>(definition.selector);
     if (!button) continue;
     const label = button.getAttribute("aria-label") ?? definition.title(catalog);
-    const baseTitle = button.dataset.commandShortcutBaseTitle ?? (button.title || label);
+    const currentTitle = button.title || label;
+    const baseTitle = currentTitle !== button.dataset.commandShortcutDecoratedTitle
+      ? currentTitle
+      : button.dataset.commandShortcutBaseTitle ?? currentTitle;
     button.dataset.commandShortcutBaseTitle = baseTitle;
     refreshCommandShortcut(root, keybindings, {
       selector: definition.selector,
@@ -113,6 +117,7 @@ export function refreshWorkbenchShortcutPresentation(
       label,
       title: baseTitle,
     });
+    button.dataset.commandShortcutDecoratedTitle = button.title;
   }
 }
 

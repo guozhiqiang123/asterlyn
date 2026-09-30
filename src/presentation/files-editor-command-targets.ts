@@ -1,31 +1,17 @@
-import type {
-  CommandCategory,
-  CommandFocusScope,
-  CommandId,
-} from "../application/commands/command-service.ts";
+import type { CommandFocusScope, CommandId } from "../application/commands/command-service.ts";
 import {
   DIFF_COMMANDS,
   EDITOR_COMMANDS,
   FILES_COMMANDS,
 } from "../application/commands/files-editor-command-ids.ts";
 import type { LocaleCatalog } from "../localization/catalog.ts";
+import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
 const SURFACE_SCOPES: readonly CommandFocusScope[] = [
   "workbench", "input", "editor", "diff", "history", "terminal",
 ];
 const EDITOR_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "editor"];
 const DIFF_SCOPES: readonly CommandFocusScope[] = ["workbench", "diff"];
-
-export interface DomCommandDefinition {
-  readonly id: CommandId;
-  readonly category: CommandCategory;
-  readonly selector: string;
-  readonly scopes: readonly CommandFocusScope[];
-  readonly title: (catalog: LocaleCatalog) => string;
-  readonly detail: (catalog: LocaleCatalog) => string;
-  readonly keywords: string;
-  readonly blockedReason: (catalog: LocaleCatalog) => string;
-}
 
 export const FILES_EDITOR_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   files(FILES_COMMANDS.locateActive, "#locate-project-file", (copy) => copy.locateCurrentFile, "locate reveal current active file"),

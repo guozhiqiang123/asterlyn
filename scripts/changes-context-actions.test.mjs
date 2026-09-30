@@ -155,3 +155,50 @@ test("renamed history queries both exact names and action routing never opens Di
   await session.invoke("changes.context-actions.trash-all");
   assert.deepEqual(events.slice(-2), [["stage-all"], ["trash-all"]]);
 });
+
+test("command routing reuses context policy and revalidates the exact target", async () => {
+  const events = [];
+  let current = true;
+  let included = true;
+  const provider = new ChangesContextActions(
+    { open() {}, close() {} },
+    { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => current,
+      select: () => true,
+      included: () => included,
+      snapshot: () => snapshot(),
+      policyOptions: () => ({
+        sourceAvailable: true, conflictAvailable: false, mutationBusy: false,
+        trashAvailable: true, reasons: EN_US.changes.contextMenu,
+      }),
+      groupPolicy: () => ({ stage: enabled, trash: enabled }),
+      setIncluded: (_target, value) => { included = value; events.push(["include", value]); },
+      showDiff: () => events.push(["diff"]), jumpToSource: () => events.push(["source"]),
+      resolveConflict: () => events.push(["resolve"]), restore: () => events.push(["restore"]),
+      trash: () => events.push(["trash"]), stageAll: () => events.push(["stage-all"]),
+      trashAll: () => events.push(["trash-all"]), installHistoryQuery: () => events.push(["history"]),
+      blocked: (reason) => events.push(["blocked", reason]), status: () => {},
+      error: (error) => events.push(["error", error]),
+    },
+    () => EN_US.changes,
+  );
+  const ordinary = target();
+  const untracked = target({ worktreeStatus: "untracked" });
+  const group = {
+    workspaceRoot: "/repo", workspaceGeneration: 5, kind: "group",
+    group: "unversioned", repositoryId: ".", repositoryRevision: 3,
+    paths: ["new-a.txt"],
+  };
+
+  assert.equal(provider.commandAvailability("trash", ordinary).kind, "blocked");
+  assert.equal(provider.commandAvailability("trash", untracked).kind, "enabled");
+  await provider.executeCommand("include", ordinary);
+  await provider.executeCommand("source", ordinary);
+  await provider.executeCommand("stage-all", group);
+  assert.deepEqual(events, [["include", false], ["source"], ["stage-all"]]);
+
+  current = false;
+  await provider.executeCommand("restore", ordinary);
+  assert.deepEqual(events.at(-1), ["blocked", EN_US.changes.contextMenu.targetChanged]);
+});
