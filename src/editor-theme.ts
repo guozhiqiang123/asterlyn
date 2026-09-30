@@ -286,12 +286,13 @@ const editorThemeRules =
     ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--editor-search-selected)" },
     ".cm-panels": { backgroundColor: "var(--bg-panel)", color: "var(--text)", zIndex: "10" },
     ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--border)" },
-    ".cm-panel.cm-search": { padding: "6px 6px 6px 10px" },
+    ".cm-panel.cm-search": { padding: "8px 10px" },
     ".asterlyn-search-panel": {
       display: "grid",
       gridTemplateColumns: "minmax(190px, 1fr) auto 34px",
       alignItems: "flex-start",
-      gap: "5px",
+      columnGap: "8px",
+      rowGap: "8px",
     },
     ".asterlyn-search-input-shell, .asterlyn-search-replace-shell": {
       display: "flex",
@@ -311,7 +312,7 @@ const editorThemeRules =
     ".asterlyn-search-input-shell input, .asterlyn-search-replace-shell input": {
       boxSizing: "border-box",
       minWidth: "70px",
-      height: "27px",
+      height: "30px",
       flex: "1 1 auto",
       padding: "0 7px",
       border: "0",
@@ -325,7 +326,7 @@ const editorThemeRules =
       boxSizing: "border-box",
       width: "100%",
       minWidth: "70px",
-      minHeight: "31px",
+      minHeight: "30px",
       maxHeight: "124px",
       flex: "1 1 auto",
       padding: "6px 7px",
@@ -338,17 +339,15 @@ const editorThemeRules =
       lineHeight: "calc(var(--ui-font-size, 13px) + 6px)",
       resize: "none",
     },
-    ".asterlyn-search-option-strip, .asterlyn-search-actions, .asterlyn-search-replace-row": {
+    ".asterlyn-search-option-strip, .asterlyn-search-actions": {
       display: "flex",
       alignItems: "center",
       gap: "2px",
     },
     ".asterlyn-search-option-strip": { gap: "0", paddingRight: "0" },
-    ".asterlyn-search-actions": { gap: "4px" },
+    ".asterlyn-search-actions": { gap: "6px" },
     ".asterlyn-search-replace-row": {
-      width: "100%",
-      gridColumn: "1 / -1",
-      paddingRight: "34px",
+      display: "contents",
     },
     ".asterlyn-search-panel button": {
       boxSizing: "border-box",
@@ -366,7 +365,7 @@ const editorThemeRules =
     ".asterlyn-search-panel .asterlyn-search-option-strip button": {
       width: "30px",
       minWidth: "30px",
-      height: "30px",
+      height: "32px",
       margin: "0",
       padding: "0",
       border: "0",
@@ -388,8 +387,8 @@ const editorThemeRules =
     ".asterlyn-search-panel .asterlyn-search-close": {
       width: "34px",
       minWidth: "34px",
-      height: "34px",
-      margin: "-2px -2px -2px 0",
+      height: "32px",
+      margin: "0",
       padding: "0",
       borderColor: "var(--border)",
       backgroundColor: "var(--surface-translucent)",

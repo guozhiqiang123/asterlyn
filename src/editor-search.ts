@@ -164,6 +164,7 @@ class AsterlynSearchPanel implements Panel {
   private replacementRow(field: HTMLInputElement): HTMLElement {
     const row = element("div", "asterlyn-search-replace-row");
     const shell = element("div", "asterlyn-search-replace-shell");
+    const actions = element("span", "asterlyn-search-actions asterlyn-search-replace-actions");
     shell.append(field);
     const replace = action(
       this.view.state.phrase("replace"),
@@ -177,7 +178,8 @@ class AsterlynSearchPanel implements Panel {
       "asterlyn-search-command",
     );
     all.addEventListener("click", () => replaceAll(this.view));
-    row.append(shell, replace, all);
+    actions.append(replace, all);
+    row.append(shell, actions);
     return row;
   }
 
