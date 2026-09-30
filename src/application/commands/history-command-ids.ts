@@ -4,7 +4,7 @@ export type BranchContextCommandAction =
   | "ref-history"
   | "branch-switch" | "branch-checkout-remote" | "branch-create" | "branch-rename"
   | "branch-merge" | "branch-rebase" | "branch-delete"
-  | "tag-checkout" | "tag-merge" | "tag-delete-local";
+  | "tag-checkout" | "tag-merge" | "tag-push" | "tag-delete-local" | "tag-delete-remote";
 
 export type HistoryContextCommandAction =
   | "load-more" | "compare-selection"
@@ -46,5 +46,7 @@ export const HISTORY_COMMANDS = {
   deleteBranch: commandId("git.branch.delete"),
   checkoutTag: commandId("git.tag.checkout"),
   mergeTag: commandId("git.tag.merge"),
+  pushTag: commandId("git.tag.push"),
   deleteLocalTag: commandId("git.tag.deleteLocal"),
+  deleteRemoteTag: commandId("git.tag.deleteRemote"),
 } as const;

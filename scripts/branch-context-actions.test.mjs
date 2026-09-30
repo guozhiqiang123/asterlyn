@@ -135,6 +135,8 @@ test("tag menu exposes detached checkout, merge, exact remote push, and local or
       openGitOperation: (kind, name) => events.push(["operation", kind, name]),
       openRemoteAction: () => {},
       tagRemotes: () => ["origin"],
+      selectedTagRemote: () => "origin",
+      tagRemoteUnavailable: () => "Select a configured remote.",
       openTagMutation: (kind, selected, remoteName) =>
         events.push(["tag", kind, selected.branch.fullName, remoteName ?? null]),
       blocked: () => {}, status: () => {}, error: () => {},
@@ -152,6 +154,12 @@ test("tag menu exposes detached checkout, merge, exact remote push, and local or
     ["operation", "merge", selectedTag.fullName],
     ["tag", "push", selectedTag.fullName, "origin"],
     ["tag", "deleteLocal", selectedTag.fullName, null],
+    ["tag", "deleteRemote", selectedTag.fullName, "origin"],
+  ]);
+  provider.executeCommand("tag-push", selectedTarget);
+  provider.executeCommand("tag-delete-remote", selectedTarget);
+  assert.deepEqual(events.slice(-2), [
+    ["tag", "push", selectedTag.fullName, "origin"],
     ["tag", "deleteRemote", selectedTag.fullName, "origin"],
   ]);
 });
@@ -173,6 +181,8 @@ test("provider opens without executing and routes history, copy, and reviewed mu
       openGitOperation: (kind, name) => events.push(["operation", kind, name]),
       openRemoteAction: (kind) => events.push(["remote", kind]),
       tagRemotes: () => [],
+      selectedTagRemote: () => null,
+      tagRemoteUnavailable: () => "Select a configured remote.",
       openTagMutation: () => {},
       blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]),

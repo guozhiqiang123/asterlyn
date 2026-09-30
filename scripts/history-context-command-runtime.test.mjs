@@ -84,7 +84,8 @@ test("History context commands resolve current range, file, and focused folder t
         showHistory: (target) => events.push(["ref-history", target.branch.name]),
         openMutation: (kind, branch) => events.push(["branch-mutation", kind, branch.name]),
         openGitOperation: (kind, ref) => events.push(["branch-operation", kind, ref]),
-        openRemoteAction() {}, tagRemotes: () => [], openTagMutation() {},
+        openRemoteAction() {}, tagRemotes: () => [], selectedTagRemote: () => null,
+        tagRemoteUnavailable: () => "Select a configured remote.", openTagMutation() {},
       },
       commit: {},
       range: {

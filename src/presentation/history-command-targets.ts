@@ -53,7 +53,9 @@ export const HISTORY_CONTEXT_COMMANDS: readonly HistoryContextCommandDefinition[
   context(HISTORY_COMMANDS.deleteBranch, "branch-delete", (copy) => copy.branchMutation.titles.delete, "git delete selected local branch"),
   context(HISTORY_COMMANDS.checkoutTag, "tag-checkout", (copy) => copy.tagMutation.titles.checkout, "git checkout selected tag detached head"),
   context(HISTORY_COMMANDS.mergeTag, "tag-merge", (copy) => copy.branchContextMenu.mergeIntoCurrent, "git merge selected tag into current branch"),
+  context(HISTORY_COMMANDS.pushTag, "tag-push", (copy) => copy.tagMutation.titles.push, "git push selected tag to selected remote"),
   context(HISTORY_COMMANDS.deleteLocalTag, "tag-delete-local", (copy) => copy.tagMutation.titles.deleteLocal, "git delete selected local tag"),
+  context(HISTORY_COMMANDS.deleteRemoteTag, "tag-delete-remote", (copy) => copy.tagMutation.titles.deleteRemote, "git delete selected tag from selected remote"),
 ];
 
 function history(

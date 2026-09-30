@@ -183,7 +183,7 @@ without Asterlyn claiming common editor or terminal keys.
 | Merge/rebase selected ref | write | `git.branch.merge`, `git.branch.rebase` | **Custom**, reviewed Git-operation route only |
 | Delete local branch | destructive | `git.branch.delete` | **Custom**, unassigned and confirmed |
 | Checkout/merge/delete local tag | write/destructive | `git.tag.checkout`, `git.tag.merge`, `git.tag.deleteLocal` | **Custom**, destructive action unassigned and confirmed |
-| Push/delete tag on selected remote | network write/destructive | `git.tag.push`, `git.tag.deleteRemote` | **Gap**, requires selected-remote adapter; unassigned and confirmed |
+| Push/delete tag on selected remote | network write/destructive | `git.tag.push`, `git.tag.deleteRemote` | **Custom**, exact selected remote is revalidated; destructive action unassigned and confirmed |
 | Copy ref names and paths | read | selection-specific copy commands | **Gap** |
 
 Dynamic branch, tag, commit, and file identities never enter persisted keybindings as arguments. A

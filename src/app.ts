@@ -928,6 +928,7 @@ export class AsterlynApp {
           openRemoteAction: (kind, returnFocus) =>
             this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
           tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
+          selectedTagRemote: () => this.windowSession.repository.state.snapshot?.remotes.find((remote) => remote.name === this.remoteState.selectedRemote && remote.pushSupported)?.name ?? null, tagRemoteUnavailable: () => this.localization.catalog.remote.policy.selectConfigured,
           openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
         },
         commit: {

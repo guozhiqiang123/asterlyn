@@ -44,6 +44,8 @@ export interface BranchContextRuntime {
   openGitOperation(kind: "merge" | "rebase", fullName: string): void;
   openRemoteAction(kind: "pull" | "push", returnFocus: HTMLElement): void | Promise<void>;
   tagRemotes(target: BranchContextTarget): readonly string[];
+  selectedTagRemote(target: BranchContextTarget): string | null;
+  tagRemoteUnavailable(): string;
   openTagMutation(
     kind: TagMutationKind,
     target: BranchContextTarget,
@@ -138,6 +140,11 @@ export class BranchContextActions {
     if (target.branch.kind !== "tag" || !policy.writable) return blocked(this.copy().branchContextMenu.targetChanged);
     if (action === "tag-checkout") return policy.tagCheckout;
     if (action === "tag-merge") return policy.tagIntegrate;
+    if (action === "tag-push" || action === "tag-delete-remote") {
+      return this.runtime.selectedTagRemote(target)
+        ? policy.tagMutation
+        : blocked(this.runtime.tagRemoteUnavailable());
+    }
     return policy.tagMutation;
   }
 
@@ -207,7 +214,17 @@ export class BranchContextActions {
       case "branch-delete": return this.runtime.openMutation("delete", target.branch, "");
       case "tag-checkout": return this.runtime.openTagMutation("checkout", target);
       case "tag-merge": return this.runtime.openGitOperation("merge", target.branch.fullName);
+      case "tag-push": {
+        const remote = this.runtime.selectedTagRemote(target);
+        if (remote) this.runtime.openTagMutation("push", target, remote);
+        return;
+      }
       case "tag-delete-local": return this.runtime.openTagMutation("deleteLocal", target);
+      case "tag-delete-remote": {
+        const remote = this.runtime.selectedTagRemote(target);
+        if (remote) this.runtime.openTagMutation("deleteRemote", target, remote);
+        return;
+      }
     }
   }
 }
