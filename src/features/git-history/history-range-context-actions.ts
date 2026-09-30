@@ -58,17 +58,7 @@ export class HistoryCommitRangeContextActions {
       isCurrent: () => this.runtime.current(request.target),
       invoke: async (actionId) => {
         try {
-          if (actionId === `${OWNER_ID}.copy-commit-ids`) {
-            const result = await this.clipboard.writeText(
-              request.target.commits.map((commit) => commit.oid).join("\n"),
-            );
-            if (result.status === "failure") {
-              this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
-              return;
-            }
-            this.runtime.status(labels.copiedCommitIds(request.target.commits.length));
-            return;
-          }
+          if (actionId === `${OWNER_ID}.copy-commit-ids`) return this.copyCommitIds(request.target);
           this.invoke(actionId, policy, request.target);
         } catch (error) {
           this.runtime.error(error);
@@ -102,6 +92,21 @@ export class HistoryCommitRangeContextActions {
     } catch (error) {
       this.runtime.error(error);
     }
+  }
+
+  async executeCopyCommand(target: HistoryCommitRangeTarget): Promise<void> {
+    if (!this.runtime.current(target)) {
+      this.runtime.blocked(this.copy().rangeContextMenu.targetChanged);
+      return;
+    }
+    await this.copyCommitIds(target);
+  }
+
+  private async copyCommitIds(target: HistoryCommitRangeTarget): Promise<void> {
+    const labels = this.copy().rangeContextMenu;
+    const result = await this.clipboard.writeText(target.commits.map((commit) => commit.oid).join("\n"));
+    if (result.status === "failure") this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+    else this.runtime.status(labels.copiedCommitIds(target.commits.length));
   }
 
   private invoke(

@@ -8,6 +8,7 @@ export type BranchContextCommandAction =
 
 export type HistoryContextCommandAction =
   | "load-more" | "compare-selection"
+  | "commit-copy-id" | "range-copy-ids"
   | "file-show-diff" | "file-open-historical" | "file-compare-current"
   | "file-open-current" | "file-restore" | "file-history"
   | "file-copy-name" | "file-copy-relative-path" | "file-copy-absolute-path"
@@ -31,6 +32,8 @@ export const HISTORY_COMMANDS = {
   swapComparison: commandId("history.comparison.swap"),
   loadMore: commandId("history.loadMore"),
   compareSelection: commandId("history.selection.compare"),
+  copyCommitId: commandId("history.commit.copyId"),
+  copyRangeIds: commandId("history.range.copyIds"),
   openFileDiff: commandId("history.file.diff.open"),
   openHistoricalFile: commandId("history.file.openHistorical"),
   compareCurrentFile: commandId("history.file.compareCurrent"),

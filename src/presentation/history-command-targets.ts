@@ -36,6 +36,8 @@ export interface HistoryContextCommandDefinition {
 export const HISTORY_CONTEXT_COMMANDS: readonly HistoryContextCommandDefinition[] = [
   context(HISTORY_COMMANDS.loadMore, "load-more", (copy) => copy.scrollForOlder, "history load more older commits page"),
   context(HISTORY_COMMANDS.compareSelection, "compare-selection", (copy) => copy.rangeContextMenu.compareTwoCommits, "history compare two selected commits"),
+  context(HISTORY_COMMANDS.copyCommitId, "commit-copy-id", (copy) => copy.commitContextMenu.copyCommitId, "copy selected history commit full id hash oid"),
+  context(HISTORY_COMMANDS.copyRangeIds, "range-copy-ids", (copy) => copy.rangeContextMenu.copyCommitIds, "copy selected history commit range full ids hashes oids"),
   context(HISTORY_COMMANDS.openFileDiff, "file-show-diff", (copy) => copy.commitFileContextMenu.showDiff, "history selected file diff"),
   context(HISTORY_COMMANDS.openHistoricalFile, "file-open-historical", (copy) => copy.commitFileContextMenu.openHistorical, "history open selected historical file version"),
   context(HISTORY_COMMANDS.compareCurrentFile, "file-compare-current", (copy) => copy.commitFileContextMenu.compareCurrent, "history compare selected file current working tree"),

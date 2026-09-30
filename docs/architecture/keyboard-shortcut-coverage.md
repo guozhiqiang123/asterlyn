@@ -171,6 +171,7 @@ without Asterlyn claiming common editor or terminal keys.
 | Clear one/all active History filters | presentation | `history.filter.clearCurrent`, `history.filter.clearAll` | **Custom**; clear-current chooses the leftmost active chip |
 | Select commits and ranges | navigation | History list keyboard/pointer contract | **Local** |
 | Open selected commit/range comparison | navigation | `history.selection.compare` | **Custom**; exact current two-commit range is revalidated |
+| Copy selected commit ID / selected range IDs | read | `history.commit.copyId`, `history.range.copyIds` | **Custom**; copies the exact revalidated History selection |
 | Load more history | read | `history.loadMore` | **Custom** |
 | Toggle commit-file tree/flat, expand/collapse | presentation | `history.files.view.toggle`, `history.files.expandAll`, `history.files.collapseAll` | **Custom** |
 | Swap the before/after sides of a commit comparison | presentation | `history.comparison.swap` | **Custom** |

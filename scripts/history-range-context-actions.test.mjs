@@ -139,6 +139,29 @@ test("range context snapshot validates the entire logical selection", () => {
   }, state, 2, 3), false);
 });
 
+test("range copy command revalidates the complete selection", async () => {
+  const selected = target([commit("new", ["old"]), commit("old", [])]);
+  const events = [];
+  let current = true;
+  const provider = new HistoryCommitRangeContextActions(
+    { open() {}, close() {} },
+    { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
+    {
+      current: () => current, policyOptions: () => options(selected.commits, "new"),
+      openGitOperation() {}, openComparison() {}, blocked: (reason) => events.push(["blocked", reason]),
+      status: (message) => events.push(["status", message]), error: () => undefined,
+    },
+    () => EN_US.history,
+  );
+  await provider.executeCopyCommand(selected);
+  current = false;
+  await provider.executeCopyCommand(selected);
+  assert.deepEqual(events, [
+    ["copy", "new\nold"], ["status", EN_US.history.rangeContextMenu.copiedCommitIds(2)],
+    ["blocked", EN_US.history.rangeContextMenu.targetChanged],
+  ]);
+});
+
 function target(commits) {
   return {
     workspaceRoot: "/repo", workspaceGeneration: 2, repositoryRevision: 3,

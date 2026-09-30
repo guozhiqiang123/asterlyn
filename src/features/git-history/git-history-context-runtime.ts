@@ -37,7 +37,7 @@ import {
   type HistoryCommitContextRuntime,
 } from "./history-commit-context-actions.ts";
 import { HistoryContextBinding } from "./history-context-binding.ts";
-import { resolveHistoryCommitContextTarget } from "./history-context-binding.ts";
+import { resolveHistoryCommitContextTarget, type HistoryCommitContextTarget } from "./history-context-binding.ts";
 import {
   HistoryCommitRangeContextActions,
   type HistoryCommitRangeRuntime,
@@ -100,6 +100,7 @@ export class GitHistoryContextRuntime {
   private readonly copy: () => HistoryCopy;
   private readonly sources: GitHistoryContextSources;
   private readonly branchActions: BranchContextActions;
+  private readonly commitActions: HistoryCommitContextActions;
   private readonly rangeActions: HistoryCommitRangeContextActions;
   private readonly folderActions: CommitFolderContextActions;
   private readonly fileActions: CommitFileContextActions;
@@ -115,7 +116,7 @@ export class GitHistoryContextRuntime {
     this.loadMoreHistory = options.loadMoreHistory;
     this.unavailableReason = options.unavailableReason;
     this.branchActions = new BranchContextActions(host, clipboard, ports.branch, copy);
-    const commitActions = new HistoryCommitContextActions(host, clipboard, ports.commit, copy);
+    this.commitActions = new HistoryCommitContextActions(host, clipboard, ports.commit, copy);
     this.rangeActions = new HistoryCommitRangeContextActions(host, clipboard, ports.range, copy);
     this.folderActions = new CommitFolderContextActions(host, clipboard, ports.folder, copy);
     this.fileActions = new CommitFileContextActions(host, clipboard, ports.file, copy);
@@ -128,7 +129,7 @@ export class GitHistoryContextRuntime {
           request.target,
           sources.rangeSelection(request.target.key),
         );
-        if (!range) return commitActions.open(request);
+        if (!range) return this.commitActions.open(request);
         sources.markHistoryTarget(request.target.key);
         return this.rangeActions.open({ ...request, target: range });
       }),
@@ -168,6 +169,10 @@ export class GitHistoryContextRuntime {
       ? this.branchActions.commandAvailability(action, target as BranchContextTarget)
       : action === "compare-selection"
       ? this.rangeActions.commandAvailability(target as HistoryCommitRangeTarget)
+      : action === "commit-copy-id"
+        ? this.commitActions.commandAvailability(target as HistoryCommitContextTarget)
+      : action === "range-copy-ids"
+        ? { kind: "enabled" as const }
       : action.startsWith("file-")
         ? this.fileActions.commandAvailability(
             action.slice("file-".length) as CommitFileCommandAction,
@@ -195,6 +200,10 @@ export class GitHistoryContextRuntime {
       await this.branchActions.executeCommand(action, target as BranchContextTarget);
     } else if (action === "compare-selection") {
       this.rangeActions.executeCompareCommand(target as HistoryCommitRangeTarget);
+    } else if (action === "commit-copy-id") {
+      await this.commitActions.executeCopyCommand(target as HistoryCommitContextTarget);
+    } else if (action === "range-copy-ids") {
+      await this.rangeActions.executeCopyCommand(target as HistoryCommitRangeTarget);
     } else if (action.startsWith("file-")) {
       await this.fileActions.executeCommand(
         action.slice("file-".length) as CommitFileCommandAction,
@@ -220,7 +229,7 @@ export class GitHistoryContextRuntime {
 
   private commandTarget(
     action: Exclude<HistoryContextCommandAction, "load-more">,
-  ): BranchContextTarget | CommitDetailContextTarget | HistoryCommitRangeTarget | null {
+  ): BranchContextTarget | HistoryCommitContextTarget | CommitDetailContextTarget | HistoryCommitRangeTarget | null {
     if (isBranchCommand(action)) {
       const source = this.sources.branch();
       return source.selectedBranchKey
@@ -230,7 +239,7 @@ export class GitHistoryContextRuntime {
           )
         : null;
     }
-    if (action === "compare-selection") {
+    if (action === "compare-selection" || action === "range-copy-ids") {
       const source = this.sources.history();
       const selection = this.sources.currentRangeSelection();
       const key = selection?.activeKey ?? source.state.selectedCommit;
@@ -243,6 +252,15 @@ export class GitHistoryContextRuntime {
           )
         : null;
       return row ? resolveHistoryCommitRangeTarget(row, selection) : null;
+    }
+    if (action === "commit-copy-id") {
+      const source = this.sources.history();
+      return source.state.selectedCommit
+        ? resolveHistoryCommitContextTarget(
+            source.state, source.workspaceGeneration, source.repositoryRevision,
+            source.state.selectedCommit,
+          )
+        : null;
     }
     const source = this.sources.detail();
     const kind = action.startsWith("file-") ? "file" : "directory";

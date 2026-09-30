@@ -96,6 +96,32 @@ export class HistoryCommitContextActions {
     return true;
   }
 
+  commandAvailability(target: HistoryCommitContextTarget): ContextMenuAvailability {
+    return this.runtime.current(target)
+      ? { kind: "enabled" }
+      : { kind: "blocked", reason: this.copy().commitContextMenu.targetChanged };
+  }
+
+  async executeCopyCommand(target: HistoryCommitContextTarget): Promise<void> {
+    const availability = this.commandAvailability(target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    if (!this.runtime.select(target)) {
+      this.runtime.blocked(this.copy().commitContextMenu.targetChanged);
+      return;
+    }
+    await this.copyCommitId(target.oid);
+  }
+
+  private async copyCommitId(oid: string): Promise<void> {
+    const labels = this.copy().commitContextMenu;
+    const result = await this.clipboard.writeText(oid);
+    if (result.status === "failure") this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+    else this.runtime.status(labels.copiedCommitId);
+  }
+
   private invoke(
     actionId: string,
     target: HistoryCommitContextTarget,

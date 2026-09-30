@@ -138,3 +138,27 @@ test("provider routes each tagged commit submenu action to its exact tag and rem
   await session.invoke("git-history.commit-context-actions.tag-0.delete-remote-0");
   assert.deepEqual(events, [["deleteLocal", "v1", null], ["deleteRemote", "v1", "origin"]]);
 });
+
+test("commit copy command revalidates selection and reuses clipboard feedback", async () => {
+  const selected = target();
+  const events = [];
+  let current = true;
+  const provider = new HistoryCommitContextActions(
+    { open() {}, close() {} },
+    { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
+    {
+      current: () => current, select: () => true, policyOptions: () => ({ ...options }),
+      openGitOperation() {}, openBranchFromCommit() {}, openReset() {}, tagRemotes: () => [],
+      openTagMutation() {}, blocked: (reason) => events.push(["blocked", reason]),
+      status: (message) => events.push(["status", message]), error: () => undefined,
+    },
+    () => EN_US.history,
+  );
+  await provider.executeCopyCommand(selected);
+  current = false;
+  await provider.executeCopyCommand(selected);
+  assert.deepEqual(events, [
+    ["copy", selected.oid], ["status", EN_US.history.commitContextMenu.copiedCommitId],
+    ["blocked", EN_US.history.commitContextMenu.targetChanged],
+  ]);
+});

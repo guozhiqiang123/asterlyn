@@ -67,7 +67,7 @@ test("History context commands resolve current range, file, and focused folder t
   const runtime = new GitHistoryContextRuntime({
     root,
     host: { open() {}, close() {}, revalidate() {} },
-    clipboard: { async writeText() { return { status: "copied" }; } },
+    clipboard: { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
     copy: () => EN_US.history,
     sources: {
       branch: () => ({ snapshot, workspaceGeneration: 4, repositoryRevision: 5, selectedRepositoryIds: new Set(), selectedBranchKey: branchKey(topic) }),
@@ -87,7 +87,11 @@ test("History context commands resolve current range, file, and focused folder t
         openRemoteAction() {}, tagRemotes: () => [], selectedTagRemote: () => null,
         tagRemoteUnavailable: () => "Select a configured remote.", openTagMutation() {},
       },
-      commit: {},
+      commit: {
+        ...feedback, current: () => true, select: () => true, policyOptions: () => ({}),
+        openGitOperation() {}, openBranchFromCommit() {}, tagRemotes: () => [],
+        openTagMutation() {}, openReset() {},
+      },
       range: {
         ...feedback, current: () => true, policyOptions: () => ({}),
         openGitOperation() {}, openComparison: (target) => events.push(["compare", target.commits.length]),
@@ -115,11 +119,15 @@ test("History context commands resolve current range, file, and focused folder t
   });
 
   assert.deepEqual(runtime.commandAvailability("compare-selection"), { enabled: true });
+  assert.deepEqual(runtime.commandAvailability("commit-copy-id"), { enabled: true });
+  assert.deepEqual(runtime.commandAvailability("range-copy-ids"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("file-restore"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("folder-reveal"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("branch-merge"), { enabled: true });
   assert.equal(runtime.commandAvailability("tag-checkout").enabled, false);
   await runtime.executeCommand("compare-selection");
+  await runtime.executeCommand("commit-copy-id");
+  await runtime.executeCommand("range-copy-ids");
   await runtime.executeCommand("file-open-historical");
   await runtime.executeCommand("file-history");
   await runtime.executeCommand("folder-reveal");
@@ -128,7 +136,8 @@ test("History context commands resolve current range, file, and focused folder t
   await runtime.executeCommand("ref-history");
   await runtime.executeCommand("branch-merge");
   assert.deepEqual(events, [
-    ["compare", 2], ["historical", "src/app.ts"], ["file-history", "src/app.ts"],
+    ["compare", 2], ["copy", second.oid], ["copy", `${first.oid}\n${second.oid}`],
+    ["historical", "src/app.ts"], ["file-history", "src/app.ts"],
     ["folder-reveal", "src"], ["folder-history", "src"], ["load-more"],
     ["ref-history", "topic"], ["branch-operation", "merge", topic.fullName],
   ]);
