@@ -67,4 +67,11 @@ export const DEFAULT_KEYBINDINGS: readonly DefaultKeybindingRule[] = [
     sequence: primarySequence("r"),
     scopes: WORKBENCH_SCOPES,
   },
+  {
+    id: "workbench.settings.primary",
+    commandId: WORKBENCH_COMMANDS.openSettings,
+    sequence: primarySequence(","),
+    scopes: [...WORKBENCH_SCOPES, "terminal"],
+    terminalPolicy: "intercept",
+  },
 ];

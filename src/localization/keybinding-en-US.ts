@@ -40,5 +40,8 @@ export const KEYBINDING_EN_US: KeybindingCopy = {
   editorRequired: "Focus an available editor first.",
   historyRequired: "Open and focus Git history first.",
   gitRequired: "This command requires a Git project.",
+  settingsRequired: "Open Settings first.",
+  leftToolRequired: "Show a left tool window first.",
+  bottomToolRequired: "Show a bottom tool window first.",
   categories: { workbench: "Workbench", workspace: "Project", editor: "Editor", view: "Tool windows" },
 };

@@ -61,8 +61,8 @@ blocked reason.
 | Open recent files | navigation | `workspace.recentFiles.open` | **Default:** Primary+E |
 | Find in files / reviewed replace | navigation | `workspace.search.open` | **Default:** Primary+Shift+F |
 | Refresh project and local Git state | read | `workbench.refresh` | **Default:** Primary+R |
-| Open Settings | navigation | `workbench.settings.open` | **Gap**, target default Primary+, |
-| Return from Settings | navigation | `workbench.settings.close` | **Gap**; Escape remains **Local** |
+| Open Settings | navigation | `workbench.settings.open` | **Default:** Primary+, |
+| Return from Settings | navigation | `workbench.settings.close` | **Custom**; Escape remains **Local** |
 | Dismiss visible error toast | presentation | `workbench.notification.dismiss` | **Gap** |
 | Reorder activity tools | presentation | activity-rail drag and Alt+Arrow local behavior | **Local** |
 | Choose current/new window when opening a project | window | repository-target dialog | **Local** dialog choice |
@@ -73,18 +73,18 @@ blocked reason.
 | User action | Family | Command | State / default |
 | --- | --- | --- | --- |
 | Show/hide Files | presentation | `workbench.tool.files.toggle` | **Custom** |
-| Show/hide Search results | presentation | `workbench.tool.search.toggle` | **Gap** |
+| Show/hide Search results | presentation | `workbench.tool.search.toggle` | **Custom** |
 | Show/hide Changes | presentation | `workbench.tool.changes.toggle` | **Custom** |
 | Show/hide Branches and Log | presentation | `workbench.tool.branches.toggle` | **Custom** |
-| Show/hide Stash | presentation | `workbench.tool.stash.toggle` | **Gap** |
+| Show/hide Stash | presentation | `workbench.tool.stash.toggle` | **Custom** |
 | Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Custom** |
-| Hide the active left tool | presentation | `workbench.tool.left.hide` | **Gap** |
-| Hide the active bottom tool | presentation | `workbench.tool.bottom.hide` | **Gap** |
+| Hide the active left tool | presentation | `workbench.tool.left.hide` | **Custom** |
+| Hide the active bottom tool | presentation | `workbench.tool.bottom.hide` | **Custom** |
 | Resize tool panes | presentation | keyboard-operable splitters | **Local** |
 
-Default number/chord bindings for tool windows are intentionally deferred until the complete set is
-registered, so one release does not claim combinations that the next release must immediately
-reassign. Users may already assign the four registered commands.
+Default number/chord bindings for tool windows are intentionally omitted: these presentation
+commands are registered and discoverable, while users choose combinations that fit their workflow
+without Asterlyn claiming common editor or terminal keys.
 
 ## 3. Files
 
@@ -116,7 +116,7 @@ reassign. Users may already assign the four registered commands.
 | Insert a query line break | editing | focused query control | **Local** |
 | Preview workspace replacement | write | `search.replace.preview` | **Gap** |
 | Apply reviewed replacement | write | `search.replace.apply` | **Gap**, must preserve review/recovery |
-| Open/close Find results tool | presentation | `workbench.tool.search.toggle` | **Gap** |
+| Open/close Find results tool | presentation | `workbench.tool.search.toggle` | **Custom** |
 | Locate current file in Find results | navigation | `search.results.locateCurrent` | **Gap** |
 | Toggle tree/flat results | presentation | `search.results.view.toggle` | **Gap** |
 | Expand/collapse selected result folder | presentation | `search.results.expand`, `.collapse` | **Gap** |
@@ -238,7 +238,7 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Command / route | State |
 | --- | --- | --- | --- |
-| Open/close Settings | navigation | `workbench.settings.open`, `.close` | **Gap** |
+| Open/close Settings | navigation | `workbench.settings.open`, `.close` | **Default** Primary+, to open; close is **Custom** |
 | Select a Settings section | navigation | Settings navigation buttons | **Local** |
 | Change locale/theme/font/editor/Diff preferences | preference | form controls | **Local**; each value is directly discoverable and focused |
 | Search/filter/category-filter shortcuts | editing | Keyboard Shortcuts controls | **Local** |

@@ -188,7 +188,7 @@ import { clearNavigatorRootTarget, navigatorHeaderHost, renderChangesNavigatorHe
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
-import { refreshCommandCenterShortcut, shortcutFocusScope } from "./shell/shortcut-presentation.ts";
+import { refreshWorkbenchShortcutPresentation, shortcutFocusScope } from "./shell/shortcut-presentation.ts";
 import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
 import { WindowSession } from "./application/window-session";
 import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts";
@@ -562,12 +562,12 @@ export class AsterlynApp {
     this.shortcuts = new KeyboardShortcutRuntime(window, window.localStorage, {
       navigationCopy: () => this.localization.catalog.navigation.commands,
       commandPaletteCopy: () => ({ label: this.localization.catalog.navigation.titles.commands, detail: this.localization.catalog.navigation.hints.commands }),
-      workspaceRequiredReason: () => this.localization.catalog.settings.keybindings.workspaceRequired,
-      editorRequiredReason: () => this.localization.catalog.settings.keybindings.editorRequired,
-      historyRequiredReason: () => this.localization.catalog.settings.keybindings.historyRequired,
-      gitRequiredReason: () => this.localization.catalog.settings.keybindings.gitRequired,
+      keybindingCopy: () => this.localization.catalog.settings.keybindings,
       workspaceOpen: () => this.windowSession.workspace.state.root !== null,
       gitAvailable: () => this.windowSession.repository.state.snapshot !== null,
+      settingsOpen: () => this.shellState.page === "settings",
+      leftToolVisible: () => this.windowSession.workspace.state.root !== null && this.shellState.layout.leftTool !== null,
+      bottomToolVisible: () => this.windowSession.workspace.state.root !== null && this.shellState.layout.bottomTool !== null,
       editorFindAvailable: () => Boolean(this.root.querySelector(".cm-editor")),
       historyFindAvailable: () => this.shellState.layout.bottomTool === "branches",
       saveAvailable: () => {
@@ -592,7 +592,9 @@ export class AsterlynApp {
         if (tab?.status === "ready") await this.saveTextTab(tab.id);
       },
       refresh: async () => { await this.refresh(); },
+      openSettings: () => this.openSettings(), closeSettings: () => this.closeSettings(),
       toggleTool: (tool) => this.toggleTool(tool),
+      hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(),
       scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
       pending: (active) => {
         const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
@@ -1514,24 +1516,8 @@ export class AsterlynApp {
         this.renderEditorTabMenu();
         this.bindEditorTabMenuEvents();
       },
-      hideBottomTool: () => {
-        const tool = this.shellState.layout.bottomTool;
-        if (tool) {
-          if (tool === "find" || tool === "replace") {
-            this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
-            this.applyWorkbenchLayout(true);
-            this.renderActivityRail();
-            this.query<HTMLButtonElement>("#command-center-button").focus();
-          } else {
-            this.toggleTool(tool);
-            this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`)?.focus();
-          }
-        }
-      },
-      hideLeftTool: () => {
-        const tool = this.shellState.layout.leftTool;
-        if (tool) this.toggleTool(tool);
-      },
+      hideBottomTool: () => this.hideBottomTool(),
+      hideLeftTool: () => this.hideLeftTool(),
       applyLayout: () => this.applyWorkbenchLayout(false),
       closePushDiff: () => this.closePushDiff(),
       closePushModeMenu: () => this.remoteRuntime.push.closePushModeMenu(),
@@ -1909,7 +1895,6 @@ export class AsterlynApp {
     const status = this.root.querySelector<HTMLElement>("#status-message");
     if (status && status.textContent === previousCatalog?.common.ready) status.textContent = common.ready;
     text("#command-center-button span", copy.search);
-    this.refreshShortcutPresentation();
     this.root.querySelector("#remote-toolbar")?.setAttribute("aria-label", copy.remoteActions);
     label(".topbar-remote-select", copy.remoteForActions);
     label("#topbar-remote-select", copy.remoteForActions);
@@ -1945,13 +1930,12 @@ export class AsterlynApp {
     text("#repository-target-current", copy.currentWindow);
     text("#repository-target-new", copy.newWindow);
     label("#repository-target-close", copy.cancelOpeningProject);
+    this.refreshShortcutPresentation();
   }
 
   private refreshShortcutPresentation(): void {
-    refreshCommandCenterShortcut(
-      this.root,
-      this.localization.catalog.shell.searchFilesAndCommands,
-      this.shortcuts.keybindings,
+    refreshWorkbenchShortcutPresentation(
+      this.root, this.localShellCopy(), this.shellState.activityOrder, this.shortcuts.keybindings,
     );
   }
 
@@ -3827,6 +3811,21 @@ export class AsterlynApp {
     await this.remoteRuntime.push.cancelActiveOperation();
   }
 
+  private hideBottomTool(): void {
+    const tool = this.shellState.layout.bottomTool;
+    if (!tool) return;
+    if (tool === "find" || tool === "replace") {
+      this.shellController.setLayout({ ...this.shellState.layout, bottomTool: null });
+      this.applyWorkbenchLayout(true);
+      this.renderActivityRail();
+    } else this.toggleTool(tool);
+    const focus = tool === "find" || tool === "replace"
+      ? "#command-center-button" : `[data-tool="${tool}"]`;
+    this.root.querySelector<HTMLButtonElement>(focus)?.focus();
+  }
+
+  private hideLeftTool(): void { const tool = this.shellState.layout.leftTool; if (tool) this.toggleTool(tool); }
+
   private toggleTool(tool: ActivityTool): void {
     if (
       !this.windowSession.workspace.state.root ||
@@ -3898,6 +3897,7 @@ export class AsterlynApp {
           ? copy.openFolderFirst
           : copy.gitUnavailableReorder;
     });
+    this.refreshShortcutPresentation();
   }
 
   private bindWorkbenchSplitters(): void {

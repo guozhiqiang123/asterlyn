@@ -40,5 +40,8 @@ export const KEYBINDING_ZH_CN: KeybindingCopy = {
   editorRequired: "请先聚焦可用的编辑器。",
   historyRequired: "请先打开并聚焦 Git 历史记录。",
   gitRequired: "该命令需要 Git 项目。",
+  settingsRequired: "请先打开设置。",
+  leftToolRequired: "请先显示一个左侧工具窗口。",
+  bottomToolRequired: "请先显示一个底部工具窗口。",
   categories: { workbench: "工作台", workspace: "项目", editor: "编辑器", view: "工具窗口" },
 };

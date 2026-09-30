@@ -6,7 +6,7 @@ import {
   type CommandId,
 } from "../application/commands/command-service.ts";
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
-import type { NavigationCommandId } from "../localization/catalog.ts";
+import type { KeybindingCopy, NavigationCommandId } from "../localization/catalog.ts";
 import type { ActivityTool } from "../shell/activity-order.ts";
 
 const WORKBENCH_SCOPES: readonly CommandFocusScope[] = [
@@ -16,6 +16,7 @@ const WORKBENCH_SCOPES: readonly CommandFocusScope[] = [
   "diff",
   "history",
 ];
+const TOOL_SCOPES: readonly CommandFocusScope[] = [...WORKBENCH_SCOPES, "terminal"];
 
 export interface WorkbenchCommandRuntimeOptions {
   readonly navigationCopy: () => Record<NavigationCommandId, {
@@ -24,12 +25,12 @@ export interface WorkbenchCommandRuntimeOptions {
     readonly aliases: string;
   }>;
   readonly commandPaletteCopy: () => { readonly label: string; readonly detail: string };
-  readonly workspaceRequiredReason: () => string;
-  readonly editorRequiredReason: () => string;
-  readonly historyRequiredReason: () => string;
-  readonly gitRequiredReason: () => string;
+  readonly keybindingCopy: () => KeybindingCopy;
   readonly workspaceOpen: () => boolean;
   readonly gitAvailable: () => boolean;
+  readonly settingsOpen: () => boolean;
+  readonly leftToolVisible: () => boolean;
+  readonly bottomToolVisible: () => boolean;
   readonly editorFindAvailable: () => boolean;
   readonly historyFindAvailable: () => boolean;
   readonly saveAvailable: () => boolean;
@@ -40,7 +41,11 @@ export interface WorkbenchCommandRuntimeOptions {
   readonly focusHistoryFilter: () => void;
   readonly saveFile: () => void | Promise<void>;
   readonly refresh: () => void | Promise<void>;
+  readonly openSettings: () => void;
+  readonly closeSettings: () => void;
   readonly toggleTool: (tool: ActivityTool) => void;
+  readonly hideLeftTool: () => void;
+  readonly hideBottomTool: () => void;
 }
 
 export function registerWorkbenchCommands(
@@ -50,10 +55,10 @@ export function registerWorkbenchCommands(
   const enabled = (): CommandAvailability => ({ enabled: true });
   const workspace = (): CommandAvailability => options.workspaceOpen()
     ? enabled()
-    : { enabled: false, reason: options.workspaceRequiredReason() };
+    : { enabled: false, reason: options.keybindingCopy().workspaceRequired };
   const git = (): CommandAvailability => options.gitAvailable()
     ? enabled()
-    : { enabled: false, reason: options.gitRequiredReason() };
+    : { enabled: false, reason: options.keybindingCopy().gitRequired };
   const navigation = (
     id: CommandId,
     copyId: NavigationCommandId,
@@ -116,7 +121,7 @@ export function registerWorkbenchCommands(
       "editor",
       () => options.editorFindAvailable()
         ? enabled()
-        : { enabled: false, reason: options.editorRequiredReason() },
+        : { enabled: false, reason: options.keybindingCopy().editorRequired },
       () => options.openEditorFind(),
       ["editor", "diff"],
     ),
@@ -129,7 +134,7 @@ export function registerWorkbenchCommands(
       keywords: () => "history filter search",
       availability: () => options.historyFindAvailable()
         ? enabled()
-        : { enabled: false, reason: options.historyRequiredReason() },
+        : { enabled: false, reason: options.keybindingCopy().historyRequired },
       execute: () => options.focusHistoryFilter(),
     },
     navigation(
@@ -138,7 +143,7 @@ export function registerWorkbenchCommands(
       "editor",
       () => options.saveAvailable()
         ? enabled()
-        : { enabled: false, reason: options.editorRequiredReason() },
+        : { enabled: false, reason: options.keybindingCopy().editorRequired },
       () => options.saveFile(),
       ["editor", "diff"],
     ),
@@ -148,8 +153,26 @@ export function registerWorkbenchCommands(
       "workbench",
       () => options.refreshAvailable()
         ? enabled()
-        : { enabled: false, reason: options.workspaceRequiredReason() },
+        : { enabled: false, reason: options.keybindingCopy().workspaceRequired },
       () => options.refresh(),
+    ),
+    navigation(
+      WORKBENCH_COMMANDS.openSettings,
+      "open-settings",
+      "workbench",
+      enabled,
+      () => options.openSettings(),
+      TOOL_SCOPES,
+    ),
+    navigation(
+      WORKBENCH_COMMANDS.closeSettings,
+      "close-settings",
+      "workbench",
+      () => options.settingsOpen()
+        ? enabled()
+        : { enabled: false, reason: options.keybindingCopy().settingsRequired },
+      () => options.closeSettings(),
+      ["settings"],
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleFiles,
@@ -157,6 +180,15 @@ export function registerWorkbenchCommands(
       "view",
       workspace,
       () => options.toggleTool("files"),
+      TOOL_SCOPES,
+    ),
+    navigation(
+      WORKBENCH_COMMANDS.toggleSearch,
+      "toggle-search",
+      "view",
+      workspace,
+      () => options.toggleTool("search"),
+      TOOL_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleChanges,
@@ -164,6 +196,7 @@ export function registerWorkbenchCommands(
       "view",
       git,
       () => options.toggleTool("changes"),
+      TOOL_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleGit,
@@ -171,6 +204,15 @@ export function registerWorkbenchCommands(
       "view",
       git,
       () => options.toggleTool("branches"),
+      TOOL_SCOPES,
+    ),
+    navigation(
+      WORKBENCH_COMMANDS.toggleStash,
+      "toggle-stash",
+      "view",
+      git,
+      () => options.toggleTool("stash"),
+      TOOL_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleTerminal,
@@ -178,6 +220,31 @@ export function registerWorkbenchCommands(
       "view",
       workspace,
       () => options.toggleTool("terminal"),
+      TOOL_SCOPES,
+    ),
+    navigation(
+      WORKBENCH_COMMANDS.hideLeftTool,
+      "hide-left-tool",
+      "view",
+      () => !options.workspaceOpen()
+        ? workspace()
+        : options.leftToolVisible()
+          ? enabled()
+          : { enabled: false, reason: options.keybindingCopy().leftToolRequired },
+      () => options.hideLeftTool(),
+      TOOL_SCOPES,
+    ),
+    navigation(
+      WORKBENCH_COMMANDS.hideBottomTool,
+      "hide-bottom-tool",
+      "view",
+      () => !options.workspaceOpen()
+        ? workspace()
+        : options.bottomToolVisible()
+          ? enabled()
+          : { enabled: false, reason: options.keybindingCopy().bottomToolRequired },
+      () => options.hideBottomTool(),
+      TOOL_SCOPES,
     ),
   ];
   const releases = descriptors.map((descriptor) => registry.register(descriptor));

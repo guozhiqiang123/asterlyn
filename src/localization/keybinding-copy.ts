@@ -38,5 +38,8 @@ export interface KeybindingCopy {
   editorRequired: string;
   historyRequired: string;
   gitRequired: string;
+  settingsRequired: string;
+  leftToolRequired: string;
+  bottomToolRequired: string;
   categories: Record<"workbench" | "workspace" | "editor" | "view", string>;
 }

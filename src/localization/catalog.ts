@@ -206,17 +206,11 @@ export interface SettingsCopy {
 }
 
 export type NavigationCommandId =
-  | "open-repository"
-  | "go-file"
-  | "recent-files"
-  | "find-workspace"
-  | "find-current"
-  | "save-current"
-  | "refresh"
-  | "toggle-files"
-  | "toggle-changes"
-  | "toggle-git"
-  | "toggle-terminal";
+  | "open-repository" | "go-file" | "recent-files" | "find-workspace"
+  | "find-current" | "save-current" | "refresh"
+  | "open-settings" | "close-settings"
+  | "toggle-files" | "toggle-search" | "toggle-changes" | "toggle-git" | "toggle-stash" | "toggle-terminal"
+  | "hide-left-tool" | "hide-bottom-tool";
 
 export interface NavigationCopy {
   navigationMode: string;
