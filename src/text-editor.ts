@@ -514,8 +514,7 @@ export class TextEditor {
           ...foldKeymap,
           ...defaultKeymap,
           ...historyKeymap,
-          ...searchKeymap,
-          { key: "Mod-f", run: openSearchPanel },
+          ...searchKeymap.filter((binding) => binding.key !== "Mod-f"),
         ]),
         EditorView.updateListener.of((update) => {
           entry.state = update.state;

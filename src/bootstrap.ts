@@ -1,18 +1,13 @@
-import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter.ts";
-import {
-  applyPresentationToDocument,
-  createBrowserSystemPresentationPort,
-  resolvePresentationSnapshot,
-} from "./presentation/presentation-environment.ts";
-import { loadAppPreferences } from "./preferences.ts";
-import { loadLocale } from "./localization/locale-loader.ts";
+import "./styles.css";
+import "./startup-failure.css";
+import { renderStartupFailure } from "./startup-failure.ts";
 
-const preferences = loadAppPreferences(window.localStorage);
-const system = createBrowserSystemPresentationPort(window);
-const presentation = resolvePresentationSnapshot(preferences, system);
-applyPresentationToDocument(document, presentation);
-void nativeAppearance.setTheme(preferences.theme).catch(console.error);
+async function bootstrap(): Promise<void> {
+  const { startDesktopApplication } = await import("./startup-runtime.ts");
+  await startDesktopApplication();
+}
 
-const catalog = await loadLocale(presentation.locale);
-const { startApplication } = await import("./main.ts");
-startApplication(catalog);
+void bootstrap().catch((error: unknown) => {
+  console.error("Asterlyn startup failed.", error);
+  renderStartupFailure(document, window.navigator.languages);
+});

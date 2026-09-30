@@ -4,7 +4,8 @@ import path from "node:path";
 import test from "node:test";
 
 const ownedStyles = [
-  ["styles.css", "main.ts"],
+  ["styles.css", "bootstrap.ts"],
+  ["startup-failure.css", "bootstrap.ts"],
   ["shared/layout.css", "main.ts"],
   ["shared/controls.css", "main.ts"],
   ["shared/select-control.css", "main.ts"],

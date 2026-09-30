@@ -1,6 +1,7 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts";
+import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
 export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
 export interface CommonCopy {
   ready: string;
@@ -126,7 +127,8 @@ export interface TerminalCopy {
 export interface SettingsCopy {
   planned: string;
   available: string;
-  sections: Record<"general" | "appearance" | "editor" | "version-control" | "code", string>;
+  sections: Record<"general" | "appearance" | "editor" | "keybindings" | "version-control" | "code", string>;
+  keybindings: KeybindingCopy;
   generalTitle: string;
   generalDescription: string;
   languageLabel: string;

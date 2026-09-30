@@ -10,6 +10,8 @@
     "icons:generate": "node scripts/generate-desktop-icons.mjs",
     "protocol:generate": "node scripts/generate-desktop-protocol.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
+    "test:native:rendered": "node scripts/smoke-native-app.mjs --require-rendered target/release/asterlyn",
+    "test:native:rendered:build": "tauri build --no-bundle && npm run test:native:rendered",
     "tauri": "tauri"
   },
   "dependencies": {

@@ -6,6 +6,7 @@ export interface TerminalViewActions {
   readonly input: (data: string) => void;
   readonly resize: (cols: number, rows: number) => void;
   readonly failure: (error: unknown) => void;
+  readonly keyboard?: (event: KeyboardEvent) => boolean;
 }
 
 export class TerminalView {
@@ -54,6 +55,9 @@ export class TerminalView {
         terminal.loadAddon(fitAddon);
         parent.replaceChildren();
         terminal.open(parent);
+        terminal.attachCustomKeyEventHandler((event) =>
+          event.type === "keydown" ? this.actions?.keyboard?.(event) ?? true : true
+        );
         parent.removeAttribute("aria-busy");
         this.terminal = terminal;
         this.fitAddon = fitAddon;

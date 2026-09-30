@@ -7,6 +7,7 @@ import { TerminalView } from "./terminal-view.ts";
 interface TerminalPanelFeedback {
   readonly status: (message: string, kind: "normal" | "busy" | "warning" | "success") => void;
   readonly error: (error: unknown) => void;
+  readonly keyboard?: (event: KeyboardEvent) => boolean;
 }
 
 export class TerminalPanel {
@@ -66,6 +67,7 @@ export class TerminalPanel {
       input: (data) => this.controller.sendInput(data),
       resize: (cols, rows) => this.controller.resize(cols, rows),
       failure: (error) => this.controller.reportViewFailure(error),
+      keyboard: this.feedback.keyboard,
     });
     const dimensions = this.view.dimensions();
     if (dimensions && this.controller.state.status === "idle") {

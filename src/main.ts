@@ -1,6 +1,5 @@
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght-italic.css";
-import "./styles.css";
 import "./shared/layout.css";
 import "./shared/controls.css";
 import "./shared/select-control.css";
@@ -40,7 +39,7 @@ import { ThemedSelectHost } from "./shared/themed-select-host.ts";
 interface ApplicationRuntime { dispose(): void; }
 let activeRuntime: ApplicationRuntime | null = null;
 
-export function startApplication(catalog: LocaleCatalog): ApplicationRuntime {
+export async function startApplication(catalog: LocaleCatalog): Promise<ApplicationRuntime> {
   activeRuntime?.dispose();
   document.title = BRAND.name;
   document
@@ -65,6 +64,11 @@ export function startApplication(catalog: LocaleCatalog): ApplicationRuntime {
   };
   activeRuntime = runtime;
   window.addEventListener("pagehide", runtime.dispose, { once: true });
-  void app.start();
-  return runtime;
+  try {
+    await app.start();
+    return runtime;
+  } catch (error) {
+    runtime.dispose();
+    throw error;
+  }
 }

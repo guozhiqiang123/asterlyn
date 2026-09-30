@@ -632,9 +632,7 @@ export class EditableDiffEditor {
       keymap.of([
         ...defaultKeymap,
         ...historyKeymap,
-        ...searchKeymap,
-        { key: "Mod-f", run: openSearchPanel },
-        { key: "Mod-s", run: () => this.requestSave() },
+        ...searchKeymap.filter((binding) => binding.key !== "Mod-f"),
       ]),
       editable ? EditorView.updateListener.of((update) => this.onDocUpdate(update)) : [],
     ];
@@ -733,13 +731,6 @@ export class EditableDiffEditor {
       this.interactions?.activate?.(chunk, index);
     }, true);
     return button;
-  }
-
-  private requestSave(): boolean {
-    if (!this.interactions?.save) return false;
-    this.flushChanges();
-    this.interactions.save(this.content());
-    return true;
   }
 
   private observeRevertControls(): void {

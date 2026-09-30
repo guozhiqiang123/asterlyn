@@ -24,3 +24,13 @@ After building the desktop binary, a repository can be opened directly:
 ```bash
 target/release/asterlyn /path/to/repository
 ```
+
+On macOS, the production startup regression can be checked end to end with:
+
+```bash
+npm run test:native:rendered:build
+```
+
+Unlike the cross-platform liveness smoke, this check inspects the native window and fails when the
+process stays alive but the application shell remains blank. macOS may request Accessibility access
+for the terminal or automation host running the check.

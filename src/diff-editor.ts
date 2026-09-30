@@ -21,7 +21,6 @@ import {
 } from "@codemirror/view";
 import {
   highlightSelectionMatches,
-  openSearchPanel,
   searchKeymap,
 } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
@@ -407,11 +406,7 @@ export class DiffEditor {
         ),
       }),
       keymap.of([
-        ...searchKeymap,
-        {
-          key: "Mod-f",
-          run: openSearchPanel,
-        },
+        ...searchKeymap.filter((binding) => binding.key !== "Mod-f"),
       ]),
     ];
     if (rows && side) {

@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import {
+  accessibilitySnapshotIsReady,
   createRepositoryFixture,
   isolatedDesktopEnvironment,
   smokeProcess,
@@ -21,6 +22,47 @@ test("accepts a process that remains alive for the observation window", async ()
   });
 
   assert.equal(result.observationMs, 80);
+});
+
+test("requires visible readiness when a probe is supplied", async () => {
+  let probes = 0;
+  const result = await smokeProcess({
+    command: process.execPath,
+    args: ["-e", "setInterval(() => {}, 1_000)"],
+    observationMs: 500,
+    probeIntervalMs: 10,
+    readinessProbe: async () => {
+      probes += 1;
+      return { ready: probes >= 2, detail: "window exists without shell" };
+    },
+    shutdownGraceMs: 500,
+  });
+
+  assert.equal(result.rendered, true);
+  assert.equal(probes, 2);
+});
+
+test("rejects a live process whose window never renders the shell", async () => {
+  await assert.rejects(
+    smokeProcess({
+      command: process.execPath,
+      args: ["-e", "setInterval(() => {}, 1_000)"],
+      observationMs: 80,
+      probeIntervalMs: 10,
+      readinessProbe: async () => ({ ready: false, detail: "blank native window" }),
+      shutdownGraceMs: 500,
+    }),
+    /stayed alive but did not render.*blank native window/su,
+  );
+});
+
+test("recognizes the rendered shell version in a macOS accessibility snapshot", () => {
+  assert.equal(accessibilitySnapshotIsReady("READY", "0.1"), true);
+  assert.equal(
+    accessibilitySnapshotIsReady("static text 0.1 of group Asterlyn version 0.1", "0.1"),
+    true,
+  );
+  assert.equal(accessibilitySnapshotIsReady("window Asterlyn", "0.1"), false);
 });
 
 test("rejects a process that exits during the observation window", async () => {

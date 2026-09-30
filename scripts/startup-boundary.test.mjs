@@ -6,6 +6,7 @@ test("the native bridge is static while the deterministic browser demo is lazy",
   const bridge = await readFile(new URL("../src/bridge.ts", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
   const config = await readFile(new URL("../vite.config.ts", import.meta.url), "utf8");
+  const bootstrap = await readFile(new URL("../src/bootstrap.ts", import.meta.url), "utf8");
 
   assert.match(bridge, /from ["']\.\/adapters\/tauri\/tauri-desktop-bridge\.ts["']/);
   assert.match(
@@ -16,4 +17,9 @@ test("the native bridge is static while the deterministic browser demo is lazy",
   assert.doesNotMatch(app, /from ["']\.\/demo(?:\.ts)?["']/);
   assert.match(config, /MAIN_CHUNK_MAX_BYTES\s*=\s*500_000/);
   assert.match(config, /production startup contains browser demo modules/);
+  assert.match(config, /assertStartupBundlePolicy\(\)/);
+  assert.match(config, /preserveEntrySignatures:\s*STARTUP_BUNDLE_POLICY\.preserveEntrySignatures/);
+  assert.match(config, /strictExecutionOrder:\s*STARTUP_BUNDLE_POLICY\.strictExecutionOrder/);
+  assert.match(bootstrap, /import\(["']\.\/startup-runtime\.ts["']\)/);
+  assert.match(bootstrap, /renderStartupFailure/);
 });

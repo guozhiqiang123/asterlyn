@@ -182,18 +182,18 @@ import {
   renderSettingsNavigation,
   renderSettingsSection,
 } from "./features/settings/settings-view";
-import {
-  ShellController,
-  type ShellState,
-} from "./shell/shell-controller";
+import { bindKeybindingSettings } from "./features/keybindings/keybinding-settings-binding.ts";
+import { renderKeybindingSettings } from "./features/keybindings/keybinding-view.ts";
+import { ShellController, type ShellState } from "./shell/shell-controller";
 import { renderShellView } from "./shell/shell-view";
 import { clearNavigatorRootTarget, navigatorHeaderHost, renderChangesNavigatorHeader, renderFilesNavigatorHeader } from "./shell/navigator-header";
 import { ActivityRailBinding } from "./shell/activity-rail-binding";
 import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
+import { refreshCommandCenterShortcut, shortcutFocusScope } from "./shell/shortcut-presentation.ts";
 import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
-import { primaryShortcut } from "./shell/window-chrome";
 import { WindowSession } from "./application/window-session";
+import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
 import { renderRepositoryProjectionSlices } from "./application/repository-projection-renderer.ts";
 import { RepositoryIntegrationCoordinator } from "./application/repository-integration-coordinator";
@@ -289,7 +289,7 @@ import {
 } from "./presentation/presentation-environment";
 import { nativeAppearance } from "./adapters/tauri/tauri-appearance-adapter";
 import { SettingsPresentationRuntime } from "./composition/settings-presentation-runtime.ts";
-import type { LocaleCatalog, NavigationCommandId } from "./localization/catalog";
+import type { LocaleCatalog } from "./localization/catalog";
 import { loadLocale } from "./localization/locale-loader";
 import { createLocalization, type Localization } from "./localization/localization";
 import {
@@ -439,6 +439,8 @@ export class AsterlynApp {
   private editorTabsMarkup = "";
   private readonly settingsPresentationRuntime: SettingsPresentationRuntime;
   private readonly shellController: ShellController;
+  private readonly shortcuts: KeyboardShortcutRuntime;
+  private readonly releaseKeybindings: () => void;
   private readonly terminalPanel: TerminalPanel;
   private projectTreeScrollFrame: number | null = null;
   private projectTreeWindowStart = 0;
@@ -558,10 +560,58 @@ export class AsterlynApp {
       settingsChanged: (change) => this.handleSettingsControllerChange(change),
     });
     this.shellController = new ShellController(window.localStorage);
+    this.shortcuts = new KeyboardShortcutRuntime(window, window.localStorage, {
+      navigationCopy: () => this.localization.catalog.navigation.commands,
+      commandPaletteCopy: () => ({ label: this.localization.catalog.navigation.titles.commands, detail: this.localization.catalog.navigation.hints.commands }),
+      workspaceRequiredReason: () => this.localization.catalog.settings.keybindings.workspaceRequired,
+      editorRequiredReason: () => this.localization.catalog.settings.keybindings.editorRequired,
+      historyRequiredReason: () => this.localization.catalog.settings.keybindings.historyRequired,
+      gitRequiredReason: () => this.localization.catalog.settings.keybindings.gitRequired,
+      workspaceOpen: () => this.windowSession.workspace.state.root !== null,
+      gitAvailable: () => this.windowSession.repository.state.snapshot !== null,
+      editorFindAvailable: () => Boolean(this.root.querySelector(".cm-editor")),
+      historyFindAvailable: () => this.shellState.layout.bottomTool === "branches",
+      saveAvailable: () => {
+        const tab = activeEditableTextTab(
+          this.editorState.session,
+          this.activeDocument(),
+          this.filesState.files,
+        );
+        return tab?.status === "ready";
+      },
+      refreshAvailable: () => this.windowSession.workspace.state.root !== null && !this.state.loading,
+      openCommandSurface: (mode) => this.openCommandSurface(mode),
+      openRepository: async () => { await this.chooseRepository(); },
+      openEditorFind: () => this.editorSurface.openFindReplace(),
+      focusHistoryFilter: () => this.focusHistoryFilter(),
+      saveFile: async () => {
+        const tab = activeEditableTextTab(
+          this.editorState.session,
+          this.activeDocument(),
+          this.filesState.files,
+        );
+        if (tab?.status === "ready") await this.saveTextTab(tab.id);
+      },
+      refresh: async () => { await this.refresh(); },
+      toggleTool: (tool) => this.toggleTool(tool),
+      scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
+      pending: (active) => {
+        const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
+        if (active || this.root.querySelector("#status-message")?.textContent === waiting) this.setStatus(active ? waiting : this.localization.catalog.common.ready, "normal");
+      },
+      blocked: (reason) => this.setStatus(reason, "warning"), error: (error) => this.showError(error),
+    });
+    this.releaseKeybindings = this.shortcuts.subscribe(() => {
+      if (!this.root.querySelector(".app-shell")) return;
+      this.refreshShortcutPresentation();
+      if (this.filesEditorRuntime.commands.state.mode === "commands") this.renderCommandSurface(true);
+      if (this.shellState.page === "settings" && this.settingsState.section === "keybindings") this.renderSettingsPage();
+    });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),
       error: (error) => this.showError(error),
+      keyboard: this.shortcuts.handleTerminalKeyEvent,
     });
     this.findResultsRuntime = new FindResultsRuntime(root, {
       copy: () => this.localization.catalog,
@@ -1413,7 +1463,6 @@ export class AsterlynApp {
       browserWindowFocusPort,
     );
     this.shellEventBinding = new ShellEventBinding(root, {
-      workspaceOpen: () => this.windowSession.workspace.state.root !== null,
       remoteDialogOpen: () => this.remoteState.dialog !== null,
       remoteOperationActive: () => this.remoteState.operation !== null,
       pushDiffOpen: () => this.remoteState.pushDiff !== null,
@@ -1429,11 +1478,6 @@ export class AsterlynApp {
       ),
       commandSurfaceOpen: () => this.filesEditorRuntime.commands.state.mode !== null,
       historyFilterOpen: () => this.gitHistoryPresentationRuntime.filterState.historyFilterMenu !== null,
-      historyToolOpen: () => this.shellState.layout.bottomTool === "branches",
-      activeReadyTextTab: () => {
-        const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
-        return tab?.status === "ready" ? tab.id : null;
-      },
       dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationRuntime.controller.hasUnsavedConflict()),
       toggleRepositoryMenu: () => {
         this.shellController.toggleRepositoryMenu();
@@ -1447,7 +1491,6 @@ export class AsterlynApp {
       },
       remoteAction: (kind, anchor) => void this.activateRemoteAction(kind, anchor),
       cancelRemoteOperation: () => void this.cancelActiveRemoteOperation(),
-      refresh: () => void this.refresh(),
       openSettings: () => this.openSettings(),
       closeSettings: () => this.closeSettings(),
       openCommandSurface: (mode) => this.openCommandSurface(mode),
@@ -1509,9 +1552,6 @@ export class AsterlynApp {
         this.gitHistoryPresentationRuntime.filters.closeMenus();
         if (this.shellState.layout.bottomTool === "branches") this.renderHistoryPane();
       },
-      saveTextTab: (tabId) => void this.saveTextTab(tabId),
-      focusHistoryFilter: () => this.focusHistoryFilter(),
-      openEditorFind: () => this.editorSurface.openFindReplace(),
       captureEditor: () => this.captureMountedTextEditor(),
       disposeFeatures: () => this.dispose(),
     });
@@ -1701,8 +1741,10 @@ export class AsterlynApp {
   async start(): Promise<void> {
     this.shellController.setWindowChromeMode(await bridge.windowChromeMode());
     this.renderShell();
+    this.refreshShortcutPresentation();
     this.applyAppPreferences();
     this.shellEventBinding.bind();
+    this.shortcuts.bind();
     this.windowChromeBinding.bind();
     this.activityRailBinding.bind();
     this.bindWorkbenchSplitters();
@@ -1737,8 +1779,8 @@ export class AsterlynApp {
       windowControlsAvailable: this.windowChromeBinding.available,
       localization: this.localization.catalog,
     });
+    this.root.ownerDocument.documentElement.dataset.startupState = "ready";
   }
-
   private async activateLocale(locale: "en-US" | "zh-CN"): Promise<void> {
     const request = ++this.localeRequestGeneration;
     const restoreFocus = this.captureLocaleChangeFocus();
@@ -1868,9 +1910,7 @@ export class AsterlynApp {
     const status = this.root.querySelector<HTMLElement>("#status-message");
     if (status && status.textContent === previousCatalog?.common.ready) status.textContent = common.ready;
     text("#command-center-button span", copy.search);
-    const searchShortcut = primaryShortcut(this.shellState.windowChromeMode, "P");
-    text("#command-center-button kbd", searchShortcut.label);
-    label("#command-center-button", copy.searchFilesAndCommands, `${copy.searchFilesAndCommands} (${searchShortcut.accessible})`);
+    this.refreshShortcutPresentation();
     this.root.querySelector("#remote-toolbar")?.setAttribute("aria-label", copy.remoteActions);
     label(".topbar-remote-select", copy.remoteForActions);
     label("#topbar-remote-select", copy.remoteForActions);
@@ -1906,6 +1946,14 @@ export class AsterlynApp {
     text("#repository-target-current", copy.currentWindow);
     text("#repository-target-new", copy.newWindow);
     label("#repository-target-close", copy.cancelOpeningProject);
+  }
+
+  private refreshShortcutPresentation(): void {
+    refreshCommandCenterShortcut(
+      this.root,
+      this.localization.catalog.shell.searchFilesAndCommands,
+      this.shortcuts.keybindings,
+    );
   }
 
   private commitActivityOrder(order: ActivityTool[], focusTool: ActivityTool): void {
@@ -1946,6 +1994,8 @@ export class AsterlynApp {
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.settingsPresentationRuntime.dispose();
+    this.releaseKeybindings();
+    this.shortcuts.dispose();
     this.shellController.dispose();
     this.windowChromeBinding.dispose();
     this.activityRailBinding.dispose();
@@ -1988,17 +2038,33 @@ export class AsterlynApp {
     });
   }
 
-  private renderSettingsPage(): void {
+  private renderSettingsPage(
+    focusSelector?: string,
+    selection?: readonly [number, number],
+  ): void {
     this.query("#settings-navigation").innerHTML = renderSettingsNavigation(
       this.settingsState.section,
       this.localization.catalog.settings,
     );
-    this.query("#settings-content").innerHTML = renderSettingsSection(
-      this.settingsState,
-      this.editorFontStatus,
-      this.localization.catalog.settings,
-    );
+    this.query("#settings-content").innerHTML = this.settingsState.section === "keybindings"
+      ? renderKeybindingSettings(
+        this.shortcuts.keybindings.viewModel(), this.shortcuts.keybindings.platform,
+        this.localization.catalog.settings.keybindings,
+      )
+      : renderSettingsSection(
+        this.settingsState, this.editorFontStatus, this.localization.catalog.settings,
+      );
     this.bindSettingsEvents();
+    if (focusSelector) {
+      queueMicrotask(() => {
+        const target = this.root.querySelector<HTMLElement>(focusSelector);
+        target?.focus();
+        if (
+          selection &&
+          (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+        ) target.setSelectionRange(selection[0], selection[1]);
+      });
+    }
   }
 
   private bindSettingsEvents(): void {
@@ -2016,6 +2082,20 @@ export class AsterlynApp {
           );
         });
       });
+    if (this.settingsState.section === "keybindings") {
+      bindKeybindingSettings(this.root, this.shortcuts.keybindings, {
+        render: (focusSelector, selection) => this.renderSettingsPage(focusSelector, selection),
+        error: (error) => this.showError(error),
+        confirm: (message) => this.dialogRuntime.confirm({
+          title: this.localization.catalog.settings.keybindings.resetAll,
+          message,
+          confirmLabel: this.localization.catalog.settings.keybindings.resetAll,
+          cancelLabel: this.localization.catalog.common.cancel,
+          destructive: true,
+        }),
+        copy: this.localization.catalog.settings.keybindings,
+      });
+    }
     this.root
       .querySelector<HTMLSelectElement>("#setting-editor-font-family")
       ?.addEventListener("change", (event) => {
@@ -2781,73 +2861,12 @@ export class AsterlynApp {
   }
 
   private navigationCommands(): NavigationCommand[] {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const hasWorkspace = this.windowSession.workspace.state.root !== null;
-    const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
-    const copy = this.localization.catalog.navigation.commands;
-    const command = (
-      id: NavigationCommandId,
-      enabled: boolean,
-      shortcut?: string,
-    ): NavigationCommand => ({
-      id,
-      label: copy[id].label,
-      detail: copy[id].detail,
-      keywords: copy[id].aliases,
-      ...(shortcut ? { shortcut } : {}),
-      enabled,
-    });
-    return [
-      command("open-repository", true, primaryShortcut(this.shellState.windowChromeMode, "O").label),
-      command("go-file", hasWorkspace, primaryShortcut(this.shellState.windowChromeMode, "P").label),
-      command("recent-files", hasWorkspace, primaryShortcut(this.shellState.windowChromeMode, "E").label),
-      command("find-workspace", hasWorkspace, primaryShortcut(this.shellState.windowChromeMode, "F", true).label),
-      command("find-current", Boolean(tab?.status === "ready"), primaryShortcut(this.shellState.windowChromeMode, "F").label),
-      command("save-current", Boolean(tab && isTextTabDirty(tab) && !tab.saveRequest), primaryShortcut(this.shellState.windowChromeMode, "S").label),
-      command("refresh", Boolean(hasWorkspace && !this.state.loading), primaryShortcut(this.shellState.windowChromeMode, "R").label),
-      command("toggle-files", hasWorkspace),
-      command("toggle-changes", Boolean(snapshot)),
-      command("toggle-git", Boolean(snapshot)),
-      command("toggle-terminal", hasWorkspace),
-    ];
+    return this.shortcuts.navigationCommands();
   }
 
   private executeNavigationCommand(commandId: string): void {
-    if (commandId === "go-file" || commandId === "recent-files" || commandId === "find-workspace") {
-      this.openCommandSurface(
-        commandId === "go-file" ? "files" : commandId === "recent-files" ? "recent" : "workspace",
-      );
-      return;
-    }
     this.dismissCommandSurface();
-    switch (commandId) {
-      case "open-repository":
-        void this.chooseRepository();
-        break;
-      case "find-current":
-        queueMicrotask(() => this.editorSurface.openFindReplace());
-        break;
-      case "save-current": {
-        const tab = activeEditableTextTab(this.editorState.session, this.activeDocument(), this.filesState.files);
-        if (tab) void this.saveTextTab(tab.id);
-        break;
-      }
-      case "refresh":
-        void this.refresh();
-        break;
-      case "toggle-files":
-        this.toggleTool("files");
-        break;
-      case "toggle-changes":
-        this.toggleTool("changes");
-        break;
-      case "toggle-git":
-        this.toggleTool("branches");
-        break;
-      case "toggle-terminal":
-        this.toggleTool("terminal");
-        break;
-    }
+    queueMicrotask(() => this.shortcuts.execute(commandId));
   }
 
   private async runWorkspaceSearch(): Promise<void> {

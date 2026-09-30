@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from "./catalog.ts";
+import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } from "./keybinding-zh-CN.ts";
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 import { ZH_CN_STASH_COPY } from "./stash-copy.ts";
@@ -65,7 +65,8 @@ export const ZH_CN = {
   },
   settings: {
     planned: "计划中", available: "可用",
-    sections: { general: "常规", appearance: "外观", editor: "编辑器", "version-control": "版本控制", code: "代码" },
+    sections: { general: "常规", appearance: "外观", editor: "编辑器", keybindings: "快捷键", "version-control": "版本控制", code: "代码" },
+    keybindings: KEYBINDING_ZH_CN,
     generalTitle: "常规", generalDescription: "应用范围的行为与界面语言。", languageLabel: "应用语言",
     languageDescription: "选择固定的界面语言，或跟随操作系统。", languageSystem: "跟随系统", languageEnglish: "English", languageChinese: "简体中文",
     appearanceTitle: "外观", appearanceDescription: "界面颜色和应用菜单字体。", themeLabel: "主题",

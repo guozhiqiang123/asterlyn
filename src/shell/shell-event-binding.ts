@@ -33,7 +33,6 @@ export function bindDelegatedRemoteActions(
 }
 
 export interface ShellEventActions {
-  readonly workspaceOpen: () => boolean;
   readonly remoteDialogOpen: () => boolean;
   readonly remoteOperationActive: () => boolean;
   readonly pushDiffOpen: () => boolean;
@@ -45,14 +44,11 @@ export interface ShellEventActions {
   readonly replacementClosable: () => boolean;
   readonly commandSurfaceOpen: () => boolean;
   readonly historyFilterOpen: () => boolean;
-  readonly historyToolOpen: () => boolean;
-  readonly activeReadyTextTab: () => string | null;
   readonly dirtyTextTabs: () => number;
   readonly toggleRepositoryMenu: () => void;
   readonly selectRemote: (remote: string) => void;
   readonly remoteAction: (kind: RemoteActionKind, anchor: HTMLButtonElement) => void;
   readonly cancelRemoteOperation: () => void;
-  readonly refresh: () => void;
   readonly openSettings: () => void;
   readonly closeSettings: () => void;
   readonly openCommandSurface: (mode: NavigationMode) => void;
@@ -77,9 +73,6 @@ export interface ShellEventActions {
   readonly closeRepositoryMenu: (restoreFocus: boolean) => void;
   readonly closeEditorTabMenu: () => void;
   readonly closeHistoryFilter: () => void;
-  readonly saveTextTab: (tabId: string) => void;
-  readonly focusHistoryFilter: () => void;
-  readonly openEditorFind: () => void;
   readonly captureEditor: () => void;
   readonly disposeFeatures: () => void;
 }
@@ -214,30 +207,8 @@ export class ShellEventBinding {
 
   private handleWindowKeydown(event: KeyboardEvent): void {
     if (event.isComposing) return;
-    const mod = event.ctrlKey || event.metaKey;
-    if (mod && event.shiftKey && event.key.toLowerCase() === "p") return this.prevent(event, () => this.actions.openCommandSurface("commands"));
-    if (mod && event.shiftKey && event.key.toLowerCase() === "f" && this.actions.workspaceOpen()) return this.prevent(event, () => this.actions.openCommandSurface("workspace"));
-    if (mod && !event.shiftKey && event.key.toLowerCase() === "p" && this.actions.workspaceOpen()) return this.prevent(event, () => this.actions.openCommandSurface("files"));
-    if (mod && !event.shiftKey && event.key.toLowerCase() === "e" && this.actions.workspaceOpen()) return this.prevent(event, () => this.actions.openCommandSurface("recent"));
     if (event.key === "Escape" && this.handleEscape()) {
       event.preventDefault();
-      return;
-    }
-    if (mod && event.key.toLowerCase() === "r") return this.prevent(event, () => this.actions.refresh());
-    if (mod && event.key.toLowerCase() === "s") {
-      const tabId = this.actions.activeReadyTextTab();
-      if (tabId) return this.prevent(event, () => this.actions.saveTextTab(tabId));
-    }
-    if (
-      mod && event.key.toLowerCase() === "f" && !this.actions.commandSurfaceOpen() &&
-      !event.defaultPrevented && !(event.target instanceof Element && event.target.closest(".cm-editor"))
-    ) {
-      event.preventDefault();
-      if (event.target instanceof Element && event.target.closest("#bottom-tool") && this.actions.historyToolOpen()) {
-        this.actions.focusHistoryFilter();
-      } else if (this.actions.activeReadyTextTab()) {
-        this.actions.openEditorFind();
-      }
     }
   }
 

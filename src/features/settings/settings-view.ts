@@ -63,6 +63,8 @@ export function renderSettingsSection(
         copy.editorDescription,
         `${settingsRow(copy.editorFontLabel, copy.editorFontDescription, editorFontControl(preferences, fontStatus, copy))}${settingsRow(copy.editorFontSizeLabel, copy.editorFontSizeDescription, settingsSelect("setting-editor-font", copy.editorFontSizeAria, "editorFontSize", EDITOR_FONT_SIZES, preferences.editorFontSize, (value) => `${value} px`))}${settingsRow(copy.lineSpacingLabel, copy.lineSpacingDescription, settingsSelect("setting-editor-line-height", copy.lineSpacingAria, "editorLineHeight", EDITOR_LINE_HEIGHTS, preferences.editorLineHeight, (value) => value.toFixed(2)))}${settingsRow(copy.letterSpacingLabel, copy.letterSpacingDescription, settingsSelect("setting-editor-letter-spacing", copy.letterSpacingAria, "editorLetterSpacing", EDITOR_LETTER_SPACINGS, preferences.editorLetterSpacing, (value) => value === 0 ? copy.defaultPixels(0) : `${value > 0 ? "+" : ""}${value} px`))}${settingsRow(copy.indentLabel, copy.indentDescription, settingsSelect("setting-editor-indent", copy.indentAria, "editorIndentSize", EDITOR_INDENT_SIZES, preferences.editorIndentSize, copy.spaces))}${settingsRow(copy.tabWidthLabel, copy.tabWidthDescription, settingsSelect("setting-editor-tab", copy.tabWidthAria, "editorTabSize", EDITOR_TAB_SIZES, preferences.editorTabSize, copy.spaces))}`,
       );
+    case "keybindings":
+      return "";
     case "version-control":
       return settingsGroup(
         copy.versionControlTitle,

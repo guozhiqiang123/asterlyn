@@ -1,22 +1,47 @@
 import { spawn } from "node:child_process";
-import { appendFile, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const DEFAULT_OBSERVATION_MS = 6_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 2_000;
+const DEFAULT_PROBE_INTERVAL_MS = 250;
 const MAX_CAPTURED_CHARACTERS = 32_768;
+
+const MACOS_ACCESSIBILITY_SNAPSHOT = `on run argv
+  set targetPid to item 1 of argv as integer
+  set expectedVersion to item 2 of argv
+  tell application "System Events"
+    set targetProcesses to every application process whose unix id is targetPid
+    if (count of targetProcesses) is 0 then return "PROCESS_MISSING"
+    tell item 1 of targetProcesses
+      if (count of windows) is 0 then return "WINDOW_MISSING"
+      set windowElements to entire contents of window 1
+      repeat with windowElement in windowElements
+        try
+          if (value of windowElement as text) is expectedVersion then return "READY"
+        end try
+      end repeat
+      return "SHELL_MARKER_MISSING"
+    end tell
+  end tell
+end run`;
 
 export async function smokeProcess({
   command,
   args = [],
   observationMs = DEFAULT_OBSERVATION_MS,
   shutdownGraceMs = DEFAULT_SHUTDOWN_GRACE_MS,
+  readinessProbe = null,
+  probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   environment = process.env,
 }) {
   if (!Number.isFinite(observationMs) || observationMs <= 0) {
     throw new Error("observationMs must be a positive number.");
+  }
+  if (!Number.isFinite(probeIntervalMs) || probeIntervalMs <= 0) {
+    throw new Error("probeIntervalMs must be a positive number.");
   }
 
   let stdout = "";
@@ -45,19 +70,32 @@ export async function smokeProcess({
   });
 
   await spawned;
-  const outcome = await Promise.race([
-    exited.then((exit) => ({ kind: "exit", exit })),
-    delay(observationMs).then(() => ({ kind: "observed" })),
-  ]);
+  try {
+    const outcome = readinessProbe
+      ? await observeReadiness(child.pid, exited, readinessProbe, observationMs, probeIntervalMs)
+      : await Promise.race([
+        exited.then((exit) => ({ kind: "exit", exit })),
+        delay(observationMs).then(() => ({ kind: "observed" })),
+      ]);
 
-  if (outcome.kind === "exit") {
-    throw new Error(
-      formatEarlyExit(command, observationMs, outcome.exit, stdout, stderr),
-    );
+    if (outcome.kind === "exit") {
+      throw new Error(
+        formatEarlyExit(command, observationMs, outcome.exit, stdout, stderr),
+      );
+    }
+    if (outcome.kind === "not-ready") {
+      throw new Error(formatNotReady(command, observationMs, outcome.detail, stdout, stderr));
+    }
+
+    return {
+      observationMs,
+      rendered: outcome.kind === "ready",
+      stdout,
+      stderr,
+    };
+  } finally {
+    await stopProcessTree(child, exited, shutdownGraceMs);
   }
-
-  await stopProcessTree(child, exited, shutdownGraceMs);
-  return { observationMs, stdout, stderr };
 }
 
 export async function createRepositoryFixture() {
@@ -95,11 +133,14 @@ export function isolatedDesktopEnvironment(root, environment = process.env) {
   };
 }
 
-async function runNativeSmoke(executableArgument) {
+async function runNativeSmoke(executableArgument, { requireRendered = false } = {}) {
   const executable = resolve(executableArgument);
   const executableStat = await stat(executable).catch(() => null);
   if (!executableStat?.isFile()) {
     throw new Error(`Native executable was not found: ${executable}`);
+  }
+  if (requireRendered && process.platform !== "darwin") {
+    throw new Error("Rendered native smoke currently requires macOS accessibility inspection.");
   }
 
   const profile = await mkdtemp(join(tmpdir(), "asterlyn-native-smoke-profile-"));
@@ -110,22 +151,83 @@ async function runNativeSmoke(executableArgument) {
       process.env.ASTERLYN_SMOKE_OBSERVATION_MS,
       DEFAULT_OBSERVATION_MS,
     );
+    const readyVersion = requireRendered ? await readBrandVersion() : null;
     const result = await smokeProcess({
       command: executable,
       args: [fixture],
       observationMs,
+      readinessProbe: readyVersion ? createMacOSReadinessProbe(readyVersion) : null,
       environment: {
         ...isolatedDesktopEnvironment(profile),
         RUST_BACKTRACE: "1",
       },
     });
-    console.log(
-      `Native smoke passed: ${basename(executable)} remained alive for ${result.observationMs} ms.`,
-    );
+    const evidence = result.rendered
+      ? `rendered the application shell within ${result.observationMs} ms`
+      : `remained alive for ${result.observationMs} ms`;
+    console.log(`Native smoke passed: ${basename(executable)} ${evidence}.`);
   } finally {
     if (fixture) await rm(fixture, { force: true, recursive: true });
     await rm(profile, { force: true, recursive: true });
   }
+}
+
+export function accessibilitySnapshotIsReady(snapshot, expectedVersion) {
+  return snapshot === "READY" || (
+    snapshot.includes(expectedVersion) && !snapshot.includes("startup-failure-title")
+  );
+}
+
+export function createMacOSReadinessProbe(expectedVersion) {
+  if (!expectedVersion) throw new Error("A visible version marker is required.");
+  return async (pid) => {
+    const result = await runCommand("osascript", [
+      "-e",
+      MACOS_ACCESSIBILITY_SNAPSHOT,
+      String(pid),
+      expectedVersion,
+    ]);
+    const snapshot = result.stdout.trim();
+    return {
+      ready: accessibilitySnapshotIsReady(snapshot, expectedVersion),
+      detail: snapshot === "" ? "empty accessibility snapshot" : snapshot.slice(0, 240),
+    };
+  };
+}
+
+async function readBrandVersion() {
+  const source = await readFile(new URL("../src/brand.ts", import.meta.url), "utf8");
+  const version = source.match(/version:\s*["']([^"']+)["']/u)?.[1];
+  if (!version) throw new Error("Unable to read the native smoke version marker from src/brand.ts.");
+  return version;
+}
+
+async function observeReadiness(pid, exited, probe, observationMs, probeIntervalMs) {
+  if (pid === undefined) throw new Error("Native process did not expose a process identifier.");
+  const deadline = Date.now() + observationMs;
+  let detail = "the application shell was not exposed";
+  while (Date.now() < deadline) {
+    const probeOutcome = await Promise.race([
+      exited.then((exit) => ({ kind: "exit", exit })),
+      Promise.resolve(probe(pid)).then((result) => ({ kind: "probe", result })),
+    ]);
+    if (probeOutcome.kind === "exit") return probeOutcome;
+
+    const result = typeof probeOutcome.result === "boolean"
+      ? { ready: probeOutcome.result, detail: "" }
+      : probeOutcome.result;
+    if (result.ready) return { kind: "ready" };
+    if (result.detail) detail = result.detail;
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    const pauseOutcome = await Promise.race([
+      exited.then((exit) => ({ kind: "exit", exit })),
+      delay(Math.min(probeIntervalMs, remaining)).then(() => ({ kind: "continue" })),
+    ]);
+    if (pauseOutcome.kind === "exit") return pauseOutcome;
+  }
+  return { kind: "not-ready", detail };
 }
 
 async function stopProcessTree(child, exited, shutdownGraceMs) {
@@ -196,6 +298,16 @@ function formatEarlyExit(command, observationMs, exit, stdout, stderr) {
   return details.join("\n");
 }
 
+function formatNotReady(command, observationMs, detail, stdout, stderr) {
+  const details = [
+    `${command} stayed alive but did not render the application shell within ${observationMs} ms.`,
+    `Last readiness observation: ${detail}.`,
+  ];
+  if (stdout.trim()) details.push(`stdout:\n${stdout.trim()}`);
+  if (stderr.trim()) details.push(`stderr:\n${stderr.trim()}`);
+  return details.join("\n");
+}
+
 function appendBounded(current, addition) {
   const combined = current + addition;
   return combined.length <= MAX_CAPTURED_CHARACTERS
@@ -221,12 +333,15 @@ const invokedDirectly =
   pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
 
 if (invokedDirectly) {
-  const executable = process.argv[2];
-  if (!executable || process.argv.length > 3) {
-    console.error("Usage: node scripts/smoke-native-app.mjs <native-executable>");
+  const arguments_ = process.argv.slice(2);
+  const requireRendered = arguments_.includes("--require-rendered");
+  const positional = arguments_.filter((argument) => argument !== "--require-rendered");
+  const executable = positional[0];
+  if (!executable || positional.length > 1 || arguments_.some((argument) => argument.startsWith("--") && argument !== "--require-rendered")) {
+    console.error("Usage: node scripts/smoke-native-app.mjs [--require-rendered] <native-executable>");
     process.exitCode = 2;
   } else {
-    runNativeSmoke(executable).catch((error) => {
+    runNativeSmoke(executable, { requireRendered }).catch((error) => {
       console.error(error instanceof Error ? error.message : error);
       process.exitCode = 1;
     });

@@ -176,3 +176,220 @@
   color: var(--danger-text);
   text-align: right;
 }
+
+.keybinding-settings {
+  width: min(1120px, 100%);
+}
+
+.keybinding-toolbar {
+  position: sticky;
+  z-index: 2;
+  top: -32px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 0;
+  background: var(--bg-deep);
+}
+
+.keybinding-search {
+  display: flex;
+  min-width: 240px;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
+.keybinding-search input,
+.keybinding-recorder-input {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+  background: var(--surface-inset);
+  color: var(--text);
+  font: inherit;
+}
+
+.keybinding-search input:focus,
+.keybinding-recorder-input:focus {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+
+.keybinding-list {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-chrome);
+}
+
+.keybinding-row {
+  display: grid;
+  min-height: 82px;
+  grid-template-columns: minmax(230px, 1.4fr) minmax(100px, 0.45fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.keybinding-row:last-child {
+  border-bottom: 0;
+}
+
+.keybinding-command-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.keybinding-command-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keybinding-command-copy span,
+.keybinding-command-copy code,
+.keybinding-command-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 2px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keybinding-command-copy code {
+  color: var(--text-faint);
+}
+
+.keybinding-command-meta,
+.keybinding-values,
+.keybinding-row-actions,
+.keybinding-recorder-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.keybinding-values {
+  justify-content: flex-start;
+}
+
+.keybinding-pill {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-inset);
+}
+
+.keybinding-pill > button,
+.keybinding-row-actions button,
+.keybinding-recorder-actions button {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.keybinding-pill > button:hover,
+.keybinding-row-actions button:hover,
+.keybinding-recorder-actions button:hover {
+  background: var(--bg-hover);
+}
+
+.keybinding-pill .keybinding-remove {
+  padding-inline: 7px;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.keybinding-pill kbd,
+.keybinding-recorder-input kbd {
+  font-family: var(--editor-font-family, monospace);
+}
+
+.keybinding-pill.disabled {
+  border-style: dashed;
+  opacity: 0.78;
+}
+
+.keybinding-badge {
+  padding: 2px 5px;
+  border-radius: 10px;
+  background: var(--selection-bg);
+  color: var(--selection-text);
+  font-size: calc(var(--ui-font-size, 13px) - 2px);
+}
+
+.keybinding-badge.warning,
+.keybinding-recorder-error,
+.keybinding-diagnostic {
+  color: var(--warning-text);
+}
+
+.keybinding-recorder,
+.keybinding-diagnostic {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-chrome);
+}
+
+.keybinding-recorder > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.keybinding-recorder > div:first-child span,
+.keybinding-recorder-error {
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
+.keybinding-recorder-input {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  font-size: calc(var(--ui-font-size, 13px) + 1px);
+}
+
+.keybinding-recorder-actions {
+  justify-content: flex-end;
+}
+
+.keybinding-empty,
+.keybinding-unassigned {
+  padding: 18px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .keybinding-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .keybinding-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .keybinding-values,
+  .keybinding-command-meta {
+    grid-column: 1 / -1;
+  }
+}

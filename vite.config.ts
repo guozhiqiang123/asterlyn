@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
+import {
+  assertStartupBundlePolicy,
+  STARTUP_BUNDLE_POLICY,
+} from "./build/startup-bundle-policy.ts";
 
 const MAIN_CHUNK_MAX_BYTES = 500_000;
 
@@ -27,6 +31,12 @@ export default defineConfig({
           fileName: "licenses/codemirror-merge-6.12.2-MIT.txt",
           source: codeMirrorMergeLicense,
         });
+      },
+    },
+    {
+      name: "asterlyn-startup-bundle-policy",
+      configResolved() {
+        assertStartupBundlePolicy();
       },
     },
     {
@@ -67,14 +77,17 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
     rolldownOptions: {
+      preserveEntrySignatures: STARTUP_BUNDLE_POLICY.preserveEntrySignatures,
       output: {
+        strictExecutionOrder: STARTUP_BUNDLE_POLICY.strictExecutionOrder,
         codeSplitting: {
           groups: [
             {
               name: "features",
               test: /[/\\]src[/\\]features[/\\]/,
-              maxSize: 300_000,
-              includeDependenciesRecursively: false,
+              maxSize: STARTUP_BUNDLE_POLICY.featureChunk.maxSize,
+              includeDependenciesRecursively:
+                STARTUP_BUNDLE_POLICY.featureChunk.includeDependenciesRecursively,
             },
           ],
         },

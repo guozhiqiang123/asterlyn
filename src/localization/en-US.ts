@@ -1,7 +1,6 @@
-import type { LocaleCatalog } from "./catalog.ts";
+import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_EN_US } from "./keybinding-en-US.ts";
 import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
 import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts"; import { EN_US_STASH_COPY } from "./stash-copy.ts";
-
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
   common: {
@@ -131,7 +130,8 @@ export const EN_US: LocaleCatalog = {
   settings: {
     planned: "Planned",
     available: "Available",
-    sections: { general: "General", appearance: "Appearance", editor: "Editor", "version-control": "Version Control", code: "Code" },
+    sections: { general: "General", appearance: "Appearance", editor: "Editor", keybindings: "Keyboard Shortcuts", "version-control": "Version Control", code: "Code" },
+    keybindings: KEYBINDING_EN_US,
     generalTitle: "General",
     generalDescription: "Application-wide behavior and presentation language.",
     languageLabel: "Application language",
