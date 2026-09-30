@@ -602,7 +602,7 @@ export const EN_US: LocaleCatalog = {
     noRefs: "No refs", refsAppearHere: "Branches and tags will appear here.", branchOrTag: "Branch or tag",
     filterBranchesAndTags: "Filter branches and tags", noMatchingRefs: "No matching refs",
     tryAnotherRef: "Try another branch, remote, or tag name.", groups: { local: "Local", remote: "Remote", tag: "Tags" },
-    activateAgainForAllRefs: "Activate again to show all refs", worktreeBadge: "WORKTREE", roots: (count) => `${count} Git roots`,
+    activateAgainForAllRefs: "Activate again to show all refs", primaryWorktreeBadge: "PRIMARY", worktreeBadge: "WORKTREE", availableBranchBadge: "AVAILABLE", roots: (count) => `${count} Git roots`,
     allRefs: "All refs", allRefsTitle: "History from local branches, remote-tracking branches, and tags",
     upToCommit: (shortOid) => `Up to ${shortOid}`,
     historyStartsAt: (shortOid, repositoryId) => `History starts at exact commit ${shortOid} in ${repositoryId}`,

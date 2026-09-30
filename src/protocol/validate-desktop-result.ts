@@ -178,7 +178,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         "startHeadOid",
         "previewToken",
       );
-      nullableStrings(result, command, "targetFullName", "newName", "upstream", "worktreePath");
+      nullableStrings(result, command, "targetFullName", "newName", "upstream");
       assert(typeof result.deleteRemote === "boolean", command, "deleteRemote must be a boolean");
       if (result.remoteDeletion !== null) {
         const remoteDeletion = record(result.remoteDeletion, command);
@@ -199,10 +199,23 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         command,
         "mergedIntoCurrent must be boolean or null",
       );
+      if (result.worktreeReview !== null) {
+        const review = record(result.worktreeReview, command);
+        strings(review, command, "path", "primaryHeadOid", "reviewToken");
+        nullableStrings(review, command, "primaryHeadRef");
+        assert(Array.isArray(review.changedPaths) && review.changedPaths.every((path) => typeof path === "string"), command, "changedPaths must be strings");
+        assert(Number.isInteger(review.totalChangedPaths) && Number(review.totalChangedPaths) >= 0, command, "totalChangedPaths must be a non-negative integer");
+        assert(Number.isInteger(review.unmergedCommitCount) && Number(review.unmergedCommitCount) >= 0, command, "unmergedCommitCount must be a non-negative integer");
+        assert(typeof review.changesTruncated === "boolean", command, "changesTruncated must be a boolean");
+        assert(typeof review.forceRequired === "boolean", command, "forceRequired must be a boolean");
+        assert(typeof review.forceAuthorized === "boolean", command, "forceAuthorized must be a boolean");
+        assert(review.forceRequired === (Number(review.totalChangedPaths) > 0 || Number(review.unmergedCommitCount) > 0), command, "forceRequired must match reviewed warnings");
+        assert(!review.forceAuthorized || review.forceRequired, command, "forceAuthorized requires warnings");
+      }
       assert(
-        (result.kind === "removeWorktree") === (typeof result.worktreePath === "string"),
+        (result.kind === "removeWorktree") === (result.worktreeReview !== null),
         command,
-        "worktreePath must be present only for worktree removal",
+        "worktreeReview must be present only for worktree removal",
       );
       break;
     }

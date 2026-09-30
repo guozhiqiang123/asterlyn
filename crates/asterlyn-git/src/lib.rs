@@ -23,6 +23,7 @@ pub use model::{
     RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, StashCatalog, StashEntry,
     StashMutationKind, StashMutationRequest, TagMutationKind, TagMutationRequest,
     TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
+    WorktreeRemovalReview,
 };
 pub use process::CancellationToken;
 pub use repository::GitRepository;

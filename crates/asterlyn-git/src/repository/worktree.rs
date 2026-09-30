@@ -1,17 +1,29 @@
 use std::ffi::OsString;
 use std::path::Path;
 
-use super::{GitRepository, run_from, stale_branch_plan};
+use super::{
+    GitRepository, branch_mutation_token, run_from, stale_branch_plan, validate_object_id,
+};
 use crate::error::GitError;
-use crate::model::BranchMutationPlan;
+use crate::model::{BranchMutationPlan, WorktreeRemovalReview};
 use crate::parser::parse_status;
+
+const REVIEWED_CHANGE_LIMIT: usize = 20;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct RegisteredWorktree {
     pub(super) path: String,
+    pub(super) head_oid: Option<String>,
     pub(super) branch: Option<String>,
     pub(super) locked: bool,
     pub(super) prunable: bool,
+}
+
+pub(super) fn primary_path(worktrees: &[RegisteredWorktree], full_name: &str) -> Option<String> {
+    worktrees
+        .first()
+        .filter(|worktree| worktree.branch.as_deref() == Some(full_name))
+        .map(|worktree| worktree.path.clone())
 }
 
 pub(super) fn linked_path(worktrees: &[RegisteredWorktree], full_name: &str) -> Option<String> {
@@ -43,13 +55,16 @@ impl GitRepository {
         parse_registered_worktrees(&output.stdout)
     }
 
-    pub(super) fn removable_linked_worktree(
+    pub(super) fn worktree_removal_review(
         &self,
         full_name: &str,
-    ) -> Result<RegisteredWorktree, GitError> {
-        let matches: Vec<_> = self
-            .registered_worktrees()?
-            .into_iter()
+        source_oid: &str,
+        force_requested: bool,
+        reviewed_token: Option<&str>,
+    ) -> Result<WorktreeRemovalReview, GitError> {
+        let worktrees = self.registered_worktrees()?;
+        let matches: Vec<_> = worktrees
+            .iter()
             .skip(1)
             .filter(|worktree| worktree.branch.as_deref() == Some(full_name))
             .collect();
@@ -63,7 +78,7 @@ impl GitRepository {
                     "the selected branch is associated with multiple linked Git worktrees"
                         .to_string()
                 },
-                blockers: matches.into_iter().map(|item| item.path).collect(),
+                blockers: matches.into_iter().map(|item| item.path.clone()).collect(),
             });
         };
         if worktree.locked || worktree.prunable {
@@ -97,35 +112,114 @@ impl GitRepository {
             ],
         )?;
         let (_, changes) = parse_status(&status.stdout)?;
-        if !changes.is_empty() {
+        let all_changed_paths = changes
+            .into_iter()
+            .map(|change| change.path)
+            .collect::<Vec<_>>();
+        let total_changed_paths = u32::try_from(all_changed_paths.len()).unwrap_or(u32::MAX);
+        let changed_paths = all_changed_paths
+            .iter()
+            .take(REVIEWED_CHANGE_LIMIT)
+            .cloned()
+            .collect::<Vec<_>>();
+        let primary = worktrees.first().ok_or_else(|| GitError::Parse {
+            context: "Git worktree list".to_string(),
+            message: "Git returned no primary worktree".to_string(),
+        })?;
+        let primary_head_oid = primary.head_oid.clone().ok_or_else(|| GitError::Parse {
+            context: "Git worktree list".to_string(),
+            message: "the primary worktree has no HEAD object".to_string(),
+        })?;
+        validate_object_id(&primary_head_oid)?;
+        let unmerged_commit_count = self.commits_not_in_primary(source_oid, &primary_head_oid)?;
+        let force_required = total_changed_paths > 0 || unmerged_commit_count > 0;
+        // Bind every dirty path into the review token, including paths omitted from the bounded UI
+        // preview. A change outside the displayed sample must still invalidate force authorization.
+        let changes_identity = all_changed_paths.join("\0");
+        let total_identity = total_changed_paths.to_string();
+        let unmerged_identity = unmerged_commit_count.to_string();
+        let review_token = branch_mutation_token(&[
+            "worktree-review",
+            full_name,
+            source_oid,
+            &worktree.path,
+            &primary.path,
+            primary.branch.as_deref().unwrap_or("detached"),
+            &primary_head_oid,
+            &total_identity,
+            &changes_identity,
+            &unmerged_identity,
+        ]);
+        if force_requested && reviewed_token != Some(review_token.as_str()) {
             return Err(GitError::UnsafeOperation {
-                operation: "prepare linked worktree removal".to_string(),
-                message:
-                    "commit, stash, or remove changes in the linked worktree before deleting it"
-                        .to_string(),
-                blockers: changes.into_iter().map(|change| change.path).collect(),
+                operation: "authorize forced linked worktree removal".to_string(),
+                message: "the worktree warnings changed after review; inspect them again"
+                    .to_string(),
+                blockers: vec![worktree.path.clone()],
             });
         }
-        Ok(worktree.clone())
+        if force_requested && !force_required {
+            return Err(GitError::InvalidInput {
+                field: "force worktree removal".to_string(),
+                message: "force is available only when the reviewed worktree has warnings"
+                    .to_string(),
+            });
+        }
+        Ok(WorktreeRemovalReview {
+            path: worktree.path.clone(),
+            changed_paths,
+            total_changed_paths,
+            changes_truncated: usize::try_from(total_changed_paths)
+                .map_or(true, |total| total > REVIEWED_CHANGE_LIMIT),
+            primary_head_ref: primary.branch.clone(),
+            primary_head_oid,
+            unmerged_commit_count,
+            force_required,
+            force_authorized: force_requested,
+            review_token,
+        })
     }
 
     pub(super) fn remove_worktree_from_plan(
         &self,
         plan: &BranchMutationPlan,
     ) -> Result<(), GitError> {
-        let path = plan
-            .worktree_path
-            .as_deref()
-            .ok_or_else(|| stale_branch_plan("the reviewed worktree path is missing"))?;
-        self.run_mutation(
-            "remove reviewed linked worktree",
+        let review = plan
+            .worktree_review
+            .as_ref()
+            .ok_or_else(|| stale_branch_plan("the reviewed worktree evidence is missing"))?;
+        if review.force_required && !review.force_authorized {
+            return Err(stale_branch_plan(
+                "the worktree has warnings that require explicit force authorization",
+            ));
+        }
+        let mut arguments = vec![OsString::from("worktree"), OsString::from("remove")];
+        if review.force_authorized {
+            arguments.push(OsString::from("--force"));
+        }
+        arguments.push(OsString::from(&review.path));
+        self.run_mutation("remove reviewed linked worktree", arguments)?;
+        Ok(())
+    }
+
+    fn commits_not_in_primary(&self, source_oid: &str, primary_oid: &str) -> Result<u32, GitError> {
+        let range = format!("{primary_oid}..{source_oid}");
+        let output = self.run_read_owned(
+            "count commits outside primary worktree HEAD",
             vec![
-                OsString::from("worktree"),
-                OsString::from("remove"),
-                OsString::from(path),
+                OsString::from("rev-list"),
+                OsString::from("--count"),
+                OsString::from(range),
             ],
         )?;
-        Ok(())
+        let count = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<u64>()
+            .map_err(|error| GitError::Parse {
+                context: "worktree commit comparison".to_string(),
+                message: error.to_string(),
+            })?;
+        Ok(u32::try_from(count).unwrap_or(u32::MAX))
     }
 }
 
@@ -133,6 +227,7 @@ fn parse_registered_worktrees(input: &[u8]) -> Result<Vec<RegisteredWorktree>, G
     #[derive(Default)]
     struct PendingWorktree {
         path: Option<String>,
+        head_oid: Option<String>,
         branch: Option<String>,
         locked: bool,
         prunable: bool,
@@ -145,6 +240,7 @@ fn parse_registered_worktrees(input: &[u8]) -> Result<Vec<RegisteredWorktree>, G
         })?;
         Ok(RegisteredWorktree {
             path,
+            head_oid: value.head_oid,
             branch: value.branch,
             locked: value.locked,
             prunable: value.prunable,
@@ -176,7 +272,9 @@ fn parse_registered_worktrees(input: &[u8]) -> Result<Vec<RegisteredWorktree>, G
                 ..PendingWorktree::default()
             });
         } else if let Some(current) = pending.as_mut() {
-            if let Some(branch) = value.strip_prefix("branch ") {
+            if let Some(head_oid) = value.strip_prefix("HEAD ") {
+                current.head_oid = Some(head_oid.to_string());
+            } else if let Some(branch) = value.strip_prefix("branch ") {
                 current.branch = Some(branch.to_string());
             } else if value == "locked" || value.starts_with("locked ") {
                 current.locked = true;
@@ -220,6 +318,11 @@ mod tests {
         assert_eq!(worktrees[1].branch.as_deref(), Some("refs/heads/topic"));
         assert!(worktrees[1].locked);
         assert!(worktrees[1].prunable);
+        assert_eq!(
+            primary_path(&worktrees, "refs/heads/main").as_deref(),
+            Some("/repo")
+        );
+        assert_eq!(primary_path(&worktrees, "refs/heads/topic"), None);
         assert_eq!(linked_path(&worktrees, "refs/heads/main"), None);
         assert_eq!(
             linked_path(&worktrees, "refs/heads/topic").as_deref(),
@@ -266,11 +369,18 @@ mod tests {
             .into_owned();
         let repository = GitRepository::open(directory.path()).expect("repository opens");
         let references = repository.read_references().expect("references");
+        let primary_path = fs::canonicalize(directory.path())
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         assert!(references.iter().any(|branch| {
-            branch.full_name == "refs/heads/main" && branch.linked_worktree_path.is_none()
+            branch.full_name == "refs/heads/main"
+                && branch.primary_worktree_path.as_deref() == Some(primary_path.as_str())
+                && branch.linked_worktree_path.is_none()
         }));
         assert!(references.iter().any(|branch| {
             branch.full_name == "refs/heads/linked"
+                && branch.primary_worktree_path.is_none()
                 && branch.linked_worktree_path.as_deref() == Some(registered_path.as_str())
         }));
 
@@ -278,7 +388,9 @@ mod tests {
             .prepare_branch_mutation(&worktree_request(linked_oid.clone()))
             .expect("worktree removal plan");
         assert_eq!(
-            plan.worktree_path.as_deref(),
+            plan.worktree_review
+                .as_ref()
+                .map(|review| review.path.as_str()),
             Some(registered_path.as_str())
         );
         repository
@@ -300,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn removal_fails_closed_for_dirty_locked_current_and_stale_targets() {
+    fn removal_reviews_dirty_state_and_blocks_locked_current_and_stale_targets() {
         let directory = repository_fixture();
         git(directory.path(), &["branch", "linked"]);
         let linked_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/linked"]);
@@ -319,12 +431,15 @@ mod tests {
         let stale = repository
             .execute_branch_mutation(&plan)
             .expect_err("a dirty worktree invalidates the plan");
-        assert!(stale.to_string().contains("before deleting it"));
+        assert!(stale.to_string().contains("changed"));
         assert!(linked_path.exists());
         let dirty = repository
             .prepare_branch_mutation(&request)
-            .expect_err("dirty worktree is blocked during review");
-        assert!(dirty.to_string().contains("before deleting it"));
+            .expect("dirty worktree is reviewed before force authorization");
+        let review = dirty.worktree_review.as_ref().unwrap();
+        assert!(review.force_required);
+        assert!(!review.force_authorized);
+        assert_eq!(review.changed_paths, ["untracked.txt"]);
         fs::remove_file(linked_path.join("untracked.txt")).unwrap();
 
         git(
@@ -385,6 +500,74 @@ mod tests {
         assert!(error.to_string().contains("multiple"));
     }
 
+    #[test]
+    fn dirty_unmerged_worktree_requires_reviewed_force_and_retains_its_branch() {
+        let directory = repository_fixture();
+        git(directory.path(), &["branch", "linked"]);
+        let linked_parent = tempfile::tempdir().unwrap();
+        let linked_path = linked_parent.path().join("forced");
+        git(
+            directory.path(),
+            &["worktree", "add", linked_path.to_str().unwrap(), "linked"],
+        );
+        fs::write(linked_path.join("committed.txt"), "committed\n").unwrap();
+        git(&linked_path, &["add", "committed.txt"]);
+        git(&linked_path, &["commit", "-m", "Linked only"]);
+        fs::write(linked_path.join("draft.txt"), "draft\n").unwrap();
+        let linked_oid = git_stdout(&linked_path, &["rev-parse", "HEAD"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = worktree_request(linked_oid.clone());
+        let plan = repository
+            .prepare_branch_mutation(&request)
+            .expect("warning review is prepared");
+        let review = plan.worktree_review.as_ref().unwrap();
+        assert_eq!(review.changed_paths, ["draft.txt"]);
+        assert_eq!(review.unmerged_commit_count, 1);
+        assert!(review.force_required);
+        assert!(!review.force_authorized);
+        let ordinary = repository
+            .execute_branch_mutation(&plan)
+            .expect_err("warning review cannot execute without force authorization");
+        assert!(ordinary.to_string().contains("force authorization"));
+
+        fs::write(linked_path.join("late.txt"), "late\n").unwrap();
+        let stale_force = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                force_worktree_removal: true,
+                reviewed_worktree_token: Some(review.review_token.clone()),
+                ..request.clone()
+            })
+            .expect_err("changed warnings invalidate force authorization");
+        assert!(stale_force.to_string().contains("warnings changed"));
+
+        let refreshed = repository
+            .prepare_branch_mutation(&request)
+            .expect("changed warnings are reviewed again");
+        let refreshed_review = refreshed.worktree_review.as_ref().unwrap();
+        assert_eq!(refreshed_review.total_changed_paths, 2);
+        let forced = repository
+            .prepare_branch_mutation(&BranchMutationRequest {
+                force_worktree_removal: true,
+                reviewed_worktree_token: Some(refreshed_review.review_token.clone()),
+                ..request
+            })
+            .expect("exact warnings authorize force");
+        assert!(
+            forced
+                .worktree_review
+                .as_ref()
+                .is_some_and(|review| review.force_authorized)
+        );
+        repository
+            .execute_branch_mutation(&forced)
+            .expect("reviewed forced removal succeeds");
+        assert!(!linked_path.exists());
+        assert_eq!(
+            git_stdout(directory.path(), &["rev-parse", "refs/heads/linked"]),
+            linked_oid
+        );
+    }
+
     fn repository_fixture() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
         git(directory.path(), &["init", "--initial-branch=main"]);
@@ -406,6 +589,8 @@ mod tests {
             source_oid,
             new_name: None,
             delete_remote: false,
+            force_worktree_removal: false,
+            reviewed_worktree_token: None,
         }
     }
 

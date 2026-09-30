@@ -95,6 +95,33 @@
   color: var(--success-text) !important;
 }
 
+.branch-mutation-warning {
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.branch-mutation-warning > p,
+.branch-mutation-warning > small {
+  margin: 0;
+  color: inherit;
+  line-height: 1.45;
+}
+
+.branch-mutation-warning .branch-mutation-warning-paths {
+  gap: 3px;
+  padding-left: 14px;
+  list-style: disc;
+}
+
+.branch-mutation-warning .branch-mutation-warning-paths li {
+  display: list-item;
+}
+
 .branch-mutation-remote-option {
   display: flex;
   align-items: center;

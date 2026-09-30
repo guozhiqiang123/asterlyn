@@ -320,7 +320,7 @@ test("desktop response validation accepts representative valid payloads", () => 
     startHeadOid: "b".repeat(40),
     upstream: "origin/old",
     mergedIntoCurrent: null,
-    worktreePath: null,
+    worktreeReview: null,
     deleteRemote: false,
     remoteDeletion: null,
     previewToken: "reviewed-plan",
@@ -332,7 +332,12 @@ test("desktop response validation accepts representative valid payloads", () => 
     sourceFullName: "refs/heads/topic",
     sourceName: "topic",
     upstream: null,
-    worktreePath: "/worktrees/topic",
+    worktreeReview: {
+      path: "/worktrees/topic", changedPaths: [], totalChangedPaths: 0, changesTruncated: false,
+      primaryHeadRef: "refs/heads/main", primaryHeadOid: "b".repeat(40),
+      unmergedCommitCount: 0, forceRequired: false, forceAuthorized: false,
+      reviewToken: "worktree-review",
+    },
   };
   assert.deepEqual(validateDesktopResult("prepare_branch_mutation", worktreePlan), worktreePlan);
 });
@@ -373,7 +378,7 @@ test("desktop response validation rejects malformed results", () => {
       sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
       targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
       startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: true,
-      worktreePath: null,
+      worktreeReview: null,
       deleteRemote: false, remoteDeletion: null,
       previewToken: "reviewed-plan",
     }),
@@ -385,11 +390,11 @@ test("desktop response validation rejects malformed results", () => {
       sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
       targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
       startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: null,
-      worktreePath: null,
+      worktreeReview: null,
       deleteRemote: false, remoteDeletion: null,
       previewToken: "reviewed-plan",
     }),
-    /worktreePath must be present only for worktree removal/,
+    /worktreeReview must be present only for worktree removal/,
   );
   assert.throws(
     () => validateDesktopResult("prepare_branch_mutation", {
@@ -397,11 +402,16 @@ test("desktop response validation rejects malformed results", () => {
       sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
       targetFullName: "refs/heads/renamed", newName: "renamed", startHeadRef: "refs/heads/main",
       startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: null,
-      worktreePath: "/worktrees/topic",
+      worktreeReview: {
+        path: "/worktrees/topic", changedPaths: [], totalChangedPaths: 0, changesTruncated: false,
+        primaryHeadRef: "refs/heads/main", primaryHeadOid: "b".repeat(40),
+        unmergedCommitCount: 0, forceRequired: false, forceAuthorized: false,
+        reviewToken: "worktree-review",
+      },
       deleteRemote: false, remoteDeletion: null,
       previewToken: "reviewed-plan",
     }),
-    /worktreePath must be present only for worktree removal/,
+    /worktreeReview must be present only for worktree removal/,
   );
   assert.throws(
     () => validateDesktopResult("read_commit_file", {

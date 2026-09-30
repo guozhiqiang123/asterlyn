@@ -912,7 +912,7 @@ export interface HistoryCopy {
   noMatchingRefs: string;
   tryAnotherRef: string;
   groups: Record<"local" | "remote" | "tag", string>;
-  activateAgainForAllRefs: string; worktreeBadge: string;
+  activateAgainForAllRefs: string; primaryWorktreeBadge: string; worktreeBadge: string; availableBranchBadge: string;
   roots(count: number): string;
   allRefs: string;
   allRefsTitle: string;

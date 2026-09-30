@@ -172,6 +172,7 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: "[ahead 2]",
       committedAt: 1788839400,
       subject: "merge: complete the Git workbench foundation",
+      primaryWorktreePath: "/workspace/asterlyn",
       linkedWorktreePath: null,
     },
     {
@@ -185,6 +186,7 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788838500,
       subject: "feat(history): prototype topology graph lanes",
+      primaryWorktreePath: null,
       linkedWorktreePath: "/demo/worktrees/feature-graph-rendering",
     },
     {
@@ -198,6 +200,7 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788837600,
       subject: "docs: establish Asterlyn roadmap and architecture",
+      primaryWorktreePath: null,
       linkedWorktreePath: null,
     },
     {
@@ -211,6 +214,7 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788839000,
       subject: "feat(git): add tested repository core",
+      primaryWorktreePath: null,
       linkedWorktreePath: null,
     },
     {
@@ -224,6 +228,7 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788837600,
       subject: "docs: establish Asterlyn roadmap and architecture",
+      primaryWorktreePath: null,
       linkedWorktreePath: null,
     },
     {
@@ -237,6 +242,7 @@ export const demoSnapshot: RepositorySnapshot = {
       tracking: null,
       committedAt: 1788837600,
       subject: "docs: establish Asterlyn roadmap and architecture",
+      primaryWorktreePath: null,
       linkedWorktreePath: null,
     },
   ],

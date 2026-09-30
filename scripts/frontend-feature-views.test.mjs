@@ -357,9 +357,15 @@ test("flat push review files sort by file name instead of directory path", () =>
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
   const snapshot = repositorySnapshot();
   snapshot.branches = branchFixtures();
+  snapshot.branches[0].primaryWorktreePath = "/workspace/repo";
   snapshot.branches.push({
     ...snapshot.branches[0], fullName: "refs/heads/topic", name: "topic", current: false,
-    upstream: null, tracking: null, linkedWorktreePath: "/worktrees/topic",
+    upstream: null, tracking: null, primaryWorktreePath: null,
+    linkedWorktreePath: "/worktrees/topic",
+  });
+  snapshot.branches.push({
+    ...snapshot.branches[0], fullName: "refs/heads/available", name: "available", current: false,
+    upstream: null, tracking: null, primaryWorktreePath: null, linkedWorktreePath: null,
   });
   const html = renderBranchNavigation({
     snapshot,
@@ -376,8 +382,11 @@ test("branch navigation keeps repository hierarchy and selection in feature-owne
   assert.match(html, /data-remote-group-toggle="origin" aria-expanded="true"/);
   assert.match(html, /origin/);
   assert.match(html, /branch-row[^>]*selected/);
+  assert.match(html, /branch-primary-worktree-badge[^>]*>PRIMARY</);
   assert.match(html, /branch-worktree-badge[^>]*>WORKTREE</);
-  assert.match(html, /\/worktrees\/topic/u);
+  assert.match(html, /branch-available-badge[^>]*>AVAILABLE</);
+  assert.ok(html.includes("/workspace/repo"));
+  assert.ok(html.includes("/worktrees/topic"));
 
   const collapsed = renderBranchNavigation({
     snapshot,

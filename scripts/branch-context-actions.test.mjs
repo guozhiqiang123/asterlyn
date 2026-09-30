@@ -129,6 +129,25 @@ test("linked worktree branches expose removal instead of local branch deletion",
   assert.deepEqual(events, [["removeWorktree", linked.fullName]]);
 });
 
+test("a branch checked out in the primary worktree cannot be switched, renamed, or deleted elsewhere", () => {
+  const primary = { ...local("main"), primaryWorktreePath: "/repo" };
+  const currentSnapshot = snapshot([local("linked", true), primary]);
+  const selectedTarget = target(primary);
+  const policy = branchContextPolicy(selectedTarget, currentSnapshot, options);
+  const model = branchContextMenuModel(
+    selectedTarget,
+    policy,
+    branchCopyActions(primary, EN_US.history.branchContextMenu),
+    EN_US.history,
+  );
+
+  assert.equal(policy.switch.kind, "blocked");
+  assert.equal(policy.rename.kind, "blocked");
+  assert.equal(policy.delete.kind, "blocked");
+  assert.equal(ids(model).includes("git-branches.context-actions.remove-worktree"), false);
+  assert.equal(ids(model).includes("git-branches.context-actions.delete"), true);
+});
+
 test("tag menu exposes detached checkout, merge, exact remote push, and local or remote deletion", async () => {
   const selectedTag = tag("release/v1");
   const currentSnapshot = snapshot([local("main", true), selectedTag]);

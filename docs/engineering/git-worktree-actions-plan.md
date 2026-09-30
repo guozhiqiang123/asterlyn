@@ -1,12 +1,12 @@
 # Git worktree actions plan
 
-- **Status:** Implemented and locally accepted
+- **Status:** Follow-up locally accepted and installed
 - **Date:** 2026-09-30
 - **Baseline:** `d08e0d8`
 - **Working branch:** `codex/delete-worktree-action`
-- **Scope:** Detect linked Git worktrees in the Branches tool, identify them visibly, and provide a
-  reviewed, safe removal action from the branch context menu. A “New Worktree from Here” workflow
-  is designed as a follow-up but is not part of the first implementation without explicit approval.
+- **Scope:** Detect primary and linked Git worktrees in the Branches tool, show all local branches
+  as `PRIMARY` / `WORKTREE` / `AVAILABLE`, and provide reviewed ordinary or explicitly forced
+  linked-worktree removal. A “New Worktree from Here” workflow remains a separate follow-up.
 
 ## Objective
 
@@ -19,13 +19,16 @@ branch.
 The first delivery must:
 
 1. derive worktree identity from Git metadata instead of branch naming conventions;
-2. display a localized `WORKTREE` / `工作树` badge and expose the registered path in the row title;
+2. display localized primary, linked, and available checkout states and expose registered paths in
+   row titles;
 3. show **Delete Worktree…** only for an exact linked-worktree branch;
 4. review the exact branch, object, and registered path before removal;
-5. refuse to remove the primary worktree, the currently open worktree, a dirty worktree, a locked
-   worktree, a missing/prunable worktree, or a target that changed after review;
-6. run ordinary `git worktree remove` without `--force`, retain the local branch and commit objects,
-   refresh repository state, and remove the badge only after Git confirms success.
+5. warn when the linked worktree is dirty or its branch contains commits not reachable from the
+   primary-worktree HEAD;
+6. require an explicit **Force Delete Worktree** action for either warning, while locked,
+   missing/prunable, primary, current, ambiguous, or stale targets remain non-overridable;
+7. retain the local branch and commit objects after ordinary or forced removal, refresh repository
+   state, and update the checkout-state badge only after Git confirms success.
 
 ## Source of truth and identity
 
@@ -37,24 +40,24 @@ The porcelain records are interpreted as follows:
 
 - the first record is the primary worktree and is never exposed as removable;
 - later records are linked worktrees;
-- a linked record with `branch refs/heads/<name>` may annotate the matching local branch with its
-  exact registered path;
+- the first record annotates the primary-worktree branch and later records annotate linked branches;
 - detached records do not annotate a branch row;
 - zero matches mean the branch is ordinary;
 - one match enables linked-worktree presentation;
 - multiple matches fail closed for mutation, even if they were created with Git override flags;
 - `locked` and `prunable` states remain visible as worktree identity but block removal.
 
-The serialized branch summary gains only the linked-worktree path. The primary-worktree path is not
-placed on branch rows. Repository refresh remains authoritative, so external `git worktree add`,
+The serialized branch summary carries separate primary- and linked-worktree paths. Repository
+refresh remains authoritative, so external `git worktree add`,
 `remove`, `move`, `lock`, or `prune` changes are reflected by the existing refs refresh path.
 
 ## User experience
 
 ### Branch list
 
-- Ordinary local branch: existing branch icon and no badge.
-- Current branch in the open repository: existing `HEAD` marker.
+- Local branch not checked out in any worktree: muted `AVAILABLE` / `未检出` state.
+- Branch checked out in the primary worktree: `PRIMARY` / `主工作区` badge and its path.
+- Current branch in the open repository: existing independent `HEAD` marker.
 - Local branch checked out in one linked worktree: existing branch icon plus a compact localized
   `WORKTREE` / `工作树` badge.
 - The accessible row title includes the branch subject and the exact worktree path.
@@ -82,11 +85,17 @@ review shows:
 - the exact source object ID;
 - the exact registered worktree path;
 - the current repository HEAD used to bind the review;
+- bounded changed paths and the total dirty-path count;
+- the primary-worktree branch/HEAD used for comparison and the count of commits reachable from the
+  linked branch but not from that primary HEAD;
 - an explicit consequence: the directory is removed, while the local branch, remote branch, and
   commit objects are retained.
 
-The final action is labeled **Delete Worktree** / **删除工作树**. It is never a one-click destructive
-menu action.
+The final action is **Delete Worktree** for a clean branch already contained by the primary HEAD.
+If dirty paths or unmerged commits are present, the warning is visually prominent and the only
+final action is **Force Delete Worktree** / **强制删除工作树**. The dialog states that force discards
+uncommitted filesystem changes, while committed history remains reachable through the retained
+local branch.
 
 ## Backend safety contract
 
@@ -96,13 +105,20 @@ Preparation and execution use the same fail-closed checks:
 2. The selected full ref still resolves to the reviewed object ID and remains a local branch.
 3. The branch is not the branch checked out by the current repository window.
 4. Exactly one non-primary porcelain record still associates the branch with the reviewed path.
-5. The record is neither locked nor prunable, and the registered directory still exists.
-6. `git status --porcelain=v2 -z --untracked-files=normal --ignore-submodules=none` in that
-   worktree is empty. Tracked, staged, untracked, conflicted, and submodule changes all block.
-7. The review token still matches the source ref, object, current HEAD, worktree path, and removal
-   kind immediately before execution.
-8. Execution invokes ordinary `git worktree remove <exact-registered-path>` without `--force`.
-9. Git failure retains the worktree and presents the sanitized diagnostic; Asterlyn does not fall
+5. The record is neither locked nor prunable, and the registered directory still exists. These
+   structural blockers cannot be forced.
+6. `git status --porcelain=v2 -z --untracked-files=normal --ignore-submodules=none` produces a
+   bounded review of tracked, staged, untracked, conflicted, and submodule changes.
+7. The source object is compared with the primary worktree's exact HEAD using a bounded commit
+   count; committed differences are warnings because the local branch is retained.
+8. Dirty paths or commits not contained by the primary HEAD require a second backend plan carrying
+   explicit force authorization. The review token binds the warnings, comparison HEAD, force bit,
+   source ref/object, current HEAD, and exact worktree path.
+9. Clean contained targets invoke `git worktree remove <path>`; explicitly authorized warning cases
+   invoke `git worktree remove --force <path>`.
+10. Preparation and execution both recompute the same review. New changes, commits, checkout
+   movement, or comparison-HEAD movement invalidate the confirmation.
+11. Git failure retains the worktree and presents the sanitized diagnostic; Asterlyn does not fall
    back to filesystem deletion.
 
 This operation deliberately does not delete the local branch. After successful removal, users may
@@ -114,9 +130,11 @@ eligible.
 ### Rust repository layer
 
 - Parse bounded NUL-delimited worktree porcelain records into a private registered-worktree model.
-- Annotate local `BranchSummary` values with `linked_worktree_path` only for one exact linked match.
-- Extend the reviewed branch mutation kind with `RemoveWorktree` and its plan with
-  `worktree_path`.
+- Annotate local `BranchSummary` values with separate primary and linked paths.
+- Include porcelain `HEAD` identities, bounded status evidence, and the primary-HEAD comparison in
+  a worktree-removal review object.
+- Extend the reviewed branch mutation kind with `RemoveWorktree` and its plan with a typed
+  worktree review containing bounded warnings and exact force authorization.
 - Prepare, tokenize, revalidate, and execute removal inside `asterlyn-git`; Tauri remains an
   authorization and operation-coordination adapter.
 - Keep branch deletion, remote deletion, and worktree removal as distinct match arms and
@@ -125,7 +143,8 @@ eligible.
 ### Typed desktop boundary
 
 - Add `removeWorktree` to the TypeScript/Rust mutation kind.
-- Add nullable `worktreePath` to the reviewed plan and runtime validator.
+- Add a typed nullable worktree-removal review and explicit force authorization to requests/plans
+  and runtime validation.
 - Keep the existing `prepare_branch_mutation` and `execute_branch_mutation` commands; no extra
   desktop command or arbitrary path argument is introduced.
 - The frontend submits only branch identity. The backend discovers and returns the path, preventing
@@ -133,12 +152,14 @@ eligible.
 
 ### Frontend feature layer
 
-- Branch presentation consumes `linkedWorktreePath` for the badge and accessible title.
+- Branch presentation consumes primary and linked paths for three-state badges and accessible titles.
 - Context policy owns switch blocking and the mutually exclusive worktree/branch delete actions.
 - The existing branch mutation controller gains a reusable “requires review” predicate for both
   local-branch deletion and worktree removal.
 - The review view renders the worktree path and hides remote-deletion controls for worktree
   removal.
+- The controller reparses an explicitly forced request before execution; it never mutates a clean
+  plan into a forced command on the renderer alone.
 - English and Simplified Chinese copy cover the badge, blocked reason, menu action, review,
   progress, completion, and retained-branch consequence.
 
@@ -161,12 +182,13 @@ deleting a host directory.
 - Add the Rust/TypeScript branch-summary field.
 - Parse and associate registered linked worktrees.
 - Add badge, title/path presentation, localization, and current-target invalidation.
-- Verify ordinary branches and the primary worktree remain visually unchanged.
+- Verify ordinary, primary-worktree, and linked-worktree branches receive only their intended
+  localized checkout-state presentation.
 
 ### WT2 — Reviewed removal
 
-- Add the reviewed removal kind and nullable plan path.
-- Enforce clean/locked/prunable/current/primary/exact-match checks.
+- Add the reviewed removal kind and nullable worktree-review evidence.
+- Review dirty/unmerged evidence and enforce locked/prunable/current/primary/exact-match checks.
 - Add context policy, menu routing, review copy, execution, reconciliation, and demo behavior.
 - Verify the branch remains after successful removal and becomes an ordinary local branch.
 
@@ -178,6 +200,14 @@ deleting a host directory.
 - Build the macOS application, verify its ad-hoc hardened-runtime signature and arm64 architecture,
   archive and hash it, replace the local installation through a recoverable backup, and run the
   installed native smoke test.
+
+### WT4 — Checkout-state clarity and reviewed force removal
+
+- Add primary/linked/available branch presentation without changing `HEAD` semantics.
+- Review dirty paths and commits not contained by the primary worktree HEAD.
+- Require a newly prepared force-authorized plan before `--force` execution.
+- Keep structural blockers non-overridable, retain the branch, rerun the full gates, and replace the
+  local installation with a newly accepted package.
 
 ## Follow-up: New Worktree from Here
 
@@ -207,11 +237,11 @@ accept a renderer-selected command line.
 | Gate | Required result |
 | --- | --- |
 | Porcelain parser | primary, linked, detached, locked, prunable, spaces, malformed records, and duplicate branch associations covered |
-| Rust repository | clean removal succeeds and retains branch; dirty, untracked, locked, missing, current, primary, multiple, and stale targets fail closed |
+| Rust repository | clean removal succeeds; dirty/unmerged evidence requires explicit force; locked, missing, current, primary, multiple, and stale targets fail closed; branch is retained |
 | Context policy | linked row shows worktree removal and no branch deletion; ordinary row keeps branch deletion; logical multi-root rows remain read-only |
-| Presentation | localized badge and path title render without changing ordinary branch/HEAD semantics |
-| Reviewed controller | removal prepares immediately, waits for explicit confirmation, renders no remote option, and retains failed plans |
-| Protocol | valid nullable path accepted; unknown kinds, missing path for removal, and path on unrelated kinds rejected |
+| Presentation | localized primary/worktree/available states and path titles render independently of `HEAD` |
+| Reviewed controller | warnings render before execution; force reparses and authorizes; no remote option; failed plans remain visible |
+| Protocol | typed worktree review and force semantics accept coherent plans and reject mismatches |
 | Demo | removal clears only the association and preserves the local branch |
 | Frontend regression | `npm run test:scripts`, `npm run check`, and `npm run build` pass without relaxing ownership or bundle budgets |
 | Native regression | `cargo test -p asterlyn --lib`, `cargo fmt --all -- --check`, and strict all-target Clippy pass |
@@ -222,8 +252,9 @@ accept a renderer-selected command line.
 
 - Detection/presentation and mutation are separate rollback units. If removal is reverted, the
   worktree badge may remain useful, but no partially wired destructive menu item may remain.
-- No `git worktree prune`, move, repair, lock/unlock, forced removal, branch deletion, remote
-  deletion, or filesystem fallback is added in this delivery.
+- No `git worktree prune`, move, repair, lock/unlock, branch deletion, remote deletion, or filesystem
+  fallback is added. Force applies only to a reviewed linked-worktree removal with dirty/unmerged
+  evidence; it cannot bypass structural identity blockers.
 - No branch-name prefix is reserved for worktrees.
 - No background worktree watcher or index is introduced; the existing repository refresh lifecycle
   remains authoritative.
@@ -231,25 +262,29 @@ accept a renderer-selected command line.
 
 ## Completion record
 
-- **Accepted branch:** `codex/delete-worktree-action`; implementation commit `a33ee5a`. The exact
-  completion-record commit is reported in the handoff because a commit cannot embed its own hash.
-- **Frontend:** TypeScript checking, the 762-test script suite, production Vite build, ownership
+- **Accepted branch:** `codex/delete-worktree-action`; initial implementation commit `a33ee5a` plus
+  the checkout-state and force-review follow-up. The exact completion-record commit is reported in
+  the handoff because a commit cannot embed its own hash.
+- **Frontend:** TypeScript checking, the 765-test script suite, production Vite build, ownership
   budgets, protocol validation, and `git diff --check` passed.
 - **Native:** Rust formatting, strict all-target workspace Clippy, and workspace tests passed. The
-  `asterlyn-git` crate passed 126 tests; two unrelated operating-system watcher tests remain ignored
+  `asterlyn-git` crate passed 127 tests; two unrelated operating-system watcher tests remain ignored
   by their existing contract.
 - **Worktree coverage:** porcelain paths with spaces, detached records, locked/prunable state,
-  malformed UTF-8, duplicate branch associations, clean removal, dirty/untracked invalidation,
-  locked, missing, current, and stale targets passed. Successful removal retained the local branch.
+  malformed UTF-8, duplicate branch associations, primary/linked/available presentation, clean
+  removal, dirty and primary-uncontained warning review, stale force-token rejection, exact forced
+  removal, locked, missing, current, and stale targets passed. Successful ordinary and forced
+  removal retained the local branch.
 - **Accepted package:**
-  `target/release/bundle/macos/Asterlyn-worktree-actions-20260930-macos-arm64.zip`, 8,936,497 bytes,
-  SHA-256 `fe236f20ac18e36dd9b8460f5ba68cc023cda9643dfb71fc289cf4d30af82ed3`.
-- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,613,376 bytes,
-  SHA-256 `f5a2f78368a3eef5cfd8d9a63ee3c5ac44cebeb44cfed0815700634fd1d21d0b`, exactly matching the
+  `target/release/bundle/macos/Asterlyn-worktree-safety-20260930-macos-arm64.zip`, 8,961,076 bytes,
+  SHA-256 `974ee9f07d741e07127f8118dfca31001c9b44ea5003f9769bf847d010896cc5`.
+- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,662,496 bytes,
+  SHA-256 `0405db609df7578984e79094614ca20ddf68f47f9094b5589cb5c94b8a69139e`, exactly matching the
   packaged executable. The arm64 bundle is ad-hoc signed with hardened runtime, passed strict
-  signature verification, and remained alive for the six-second isolated native smoke.
-- **Previous installation backup:**
-  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20260930-worktree-actions-preinstall/Asterlyn.app`.
+  signature verification, and rendered the application shell during the six-second isolated native
+  smoke from both the build and installed paths.
+- **Replaced installation backup:** moved to the recoverable macOS Trash location
+  `/Users/gzq/.Trash/Asterlyn.app.backup-worktree-safety-20260930` after installed verification.
 - **Host:** macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1, and Git
   2.48.1. Windows/Linux compilation and installed interaction remain platform-specific follow-up
   gates; this local preview is neither Developer ID signed nor notarized.

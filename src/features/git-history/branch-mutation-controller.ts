@@ -67,6 +67,8 @@ export class BranchMutationController {
         sourceOid: source.oid,
         newName: mutationNeedsName(kind) ? suggestedName.trim() || null : null,
         deleteRemote: false,
+        forceWorktreeRemoval: false,
+        reviewedWorktreeToken: null,
       },
       value: suggestedName,
       plan: null,
@@ -146,11 +148,23 @@ export class BranchMutationController {
   async execute(): Promise<void> {
     const dialog = this.value.dialog;
     if (!dialog || dialog.busy || !dialog.plan) return;
+    const previousPlan = dialog.plan;
     dialog.busy = true;
     dialog.error = null;
     this.emit();
     try {
-      const succeeded = await this.gateway.execute(dialog.plan);
+      let plan = dialog.plan;
+      if (
+        plan.kind === "removeWorktree" && plan.worktreeReview?.forceRequired &&
+        !plan.worktreeReview.forceAuthorized
+      ) {
+        dialog.request.forceWorktreeRemoval = true;
+        dialog.request.reviewedWorktreeToken = plan.worktreeReview.reviewToken;
+        plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
+        if (this.value.dialog !== dialog) return;
+        dialog.plan = plan;
+      }
+      const succeeded = await this.gateway.execute(plan);
       if (this.value.dialog !== dialog) return;
       if (succeeded) {
         this.value = { dialog: null };
@@ -158,7 +172,14 @@ export class BranchMutationController {
         dialog.error = "branch-mutation-failed";
       }
     } catch (error) {
-      if (this.value.dialog === dialog) dialog.error = this.gateway.errorMessage(error);
+      if (this.value.dialog === dialog) {
+        if (!dialog.plan?.worktreeReview?.forceAuthorized) {
+          dialog.request.forceWorktreeRemoval = false;
+          dialog.request.reviewedWorktreeToken = null;
+          dialog.plan = previousPlan;
+        }
+        dialog.error = this.gateway.errorMessage(error);
+      }
     } finally {
       if (this.value.dialog === dialog) dialog.busy = false;
       this.emit();

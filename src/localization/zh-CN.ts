@@ -470,7 +470,7 @@ export const ZH_CN = {
     comparisonAria: (before, after) => `从 ${before} 到 ${after} 的变更`,
     noRefs: "没有引用", refsAppearHere: "分支和标签会显示在这里。", branchOrTag: "分支或标签",
     filterBranchesAndTags: "筛选分支和标签", noMatchingRefs: "没有匹配的引用", tryAnotherRef: "请尝试其他分支、远程或标签名称。",
-    groups: { local: "本地", remote: "远程", tag: "标签" }, activateAgainForAllRefs: "再次激活可显示所有引用", worktreeBadge: "工作树",
+    groups: { local: "本地", remote: "远程", tag: "标签" }, activateAgainForAllRefs: "再次激活可显示所有引用", primaryWorktreeBadge: "主工作区", worktreeBadge: "工作树", availableBranchBadge: "未检出",
     roots: (count) => `${count} 个 Git 根目录`, allRefs: "所有引用", allRefsTitle: "本地分支、远程跟踪分支和标签的历史记录",
     upToCommit: (shortOid) => `截至 ${shortOid}`,
     historyStartsAt: (shortOid, repositoryId) => `${repositoryId} 中从精确提交 ${shortOid} 开始的历史`,

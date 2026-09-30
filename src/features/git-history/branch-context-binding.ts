@@ -100,6 +100,7 @@ export function branchContextTargetIsCurrent(
     return Boolean(
       before && before.oid === branch.oid && before.kind === branch.kind &&
       before.current === branch.current && before.upstream === branch.upstream &&
+      before.primaryWorktreePath === branch.primaryWorktreePath &&
       before.linkedWorktreePath === branch.linkedWorktreePath,
     );
   });

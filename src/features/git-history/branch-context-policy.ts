@@ -49,9 +49,15 @@ export function branchContextPolicy(
     : options.clean
       ? enabled()
       : blocked(options.cleanReason || options.reasons.cleanRequired);
-  const switchMutation = target.branch.linkedWorktreePath
+  const checkedOutElsewhere = !target.branch.current && Boolean(
+    target.branch.primaryWorktreePath || target.branch.linkedWorktreePath,
+  );
+  const switchMutation = checkedOutElsewhere
     ? blocked(options.reasons.worktreeCheckedOut)
     : cleanMutation;
+  const checkedOutMutation = checkedOutElsewhere
+    ? blocked(options.reasons.worktreeCheckedOut)
+    : mutation;
   const trackingLocals = target.branch.kind === "remote" && writable
     ? snapshot.branches.filter((branch) =>
         branch.repositoryId === "." && branch.kind === "local" &&
@@ -76,8 +82,8 @@ export function branchContextPolicy(
     switch: switchMutation,
     create: cleanMutation,
     integrate: mutation,
-    rename: mutation,
-    delete: mutation,
+    rename: checkedOutMutation,
+    delete: checkedOutMutation,
     removeWorktree: mutation,
     update: options.updateBlocked ? blocked(options.updateBlocked) : mutation,
     push: options.pushBlocked ? blocked(options.pushBlocked) : mutation,

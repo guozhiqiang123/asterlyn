@@ -11,7 +11,13 @@ export function demoSwitchBranch(
   );
   if (!target) throw new Error("Select an existing local branch.");
   if (target.current) throw new Error(`${target.name} is already checked out.`);
-  for (const branch of next.branches) branch.current = branch === target;
+  if (target.primaryWorktreePath || target.linkedWorktreePath) {
+    throw new Error("The selected branch is checked out in another Git worktree.");
+  }
+  for (const branch of next.branches) {
+    branch.current = branch === target;
+    if (branch.kind === "local") branch.primaryWorktreePath = branch === target ? snapshot.root : null;
+  }
   next.branch = {
     head: target.name,
     oid: target.oid,
@@ -42,7 +48,10 @@ export function demoCreateBranch(
     throw new Error(`${normalized} already exists.`);
   }
   const next = structuredClone(snapshot);
-  for (const branch of next.branches) branch.current = false;
+  for (const branch of next.branches) {
+    branch.current = false;
+    if (branch.kind === "local") branch.primaryWorktreePath = null;
+  }
   const tip = next.commits[0];
   next.branches.unshift({
     repositoryId: ".",
@@ -55,6 +64,7 @@ export function demoCreateBranch(
     tracking: null,
     committedAt: tip?.authoredAt ?? Math.floor(Date.now() / 1000),
     subject: tip?.subject ?? "Unborn branch",
+    primaryWorktreePath: snapshot.root,
     linkedWorktreePath: null,
   });
   next.branch = {
@@ -144,12 +154,41 @@ export function demoPrepareBranchMutation(
   if (request.deleteRemote && request.kind !== "delete") {
     throw new Error("Remote deletion is available only while deleting a local branch.");
   }
+  if (request.kind !== "removeWorktree" && (request.forceWorktreeRemoval || request.reviewedWorktreeToken)) {
+    throw new Error("Force authorization is available only for linked worktree removal.");
+  }
+  const primary = snapshot.branches.find((candidate) => candidate.primaryWorktreePath);
+  const primaryHistory = new Set(historyFromOid(snapshot, primary?.oid ?? null).map((commit) => commit.oid));
+  const unmergedCommitCount = request.kind === "removeWorktree"
+    ? historyFromOid(snapshot, source.oid).filter((commit) => !primaryHistory.has(commit.oid)).length
+    : 0;
+  const worktreeReviewToken = request.kind === "removeWorktree"
+    ? JSON.stringify([request.sourceFullName, source.oid, worktreePath, primary?.oid ?? "", unmergedCommitCount])
+    : null;
+  if (request.forceWorktreeRemoval && request.reviewedWorktreeToken !== worktreeReviewToken) {
+    throw new Error("The worktree warnings changed after review; inspect them again.");
+  }
+  const worktreeReview = worktreePath && primary
+    ? {
+        path: worktreePath,
+        changedPaths: [],
+        totalChangedPaths: 0,
+        changesTruncated: false,
+        primaryHeadRef: primary.fullName,
+        primaryHeadOid: primary.oid,
+        unmergedCommitCount,
+        forceRequired: unmergedCommitCount > 0,
+        forceAuthorized: Boolean(request.forceWorktreeRemoval),
+        reviewToken: worktreeReviewToken!,
+      }
+    : null;
   const remoteDeletion = request.deleteRemote
     ? demoRemoteDeletionTarget(snapshot, source.upstream)
     : null;
   const fields = [
-    request.kind, request.sourceFullName, source.oid, source.kind, newName ?? "", worktreePath ?? "", startHeadRef,
+    request.kind, request.sourceFullName, source.oid, source.kind, newName ?? "", worktreeReviewToken ?? "", startHeadRef,
     snapshot.branch.oid, source.upstream ?? "", mergedIntoCurrent ? "merged" : "",
+    request.forceWorktreeRemoval ? "force-worktree-removal" : "ordinary-worktree-removal",
     request.deleteRemote ? "delete-remote" : "local-only", remoteDeletion?.remote ?? "",
     remoteDeletion?.branchFullName ?? "", remoteDeletion?.trackingFullName ?? "",
     remoteDeletion?.oid ?? "",
@@ -167,7 +206,7 @@ export function demoPrepareBranchMutation(
     startHeadOid: snapshot.branch.oid,
     upstream: source.upstream,
     mergedIntoCurrent,
-    worktreePath,
+    worktreeReview,
     deleteRemote: request.deleteRemote,
     remoteDeletion,
     previewToken: JSON.stringify(fields),
@@ -184,6 +223,10 @@ export function demoExecuteBranchMutation(
     sourceOid: plan.sourceOid,
     newName: plan.newName,
     deleteRemote: plan.deleteRemote,
+    forceWorktreeRemoval: plan.worktreeReview?.forceAuthorized ?? false,
+    reviewedWorktreeToken: plan.worktreeReview?.forceAuthorized
+      ? plan.worktreeReview.reviewToken
+      : null,
   });
   if (refreshed.previewToken !== plan.previewToken) {
     throw new Error("The reviewed branch plan is stale; prepare it again.");
@@ -211,7 +254,10 @@ export function demoExecuteBranchMutation(
     if (source.current) next.branch.head = plan.newName;
     return next;
   }
-  for (const branch of next.branches) branch.current = false;
+  for (const branch of next.branches) {
+    branch.current = false;
+    if (branch.kind === "local") branch.primaryWorktreePath = null;
+  }
   const commit = next.commits.find((candidate) => candidate.oid === plan.sourceOid);
   const upstream = plan.kind === "checkoutRemote" ? plan.sourceName : null;
   next.branches.unshift({
@@ -219,6 +265,7 @@ export function demoExecuteBranchMutation(
     current: true, kind: "local", upstream, tracking: null,
     committedAt: commit?.authoredAt ?? Math.floor(Date.now() / 1000),
     subject: commit?.subject ?? plan.sourceName,
+    primaryWorktreePath: snapshot.root,
     linkedWorktreePath: null,
   });
   next.branch = {

@@ -5,6 +5,7 @@ import {
   demoExecuteBranchMutation,
   demoPrepareBranchMutation,
   demoSnapshot,
+  demoSwitchBranch,
 } from "../src/demo.ts";
 
 function cleanSnapshot() {
@@ -78,10 +79,35 @@ test("reviewed demo worktree deletion removes only the linked checkout", () => {
     kind: "removeWorktree", sourceFullName: linked.fullName, sourceOid: linked.oid,
     newName: null, deleteRemote: false,
   });
-  assert.equal(plan.worktreePath, linked.linkedWorktreePath);
+  assert.equal(plan.worktreeReview.path, linked.linkedWorktreePath);
 
   const next = demoExecuteBranchMutation(snapshot, plan);
   const retained = next.branches.find((branch) => branch.fullName === linked.fullName);
   assert.ok(retained);
   assert.equal(retained.linkedWorktreePath, null);
+});
+
+test("demo branch switching preserves primary and linked checkout identity", () => {
+  const snapshot = cleanSnapshot();
+  const linked = snapshot.branches.find((branch) => branch.linkedWorktreePath);
+  assert.throws(
+    () => demoSwitchBranch(snapshot, linked.fullName),
+    /checked out in another Git worktree/i,
+  );
+
+  const previousPrimary = snapshot.branches.find((branch) => branch.primaryWorktreePath);
+  const available = snapshot.branches.find((branch) =>
+    branch.kind === "local" && !branch.current &&
+    !branch.primaryWorktreePath && !branch.linkedWorktreePath
+  );
+  assert.ok(available);
+  const next = demoSwitchBranch(snapshot, available.fullName);
+  assert.equal(
+    next.branches.find((branch) => branch.fullName === previousPrimary.fullName).primaryWorktreePath,
+    null,
+  );
+  assert.equal(
+    next.branches.find((branch) => branch.fullName === available.fullName).primaryWorktreePath,
+    snapshot.root,
+  );
 });
