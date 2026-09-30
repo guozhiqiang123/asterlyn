@@ -2263,15 +2263,14 @@ mod tests {
         journal
             .update("source-held", Some(path_string(&hold_path).unwrap()))
             .unwrap();
+        let held_workspace_path = hold_path
+            .strip_prefix(workspace.root())
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .replace('\\', "/");
         let held_inventory = workspace
-            .inspect_entry(
-                hold_path
-                    .strip_prefix(workspace.root())
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-                WorkspaceMutationLimits::default(),
-            )
+            .inspect_entry(&held_workspace_path, WorkspaceMutationLimits::default())
             .unwrap();
         assert!(
             relocated_inventory_matches(inventory, &held_inventory),
