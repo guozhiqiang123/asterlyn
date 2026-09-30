@@ -71,6 +71,10 @@ function runtimeOptions(overrides = {}) {
     executeRemoteCommand: () => undefined,
     searchCommandAvailability: () => ({ enabled: false, reason: "Search required" }),
     executeSearchCommand: () => undefined,
+    gitOperationAvailable: () => true,
+    gitRecoveryAvailable: () => true,
+    openGitOperation: () => undefined,
+    openGitRecoveries: () => undefined,
     ...overrides,
   };
 }

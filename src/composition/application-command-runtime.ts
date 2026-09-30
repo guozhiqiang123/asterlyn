@@ -27,11 +27,15 @@ import {
   registerSearchCommands,
   type SearchCommandRuntimeOptions,
 } from "./search-command-runtime.ts";
+import {
+  registerGitOperationCommands,
+  type GitOperationCommandRuntimeOptions,
+} from "./git-operation-command-runtime.ts";
 
 export interface ApplicationCommandRuntimeOptions
   extends WorkbenchCommandRuntimeOptions, FilesEditorCommandRuntimeOptions,
     ChangesCommandRuntimeOptions, StashCommandRuntimeOptions, HistoryCommandRuntimeOptions,
-    RemoteCommandRuntimeOptions, SearchCommandRuntimeOptions {}
+    RemoteCommandRuntimeOptions, SearchCommandRuntimeOptions, GitOperationCommandRuntimeOptions {}
 
 export function registerApplicationCommands(
   registry: CommandRegistry,
@@ -45,6 +49,7 @@ export function registerApplicationCommands(
     registerHistoryCommands(registry, options),
     registerRemoteCommands(registry, options),
     registerSearchCommands(registry, options),
+    registerGitOperationCommands(registry, options),
   ];
   return () => { for (const release of releases.reverse()) release(); };
 }

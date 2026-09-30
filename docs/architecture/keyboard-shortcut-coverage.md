@@ -223,8 +223,8 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Open Git operations launcher | navigation | `git.operation.open` | **Gap** |
-| Review recoverable operations | navigation | `git.operation.recovery.open` | **Gap** |
+| Open Git operations launcher | navigation | `git.operation.open` | **Custom**; opens the existing reviewed-operation setup route |
+| Review recoverable operations | navigation | `git.operation.recovery.open` | **Custom**; retains recovery listing, verification, and undo safeguards |
 | Prepare Merge/Cherry-pick/Rebase/Squash | write | launcher/form controls | **Local** until a complete exact plan exists |
 | Execute, Continue, Skip, Abort | destructive/write | reviewed operation dialog/banner | **Local**; no global default and no bypass of confirmation |
 | Open selected conflict resolution | write | `changes.selection.conflict.resolve` | **Custom** |
