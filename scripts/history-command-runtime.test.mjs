@@ -18,6 +18,7 @@ function catalog() {
   return {
     shell: { branches: "Branches and Log" },
     history: {
+      topbarBranchMenu: { ariaLabel: "Current branch and branch actions" },
       useRegularExpression: "Use regular expression",
       matchCase: "Match case",
       branchOrTag: "Branch or tag",
@@ -47,10 +48,12 @@ function catalog() {
 
 test("History commands invoke the current rendered controls and expose live availability", async () => {
   const regex = button();
+  const branchMenu = button();
   const paths = button();
   const toggleFiles = button();
   const swap = button();
   const targets = new Map([
+    ["#current-branch-menu", branchMenu],
     ['[data-history-text-mode="regex"]', regex],
     ['[data-history-menu="paths"]', paths],
     ["#commit-file-view-toggle, #comparison-file-view-toggle, #commit-folder-file-view-toggle", toggleFiles],
@@ -66,15 +69,17 @@ test("History commands invoke the current rendered controls and expose live avai
   });
 
   assert.equal(registry.get(HISTORY_COMMANDS.toggleRegex).title(), "Use regular expression");
+  assert.equal(registry.get(HISTORY_COMMANDS.openBranchMenu).title(), "Current branch and branch actions");
   assert.equal(registry.get(HISTORY_COMMANDS.openPathFilter).title(), "Filter by paths or roots");
   assert.equal(registry.get(HISTORY_COMMANDS.switchBranch).title(), "Switch Branch");
   assert.equal(registry.get(HISTORY_COMMANDS.toggleFileView).availability().enabled, true);
   await registry.get(HISTORY_COMMANDS.toggleRegex).execute("keyboard");
+  await registry.get(HISTORY_COMMANDS.openBranchMenu).execute("keyboard");
   await registry.get(HISTORY_COMMANDS.openPathFilter).execute("palette");
   await registry.get(HISTORY_COMMANDS.toggleFileView).execute("keyboard");
   await registry.get(HISTORY_COMMANDS.swapComparison).execute("keyboard");
   await registry.get(HISTORY_COMMANDS.loadMore).execute("keyboard");
-  assert.deepEqual([regex.clicks, paths.clicks, toggleFiles.clicks, swap.clicks], [1, 1, 1, 1]);
+  assert.deepEqual([branchMenu.clicks, regex.clicks, paths.clicks, toggleFiles.clicks, swap.clicks], [1, 1, 1, 1, 1]);
   assert.deepEqual(actions, ["load-more"]);
 
   swap.disabled = true;

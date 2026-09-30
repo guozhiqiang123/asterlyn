@@ -19,6 +19,7 @@ export type HistoryContextCommandAction =
   | BranchContextCommandAction;
 
 export const HISTORY_COMMANDS = {
+  openBranchMenu: commandId("git.branch.menu.open"),
   toggleRegex: commandId("history.filter.regex.toggle"),
   toggleCase: commandId("history.filter.case.toggle"),
   openBranchFilter: commandId("history.filter.branch.open"),

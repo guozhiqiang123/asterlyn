@@ -9,6 +9,7 @@ import type { DomCommandDefinition } from "./dom-command-definition.ts";
 const HISTORY_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "history"];
 
 export const HISTORY_DOM_COMMANDS: readonly DomCommandDefinition[] = [
+  history(HISTORY_COMMANDS.openBranchMenu, "#current-branch-menu", (copy) => copy.topbarBranchMenu.ariaLabel, "current branch menu local remote branches actions"),
   history(HISTORY_COMMANDS.toggleRegex, '[data-history-text-mode="regex"]', (copy) => copy.useRegularExpression, "history filter regex regular expression"),
   history(HISTORY_COMMANDS.toggleCase, '[data-history-text-mode="case"]', (copy) => copy.matchCase, "history filter match case sensitive"),
   history(HISTORY_COMMANDS.openBranchFilter, '[data-history-menu="branch"]', (copy) => copy.branchOrTag, "history branch tag reference filter"),

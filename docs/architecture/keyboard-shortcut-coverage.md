@@ -166,6 +166,7 @@ without Asterlyn claiming common editor or terminal keys.
 | User action | Family | Command / target command | State |
 | --- | --- | --- | --- |
 | Focus History filter | navigation | `history.find.focus` | **Default:** Primary+F in History scope |
+| Open current-branch menu | navigation | `git.branch.menu.open` | **Custom**; reuses the current exact branch-menu route |
 | Toggle History regex / match case | presentation | `history.filter.regex.toggle`, `history.filter.case.toggle` | **Custom** |
 | Open branch/user/date/path/graph filters | navigation | `history.filter.branch.open`, `history.filter.user.open`, `history.filter.date.open`, `history.filter.path.open`, `history.filter.graph.open` | **Custom** |
 | Clear one/all active History filters | presentation | `history.filter.clearCurrent`, `history.filter.clearAll` | **Custom**; clear-current chooses the leftmost active chip |
