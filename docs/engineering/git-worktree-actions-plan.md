@@ -224,7 +224,11 @@ Asterlyn's existing visual system:
 - **New branch** is optional. Enabling it reveals a validated local branch name. Leaving it disabled
   creates a detached worktree at the selected source object so an already checked-out source branch
   is never checked out twice.
-- **Project name** is one filesystem component and defaults to `<repository>-<branch-leaf>`.
+- **Project name** is one filesystem component and defaults to
+  `<primary-repository>-<branch-leaf>`. When creation starts from another linked worktree, the
+  primary-worktree directory name is used instead of recursively reusing the current worktree's
+  longer directory name. The generated default is compacted to at most 64 characters while the
+  field remains fully editable.
 - **Location** is a parent directory selected through the native folder chooser, not an arbitrary
   command-line fragment.
 - The derived final path is shown continuously as `<location>/<project name>` before creation.
@@ -295,7 +299,7 @@ protocol validation, localization, full regression gates, and installed-package 
   checkout-state and force-review follow-up `dcecf8678423319a0b45ad68c4f04001273a064e`, plus the
   New/Open/Reveal follow-up. The exact completion-record commit is reported in the handoff because
   a commit cannot embed its own hash.
-- **Frontend:** TypeScript checking, the 768-test script suite, production Vite build, ownership
+- **Frontend:** TypeScript checking, the 769-test script suite, production Vite build, ownership
   budgets, protocol validation, and `git diff --check` passed.
 - **Native:** Rust formatting, strict all-target workspace Clippy, and workspace tests passed. The
   `asterlyn-git` crate passed 130 tests; two unrelated operating-system watcher tests remain ignored
@@ -306,22 +310,21 @@ protocol validation, localization, full regression gates, and installed-package 
   removal, locked, missing, current, and stale targets passed. Successful ordinary and forced
   removal retained the local branch. New coverage also passed for detached and new-branch creation,
   invalid names, existing/colliding/overlapping destinations, menu eligibility, native folder
-  chooser cancellation, primary-only Open/Reveal behavior, and exact registered-path reveal.
+  chooser cancellation, compact primary-project-based default names, primary-only Open/Reveal
+  behavior, and exact registered-path reveal.
 - **Accepted package:**
-  `target/release/bundle/macos/Asterlyn-worktree-create-open-reveal-20260930-macos-arm64.zip`,
-  9,031,045 bytes, SHA-256
-  `74830910b005026472da8967a503649fc30c6caffd93f65f6cf649d8c6eb684c`.
+  `target/release/bundle/macos/Asterlyn-worktree-short-name-20260930-macos-arm64.zip`, 9,031,270
+  bytes, SHA-256 `49d12e6aa9b8681670402896cf08376f893e9443c0223ac497e3662535685f02`.
 - **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,930,512 bytes,
   SHA-256
-  `41c84380afba24f0a7ffeb776fce8de367d8caa6ecfa0efa7ceaf05566f5493a`, exactly matching the
+  `f8a523c35c38dcf9c82275432d71a687a8374de3d5a4b3880844723bd8b06d0c`, exactly matching the
   packaged executable. The arm64 bundle is ad-hoc signed with hardened runtime, passed strict
-  signature verification, and passed the six-second isolated native smoke from both the build and
-  installed paths. The relaunched installed application exposed an on-screen 1320 x 821 Asterlyn
-  window through CoreGraphics. On this host, System Events reported zero accessibility windows for
-  both the previous accepted package and this package, so the accessibility-marker smoke remained
-  unavailable rather than being treated as a product regression.
+  signature verification, passed the six-second isolated native smoke, and rendered the expected
+  application-shell marker within the 15-second bound from both the build and installed paths. The
+  relaunched installed application also exposed an on-screen 1320 x 821 Asterlyn window through
+  CoreGraphics.
 - **Replaced installation backup:** moved to the recoverable macOS Trash location
-  `/Users/gzq/.Trash/Asterlyn.app.backup-worktree-create-open-reveal-20260930-130533` after installed
+  `/Users/gzq/.Trash/Asterlyn.app.backup-worktree-short-name-20260930-134219` after installed
   verification.
 - **Host:** macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1, and Git
   2.48.1. Windows/Linux compilation and installed interaction remain platform-specific follow-up

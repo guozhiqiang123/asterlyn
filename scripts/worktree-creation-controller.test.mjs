@@ -86,3 +86,31 @@ test("folder cancellation preserves location and required new branch is validate
   assert.equal(controller.state.dialog.error, "branch-name-required");
   assert.equal(prepared, 0);
 });
+
+test("default project names use the primary checkout name and stay compact", () => {
+  const primary = branch("main", "a");
+  primary.primaryWorktreePath = "/projects/asterlyn";
+  const source = branch("codex/delete-worktree-action", "b");
+  const controller = new WorktreeCreationController({
+    chooseDirectory: async () => ({ kind: "cancelled" }),
+    prepare: async () => { throw new Error("unexpected"); },
+    execute: async () => false,
+    errorMessage: String,
+  });
+
+  controller.open(
+    "/projects/asterlyn-github-update-settings",
+    [primary, source],
+    source,
+  );
+  assert.equal(controller.state.dialog.projectName, "asterlyn-delete-worktree-action");
+
+  const longSource = branch(`codex/${"long-feature-name-".repeat(5)}`, "c");
+  controller.open(
+    `/projects/${"long-primary-repository-".repeat(4)}`,
+    [longSource],
+    longSource,
+  );
+  assert.equal(Array.from(controller.state.dialog.projectName).length, 64);
+  assert.match(controller.state.dialog.projectName, /^long-primary-repository-/u);
+});

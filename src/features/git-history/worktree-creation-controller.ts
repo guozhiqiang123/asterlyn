@@ -30,6 +30,7 @@ export interface WorktreeCreationGateway {
 }
 
 type Listener = () => void;
+const DEFAULT_PROJECT_NAME_LIMIT = 64;
 
 export class WorktreeCreationController {
   private readonly gateway: WorktreeCreationGateway;
@@ -58,7 +59,7 @@ export class WorktreeCreationController {
       sourceOid: source.oid,
       newBranchEnabled: false,
       newBranch: "",
-      projectName: suggestedProjectName(repositoryRoot, source.name),
+      projectName: suggestedProjectName(repositoryRoot, source.name, local),
       parentDirectory: parentPath(repositoryRoot),
       busy: false,
       error: null,
@@ -72,7 +73,7 @@ export class WorktreeCreationController {
     if (!dialog || !source) return;
     dialog.sourceFullName = source.fullName;
     dialog.sourceOid = source.oid;
-    dialog.projectName = suggestedProjectName(dialog.repositoryRoot, source.name);
+    dialog.projectName = suggestedProjectName(dialog.repositoryRoot, source.name, dialog.branches);
     dialog.error = null;
     this.emit();
   }
@@ -186,10 +187,35 @@ export function worktreeDestination(parent: string, projectName: string): string
   return `${trimmed}${separator}${projectName.trim()}`;
 }
 
-function suggestedProjectName(root: string, branch: string): string {
-  const repository = root.replace(/[\\/]+$/u, "").split(/[\\/]/u).at(-1) || "project";
+function suggestedProjectName(
+  root: string,
+  branch: string,
+  branches: readonly BranchSummary[],
+): string {
+  const primaryRoot = branches.find((candidate) =>
+    candidate.repositoryId === "." && candidate.primaryWorktreePath
+  )?.primaryWorktreePath ?? root;
+  const repository = primaryRoot.replace(/[\\/]+$/u, "").split(/[\\/]/u).at(-1) || "project";
   const leaf = branch.split("/").at(-1) || "worktree";
-  return `${repository}-${leaf}`;
+  const candidate = `${repository}-${leaf}`;
+  if (codePointLength(candidate) <= DEFAULT_PROJECT_NAME_LIMIT) return candidate;
+
+  const branchReserve = Math.min(40, codePointLength(leaf));
+  const repositoryPart = takeCodePoints(
+    repository,
+    Math.max(1, DEFAULT_PROJECT_NAME_LIMIT - branchReserve - 1),
+  );
+  const branchPart = takeCodePoints(
+    leaf,
+    Math.max(1, DEFAULT_PROJECT_NAME_LIMIT - codePointLength(repositoryPart) - 1),
+  );
+  return `${repositoryPart}-${branchPart}`;
+}
+
+function codePointLength(value: string): number { return Array.from(value).length; }
+
+function takeCodePoints(value: string, limit: number): string {
+  return Array.from(value).slice(0, limit).join("");
 }
 
 function parentPath(path: string): string {
