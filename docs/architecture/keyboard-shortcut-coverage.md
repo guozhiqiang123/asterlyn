@@ -36,6 +36,25 @@ Commands that write, discard, publish, or delete data are still eligible for cus
 their command route must enter the same preview/confirmation/revalidation/recovery flow as the
 button. Such commands normally ship **unassigned** so users opt in deliberately.
 
+### Presentation ownership
+
+Shortcut combinations for **Command** actions are runtime data, not localized copy or template
+text. A control may reserve an empty `data-command-shortcut` target, but the shared window projector
+must derive its visible primary badge, tooltip, and `aria-keyshortcuts` from the current effective
+profile. It must expose every effective alternative in accessible presentation and remove all shortcut
+presentation when the command becomes unassigned. Context-menu entries may not provide a parallel
+raw shortcut string.
+
+`aria-keyshortcuts` contains every effective single-stroke alternative. Sequential chords remain in
+the accessible title because the ARIA attribute cannot represent chord grouping without falsely
+announcing each stroke as a separate shortcut.
+
+**Local** interactions may show fixed key help because they are not customizable commands. Their
+markup is identified as local help, and platform-dependent combinations use the shared formatter so
+the copy says the actual host key rather than ambiguous or hard-coded `Ctrl/Cmd` text. Adding or
+changing a user-visible shortcut hint requires its ownership classification and regression coverage
+in the same change.
+
 ## Coverage notation
 
 | State | Meaning |

@@ -241,7 +241,7 @@
   min-width: 180px;
   flex: 0 1 auto;
   height: 32px;
-  grid-template-columns: 20px auto auto;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 0 7px;

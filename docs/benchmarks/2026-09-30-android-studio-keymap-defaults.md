@@ -105,3 +105,26 @@ makes read-only content explicitly focusable and transfers pointer focus without
 rights. Ordinary text editors, historical Diffs, editable Diffs, and conflict projections all
 install the same contract, and context-menu focus restoration now targets CodeMirror content rather
 than its outer shell.
+
+## Dynamic shortcut-presentation correction
+
+The compatibility work exposed older shortcut copy that predated customizable profiles. The top
+command center could clear its text after a binding was removed but leave an empty stretched keycap;
+History accessibility metadata and dialog help also contained static platform combinations.
+Configurable command hints now have one runtime presentation owner. Controls begin with hidden empty
+targets, then the shared projector derives the primary badge, tooltip, and all accessibility
+alternatives from the effective per-window profile. Removing the final binding removes the entire
+presentation. Local widget keys remain deliberately separate and use the shared platform formatter
+when their display differs by host. A static ownership gate rejects hard-coded configurable
+combinations in localization, raw context-menu shortcut labels, and shortcut targets populated by
+feature templates.
+
+Verification passed TypeScript checking, all 807 frontend/delivery tests, and the production build;
+the main chunk is 425.09 kB and remains below the 500 kB budget. The installed macOS acceptance
+archive is `.artifacts/packages/Asterlyn-dynamic-shortcut-hints-20260930-155750.zip` (8,980,723
+bytes), SHA-256 `7f3e08f9363416ac74076ce50f6e6b5519d01f1762141bc22f6ff972def2bec4`.
+The signed bundle and `/Applications/Asterlyn.app` executable both have SHA-256
+`0ba3f03565542f420510185d683b0f1abec77dc0668456300394b3c918126315`. The installed native smoke
+rendered the application shell within the 6,000 ms gate, and PID 21122 remained live after relaunch.
+The previous installation is recoverable from
+`/Users/gzq/.Trash/Asterlyn-before-dynamic-shortcut-hints-20260930-155750.app`.

@@ -25,9 +25,11 @@ test("customized shortcuts update persistent control titles and accessibility me
   const button = element();
   const root = { querySelector: (selector) => selector === "#settings-button" ? button : null };
   const keybindings = {
-    accessibleShortcutForCommand: (id) => id === WORKBENCH_COMMANDS.openSettings
-      ? "Command+,"
-      : null,
+    shortcutsForCommand: () => ["⌘,"],
+    accessibleShortcutsForCommand: (id) => id === WORKBENCH_COMMANDS.openSettings
+      ? ["Command+,"]
+      : [],
+    ariaShortcutsForCommand: () => ["Meta+,"],
   };
 
   refreshCommandShortcut(root, keybindings, {
@@ -45,18 +47,40 @@ test("customized shortcuts update persistent control titles and accessibility me
 
 test("command center visible and accessible labels follow the effective binding", () => {
   const key = element();
-  const button = element({ kbd: key });
+  key.setAttribute("hidden", "");
+  const button = element({ "[data-command-shortcut]": key });
   const root = { querySelector: (selector) => selector === "#command-center-button" ? button : null };
   const keybindings = {
-    shortcutForCommand: () => "⌘K ⌘P",
-    accessibleShortcutForCommand: () => "Command+K Command+P",
+    shortcutsForCommand: () => ["⌘K ⌘P", "⌘P"],
+    accessibleShortcutsForCommand: () => ["Command+K Command+P", "Command+P"],
+    ariaShortcutsForCommand: () => ["Meta+P"],
   };
 
   refreshCommandCenterShortcut(root, "Search files and commands", keybindings);
 
   assert.equal(key.textContent, "⌘K ⌘P");
-  assert.equal(button.title, "Search files and commands (Command+K Command+P)");
-  assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+K Meta+P");
+  assert.equal(key.getAttribute("hidden"), null);
+  assert.equal(button.title, "Search files and commands (Command+K Command+P, Command+P)");
+  assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+P");
+});
+
+test("unassigned commands remove stale visible and accessible shortcut hints", () => {
+  const key = element();
+  key.textContent = "⌘P";
+  const button = element({ "[data-command-shortcut]": key });
+  const root = { querySelector: (selector) => selector === "#command-center-button" ? button : null };
+  const keybindings = {
+    shortcutsForCommand: () => [],
+    accessibleShortcutsForCommand: () => [],
+    ariaShortcutsForCommand: () => [],
+  };
+
+  refreshCommandCenterShortcut(root, "Search files and commands", keybindings);
+
+  assert.equal(key.textContent, "");
+  assert.equal(key.getAttribute("hidden"), "");
+  assert.equal(button.title, "Search files and commands");
+  assert.equal(button.getAttribute("aria-keyshortcuts"), null);
 });
 
 test("focus routing keeps every shortcut surface mutually exclusive and protects text inputs", () => {

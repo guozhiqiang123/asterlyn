@@ -40,7 +40,6 @@ export interface ShellCopy {
   pushBranch: string;
   cancelRemote: string;
   refreshProject: string;
-  refreshShortcut: string;
   openSettings: string;
   settings: string;
   windowControls: string;
@@ -1036,7 +1035,7 @@ export interface HistoryCopy {
   apply: string;
   all: string;
   selectPathsToFilter: string;
-  pathTextHelp: string;
+  pathTextHelp(shortcut: string | null): string;
   trackedRepositoryPaths: string;
   noTrackedPaths: string;
   unknownTrackedPath(path: string): string;

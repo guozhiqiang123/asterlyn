@@ -74,8 +74,28 @@ test("two-stroke bindings enter and complete one bounded chord", () => {
   controller.capture(keyboard("x", { ctrlKey: true }));
   controller.capture(keyboard("s", { ctrlKey: true }));
   assert.equal(controller.applyRecording(false), true);
+  assert.deepEqual(
+    controller.accessibleShortcutsForCommand(commandA),
+    ["Control+P", "Control+X Control+S"],
+  );
+  assert.deepEqual(controller.ariaShortcutsForCommand(commandA), ["Control+P"]);
   assert.deepEqual(controller.dispatch(keyboard("x", { ctrlKey: true }), "workbench"), { kind: "pending" });
   assert.deepEqual(controller.dispatch(keyboard("s", { ctrlKey: true }), "workbench"), { kind: "command", commandId: commandA });
+  dispose();
+});
+
+test("presentation projections expose every effective binding without duplicates", () => {
+  const { controller, commandA, dispose } = setup();
+  controller.startRecording(commandA, null);
+  controller.capture(keyboard("j", { ctrlKey: true }));
+  assert.equal(controller.applyRecording(false), true);
+
+  assert.deepEqual(controller.shortcutsForCommand(commandA), ["Control+P", "Control+J"]);
+  assert.deepEqual(
+    controller.accessibleShortcutsForCommand(commandA),
+    ["Control+P", "Control+J"],
+  );
+  assert.deepEqual(controller.ariaShortcutsForCommand(commandA), ["Control+P", "Control+J"]);
   dispose();
 });
 

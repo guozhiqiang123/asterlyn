@@ -103,7 +103,7 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
     </div>
     <footer class="command-surface-footer">
       <span id="command-surface-result-count" title="${escapeAttribute(copy.hints[mode])}">${escapeHtml(commandSurfaceResultLabel(model))}</span>
-      <span class="command-surface-footer-actions"><span><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>${mode !== "commands" ? `<button class="secondary-button command-surface-find-button" id="command-surface-open-find" type="button" ${commandSurfaceCanOpenFind(model) ? "" : "disabled"}>${escapeHtml(copy.openInFindWindow)}</button>` : ""}</span>
+      <span class="command-surface-footer-actions"><span data-local-shortcut-help><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>${mode !== "commands" ? `<button class="secondary-button command-surface-find-button" id="command-surface-open-find" type="button" ${commandSurfaceCanOpenFind(model) ? "" : "disabled"}>${escapeHtml(copy.openInFindWindow)}</button>` : ""}</span>
     </footer>
   </section>`;
 }
@@ -200,7 +200,7 @@ function commandSurfaceTab(
   model: CommandSurfaceViewModel,
 ): string {
   const active = model.commandSurface.mode === mode;
-  return `<button type="button" role="tab" data-command-mode="${mode}" aria-selected="${active}" ${mode !== "commands" && !model.workspaceOpen ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  return `<button type="button" role="tab" data-command-mode="${mode}" aria-selected="${active}" ${mode !== "commands" && !model.workspaceOpen ? "disabled" : ""}><span>${escapeHtml(label)}</span><kbd data-command-shortcut hidden></kbd></button>`;
 }
 
 function searchOptionButton(
@@ -338,7 +338,10 @@ function renderCommandResult(command: NavigationCommand, index: number, selected
     ranges.keywords.length ? renderHighlightedText(command.keywords ?? "", ranges.keywords) : "",
     ranges.id.length ? renderHighlightedText(command.id, ranges.id) : "",
   ].filter(Boolean).join(" · ");
-  return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}" ${command.enabled ? "" : "disabled"}>
+  const ariaShortcuts = command.ariaShortcuts?.length
+    ? ` aria-keyshortcuts="${escapeAttribute(command.ariaShortcuts.join(" "))}"`
+    : "";
+  return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}"${ariaShortcuts} ${command.enabled ? "" : "disabled"}>
     <span class="command-result-icon">${icon("search", 15)}</span>
     <span class="command-result-copy"><strong>${renderHighlightedText(command.label, ranges.label)}</strong><small>${renderHighlightedText(command.detail, ranges.detail)}</small>${hidden ? `<small class="command-result-alias">${hidden}</small>` : ""}</span>
     ${command.shortcut ? `<kbd>${escapeHtml(command.shortcut)}</kbd>` : ""}

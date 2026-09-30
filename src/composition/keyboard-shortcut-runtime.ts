@@ -70,13 +70,15 @@ export class KeyboardShortcutRuntime {
   navigationCommands(): NavigationCommand[] {
     return this.registry.list().filter((command) => command.id !== WORKBENCH_COMMANDS.historyFind).map((command) => {
       const availability = command.availability();
-      const shortcut = this.keybindings.shortcutForCommand(command.id);
+      const shortcut = this.keybindings.shortcutsForCommand(command.id)[0];
+      const ariaShortcuts = this.keybindings.ariaShortcutsForCommand(command.id);
       return {
         id: command.id,
         label: command.title(),
         detail: command.detail(),
         keywords: command.keywords?.(),
         ...(shortcut ? { shortcut } : {}),
+        ...(ariaShortcuts.length > 0 ? { ariaShortcuts } : {}),
         enabled: availability.enabled,
       };
     });

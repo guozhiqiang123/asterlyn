@@ -21,6 +21,10 @@ export interface HistoryDialogViewModel {
   readonly pathDraft: ReadonlyMap<string, HistoryPath>;
   readonly pathText: string;
   readonly expandedTreePaths: ReadonlySet<string>;
+  readonly pathApplyShortcut?: {
+    readonly display: string;
+    readonly aria: string;
+  };
   readonly localization?: Localization;
 }
 
@@ -59,7 +63,9 @@ function renderBranchDialog(model: HistoryDialogViewModel): string {
 function renderPathTextDialog(model: HistoryDialogViewModel): string {
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.history;
-  return `<section class="dialog history-selection-dialog history-path-text-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">${heading(copy.selectPathsToFilter, localization)}<textarea id="history-path-text" spellcheck="false" autocomplete="off" aria-describedby="history-path-text-help">${escapeHtml(model.pathText)}</textarea>${model.error ? `<div class="history-dialog-error" role="alert">${escapeHtml(localization.catalog.errors.translate(model.error))}</div>` : ""}<p id="history-path-text-help">${escapeHtml(copy.pathTextHelp)}</p><div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-cancel>${escapeHtml(localization.catalog.common.cancel)}</button><button class="primary-button" type="button" data-history-dialog-apply>${escapeHtml(copy.apply)}</button></div></section>`;
+  const shortcut = model.pathApplyShortcut;
+  const ariaShortcut = shortcut ? ` aria-keyshortcuts="${escapeAttribute(shortcut.aria)}"` : "";
+  return `<section class="dialog history-selection-dialog history-path-text-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title">${heading(copy.selectPathsToFilter, localization)}<textarea id="history-path-text" spellcheck="false" autocomplete="off" aria-describedby="history-path-text-help"${ariaShortcut}>${escapeHtml(model.pathText)}</textarea>${model.error ? `<div class="history-dialog-error" role="alert">${escapeHtml(localization.catalog.errors.translate(model.error))}</div>` : ""}<p id="history-path-text-help">${escapeHtml(copy.pathTextHelp(shortcut?.display ?? null))}</p><div class="dialog-actions"><button class="secondary-button" type="button" data-history-dialog-cancel>${escapeHtml(localization.catalog.common.cancel)}</button><button class="primary-button" type="button" data-history-dialog-apply>${escapeHtml(copy.apply)}</button></div></section>`;
 }
 
 function renderPathTreeDialog(model: HistoryDialogViewModel): string {

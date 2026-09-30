@@ -62,6 +62,23 @@ allowed in terminal focus, so ordinary text and terminal control sequences remai
 Settings provides localized discovery, search, state/category filters, recording, conflict display,
 add/replace/disable/reset operations, invalid-profile repair, and live effective shortcut labels.
 
+Configurable shortcut text has one presentation owner. Render templates and localization catalogs
+must not embed a command's default combination. Instead, command controls expose an initially empty
+and hidden `data-command-shortcut` target; the window shortcut projector fills its compact primary
+label, derives the control title from every effective binding, and derives `aria-keyshortcuts` from
+every representable effective binding. Profile
+changes refresh those projections in place, while disabling the last binding clears and hides stale
+text and removes stale accessibility metadata. Context-menu models likewise identify commands and
+may not carry an independent raw shortcut label.
+
+Because ARIA has no notation for sequential chords, `aria-keyshortcuts` includes only effective
+single-stroke bindings; the full accessible title still describes every binding, including chords.
+
+Component-local keyboard behavior remains separate. Fixed widget semantics such as list arrows,
+Enter/Escape, or a dialog-only submit gesture may be described locally, but any platform-dependent
+text is produced by the shared key-sequence formatter rather than written as `Ctrl/Cmd` prose. Local
+help is marked explicitly so ownership tests can distinguish it from configurable command hints.
+
 The durable user-action and shortcut ledger is maintained by product surface in
 [`keyboard-shortcut-coverage.md`](../keyboard-shortcut-coverage.md). Every new user-visible action
 must be classified there as a registered customizable command, component-local keyboard behavior,
@@ -75,6 +92,8 @@ shortcut-system cleanup.
 - New application commands require a registry contribution rather than another shell keydown branch.
 - New user-facing controls require a same-change entry in the per-surface shortcut ledger; commands
   ship discoverable and customizable even when risk or conflicts justify leaving the default empty.
+- A command binding, its visible hint, tooltip, and accessibility metadata cannot drift because they
+  are all projections of the same effective per-window profile.
 - Per-window listener, store, chord timer, subscriptions, and terminal adapter have explicit disposal.
 - Native global hotkeys, repository-provided keymaps, macros, arbitrary conditions, and profile
   import/export remain out of scope.

@@ -377,6 +377,18 @@ The page is a specialized feature view rather than a collection of ordinary scal
 Relevant buttons, command rows, and menu items update shortcut badges and `aria-keyshortcuts` from
 the effective binding. Decorative `kbd` text alone is not considered accessible discovery.
 
+The production presentation contract is centralized in the window shortcut projector. Configurable
+controls render empty, hidden shortcut targets; profile updates populate the primary compact badge,
+put all effective alternatives in the tooltip, put representable alternatives in accessibility
+metadata, and clear those values
+when no binding remains. Localization catalogs and context-menu models do not own command shortcut
+strings. Component-local keys are explicitly marked and, when platform-dependent, formatted through
+the shared sequence formatter. Static-ownership tests scan these boundaries so a later feature
+cannot accidentally introduce a second source of truth.
+
+The projector writes only single-stroke alternatives to `aria-keyshortcuts`; sequential chords stay
+in the accessible title because ARIA does not define grouping syntax for multi-stroke commands.
+
 ## Editor and terminal integration
 
 ### CodeMirror

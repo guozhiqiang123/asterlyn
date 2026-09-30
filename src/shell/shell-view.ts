@@ -2,7 +2,7 @@ import { BRAND } from "../brand.ts";
 import { icon } from "../icons.ts";
 import { renderSelectControl } from "../shared/select-control.ts";
 import type { ActivityTool } from "./activity-order.ts";
-import { primaryShortcut, showCustomWindowControls, windowChromeClass } from "./window-chrome.ts";
+import { showCustomWindowControls, windowChromeClass } from "./window-chrome.ts";
 import type { ShellState } from "./shell-controller.ts";
 import type { LocaleCatalog, ShellCopy } from "../localization/catalog.ts";
 import { EN_US } from "../localization/en-US.ts";
@@ -20,7 +20,6 @@ export function renderShellView(model: ShellViewModel): string {
   const copy = model.localization?.shell ?? EN_US.shell;
   const common = model.localization?.common ?? EN_US.common;
   const branchCopy = model.localization?.history.topbarBranchMenu ?? EN_US.history.topbarBranchMenu;
-  const searchShortcut = primaryShortcut(model.shell.windowChromeMode, "P");
   return `<main class="app-shell ${windowChromeClass(model.shell.windowChromeMode)}">
     <header class="topbar" data-tauri-drag-region>
       <div class="repository-switcher-anchor" id="repository-switcher-anchor">
@@ -28,7 +27,7 @@ export function renderShellView(model: ShellViewModel): string {
         <div class="repository-menu hidden" id="repository-menu" role="menu" aria-label="${escapeHtml(copy.projectMenu)}"></div>
       </div>
       <button class="current-branch-menu" id="current-branch-menu" type="button" aria-label="${escapeHtml(branchCopy.ariaLabel)}" aria-haspopup="menu" title="${escapeHtml(branchCopy.ariaLabel)}" disabled>${icon("branch", 15)}<span id="current-branch-name">${escapeHtml(branchCopy.noBranch)}</span>${icon("chevron-down", 13)}</button>
-      <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)} (${escapeHtml(searchShortcut.accessible)})">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd>${escapeHtml(searchShortcut.label)}</kbd></button>
+      <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)}">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd data-command-shortcut hidden></kbd></button>
       <div class="topbar-actions" data-tauri-drag-region>
         <span class="demo-badge ${model.demo ? "" : "hidden"}">${escapeHtml(copy.browserDemo)}</span>
         <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="${escapeHtml(copy.remoteActions)}">

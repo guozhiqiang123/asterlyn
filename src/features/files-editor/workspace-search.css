@@ -26,6 +26,13 @@
   font-size: inherit;
 }
 
+.command-surface-tabs > button:not(.command-surface-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .command-surface-ignore-filter input {
   width: 13px;
   height: 13px;

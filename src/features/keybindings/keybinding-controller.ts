@@ -4,6 +4,7 @@ import {
   type CommandRegistry,
 } from "../../application/commands/command-service.ts";
 import {
+  ariaKeyShortcut,
   defaultKeybindingsForPlatform,
   formatKeySequence,
   normalizeKeyboardEvent,
@@ -125,17 +126,32 @@ export class KeybindingController {
   }
 
   shortcutForCommand(commandId: string, scope?: CommandFocusScope): string | null {
-    const rule = this.resolved.find((candidate) =>
-      candidate.commandId === commandId && (!scope || candidate.scopes.includes(scope))
-    );
-    return rule ? formatKeySequence(rule.sequence, this.platform) : null;
+    return this.shortcutsForCommand(commandId, scope)[0] ?? null;
   }
 
   accessibleShortcutForCommand(commandId: string, scope?: CommandFocusScope): string | null {
-    const rule = this.resolved.find((candidate) =>
-      candidate.commandId === commandId && (!scope || candidate.scopes.includes(scope))
-    );
-    return rule ? formatKeySequence(rule.sequence, this.platform, true) : null;
+    return this.accessibleShortcutsForCommand(commandId, scope)[0] ?? null;
+  }
+
+  shortcutsForCommand(commandId: string, scope?: CommandFocusScope): readonly string[] {
+    return this.formattedShortcutsForCommand(commandId, scope, false);
+  }
+
+  accessibleShortcutsForCommand(
+    commandId: string,
+    scope?: CommandFocusScope,
+  ): readonly string[] {
+    return this.formattedShortcutsForCommand(commandId, scope, true);
+  }
+
+  ariaShortcutsForCommand(commandId: string, scope?: CommandFocusScope): readonly string[] {
+    const shortcuts = this.resolved
+      .filter((candidate) =>
+        candidate.commandId === commandId && candidate.sequence.length === 1 &&
+        (!scope || candidate.scopes.includes(scope))
+      )
+      .map((rule) => ariaKeyShortcut(formatKeySequence(rule.sequence, this.platform, true)));
+    return [...new Set(shortcuts)];
   }
 
   dispatch(
@@ -341,6 +357,19 @@ export class KeybindingController {
     for (const release of this.releases) release();
     this.store.dispose();
     this.listeners.clear();
+  }
+
+  private formattedShortcutsForCommand(
+    commandId: string,
+    scope: CommandFocusScope | undefined,
+    accessible: boolean,
+  ): readonly string[] {
+    const shortcuts = this.resolved
+      .filter((candidate) =>
+        candidate.commandId === commandId && (!scope || candidate.scopes.includes(scope))
+      )
+      .map((rule) => formatKeySequence(rule.sequence, this.platform, accessible));
+    return [...new Set(shortcuts)];
   }
 
   private allRows(): KeybindingCommandRow[] {

@@ -38,6 +38,7 @@ import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { createWorkspaceReplacementState } from "../src/features/files-editor/workspace-replacement.ts";
 import { createWorkspaceSearchControls, createWorkspaceSearchState } from "../src/features/files-editor/workspace-search.ts";
+import { historyPathApplyShortcut } from "../src/composition/history-shortcut-presentation.ts";
 
 test("shell view follows persisted activity order and exposes stable feature hosts", () => {
   const shell = new ShellController(memoryStorage());
@@ -76,7 +77,7 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.match(html, /class="status-indicator success" id="status-indicator"/);
 });
 
-test("shell search shortcut uses the native macOS convention", () => {
+test("shell search shortcut starts empty until the keybinding projection owns it", () => {
   const shell = new ShellController(memoryStorage());
   shell.setWindowChromeMode("macos-native");
   const html = renderShellView({
@@ -87,9 +88,9 @@ test("shell search shortcut uses the native macOS convention", () => {
     windowControlsAvailable: true,
   });
 
-  assert.match(html, /<kbd>⌘P<\/kbd>/);
-  assert.match(html, /Search files and commands \(Command\+P\)/);
-  assert.doesNotMatch(html, /Ctrl P|Ctrl\/Cmd\+P/);
+  assert.match(html, /<kbd data-command-shortcut hidden><\/kbd>/);
+  assert.match(html, /title="Search files and commands"/);
+  assert.doesNotMatch(html, /Command\+P|Ctrl P|Ctrl\/Cmd\+P|⌘P/);
 });
 
 test("blocked remote actions remain interactive so their exact reason can be announced", () => {
@@ -632,6 +633,26 @@ test("history path dialog mounts only expanded directory levels", () => {
   assert.doesNotMatch(expanded, />deep\.ts</);
 });
 
+test("history path local shortcut is formatted outside localization copy", () => {
+  const html = renderHistoryDialogView({
+    kind: "paths-text",
+    snapshot: repositorySnapshot(),
+    files: [],
+    query: "",
+    error: null,
+    refDraft: new Map(),
+    favoriteRefs: new Map(),
+    pathDraft: new Map(),
+    pathText: "src/app.ts",
+    expandedTreePaths: new Set(),
+    pathApplyShortcut: historyPathApplyShortcut("macos"),
+  });
+
+  assert.match(html, /aria-keyshortcuts="Meta\+Enter"/);
+  assert.match(html, /⌘Enter applies the selection/);
+  assert.doesNotMatch(html, /Ctrl\/Cmd/);
+});
+
 test("workspace navigation and replacement previews are feature-owned", () => {
   const commandSurface = openCommandSurface(createCommandSurfaceState(), "files");
   const commandHtml = renderCommandSurface({
@@ -672,6 +693,8 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   assert.match(commandHtml, /<small>src<\/small>/);
   assert.match(commandHtml, /1 matching file/);
   assert.match(commandHtml, /id="command-surface-open-find"/);
+  assert.match(commandHtml, /data-command-mode="files"[^>]*>[^]*data-command-shortcut hidden/);
+  assert.match(commandHtml, /data-local-shortcut-help/);
   assert.doesNotMatch(commandHtml.match(/<button[^>]*id="command-surface-open-find"[^>]*>/)?.[0] ?? "", /disabled/);
   assert.match(replacementHtml, /Replacement preview unavailable/);
   assert.match(replacementHtml, /Preview expired/);
@@ -723,12 +746,21 @@ test("workspace navigation and replacement previews are feature-owned", () => {
     commandSurface: openCommandSurface(createCommandSurfaceState(), "commands"),
     workspaceOpen: true,
     filesLoading: false,
-    files: [], commands: [], workspaceSearch: createWorkspaceSearchState(),
+    files: [], commands: [{
+      id: "workspace.quickOpen.open",
+      label: "Go to File",
+      detail: "Open a project file",
+      shortcut: "⌘P",
+      ariaShortcuts: ["Meta+P"],
+      enabled: true,
+    }], workspaceSearch: createWorkspaceSearchState(),
     workspaceSearchControls: createWorkspaceSearchControls(), searchRequestIsCurrent: false,
     replacementText: "", replacementRecoveryCount: 0,
   });
   assert.doesNotMatch(commandPaletteHtml, /data-workspace-search-option=|data-search-insert=/);
   assert.doesNotMatch(commandPaletteHtml, /id="command-surface-open-find"/);
+  assert.match(commandPaletteHtml, /aria-keyshortcuts="Meta\+P"/);
+  assert.match(commandPaletteHtml, /<kbd>⌘P<\/kbd>/);
 });
 
 test("editor chrome renders tabs, Markdown modes, menu, and Diff controls independently", () => {

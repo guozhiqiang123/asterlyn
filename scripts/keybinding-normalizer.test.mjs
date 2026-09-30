@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ariaKeyShortcut,
   defaultKeybindingsForPlatform,
   formatKeySequence,
   keySequence,
@@ -66,6 +67,11 @@ test("platform detection and default sequence formatting are deterministic", () 
   assert.equal(keybindingPlatform({ platform: "Win32", userAgent: "WebView2" }), "windows");
   assert.equal(keybindingPlatform({ platform: "Linux x86_64", userAgent: "WebKit" }), "linux");
   assert.equal(formatKeySequence(primarySequence("f", true), "linux"), "Control+Shift+F");
+});
+
+test("ARIA shortcut tokens use platform-neutral modifier and named-key values", () => {
+  assert.equal(ariaKeyShortcut("Command+Option+←"), "Meta+Alt+ArrowLeft");
+  assert.equal(ariaKeyShortcut("Control+Esc"), "Control+Escape");
 });
 
 test("stable defaults can resolve verified platform-specific sequences", () => {

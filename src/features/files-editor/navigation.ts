@@ -11,6 +11,7 @@ export interface NavigationCommand {
   detail: string;
   keywords?: string;
   shortcut?: string;
+  ariaShortcuts?: readonly string[];
   enabled: boolean;
 }
 

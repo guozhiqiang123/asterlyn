@@ -192,6 +192,7 @@ import { refreshWorkbenchShortcutPresentation, shortcutFocusScope } from "./shel
 import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
 import { WindowSession } from "./application/window-session";
 import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts";
+import { historyPathApplyShortcut } from "./composition/history-shortcut-presentation.ts";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
 import { renderRepositoryProjectionSlices } from "./application/repository-projection-renderer.ts";
 import { RepositoryIntegrationCoordinator } from "./application/repository-integration-coordinator";
@@ -4664,7 +4665,7 @@ export class AsterlynApp {
       favoriteRefs: this.gitHistoryPresentationRuntime.filterState.historyFavoriteRefs,
       pathDraft: this.gitHistoryPresentationRuntime.filterState.historyPathDraft,
       pathText: this.gitHistoryPresentationRuntime.filterState.historyPathText,
-      expandedTreePaths: this.gitHistoryPresentationRuntime.filterState.historyTreeExpanded,
+      expandedTreePaths: this.gitHistoryPresentationRuntime.filterState.historyTreeExpanded, pathApplyShortcut: historyPathApplyShortcut(this.shortcuts.keybindings.platform),
       localization: this.localization,
     });
     this.bindHistoryDialogEvents();
@@ -5248,7 +5249,7 @@ export class AsterlynApp {
       this.gitHistoryPresentationRuntime.filters.setPathText((event.currentTarget as HTMLTextAreaElement).value);
     });
     this.root.querySelector<HTMLTextAreaElement>("#history-path-text")?.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      if ((this.shortcuts.keybindings.platform === "macos" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey) && !event.altKey && !event.shiftKey && event.key === "Enter") {
         event.preventDefault();
         this.applyHistoryDialog();
       }

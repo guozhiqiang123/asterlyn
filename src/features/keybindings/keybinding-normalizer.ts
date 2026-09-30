@@ -87,6 +87,19 @@ export function formatKeySequence(
   return sequence.map((stroke) => formatKeyStroke(stroke, platform, accessible)).join(" ");
 }
 
+export function ariaKeyShortcut(accessibleShortcut: string): string {
+  const aliases: Readonly<Record<string, string>> = {
+    Command: "Meta",
+    Option: "Alt",
+    Esc: "Escape",
+    "←": "ArrowLeft",
+    "→": "ArrowRight",
+    "↑": "ArrowUp",
+    "↓": "ArrowDown",
+  };
+  return accessibleShortcut.split("+").map((token) => aliases[token] ?? token).join("+");
+}
+
 export function formatKeyStroke(
   stroke: KeyStroke,
   platform: KeybindingPlatform,

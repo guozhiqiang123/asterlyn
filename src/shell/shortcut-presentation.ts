@@ -18,6 +18,7 @@ export interface CommandShortcutPresentation {
   readonly commandId: string;
   readonly label: string;
   readonly title?: string;
+  readonly scope?: CommandFocusScope;
   readonly staticAriaShortcuts?: readonly string[];
 }
 
@@ -28,13 +29,26 @@ export function refreshCommandShortcut(
 ): void {
   const button = root.querySelector<HTMLElement>(presentation.selector);
   if (!button) return;
-  const accessible = keybindings.accessibleShortcutForCommand(presentation.commandId);
+  const visible = keybindings.shortcutsForCommand(presentation.commandId, presentation.scope);
+  const accessible = keybindings.accessibleShortcutsForCommand(
+    presentation.commandId,
+    presentation.scope,
+  );
+  const aria = keybindings.ariaShortcutsForCommand(presentation.commandId, presentation.scope);
   const baseTitle = presentation.title ?? presentation.label;
   button.setAttribute("aria-label", presentation.label);
-  button.title = accessible ? `${baseTitle} (${accessible})` : baseTitle;
+  button.title = accessible.length > 0
+    ? `${baseTitle} (${accessible.join(", ")})`
+    : baseTitle;
+  const visibleLabel = button.querySelector<HTMLElement>("[data-command-shortcut]");
+  if (visibleLabel) {
+    visibleLabel.textContent = visible[0] ?? "";
+    if (visible.length > 0) visibleLabel.removeAttribute("hidden");
+    else visibleLabel.setAttribute("hidden", "");
+  }
   const shortcuts = [
     ...(presentation.staticAriaShortcuts ?? []),
-    ...(accessible ? [ariaShortcut(accessible)] : []),
+    ...aria,
   ];
   if (shortcuts.length > 0) button.setAttribute("aria-keyshortcuts", shortcuts.join(" "));
   else button.removeAttribute("aria-keyshortcuts");
@@ -45,10 +59,6 @@ export function refreshCommandCenterShortcut(
   label: string,
   keybindings: KeybindingController,
 ): void {
-  const shortcut = keybindings.shortcutForCommand(WORKBENCH_COMMANDS.quickOpen);
-  const button = root.querySelector<HTMLButtonElement>("#command-center-button");
-  const key = button?.querySelector<HTMLElement>("kbd");
-  if (key) key.textContent = shortcut ?? "";
   refreshCommandShortcut(root, keybindings, {
     selector: "#command-center-button",
     commandId: WORKBENCH_COMMANDS.quickOpen,
@@ -76,6 +86,24 @@ export function refreshWorkbenchShortcutPresentation(
     label: copy.returnToWorkbench,
     title: copy.backToWorkbench,
   });
+  refreshCommandShortcut(root, keybindings, {
+    selector: "#history-filter",
+    commandId: WORKBENCH_COMMANDS.historyFind,
+    label: catalog.history.filterCommitHistory,
+    scope: "history-input",
+  });
+  for (const [mode, commandId] of [
+    ["files", WORKBENCH_COMMANDS.quickOpen],
+    ["recent", WORKBENCH_COMMANDS.recentFiles],
+    ["workspace", WORKBENCH_COMMANDS.workspaceSearch],
+    ["commands", WORKBENCH_COMMANDS.commandPalette],
+  ] as const) {
+    refreshCommandShortcut(root, keybindings, {
+      selector: `[data-command-mode="${mode}"]`,
+      commandId,
+      label: catalog.navigation.tabs[mode],
+    });
+  }
   const labels: Record<ActivityTool, string> = {
     files: copy.files,
     search: copy.search,
@@ -140,10 +168,6 @@ function refreshHideShortcut(
 ): void {
   const label = root.querySelector(selector)?.getAttribute("aria-label");
   if (label) refreshCommandShortcut(root, keybindings, { selector, commandId, label });
-}
-
-function ariaShortcut(accessible: string): string {
-  return accessible.replaceAll("Command", "Meta").replaceAll("Option", "Alt");
 }
 
 export function shortcutFocusScope(

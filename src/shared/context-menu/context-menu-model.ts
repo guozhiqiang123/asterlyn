@@ -8,7 +8,6 @@ interface ContextMenuActionBase {
   readonly actionId: string;
   readonly label: string;
   readonly availability: ContextMenuAvailability;
-  readonly shortcut?: string;
   readonly tone?: "normal" | "danger";
 }
 

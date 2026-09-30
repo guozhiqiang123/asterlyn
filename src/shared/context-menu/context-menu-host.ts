@@ -361,7 +361,7 @@ export class ContextMenuHost implements ContextMenuPort {
       const trailing = this.document.createElement("span");
       trailing.className = "context-menu-trailing";
       trailing.setAttribute("aria-hidden", "true");
-      trailing.textContent = item.kind === "submenu" ? "›" : item.shortcut ?? "";
+      trailing.textContent = item.kind === "submenu" ? "›" : "";
       button.append(mark, label, trailing);
       const reason = itemAvailabilityReason(item);
       if (reason && item.availability.kind === "blocked") {
