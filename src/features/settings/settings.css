@@ -317,7 +317,16 @@
 
 .keybinding-pill kbd,
 .keybinding-recorder-input kbd {
-  font-family: var(--editor-font-family, monospace);
+  display: inline-flex;
+  align-items: center;
+  min-height: 1em;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Symbols 2", sans-serif;
+  font-size: var(--ui-font-size, 13px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .keybinding-pill.disabled {

@@ -102,6 +102,22 @@ test("bottom tool close stays right-aligned when feature actions are hidden", as
   );
 });
 
+test("keyboard shortcut keycaps use one UI font metric independent of editor preferences", async () => {
+  const source = await readFile(
+    new URL("../src/features/settings/settings.css", import.meta.url),
+    "utf8",
+  );
+  const keycaps = source.match(
+    /\.keybinding-pill kbd,\s*\.keybinding-recorder-input kbd\s*\{([^}]*)\}/s,
+  )?.[1] ?? "";
+
+  assert.match(keycaps, /font-family:\s*-apple-system, BlinkMacSystemFont,/);
+  assert.match(keycaps, /font-size:\s*var\(--ui-font-size, 13px\);/);
+  assert.match(keycaps, /font-weight:\s*500;/);
+  assert.match(keycaps, /line-height:\s*1;/);
+  assert.doesNotMatch(keycaps, /--editor-font-family|monospace/);
+});
+
 test("project folders use the same configured UI scale as files", async () => {
   const [source, shared] = await Promise.all([
     readFile(new URL("../src/features/files-editor/project-files.css", import.meta.url), "utf8"),
