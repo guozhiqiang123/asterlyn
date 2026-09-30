@@ -73,6 +73,8 @@ may not carry an independent raw shortcut label.
 
 Because ARIA has no notation for sequential chords, `aria-keyshortcuts` includes only effective
 single-stroke bindings; the full accessible title still describes every binding, including chords.
+Composite entry points must not advertise one child mode's shortcut as their own. Their individual
+mode controls own those dynamic hints instead.
 
 Component-local keyboard behavior remains separate. Fixed widget semantics such as list arrows,
 Enter/Escape, or a dialog-only submit gesture may be described locally, but any platform-dependent

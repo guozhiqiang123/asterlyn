@@ -24,18 +24,18 @@ test("configurable UI hints start empty and are owned by the shared projector", 
     read("src/shell/shortcut-presentation.ts"),
   ]);
 
-  assert.match(shell, /<kbd data-command-shortcut hidden><\/kbd>/u);
+  assert.doesNotMatch(shell, /data-command-shortcut/u);
   assert.doesNotMatch(shell, /primaryShortcut|Command\+P|⌘P/u);
   assert.doesNotMatch(history, /aria-keyshortcuts=/u);
   assert.match(commandSurface, /data-local-shortcut-help/u);
   assert.match(commandSurface, /data-command-shortcut hidden/u);
   for (const selector of [
-    "#command-center-button",
     "#history-filter",
     "data-command-mode",
   ]) {
     assert.match(projection, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
   }
+  assert.doesNotMatch(projection, /#command-center-button/u);
 });
 
 test("context menus cannot bypass command shortcut ownership with raw labels", async () => {

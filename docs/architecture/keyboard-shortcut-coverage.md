@@ -49,6 +49,10 @@ raw shortcut string.
 the accessible title because the ARIA attribute cannot represent chord grouping without falsely
 announcing each stroke as a separate shortcut.
 
+A composite launcher spanning several commands does not display one child command's badge. The top
+search launcher therefore has no shortcut hint; its Files, Recent, Text, and Commands tabs show
+their own effective bindings after the surface opens.
+
 **Local** interactions may show fixed key help because they are not customizable commands. Their
 markup is identified as local help, and platform-dependent combinations use the shared formatter so
 the copy says the actual host key rather than ambiguous or hard-coded `Ctrl/Cmd` text. Adding or

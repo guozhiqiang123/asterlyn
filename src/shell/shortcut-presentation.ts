@@ -54,18 +54,6 @@ export function refreshCommandShortcut(
   else button.removeAttribute("aria-keyshortcuts");
 }
 
-export function refreshCommandCenterShortcut(
-  root: ParentNode,
-  label: string,
-  keybindings: KeybindingController,
-): void {
-  refreshCommandShortcut(root, keybindings, {
-    selector: "#command-center-button",
-    commandId: WORKBENCH_COMMANDS.quickOpen,
-    label,
-  });
-}
-
 export function refreshWorkbenchShortcutPresentation(
   root: ParentNode,
   catalog: LocaleCatalog,
@@ -73,7 +61,6 @@ export function refreshWorkbenchShortcutPresentation(
   keybindings: KeybindingController,
 ): void {
   const copy = catalog.shell;
-  refreshCommandCenterShortcut(root, copy.searchFilesAndCommands, keybindings);
   refreshCommandShortcut(root, keybindings, {
     selector: "#settings-button",
     commandId: WORKBENCH_COMMANDS.openSettings,

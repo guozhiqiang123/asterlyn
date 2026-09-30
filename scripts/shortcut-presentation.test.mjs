@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 
 import { WORKBENCH_COMMANDS } from "../src/application/commands/workbench-command-ids.ts";
 import {
-  refreshCommandCenterShortcut,
   refreshCommandShortcut,
   shortcutFocusScope,
 } from "../src/shell/shortcut-presentation.ts";
@@ -45,22 +44,26 @@ test("customized shortcuts update persistent control titles and accessibility me
   assert.equal(button.getAttribute("aria-keyshortcuts"), "Alt+ArrowUp Meta+,");
 });
 
-test("command center visible and accessible labels follow the effective binding", () => {
+test("dynamic shortcut targets show the primary binding and expose every representable binding", () => {
   const key = element();
   key.setAttribute("hidden", "");
   const button = element({ "[data-command-shortcut]": key });
-  const root = { querySelector: (selector) => selector === "#command-center-button" ? button : null };
+  const root = { querySelector: (selector) => selector === "#command-button" ? button : null };
   const keybindings = {
     shortcutsForCommand: () => ["⌘K ⌘P", "⌘P"],
     accessibleShortcutsForCommand: () => ["Command+K Command+P", "Command+P"],
     ariaShortcutsForCommand: () => ["Meta+P"],
   };
 
-  refreshCommandCenterShortcut(root, "Search files and commands", keybindings);
+  refreshCommandShortcut(root, keybindings, {
+    selector: "#command-button",
+    commandId: WORKBENCH_COMMANDS.quickOpen,
+    label: "Go to File",
+  });
 
   assert.equal(key.textContent, "⌘K ⌘P");
   assert.equal(key.getAttribute("hidden"), null);
-  assert.equal(button.title, "Search files and commands (Command+K Command+P, Command+P)");
+  assert.equal(button.title, "Go to File (Command+K Command+P, Command+P)");
   assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+P");
 });
 
@@ -68,18 +71,22 @@ test("unassigned commands remove stale visible and accessible shortcut hints", (
   const key = element();
   key.textContent = "⌘P";
   const button = element({ "[data-command-shortcut]": key });
-  const root = { querySelector: (selector) => selector === "#command-center-button" ? button : null };
+  const root = { querySelector: (selector) => selector === "#command-button" ? button : null };
   const keybindings = {
     shortcutsForCommand: () => [],
     accessibleShortcutsForCommand: () => [],
     ariaShortcutsForCommand: () => [],
   };
 
-  refreshCommandCenterShortcut(root, "Search files and commands", keybindings);
+  refreshCommandShortcut(root, keybindings, {
+    selector: "#command-button",
+    commandId: WORKBENCH_COMMANDS.quickOpen,
+    label: "Go to File",
+  });
 
   assert.equal(key.textContent, "");
   assert.equal(key.getAttribute("hidden"), "");
-  assert.equal(button.title, "Search files and commands");
+  assert.equal(button.title, "Go to File");
   assert.equal(button.getAttribute("aria-keyshortcuts"), null);
 });
 

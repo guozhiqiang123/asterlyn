@@ -27,7 +27,7 @@ export function renderShellView(model: ShellViewModel): string {
         <div class="repository-menu hidden" id="repository-menu" role="menu" aria-label="${escapeHtml(copy.projectMenu)}"></div>
       </div>
       <button class="current-branch-menu" id="current-branch-menu" type="button" aria-label="${escapeHtml(branchCopy.ariaLabel)}" aria-haspopup="menu" title="${escapeHtml(branchCopy.ariaLabel)}" disabled>${icon("branch", 15)}<span id="current-branch-name">${escapeHtml(branchCopy.noBranch)}</span>${icon("chevron-down", 13)}</button>
-      <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)}">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span><kbd data-command-shortcut hidden></kbd></button>
+      <button class="command-center-button" id="command-center-button" type="button" aria-label="${escapeHtml(copy.searchFilesAndCommands)}" title="${escapeHtml(copy.searchFilesAndCommands)}">${icon("search", 18)}<span>${escapeHtml(copy.search)}</span></button>
       <div class="topbar-actions" data-tauri-drag-region>
         <span class="demo-badge ${model.demo ? "" : "hidden"}">${escapeHtml(copy.browserDemo)}</span>
         <div class="remote-toolbar git-unavailable" id="remote-toolbar" role="group" aria-label="${escapeHtml(copy.remoteActions)}">

@@ -241,7 +241,7 @@
   min-width: 180px;
   flex: 0 1 auto;
   height: 32px;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   padding: 0 7px;
@@ -260,7 +260,6 @@
   color: var(--text-soft);
 }
 
-.command-center-button kbd,
 .command-surface kbd {
   border: 1px solid var(--border-strong);
   border-radius: 3px;
