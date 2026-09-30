@@ -163,7 +163,7 @@ test("no-project Welcome presentation owns the user-initiated folder chooser act
   assert.match(presentation.html, />Open a project folder<\/button>/u);
 });
 
-test("shell search shortcut starts empty until the keybinding projection owns it", () => {
+test("shell composite search does not claim the file-search shortcut", () => {
   const shell = new ShellController(memoryStorage());
   shell.setWindowChromeMode("macos-native");
   const html = renderShellView({
@@ -174,7 +174,8 @@ test("shell search shortcut starts empty until the keybinding projection owns it
     windowControlsAvailable: true,
   });
 
-  assert.match(html, /<kbd data-command-shortcut hidden><\/kbd>/);
+  const commandCenter = html.match(/<button[^>]*id="command-center-button"[^]*?<\/button>/u)?.[0] ?? "";
+  assert.doesNotMatch(commandCenter, /<kbd|data-command-shortcut|aria-keyshortcuts/u);
   assert.match(html, /title="Search files and commands"/);
   assert.doesNotMatch(html, /Command\+P|Ctrl P|Ctrl\/Cmd\+P|⌘P/);
 });
