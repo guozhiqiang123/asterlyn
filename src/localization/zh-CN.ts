@@ -475,7 +475,7 @@ export const ZH_CN = {
     upToCommit: (shortOid) => `截至 ${shortOid}`,
     historyStartsAt: (shortOid, repositoryId) => `${repositoryId} 中从精确提交 ${shortOid} 开始的历史`,
     branchCount: (count) => `${count} 个分支`, textOrHash: "文本或哈希", filterCommitHistory: "筛选提交历史",
-    useRegularExpression: "使用正则表达式", matchCase: "区分大小写", queryFilters: "历史查询筛选器",
+    useRegularExpression: "使用正则表达式", matchCase: "区分大小写", queryFilters: "历史查询筛选器", clearCurrentFilter: "清除当前历史筛选器", clearAllFilters: "清除全部历史筛选器",
     filterByAuthor: "按提交作者筛选", filterByDate: "按提交日期筛选", filterByPathsOrRoots: "按仓库路径或 Git 根目录筛选",
     graphOptions: "图谱排序和遍历选项", select: "选择…", recent: "最近", favorites: "收藏",
     allUsers: "所有用户", identity: "身份", me: "我", loadedAuthors: "已加载的作者", allDates: "所有日期",

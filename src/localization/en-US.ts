@@ -607,7 +607,7 @@ export const EN_US: LocaleCatalog = {
     upToCommit: (shortOid) => `Up to ${shortOid}`,
     historyStartsAt: (shortOid, repositoryId) => `History starts at exact commit ${shortOid} in ${repositoryId}`,
     branchCount: (count) => `Branch ${count}`, textOrHash: "Text or hash", filterCommitHistory: "Filter commit history",
-    useRegularExpression: "Use regular expression", matchCase: "Match case", queryFilters: "History query filters",
+    useRegularExpression: "Use regular expression", matchCase: "Match case", queryFilters: "History query filters", clearCurrentFilter: "Clear current History filter", clearAllFilters: "Clear all History filters",
     filterByAuthor: "Filter by commit author", filterByDate: "Filter by commit date",
     filterByPathsOrRoots: "Filter by repository paths or Git roots", graphOptions: "Graph order and traversal options",
     select: "Select…", recent: "Recent", favorites: "Favorites", allUsers: "All users", identity: "Identity",

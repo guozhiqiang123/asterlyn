@@ -5092,6 +5092,7 @@ export class AsterlynApp {
         this.applyHistoryQuery();
       });
     });
+    this.root.querySelector<HTMLButtonElement>("[data-history-clear-all]")?.addEventListener("click", () => { this.gitHistoryPresentationRuntime.filters.clearAllFilters(); this.applyHistoryQuery(); });
     this.root.querySelectorAll<HTMLButtonElement>("[data-history-branch-submenu]").forEach((button) => {
       const open = () => {
         const submenu = button.dataset.historyBranchSubmenu;

@@ -16,6 +16,8 @@ export const HISTORY_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   history(HISTORY_COMMANDS.openDateFilter, '[data-history-menu="date"]', (copy) => copy.filterByDate, "history date time filter"),
   history(HISTORY_COMMANDS.openPathFilter, '[data-history-menu="paths"]', (copy) => copy.filterByPathsOrRoots, "history path root file filter"),
   history(HISTORY_COMMANDS.openGraphFilter, '[data-history-menu="graph"]', (copy) => copy.graphOptions, "history graph sort options"),
+  history(HISTORY_COMMANDS.clearCurrentFilter, "[data-history-clear-filter]", (copy) => copy.clearCurrentFilter, "clear current active history filter"),
+  history(HISTORY_COMMANDS.clearAllFilters, "[data-history-clear-all]", (copy) => copy.clearAllFilters, "clear reset all active history filters"),
   history(HISTORY_COMMANDS.toggleFileView, "#commit-file-view-toggle, #comparison-file-view-toggle, #commit-folder-file-view-toggle", (copy) => copy.showChangedFilesAs(`${copy.flatList} / ${copy.directoryTree}`), "history changed files tree flat view"),
   history(HISTORY_COMMANDS.expandFiles, "#commit-file-expand-all, #comparison-file-expand-all, #commit-folder-expand-all", (copy) => copy.expandChangedFolders, "history expand changed file folders"),
   history(HISTORY_COMMANDS.collapseFiles, "#commit-file-collapse-all, #comparison-file-collapse-all, #commit-folder-collapse-all", (copy) => copy.collapseChangedFolders, "history collapse changed file folders"),

@@ -458,6 +458,7 @@ test("history navigation owns filter menus and list host presentation", () => {
   assert.match(html, /No commits match these filters/);
   assert.match(html, /Up to aaaaaaaaaa/);
   assert.match(html, /data-history-clear-filter="branch"/);
+  assert.match(html, /data-history-clear-all/);
 });
 
 test("history dialogs and commit details render without the application shell", () => {

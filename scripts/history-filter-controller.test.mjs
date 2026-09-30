@@ -157,6 +157,26 @@ test("history filter chips clear only their owned query dimension", () => {
   assert.equal(controller.query().repositoryIds.length, 0);
 });
 
+test("clearing all History filters resets every query dimension but keeps text search", () => {
+  const controller = new HistoryFilterController(memoryStorage());
+  controller.setTextQuery("fix parser");
+  controller.install({
+    repositoryIds: ["."], refs: [{ repositoryId: ".", fullName: "refs/heads/main" }],
+    startCommit: null, authorEmails: ["developer@example.com"], currentAuthor: true,
+    sinceEpoch: 123, paths: [{ repositoryId: ".", path: "src" }], firstParent: true,
+    excludeMerges: true, order: "date",
+  });
+
+  controller.clearAllFilters();
+
+  assert.deepEqual(controller.query(), {
+    repositoryIds: [], refs: [], startCommit: null, authorEmails: [], currentAuthor: false,
+    sinceEpoch: null, paths: [], firstParent: false, excludeMerges: false, order: "topological",
+  });
+  assert.equal(controller.state.historyQuery, "fix parser");
+  assert.equal(controller.state.historyFilterMenu, null);
+});
+
 test("history path tree projects only the requested level", () => {
   const files = [
     { repositoryId: ".", path: "src/features/app.ts", workspacePath: "src/features/app.ts" },

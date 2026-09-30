@@ -21,6 +21,8 @@ export const HISTORY_COMMANDS = {
   openDateFilter: commandId("history.filter.date.open"),
   openPathFilter: commandId("history.filter.path.open"),
   openGraphFilter: commandId("history.filter.graph.open"),
+  clearCurrentFilter: commandId("history.filter.clearCurrent"),
+  clearAllFilters: commandId("history.filter.clearAll"),
   toggleFileView: commandId("history.files.view.toggle"),
   expandFiles: commandId("history.files.expandAll"),
   collapseFiles: commandId("history.files.collapseAll"),

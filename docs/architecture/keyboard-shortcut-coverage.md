@@ -167,7 +167,7 @@ without Asterlyn claiming common editor or terminal keys.
 | Focus History filter | navigation | `history.find.focus` | **Default:** Primary+F in History scope |
 | Toggle History regex / match case | presentation | `history.filter.regex.toggle`, `history.filter.case.toggle` | **Custom** |
 | Open branch/user/date/path/graph filters | navigation | `history.filter.branch.open`, `history.filter.user.open`, `history.filter.date.open`, `history.filter.path.open`, `history.filter.graph.open` | **Custom** |
-| Clear one/all active History filters | presentation | `history.filter.clearCurrent`, `.clearAll` | **Gap** |
+| Clear one/all active History filters | presentation | `history.filter.clearCurrent`, `history.filter.clearAll` | **Custom**; clear-current chooses the leftmost active chip |
 | Select commits and ranges | navigation | History list keyboard/pointer contract | **Local** |
 | Open selected commit/range comparison | navigation | `history.selection.compare` | **Custom**; exact current two-commit range is revalidated |
 | Load more history | read | `history.loadMore` | **Custom** |

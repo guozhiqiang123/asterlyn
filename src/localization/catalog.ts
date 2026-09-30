@@ -917,7 +917,7 @@ export interface HistoryCopy {
   filterCommitHistory: string;
   useRegularExpression: string;
   matchCase: string;
-  queryFilters: string;
+  queryFilters: string; clearCurrentFilter: string; clearAllFilters: string;
   filterByAuthor: string;
   filterByDate: string;
   filterByPathsOrRoots: string;

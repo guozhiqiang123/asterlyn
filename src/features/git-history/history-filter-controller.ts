@@ -254,6 +254,11 @@ export class HistoryFilterController {
     this.closeMenus();
   }
 
+  clearAllFilters(): void {
+    this.install(defaultHistoryQuery());
+    this.closeMenus();
+  }
+
   toggleCurrentAuthor(): void {
     this.value.historyStartCommit = null;
     this.value.historyCurrentAuthor = !this.value.historyCurrentAuthor;
