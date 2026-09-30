@@ -2,10 +2,9 @@
 
 ## Problem
 
-On first launch, Asterlyn opens the operating system folder chooser. Cancelling that chooser leaves
-the window without a project, but the initial shell currently presents the Files tool as selected
-and shows an indefinite `Waiting for a project` spinner. That makes a completed cancellation look
-like a pending import and provides no obvious way to reopen the chooser from the Welcome page.
+On first launch, Asterlyn must enter a stable Welcome page without opening the operating system
+folder chooser. The folder chooser is a user-initiated action, not part of startup. An empty
+workspace must not retain persisted tool-window layout or look like a pending import.
 
 ## State contract
 
@@ -13,8 +12,8 @@ like a pending import and provides no obvious way to reopen the chooser from the
 
 - every project-scoped activity-rail entry is visibly disabled, removed from keyboard focus, and
   cannot be clicked or dragged;
-- no activity entry remains selected and no tool-window body presents an indefinite progress
-  indicator;
+- no activity entry remains selected, both project tool windows are hidden, and no indefinite
+  progress indicator is presented;
 - the Welcome editor presents one primary `Open a project folder` action that invokes the existing
   native directory chooser;
 - cancelling the chooser leaves the same ready state intact, while selecting a directory continues
@@ -26,22 +25,26 @@ Git-only activity entries remain unavailable under the existing capability polic
 
 ## Implementation plan
 
-1. Make the shell renderer derive activity selection from capability, emit native `disabled`
-   semantics, and render a static empty navigator when no workspace is open.
-2. Add a reusable actionable editor empty state and render it only for the no-project Welcome
+1. Make startup restore a valid recent project when available, but remain on Welcome when there is
+   no recent project or the remembered project is stale; never open the chooser automatically.
+2. Make the shell renderer derive activity selection from capability, emit native `disabled`
+   semantics, and keep both persisted tool-window regions hidden when no workspace is open.
+3. Add a reusable actionable editor empty state and render it only for the no-project Welcome
    document; bind its button to the existing repository chooser.
-3. Make cancellation explicitly refresh the empty-workspace presentation so later chooser paths
+4. Make cancellation explicitly refresh the empty-workspace presentation so later chooser paths
    cannot leave stale loading or selection state behind.
-4. Update unavailable-control styling to remove hover, pressed, drag, and focus affordances.
-5. Add renderer regressions for the no-project, ordinary-folder, and Git-workspace capability
-   states, plus a source-level interaction check for the Welcome action.
+5. Update unavailable-control styling to remove hover, pressed, drag, and focus affordances.
+6. Add startup and renderer regressions for the no-project, ordinary-folder, and Git-workspace
+   capability states, plus a source-level interaction check for the Welcome action.
 
 ## Acceptance
 
-- Fresh-profile launch opens the native directory chooser.
-- Pressing Cancel returns to a ready Welcome page with no spinner.
-- All six activity-rail entries are disabled and none is highlighted.
+- Fresh-profile launch shows the ready Welcome page without opening the native directory chooser.
+- The left and bottom project tool windows are hidden, with all six activity entries disabled and
+  none highlighted.
+- The Welcome page shows a primary `Open a project folder` button.
 - Activating `Open a project folder` reopens the native chooser.
+- Pressing Cancel returns to the same ready Welcome page with no spinner.
 - Selecting either an ordinary folder or Git repository restores the existing capability-aware
   activity behavior.
 - Type checking, frontend tests, production build, packaged-app signature verification, and a
@@ -49,16 +52,16 @@ Git-only activity entries remain unavailable under the existing capability polic
 
 ## Result
 
-Implemented and accepted on 2026-09-30. The packaged macOS application was launched without a
-workspace, the native chooser was cancelled, and the resulting window showed only the Welcome
-editor: all six activity entries were disabled, no entry retained selected styling, both project
-tool windows were closed, and no loading indicator remained. Activating the new primary Welcome
-action opened the native chooser again.
+Implemented and accepted on 2026-09-30. A fresh installed profile opened directly to the stable
+Welcome page with no native chooser or loading indicator. Both project tool-window regions were
+hidden, all six project activity entries were disabled with no selected entry, and the primary
+`Open a project folder` button was visible. Activating that button opened the native directory
+chooser; cancelling it returned to the same stable Welcome page.
 
-The complete 777-test frontend suite, TypeScript checking, production frontend build, macOS release
-bundle, strict deep signature verification, build-tree rendered smoke, and installed-app rendered
-smoke passed. The arm64 archive is
-`target/release/bundle/macos/Asterlyn-empty-workspace-startup-20260930-macos-arm64.zip` (9,032,250
-bytes; SHA-256 `ce64ac28fcdee00fd81538438c247494e1e153acb234d57ed5bad42eff3bccd3`).
-The installed executable matched the accepted build byte-for-byte; the replaced application remains
-recoverable from `/Users/gzq/.Trash/Asterlyn-before-empty-workspace-startup-20260930-1558.app`.
+The complete 778-test frontend suite, TypeScript checking, production frontend build, macOS release
+bundle, native rendered smoke, strict deep signature verification, installed-executable identity
+check, and installed-app interaction acceptance passed. The arm64 archive is
+`target/release/bundle/macos/Asterlyn-empty-welcome-startup-20260930-macos-arm64.zip` (9,032,287
+bytes; SHA-256 `110593b4a2378f5cebaa0f60187ec4c676358c0e476a5b6b8de585b8a93a6a66`).
+The replaced application remains recoverable from
+`/Users/gzq/.Trash/Asterlyn-before-empty-welcome-startup-20260930-162623.app`.

@@ -1767,7 +1767,6 @@ export class AsterlynApp {
     await restoreRecentRepository(
       window.localStorage,
       (recent) => this.openRepository(recent, false),
-      () => this.chooseRepository(),
     );
   }
 
@@ -3918,6 +3917,7 @@ export class AsterlynApp {
   }
 
   private applyWorkbenchLayout(persist: boolean): void {
+    if (!this.windowSession.workspace.state.root) return hideWorkspaceToolWindows(this.root);
     this.workbenchLayoutRuntime.apply(persist);
   }
 

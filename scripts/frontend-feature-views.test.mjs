@@ -15,6 +15,7 @@ import { renderHistoryNavigation } from "../src/features/git-history/history-nav
 import {
   actionableEmptyState,
   contentHeading,
+  editorWelcomePresentation,
   renderDiffControls,
   renderEditorTabMenu,
   renderEditorTabs,
@@ -151,6 +152,14 @@ test("actionable empty state exposes an explicit project-folder button", () => {
   assert.match(html, /class="primary-button empty-state-action"/u);
   assert.match(html, /id="open-project-from-welcome"/u);
   assert.match(html, />Open a project folder<\/button>/u);
+});
+
+test("no-project Welcome presentation owns the user-initiated folder chooser action", () => {
+  const presentation = editorWelcomePresentation(false, "en-US", EN_US.shell, EN_US.editor);
+
+  assert.equal(presentation.actionId, "open-project-from-welcome");
+  assert.match(presentation.html, /class="primary-button empty-state-action"/u);
+  assert.match(presentation.html, />Open a project folder<\/button>/u);
 });
 
 test("shell search shortcut uses the native macOS convention", () => {

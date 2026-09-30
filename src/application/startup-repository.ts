@@ -13,18 +13,14 @@ export type RecentRepositoryRestore = "opened" | "recovered" | "empty";
 export async function restoreRecentRepository(
   storage: RecentRepositoryStorage,
   open: (path: string) => Promise<boolean>,
-  choose: () => Promise<void>,
 ): Promise<RecentRepositoryRestore> {
   let recent: string | null = null;
   try {
     recent = storage.getItem(RECENT_REPOSITORY_KEY);
   } catch {
-    // Storage failure must not block the first project chooser.
+    // Storage failure must not block the stable first-launch Welcome state.
   }
-  if (!recent) {
-    await choose();
-    return "empty";
-  }
+  if (!recent) return "empty";
 
   let opened = false;
   try {
@@ -35,7 +31,6 @@ export async function restoreRecentRepository(
   if (opened) return "opened";
 
   forgetRecentRepository(storage, recent);
-  await choose();
   return "recovered";
 }
 
