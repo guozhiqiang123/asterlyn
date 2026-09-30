@@ -236,7 +236,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         "previewToken",
       );
       nullableStrings(result, command, "newBranch");
-      assert(String(result.sourceFullName).startsWith("refs/heads/"), command, "sourceFullName must be a local branch");
+      assert(
+        String(result.sourceFullName).startsWith("refs/heads/") ||
+          String(result.sourceFullName).startsWith("refs/remotes/"),
+        command,
+        "sourceFullName must be a local or remote-tracking branch",
+      );
       assert(Boolean(result.projectName), command, "projectName must not be empty");
       assert(Boolean(result.destinationPath), command, "destinationPath must not be empty");
       break;

@@ -67,7 +67,7 @@ test("branch menu matrix keeps writes scoped to one top-level ref", () => {
       assert.equal(menuIds.includes("git-branches.context-actions.delete"), true);
     } else {
       assert.equal(menuIds.includes("git-branches.context-actions.checkout-remote"), true);
-      assert.equal(menuIds.includes("git-branches.context-actions.create-worktree"), false);
+      assert.equal(menuIds.includes("git-branches.context-actions.create-worktree"), true);
       assert.equal(menuIds.includes("git-branches.context-actions.rename"), false);
       assert.equal(menuIds.includes("git-branches.context-actions.delete"), false);
     }

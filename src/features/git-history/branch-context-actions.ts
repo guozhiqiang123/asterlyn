@@ -251,7 +251,7 @@ export function branchContextMenuModel(
       items.push(command("checkout-remote", labels.checkoutRemote, policy.switch));
     }
     items.push(command("create", labels.newBranchFrom, policy.create));
-    if (target.branch.kind === "local") {
+    if (target.branch.kind === "local" || target.branch.kind === "remote") {
       items.push(command("create-worktree", labels.newWorktree, policy.createWorktree));
     }
     if (!target.branch.current) {

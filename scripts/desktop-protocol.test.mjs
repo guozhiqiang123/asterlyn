@@ -357,6 +357,15 @@ test("desktop response validation accepts representative valid payloads", () => 
     validateDesktopResult("prepare_worktree_creation", creationPlan),
     creationPlan,
   );
+  const remoteCreationPlan = {
+    ...creationPlan,
+    sourceFullName: "refs/remotes/origin/main",
+    sourceName: "origin/main",
+  };
+  assert.deepEqual(
+    validateDesktopResult("prepare_worktree_creation", remoteCreationPlan),
+    remoteCreationPlan,
+  );
 });
 
 test("desktop response validation rejects malformed results", () => {
@@ -450,8 +459,8 @@ test("desktop response validation rejects malformed results", () => {
   assert.throws(
     () => validateDesktopResult("prepare_worktree_creation", {
       repositoryRoot: "/repo",
-      sourceFullName: "refs/remotes/origin/main",
-      sourceName: "main",
+      sourceFullName: "refs/tags/v1.0",
+      sourceName: "v1.0",
       sourceOid: "a".repeat(40),
       parentDirectory: "/worktrees",
       projectName: "repo-main",
@@ -461,7 +470,7 @@ test("desktop response validation rejects malformed results", () => {
       startHeadOid: "a".repeat(40),
       previewToken: "reviewed-worktree-creation",
     }),
-    /local branch/,
+    /local or remote-tracking branch/,
   );
   assert.throws(
     () => validateDesktopResult("compare_commit_file_to_current", {

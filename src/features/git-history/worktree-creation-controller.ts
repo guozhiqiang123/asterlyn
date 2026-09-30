@@ -50,16 +50,18 @@ export class WorktreeCreationController {
   }
 
   open(repositoryRoot: string, branches: readonly BranchSummary[], source: BranchSummary): void {
-    const local = branches.filter((branch) => branch.repositoryId === "." && branch.kind === "local");
-    if (!local.some((branch) => branch.fullName === source.fullName && branch.oid === source.oid)) return;
+    const sources = branches.filter((branch) =>
+      branch.repositoryId === "." && (branch.kind === "local" || branch.kind === "remote")
+    );
+    if (!sources.some((branch) => branch.fullName === source.fullName && branch.oid === source.oid)) return;
     this.value = { dialog: {
       repositoryRoot,
-      branches: local.map((branch) => ({ ...branch })),
+      branches: sources.map((branch) => ({ ...branch })),
       sourceFullName: source.fullName,
       sourceOid: source.oid,
       newBranchEnabled: false,
       newBranch: "",
-      projectName: suggestedProjectName(repositoryRoot, source.name, local),
+      projectName: suggestedProjectName(repositoryRoot, source.name, sources),
       parentDirectory: parentPath(repositoryRoot),
       busy: false,
       error: null,

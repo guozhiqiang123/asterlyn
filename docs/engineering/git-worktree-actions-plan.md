@@ -6,8 +6,8 @@
 - **Working branch:** `codex/delete-worktree-action`
 - **Scope:** Detect primary and linked Git worktrees in the Branches tool, show all local branches
   as `PRIMARY` / `WORKTREE` / `AVAILABLE`, provide reviewed ordinary or explicitly forced
-  linked-worktree removal, create a worktree from an exact local branch, and expose safe open and
-  file-manager actions for registered linked worktrees.
+  linked-worktree removal, create a worktree from an exact local or remote-tracking branch, and
+  expose safe open and file-manager actions for registered linked worktrees.
 
 ## Objective
 
@@ -212,15 +212,15 @@ deleting a host directory.
 
 ## WT5 — Android Studio-style New Worktree
 
-The Branches context menu adds **New Worktree from…** for one exact local branch. Creation has its
-own typed request, reviewed plan, controller, dialog, and desktop commands; it does not overload
-branch mutation or accept a renderer-selected command line.
+The Branches context menu adds **New Worktree from…** for one exact local or remote-tracking branch.
+Creation has its own typed request, reviewed plan, controller, dialog, and desktop commands; it does
+not overload branch mutation or accept a renderer-selected command line.
 
 The dialog mirrors the useful structure of Android Studio's New Worktree surface while retaining
 Asterlyn's existing visual system:
 
-- **From branch** is a local-branch selector initialized to the right-clicked branch; changing it
-  updates the exact source ref/object used by preparation.
+- **From branch** is a local/remote-tracking branch selector initialized to the right-clicked branch;
+  changing it updates the exact source ref/object used by preparation.
 - **New branch** is optional. Enabling it reveals a validated local branch name. Leaving it disabled
   creates a detached worktree at the selected source object so an already checked-out source branch
   is never checked out twice.
@@ -259,11 +259,11 @@ when the current window already represents a linked worktree. The registered pat
 repository snapshot is presentation identity only; the native reveal command repeats repository
 authorization and worktree association checks at activation time.
 
-Acceptance covers menu availability, branch selection, native chooser cancellation, field
-validation, destination preview, detached and new-branch creation, exact-object and stale-plan
-rejection, collision/overlap/Git-metadata blocking, primary-window-only Open/Reveal availability,
-reuse of the current/new-window confirmation flow, safe native registered-worktree reveal,
-protocol validation, localization, full regression gates, and installed-package replacement.
+Acceptance covers local and remote-tracking menu availability and branch selection, native chooser
+cancellation, field validation, destination preview, detached and new-branch creation, exact-object
+and stale-plan rejection, collision/overlap/Git-metadata blocking, primary-window-only Open/Reveal
+availability, reuse of the current/new-window confirmation flow, safe native registered-worktree
+reveal, protocol validation, localization, full regression gates, and installed-package replacement.
 
 ## Validation matrix
 
@@ -299,32 +299,32 @@ protocol validation, localization, full regression gates, and installed-package 
   checkout-state and force-review follow-up `dcecf8678423319a0b45ad68c4f04001273a064e`, plus the
   New/Open/Reveal follow-up. The exact completion-record commit is reported in the handoff because
   a commit cannot embed its own hash.
-- **Frontend:** TypeScript checking, the 769-test script suite, production Vite build, ownership
+- **Frontend:** TypeScript checking, the 770-test script suite, production Vite build, ownership
   budgets, protocol validation, and `git diff --check` passed.
 - **Native:** Rust formatting, strict all-target workspace Clippy, and workspace tests passed. The
-  `asterlyn-git` crate passed 130 tests; two unrelated operating-system watcher tests remain ignored
+  `asterlyn-git` crate passed 132 tests; two unrelated operating-system watcher tests remain ignored
   by their existing contract.
 - **Worktree coverage:** porcelain paths with spaces, detached records, locked/prunable state,
   malformed UTF-8, duplicate branch associations, primary/linked/available presentation, clean
   removal, dirty and primary-uncontained warning review, stale force-token rejection, exact forced
   removal, locked, missing, current, and stale targets passed. Successful ordinary and forced
   removal retained the local branch. New coverage also passed for detached and new-branch creation,
-  invalid names, existing/colliding/overlapping destinations, menu eligibility, native folder
-  chooser cancellation, compact primary-project-based default names, primary-only Open/Reveal
-  behavior, and exact registered-path reveal.
+  exact remote-tracking sources, invalid names, existing/colliding/overlapping destinations, local
+  and remote menu eligibility, native folder chooser cancellation, compact primary-project-based
+  default names, primary-only Open/Reveal behavior, and exact registered-path reveal.
 - **Accepted package:**
-  `target/release/bundle/macos/Asterlyn-worktree-short-name-20260930-macos-arm64.zip`, 9,031,270
-  bytes, SHA-256 `49d12e6aa9b8681670402896cf08376f893e9443c0223ac497e3662535685f02`.
-- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,930,512 bytes,
+  `target/release/bundle/macos/Asterlyn-remote-worktree-20260930-macos-arm64.zip`, 9,031,500 bytes,
+  SHA-256 `b755282f5d7bca549a218d7ec3f11cd5b9689248b5f283adefe0d61ba6e0fee9`.
+- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,930,672 bytes,
   SHA-256
-  `f8a523c35c38dcf9c82275432d71a687a8374de3d5a4b3880844723bd8b06d0c`, exactly matching the
+  `b05192c07d99c6bb7d63ea0b3db6b0a00cd104d7362f1cb38722bfd790b61793`, exactly matching the
   packaged executable. The arm64 bundle is ad-hoc signed with hardened runtime, passed strict
   signature verification, passed the six-second isolated native smoke, and rendered the expected
   application-shell marker within the 15-second bound from both the build and installed paths. The
   relaunched installed application also exposed an on-screen 1320 x 821 Asterlyn window through
   CoreGraphics.
 - **Replaced installation backup:** moved to the recoverable macOS Trash location
-  `/Users/gzq/.Trash/Asterlyn.app.backup-worktree-short-name-20260930-134219` after installed
+  `/Users/gzq/.Trash/Asterlyn.app.backup-remote-worktree-20260930-135748` after installed
   verification.
 - **Host:** macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1, and Git
   2.48.1. Windows/Linux compilation and installed interaction remain platform-specific follow-up

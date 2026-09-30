@@ -20,6 +20,13 @@ const branch = (name, oidValue) => ({
   primaryWorktreePath: name === "main" ? "/projects/app" : null,
   linkedWorktreePath: null,
 });
+const remoteBranch = (name, oidValue) => ({
+  ...branch(name, oidValue),
+  kind: "remote",
+  fullName: `refs/remotes/${name}`,
+  current: false,
+  primaryWorktreePath: null,
+});
 
 test("new worktree dialog derives Android Studio-style defaults and executes an exact plan", async () => {
   const requests = [];
@@ -85,6 +92,46 @@ test("folder cancellation preserves location and required new branch is validate
   await controller.submit();
   assert.equal(controller.state.dialog.error, "branch-name-required");
   assert.equal(prepared, 0);
+});
+
+test("remote-tracking branches are exact selectable worktree sources", async () => {
+  const requests = [];
+  const main = branch("main", "a");
+  const remote = remoteBranch("origin/topic", "d");
+  const controller = new WorktreeCreationController({
+    chooseDirectory: async () => ({ kind: "cancelled" }),
+    prepare: async (root, request) => {
+      requests.push([root, structuredClone(request)]);
+      return {
+        repositoryRoot: root,
+        sourceFullName: request.sourceFullName,
+        sourceName: remote.name,
+        sourceOid: request.sourceOid,
+        parentDirectory: request.parentDirectory,
+        projectName: request.projectName,
+        destinationPath: `${request.parentDirectory}/${request.projectName}`,
+        newBranch: request.newBranch,
+        startHeadRef: "refs/heads/main",
+        startHeadOid: main.oid,
+        previewToken: "reviewed-remote",
+      };
+    },
+    execute: async () => true,
+    errorMessage: String,
+  });
+
+  controller.open("/projects/app", [main, remote], remote);
+  assert.equal(controller.state.dialog.sourceFullName, remote.fullName);
+  assert.deepEqual(
+    controller.state.dialog.branches.map((candidate) => candidate.fullName),
+    [main.fullName, remote.fullName],
+  );
+  assert.equal(controller.state.dialog.projectName, "app-topic");
+  controller.updateNewBranchEnabled(true);
+  controller.updateNewBranch("topic-worktree");
+  await controller.submit();
+  assert.equal(requests[0][1].sourceFullName, remote.fullName);
+  assert.equal(requests[0][1].newBranch, "topic-worktree");
 });
 
 test("default project names use the primary checkout name and stay compact", () => {

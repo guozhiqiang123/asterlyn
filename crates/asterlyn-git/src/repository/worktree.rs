@@ -51,12 +51,12 @@ impl GitRepository {
             .into_iter()
             .find(|candidate| {
                 candidate.repository_id == "."
-                    && candidate.kind == BranchKind::Local
+                    && matches!(candidate.kind, BranchKind::Local | BranchKind::Remote)
                     && candidate.full_name == request.source_full_name
             })
             .ok_or_else(|| GitError::InvalidInput {
                 field: "source branch".to_string(),
-                message: "select an existing local branch".to_string(),
+                message: "select an existing local or remote-tracking branch".to_string(),
             })?;
         if source.oid != request.source_oid {
             return Err(stale_worktree_creation(
@@ -902,6 +902,39 @@ mod tests {
         let destination = parent.path().join("main-review");
         assert_eq!(git_stdout(&destination, &["rev-parse", "HEAD"]), source_oid);
         assert!(git_stdout(&destination, &["branch", "--show-current"]).is_empty());
+    }
+
+    #[test]
+    fn creates_new_local_branch_from_exact_remote_tracking_object() {
+        let directory = repository_fixture();
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/main"]);
+        git(
+            directory.path(),
+            &["update-ref", "refs/remotes/origin/topic", &source_oid],
+        );
+        let parent = tempfile::tempdir().unwrap();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = WorktreeCreationRequest {
+            source_full_name: "refs/remotes/origin/topic".to_string(),
+            source_oid: source_oid.clone(),
+            parent_directory: parent.path().to_string_lossy().into_owned(),
+            project_name: "remote-topic".to_string(),
+            new_branch: Some("topic-worktree".to_string()),
+        };
+
+        let plan = repository
+            .prepare_worktree_creation(&request)
+            .expect("remote-tracking source plan");
+        repository
+            .execute_worktree_creation(&plan)
+            .expect("remote-tracking worktree creation");
+
+        let destination = parent.path().join("remote-topic");
+        assert_eq!(git_stdout(&destination, &["rev-parse", "HEAD"]), source_oid);
+        assert_eq!(
+            git_stdout(&destination, &["branch", "--show-current"]),
+            "topic-worktree"
+        );
     }
 
     #[test]

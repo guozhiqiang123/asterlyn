@@ -72,10 +72,10 @@ function prepareDemoWorktree(
   request: WorktreeCreationRequest,
 ): WorktreeCreationPlan {
   const source = snapshot.branches.find((branch) =>
-    branch.repositoryId === "." && branch.kind === "local" &&
+    branch.repositoryId === "." && (branch.kind === "local" || branch.kind === "remote") &&
     branch.fullName === request.sourceFullName && branch.oid === request.sourceOid
   );
-  if (!source) throw new Error("The selected local branch changed.");
+  if (!source) throw new Error("The selected local or remote-tracking branch changed.");
   const parent = request.parentDirectory.replace(/[\\/]+$/u, "");
   const destinationPath = `${parent}/${request.projectName}`;
   return {
