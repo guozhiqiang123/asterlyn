@@ -10,6 +10,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Architecture
 
 - [`architecture/overview.md`](architecture/overview.md) — boundaries, dependency direction, runtime model, and evolution seams.
+- [`architecture/keyboard-shortcut-coverage.md`](architecture/keyboard-shortcut-coverage.md) — durable per-surface user-action inventory, shortcut classification, coverage gaps, and feature completion rules.
 - [`architecture/decisions/0001-foundation.md`](architecture/decisions/0001-foundation.md) — first architecture decision record.
 - [`architecture/decisions/0002-tracked-first-refresh.md`](architecture/decisions/0002-tracked-first-refresh.md) — cancellable two-phase repository refresh contract.
 - [`architecture/decisions/0003-persistent-workbench.md`](architecture/decisions/0003-persistent-workbench.md) — persistent editor, orthogonal tool windows, and resizable layout state.

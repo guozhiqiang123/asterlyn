@@ -32,6 +32,21 @@ A 3–5 year product will outlive individual library versions and many early ass
 - Reserve 20–30% of delivery capacity for defects, platform changes, performance, accessibility, and dependency upkeep after Stage 2.
 - Remove experiments that fail their decision deadline; do not leave dormant frameworks in the baseline.
 
+## Interaction and shortcut lifecycle
+
+- The per-surface [`keyboard shortcut coverage ledger`](../architecture/keyboard-shortcut-coverage.md)
+  is a maintained architecture source, not a one-time implementation checklist.
+- Every new user-visible action must be classified in that ledger in the same change as **Command**,
+  **Local**, or **Excluded**. A feature is incomplete without this decision.
+- Stable product actions register localized, availability-aware commands and appear in Keyboard
+  Shortcuts even when they intentionally ship without a default binding.
+- Component navigation, text editing, modal confirmation, and operating-system lifecycle keys stay
+  local unless a reviewed command adapter can preserve focus, identity, confirmation, and recovery.
+- Removing or renaming a command must document override compatibility. Stable IDs are not renamed to
+  match new labels or UI placement.
+- Feature acceptance covers the button/menu route and the command/shortcut route against the same
+  business behavior; destructive shortcuts may never bypass review or confirmation.
+
 ## Publication lifecycle
 
 - Remote publication follows the reviewed [`asterlyn-git` Push workflow](../engineering/local-build.md#repository-publication-policy), including an exact preview token and post-push remote verification.

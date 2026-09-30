@@ -142,6 +142,11 @@ one terminal success, no-op, cancellation, or failure result. A status-bar chang
 sufficient when the command otherwise leaves the current surface unchanged. Controls rendered
 inside replaceable feature regions use delegation from a stable owner or explicitly rebind through a
 disposable lifecycle; a visually available replacement node cannot silently lose its command route.
+The maintained [keyboard shortcut coverage ledger](keyboard-shortcut-coverage.md) groups actions by
+product surface, then tags their action family. Every new or changed user-visible action must update
+that ledger in the same change and be classified as a customizable application command, a
+component-local keyboard interaction, or an explicitly justified exclusion. A missing default key
+does not exempt a stable action from command registration or Settings discovery.
 The remote-command controller is a projection of the canonical repository session, not an
 independent source of Git truth. It receives every `head`, `refs`, `workingTree`, and `operation`
 change because action policy depends on branch/upstream identity, worktree cleanliness, untracked

@@ -1,6 +1,7 @@
 # Keyboard shortcut management plan
 
-- **Status:** Implemented; local automated acceptance complete, installed-app interaction pending
+- **Status:** Implemented and manually accepted on the local installed macOS package; ongoing command
+  coverage is governed by the architecture ledger
 - **Date:** 2026-09-29
 - **Scope:** Application-local command discovery, dispatch, customization, persistence, conflict
   handling, Settings presentation, and editor/terminal integration.
@@ -19,6 +20,9 @@ The accepted architecture is recorded in
 [`ADR-0018`](../architecture/decisions/0018-command-and-keybinding-system.md), and validation evidence
 is recorded in
 [`2026-09-29-keyboard-shortcut-management`](../benchmarks/2026-09-29-keyboard-shortcut-management.md).
+The maintained per-surface action inventory and all future coverage decisions live in
+[`keyboard-shortcut-coverage`](../architecture/keyboard-shortcut-coverage.md); this delivery plan is
+not the long-term feature ledger.
 
 ## Objective
 

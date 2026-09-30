@@ -36,10 +36,19 @@ allowed in terminal focus, so ordinary text and terminal control sequences remai
 Settings provides localized discovery, search, state/category filters, recording, conflict display,
 add/replace/disable/reset operations, invalid-profile repair, and live effective shortcut labels.
 
+The durable user-action and shortcut ledger is maintained by product surface in
+[`keyboard-shortcut-coverage.md`](../keyboard-shortcut-coverage.md). Every new user-visible action
+must be classified there as a registered customizable command, component-local keyboard behavior,
+or an explicitly justified exclusion. This classification, localized command metadata, and an
+explicit default-binding decision are part of the feature's definition of done rather than a later
+shortcut-system cleanup.
+
 ## Consequences
 
 - Keyboard, palette, and future menu routes share command availability and execution behavior.
 - New application commands require a registry contribution rather than another shell keydown branch.
+- New user-facing controls require a same-change entry in the per-surface shortcut ledger; commands
+  ship discoverable and customizable even when risk or conflicts justify leaving the default empty.
 - Per-window listener, store, chord timer, subscriptions, and terminal adapter have explicit disposal.
 - Native global hotkeys, repository-provided keymaps, macros, arbitrary conditions, and profile
   import/export remain out of scope.
