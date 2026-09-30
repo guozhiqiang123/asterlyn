@@ -40,7 +40,10 @@ test("path copy actions derive three exact values without filesystem access", ()
     labels,
   );
   assert.equal(windows[2]?.text, "C:\\work\\project\\src\\api.ts");
-  assert.deepEqual(buildPathCopyGroup("files.copy", labels, unix).children, unix.map(copyCommandItem));
+  assert.deepEqual(
+    buildPathCopyGroup("files.copy", labels, unix).children,
+    unix.map((action) => ({ ...copyCommandItem(action), secondaryText: action.text })),
+  );
 });
 
 test("ref and commit builders preserve full unambiguous identities", () => {
@@ -49,6 +52,7 @@ test("ref and commit builders preserve full unambiguous identities", () => {
   assert.equal(ref.text, "refs/remotes/origin/main");
   assert.equal(commit.text, "a".repeat(40));
   assert.equal(copyCommandItem(commit).actionId, "history.copy-commit-id");
+  assert.equal(copyCommandItem(commit).secondaryText, undefined);
 });
 
 test("text clipboard reports success and retains the original failure", async () => {

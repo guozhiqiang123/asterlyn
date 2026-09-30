@@ -275,6 +275,15 @@ test("multi-selection disables single-only actions and formats copy paths with n
   const revealItem = model.items.find((i) => i.id === "project-files.context-actions.reveal");
   assert.equal(revealItem.availability.kind, "enabled");
 
+  const copyPathGroup = model.items.find((i) => i.id === "project-files.context-actions.copy-path");
+  assert.ok(copyPathGroup);
+  assert.equal(copyPathGroup.kind, "submenu");
+  assert.deepEqual(copyPathGroup.children.map((item) => item.secondaryText), [
+    "a.ts\nb.ts",
+    "src/a.ts\nsrc/b.ts",
+    "/workspace/src/a.ts\n/workspace/src/b.ts",
+  ]);
+
   let session = null;
   const copied = [];
   const revealed = [];

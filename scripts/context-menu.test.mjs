@@ -39,6 +39,7 @@ test("context menu models enforce stable ids, reasons, separators, and one subme
           id: "copy.path",
           actionId: "files.copy-path",
           label: "Path",
+          secondaryText: "/work/project/src/app.ts",
           availability: enabled,
         }],
       },
@@ -70,6 +71,19 @@ test("context menu models enforce stable ids, reasons, separators, and one subme
   assert.ok(errors.some((error) => error.includes("duplicate item id same")));
   assert.ok(errors.some((error) => error.includes("no actionId")));
   assert.ok(errors.some((error) => error.includes("empty blocked reason")));
+
+  const secondaryTextErrors = contextMenuModelErrors({
+    ariaLabel: "Actions",
+    items: [{
+      kind: "command",
+      id: "copy",
+      actionId: "copy",
+      label: "Copy",
+      secondaryText: " ",
+      availability: enabled,
+    }],
+  });
+  assert.ok(secondaryTextErrors.some((error) => error.includes("empty secondary text")));
 });
 
 test("menu navigation skips separators, wraps, and supports edge and type-ahead focus", () => {
@@ -176,6 +190,8 @@ test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", 
   assert.match(host, /active\.session\.dismissed\?\.\(\)/u);
   assert.match(host, /revalidate\(\): void/u);
   assert.match(host, /!active\.session\.isCurrent\(\)/u);
+  assert.match(host, /secondary\.textContent = item\.secondaryText/u);
+  assert.match(host, /secondary\.title = item\.secondaryText/u);
   assert.match(lazyHost, /import\("\.\/context-menu-host\.ts"\)/u);
   assert.match(lazyHost, /pending\?\.session\.dismissed\?\.\(\)/u);
   assert.match(lazyHost, /addEventListener\("contextmenu", this\.preventNativeContextMenu/u);

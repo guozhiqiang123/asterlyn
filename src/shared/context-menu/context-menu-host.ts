@@ -358,11 +358,22 @@ export class ContextMenuHost implements ContextMenuPort {
       label.className = "context-menu-label";
       label.textContent = item.availability.kind === "busy" ? item.availability.label : item.label;
       label.title = item.label;
+      const content = this.document.createElement("span");
+      content.className = "context-menu-content";
+      content.append(label);
+      if (item.kind !== "submenu" && item.secondaryText !== undefined) {
+        button.dataset.hasSecondary = "true";
+        const secondary = this.document.createElement("small");
+        secondary.className = "context-menu-secondary-text";
+        secondary.textContent = item.secondaryText;
+        secondary.title = item.secondaryText;
+        content.append(secondary);
+      }
       const trailing = this.document.createElement("span");
       trailing.className = "context-menu-trailing";
       trailing.setAttribute("aria-hidden", "true");
       trailing.textContent = item.kind === "submenu" ? "›" : item.shortcut ?? "";
-      button.append(mark, label, trailing);
+      button.append(mark, content, trailing);
       const reason = itemAvailabilityReason(item);
       if (reason && item.availability.kind === "blocked") {
         const reasonElement = this.document.createElement("small");
