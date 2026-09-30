@@ -274,7 +274,7 @@ export const EN_US: LocaleCatalog = {
       ignored: "Ignored", unknown: "Unknown",
     },
     contextMenu: {
-      ariaLabel: (path) => `File actions for ${path}`,
+      ariaLabel: (path) => `File actions for ${path}`, open: "Open Selected File",
       newFile: "New File…", cut: "Cut", copy: "Copy", paste: "Paste",
       reveal: "Reveal in File Manager", rename: "Rename…", copyPath: "Copy Path",
       fileName: "File Name", relativePath: "Relative Path", absolutePath: "Absolute Path",

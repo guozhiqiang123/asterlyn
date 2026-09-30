@@ -4,6 +4,20 @@ export const FILES_COMMANDS = {
   locateActive: commandId("files.active.locate"),
   expandFolder: commandId("files.folder.expand"),
   collapseFolder: commandId("files.folder.collapse"),
+  openSelection: commandId("files.selection.open"),
+  createFile: commandId("files.file.create"),
+  renameSelection: commandId("files.selection.rename"),
+  cutSelection: commandId("files.selection.cut"),
+  copySelection: commandId("files.selection.copy"),
+  pasteSelection: commandId("files.selection.paste"),
+  revealSelection: commandId("files.selection.reveal"),
+  copyName: commandId("files.selection.copyName"),
+  copyRelativePath: commandId("files.selection.copyRelativePath"),
+  copyAbsolutePath: commandId("files.selection.copyAbsolutePath"),
+  selectionHistory: commandId("files.selection.history"),
+  trashSelection: commandId("files.selection.trash"),
+  openRecoveries: commandId("files.recovery.open"),
+  refresh: commandId("files.refresh"),
 } as const;
 
 export const EDITOR_COMMANDS = {

@@ -111,7 +111,7 @@ test("the workspace root receives the folder menu with root-safe availability an
       },
     },
     {
-      current: () => true, select: () => true,
+      current: () => true, select: () => true, open() {},
       policy: () => policy,
       createFile() {}, cut() {}, copy() {}, paste() {}, reveal() {}, rename() {},
       historyIntent: () => null, installHistoryQuery() {}, trash() {},
@@ -145,6 +145,7 @@ test("Files action provider owns selection, copy routing and exact target lifeti
     {
       current: (candidate) => candidate.workspaceGeneration === 7,
       select: (candidate) => { events.push(["select", candidate.workspacePath]); return true; },
+      open: () => events.push(["open"]),
       policy: () => ({ create: enabled, mutation: enabled, paste: enabled, history: enabled }),
       createFile: () => events.push(["new"]),
       cut: () => events.push(["cut"]),
@@ -207,7 +208,7 @@ test("blocked policy stays semantic and provider does not open for a stale targe
     { open() { opened = true; }, close() {} },
     { writeText: async () => ({ status: "copied" }) },
     {
-      current: () => false, select: () => true,
+      current: () => false, select: () => true, open() {},
       policy: () => ({ create: enabled, mutation: enabled, paste: enabled, history: enabled }),
       createFile() {}, cut() {}, copy() {}, paste() {}, reveal() {}, rename() {},
       historyIntent: () => null, installHistoryQuery() {}, trash() {},
@@ -226,7 +227,7 @@ test("action failures are reported through the feature runtime", async () => {
     { open(_anchor, value) { session = value; }, close() {} },
     { writeText: async () => ({ status: "copied" }) },
     {
-      current: () => true, select: () => true,
+      current: () => true, select: () => true, open() {},
       policy: () => ({ create: enabled, mutation: enabled, paste: enabled, history: enabled }),
       createFile() {}, cut() {}, copy() {}, paste() {},
       async reveal() { throw new Error("reveal failed"); },
@@ -240,6 +241,45 @@ test("action failures are reported through the feature runtime", async () => {
   await session.invoke("project-files.context-actions.reveal");
 
   assert.deepEqual(errors, ["reveal failed"]);
+});
+
+test("Files commands recheck policy and reuse open, copy-path, and destructive routes", async () => {
+  const events = [];
+  let current = true;
+  let mutation = enabled;
+  const provider = new ProjectFilesContextActions(
+    { open() {}, close() {} },
+    { async writeText(text) { events.push(["clipboard", text]); return { status: "copied" }; } },
+    {
+      current: () => current,
+      select: (candidate) => { events.push(["select", candidate.workspacePath]); return true; },
+      policy: () => ({ create: mutation, mutation, paste: mutation, history: enabled }),
+      open: () => events.push(["open"]),
+      createFile() {}, cut() {}, copy() {}, paste() {}, reveal() {}, rename() {},
+      historyIntent: () => null, installHistoryQuery() {},
+      trash: () => events.push(["trash"]),
+      blocked: (reason) => events.push(["blocked", reason]),
+      status: (message) => events.push(["status", message]),
+      error: (error) => events.push(["error", error]),
+    },
+    () => EN_US.projectFiles,
+  );
+
+  assert.equal(provider.commandAvailability("open", target).kind, "enabled");
+  await provider.executeCommand("open", target);
+  await provider.executeCommand("copy-relative-path", target);
+  await provider.executeCommand("trash", target);
+  mutation = { kind: "blocked", reason: "busy now" };
+  await provider.executeCommand("rename", target);
+  current = false;
+  await provider.executeCommand("open", target);
+
+  assert.deepEqual(events, [
+    ["select", "src/app.ts"], ["open"],
+    ["select", "src/app.ts"], ["clipboard", "src/app.ts"], ["status", "Relative path copied"],
+    ["select", "src/app.ts"], ["trash"],
+    ["blocked", "busy now"], ["blocked", EN_US.projectFiles.contextMenu.sourceChanged],
+  ]);
 });
 
 test("multi-selection disables single-only actions and formats copy paths with newlines", async () => {
@@ -289,6 +329,7 @@ test("multi-selection disables single-only actions and formats copy paths with n
     {
       current: () => true,
       select: () => true,
+      open() {},
       policy: () => policy,
       createFile() {}, cut() {}, copy() {}, paste() {},
       reveal: (t) => { revealed.push(t.workspacePath); },

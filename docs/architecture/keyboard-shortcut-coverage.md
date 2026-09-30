@@ -93,16 +93,16 @@ without Asterlyn claiming common editor or terminal keys.
 | Locate the active editor file | navigation | `files.active.locate` | **Custom** |
 | Expand selected folder recursively | presentation | `files.folder.expand` | **Custom** |
 | Collapse selected folder recursively | presentation | `files.folder.collapse` | **Custom** |
-| Open selected file | navigation | `files.selection.open` | **Gap**; Enter/double-click remains **Local** |
-| Create file at selected target | write | `files.file.create` | **Gap** |
-| Rename selected item | write | `files.selection.rename` | **Gap** |
-| Cut, copy, paste selected item | write | `files.selection.cut`, `.copy`, `.paste` | **Gap** |
-| Reveal selected item in the OS file manager | navigation | `files.selection.reveal` | **Gap** |
-| Copy name, relative path, absolute path | read | `files.selection.copyName`, `.copyRelativePath`, `.copyAbsolutePath` | **Gap** |
-| Show Git history for selected path | navigation | `files.selection.history` | **Gap** |
-| Move selected item(s) to system Trash | destructive | `files.selection.trash` | **Gap**, must remain unassigned and confirmed |
-| Review recoverable file operations | navigation | `files.recovery.open` | **Gap** |
-| Retry a failed catalog read | read | `files.refresh` | **Gap**; may share the project refresh service when identities match |
+| Open selected file | navigation | `files.selection.open` | **Custom**; Enter/double-click remains **Local** |
+| Create file at selected target | write | `files.file.create` | **Custom** |
+| Rename selected item | write | `files.selection.rename` | **Custom** |
+| Cut, copy, paste selected item | write | `files.selection.cut`, `files.selection.copy`, `files.selection.paste` | **Custom** |
+| Reveal selected item in the OS file manager | navigation | `files.selection.reveal` | **Custom** |
+| Copy name, relative path, absolute path | read | `files.selection.copyName`, `files.selection.copyRelativePath`, `files.selection.copyAbsolutePath` | **Custom** |
+| Show Git history for selected path | navigation | `files.selection.history` | **Custom** |
+| Move selected item(s) to system Trash | destructive | `files.selection.trash` | **Custom**, remains unassigned and confirmed |
+| Review recoverable file operations | navigation | `files.recovery.open` | **Custom** |
+| Retry a failed catalog read | read | `files.refresh` | **Custom**; reuses the project catalog retry route |
 | Select rows, extend selection, disclose one directory | navigation | tree keyboard/mouse contract | **Local** |
 
 ## 4. Search and replacement

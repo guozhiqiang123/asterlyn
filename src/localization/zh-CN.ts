@@ -164,7 +164,7 @@ export const ZH_CN = {
       ignored: "已忽略", unknown: "未知",
     },
     contextMenu: {
-      ariaLabel: (path) => `${path} 的文件操作`,
+      ariaLabel: (path) => `${path} 的文件操作`, open: "打开所选文件",
       newFile: "新建文件…", cut: "剪切", copy: "复制", paste: "粘贴",
       reveal: "在文件管理器中显示", rename: "重命名…", copyPath: "复制路径",
       fileName: "文件名", relativePath: "相对路径", absolutePath: "绝对路径",

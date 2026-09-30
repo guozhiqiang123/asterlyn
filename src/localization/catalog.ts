@@ -278,7 +278,7 @@ export interface ProjectFilesCopy {
   expandPath(path: string): string;
   changeLabels: Record<ChangeKind, string>;
   contextMenu: {
-    ariaLabel(path: string): string;
+    ariaLabel(path: string): string; open: string;
     newFile: string;
     cut: string;
     copy: string;

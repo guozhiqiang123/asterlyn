@@ -22,6 +22,10 @@ import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 const OWNER_ID = "project-files.context-actions";
 const ENABLED = { kind: "enabled" } as const;
 
+export type ProjectFilesContextCommandAction =
+  | "open" | "new-file" | "rename" | "cut" | "copy" | "paste" | "reveal"
+  | "copy-name" | "copy-relative-path" | "copy-absolute-path" | "history" | "trash";
+
 export interface ProjectFilesContextPolicy {
   readonly create: ContextMenuAvailability;
   readonly mutation: ContextMenuAvailability;
@@ -33,6 +37,7 @@ export interface ProjectFilesContextRuntime {
   current(target: ProjectFilesContextTarget): boolean;
   select(target: ProjectFilesContextTarget): boolean;
   policy(target: ProjectFilesContextTarget): ProjectFilesContextPolicy;
+  open(target: ProjectFilesContextTarget): void | Promise<void>;
   createFile(target: ProjectFilesContextTarget): void | Promise<void>;
   cut(target: ProjectFilesContextTarget): void | Promise<void>;
   copy(target: ProjectFilesContextTarget): void | Promise<void>;
@@ -103,6 +108,83 @@ export class ProjectFilesContextActions {
       restoreFocus: request.restoreFocus,
     });
     return true;
+  }
+
+  commandAvailability(
+    action: ProjectFilesContextCommandAction,
+    target: ProjectFilesContextTarget,
+  ): ContextMenuAvailability {
+    const labels = this.copy().contextMenu;
+    const multiple = Boolean(target.selectedTargets && target.selectedTargets.length > 1);
+    const single = multiple ? { kind: "blocked" as const, reason: labels.multipleSelected } : null;
+    const policy = this.runtime.policy(target);
+    if (action === "open") {
+      return single ?? (target.kind === "file"
+        ? ENABLED
+        : { kind: "blocked", reason: this.copy().projectFiles });
+    }
+    if (action === "new-file") return single ?? policy.create;
+    if (action === "cut" || action === "copy" || action === "rename") {
+      return single ?? policy.mutation;
+    }
+    if (action === "paste") return single ?? policy.paste;
+    if (action === "history") return single ?? policy.history;
+    if (action === "trash") return policy.mutation;
+    return ENABLED;
+  }
+
+  async executeCommand(
+    action: ProjectFilesContextCommandAction,
+    target: ProjectFilesContextTarget,
+  ): Promise<void> {
+    if (!this.runtime.current(target)) {
+      this.runtime.blocked(this.copy().contextMenu.sourceChanged);
+      return;
+    }
+    const availability = this.commandAvailability(action, target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    if (!this.runtime.select(target)) {
+      this.runtime.blocked(this.copy().contextMenu.sourceChanged);
+      return;
+    }
+    try {
+      if (action === "open") {
+        await this.runtime.open(target);
+        return;
+      }
+      if (action === "copy-name" || action === "copy-relative-path" || action === "copy-absolute-path") {
+        await this.copyPath(action, target);
+        return;
+      }
+      await this.invoke(`${OWNER_ID}.${action}`, target);
+    } catch (error) {
+      this.runtime.error(error);
+    }
+  }
+
+  private async copyPath(
+    action: Extract<ProjectFilesContextCommandAction, `copy-${string}`>,
+    target: ProjectFilesContextTarget,
+  ): Promise<void> {
+    const labels = this.copy().contextMenu;
+    const pathActions = projectFilesPathCopyActions(target, {
+      copy: labels.copyPath,
+      fileName: labels.fileName,
+      relativePath: labels.relativePath,
+      absolutePath: labels.absolutePath,
+    });
+    const actionId = `${OWNER_ID}.${action}`;
+    const text = textForCopyAction(pathActions, actionId);
+    if (text === null) throw new Error(`Unknown Files copy action: ${action}`);
+    const result = await this.clipboard.writeText(text);
+    if (result.status === "failure") {
+      this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+      return;
+    }
+    this.runtime.status(copyPathFeedback(actionId, labels));
   }
 
   private async invoke(actionId: string, target: ProjectFilesContextTarget): Promise<void> {
