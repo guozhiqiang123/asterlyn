@@ -461,8 +461,7 @@ function changedProjectionSlices(
       case "repositoryCapability":
         return false;
       case "workingTree":
-        return previous.untrackedState !== next.untrackedState ||
-          !sameProjection(previous.changes, next.changes);
+        return workingTreeProjectionChanged(previous, next);
       case "head":
         return !sameProjection(previous.branch, next.branch);
       case "refs":
@@ -479,6 +478,23 @@ function changedProjectionSlices(
         return true;
     }
   });
+}
+
+function workingTreeProjectionChanged(
+  previous: RepositorySnapshot,
+  next: RepositorySnapshot,
+): boolean {
+  // A tracked-first refresh temporarily reports an empty pending snapshot. Keep the
+  // already-settled clean surface mounted until discovery finds a change or fails.
+  const keepsSettledCleanView =
+    previous.untrackedState === "complete" &&
+    next.untrackedState === "pending" &&
+    previous.changes.length === 0 &&
+    next.changes.length === 0;
+  return !keepsSettledCleanView && (
+    previous.untrackedState !== next.untrackedState ||
+    !sameProjection(previous.changes, next.changes)
+  );
 }
 
 function sameProjection(left: unknown, right: unknown): boolean {

@@ -275,6 +275,23 @@ test("manual refresh of the same Git capability keeps the mounted shell and rout
   fixture.dispose();
 });
 
+test("manual refresh keeps the settled clean Changes view while untracked discovery is pending", () => {
+  const fixture = integrationFixture();
+  const previous = snapshot("/repo");
+  const pending = { ...snapshot("/repo"), untrackedState: "pending" };
+
+  fixture.coordinator.acceptManualRefresh(
+    "/repo",
+    pending,
+    fixture.session.generation,
+    previous,
+  );
+
+  assert.deepEqual(fixture.records.changes, [{ snapshot: pending, options: {} }]);
+  assert.deepEqual(fixture.records.sliceRenders, [["openDocuments"]]);
+  fixture.dispose();
+});
+
 test("manual refresh keeps an ordinary workspace and disables Git projections", () => {
   const fixture = integrationFixture();
 
