@@ -9,6 +9,7 @@ import { HISTORY_DOM_COMMANDS } from "../presentation/history-command-targets.ts
 import { REMOTE_SHORTCUT_TARGETS } from "../presentation/remote-command-targets.ts";
 import { SEARCH_SHORTCUT_TARGETS } from "../presentation/search-command-targets.ts";
 import { WORKBENCH_DOM_COMMANDS } from "../presentation/workbench-command-targets.ts";
+import { TERMINAL_COMMAND_DEFINITIONS } from "../presentation/terminal-command-targets.ts";
 import type { ActivityTool } from "./activity-order.ts";
 
 export interface CommandShortcutPresentation {
@@ -123,6 +124,10 @@ export function refreshWorkbenchShortcutPresentation(
       title: baseTitle,
     });
     button.dataset.commandShortcutDecoratedTitle = button.title;
+  }
+  for (const definition of TERMINAL_COMMAND_DEFINITIONS) {
+    const button = root.querySelector<HTMLElement>(definition.presentationSelector);
+    if (button) refreshCommandShortcut(root, keybindings, { selector: definition.presentationSelector, commandId: definition.id, label: button.getAttribute("aria-label") ?? definition.title(catalog) });
   }
 }
 

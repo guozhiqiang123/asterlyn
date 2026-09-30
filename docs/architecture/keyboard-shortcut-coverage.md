@@ -236,8 +236,9 @@ selection command resolves and revalidates the current exact target when invoked
 | --- | --- | --- | --- |
 | Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Custom**, explicit terminal interception only when assigned |
 | Open command palette from Terminal | navigation | `workbench.commandPalette.open` | **Default:** Primary+Shift+P, explicitly intercepted |
-| Clear terminal display | presentation | `terminal.clear` | **Gap** |
-| Restart/close the supervised session | process | `terminal.session.restart`, `.close` | **Gap**, must preserve session lifecycle |
+| Clear terminal display | presentation | `terminal.clear` | **Custom**; terminal-scoped and explicitly intercepted only when assigned |
+| Start a new session after idle/exit/error | process | `terminal.session.restart` | **Custom**; reuses the supervised close/start lifecycle |
+| Close the running supervised session | process | `terminal.session.close` | **Custom**; reuses the supervised close lifecycle |
 | Send text, Control+C/Z/D, shell completion/history | terminal input | xterm/PTY contract | **Local**, always pass through unless an explicit terminal command wins |
 
 ## 12. Settings and Keyboard Shortcuts

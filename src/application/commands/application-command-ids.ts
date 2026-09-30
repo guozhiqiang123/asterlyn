@@ -6,6 +6,7 @@ import { REMOTE_COMMANDS } from "./remote-command-ids.ts";
 import { SEARCH_COMMANDS } from "./search-command-ids.ts";
 import { WORKBENCH_COMMANDS } from "./workbench-command-ids.ts";
 import { GIT_OPERATION_COMMANDS } from "./git-operation-command-ids.ts";
+import { TERMINAL_COMMANDS } from "./terminal-command-ids.ts";
 
 export const APPLICATION_COMMAND_IDS = Object.freeze([
   ...Object.values(WORKBENCH_COMMANDS),
@@ -18,4 +19,5 @@ export const APPLICATION_COMMAND_IDS = Object.freeze([
   ...Object.values(REMOTE_COMMANDS),
   ...Object.values(SEARCH_COMMANDS),
   ...Object.values(GIT_OPERATION_COMMANDS),
+  ...Object.values(TERMINAL_COMMANDS),
 ]);

@@ -75,6 +75,8 @@ function runtimeOptions(overrides = {}) {
     gitRecoveryAvailable: () => true,
     openGitOperation: () => undefined,
     openGitRecoveries: () => undefined,
+    terminalCommandAvailable: () => false,
+    executeTerminalCommand: () => undefined,
     ...overrides,
   };
 }

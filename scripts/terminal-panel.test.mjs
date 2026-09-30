@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderTerminalHeader } from "../src/features/terminal/terminal-panel.ts";
+import { renderTerminalHeader, terminalActionAvailable } from "../src/features/terminal/terminal-panel.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 
 const idle = {
@@ -30,4 +30,18 @@ test("terminal header exposes explicit lifecycle actions and accessible explanat
   assert.match(runningHeader, />bash</);
   assert.match(runningHeader, /data-terminal-action="restart"[^>]*disabled/);
   assert.doesNotMatch(runningHeader, /data-terminal-action="close"[^>]*disabled/);
+});
+
+test("terminal shortcut availability exactly follows header lifecycle policy", () => {
+  assert.equal(terminalActionAvailable(idle, "restart"), true);
+  assert.equal(terminalActionAvailable(idle, "clear"), true);
+  assert.equal(terminalActionAvailable(idle, "close"), false);
+  const running = { ...idle, status: "running", sessionId: "session-1" };
+  assert.equal(terminalActionAvailable(running, "restart"), false);
+  assert.equal(terminalActionAvailable(running, "clear"), true);
+  assert.equal(terminalActionAvailable(running, "close"), true);
+  const starting = { ...idle, status: "starting" };
+  assert.equal(terminalActionAvailable(starting, "restart"), false);
+  assert.equal(terminalActionAvailable(starting, "clear"), false);
+  assert.equal(terminalActionAvailable(starting, "close"), false);
 });

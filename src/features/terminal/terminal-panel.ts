@@ -1,5 +1,6 @@
 import type { TerminalCopy } from "../../localization/catalog.ts";
 import type { TerminalBridge } from "../../protocol/terminal.ts";
+import type { TerminalCommandAction } from "../../application/commands/terminal-command-ids.ts";
 import { icon } from "../../icons.ts";
 import { TerminalController, type TerminalState } from "./terminal-controller.ts";
 import { TerminalView } from "./terminal-view.ts";
@@ -8,6 +9,7 @@ interface TerminalPanelFeedback {
   readonly status: (message: string, kind: "normal" | "busy" | "warning" | "success") => void;
   readonly error: (error: unknown) => void;
   readonly keyboard?: (event: KeyboardEvent) => boolean;
+  readonly presentationChanged?: () => void;
 }
 
 export class TerminalPanel {
@@ -89,6 +91,25 @@ export class TerminalPanel {
     this.view.refreshAppearance();
   }
 
+  commandAvailable(action: TerminalCommandAction): boolean {
+    return this.visible && terminalActionAvailable(this.controller.state, action);
+  }
+
+  async executeCommand(action: TerminalCommandAction): Promise<void> {
+    if (!this.commandAvailable(action)) return;
+    const dimensions = this.view.dimensions() ?? { cols: 80, rows: 24 };
+    if (action === "restart") {
+      this.view.reset();
+      await this.controller.restart(dimensions.cols, dimensions.rows);
+    } else if (action === "clear") {
+      this.view.clear();
+      this.feedback.status(this.copy.cleared, "success");
+    } else {
+      await this.controller.close();
+      this.feedback.status(this.copy.closed, "success");
+    }
+  }
+
   dispose(): void {
     this.releaseState();
     this.releaseOutput();
@@ -103,18 +124,8 @@ export class TerminalPanel {
     actions.addEventListener("click", (event) => {
       const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-terminal-action]");
       if (!button || !actions.contains(button)) return;
-      const dimensions = this.view.dimensions() ?? { cols: 80, rows: 24 };
-      if (button.dataset.terminalAction === "restart") {
-        this.view.reset();
-        void this.controller.restart(dimensions.cols, dimensions.rows);
-      } else if (button.dataset.terminalAction === "clear") {
-        this.view.clear();
-        this.feedback.status(this.copy.cleared, "success");
-      } else if (button.dataset.terminalAction === "close") {
-        void this.controller.close().then(() => {
-          this.feedback.status(this.copy.closed, "success");
-        });
-      }
+      const action = button.dataset.terminalAction;
+      if (action === "restart" || action === "clear" || action === "close") void this.executeCommand(action);
     });
   }
 
@@ -123,18 +134,25 @@ export class TerminalPanel {
     if (!actions) return;
     actions.classList.toggle("hidden", !this.visible);
     actions.innerHTML = renderTerminalHeader(this.controller.state, this.copy);
+    this.feedback.presentationChanged?.();
   }
 }
 
 export function renderTerminalHeader(state: TerminalState, copy: TerminalCopy): string {
   const summary = terminalSummary(state, copy);
-  const canClear = state.status !== "starting";
-  const canClose = state.status === "running";
-  const canRestart = state.status === "idle" || state.status === "exited" || state.status === "error";
+  const canClear = terminalActionAvailable(state, "clear");
+  const canClose = terminalActionAvailable(state, "close");
+  const canRestart = terminalActionAvailable(state, "restart");
   return `<span class="terminal-session-status ${state.status === "error" ? "error" : ""}" title="${escapeAttribute(state.cwd ?? summary)}">${escapeHtml(summary)}</span>
     <button class="compact-icon-button" type="button" data-terminal-action="restart" aria-label="${escapeAttribute(copy.newSession)}" title="${escapeAttribute(copy.newSession)}" ${canRestart ? "" : "disabled"}>${icon("refresh", 15)}</button>
     <button class="compact-icon-button" type="button" data-terminal-action="clear" aria-label="${escapeAttribute(copy.clear)}" title="${escapeAttribute(copy.clear)}" ${canClear ? "" : "disabled"}>${icon("trash", 15)}</button>
     <button class="compact-icon-button" type="button" data-terminal-action="close" aria-label="${escapeAttribute(copy.close)}" title="${escapeAttribute(copy.close)}" ${canClose ? "" : "disabled"}>${icon("stop", 14)}</button>`;
+}
+
+export function terminalActionAvailable(state: TerminalState, action: TerminalCommandAction): boolean {
+  if (action === "clear") return state.status !== "starting";
+  if (action === "close") return state.status === "running";
+  return state.status === "idle" || state.status === "exited" || state.status === "error";
 }
 
 function terminalSummary(state: TerminalState, copy: TerminalCopy): string {
