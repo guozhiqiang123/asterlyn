@@ -56,14 +56,14 @@ blocked reason.
 | --- | --- | --- | --- |
 | Open command palette | navigation | `workbench.commandPalette.open` | **Default:** Primary+Shift+P |
 | Open project | navigation | `workspace.repository.open` | **Default:** Primary+O |
-| Open project menu / recent projects | navigation | `workspace.repository.menu.toggle` | **Gap** |
+| Open project menu / recent projects | navigation | `workspace.repository.menu.toggle` | **Custom** |
 | Go to file | navigation | `workspace.quickOpen.open` | **Default:** Primary+P |
 | Open recent files | navigation | `workspace.recentFiles.open` | **Default:** Primary+E |
 | Find in files / reviewed replace | navigation | `workspace.search.open` | **Default:** Primary+Shift+F |
 | Refresh project and local Git state | read | `workbench.refresh` | **Default:** Primary+R |
 | Open Settings | navigation | `workbench.settings.open` | **Default:** Primary+, |
 | Return from Settings | navigation | `workbench.settings.close` | **Custom**; Escape remains **Local** |
-| Dismiss visible error toast | presentation | `workbench.notification.dismiss` | **Gap** |
+| Dismiss visible error toast | presentation | `workbench.notification.dismiss` | **Custom**, available only while a notification is visible |
 | Reorder activity tools | presentation | activity-rail drag and Alt+Arrow local behavior | **Local** |
 | Choose current/new window when opening a project | window | repository-target dialog | **Local** dialog choice |
 | Minimize, maximize/restore, close window | window | native/custom window controls | **Excluded:** operating-system lifecycle shortcuts own these actions |

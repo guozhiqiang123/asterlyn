@@ -3,6 +3,7 @@ import { commandId } from "./command-service.ts";
 export const WORKBENCH_COMMANDS = {
   commandPalette: commandId("workbench.commandPalette.open"),
   openRepository: commandId("workspace.repository.open"),
+  toggleRepositoryMenu: commandId("workspace.repository.menu.toggle"),
   quickOpen: commandId("workspace.quickOpen.open"),
   recentFiles: commandId("workspace.recentFiles.open"),
   workspaceSearch: commandId("workspace.search.open"),
@@ -20,4 +21,5 @@ export const WORKBENCH_COMMANDS = {
   toggleTerminal: commandId("workbench.tool.terminal.toggle"),
   hideLeftTool: commandId("workbench.tool.left.hide"),
   hideBottomTool: commandId("workbench.tool.bottom.hide"),
+  dismissNotification: commandId("workbench.notification.dismiss"),
 } as const;

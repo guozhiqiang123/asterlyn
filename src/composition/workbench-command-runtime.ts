@@ -8,6 +8,8 @@ import {
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
 import type { LocaleCatalog, NavigationCommandId } from "../localization/catalog.ts";
 import type { ActivityTool } from "../shell/activity-order.ts";
+import { WORKBENCH_DOM_COMMANDS } from "../presentation/workbench-command-targets.ts";
+import { registerDomCommands } from "./dom-command-runtime.ts";
 
 const WORKBENCH_SCOPES: readonly CommandFocusScope[] = [
   "workbench",
@@ -19,6 +21,7 @@ const WORKBENCH_SCOPES: readonly CommandFocusScope[] = [
 const TOOL_SCOPES: readonly CommandFocusScope[] = [...WORKBENCH_SCOPES, "terminal"];
 
 export interface WorkbenchCommandRuntimeOptions {
+  readonly root: ParentNode;
   readonly catalog: () => LocaleCatalog;
   readonly workspaceOpen: () => boolean;
   readonly gitAvailable: () => boolean;
@@ -46,6 +49,9 @@ export function registerWorkbenchCommands(
   registry: CommandRegistry,
   options: WorkbenchCommandRuntimeOptions,
 ): () => void {
+  const releaseDom = options.root
+    ? registerDomCommands(registry, WORKBENCH_DOM_COMMANDS, { root: options.root, catalog: options.catalog })
+    : () => undefined;
   const enabled = (): CommandAvailability => ({ enabled: true });
   const workspace = (): CommandAvailability => options.workspaceOpen()
     ? enabled()
@@ -244,5 +250,6 @@ export function registerWorkbenchCommands(
   const releases = descriptors.map((descriptor) => registry.register(descriptor));
   return () => {
     for (const release of releases.reverse()) release();
+    releaseDom();
   };
 }

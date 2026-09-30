@@ -8,6 +8,7 @@ import { STASH_SHORTCUT_TARGETS } from "../presentation/stash-command-targets.ts
 import { HISTORY_DOM_COMMANDS } from "../presentation/history-command-targets.ts";
 import { REMOTE_SHORTCUT_TARGETS } from "../presentation/remote-command-targets.ts";
 import { SEARCH_SHORTCUT_TARGETS } from "../presentation/search-command-targets.ts";
+import { WORKBENCH_DOM_COMMANDS } from "../presentation/workbench-command-targets.ts";
 import type { ActivityTool } from "./activity-order.ts";
 
 export interface CommandShortcutPresentation {
@@ -106,7 +107,7 @@ export function refreshWorkbenchShortcutPresentation(
   }
   refreshHideShortcut(root, keybindings, "#hide-left-tool", WORKBENCH_COMMANDS.hideLeftTool);
   refreshHideShortcut(root, keybindings, "#hide-bottom-tool", WORKBENCH_COMMANDS.hideBottomTool);
-  for (const definition of [...FILES_EDITOR_DOM_COMMANDS, ...CHANGES_SHORTCUT_TARGETS, ...STASH_SHORTCUT_TARGETS, ...HISTORY_DOM_COMMANDS, ...REMOTE_SHORTCUT_TARGETS, ...SEARCH_SHORTCUT_TARGETS]) {
+  for (const definition of [...WORKBENCH_DOM_COMMANDS, ...FILES_EDITOR_DOM_COMMANDS, ...CHANGES_SHORTCUT_TARGETS, ...STASH_SHORTCUT_TARGETS, ...HISTORY_DOM_COMMANDS, ...REMOTE_SHORTCUT_TARGETS, ...SEARCH_SHORTCUT_TARGETS]) {
     const button = root.querySelector<HTMLElement>(definition.selector);
     if (!button) continue;
     const label = button.getAttribute("aria-label") ?? definition.title(catalog);

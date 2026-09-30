@@ -8,6 +8,7 @@ import { WORKBENCH_COMMANDS } from "../src/application/commands/workbench-comman
 import { registerApplicationCommands } from "../src/composition/application-command-runtime.ts";
 import { registerWorkbenchCommands } from "../src/composition/workbench-command-runtime.ts";
 import { DEFAULT_KEYBINDINGS } from "../src/features/keybindings/default-keybindings.ts";
+import { EN_US } from "../src/localization/en-US.ts";
 
 const root = new URL("../", import.meta.url);
 
@@ -179,4 +180,36 @@ test("global surface commands keep live availability and reuse their feature cal
   assert.equal(settingsDefault.sequence[0].key, ",");
   assert.equal(settingsDefault.terminalPolicy, "intercept");
   release();
+});
+
+test("repository menu and visible notification commands reuse stable shell buttons", async () => {
+  const clicks = [];
+  let toastVisible = false;
+  const button = (name) => ({
+    disabled: false,
+    getAttribute: () => null,
+    click: () => clicks.push(name),
+  });
+  const repository = button("repository");
+  const toast = button("toast");
+  const registry = new CommandRegistry();
+  const releaseCommands = registerWorkbenchCommands(registry, runtimeOptions({
+    catalog: () => EN_US,
+    root: {
+      querySelector(selector) {
+        if (selector === "#repository-switcher") return repository;
+        if (selector === "#toast:not(.hidden) #toast-close") return toastVisible ? toast : null;
+        return null;
+      },
+    },
+  }));
+
+  assert.equal(registry.get(WORKBENCH_COMMANDS.toggleRepositoryMenu).availability().enabled, true);
+  assert.equal(registry.get(WORKBENCH_COMMANDS.dismissNotification).availability().enabled, false);
+  await registry.get(WORKBENCH_COMMANDS.toggleRepositoryMenu).execute("keyboard");
+  toastVisible = true;
+  assert.equal(registry.get(WORKBENCH_COMMANDS.dismissNotification).availability().enabled, true);
+  await registry.get(WORKBENCH_COMMANDS.dismissNotification).execute("keyboard");
+  assert.deepEqual(clicks, ["repository", "toast"]);
+  releaseCommands();
 });
