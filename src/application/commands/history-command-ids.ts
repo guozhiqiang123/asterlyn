@@ -8,7 +8,9 @@ export type BranchContextCommandAction =
 
 export type HistoryContextCommandAction =
   | "load-more" | "compare-selection"
-  | "commit-copy-id" | "range-copy-ids"
+  | "commit-copy-id" | "commit-cherry-pick" | "commit-revert" | "commit-reset"
+  | "commit-create-branch" | "commit-create-tag"
+  | "range-copy-ids" | "range-cherry-pick" | "range-revert" | "range-squash"
   | "file-show-diff" | "file-open-historical" | "file-compare-current"
   | "file-open-current" | "file-restore" | "file-history"
   | "file-copy-name" | "file-copy-relative-path" | "file-copy-absolute-path"
@@ -34,6 +36,14 @@ export const HISTORY_COMMANDS = {
   compareSelection: commandId("history.selection.compare"),
   copyCommitId: commandId("history.commit.copyId"),
   copyRangeIds: commandId("history.range.copyIds"),
+  cherryPickCommit: commandId("history.commit.cherryPick"),
+  revertCommit: commandId("history.commit.revert"),
+  resetToCommit: commandId("history.commit.reset"),
+  createBranchFromCommit: commandId("history.commit.createBranch"),
+  createTagFromCommit: commandId("history.commit.createTag"),
+  cherryPickRange: commandId("history.range.cherryPick"),
+  revertRange: commandId("history.range.revert"),
+  squashRange: commandId("history.range.squash"),
   openFileDiff: commandId("history.file.diff.open"),
   openHistoricalFile: commandId("history.file.openHistorical"),
   compareCurrentFile: commandId("history.file.compareCurrent"),

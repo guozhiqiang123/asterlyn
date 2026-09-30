@@ -153,12 +153,32 @@ test("range copy command revalidates the complete selection", async () => {
     },
     () => EN_US.history,
   );
-  await provider.executeCopyCommand(selected);
+  await provider.executeCommand("copy-ids", selected);
   current = false;
-  await provider.executeCopyCommand(selected);
+  await provider.executeCommand("copy-ids", selected);
   assert.deepEqual(events, [
     ["copy", "new\nold"], ["status", EN_US.history.rangeContextMenu.copiedCommitIds(2)],
     ["blocked", EN_US.history.rangeContextMenu.targetChanged],
+  ]);
+});
+
+test("range mutation commands reuse topology policy and reviewed operation ordering", async () => {
+  const selected = target([commit("new", ["middle"]), commit("middle", ["old"])]);
+  const events = [];
+  const provider = new HistoryCommitRangeContextActions(
+    { open() {}, close() {} }, { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => true,
+      policyOptions: () => options([...selected.commits, commit("old", [])], "new"),
+      openGitOperation: (kind, values) => events.push([kind, ...values]), openComparison() {},
+      blocked: (reason) => events.push(["blocked", reason]), status() {}, error() {},
+    }, () => EN_US.history,
+  );
+  await provider.executeCommand("cherry-pick", selected);
+  await provider.executeCommand("revert", selected);
+  await provider.executeCommand("squash", selected);
+  assert.deepEqual(events, [
+    ["cherryPick", "middle", "new"], ["revert", "new", "middle"], ["squash", "old"],
   ]);
 });
 

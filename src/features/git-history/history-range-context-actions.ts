@@ -17,6 +17,8 @@ import {
 export const HISTORY_RANGE_CONTEXT_OWNER_ID = "git-history.range-context-actions";
 const OWNER_ID = HISTORY_RANGE_CONTEXT_OWNER_ID;
 
+export type HistoryRangeCommandAction = "copy-ids" | "compare" | "cherry-pick" | "revert" | "squash";
+
 export interface HistoryCommitRangeRuntime {
   current(target: HistoryCommitRangeTarget): boolean;
   policyOptions(target: HistoryCommitRangeTarget): Omit<HistoryCommitRangePolicyOptions, "reasons">;
@@ -70,36 +72,45 @@ export class HistoryCommitRangeContextActions {
     return true;
   }
 
-  commandAvailability(target: HistoryCommitRangeTarget): ContextMenuAvailability {
-    return target.commits.length === 2 &&
-      target.commits[0]?.repositoryId === target.commits[1]?.repositoryId
+  commandAvailability(
+    action: HistoryRangeCommandAction,
+    target: HistoryCommitRangeTarget,
+  ): ContextMenuAvailability {
+    const labels = this.copy().rangeContextMenu;
+    if (!this.runtime.current(target)) return { kind: "blocked", reason: labels.targetChanged };
+    if (action === "copy-ids") return { kind: "enabled" };
+    if (action === "compare") return target.commits.length === 2 &&
+        target.commits[0]?.repositoryId === target.commits[1]?.repositoryId
       ? { kind: "enabled" }
-      : { kind: "blocked", reason: this.copy().rangeContextMenu.sameRootRequired };
+      : { kind: "blocked", reason: labels.sameRootRequired };
+    const policy = historyCommitRangePolicy(target, {
+      ...this.runtime.policyOptions(target), reasons: labels,
+    });
+    if (action === "cherry-pick") return policy.cherryPick;
+    if (action === "revert") return policy.revert;
+    return policy.squash;
   }
 
-  executeCompareCommand(target: HistoryCommitRangeTarget): void {
-    if (!this.runtime.current(target)) {
-      this.runtime.blocked(this.copy().rangeContextMenu.targetChanged);
-      return;
-    }
-    const availability = this.commandAvailability(target);
+  async executeCommand(
+    action: HistoryRangeCommandAction,
+    target: HistoryCommitRangeTarget,
+  ): Promise<void> {
+    const availability = this.commandAvailability(action, target);
     if (availability.kind !== "enabled") {
       this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
       return;
     }
     try {
-      this.runtime.openComparison(target);
+      if (action === "copy-ids") await this.copyCommitIds(target);
+      else {
+        const policy = historyCommitRangePolicy(target, {
+          ...this.runtime.policyOptions(target), reasons: this.copy().rangeContextMenu,
+        });
+        this.invoke(`${OWNER_ID}.${action}`, policy, target);
+      }
     } catch (error) {
       this.runtime.error(error);
     }
-  }
-
-  async executeCopyCommand(target: HistoryCommitRangeTarget): Promise<void> {
-    if (!this.runtime.current(target)) {
-      this.runtime.blocked(this.copy().rangeContextMenu.targetChanged);
-      return;
-    }
-    await this.copyCommitIds(target);
   }
 
   private async copyCommitIds(target: HistoryCommitRangeTarget): Promise<void> {

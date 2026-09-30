@@ -172,6 +172,10 @@ without Asterlyn claiming common editor or terminal keys.
 | Select commits and ranges | navigation | History list keyboard/pointer contract | **Local** |
 | Open selected commit/range comparison | navigation | `history.selection.compare` | **Custom**; exact current two-commit range is revalidated |
 | Copy selected commit ID / selected range IDs | read | `history.commit.copyId`, `history.range.copyIds` | **Custom**; copies the exact revalidated History selection |
+| Cherry-pick or revert selected commit | write | `history.commit.cherryPick`, `history.commit.revert` | **Custom**; opens the existing exact Git-operation review |
+| Reset current branch to selected commit | destructive | `history.commit.reset` | **Custom**, unassigned; preserves the existing reset review/confirmation |
+| Create branch or tag from selected commit | write | `history.commit.createBranch`, `history.commit.createTag` | **Custom**; opens existing reviewed creation dialogs |
+| Cherry-pick, revert, or squash selected range | write/destructive | `history.range.cherryPick`, `history.range.revert`, `history.range.squash` | **Custom**, destructive range actions unassigned; all reuse exact range policy and reviewed Git-operation setup |
 | Load more history | read | `history.loadMore` | **Custom** |
 | Toggle commit-file tree/flat, expand/collapse | presentation | `history.files.view.toggle`, `history.files.expandAll`, `history.files.collapseAll` | **Custom** |
 | Swap the before/after sides of a commit comparison | presentation | `history.comparison.swap` | **Custom** |

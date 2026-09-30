@@ -154,11 +154,35 @@ test("commit copy command revalidates selection and reuses clipboard feedback", 
     },
     () => EN_US.history,
   );
-  await provider.executeCopyCommand(selected);
+  await provider.executeCommand("copy-id", selected);
   current = false;
-  await provider.executeCopyCommand(selected);
+  await provider.executeCommand("copy-id", selected);
   assert.deepEqual(events, [
     ["copy", selected.oid], ["status", EN_US.history.commitContextMenu.copiedCommitId],
     ["blocked", EN_US.history.commitContextMenu.targetChanged],
+  ]);
+});
+
+test("commit mutation commands reuse current policy and existing review entry points", async () => {
+  const selected = target();
+  const events = [];
+  const provider = new HistoryCommitContextActions(
+    { open() {}, close() {} }, { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => true, select: () => true, policyOptions: () => ({ ...options }),
+      openGitOperation: (kind, oid) => events.push([kind, oid]),
+      openBranchFromCommit: (value) => events.push(["branch", value.oid]),
+      tagRemotes: () => [], openTagMutation: (kind, value) => events.push([kind, value.oid]),
+      openReset: (value) => events.push(["reset", value.oid]),
+      blocked: (reason) => events.push(["blocked", reason]), status() {}, error() {},
+    }, () => EN_US.history,
+  );
+  await provider.executeCommand("cherry-pick", selected);
+  await provider.executeCommand("revert", selected);
+  await provider.executeCommand("create-branch", selected);
+  await provider.executeCommand("create-tag", selected);
+  assert.deepEqual(events, [
+    ["cherryPick", selected.oid], ["revert", selected.oid],
+    ["branch", selected.oid], ["create", selected.oid],
   ]);
 });

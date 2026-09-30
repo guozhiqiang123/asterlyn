@@ -34,12 +34,14 @@ import {
 import type { GitHistoryDetailsState } from "./history-details-controller.ts";
 import {
   HistoryCommitContextActions,
+  type HistoryCommitCommandAction,
   type HistoryCommitContextRuntime,
 } from "./history-commit-context-actions.ts";
 import { HistoryContextBinding } from "./history-context-binding.ts";
 import { resolveHistoryCommitContextTarget, type HistoryCommitContextTarget } from "./history-context-binding.ts";
 import {
   HistoryCommitRangeContextActions,
+  type HistoryRangeCommandAction,
   type HistoryCommitRangeRuntime,
 } from "./history-range-context-actions.ts";
 import { resolveHistoryCommitRangeTarget, type HistoryCommitRangeTarget } from "./history-range-context.ts";
@@ -167,12 +169,16 @@ export class GitHistoryContextRuntime {
     if (!target) return { enabled: false, reason: this.copy().commitHistory };
     const availability = isBranchCommand(action)
       ? this.branchActions.commandAvailability(action, target as BranchContextTarget)
-      : action === "compare-selection"
-      ? this.rangeActions.commandAvailability(target as HistoryCommitRangeTarget)
-      : action === "commit-copy-id"
-        ? this.commitActions.commandAvailability(target as HistoryCommitContextTarget)
-      : action === "range-copy-ids"
-        ? { kind: "enabled" as const }
+      : action === "compare-selection" || action.startsWith("range-")
+      ? this.rangeActions.commandAvailability(
+          action === "compare-selection" ? "compare" : action.slice("range-".length) as HistoryRangeCommandAction,
+          target as HistoryCommitRangeTarget,
+        )
+      : action.startsWith("commit-")
+        ? this.commitActions.commandAvailability(
+            action.slice("commit-".length) as HistoryCommitCommandAction,
+            target as HistoryCommitContextTarget,
+          )
       : action.startsWith("file-")
         ? this.fileActions.commandAvailability(
             action.slice("file-".length) as CommitFileCommandAction,
@@ -198,12 +204,16 @@ export class GitHistoryContextRuntime {
     if (!target) return;
     if (isBranchCommand(action)) {
       await this.branchActions.executeCommand(action, target as BranchContextTarget);
-    } else if (action === "compare-selection") {
-      this.rangeActions.executeCompareCommand(target as HistoryCommitRangeTarget);
-    } else if (action === "commit-copy-id") {
-      await this.commitActions.executeCopyCommand(target as HistoryCommitContextTarget);
-    } else if (action === "range-copy-ids") {
-      await this.rangeActions.executeCopyCommand(target as HistoryCommitRangeTarget);
+    } else if (action === "compare-selection" || action.startsWith("range-")) {
+      await this.rangeActions.executeCommand(
+        action === "compare-selection" ? "compare" : action.slice("range-".length) as HistoryRangeCommandAction,
+        target as HistoryCommitRangeTarget,
+      );
+    } else if (action.startsWith("commit-")) {
+      await this.commitActions.executeCommand(
+        action.slice("commit-".length) as HistoryCommitCommandAction,
+        target as HistoryCommitContextTarget,
+      );
     } else if (action.startsWith("file-")) {
       await this.fileActions.executeCommand(
         action.slice("file-".length) as CommitFileCommandAction,
@@ -239,7 +249,7 @@ export class GitHistoryContextRuntime {
           )
         : null;
     }
-    if (action === "compare-selection" || action === "range-copy-ids") {
+    if (action === "compare-selection" || action.startsWith("range-")) {
       const source = this.sources.history();
       const selection = this.sources.currentRangeSelection();
       const key = selection?.activeKey ?? source.state.selectedCommit;
@@ -253,7 +263,7 @@ export class GitHistoryContextRuntime {
         : null;
       return row ? resolveHistoryCommitRangeTarget(row, selection) : null;
     }
-    if (action === "commit-copy-id") {
+    if (action.startsWith("commit-")) {
       const source = this.sources.history();
       return source.state.selectedCommit
         ? resolveHistoryCommitContextTarget(

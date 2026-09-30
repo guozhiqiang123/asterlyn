@@ -16,6 +16,7 @@ function commit(seed, subject) {
 test("History context commands resolve current range, file, and focused folder targets", async () => {
   const first = commit("a", "first");
   const second = commit("b", "second");
+  second.parents = [first.oid];
   const firstKey = commitKey(first);
   const secondKey = commitKey(second);
   const state = {
@@ -88,13 +89,16 @@ test("History context commands resolve current range, file, and focused folder t
         tagRemoteUnavailable: () => "Select a configured remote.", openTagMutation() {},
       },
       commit: {
-        ...feedback, current: () => true, select: () => true, policyOptions: () => ({}),
-        openGitOperation() {}, openBranchFromCommit() {}, tagRemotes: () => [],
-        openTagMutation() {}, openReset() {},
+        ...feedback, current: () => true, select: () => true,
+        policyOptions: () => ({ busy: false, clean: true, cleanReason: "", localBranch: true, headOid: second.oid, historyCommits: [first, second] }),
+        openGitOperation: (kind, oid) => events.push(["commit-operation", kind, oid]),
+        openBranchFromCommit() {}, tagRemotes: () => [], openTagMutation() {}, openReset() {},
       },
       range: {
-        ...feedback, current: () => true, policyOptions: () => ({}),
-        openGitOperation() {}, openComparison: (target) => events.push(["compare", target.commits.length]),
+        ...feedback, current: () => true,
+        policyOptions: () => ({ busy: false, clean: true, cleanReason: "", localBranch: true, headOid: second.oid, historyCommits: [first, second] }),
+        openGitOperation: (kind, values) => events.push(["range-operation", kind, ...values]),
+        openComparison: (target) => events.push(["compare", target.commits.length]),
       },
       file: {
         ...feedback, current: () => true,
@@ -121,6 +125,8 @@ test("History context commands resolve current range, file, and focused folder t
   assert.deepEqual(runtime.commandAvailability("compare-selection"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("commit-copy-id"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("range-copy-ids"), { enabled: true });
+  assert.deepEqual(runtime.commandAvailability("commit-cherry-pick"), { enabled: true });
+  assert.deepEqual(runtime.commandAvailability("range-cherry-pick"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("file-restore"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("folder-reveal"), { enabled: true });
   assert.deepEqual(runtime.commandAvailability("branch-merge"), { enabled: true });
@@ -128,6 +134,8 @@ test("History context commands resolve current range, file, and focused folder t
   await runtime.executeCommand("compare-selection");
   await runtime.executeCommand("commit-copy-id");
   await runtime.executeCommand("range-copy-ids");
+  await runtime.executeCommand("commit-cherry-pick");
+  await runtime.executeCommand("range-cherry-pick");
   await runtime.executeCommand("file-open-historical");
   await runtime.executeCommand("file-history");
   await runtime.executeCommand("folder-reveal");
@@ -137,6 +145,8 @@ test("History context commands resolve current range, file, and focused folder t
   await runtime.executeCommand("branch-merge");
   assert.deepEqual(events, [
     ["compare", 2], ["copy", second.oid], ["copy", `${first.oid}\n${second.oid}`],
+    ["commit-operation", "cherryPick", second.oid],
+    ["range-operation", "cherryPick", first.oid, second.oid],
     ["historical", "src/app.ts"], ["file-history", "src/app.ts"],
     ["folder-reveal", "src"], ["folder-history", "src"], ["load-more"],
     ["ref-history", "topic"], ["branch-operation", "merge", topic.fullName],

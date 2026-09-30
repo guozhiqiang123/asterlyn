@@ -23,6 +23,9 @@ import {
 export const HISTORY_COMMIT_CONTEXT_OWNER_ID = "git-history.commit-context-actions";
 const OWNER_ID = HISTORY_COMMIT_CONTEXT_OWNER_ID;
 
+export type HistoryCommitCommandAction =
+  | "copy-id" | "cherry-pick" | "revert" | "reset" | "create-branch" | "create-tag";
+
 export interface HistoryCommitContextRuntime {
   current(target: HistoryCommitContextTarget): boolean;
   select(target: HistoryCommitContextTarget): boolean;
@@ -96,14 +99,29 @@ export class HistoryCommitContextActions {
     return true;
   }
 
-  commandAvailability(target: HistoryCommitContextTarget): ContextMenuAvailability {
-    return this.runtime.current(target)
-      ? { kind: "enabled" }
-      : { kind: "blocked", reason: this.copy().commitContextMenu.targetChanged };
+  commandAvailability(
+    action: HistoryCommitCommandAction,
+    target: HistoryCommitContextTarget,
+  ): ContextMenuAvailability {
+    const labels = this.copy().commitContextMenu;
+    if (!this.runtime.current(target)) return { kind: "blocked", reason: labels.targetChanged };
+    if (action === "copy-id") return { kind: "enabled" };
+    const policy = historyCommitContextPolicy(target, {
+      ...this.runtime.policyOptions(target), reasons: labels,
+    });
+    if (!policy.writable) return { kind: "blocked", reason: this.copy().rangeContextMenu.topLevelRequired };
+    if (action === "cherry-pick") return policy.cherryPick;
+    if (action === "revert") return policy.revert;
+    if (action === "create-branch") return policy.create;
+    if (action === "create-tag") return policy.tag;
+    return policy.reset ?? { kind: "blocked", reason: this.copy().rangeContextMenu.currentBranchRequired };
   }
 
-  async executeCopyCommand(target: HistoryCommitContextTarget): Promise<void> {
-    const availability = this.commandAvailability(target);
+  async executeCommand(
+    action: HistoryCommitCommandAction,
+    target: HistoryCommitContextTarget,
+  ): Promise<void> {
+    const availability = this.commandAvailability(action, target);
     if (availability.kind !== "enabled") {
       this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
       return;
@@ -112,7 +130,8 @@ export class HistoryCommitContextActions {
       this.runtime.blocked(this.copy().commitContextMenu.targetChanged);
       return;
     }
-    await this.copyCommitId(target.oid);
+    if (action === "copy-id") await this.copyCommitId(target.oid);
+    else this.invoke(`${OWNER_ID}.${action === "create-tag" ? "new-tag" : action}`, target, this.runtime.tagRemotes(target));
   }
 
   private async copyCommitId(oid: string): Promise<void> {
