@@ -401,9 +401,9 @@ function renderChangeRow(
   }
   if (row.kind === "directory") {
     return `<div class="change-directory virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
-      <div class="change-directory-row" style="--tree-depth:${row.depth}">
+      <div class="change-directory-row" style="--tree-depth:${row.depth}" data-change-disclosure="${escapeAttribute(row.key)}">
         <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" aria-label="${escapeAttribute(copy.include(row.node.path))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
-        <button class="change-tree-toggle" type="button" data-change-disclosure="${escapeAttribute(row.key)}" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 12)}</span></button>
+        <button class="change-tree-toggle" type="button" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 12)}</span></button>
         ${icon("folder", 15)}<span>${escapeHtml(row.label)}</span><small class="compact-file-tree-count">${escapeHtml(copy.fileCount(row.paths.length))}</small>
       </div>
     </div>`;

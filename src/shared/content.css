@@ -101,6 +101,7 @@
   min-width: 0;
   flex: 1 1 0;
   width: auto;
+  margin: 0;
   padding: 0 14px;
 }
 
@@ -409,7 +410,6 @@
 
 .commit-button {
   width: 100%;
-  margin-top: 3px;
 }
 
 .safety-note {

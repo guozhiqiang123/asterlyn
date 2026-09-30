@@ -386,8 +386,9 @@ test("the Changes commit blocker keeps one complete line at the minimum splitter
   assert.match(content, /\.commit-tool \.commit-form textarea\s*\{[^}]*flex:\s*1 1 auto;/s);
   assert.match(content, /\.commit-tool \.commit-form textarea\s*\{[^}]*min-height:\s*0;/s);
   assert.match(content, /\.commit-blocker\s*\{[^}]*min-height:\s*13px;[^}]*flex-shrink:\s*0;[^}]*line-height:\s*13px;/s);
-  assert.match(content, /\.commit-actions > \.commit-button,\s*\.commit-actions > \.stash-primary-action\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 0;/s);
+  assert.match(content, /\.commit-actions > \.commit-button,\s*\.commit-actions > \.stash-primary-action\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 0;[^}]*margin:\s*0;/s);
   assert.doesNotMatch(content, /\.commit-actions \.commit-button:first-child/);
+  assert.doesNotMatch(content, /\.commit-button\s*\{[^}]*margin(?:-top)?:/s);
   assert.match(content, /\.commit-button-label\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
   assert.doesNotMatch(content, /\.commit-keep-staged|\.commit-stash-split|\.stash-options-toggle/);
   assert.match(app, /class="primary-button stash-primary-action" id="stash-changes-button"[^>]*><span class="commit-button-label">/s);

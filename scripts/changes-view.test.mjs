@@ -54,6 +54,16 @@ test("Changes compacts unary folders while preserving the terminal disclosure ta
   ]);
   const html = renderChangeNavigation(current, state());
   assert.match(html, />docs\/refactor\/rebuild<\/span><small[^>]*>2 files<\/small>/u);
+  assert.match(
+    html,
+    /class="change-directory-row"[^>]*data-change-disclosure="directory:changes:docs\/refactor\/rebuild"/u,
+    "the complete folder row must remain the disclosure target",
+  );
+  assert.doesNotMatch(
+    html,
+    /class="change-tree-toggle"[^>]*data-change-disclosure=/u,
+    "the nested chevron must not install a second toggle handler",
+  );
 });
 
 test("flat Changes rows sort by file name instead of directory path", () => {
