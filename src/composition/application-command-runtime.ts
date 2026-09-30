@@ -11,10 +11,14 @@ import {
   registerWorkbenchCommands,
   type WorkbenchCommandRuntimeOptions,
 } from "./workbench-command-runtime.ts";
+import {
+  registerStashCommands,
+  type StashCommandRuntimeOptions,
+} from "./stash-command-runtime.ts";
 
 export interface ApplicationCommandRuntimeOptions
   extends WorkbenchCommandRuntimeOptions, FilesEditorCommandRuntimeOptions,
-    ChangesCommandRuntimeOptions {}
+    ChangesCommandRuntimeOptions, StashCommandRuntimeOptions {}
 
 export function registerApplicationCommands(
   registry: CommandRegistry,
@@ -24,6 +28,7 @@ export function registerApplicationCommands(
     registerWorkbenchCommands(registry, options),
     registerFilesEditorCommands(registry, options),
     registerChangesCommands(registry, options),
+    registerStashCommands(registry, options),
   ];
   return () => { for (const release of releases.reverse()) release(); };
 }

@@ -21,8 +21,10 @@ export interface StashContextRuntime {
 
 export class StashContextActions {
   private readonly binding: DelegatedContextBinding<StashEntry>;
+  private readonly runtime: StashContextRuntime;
 
-  constructor(root: HTMLElement, host: ContextMenuPort, private readonly runtime: StashContextRuntime) {
+  constructor(root: HTMLElement, host: ContextMenuPort, runtime: StashContextRuntime) {
+    this.runtime = runtime;
     this.binding = new DelegatedContextBinding(root, {
       selector: "[data-stash-key]",
       resolve: (trigger) => {

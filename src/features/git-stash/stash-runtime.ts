@@ -1,4 +1,5 @@
 import { editorDocumentKey, type EditorDocument } from "../../editor-document.ts";
+import type { StashCommandAction } from "../../application/commands/stash-command-ids.ts";
 import { icon } from "../../icons.ts";
 import type { CommonCopy } from "../../localization/catalog.ts";
 import type { Localization } from "../../localization/localization.ts";
@@ -34,6 +35,7 @@ export interface StashRuntimePorts {
   closeDiff(document: Extract<EditorDocument, { kind: "commit-diff" }>): void;
   activeDocument(): EditorDocument;
   renderEditor(): void;
+  presentationChanged(): void;
   status(message: string, kind: "success" | "warning"): void;
   error(error: unknown): void;
 }
@@ -44,6 +46,7 @@ export class StashRuntime {
   private readonly root: HTMLElement;
   private readonly ports: StashRuntimePorts;
   private readonly pinned = new Map<string, Extract<EditorDocument, { kind: "commit-diff" }>>();
+  private readonly releaseController: () => void;
 
   constructor(
     root: HTMLElement,
@@ -54,7 +57,7 @@ export class StashRuntime {
     this.root = root;
     this.ports = ports;
     this.controller = new StashController(gateway);
-    this.controller.subscribe(() => {
+    this.releaseController = this.controller.subscribe(() => {
       if (ports.visible() && root.querySelector("#stash-tool-grid")) this.render();
       if (this.isDiff(ports.activeDocument())) ports.renderEditor();
       contextMenu.revalidate();
@@ -179,9 +182,57 @@ export class StashRuntime {
     const nextFiles = this.root.querySelector<HTMLElement>("#stash-file-list");
     if (nextList) { nextList.scrollTop = listPosition.top; nextList.scrollLeft = listPosition.left; }
     if (nextFiles) { nextFiles.scrollTop = filePosition.top; nextFiles.scrollLeft = filePosition.left; }
+    this.ports.presentationChanged();
   }
 
-  dispose(): void { this.context.dispose(); }
+  commandAvailability(action: StashCommandAction): { enabled: boolean; reason?: string } {
+    const copy = this.ports.copy();
+    if (!this.ports.visible() || !this.ports.workspaceRoot()) {
+      return { enabled: false, reason: copy.selectStash };
+    }
+    if (this.ports.busy() || this.controller.state.loading || this.controller.state.detailsLoading) {
+      return { enabled: false, reason: copy.loading };
+    }
+    if (action === "refresh") return { enabled: true };
+    const entry = this.controller.selectedEntry();
+    if (!entry) return { enabled: false, reason: copy.selectStash };
+    if (action === "apply" || action === "pop") {
+      return this.ports.clean()
+        ? { enabled: true }
+        : { enabled: false, reason: copy.cleanRequired };
+    }
+    const files = this.controller.state.details?.files ?? [];
+    if (action === "toggle-view") return { enabled: true };
+    if (action === "open-diff") {
+      return this.controller.selectedFile()
+        ? { enabled: true }
+        : { enabled: false, reason: copy.noFiles };
+    }
+    return this.controller.state.fileView === "tree" && files.length > 0
+      ? { enabled: true }
+      : { enabled: false, reason: copy.noFiles };
+  }
+
+  async executeCommand(action: StashCommandAction): Promise<void> {
+    const availability = this.commandAvailability(action);
+    if (!availability.enabled) {
+      if (availability.reason) this.ports.status(availability.reason, "warning");
+      return;
+    }
+    if (action === "refresh") { this.refresh(true); return; }
+    if (action === "toggle-view") { this.controller.toggleFileView(); return; }
+    if (action === "expand-all") { this.controller.expandDirectories(); return; }
+    if (action === "collapse-all") {
+      const files = this.controller.state.details?.files ?? [];
+      this.controller.collapseDirectories([".", ...stashFileDirectoryPaths(buildCommitFileTree(files))]);
+      return;
+    }
+    if (action === "open-diff") { this.openSelectedFile(false); return; }
+    const entry = this.controller.selectedEntry();
+    if (entry) await this.handleAction(action, entry);
+  }
+
+  dispose(): void { this.releaseController(); this.context.dispose(); }
 
   private refresh(preserve: boolean): void {
     const root = this.ports.workspaceRoot();

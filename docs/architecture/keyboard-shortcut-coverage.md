@@ -189,12 +189,12 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Refresh stash catalog/details | read | `stash.refresh` | **Gap** |
-| Toggle stash-file tree/flat view | presentation | `stash.files.view.toggle` | **Gap** |
-| Expand/collapse stash folders | presentation | `stash.files.expandAll`, `.collapseAll` | **Gap** |
-| Open selected stash-file Diff | navigation | `stash.file.diff.open` | **Gap** |
-| Apply selected stash | write | `stash.selection.apply` | **Gap**, reviewed operation route |
-| Pop selected stash | destructive | `stash.selection.pop` | **Gap**, unassigned and confirmed |
+| Refresh stash catalog/details | read | `stash.refresh` | **Custom** |
+| Toggle stash-file tree/flat view | presentation | `stash.files.view.toggle` | **Custom** |
+| Expand/collapse stash folders | presentation | `stash.files.expandAll`, `stash.files.collapseAll` | **Custom** |
+| Open selected stash-file Diff | navigation | `stash.file.diff.open` | **Custom** |
+| Apply selected stash | write | `stash.selection.apply` | **Custom**; exact current stash is revalidated |
+| Pop selected stash | destructive | `stash.selection.pop` | **Custom**, deliberately unassigned |
 | Select stash/file or disclose folder | navigation | list/tree behavior | **Local** |
 
 ## 9. Remote update and Push

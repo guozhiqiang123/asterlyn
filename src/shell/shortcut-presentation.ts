@@ -4,6 +4,7 @@ import type { KeybindingController } from "../features/keybindings/keybinding-co
 import type { LocaleCatalog } from "../localization/catalog.ts";
 import { CHANGES_SHORTCUT_TARGETS } from "../presentation/changes-command-targets.ts";
 import { FILES_EDITOR_DOM_COMMANDS } from "../presentation/files-editor-command-targets.ts";
+import { STASH_SHORTCUT_TARGETS } from "../presentation/stash-command-targets.ts";
 import type { ActivityTool } from "./activity-order.ts";
 
 export interface CommandShortcutPresentation {
@@ -102,7 +103,7 @@ export function refreshWorkbenchShortcutPresentation(
   }
   refreshHideShortcut(root, keybindings, "#hide-left-tool", WORKBENCH_COMMANDS.hideLeftTool);
   refreshHideShortcut(root, keybindings, "#hide-bottom-tool", WORKBENCH_COMMANDS.hideBottomTool);
-  for (const definition of [...FILES_EDITOR_DOM_COMMANDS, ...CHANGES_SHORTCUT_TARGETS]) {
+  for (const definition of [...FILES_EDITOR_DOM_COMMANDS, ...CHANGES_SHORTCUT_TARGETS, ...STASH_SHORTCUT_TARGETS]) {
     const button = root.querySelector<HTMLElement>(definition.selector);
     if (!button) continue;
     const label = button.getAttribute("aria-label") ?? definition.title(catalog);

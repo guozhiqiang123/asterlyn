@@ -60,6 +60,8 @@ function runtimeOptions(overrides = {}) {
     hideBottomTool: () => undefined,
     changesCommandAvailability: () => ({ enabled: false, reason: "Changes required" }),
     executeChangesCommand: () => undefined,
+    stashCommandAvailability: () => ({ enabled: false, reason: "Stash required" }),
+    executeStashCommand: () => undefined,
     ...overrides,
   };
 }

@@ -500,7 +500,7 @@ export class AsterlynApp {
         if (preview && editorDocumentKey(preview) === editorDocumentKey(document)) this.filesEditorRuntime.editor.closePreview();
       },
       activeDocument: () => this.activeDocument(),
-      renderEditor: () => this.renderEditor(),
+      renderEditor: () => this.renderEditor(), presentationChanged: () => this.refreshShortcutPresentation(),
       status: (message, kind) => this.setStatus(message, kind),
       error: (error) => this.showError(error),
     });
@@ -592,8 +592,8 @@ export class AsterlynApp {
       refresh: async () => { await this.refresh(); },
       openSettings: () => this.openSettings(), closeSettings: () => this.closeSettings(),
       toggleTool: (tool) => this.toggleTool(tool),
-      hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(),
-      changesCommandAvailability: (action) => this.changesContextRuntime.commandAvailability(action), executeChangesCommand: (action) => this.changesContextRuntime.executeCommand(action),
+      hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(), changesCommandAvailability: (action) => this.changesContextRuntime.commandAvailability(action), executeChangesCommand: (action) => this.changesContextRuntime.executeCommand(action),
+      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action),
       scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
       pending: (active) => {
         const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
