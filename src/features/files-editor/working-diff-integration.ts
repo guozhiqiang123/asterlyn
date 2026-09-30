@@ -1,5 +1,5 @@
 import { editorDocumentContentKey, editorDocumentKey, type EditorDocument } from "../../editor-document.ts";
-import type { DiffResult, ProjectFile, WorkingDiffBase } from "../../models.ts";
+import type { DiffResult, FileChange, ProjectFile, WorkingDiffBase } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { DiffGitBlameSources } from "./editor-gutter.ts";
@@ -37,6 +37,21 @@ export function diffProjectFile(files: readonly ProjectFile[], document: DiffDoc
     };
   }
   return files.find((file) => file.repositoryId === document.repositoryId && file.path === document.path) ?? null;
+}
+
+export function workingDiffSourceFile(
+  files: readonly ProjectFile[],
+  document: DiffDocument,
+  changes: readonly FileChange[],
+): ProjectFile | null {
+  if (document.kind === "working-diff") {
+    const change = changes.find((candidate) => candidate.path === document.selection.path);
+    const deleted = change?.worktreeStatus === "deleted" || (
+      change?.indexStatus === "deleted" && change.worktreeStatus === "unmodified"
+    );
+    if (!change || deleted) return null;
+  }
+  return diffProjectFile(files, document);
 }
 
 export function workingDiffTextTab(

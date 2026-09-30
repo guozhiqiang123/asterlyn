@@ -10,7 +10,10 @@ import {
   unifiedChangeStartLines,
 } from "../src/features/files-editor/diff-navigation.ts";
 import { editorDocumentKey } from "../src/editor-document.ts";
-import { mountEditableWorkingDiff } from "../src/features/files-editor/working-diff-integration.ts";
+import {
+  mountEditableWorkingDiff,
+  workingDiffSourceFile,
+} from "../src/features/files-editor/working-diff-integration.ts";
 import { readFile } from "node:fs/promises";
 
 test("unified Diff navigation groups adjacent removed and added lines", () => {
@@ -57,6 +60,22 @@ test("file navigation stops at collection boundaries", () => {
   assert.equal(adjacentDiffItem(files, "a", -1), null);
   assert.equal(adjacentDiffItem(files, "c", 1), null);
   assert.equal(adjacentDiffItem(files, "missing", 1), null);
+});
+
+test("deleted working Diffs do not expose a missing source file", () => {
+  const document = {
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "removed.txt", staged: false },
+  };
+  const files = [{ repositoryId: ".", path: "removed.txt", workspacePath: "removed.txt" }];
+  const removed = { path: "removed.txt", indexStatus: "unmodified", worktreeStatus: "deleted" };
+  const stagedRemoved = { ...removed, indexStatus: "deleted", worktreeStatus: "unmodified" };
+  const recreated = { ...removed, indexStatus: "deleted", worktreeStatus: "added" };
+
+  assert.equal(workingDiffSourceFile(files, document, [removed]), null);
+  assert.equal(workingDiffSourceFile(files, document, [stagedRemoved]), null);
+  assert.equal(workingDiffSourceFile(files, document, [recreated]), files[0]);
 });
 
 test("clicking an omitted Diff row expands it exactly once", () => {

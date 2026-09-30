@@ -236,9 +236,12 @@ import { adjacentDiffItem, type DiffDirection } from "./features/files-editor/di
 import {
   activeProjectWorkspacePath,
   activeEditableTextTab,
-  diffProjectFile, editableWorkingDiffBlameSources, mountEditableWorkingDiff, showsContextHeader,
+  editableWorkingDiffBlameSources,
+  mountEditableWorkingDiff,
+  showsContextHeader,
   workingDiffActive,
   workingDiffExpanded,
+  workingDiffSourceFile,
   workingDiffTextTab,
 } from "./features/files-editor/working-diff-integration.ts";
 import {
@@ -6832,7 +6835,7 @@ export class AsterlynApp {
       textReady,
       previousFile: this.adjacentDiffPath(document, -1),
       nextFile: this.adjacentDiffPath(document, 1),
-      canOpenSource: diffProjectFile(this.filesState.files, document) !== null,
+      canOpenSource: workingDiffSourceFile(this.filesState.files, document, this.windowSession.repository.state.snapshot?.changes ?? []) !== null,
       expanded: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
       preferences: this.settingsState.preferences,
       copy: this.localization.catalog.editor,
@@ -6952,7 +6955,7 @@ export class AsterlynApp {
       document.kind !== "commit-diff" &&
       document.kind !== "commit-comparison-diff"
     ) return;
-    const file = diffProjectFile(this.filesState.files, document);
+    const file = workingDiffSourceFile(this.filesState.files, document, this.windowSession.repository.state.snapshot?.changes ?? []);
     if (!file) {
       this.setStatus(this.localization.catalog.editor.diffFileMissing, "warning");
       return;
@@ -7048,7 +7051,7 @@ export class AsterlynApp {
     ) return;
     const diff = this.changesRuntime.controller.loadSelectedDiff(workingDiffExpanded(document, this.expandedUnchangedDiffKey));
     if (!isImagePreviewPath(selected.path) && !selected.conflicted && !selected.submodule) {
-      const file = diffProjectFile(this.filesState.files, document);
+      const file = workingDiffSourceFile(this.filesState.files, document, snapshot.changes);
       if (file && file.readOnly !== true) {
         void this.filesEditorRuntime.editor.ensureText(snapshot.root, file, "source");
       }
