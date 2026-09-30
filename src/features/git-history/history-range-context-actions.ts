@@ -80,6 +80,30 @@ export class HistoryCommitRangeContextActions {
     return true;
   }
 
+  commandAvailability(target: HistoryCommitRangeTarget): ContextMenuAvailability {
+    return target.commits.length === 2 &&
+      target.commits[0]?.repositoryId === target.commits[1]?.repositoryId
+      ? { kind: "enabled" }
+      : { kind: "blocked", reason: this.copy().rangeContextMenu.sameRootRequired };
+  }
+
+  executeCompareCommand(target: HistoryCommitRangeTarget): void {
+    if (!this.runtime.current(target)) {
+      this.runtime.blocked(this.copy().rangeContextMenu.targetChanged);
+      return;
+    }
+    const availability = this.commandAvailability(target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    try {
+      this.runtime.openComparison(target);
+    } catch (error) {
+      this.runtime.error(error);
+    }
+  }
+
   private invoke(
     actionId: string,
     policy: HistoryCommitRangePolicy,

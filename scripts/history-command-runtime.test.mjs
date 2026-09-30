@@ -48,9 +48,12 @@ test("History commands invoke the current rendered controls and expose live avai
     ["#swap-comparison-sides", swap],
   ]);
   const registry = new CommandRegistry();
+  const actions = [];
   const release = registerHistoryCommands(registry, {
     root: { querySelector: (selector) => targets.get(selector) ?? null },
     catalog,
+    historyCommandAvailability: () => ({ enabled: true }),
+    executeHistoryCommand: (action) => actions.push(action),
   });
 
   assert.equal(registry.get(HISTORY_COMMANDS.toggleRegex).title(), "Use regular expression");
@@ -60,7 +63,9 @@ test("History commands invoke the current rendered controls and expose live avai
   await registry.get(HISTORY_COMMANDS.openPathFilter).execute("palette");
   await registry.get(HISTORY_COMMANDS.toggleFileView).execute("keyboard");
   await registry.get(HISTORY_COMMANDS.swapComparison).execute("keyboard");
+  await registry.get(HISTORY_COMMANDS.loadMore).execute("keyboard");
   assert.deepEqual([regex.clicks, paths.clicks, toggleFiles.clicks, swap.clicks], [1, 1, 1, 1]);
+  assert.deepEqual(actions, ["load-more"]);
 
   swap.disabled = true;
   assert.deepEqual(registry.get(HISTORY_COMMANDS.swapComparison).availability(), {

@@ -24,6 +24,7 @@ test("Git History context runtime owns one disposable delegated binding set", ()
       history: () => ({}),
       detail: () => ({}),
       rangeSelection: () => null,
+      currentRangeSelection: () => null,
       markHistoryTarget: () => undefined,
     },
     ports: {
@@ -33,6 +34,9 @@ test("Git History context runtime owns one disposable delegated binding set", ()
       folder: {},
       file: {},
     },
+    manageRemotes: () => undefined,
+    loadMoreHistory: () => undefined,
+    unavailableReason: () => "History required",
   });
 
   assert.deepEqual(installed.map(({ type }) => type), [

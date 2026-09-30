@@ -15,11 +15,14 @@ import {
   registerStashCommands,
   type StashCommandRuntimeOptions,
 } from "./stash-command-runtime.ts";
-import { registerHistoryCommands } from "./history-command-runtime.ts";
+import {
+  registerHistoryCommands,
+  type HistoryCommandRuntimeOptions,
+} from "./history-command-runtime.ts";
 
 export interface ApplicationCommandRuntimeOptions
   extends WorkbenchCommandRuntimeOptions, FilesEditorCommandRuntimeOptions,
-    ChangesCommandRuntimeOptions, StashCommandRuntimeOptions {}
+    ChangesCommandRuntimeOptions, StashCommandRuntimeOptions, HistoryCommandRuntimeOptions {}
 
 export function registerApplicationCommands(
   registry: CommandRegistry,

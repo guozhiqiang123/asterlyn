@@ -593,7 +593,7 @@ export class AsterlynApp {
       openSettings: () => this.openSettings(), closeSettings: () => this.closeSettings(),
       toggleTool: (tool) => this.toggleTool(tool),
       hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(), changesCommandAvailability: (action) => this.changesContextRuntime.commandAvailability(action), executeChangesCommand: (action) => this.changesContextRuntime.executeCommand(action),
-      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action),
+      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action), historyCommandAvailability: (action) => this.gitHistoryContextRuntime.commandAvailability(action), executeHistoryCommand: (action) => this.gitHistoryContextRuntime.executeCommand(action),
       scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
       pending: (active) => {
         const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
@@ -872,7 +872,7 @@ export class AsterlynApp {
       host: this.contextMenuHost,
       clipboard: createBrowserTextClipboardAdapter(window.navigator),
       copy: () => this.localization.catalog.history,
-      manageRemotes: () => { this.remoteRuntime.management?.open(); },
+      manageRemotes: () => { this.remoteRuntime.management?.open(); }, loadMoreHistory: () => this.historyReadRuntime.details.loadOlder(), unavailableReason: () => this.localization.catalog.settings.keybindings.historyRequired,
       sources: {
         branch: () => ({
           snapshot: this.windowSession.repository.state.snapshot,
@@ -883,7 +883,7 @@ export class AsterlynApp {
         history: () => ({
           state: this.historyState,
           workspaceGeneration: this.windowSession.generation,
-          repositoryRevision: this.windowSession.repository.state.revision,
+          repositoryRevision: this.windowSession.repository.state.revision, visible: this.shellState.layout.bottomTool === "branches",
         }),
         detail: () => ({
           state: this.historyState,
@@ -892,7 +892,7 @@ export class AsterlynApp {
           snapshot: this.windowSession.repository.state.snapshot,
           fileView: this.gitHistoryPresentationRuntime.detailState.commitFileView,
         }),
-        rangeSelection: (key) => this.gitHistoryPresentationRuntime.rangeSelection.contextTarget(key),
+        rangeSelection: (key) => this.gitHistoryPresentationRuntime.rangeSelection.contextTarget(key), currentRangeSelection: () => this.gitHistoryPresentationRuntime.rangeSelection.selection,
         markHistoryTarget: (key) => this.markHistoryCommitContextTarget(key),
       },
       ports: {

@@ -169,13 +169,15 @@ without Asterlyn claiming common editor or terminal keys.
 | Open branch/user/date/path/graph filters | navigation | `history.filter.branch.open`, `history.filter.user.open`, `history.filter.date.open`, `history.filter.path.open`, `history.filter.graph.open` | **Custom** |
 | Clear one/all active History filters | presentation | `history.filter.clearCurrent`, `.clearAll` | **Gap** |
 | Select commits and ranges | navigation | History list keyboard/pointer contract | **Local** |
-| Open selected commit/range comparison | navigation | `history.selection.compare` | **Gap** |
-| Load more history | read | `history.loadMore` | **Gap** |
+| Open selected commit/range comparison | navigation | `history.selection.compare` | **Custom**; exact current two-commit range is revalidated |
+| Load more history | read | `history.loadMore` | **Custom** |
 | Toggle commit-file tree/flat, expand/collapse | presentation | `history.files.view.toggle`, `history.files.expandAll`, `history.files.collapseAll` | **Custom** |
 | Swap the before/after sides of a commit comparison | presentation | `history.comparison.swap` | **Custom** |
-| Open historical file, compare current, open current | navigation | `history.file.openHistorical`, `.compareCurrent`, `.openCurrent` | **Gap** |
-| Restore file from selected commit | destructive | `history.file.restore` | **Gap**, unassigned and confirmed |
-| Show folder changes / reveal in Files / path history | navigation | `history.folder.changes`, `.reveal`, `.history` | **Gap** |
+| Open selected historical file Diff | navigation | `history.file.diff.open` | **Custom** |
+| Open historical file, compare current, open current | navigation | `history.file.openHistorical`, `history.file.compareCurrent`, `history.file.openCurrent` | **Custom** |
+| Restore file from selected commit | destructive | `history.file.restore` | **Custom**, unassigned and confirmed |
+| Show selected file history up to the commit | navigation | `history.file.history` | **Custom** |
+| Show folder changes / reveal in Files / path history | navigation | `history.folder.changes`, `history.folder.reveal`, `history.folder.history` | **Custom**; folder commands use the focused directory |
 | Show branch/tag history | navigation | `git.ref.history` | **Gap** |
 | Switch/checkout/create/rename branch | write | `git.branch.switch`, `.checkoutRemote`, `.create`, `.rename` | **Gap** |
 | Merge/rebase selected ref | write | `git.branch.merge`, `.rebase` | **Gap**, reviewed Git-operation route only |

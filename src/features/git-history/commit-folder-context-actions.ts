@@ -23,6 +23,8 @@ export const COMMIT_FOLDER_CONTEXT_OWNER_ID = "git-history.commit-folder-context
 const OWNER_ID = COMMIT_FOLDER_CONTEXT_OWNER_ID;
 const ENABLED = { kind: "enabled" } as const;
 
+export type CommitFolderCommandAction = "show-changes" | "reveal" | "history";
+
 export interface CommitFolderContextRuntime {
   current(target: CommitDetailDirectoryContextTarget): boolean;
   policy(target: CommitDetailDirectoryContextTarget): CommitFolderContextPolicy;
@@ -91,6 +93,30 @@ export class CommitFolderContextActions {
       restoreFocus: request.restoreFocus,
     });
     return true;
+  }
+
+  commandAvailability(
+    action: CommitFolderCommandAction,
+    target: CommitDetailDirectoryContextTarget,
+  ): ContextMenuAvailability {
+    return action === "reveal" ? this.runtime.policy(target).reveal : ENABLED;
+  }
+
+  executeCommand(action: CommitFolderCommandAction, target: CommitDetailDirectoryContextTarget): void {
+    if (!this.runtime.current(target)) {
+      this.runtime.blocked(this.copy().commitFolderContextMenu.targetChanged);
+      return;
+    }
+    const availability = this.commandAvailability(action, target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    try {
+      this.invoke(`${OWNER_ID}.${action}`, target);
+    } catch (error) {
+      this.runtime.error(error);
+    }
   }
 
   private invoke(actionId: string, target: CommitDetailDirectoryContextTarget): void {

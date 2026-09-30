@@ -62,6 +62,8 @@ function runtimeOptions(overrides = {}) {
     executeChangesCommand: () => undefined,
     stashCommandAvailability: () => ({ enabled: false, reason: "Stash required" }),
     executeStashCommand: () => undefined,
+    historyCommandAvailability: () => ({ enabled: false, reason: "History required" }),
+    executeHistoryCommand: () => undefined,
     ...overrides,
   };
 }

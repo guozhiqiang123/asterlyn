@@ -1,5 +1,8 @@
 import type { CommandFocusScope, CommandId } from "../application/commands/command-service.ts";
-import { HISTORY_COMMANDS } from "../application/commands/history-command-ids.ts";
+import {
+  HISTORY_COMMANDS,
+  type HistoryContextCommandAction,
+} from "../application/commands/history-command-ids.ts";
 import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
@@ -19,6 +22,29 @@ export const HISTORY_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   history(HISTORY_COMMANDS.swapComparison, "#swap-comparison-sides", (copy) => copy.swapComparisonSides, "history comparison swap before after sides"),
 ];
 
+export interface HistoryContextCommandDefinition {
+  readonly id: CommandId;
+  readonly action: HistoryContextCommandAction;
+  readonly scopes: readonly CommandFocusScope[];
+  readonly title: (catalog: LocaleCatalog) => string;
+  readonly detail: (catalog: LocaleCatalog) => string;
+  readonly keywords: string;
+}
+
+export const HISTORY_CONTEXT_COMMANDS: readonly HistoryContextCommandDefinition[] = [
+  context(HISTORY_COMMANDS.loadMore, "load-more", (copy) => copy.scrollForOlder, "history load more older commits page"),
+  context(HISTORY_COMMANDS.compareSelection, "compare-selection", (copy) => copy.rangeContextMenu.compareTwoCommits, "history compare two selected commits"),
+  context(HISTORY_COMMANDS.openFileDiff, "file-show-diff", (copy) => copy.commitFileContextMenu.showDiff, "history selected file diff"),
+  context(HISTORY_COMMANDS.openHistoricalFile, "file-open-historical", (copy) => copy.commitFileContextMenu.openHistorical, "history open selected historical file version"),
+  context(HISTORY_COMMANDS.compareCurrentFile, "file-compare-current", (copy) => copy.commitFileContextMenu.compareCurrent, "history compare selected file current working tree"),
+  context(HISTORY_COMMANDS.openCurrentFile, "file-open-current", (copy) => copy.commitFileContextMenu.openCurrent, "history open current selected file"),
+  context(HISTORY_COMMANDS.restoreFile, "file-restore", (copy) => copy.commitFileContextMenu.restore, "history restore selected file version working tree"),
+  context(HISTORY_COMMANDS.fileHistory, "file-history", (copy) => copy.commitFileContextMenu.historyUpToCommit, "history selected file path up to commit"),
+  context(HISTORY_COMMANDS.showFolderChanges, "folder-show-changes", (copy) => copy.commitFolderContextMenu.showChanges, "history focused folder changes"),
+  context(HISTORY_COMMANDS.revealFolder, "folder-reveal", (copy) => copy.commitFolderContextMenu.revealInFiles, "history reveal focused folder files"),
+  context(HISTORY_COMMANDS.folderHistory, "folder-history", (copy) => copy.commitFolderContextMenu.historyUpToCommit, "history focused folder path up to commit"),
+];
+
 function history(
   id: CommandId,
   selector: string,
@@ -30,5 +56,18 @@ function history(
     title: (catalog) => title(catalog.history),
     detail: (catalog) => catalog.shell.branches,
     blockedReason: (catalog) => catalog.settings.keybindings.historyRequired,
+  };
+}
+
+function context(
+  id: CommandId,
+  action: HistoryContextCommandAction,
+  title: (copy: LocaleCatalog["history"]) => string,
+  keywords: string,
+): HistoryContextCommandDefinition {
+  return {
+    id, action, keywords, scopes: HISTORY_SCOPES,
+    title: (catalog) => title(catalog.history),
+    detail: (catalog) => catalog.shell.branches,
   };
 }

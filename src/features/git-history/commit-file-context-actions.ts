@@ -23,6 +23,10 @@ export const COMMIT_FILE_CONTEXT_OWNER_ID = "git-history.commit-file-context-act
 const OWNER_ID = COMMIT_FILE_CONTEXT_OWNER_ID;
 const ENABLED = { kind: "enabled" } as const;
 
+export type CommitFileCommandAction =
+  | "show-diff" | "open-historical" | "compare-current" | "open-current"
+  | "restore" | "history";
+
 export interface CommitFileContextRuntime {
   current(target: CommitDetailFileContextTarget): boolean;
   policy(target: CommitDetailFileContextTarget): CommitFileContextPolicy;
@@ -94,6 +98,33 @@ export class CommitFileContextActions {
       restoreFocus: request.restoreFocus,
     });
     return true;
+  }
+
+  commandAvailability(
+    action: CommitFileCommandAction,
+    target: CommitDetailFileContextTarget,
+  ): ContextMenuAvailability {
+    const policy = this.runtime.policy(target);
+    if (action === "compare-current" || action === "open-current") return policy.currentFile;
+    if (action === "restore") return policy.restore;
+    return ENABLED;
+  }
+
+  executeCommand(action: CommitFileCommandAction, target: CommitDetailFileContextTarget): void {
+    if (!this.runtime.current(target)) {
+      this.runtime.blocked(this.copy().commitFileContextMenu.targetChanged);
+      return;
+    }
+    const availability = this.commandAvailability(action, target);
+    if (availability.kind !== "enabled") {
+      this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
+      return;
+    }
+    try {
+      this.invoke(`${OWNER_ID}.${action}`, target);
+    } catch (error) {
+      this.runtime.error(error);
+    }
   }
 
   private invoke(actionId: string, target: CommitDetailFileContextTarget): void {

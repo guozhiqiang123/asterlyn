@@ -1,4 +1,5 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
+import type { HistoryContextCommandAction } from "../../application/commands/history-command-ids.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
 import type { RepositorySnapshot } from "../../models.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
@@ -8,15 +9,19 @@ import { BranchContextActions, type BranchContextRuntime } from "./branch-contex
 import { BranchContextBinding } from "./branch-context-binding.ts";
 import {
   CommitDetailContextBinding,
+  resolveCommitDetailContextTarget,
+  type CommitDetailContextTarget,
   type CommitDetailDirectoryContextTarget,
   type CommitDetailFileContextTarget,
 } from "./commit-detail-context-binding.ts";
 import {
   CommitFileContextActions,
+  type CommitFileCommandAction,
   type CommitFileContextRuntime,
 } from "./commit-file-context-actions.ts";
 import {
   CommitFolderContextActions,
+  type CommitFolderCommandAction,
   type CommitFolderContextRuntime,
 } from "./commit-folder-context-actions.ts";
 import type { GitHistoryDetailsState } from "./history-details-controller.ts";
@@ -25,11 +30,12 @@ import {
   type HistoryCommitContextRuntime,
 } from "./history-commit-context-actions.ts";
 import { HistoryContextBinding } from "./history-context-binding.ts";
+import { resolveHistoryCommitContextTarget } from "./history-context-binding.ts";
 import {
   HistoryCommitRangeContextActions,
   type HistoryCommitRangeRuntime,
 } from "./history-range-context-actions.ts";
-import { resolveHistoryCommitRangeTarget } from "./history-range-context.ts";
+import { resolveHistoryCommitRangeTarget, type HistoryCommitRangeTarget } from "./history-range-context.ts";
 import type { HistoryRangeSelection } from "./history-range-selection.ts";
 
 export interface GitHistoryContextSources {
@@ -43,6 +49,7 @@ export interface GitHistoryContextSources {
     readonly state: GitHistoryDetailsState;
     readonly workspaceGeneration: number;
     readonly repositoryRevision: number;
+    readonly visible: boolean;
   };
   detail(): {
     readonly state: GitHistoryDetailsState;
@@ -52,6 +59,7 @@ export interface GitHistoryContextSources {
     readonly fileView: CommitFileView;
   };
   rangeSelection(key: string): HistoryRangeSelection | null;
+  currentRangeSelection(): HistoryRangeSelection | null;
   markHistoryTarget(key: string): void;
 }
 
@@ -71,6 +79,8 @@ export interface GitHistoryContextRuntimeOptions {
   readonly sources: GitHistoryContextSources;
   readonly ports: GitHistoryContextPorts;
   readonly manageRemotes: () => void;
+  readonly loadMoreHistory: () => void | Promise<void>;
+  readonly unavailableReason: () => string;
 }
 
 /** Owns every delegated context-menu binding on the Git History DOM boundary. */
@@ -78,15 +88,28 @@ export class GitHistoryContextRuntime {
   private readonly bindings: readonly {
     dispose(): void;
   }[];
+  private readonly root: HTMLElement;
+  private readonly copy: () => HistoryCopy;
+  private readonly sources: GitHistoryContextSources;
+  private readonly rangeActions: HistoryCommitRangeContextActions;
+  private readonly folderActions: CommitFolderContextActions;
+  private readonly fileActions: CommitFileContextActions;
+  private readonly loadMoreHistory: () => void | Promise<void>;
+  private readonly unavailableReason: () => string;
   private disposed = false;
 
   constructor(options: GitHistoryContextRuntimeOptions) {
     const { root, host, clipboard, copy, sources, ports } = options;
+    this.root = root;
+    this.copy = copy;
+    this.sources = sources;
+    this.loadMoreHistory = options.loadMoreHistory;
+    this.unavailableReason = options.unavailableReason;
     const branchActions = new BranchContextActions(host, clipboard, ports.branch, copy);
     const commitActions = new HistoryCommitContextActions(host, clipboard, ports.commit, copy);
-    const rangeActions = new HistoryCommitRangeContextActions(host, clipboard, ports.range, copy);
-    const folderActions = new CommitFolderContextActions(host, clipboard, ports.folder, copy);
-    const fileActions = new CommitFileContextActions(host, clipboard, ports.file, copy);
+    this.rangeActions = new HistoryCommitRangeContextActions(host, clipboard, ports.range, copy);
+    this.folderActions = new CommitFolderContextActions(host, clipboard, ports.folder, copy);
+    this.fileActions = new CommitFileContextActions(host, clipboard, ports.file, copy);
 
     this.bindings = [
       new BranchContextBinding(root, sources.branch, (request) => branchActions.open(request)),
@@ -98,20 +121,78 @@ export class GitHistoryContextRuntime {
         );
         if (!range) return commitActions.open(request);
         sources.markHistoryTarget(request.target.key);
-        return rangeActions.open({ ...request, target: range });
+        return this.rangeActions.open({ ...request, target: range });
       }),
       new CommitDetailContextBinding(root, sources.detail, (request) =>
         request.target.kind === "directory"
-          ? folderActions.open({
+          ? this.folderActions.open({
               ...request,
               target: request.target as CommitDetailDirectoryContextTarget,
             })
-          : fileActions.open({
+          : this.fileActions.open({
               ...request,
               target: request.target as CommitDetailFileContextTarget,
             })
       ),
     ];
+  }
+
+  commandAvailability(action: HistoryContextCommandAction): { enabled: boolean; reason?: string } {
+    if (!this.sources.history().visible) {
+      return { enabled: false, reason: this.unavailableReason() };
+    }
+    if (action === "load-more") {
+      const state = this.sources.history().state;
+      if (state.history.status === "ready" && state.hasMore && !state.loadingMore && !state.refreshing) {
+        return { enabled: true };
+      }
+      return {
+        enabled: false,
+        reason: state.loadingMore || state.refreshing
+          ? this.copy().loadingOlderCommits
+          : this.copy().noOlderCommits,
+      };
+    }
+    const target = this.commandTarget(action);
+    if (!target) return { enabled: false, reason: this.copy().commitHistory };
+    const availability = action === "compare-selection"
+      ? this.rangeActions.commandAvailability(target as HistoryCommitRangeTarget)
+      : action.startsWith("file-")
+        ? this.fileActions.commandAvailability(
+            action.slice("file-".length) as CommitFileCommandAction,
+            target as CommitDetailFileContextTarget,
+          )
+        : this.folderActions.commandAvailability(
+            action.slice("folder-".length) as CommitFolderCommandAction,
+            target as CommitDetailDirectoryContextTarget,
+          );
+    return availability.kind === "enabled"
+      ? { enabled: true }
+      : {
+          enabled: false,
+          reason: availability.kind === "busy" ? availability.label : availability.reason,
+        };
+  }
+
+  async executeCommand(action: HistoryContextCommandAction): Promise<void> {
+    const availability = this.commandAvailability(action);
+    if (!availability.enabled) return;
+    if (action === "load-more") { await this.loadMoreHistory(); return; }
+    const target = this.commandTarget(action);
+    if (!target) return;
+    if (action === "compare-selection") {
+      this.rangeActions.executeCompareCommand(target as HistoryCommitRangeTarget);
+    } else if (action.startsWith("file-")) {
+      this.fileActions.executeCommand(
+        action.slice("file-".length) as CommitFileCommandAction,
+        target as CommitDetailFileContextTarget,
+      );
+    } else {
+      this.folderActions.executeCommand(
+        action.slice("folder-".length) as CommitFolderCommandAction,
+        target as CommitDetailDirectoryContextTarget,
+      );
+    }
   }
 
   renderTopbarBranch(snapshot: RepositorySnapshot | null): void {
@@ -122,5 +203,41 @@ export class GitHistoryContextRuntime {
     if (this.disposed) return;
     this.disposed = true;
     for (const binding of this.bindings) binding.dispose();
+  }
+
+  private commandTarget(
+    action: Exclude<HistoryContextCommandAction, "load-more">,
+  ): CommitDetailContextTarget | HistoryCommitRangeTarget | null {
+    if (action === "compare-selection") {
+      const source = this.sources.history();
+      const selection = this.sources.currentRangeSelection();
+      const key = selection?.activeKey ?? source.state.selectedCommit;
+      const row = key
+        ? resolveHistoryCommitContextTarget(
+            source.state,
+            source.workspaceGeneration,
+            source.repositoryRevision,
+            key,
+          )
+        : null;
+      return row ? resolveHistoryCommitRangeTarget(row, selection) : null;
+    }
+    const source = this.sources.detail();
+    const kind = action.startsWith("file-") ? "file" : "directory";
+    const path = kind === "file"
+      ? source.state.selectedFile
+      : this.root.querySelector<HTMLElement>("[data-commit-file-directory] > summary:focus")
+          ?.parentElement?.dataset.commitFileDirectory ?? null;
+    return path
+      ? resolveCommitDetailContextTarget(
+          source.state,
+          source.workspaceGeneration,
+          kind,
+          path,
+          source.snapshot,
+          source.repositoryRevision,
+          source.fileView,
+        )
+      : null;
   }
 }
