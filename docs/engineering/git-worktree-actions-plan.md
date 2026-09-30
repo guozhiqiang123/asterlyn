@@ -231,9 +231,8 @@ accept a renderer-selected command line.
 
 ## Completion record
 
-- **Accepted branch:** `codex/delete-worktree-action`; the implementation commit is recorded after
-  this plan and source set are committed, and the exact final branch commit is reported in the
-  handoff.
+- **Accepted branch:** `codex/delete-worktree-action`; implementation commit `a33ee5a`. The exact
+  completion-record commit is reported in the handoff because a commit cannot embed its own hash.
 - **Frontend:** TypeScript checking, the 762-test script suite, production Vite build, ownership
   budgets, protocol validation, and `git diff --check` passed.
 - **Native:** Rust formatting, strict all-target workspace Clippy, and workspace tests passed. The
