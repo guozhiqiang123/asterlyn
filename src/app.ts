@@ -560,9 +560,7 @@ export class AsterlynApp {
     });
     this.shellController = new ShellController(window.localStorage);
     this.shortcuts = new KeyboardShortcutRuntime(window, window.localStorage, {
-      navigationCopy: () => this.localization.catalog.navigation.commands,
-      commandPaletteCopy: () => ({ label: this.localization.catalog.navigation.titles.commands, detail: this.localization.catalog.navigation.hints.commands }),
-      keybindingCopy: () => this.localization.catalog.settings.keybindings,
+      catalog: () => this.localization.catalog,
       workspaceOpen: () => this.windowSession.workspace.state.root !== null,
       gitAvailable: () => this.windowSession.repository.state.snapshot !== null,
       settingsOpen: () => this.shellState.page === "settings",
@@ -1934,9 +1932,7 @@ export class AsterlynApp {
   }
 
   private refreshShortcutPresentation(): void {
-    refreshWorkbenchShortcutPresentation(
-      this.root, this.localShellCopy(), this.shellState.activityOrder, this.shortcuts.keybindings,
-    );
+    refreshWorkbenchShortcutPresentation(this.root, this.localization.catalog, this.shellState.activityOrder, this.shortcuts.keybindings);
   }
 
   private commitActivityOrder(order: ActivityTool[], focusTool: ActivityTool): void {
@@ -4297,6 +4293,7 @@ export class AsterlynApp {
     this.root
       .querySelector<HTMLButtonElement>("#collapse-project-folder")
       ?.addEventListener("click", () => this.setSelectedProjectFolderExpanded(false));
+    this.refreshShortcutPresentation();
     this.root
       .querySelectorAll<HTMLButtonElement>("[data-project-directory-toggle]")
       .forEach((button) => {
@@ -5831,6 +5828,7 @@ export class AsterlynApp {
     this.renderEditorContextActions(document);
     this.renderEditorTabMenu();
     this.renderDocumentStatus();
+    this.refreshShortcutPresentation();
     const showContextHeader = showsContextHeader(document);
     editorPanel.classList.toggle("show-context-header", showContextHeader);
     if (!showContextHeader) header.innerHTML = "";
@@ -6874,6 +6872,7 @@ export class AsterlynApp {
         });
       },
     );
+    this.refreshShortcutPresentation();
   }
 
   private adjacentDiffPath(

@@ -14,11 +14,12 @@ import {
 import type { NavigationCommand } from "../features/files-editor/navigation.ts";
 import { WindowKeybindingBinding } from "../shell/window-keybinding-binding.ts";
 import {
-  registerWorkbenchCommands,
-  type WorkbenchCommandRuntimeOptions,
-} from "./workbench-command-runtime.ts";
+  registerApplicationCommands,
+  type ApplicationCommandRuntimeOptions,
+} from "./application-command-runtime.ts";
 
-export interface KeyboardShortcutRuntimeOptions extends WorkbenchCommandRuntimeOptions {
+export interface KeyboardShortcutRuntimeOptions
+  extends Omit<ApplicationCommandRuntimeOptions, "root"> {
   readonly scope: (target: EventTarget | null) => CommandFocusScope;
   readonly pending: (active: boolean) => void;
   readonly blocked: (reason: string) => void;
@@ -40,7 +41,10 @@ export class KeyboardShortcutRuntime {
     options: KeyboardShortcutRuntimeOptions,
   ) {
     this.commands = new CommandService(this.registry, options);
-    this.releaseCommands = registerWorkbenchCommands(this.registry, options);
+    this.releaseCommands = registerApplicationCommands(this.registry, {
+      ...options,
+      root: host.document,
+    });
     this.keybindings = new KeybindingController(
       this.registry,
       new KeybindingStore(storage, createBrowserKeybindingSync(host)),

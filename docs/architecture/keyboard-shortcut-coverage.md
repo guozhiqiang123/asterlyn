@@ -90,9 +90,9 @@ without Asterlyn claiming common editor or terminal keys.
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Locate the active editor file | navigation | `files.active.locate` | **Gap** |
-| Expand selected folder recursively | presentation | `files.folder.expand` | **Gap** |
-| Collapse selected folder recursively | presentation | `files.folder.collapse` | **Gap** |
+| Locate the active editor file | navigation | `files.active.locate` | **Custom** |
+| Expand selected folder recursively | presentation | `files.folder.expand` | **Custom** |
+| Collapse selected folder recursively | presentation | `files.folder.collapse` | **Custom** |
 | Open selected file | navigation | `files.selection.open` | **Gap**; Enter/double-click remains **Local** |
 | Create file at selected target | write | `files.file.create` | **Gap** |
 | Rename selected item | write | `files.selection.rename` | **Gap** |
@@ -127,17 +127,17 @@ without Asterlyn claiming common editor or terminal keys.
 | --- | --- | --- | --- |
 | Find/replace in active editor or Diff | editing | `editor.find.open` | **Default:** Primary+F in editor/Diff scopes |
 | Save active editable file | write | `editor.file.save` | **Default:** Primary+S |
-| Close active tab/preview | navigation | `editor.tab.close` | **Gap**; dirty confirmation must remain intact |
+| Close active tab/preview | navigation | `editor.tab.close` | **Custom**; dirty confirmation remains intact |
 | Activate previous/next tab | navigation | `editor.tab.previous`, `.next` | **Gap** |
-| Open the tab list | navigation | `editor.tabList.toggle` | **Gap** |
+| Open the tab list | navigation | `editor.tabList.toggle` | **Custom** |
 | Select a tab or close a named tab | navigation | tab/list component interaction | **Local** dynamic target |
-| Markdown Source / Split / Preview | presentation | `editor.markdown.source`, `.split`, `.preview` | **Gap** |
-| Previous/next changed hunk | navigation | `diff.change.previous`, `.next` | **Gap** |
-| Previous/next file in current Diff set | navigation | `diff.file.previous`, `.next` | **Gap** |
-| Open current Diff source file | navigation | `diff.source.open` | **Gap** |
-| Expand/collapse unchanged Diff context | presentation | `diff.unchanged.toggle` | **Gap** |
-| Unified / side-by-side Diff | presentation | `diff.layout.unified`, `.split` | **Gap** |
-| Show/hide whitespace | presentation | `diff.whitespace.toggle` | **Gap** |
+| Markdown Source / Split / Preview | presentation | `editor.markdown.source`, `editor.markdown.split`, `editor.markdown.preview` | **Custom** |
+| Previous/next changed hunk | navigation | `diff.change.previous`, `diff.change.next` | **Custom** |
+| Previous/next file in current Diff set | navigation | `diff.file.previous`, `diff.file.next` | **Custom** |
+| Open current Diff source file | navigation | `diff.source.open` | **Custom** |
+| Expand/collapse unchanged Diff context | presentation | `diff.unchanged.toggle` | **Custom** |
+| Unified / side-by-side Diff | presentation | `diff.layout.unified`, `diff.layout.split` | **Custom** |
+| Show/hide whitespace | presentation | `diff.whitespace.toggle` | **Custom** |
 | Fold, select, edit, undo/redo, copy/paste | editing | CodeMirror behavior | **Local** until explicitly promoted as product commands |
 | Resize Markdown split | presentation | splitter keyboard contract | **Local** |
 

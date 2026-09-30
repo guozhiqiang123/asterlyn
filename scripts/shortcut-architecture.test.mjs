@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import { CommandRegistry } from "../src/application/commands/command-service.ts";
+import { APPLICATION_COMMAND_IDS } from "../src/application/commands/application-command-ids.ts";
 import { WORKBENCH_COMMANDS } from "../src/application/commands/workbench-command-ids.ts";
+import { registerApplicationCommands } from "../src/composition/application-command-runtime.ts";
 import { registerWorkbenchCommands } from "../src/composition/workbench-command-runtime.ts";
 import { DEFAULT_KEYBINDINGS } from "../src/features/keybindings/default-keybindings.ts";
 
@@ -20,16 +22,21 @@ function runtimeOptions(overrides = {}) {
     aliases: "command aliases",
   };
   return {
-    navigationCopy: () => new Proxy({}, { get: () => commandCopy }),
-    commandPaletteCopy: () => ({ label: "Commands", detail: "Open commands" }),
-    keybindingCopy: () => ({
-      workspaceRequired: "Workspace required",
-      editorRequired: "Editor required",
-      historyRequired: "History required",
-      gitRequired: "Git required",
-      settingsRequired: "Settings required",
-      leftToolRequired: "Left tool required",
-      bottomToolRequired: "Bottom tool required",
+    catalog: () => ({
+      navigation: {
+        commands: new Proxy({}, { get: () => commandCopy }),
+        titles: { commands: "Commands" },
+        hints: { commands: "Open commands" },
+      },
+      settings: { keybindings: {
+        workspaceRequired: "Workspace required",
+        editorRequired: "Editor required",
+        historyRequired: "History required",
+        gitRequired: "Git required",
+        settingsRequired: "Settings required",
+        leftToolRequired: "Left tool required",
+        bottomToolRequired: "Bottom tool required",
+      } },
     }),
     workspaceOpen: () => true,
     gitAvailable: () => true,
@@ -55,10 +62,13 @@ function runtimeOptions(overrides = {}) {
   };
 }
 
-test("registered workbench commands, defaults, and the architecture ledger stay aligned", async () => {
+test("registered application commands, defaults, and the architecture ledger stay aligned", async () => {
   const registry = new CommandRegistry();
-  const release = registerWorkbenchCommands(registry, runtimeOptions());
-  const commandIds = Object.values(WORKBENCH_COMMANDS).sort();
+  const release = registerApplicationCommands(registry, {
+    ...runtimeOptions(),
+    root: { querySelector: () => null },
+  });
+  const commandIds = [...APPLICATION_COMMAND_IDS].sort();
   const registeredIds = registry.list().map(({ id }) => id).sort();
 
   assert.deepEqual(registeredIds, commandIds, "every declared workbench command must be registered once");

@@ -1,7 +1,8 @@
 import type { CommandFocusScope } from "../application/commands/command-service.ts";
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
 import type { KeybindingController } from "../features/keybindings/keybinding-controller.ts";
-import type { ShellCopy } from "../localization/catalog.ts";
+import type { LocaleCatalog } from "../localization/catalog.ts";
+import { FILES_EDITOR_DOM_COMMANDS } from "../presentation/files-editor-command-targets.ts";
 import type { ActivityTool } from "./activity-order.ts";
 
 export interface CommandShortcutPresentation {
@@ -49,10 +50,11 @@ export function refreshCommandCenterShortcut(
 
 export function refreshWorkbenchShortcutPresentation(
   root: ParentNode,
-  copy: ShellCopy,
+  catalog: LocaleCatalog,
   activityOrder: readonly ActivityTool[],
   keybindings: KeybindingController,
 ): void {
+  const copy = catalog.shell;
   refreshCommandCenterShortcut(root, copy.searchFilesAndCommands, keybindings);
   refreshCommandShortcut(root, keybindings, {
     selector: "#settings-button",
@@ -99,6 +101,19 @@ export function refreshWorkbenchShortcutPresentation(
   }
   refreshHideShortcut(root, keybindings, "#hide-left-tool", WORKBENCH_COMMANDS.hideLeftTool);
   refreshHideShortcut(root, keybindings, "#hide-bottom-tool", WORKBENCH_COMMANDS.hideBottomTool);
+  for (const definition of FILES_EDITOR_DOM_COMMANDS) {
+    const button = root.querySelector<HTMLElement>(definition.selector);
+    if (!button) continue;
+    const label = button.getAttribute("aria-label") ?? definition.title(catalog);
+    const baseTitle = button.dataset.commandShortcutBaseTitle ?? (button.title || label);
+    button.dataset.commandShortcutBaseTitle = baseTitle;
+    refreshCommandShortcut(root, keybindings, {
+      selector: definition.selector,
+      commandId: definition.id,
+      label,
+      title: baseTitle,
+    });
+  }
 }
 
 function refreshHideShortcut(

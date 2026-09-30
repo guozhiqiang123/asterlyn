@@ -1,0 +1,9 @@
+import { FILES_COMMANDS, EDITOR_COMMANDS, DIFF_COMMANDS } from "./files-editor-command-ids.ts";
+import { WORKBENCH_COMMANDS } from "./workbench-command-ids.ts";
+
+export const APPLICATION_COMMAND_IDS = Object.freeze([
+  ...Object.values(WORKBENCH_COMMANDS),
+  ...Object.values(FILES_COMMANDS),
+  ...Object.values(EDITOR_COMMANDS),
+  ...Object.values(DIFF_COMMANDS),
+]);
