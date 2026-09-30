@@ -64,6 +64,8 @@ function runtimeOptions(overrides = {}) {
     executeStashCommand: () => undefined,
     historyCommandAvailability: () => ({ enabled: false, reason: "History required" }),
     executeHistoryCommand: () => undefined,
+    remoteCommandAvailability: () => ({ enabled: false, reason: "Remote required" }),
+    executeRemoteCommand: () => undefined,
     ...overrides,
   };
 }

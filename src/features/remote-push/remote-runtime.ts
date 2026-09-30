@@ -11,6 +11,10 @@ import {
 } from "./remote-push-controller.ts";
 import { RemoteManagementBinding } from "./remote-management-binding.ts";
 import { RemoteManagementController, type RemoteManagementGateway } from "./remote-management-controller.ts";
+import {
+  RemoteCommandAdapter,
+  type RemoteCommandPorts,
+} from "./remote-command-adapter.ts";
 
 export interface RemoteRuntimeGateways {
   readonly push: RemotePushGateway;
@@ -33,6 +37,7 @@ export class RemoteRuntime {
   readonly push: RemotePushController;
   readonly authentication: RemoteAuthenticationController;
   readonly management: RemoteManagementController | null;
+  readonly commands: RemoteCommandAdapter;
 
   private readonly releases: readonly (() => void)[];
   private readonly managementBinding: RemoteManagementBinding | null;
@@ -45,6 +50,7 @@ export class RemoteRuntime {
     root?: HTMLElement,
     managementCopy: () => RemoteManagementCopy = () => messages.remote.management,
     storage?: Pick<Storage, "getItem" | "setItem">,
+    commandPorts: RemoteCommandPorts = disabledCommandPorts(messages),
   ) {
     this.push = new RemotePushController(gateways.push, {
       messages: messages.remote,
@@ -57,6 +63,7 @@ export class RemoteRuntime {
       messages.errors,
     );
     this.management = gateways.management ? new RemoteManagementController(gateways.management) : null;
+    this.commands = new RemoteCommandAdapter(this.push, this.management, commandPorts);
     this.managementBinding = this.management && root
       ? new RemoteManagementBinding(root, this.management, managementCopy)
       : null;
@@ -77,4 +84,13 @@ export class RemoteRuntime {
     this.managementBinding?.dispose();
     this.management?.dispose();
   }
+}
+
+function disabledCommandPorts(messages: RemoteRuntimeMessages): RemoteCommandPorts {
+  return {
+    snapshot: () => null, busy: () => false, copy: () => messages.remote,
+    actionBlockedReason: () => messages.remote.selectionUnavailable,
+    openAction: () => undefined, cancelOperation: () => undefined,
+    selectedProjectFileAvailable: () => false, openSelectedProjectFile: () => undefined,
+  };
 }

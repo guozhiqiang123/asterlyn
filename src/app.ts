@@ -339,7 +339,7 @@ import { bindCommandSurfaceLineBreak, focusCommandSurfaceQuery, renderCommandSur
 import { hasCurrentWorkspaceSearch, WorkspaceSearchDebouncer } from "./features/files-editor/workspace-search-debouncer";
 import {
   buildCommitFileTree,
-  type CommitFileTreeNode,
+  commitFileDirectoryPaths,
 } from "./presentation/git-presentation";
 import type {
   BranchMutationPlan,
@@ -593,7 +593,7 @@ export class AsterlynApp {
       openSettings: () => this.openSettings(), closeSettings: () => this.closeSettings(),
       toggleTool: (tool) => this.toggleTool(tool),
       hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(), changesCommandAvailability: (action) => this.changesContextRuntime.commandAvailability(action), executeChangesCommand: (action) => this.changesContextRuntime.executeCommand(action),
-      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action), historyCommandAvailability: (action) => this.gitHistoryContextRuntime.commandAvailability(action), executeHistoryCommand: (action) => this.gitHistoryContextRuntime.executeCommand(action),
+      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action), historyCommandAvailability: (action) => this.gitHistoryContextRuntime.commandAvailability(action), executeHistoryCommand: (action) => this.gitHistoryContextRuntime.executeCommand(action), remoteCommandAvailability: (action) => this.remoteRuntime.commands.commandAvailability(action), executeRemoteCommand: (action) => this.remoteRuntime.commands.executeCommand(action),
       scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
       pending: (active) => {
         const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
@@ -747,7 +747,11 @@ export class AsterlynApp {
       {
         pushChanged: (change) => this.handleRemoteControllerChange(change),
         authenticationChanged: () => { if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog(); },
-      }, () => this.localization.catalog.remote.management, window.localStorage,
+      }, () => this.localization.catalog.remote.management, window.localStorage, {
+        snapshot: () => this.windowSession.repository.state.snapshot, busy: () => this.state.loading, copy: () => this.localization.catalog.remote, actionBlockedReason: (kind) => this.remoteActionBlockedReason(kind),
+        openAction: (kind) => this.activateRemoteAction(kind, this.root.querySelector<HTMLElement>(kind === "pull" ? "#remote-update" : "#remote-push") ?? this.root), cancelOperation: () => this.cancelActiveRemoteOperation(),
+        selectedProjectFileAvailable: () => this.pushSelectedProjectFile() !== null, openSelectedProjectFile: () => this.openSelectedPushFile(),
+      },
     );
     this.changesRuntime = new ChangesRuntime({
       root,
@@ -3182,12 +3186,12 @@ export class AsterlynApp {
       this.remoteState,
       this.state.loading,
       this.localization,
-    );
+    ); this.refreshShortcutPresentation();
   }
 
   private async activateRemoteAction(
     kind: "pull" | "push",
-    anchor: HTMLButtonElement,
+    anchor: HTMLElement,
   ): Promise<void> {
     const blocked = this.remoteActionBlockedReason(kind);
     if (blocked) {
@@ -3306,7 +3310,7 @@ export class AsterlynApp {
       queueMicrotask(() =>
         this.root.querySelector<HTMLElement>(`#${focusedId}`)?.focus(),
       );
-    }
+    } this.refreshShortcutPresentation();
   }
 
   private bindRemoteDialogEvents(): void {
@@ -8689,15 +8693,6 @@ export class AsterlynApp {
     if (!element) throw new Error(`Missing application element: ${selector}`);
     return element;
   }
-}
-
-function commitFileDirectoryPaths(nodes: readonly CommitFileTreeNode[]): string[] {
-  const paths: string[] = [];
-  for (const node of nodes) {
-    if (node.kind !== "directory") continue;
-    paths.push(node.path, ...commitFileDirectoryPaths(node.children));
-  }
-  return paths;
 }
 
 function sameCommitFileChanges(

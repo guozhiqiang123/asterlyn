@@ -19,10 +19,15 @@ import {
   registerHistoryCommands,
   type HistoryCommandRuntimeOptions,
 } from "./history-command-runtime.ts";
+import {
+  registerRemoteCommands,
+  type RemoteCommandRuntimeOptions,
+} from "./remote-command-runtime.ts";
 
 export interface ApplicationCommandRuntimeOptions
   extends WorkbenchCommandRuntimeOptions, FilesEditorCommandRuntimeOptions,
-    ChangesCommandRuntimeOptions, StashCommandRuntimeOptions, HistoryCommandRuntimeOptions {}
+    ChangesCommandRuntimeOptions, StashCommandRuntimeOptions, HistoryCommandRuntimeOptions,
+    RemoteCommandRuntimeOptions {}
 
 export function registerApplicationCommands(
   registry: CommandRegistry,
@@ -34,6 +39,7 @@ export function registerApplicationCommands(
     registerChangesCommands(registry, options),
     registerStashCommands(registry, options),
     registerHistoryCommands(registry, options),
+    registerRemoteCommands(registry, options),
   ];
   return () => { for (const release of releases.reverse()) release(); };
 }

@@ -279,6 +279,15 @@ export function buildCommitFileTree(files: CommitFileChange[]): CommitFileTreeNo
   return root;
 }
 
+export function commitFileDirectoryPaths(nodes: readonly CommitFileTreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (node.kind !== "directory") continue;
+    paths.push(node.path, ...commitFileDirectoryPaths(node.children));
+  }
+  return paths;
+}
+
 export function groupRemoteBranches(branches: BranchSummary[]): RemoteBranchGroup[] {
   const groups = new Map<string, RemoteBranchGroup>();
   for (const branch of branches.filter((candidate) => candidate.kind === "remote")) {

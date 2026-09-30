@@ -6,6 +6,7 @@ import {
 } from "./remote-runtime.ts";
 import type { RemoteManagementGateway } from "./remote-management-controller.ts";
 import type { RemoteManagementCopy } from "../../localization/git-reviewed-copy.ts";
+import type { RemoteCommandPorts } from "./remote-command-adapter.ts";
 
 export function createRemoteRuntime(
   root: HTMLElement,
@@ -15,6 +16,7 @@ export function createRemoteRuntime(
   notifications: RemoteRuntimeNotifications,
   managementCopy?: () => RemoteManagementCopy,
   storage?: Pick<Storage, "getItem" | "setItem">,
+  commandPorts?: RemoteCommandPorts,
 ): RemoteRuntime {
   return new RemoteRuntime({
     push: {
@@ -34,5 +36,5 @@ export function createRemoteRuntime(
       configureRemoteSsh: (...args) => bridge.configureRemoteSsh(...args),
     },
     management,
-  }, messages, notifications, root, managementCopy, storage);
+  }, messages, notifications, root, managementCopy, storage, commandPorts);
 }

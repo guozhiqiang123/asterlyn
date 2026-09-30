@@ -205,15 +205,16 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Update current branch | network write | `remote.update.open` | **Gap**, opens existing review/strategy flow |
-| Review Push | network write | `remote.push.open` | **Gap**, opens existing Push review |
-| Cancel active remote operation | network write | `remote.operation.cancel` | **Gap**, unassigned |
-| Manage remotes | write | `remote.manage.open` | **Gap** |
+| Update current branch | network write | `remote.update.open` | **Custom**, opens existing review/strategy flow |
+| Review Push | network write | `remote.push.open` | **Custom**, opens existing Push review |
+| Cancel active remote operation | network write | `remote.operation.cancel` | **Custom**, unassigned |
+| Manage remotes | write | `remote.manage.open` | **Custom** |
 | Confirm Update or Push | network write | dialog confirmation | **Local**; never a global shortcut |
 | Choose remote, branch, force-with-lease mode, tags | editing | form/select controls | **Local** |
 | Select outgoing commit/file; load more | navigation/read | list controls | **Local** dynamic targets |
-| Open outgoing Diff/current file | navigation | `remote.push.file.diff`, `.openCurrent` | **Gap** |
-| Toggle Push file tree; expand/collapse | presentation | `remote.push.files.view.toggle`, `.expandAll`, `.collapseAll` | **Gap** |
+| Open outgoing Diff/current file | navigation | `remote.push.file.diff`, `remote.push.file.openCurrent` | **Custom** |
+| Toggle Push file tree; expand/collapse | presentation | `remote.push.files.view.toggle`, `remote.push.files.expandAll`, `remote.push.files.collapseAll` | **Custom** |
+| Load more outgoing commits | read | `remote.push.loadMore` | **Custom** |
 | Navigate/present outgoing Diff | navigation/presentation | shared `diff.*` commands when Push Diff is active | **Gap** |
 | Save/recheck authentication | credential | authentication dialog | **Local**; focus and secret-handling boundary owns Enter/Escape |
 
