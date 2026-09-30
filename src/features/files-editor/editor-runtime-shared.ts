@@ -1,6 +1,31 @@
-import type { EditorView } from "@codemirror/view";
+import type { Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import type { AppPreferences } from "../../preferences.ts";
 import type { GitBlameSource } from "./editor-gutter.ts";
+
+export function readOnlyCodeMirrorFocusAttributes(
+  readOnly: boolean,
+): { tabindex: "0" } | null {
+  return readOnly ? { tabindex: "0" } : null;
+}
+
+/**
+ * Keeps the CodeMirror content element as the keyboard owner even when the
+ * document is read-only. CodeMirror removes `contenteditable` in that state,
+ * which otherwise lets pointer selection appear active while key events are
+ * still routed from the previously focused workbench surface.
+ */
+export const codeMirrorFocusOwnership: Extension = [
+  EditorView.contentAttributes.of((view) =>
+    readOnlyCodeMirrorFocusAttributes(view.state.readOnly)
+  ),
+  EditorView.domEventHandlers({
+    mousedown: (_event, view) => {
+      if (view.state.readOnly && !view.hasFocus) view.focus();
+      return false;
+    },
+  }),
+];
 
 export function applyEditorPreferences(
   view: EditorView,

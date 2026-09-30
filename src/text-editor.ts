@@ -48,6 +48,7 @@ import {
 import type { EditorCopy } from "./localization/catalog.ts";
 import {
   applyEditorPreferences,
+  codeMirrorFocusOwnership,
   sameBlameSource,
 } from "./features/files-editor/editor-runtime-shared.ts";
 
@@ -495,6 +496,7 @@ export class TextEditor {
         indent.of(indentUnit.of(" ".repeat(preferences.editorIndentSize))),
         readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
         editable.of(EditorView.editable.of(!this.readOnlyValue)),
+        codeMirrorFocusOwnership,
         language.of([]),
         blame.of([]),
         changeIndicators.extension,

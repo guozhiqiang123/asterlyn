@@ -43,6 +43,7 @@ import {
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
 import { createDiffSideLabels, createDiffUnifiedLabel, syncDiffSideLabels } from "./features/files-editor/diff-side-labels.ts";
+import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
 import { icon } from "./icons.ts";
 
@@ -618,6 +619,7 @@ export class EditableDiffEditor {
         : []),
       EditorState.readOnly.of(!editable),
       EditorView.editable.of(editable),
+      codeMirrorFocusOwnership,
       gutterSide ? diffLineNumberGutter(gutterSide) : lineNumbers(),
       binding.changeIndicators?.extension ?? [],
       mergeDiffSemanticHighlighting,

@@ -23,6 +23,7 @@ import {
 } from "./editor-change-indicators.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
 import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
+import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
 import {
   applyExactTextChanges,
   decodeExactText,
@@ -286,6 +287,7 @@ export class ConflictEditor {
       resultSide === "primary"
         ? this.resultEditable.of(EditorView.editable.of(!this.resultReadOnlyValue))
         : EditorView.editable.of(editable),
+      codeMirrorFocusOwnership,
       diffLineNumberGutter(gutterSide),
       binding.changeIndicators?.extension ?? [],
       mergeDiffSemanticHighlighting,

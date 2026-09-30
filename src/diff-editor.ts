@@ -61,6 +61,7 @@ import {
 } from "./features/files-editor/editor-gutter.ts";
 import {
   applyEditorPreferences,
+  codeMirrorFocusOwnership,
   sameBlameSource,
 } from "./features/files-editor/editor-runtime-shared.ts";
 import {
@@ -385,6 +386,7 @@ export class DiffEditor {
       EditorState.readOnly.of(true),
       tabSize.of(EditorState.tabSize.of(this.editorPreferences.editorTabSize)),
       EditorView.editable.of(false),
+      codeMirrorFocusOwnership,
       drawSelection(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
@@ -448,7 +450,6 @@ export class DiffEditor {
         extensions,
       }),
     });
-    view.dom.tabIndex = -1;
     this.languageBindings.push({
       view,
       compartment: language,
@@ -523,7 +524,7 @@ export class DiffEditor {
         toggle: () => side ? this.toggleBlame(side) : undefined,
         blocked: (reason) => this.blameRuntime.status(reason, "warning"),
         restoreFocus: () => {
-          if (this.languageBindings.some((binding) => binding.view === view)) view.dom.focus();
+          if (this.languageBindings.some((binding) => binding.view === view)) view.focus();
         },
       }),
     );
