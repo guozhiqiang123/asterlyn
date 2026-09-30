@@ -323,7 +323,7 @@ export const EN_US: LocaleCatalog = {
     diffNavigation: "Diff navigation", previousChange: "Previous change in file", nextChange: "Next change in file", revertDiffChange: "Revert this change in the current buffer",
     changeIndicatorAdded: "Added lines", changeIndicatorModified: "Modified lines", changeIndicatorDeleted: "Deleted lines",
     navigateChangeIndicator: (kind, line) => `Go to ${kind} change at line ${line}`,
-    previousFile: "Previous changed file", nextFile: "Next changed file", openSource: "Open file and reveal in Project",
+    previousFile: "Previous changed file", previousTab: "Previous editor tab", nextFile: "Next changed file", nextTab: "Next editor tab", openSource: "Open file and reveal in Project",
     collapseUnchanged: "Collapse unchanged lines", expandUnchanged: "Expand unchanged lines", diffPresentation: "Diff presentation",
     unified: "Unified", unifiedTitle: "Unified diff", sideBySide: "Split", sideBySideTitle: "Side-by-side diff",
     whitespace: "Whitespace", whitespaceTitle: "Show whitespace characters",

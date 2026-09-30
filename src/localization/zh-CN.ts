@@ -213,7 +213,7 @@ export const ZH_CN = {
     diffNavigation: "差异导航", previousChange: "文件中的上一处更改", nextChange: "文件中的下一处更改", revertDiffChange: "在当前缓冲区中回退此更改",
     changeIndicatorAdded: "新增行", changeIndicatorModified: "修改行", changeIndicatorDeleted: "删除行",
     navigateChangeIndicator: (kind, line) => `转到第 ${line} 行的${kind === "added" ? "新增" : kind === "modified" ? "修改" : "删除"}内容`,
-    previousFile: "上一个已更改文件", nextFile: "下一个已更改文件", openSource: "打开文件并在项目中定位",
+    previousFile: "上一个已更改文件", previousTab: "上一个编辑器标签页", nextFile: "下一个已更改文件", nextTab: "下一个编辑器标签页", openSource: "打开文件并在项目中定位",
     collapseUnchanged: "折叠未更改行", expandUnchanged: "展开未更改行", diffPresentation: "差异显示",
     unified: "统一", unifiedTitle: "统一差异", sideBySide: "并排", sideBySideTitle: "并排差异",
     whitespace: "空白字符", whitespaceTitle: "显示空白字符",

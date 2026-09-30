@@ -45,6 +45,17 @@ export interface ProjectFilesContextCommandDefinition {
   readonly keywords: string;
 }
 
+export type EditorTabCommandAction = "previous" | "next";
+
+export interface EditorTabCommandDefinition {
+  readonly id: CommandId;
+  readonly action: EditorTabCommandAction;
+  readonly scopes: readonly CommandFocusScope[];
+  readonly title: (catalog: LocaleCatalog) => string;
+  readonly detail: (catalog: LocaleCatalog) => string;
+  readonly keywords: string;
+}
+
 export const PROJECT_FILES_CONTEXT_COMMANDS: readonly ProjectFilesContextCommandDefinition[] = [
   filesContext(FILES_COMMANDS.openSelection, "open", (copy) => copy.contextMenu.open, "open activate selected file"),
   filesContext(FILES_COMMANDS.createFile, "new-file", (copy) => copy.contextMenu.newFile, "new create file selected folder"),
@@ -58,6 +69,11 @@ export const PROJECT_FILES_CONTEXT_COMMANDS: readonly ProjectFilesContextCommand
   filesContext(FILES_COMMANDS.copyAbsolutePath, "copy-absolute-path", (copy) => copy.contextMenu.absolutePath, "copy selected absolute full path"),
   filesContext(FILES_COMMANDS.selectionHistory, "history", (copy) => copy.contextMenu.gitHistory, "selected file folder git history log"),
   filesContext(FILES_COMMANDS.trashSelection, "trash", (copy) => copy.contextMenu.trash, "trash delete selected file folder"),
+];
+
+export const EDITOR_TAB_COMMANDS: readonly EditorTabCommandDefinition[] = [
+  editorTab(EDITOR_COMMANDS.previousTab, "previous", (copy) => copy.previousTab, "previous prior editor tab file"),
+  editorTab(EDITOR_COMMANDS.nextTab, "next", (copy) => copy.nextTab, "next editor tab file"),
 ];
 
 function files(
@@ -97,6 +113,19 @@ function editor(
     id, selector, title, keywords, category: "editor", scopes: EDITOR_SCOPES,
     detail: (catalog) => catalog.shell.editor,
     blockedReason: (catalog) => catalog.settings.keybindings.editorRequired,
+  };
+}
+
+function editorTab(
+  id: CommandId,
+  action: EditorTabCommandAction,
+  title: (copy: LocaleCatalog["editor"]) => string,
+  keywords: string,
+): EditorTabCommandDefinition {
+  return {
+    id, action, keywords, scopes: EDITOR_SCOPES,
+    title: (catalog) => title(catalog.editor),
+    detail: (catalog) => catalog.shell.editor,
   };
 }
 

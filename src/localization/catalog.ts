@@ -375,8 +375,8 @@ export interface EditorCopy {
   revertDiffChange: string;
   changeIndicatorAdded: string; changeIndicatorModified: string; changeIndicatorDeleted: string;
   navigateChangeIndicator(kind: "added" | "modified" | "deleted", line: number): string;
-  previousFile: string;
-  nextFile: string;
+  previousFile: string; previousTab: string;
+  nextFile: string; nextTab: string;
   openSource: string;
   collapseUnchanged: string;
   expandUnchanged: string;

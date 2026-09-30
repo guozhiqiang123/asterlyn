@@ -128,7 +128,7 @@ without Asterlyn claiming common editor or terminal keys.
 | Find/replace in active editor or Diff | editing | `editor.find.open` | **Default:** Primary+F in editor/Diff scopes |
 | Save active editable file | write | `editor.file.save` | **Default:** Primary+S |
 | Close active tab/preview | navigation | `editor.tab.close` | **Custom**; dirty confirmation remains intact |
-| Activate previous/next tab | navigation | `editor.tab.previous`, `.next` | **Gap** |
+| Activate previous/next tab | navigation | `editor.tab.previous`, `editor.tab.next` | **Custom**; follows the visible tab order and wraps |
 | Open the tab list | navigation | `editor.tabList.toggle` | **Custom** |
 | Select a tab or close a named tab | navigation | tab/list component interaction | **Local** dynamic target |
 | Markdown Source / Split / Preview | presentation | `editor.markdown.source`, `editor.markdown.split`, `editor.markdown.preview` | **Custom** |

@@ -22,6 +22,8 @@ export const FILES_COMMANDS = {
 
 export const EDITOR_COMMANDS = {
   closeTab: commandId("editor.tab.close"),
+  previousTab: commandId("editor.tab.previous"),
+  nextTab: commandId("editor.tab.next"),
   toggleTabList: commandId("editor.tabList.toggle"),
   markdownSource: commandId("editor.markdown.source"),
   markdownSplit: commandId("editor.markdown.split"),
