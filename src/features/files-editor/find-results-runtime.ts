@@ -1,4 +1,6 @@
 import type { LocaleCatalog } from "../../localization/catalog.ts";
+import type { CommandAvailability } from "../../application/commands/command-service.ts";
+import type { SearchCommandAction } from "../../application/commands/search-command-ids.ts";
 import type { ProjectFile, WorkspaceTextSearchMatch, WorkspaceTextSearchReport } from "../../models.ts";
 import type { NavigationMode } from "./navigation.ts";
 import { FindResultsController } from "./find-results-controller.ts";
@@ -25,15 +27,22 @@ export interface FindResultsRuntimeOptions {
   readonly openFile: (repositoryRoot: string, file: ProjectFile) => Promise<void>;
   readonly openMatch: (repositoryRoot: string, match: WorkspaceTextSearchMatch) => Promise<void>;
   readonly wrongWorkspace: () => void;
+  readonly visible: () => boolean;
+  readonly presentationChanged: () => void;
 }
 
 export class FindResultsRuntime {
   private readonly controller = new FindResultsController();
+  private readonly root: HTMLElement;
+  private readonly options: FindResultsRuntimeOptions;
 
   constructor(
-    private readonly root: HTMLElement,
-    private readonly options: FindResultsRuntimeOptions,
-  ) {}
+    root: HTMLElement,
+    options: FindResultsRuntimeOptions,
+  ) {
+    this.root = root;
+    this.options = options;
+  }
 
   bindCommandSurface(): void {
     this.root.querySelector<HTMLButtonElement>("#command-surface-open-find")
@@ -49,6 +58,31 @@ export class FindResultsRuntime {
     host.innerHTML = renderFindResults(this.controller.state, this.options.copy());
     this.renderHeaderActions();
     this.bindResults(host);
+  }
+
+  commandAvailability(action: SearchCommandAction): CommandAvailability {
+    const state = this.controller.state;
+    const unavailable = this.options.copy().settings.keybindings.bottomToolRequired;
+    if (!this.options.visible() || !state.snapshot || state.snapshot.kind === "workspace") {
+      return { enabled: false, reason: unavailable };
+    }
+    if (action === "locate-current") {
+      return this.options.activeFilePath()
+        ? { enabled: true }
+        : { enabled: false, reason: unavailable };
+    }
+    if (action === "toggle-results-view") return { enabled: true };
+    return state.fileView === "tree" && state.fileSelection?.kind === "directory"
+      ? { enabled: true }
+      : { enabled: false, reason: unavailable };
+  }
+
+  executeCommand(action: SearchCommandAction): void {
+    if (!this.commandAvailability(action).enabled) return;
+    this.activateHeaderAction({
+      "locate-current": "locate", "toggle-results-view": "view",
+      "expand-results": "expand", "collapse-results": "collapse",
+    }[action]!);
   }
 
   private openFromSearch(): void {
@@ -77,6 +111,7 @@ export class FindResultsRuntime {
     );
     actions.innerHTML = html;
     actions.classList.toggle("hidden", html.length === 0);
+    this.options.presentationChanged();
     if (actions.dataset.findBound === "true") return;
     actions.dataset.findBound = "true";
     actions.addEventListener("click", (event) => {

@@ -593,7 +593,7 @@ export class AsterlynApp {
       openSettings: () => this.openSettings(), closeSettings: () => this.closeSettings(),
       toggleTool: (tool) => this.toggleTool(tool),
       hideLeftTool: () => this.hideLeftTool(), hideBottomTool: () => this.hideBottomTool(), changesCommandAvailability: (action) => this.changesContextRuntime.commandAvailability(action), executeChangesCommand: (action) => this.changesContextRuntime.executeCommand(action),
-      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action), historyCommandAvailability: (action) => this.gitHistoryContextRuntime.commandAvailability(action), executeHistoryCommand: (action) => this.gitHistoryContextRuntime.executeCommand(action), remoteCommandAvailability: (action) => this.remoteRuntime.commands.commandAvailability(action), executeRemoteCommand: (action) => this.remoteRuntime.commands.executeCommand(action),
+      stashCommandAvailability: (action) => this.stashRuntime.commandAvailability(action), executeStashCommand: (action) => this.stashRuntime.executeCommand(action), historyCommandAvailability: (action) => this.gitHistoryContextRuntime.commandAvailability(action), executeHistoryCommand: (action) => this.gitHistoryContextRuntime.executeCommand(action), remoteCommandAvailability: (action) => this.remoteRuntime.commands.commandAvailability(action), executeRemoteCommand: (action) => this.remoteRuntime.commands.executeCommand(action), searchCommandAvailability: (action) => this.findResultsRuntime.commandAvailability(action), executeSearchCommand: (action) => this.findResultsRuntime.executeCommand(action),
       scope: (target) => shortcutFocusScope(target, this.shellState.page === "settings", this.activeDocument().kind, this.shellState.layout.bottomTool),
       pending: (active) => {
         const waiting = this.localization.catalog.settings.keybindings.waitingForChord;
@@ -630,6 +630,7 @@ export class AsterlynApp {
       openFile: (repositoryRoot, file) => this.openProjectFile(repositoryRoot, file),
       openMatch: (repositoryRoot, match) => this.openProjectFile(repositoryRoot, match, match),
       wrongWorkspace: () => this.setStatus(this.localization.catalog.editor.wrongWorkspace, "warning"),
+      visible: () => this.shellState.layout.bottomTool === "find", presentationChanged: () => this.refreshShortcutPresentation(),
     });
     this.bottomToolRuntime = new BottomToolRuntime(root, {
       tool: () => this.shellState.layout.bottomTool,

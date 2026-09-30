@@ -117,9 +117,9 @@ without Asterlyn claiming common editor or terminal keys.
 | Preview workspace replacement | write | `search.replace.preview` | **Gap** |
 | Apply reviewed replacement | write | `search.replace.apply` | **Gap**, must preserve review/recovery |
 | Open/close Find results tool | presentation | `workbench.tool.search.toggle` | **Custom** |
-| Locate current file in Find results | navigation | `search.results.locateCurrent` | **Gap** |
-| Toggle tree/flat results | presentation | `search.results.view.toggle` | **Gap** |
-| Expand/collapse selected result folder | presentation | `search.results.expand`, `.collapse` | **Gap** |
+| Locate current file in Find results | navigation | `search.results.locateCurrent` | **Custom** |
+| Toggle tree/flat results | presentation | `search.results.view.toggle` | **Custom** |
+| Expand/collapse selected result folder | presentation | `search.results.expand`, `search.results.collapse` | **Custom** |
 
 ## 5. Editor, Markdown, and Diff
 

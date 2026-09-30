@@ -3,6 +3,7 @@ import { FILES_COMMANDS, EDITOR_COMMANDS, DIFF_COMMANDS } from "./files-editor-c
 import { STASH_COMMANDS } from "./stash-command-ids.ts";
 import { HISTORY_COMMANDS } from "./history-command-ids.ts";
 import { REMOTE_COMMANDS } from "./remote-command-ids.ts";
+import { SEARCH_COMMANDS } from "./search-command-ids.ts";
 import { WORKBENCH_COMMANDS } from "./workbench-command-ids.ts";
 
 export const APPLICATION_COMMAND_IDS = Object.freeze([
@@ -14,4 +15,5 @@ export const APPLICATION_COMMAND_IDS = Object.freeze([
   ...Object.values(STASH_COMMANDS),
   ...Object.values(HISTORY_COMMANDS),
   ...Object.values(REMOTE_COMMANDS),
+  ...Object.values(SEARCH_COMMANDS),
 ]);

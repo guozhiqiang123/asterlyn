@@ -23,11 +23,15 @@ import {
   registerRemoteCommands,
   type RemoteCommandRuntimeOptions,
 } from "./remote-command-runtime.ts";
+import {
+  registerSearchCommands,
+  type SearchCommandRuntimeOptions,
+} from "./search-command-runtime.ts";
 
 export interface ApplicationCommandRuntimeOptions
   extends WorkbenchCommandRuntimeOptions, FilesEditorCommandRuntimeOptions,
     ChangesCommandRuntimeOptions, StashCommandRuntimeOptions, HistoryCommandRuntimeOptions,
-    RemoteCommandRuntimeOptions {}
+    RemoteCommandRuntimeOptions, SearchCommandRuntimeOptions {}
 
 export function registerApplicationCommands(
   registry: CommandRegistry,
@@ -40,6 +44,7 @@ export function registerApplicationCommands(
     registerStashCommands(registry, options),
     registerHistoryCommands(registry, options),
     registerRemoteCommands(registry, options),
+    registerSearchCommands(registry, options),
   ];
   return () => { for (const release of releases.reverse()) release(); };
 }

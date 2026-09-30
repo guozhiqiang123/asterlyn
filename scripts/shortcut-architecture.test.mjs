@@ -66,6 +66,8 @@ function runtimeOptions(overrides = {}) {
     executeHistoryCommand: () => undefined,
     remoteCommandAvailability: () => ({ enabled: false, reason: "Remote required" }),
     executeRemoteCommand: () => undefined,
+    searchCommandAvailability: () => ({ enabled: false, reason: "Search required" }),
+    executeSearchCommand: () => undefined,
     ...overrides,
   };
 }
