@@ -69,6 +69,47 @@ the platform and must not behave like free-standing windows.
 6. Run the complete frontend test, type-check, production-build, and whitespace gates; then record
    acceptance evidence here.
 
+## 2026-09-30 close placement and editor-search affordance follow-up
+
+Status: **locally accepted**.
+
+The shared dialog title currently inherits the dialog's full 18-pixel content inset, placing its
+34-pixel close target farther from the top-right edge than necessary. Move every direct
+`.dialog-heading > .icon-button` through one shared edge-offset rule so ordinary dialogs finish at
+an 8-pixel inset. Preserve the 34-pixel hit target and focus/hover behavior. Push Diff owns a
+12-pixel title inset, so it supplies a smaller negative offset to reach the same visual inset rather
+than inheriting a hard-coded ordinary-dialog margin. The command surface keeps its separate title
+structure but enlarges and nudges its close control consistently toward the edge.
+
+The editor Find/Replace panel is not a movable dialog, but it has the same close-control problem and
+is shared by ordinary editors, working Diffs, historical Diffs, editable Diffs, and the conflict
+editor. Give its close action a dedicated class, at least a 32-pixel square target, a clearly sized
+glyph, and a small right-edge inset. Mark navigation and replacement commands separately from
+search-option toggles, then render those commands with a visible border and elevated background,
+plus distinct hover, pressed, and keyboard-focus feedback. Search option toggles retain their
+existing segmented-field and selected-state treatment.
+
+Acceptance:
+
+- every close icon that is a direct child of a shared dialog heading receives the common edge
+  offset without per-feature markup changes;
+- ordinary dialogs and Push Diff converge on an 8-pixel visual right inset, while resize handles
+  and title-bar dragging remain unobstructed;
+- the command-surface and editor-search close controls have at least a 30-pixel and 32-pixel square
+  hit target respectively and move closer to their right edge;
+- previous, next, select-all, replace, and replace-all controls look clickable at rest and retain
+  hover, active, focus-visible, localization, and disabled semantics;
+- editor-search command behavior, the full frontend suite, type checking, production build, and
+  installed macOS rendered smoke verification pass before local acceptance.
+
+Validation: all 773 frontend tests, TypeScript checking, and the production frontend build passed.
+The installed macOS arm64 application passed strict signature verification and rendered-shell
+smoke verification. An installed-app visual check exercised the Find/Replace panel in a split Diff;
+that check exposed and corrected the original flex wrapping by giving the input, commands, and close
+target explicit grid columns. The accepted archive is
+`Asterlyn-dialog-close-search-actions-20260930-macos-arm64.zip`; the replaced installation remains
+recoverable from the user's Trash.
+
 ## Acceptance matrix
 
 - Every application-owned `.dialog`, `alertdialog`, and command surface receives a movable title

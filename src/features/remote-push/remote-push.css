@@ -673,6 +673,7 @@
 }
 
 .dialog.push-diff-dialog {
+  --dialog-close-edge-offset: -4px;
   position: relative;
   display: grid;
   overflow: hidden;

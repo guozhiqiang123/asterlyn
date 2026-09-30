@@ -44,3 +44,24 @@ test("ordinary, working diff, historical diff, and conflict editors share the se
     assert.match(source, /asterlynSearch\(\)/, `${file} must install the shared search extension`);
   }
 });
+
+test("editor search exposes a larger edge close target and decorated command controls", async () => {
+  const [panel, theme] = await Promise.all([
+    readFile(path.join(repositoryRoot, "src", "editor-search.ts"), "utf8"),
+    readFile(path.join(repositoryRoot, "src", "editor-theme.ts"), "utf8"),
+  ]);
+  assert.equal(Array.from(panel.matchAll(/"asterlyn-search-command"/gu)).length, 5);
+  assert.match(panel, /"asterlyn-search-close"/u);
+  assert.match(panel, /this\.dom\.append\(searchShell, commands, close\)/u);
+  assert.match(theme, /"\.cm-panel\.cm-search": \{ padding: "6px 6px 6px 10px" \}/u);
+  assert.match(theme, /gridTemplateColumns: "minmax\(190px, 1fr\) auto 34px"/u);
+  assert.match(theme, /"\.asterlyn-search-panel \.asterlyn-search-command": \{/u);
+  assert.match(theme, /borderColor: "var\(--border\)"/u);
+  assert.match(theme, /backgroundColor: "var\(--bg-elevated\)"/u);
+  assert.match(theme, /"\.asterlyn-search-panel \.asterlyn-search-close": \{/u);
+  assert.match(theme, /minWidth: "34px"/u);
+  assert.match(theme, /fontSize: "18px"/u);
+  assert.match(theme, /justifySelf: "end"/u);
+  assert.match(theme, /\.asterlyn-search-command:active/u);
+  assert.match(theme, /\.asterlyn-search-close:focus-visible/u);
+});
