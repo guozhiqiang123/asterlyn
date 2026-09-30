@@ -14,8 +14,8 @@ workspace must not retain persisted tool-window layout or look like a pending im
   cannot be clicked or dragged;
 - no activity entry remains selected, both project tool windows are hidden, and no indefinite
   progress indicator is presented;
-- the Welcome editor presents one primary `Open a project folder` action that invokes the existing
-  native directory chooser;
+- the Welcome editor presents `Open New Project` as its first action and follows it with the existing
+  bounded Recent Projects list when available; both reuse the existing project-target flow;
 - cancelling the chooser leaves the same ready state intact, while selecting a directory continues
   through the existing current-window/new-window and project-open flows;
 - the project switcher and Settings remain available because they are valid without a workspace.
@@ -42,8 +42,9 @@ Git-only activity entries remain unavailable under the existing capability polic
 - Fresh-profile launch shows the ready Welcome page without opening the native directory chooser.
 - The left and bottom project tool windows are hidden, with all six activity entries disabled and
   none highlighted.
-- The Welcome page shows a primary `Open a project folder` button.
-- Activating `Open a project folder` reopens the native chooser.
+- The Welcome page shows `Open New Project` first, followed by Recent Projects when records exist.
+- Activating `Open New Project` opens the native chooser; activating a recent project reuses the
+  existing current-window/new-window flow.
 - Pressing Cancel returns to the same ready Welcome page with no spinner.
 - Selecting either an ordinary folder or Git repository restores the existing capability-aware
   activity behavior.
@@ -57,6 +58,10 @@ Welcome page with no native chooser or loading indicator. Both project tool-wind
 hidden, all six project activity entries were disabled with no selected entry, and the primary
 `Open a project folder` button was visible. Activating that button opened the native directory
 chooser; cancelling it returned to the same stable Welcome page.
+
+The Welcome surface was subsequently extended to keep `Open New Project` first and show the bounded
+Recent Projects list beneath it when available. Missing paths are pruned after host validation, the
+current workspace is omitted, and every row uses the existing project-target flow.
 
 The complete 778-test frontend suite, TypeScript checking, production frontend build, macOS release
 bundle, native rendered smoke, strict deep signature verification, installed-executable identity

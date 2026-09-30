@@ -1,0 +1,117 @@
+/* Welcome project launcher presentation. */
+.editor-welcome {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(28px, 7vh, 72px) clamp(24px, 7vw, 96px);
+}
+
+.welcome-project-panel {
+  display: grid;
+  width: min(620px, 100%);
+  gap: 16px;
+}
+
+.welcome-project-row {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-chrome);
+  color: var(--text-soft);
+  cursor: pointer;
+  text-align: left;
+}
+
+.welcome-project-row:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.welcome-project-row:focus-visible {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+  outline: none;
+}
+
+.welcome-project-row.open-new {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.welcome-project-row.open-new:hover {
+  background: var(--info-bg-strong);
+}
+
+.welcome-project-mark {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.open-new .welcome-project-mark {
+  border-color: var(--focus-ring);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.welcome-project-copy {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  gap: 3px;
+}
+
+.welcome-project-copy strong,
+.welcome-project-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-project-copy strong {
+  color: inherit;
+  font-size: var(--ui-font-size, 13px);
+}
+
+.welcome-project-copy small {
+  color: var(--text-faint);
+  font-size: max(9px, calc(var(--ui-font-size, 13px) - 3px));
+}
+
+.open-new .welcome-project-copy small {
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.welcome-recent-projects {
+  display: grid;
+  gap: 7px;
+}
+
+.welcome-recent-projects h2 {
+  margin: 0 4px 2px;
+  color: var(--text-faint);
+  font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
+  font-weight: 600;
+}
+
+.welcome-project-list {
+  display: grid;
+  gap: 5px;
+}

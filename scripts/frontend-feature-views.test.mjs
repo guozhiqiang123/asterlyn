@@ -159,8 +159,24 @@ test("no-project Welcome presentation owns the user-initiated folder chooser act
   const presentation = editorWelcomePresentation(false, "en-US", EN_US.shell, EN_US.editor);
 
   assert.equal(presentation.actionId, "open-project-from-welcome");
-  assert.match(presentation.html, /class="primary-button empty-state-action"/u);
-  assert.match(presentation.html, />Open a project folder<\/button>/u);
+  assert.match(presentation.html, /class="welcome-project-row open-new"/u);
+  assert.match(presentation.html, /<strong>Open New Project<\/strong>/u);
+  assert.doesNotMatch(presentation.html, /welcome-recent-projects/u);
+});
+
+test("Welcome lists Open New Project before bounded recent project paths", () => {
+  const presentation = editorWelcomePresentation(
+    true,
+    "en-US",
+    EN_US.shell,
+    EN_US.editor,
+    ["/work/asterlyn", "/work/notes"],
+  );
+
+  assert.ok(presentation.html.indexOf('id="open-project-from-welcome"') < presentation.html.indexOf('data-welcome-recent-repository="/work/asterlyn"'));
+  assert.ok(presentation.html.indexOf('/work/asterlyn') < presentation.html.indexOf('/work/notes'));
+  assert.match(presentation.html, /<h2 id="welcome-recent-projects-title">Recent Projects<\/h2>/u);
+  assert.match(presentation.html, /<strong>asterlyn<\/strong><small>\/work\/asterlyn<\/small>/u);
 });
 
 test("shell composite search does not claim the file-search shortcut", () => {

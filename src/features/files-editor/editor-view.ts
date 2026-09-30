@@ -195,16 +195,19 @@ export function editorWelcomePresentation(
   locale: string,
   shellCopy: ShellCopy,
   editorCopy: EditorCopy,
+  recentProjects: readonly string[] = [],
 ): EditorWelcomePresentation {
-  if (workspaceOpen) return {
-    key: "welcome:workspace",
-    html: emptyState(editorCopy.workspaceReady, editorCopy.workspaceReadyDetail, "folder"),
-    actionId: null,
-  };
   const actionId = "open-project-from-welcome";
+  const recent = recentProjects.map((path) => {
+    const name = basename(path);
+    return `<button class="welcome-project-row" type="button" data-welcome-recent-repository="${escapeAttribute(path)}" title="${escapeAttribute(path)}"><span class="welcome-project-mark">${escapeHtml(projectMonogram(path))}</span><span class="welcome-project-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(path)}</small></span></button>`;
+  }).join("");
+  const recentSection = recent
+    ? `<section class="welcome-recent-projects" aria-labelledby="welcome-recent-projects-title"><h2 id="welcome-recent-projects-title">${escapeHtml(shellCopy.recentProjects)}</h2><div class="welcome-project-list">${recent}</div></section>`
+    : "";
   return {
-    key: `welcome:no-project:${locale}`,
-    html: actionableEmptyState(shellCopy.openFolder, shellCopy.openFolderDetail, actionId, shellCopy.openFolder),
+    key: `welcome:${workspaceOpen ? "workspace" : "no-project"}:${locale}:${JSON.stringify(recentProjects)}`,
+    html: `<section class="editor-welcome" aria-label="${escapeAttribute(workspaceOpen ? editorCopy.workspaceReady : shellCopy.welcome)}"><div class="welcome-project-panel"><button class="welcome-project-row open-new" id="${actionId}" type="button"><span class="welcome-project-mark">${icon("folder", 20)}</span><span class="welcome-project-copy"><strong>${escapeHtml(shellCopy.openNewProject)}</strong><small>${escapeHtml(shellCopy.openFolderDetail)}</small></span></button>${recentSection}</div></section>`,
     actionId,
   };
 }
@@ -239,6 +242,10 @@ function previewStatusClass(
 function basename(path: string): string {
   const normalized = path.replaceAll("\\", "/").replace(/\/$/, "");
   return normalized.split("/").pop() || normalized;
+}
+
+function projectMonogram(path: string): string {
+  return (basename(path).trim().match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
 }
 
 function formatBytes(bytes: number): string {

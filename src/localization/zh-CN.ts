@@ -31,7 +31,7 @@ export const ZH_CN = {
     toolReorder: (label) => `${label} — 拖动可排序`, openFolderFirst: "请先打开项目文件夹 — 拖动可排序",
     gitUnavailableReorder: "此文件夹无法使用 Git — 拖动可排序", genericTool: "工具窗口", leftToolWindow: "左侧工具窗口",
     hideFiles: "隐藏文件工具窗口", hideChanges: "隐藏更改工具窗口", waitingForProject: "正在等待项目", resizeLeft: "调整左侧工具窗口大小", editor: "编辑器",
-    welcome: "欢迎", showOpenFiles: "显示已打开文件", openFiles: "已打开文件", editorName: (name) => `${name} 编辑器`,
+    welcome: "欢迎", showOpenFiles: "显示已打开文件", openFiles: "已打开文件", editorName: (name) => `${name} 编辑器`, openNewProject: "打开新项目",
     openFolder: "打开项目文件夹", openFolderDetail: "可浏览普通文件夹；当所选文件夹为仓库根目录时，还可使用 Git 工具。",
     resizeGit: "调整 Git 工具窗口大小", branchesAndLog: "分支与日志", prepareGitOperation: "准备合并、拣选、变基或压缩操作",
     gitOperations: "Git 操作…", recoverChanges: "恢复本地更改", hideGit: "隐藏 Git 工具窗口", hideStash: "隐藏贮藏工具窗口", hideTerminal: "隐藏终端工具窗口",

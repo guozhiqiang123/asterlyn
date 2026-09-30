@@ -1756,10 +1756,7 @@ export class AsterlynApp {
       return;
     }
 
-    await restoreRecentRepository(
-      window.localStorage,
-      (recent) => this.openRepository(recent, false),
-    );
+    if (await restoreRecentRepository(window.localStorage, (recent) => this.openRepository(recent, false)) !== "opened") this.renderEditor();
   }
 
   private renderShell(): void {
@@ -4057,7 +4054,7 @@ export class AsterlynApp {
         if (
           generation !== this.recentRepositoryValidationGeneration ||
           this.recentRepositoryValidationKey !== key ||
-          !this.shellState.repositoryMenuOpen
+          this.windowSession.workspace.state.root !== currentRoot
         ) {
           return;
         }
@@ -4068,7 +4065,8 @@ export class AsterlynApp {
         ).filter((path) => path !== currentRoot);
         if (retained.length === recent.length) return;
         this.recentRepositoryValidationKey = JSON.stringify([currentRoot, ...retained]);
-        this.renderRepositoryMenu(currentRoot);
+        if (this.shellState.repositoryMenuOpen) this.renderRepositoryMenu(currentRoot);
+        else this.renderEditor();
       },
       () => {
         // An inconclusive host check keeps history intact and retries on the next menu opening.
@@ -5850,10 +5848,10 @@ export class AsterlynApp {
     if (revealActiveTab) this.revealActiveEditorTab();
 
     if (document.kind === "welcome") {
-      const welcome = editorWelcomePresentation(Boolean(this.windowSession.workspace.state.root),
-        this.localization.catalog.locale, this.localization.catalog.shell, this.localization.catalog.editor);
+      const currentRoot = this.windowSession.workspace.state.root; const recent = loadRecentRepositories(window.localStorage).filter((path) => path !== currentRoot);
+      const welcome = editorWelcomePresentation(Boolean(currentRoot), this.localization.catalog.locale, this.localization.catalog.shell, this.localization.catalog.editor, recent);
       this.showEditorHtml(welcome.key, welcome.html);
-      if (welcome.actionId) this.query<HTMLButtonElement>(`#${welcome.actionId}`).onclick = () => { void this.chooseRepository(); };
+      if (welcome.actionId) { this.query<HTMLButtonElement>(`#${welcome.actionId}`).onclick = () => { void this.chooseRepository(); }; this.root.querySelectorAll<HTMLButtonElement>("[data-welcome-recent-repository]").forEach((item) => { item.onclick = () => { const path = item.dataset.welcomeRecentRepository; if (path) void this.requestRepositoryTarget(path); }; }); this.validateRecentRepositoryPaths(currentRoot, recent); }
       return;
     }
 

@@ -72,6 +72,7 @@ export const EN_US: LocaleCatalog = {
     showOpenFiles: "Show open files",
     openFiles: "Open files",
     editorName: (name) => `${name} Editor`,
+    openNewProject: "Open New Project",
     openFolder: "Open a project folder",
     openFolderDetail: "Browse ordinary folders, or use Git tools when the selected folder is a repository root.",
     resizeGit: "Resize Git tool window",

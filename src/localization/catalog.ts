@@ -69,6 +69,7 @@ export interface ShellCopy {
   showOpenFiles: string;
   openFiles: string;
   editorName(name: string): string;
+  openNewProject: string;
   openFolder: string;
   openFolderDetail: string;
   resizeGit: string;
