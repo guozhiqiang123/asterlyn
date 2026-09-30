@@ -320,11 +320,21 @@ test("desktop response validation accepts representative valid payloads", () => 
     startHeadOid: "b".repeat(40),
     upstream: "origin/old",
     mergedIntoCurrent: null,
+    worktreePath: null,
     deleteRemote: false,
     remoteDeletion: null,
     previewToken: "reviewed-plan",
   };
   assert.deepEqual(validateDesktopResult("prepare_branch_mutation", branchPlan), branchPlan);
+  const worktreePlan = {
+    ...branchPlan,
+    kind: "removeWorktree",
+    sourceFullName: "refs/heads/topic",
+    sourceName: "topic",
+    upstream: null,
+    worktreePath: "/worktrees/topic",
+  };
+  assert.deepEqual(validateDesktopResult("prepare_branch_mutation", worktreePlan), worktreePlan);
 });
 
 test("desktop response validation rejects malformed results", () => {
@@ -363,10 +373,35 @@ test("desktop response validation rejects malformed results", () => {
       sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
       targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
       startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: true,
+      worktreePath: null,
       deleteRemote: false, remoteDeletion: null,
       previewToken: "reviewed-plan",
     }),
     /supported branch mutation kind/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_branch_mutation", {
+      repositoryRoot: "/repo", kind: "removeWorktree", sourceFullName: "refs/heads/topic",
+      sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
+      targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
+      startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: null,
+      worktreePath: null,
+      deleteRemote: false, remoteDeletion: null,
+      previewToken: "reviewed-plan",
+    }),
+    /worktreePath must be present only for worktree removal/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_branch_mutation", {
+      repositoryRoot: "/repo", kind: "rename", sourceFullName: "refs/heads/topic",
+      sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
+      targetFullName: "refs/heads/renamed", newName: "renamed", startHeadRef: "refs/heads/main",
+      startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: null,
+      worktreePath: "/worktrees/topic",
+      deleteRemote: false, remoteDeletion: null,
+      previewToken: "reviewed-plan",
+    }),
+    /worktreePath must be present only for worktree removal/,
   );
   assert.throws(
     () => validateDesktopResult("read_commit_file", {

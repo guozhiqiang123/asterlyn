@@ -241,6 +241,7 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
             tracking: non_empty(fields[5]),
             committed_at: fields[6].parse().unwrap_or(0),
             subject: fields[7].to_string(),
+            linked_worktree_path: None,
         });
     }
 

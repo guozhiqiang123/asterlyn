@@ -95,6 +95,40 @@ test("remote tracking relationship switches the exact local branch and logical r
   ]);
 });
 
+test("linked worktree branches expose removal instead of local branch deletion", async () => {
+  const linked = { ...local("topic"), linkedWorktreePath: "/worktrees/topic" };
+  const currentSnapshot = snapshot([local("main", true), linked]);
+  const selectedTarget = target(linked);
+  const policy = branchContextPolicy(selectedTarget, currentSnapshot, options);
+  const model = branchContextMenuModel(
+    selectedTarget,
+    policy,
+    branchCopyActions(linked, EN_US.history.branchContextMenu),
+    EN_US.history,
+  );
+  assert.equal(ids(model).includes("git-branches.context-actions.remove-worktree"), true);
+  assert.equal(ids(model).includes("git-branches.context-actions.delete"), false);
+  assert.equal(policy.switch.kind, "blocked");
+
+  const events = [];
+  let session;
+  const provider = new BranchContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => true, highlight: () => {}, snapshot: () => currentSnapshot,
+      policyOptions: () => ({ ...options }), showHistory: () => {},
+      openMutation: (kind, branch) => events.push([kind, branch.fullName]),
+      openGitOperation: () => {}, openRemoteAction: () => {}, tagRemotes: () => [],
+      openTagMutation: () => {}, blocked: () => {}, status: () => {}, error: () => {},
+    },
+    () => EN_US.history,
+  );
+  provider.open({ target: selectedTarget, anchor: { x: 1, y: 2 }, trigger: {}, restoreFocus() {} });
+  await session.invoke("git-branches.context-actions.remove-worktree");
+  assert.deepEqual(events, [["removeWorktree", linked.fullName]]);
+});
+
 test("tag menu exposes detached checkout, merge, exact remote push, and local or remote deletion", async () => {
   const selectedTag = tag("release/v1");
   const currentSnapshot = snapshot([local("main", true), selectedTag]);

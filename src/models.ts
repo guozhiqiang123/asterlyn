@@ -291,9 +291,10 @@ export interface BranchSummary {
   tracking: string | null;
   committedAt: number;
   subject: string;
+  linkedWorktreePath: string | null;
 }
 
-export type BranchMutationKind = "switch" | "create" | "checkoutRemote" | "rename" | "delete";
+export type BranchMutationKind = "switch" | "create" | "checkoutRemote" | "rename" | "delete" | "removeWorktree";
 
 export interface BranchMutationRequest {
   kind: BranchMutationKind;
@@ -323,6 +324,7 @@ export interface BranchMutationPlan {
   startHeadOid: string;
   upstream: string | null;
   mergedIntoCurrent: boolean | null;
+  worktreePath: string | null;
   deleteRemote: boolean;
   remoteDeletion: RemoteBranchDeletionTarget | null;
   previewToken: string;

@@ -68,3 +68,20 @@ test("remote checkout sets upstream while rename and delete affect local refs on
   assert.ok(!deletedEverywhere.branches.some((branch) => branch.fullName === local.fullName));
   assert.ok(!deletedEverywhere.branches.some((branch) => branch.fullName === remote.fullName));
 });
+
+test("reviewed demo worktree deletion removes only the linked checkout", () => {
+  const snapshot = cleanSnapshot();
+  const linked = snapshot.branches.find((branch) => branch.linkedWorktreePath);
+  assert.ok(linked);
+
+  const plan = demoPrepareBranchMutation(snapshot, {
+    kind: "removeWorktree", sourceFullName: linked.fullName, sourceOid: linked.oid,
+    newName: null, deleteRemote: false,
+  });
+  assert.equal(plan.worktreePath, linked.linkedWorktreePath);
+
+  const next = demoExecuteBranchMutation(snapshot, plan);
+  const retained = next.branches.find((branch) => branch.fullName === linked.fullName);
+  assert.ok(retained);
+  assert.equal(retained.linkedWorktreePath, null);
+});

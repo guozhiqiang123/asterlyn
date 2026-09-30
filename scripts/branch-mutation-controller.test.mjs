@@ -18,6 +18,7 @@ function plan(request) {
     newName: request.newName, startHeadRef: "refs/heads/main", startHeadOid: "a".repeat(40),
     upstream: request.kind === "delete" ? "origin/topic" : null,
     mergedIntoCurrent: request.kind === "delete" ? true : null,
+    worktreePath: request.kind === "removeWorktree" ? "/worktrees/topic" : null,
     deleteRemote: request.deleteRemote,
     remoteDeletion: request.deleteRemote ? {
       remote: "origin", branchFullName: "refs/heads/topic",
@@ -76,6 +77,22 @@ test("switch prepares and executes directly without a confirmation state", async
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(calls, ["prepare", "execute"]);
   assert.equal(controller.state.dialog, null);
+});
+
+test("worktree removal reviews the exact path and retains explicit confirmation", async () => {
+  const controller = new BranchMutationController({
+    async prepare(_root, request) { return plan(request); },
+    async execute() { return true; },
+    errorMessage: String,
+  });
+  controller.open("/repo", "removeWorktree", { ...branch, linkedWorktreePath: "/worktrees/topic" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(controller.state.dialog.plan.worktreePath, "/worktrees/topic");
+  const html = renderBranchMutationDialog(controller.state, EN_US.history.branchMutation);
+  assert.match(html, /\/worktrees\/topic/u);
+  assert.match(html, /Delete Worktree/u);
+  assert.doesNotMatch(html, /branch-mutation-delete-remote/u);
+  assert.notEqual(controller.state.dialog, null);
 });
 
 test("remote deletion is opt-in and replaces the exact delete plan before execution", async () => {

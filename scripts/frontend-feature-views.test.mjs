@@ -357,6 +357,10 @@ test("flat push review files sort by file name instead of directory path", () =>
 test("branch navigation keeps repository hierarchy and selection in feature-owned markup", () => {
   const snapshot = repositorySnapshot();
   snapshot.branches = branchFixtures();
+  snapshot.branches.push({
+    ...snapshot.branches[0], fullName: "refs/heads/topic", name: "topic", current: false,
+    upstream: null, tracking: null, linkedWorktreePath: "/worktrees/topic",
+  });
   const html = renderBranchNavigation({
     snapshot,
     query: "",
@@ -372,6 +376,8 @@ test("branch navigation keeps repository hierarchy and selection in feature-owne
   assert.match(html, /data-remote-group-toggle="origin" aria-expanded="true"/);
   assert.match(html, /origin/);
   assert.match(html, /branch-row[^>]*selected/);
+  assert.match(html, /branch-worktree-badge[^>]*>WORKTREE</);
+  assert.match(html, /\/worktrees\/topic/u);
 
   const collapsed = renderBranchNavigation({
     snapshot,

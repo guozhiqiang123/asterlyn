@@ -28,7 +28,7 @@ export function demoExecuteTagMutation(
   if (request.kind === "create") {
     if (existing) throw new Error(`Tag '${name}' already exists.`);
     next.branches.push({
-      repositoryId: ".", fullName, name, oid: request.commitOid, current: false, kind: "tag",
+      repositoryId: ".", fullName, name, oid: request.commitOid, current: false, kind: "tag", linkedWorktreePath: null,
       upstream: null, tracking: null, committedAt: commit.authoredAt, subject: commit.subject,
     });
     nextCommit.decorations.push(`tag: ${name}`);

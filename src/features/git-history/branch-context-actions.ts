@@ -140,6 +140,8 @@ export class BranchContextActions {
         return this.runtime.openMutation("rename", target.branch, target.branch.name);
       case `${OWNER_ID}.delete`:
         return this.runtime.openMutation("delete", target.branch, "");
+      case `${OWNER_ID}.remove-worktree`:
+        return this.runtime.openMutation("removeWorktree", target.branch, "");
       case `${OWNER_ID}.tag-checkout`:
         return this.runtime.openTagMutation("checkout", target);
       case `${OWNER_ID}.tag-merge`:
@@ -257,7 +259,9 @@ export function branchContextMenuModel(
   if (policy.writable && target.branch.kind === "local" && !target.branch.current) {
     items.push(
       { kind: "separator" },
-      command("delete", labels.deleteLocal, policy.delete, "danger"),
+      target.branch.linkedWorktreePath
+        ? command("remove-worktree", labels.removeWorktree, policy.removeWorktree, "danger")
+        : command("delete", labels.deleteLocal, policy.delete, "danger"),
     );
   }
   return { ariaLabel: labels.ariaLabel(target.branch.name), items };

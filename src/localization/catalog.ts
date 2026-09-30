@@ -912,7 +912,7 @@ export interface HistoryCopy {
   noMatchingRefs: string;
   tryAnotherRef: string;
   groups: Record<"local" | "remote" | "tag", string>;
-  activateAgainForAllRefs: string;
+  activateAgainForAllRefs: string; worktreeBadge: string;
   roots(count: number): string;
   allRefs: string;
   allRefsTitle: string;
@@ -1069,12 +1069,12 @@ export interface BranchContextMenuCopy {
   copyBranch: string; copyTag: string;
   shortName: string;
   fullReference: string;
-  deleteLocal: string; checkoutTag: string; mergeTagInto(tag: string, branch: string | null): string; pushTagTo(remote: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;
+  deleteLocal: string; removeWorktree: string; checkoutTag: string; mergeTagInto(tag: string, branch: string | null): string; pushTagTo(remote: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;
   copiedShort: string;
   copiedFull: string;
   clipboardUnavailable: string;
   busy: string;
-  cleanRequired: string; localBranchRequired: string;
+  cleanRequired: string; localBranchRequired: string; worktreeCheckedOut: string;
   targetChanged: string;
 }
 

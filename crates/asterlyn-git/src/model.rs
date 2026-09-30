@@ -651,6 +651,8 @@ pub struct BranchSummary {
     pub tracking: Option<String>,
     pub committed_at: i64,
     pub subject: String,
+    #[serde(default)]
+    pub linked_worktree_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -669,6 +671,7 @@ pub enum BranchMutationKind {
     CheckoutRemote,
     Rename,
     Delete,
+    RemoveWorktree,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -716,6 +719,7 @@ impl BranchMutationKind {
             Self::CheckoutRemote => "checkout-remote",
             Self::Rename => "rename",
             Self::Delete => "delete",
+            Self::RemoveWorktree => "remove-worktree",
         }
     }
 }
@@ -754,6 +758,7 @@ pub struct BranchMutationPlan {
     pub start_head_oid: String,
     pub upstream: Option<String>,
     pub merged_into_current: Option<bool>,
+    pub worktree_path: Option<String>,
     pub delete_remote: bool,
     pub remote_deletion: Option<RemoteBranchDeletionTarget>,
     pub preview_token: String,

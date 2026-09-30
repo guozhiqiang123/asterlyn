@@ -99,7 +99,8 @@ export function branchContextTargetIsCurrent(
     const before = captured.get(branchKey(branch));
     return Boolean(
       before && before.oid === branch.oid && before.kind === branch.kind &&
-      before.current === branch.current && before.upstream === branch.upstream,
+      before.current === branch.current && before.upstream === branch.upstream &&
+      before.linkedWorktreePath === branch.linkedWorktreePath,
     );
   });
 }

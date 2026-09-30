@@ -34,6 +34,7 @@ use crate::process::{
 
 mod commit_details;
 mod stash_creation;
+mod worktree;
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
@@ -539,7 +540,14 @@ impl GitRepository {
                 "refs/tags",
             ],
         )?;
-        parse_branches(&refs.stdout)
+        let mut branches = parse_branches(&refs.stdout)?;
+        let worktrees = self.registered_worktrees()?;
+        for branch in branches.iter_mut().filter(|branch| {
+            branch.kind == crate::model::BranchKind::Local && branch.repository_id == "."
+        }) {
+            branch.linked_worktree_path = worktree::linked_path(&worktrees, &branch.full_name);
+        }
+        Ok(branches)
     }
 
     fn tracked_root_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
@@ -3339,7 +3347,8 @@ impl GitRepository {
         let (source_kind, source_name, source_oid, upstream) = match request.kind {
             BranchMutationKind::Switch
             | BranchMutationKind::Rename
-            | BranchMutationKind::Delete => {
+            | BranchMutationKind::Delete
+            | BranchMutationKind::RemoveWorktree => {
                 let source = reference
                     .filter(|candidate| {
                         candidate.kind == crate::model::BranchKind::Local
@@ -3431,8 +3440,21 @@ impl GitRepository {
                     blockers: Vec::new(),
                 });
             }
+            BranchMutationKind::RemoveWorktree if current_source => {
+                return Err(GitError::UnsafeOperation {
+                    operation: "prepare linked worktree removal".to_string(),
+                    message: "the current Git worktree cannot delete itself".to_string(),
+                    blockers: vec![self.root.to_string_lossy().into_owned()],
+                });
+            }
             _ => {}
         }
+
+        let worktree = if request.kind == BranchMutationKind::RemoveWorktree {
+            Some(self.removable_linked_worktree(&request.source_full_name)?)
+        } else {
+            None
+        };
 
         let checked_out = if source_kind == BranchMutationSourceKind::Local {
             self.branch_worktree_checkout_count(&request.source_full_name)?
@@ -3484,7 +3506,9 @@ impl GitRepository {
                 }
                 (Some(name.to_string()), Some(target))
             }
-            BranchMutationKind::Switch | BranchMutationKind::Delete => (None, None),
+            BranchMutationKind::Switch
+            | BranchMutationKind::Delete
+            | BranchMutationKind::RemoveWorktree => (None, None),
         };
         let merged_into_current = if request.kind == BranchMutationKind::Delete {
             let merged = self.is_ancestor(&source_oid, &start_head_oid)?;
@@ -3531,6 +3555,10 @@ impl GitRepository {
             &start_head_ref,
             &start_head_oid,
             upstream.as_deref().unwrap_or(""),
+            worktree
+                .as_ref()
+                .map(|worktree| worktree.path.as_str())
+                .unwrap_or(""),
             if merged_into_current == Some(true) {
                 "merged"
             } else {
@@ -3571,6 +3599,7 @@ impl GitRepository {
             start_head_oid,
             upstream,
             merged_into_current,
+            worktree_path: worktree.map(|worktree| worktree.path),
             delete_remote: request.delete_remote,
             remote_deletion,
             preview_token,
@@ -3640,6 +3669,7 @@ impl GitRepository {
             BranchMutationKind::CheckoutRemote => self.create_branch_from(plan, true),
             BranchMutationKind::Rename => self.rename_branch_from_plan(plan),
             BranchMutationKind::Delete => self.delete_branch_from_plan(plan),
+            BranchMutationKind::RemoveWorktree => self.remove_worktree_from_plan(plan),
         }
     }
 
@@ -3760,19 +3790,6 @@ impl GitRepository {
             true,
         )?;
         Ok(())
-    }
-
-    fn branch_worktree_checkout_count(&self, full_name: &str) -> Result<usize, GitError> {
-        let output = self.run_read(
-            "read linked worktree branches",
-            ["worktree", "list", "--porcelain", "-z"],
-        )?;
-        let expected = format!("branch {full_name}");
-        Ok(output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|field| String::from_utf8_lossy(field).trim() == expected)
-            .count())
     }
 
     pub fn prepare_remote_mutation(

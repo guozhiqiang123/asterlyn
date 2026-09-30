@@ -178,14 +178,14 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         "startHeadOid",
         "previewToken",
       );
-      nullableStrings(result, command, "targetFullName", "newName", "upstream");
+      nullableStrings(result, command, "targetFullName", "newName", "upstream", "worktreePath");
       assert(typeof result.deleteRemote === "boolean", command, "deleteRemote must be a boolean");
       if (result.remoteDeletion !== null) {
         const remoteDeletion = record(result.remoteDeletion, command);
         strings(remoteDeletion, command, "remote", "branchFullName", "trackingFullName", "oid");
       }
       assert(
-        ["switch", "create", "checkoutRemote", "rename", "delete"].includes(String(result.kind)),
+        ["switch", "create", "checkoutRemote", "rename", "delete", "removeWorktree"].includes(String(result.kind)),
         command,
         "kind must be a supported branch mutation kind",
       );
@@ -198,6 +198,11 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         result.mergedIntoCurrent === null || typeof result.mergedIntoCurrent === "boolean",
         command,
         "mergedIntoCurrent must be boolean or null",
+      );
+      assert(
+        (result.kind === "removeWorktree") === (typeof result.worktreePath === "string"),
+        command,
+        "worktreePath must be present only for worktree removal",
       );
       break;
     }

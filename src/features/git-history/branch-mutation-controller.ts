@@ -127,7 +127,7 @@ export class BranchMutationController {
     try {
       const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
       if (this.value.dialog !== dialog) return;
-      if (dialog.request.kind === "delete") {
+      if (mutationNeedsReview(dialog.request.kind)) {
         dialog.plan = plan;
       } else if (await this.gateway.execute(plan)) {
         this.value = { dialog: null };
@@ -187,4 +187,8 @@ export class BranchMutationController {
 
 export function mutationNeedsName(kind: BranchMutationKind): boolean {
   return kind === "create" || kind === "checkoutRemote" || kind === "rename";
+}
+
+export function mutationNeedsReview(kind: BranchMutationKind): boolean {
+  return kind === "delete" || kind === "removeWorktree";
 }

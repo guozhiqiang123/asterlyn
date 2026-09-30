@@ -142,6 +142,17 @@
   color: var(--text-faint);
 }
 
+.branch-row .branch-worktree-badge {
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--info-text) 55%, transparent);
+  border-radius: 999px;
+  background: var(--info-bg);
+  color: var(--info-text);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .branch-no-results {
   display: flex;
   min-height: 110px;

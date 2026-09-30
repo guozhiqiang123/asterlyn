@@ -138,7 +138,7 @@ function branchRow(
   const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
   const title = exclusive
     ? `${branch.name} — ${branch.subject} — ${(model.localization ?? DEFAULT_LOCALIZATION).catalog.history.activateAgainForAllRefs}`
-    : `${branch.name} — ${branch.subject}`;
+    : `${branch.name} — ${branch.subject}${branch.linkedWorktreePath ? ` — ${branch.linkedWorktreePath}` : ""}`;
   const root = model.snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
   const meta = [
     branch.current ? "HEAD" : "",
@@ -147,8 +147,11 @@ function branchRow(
       : model.snapshot.repositoryRoots.length > 1
         ? (root?.displayName ?? branch.repositoryId)
         : "",
-  ].filter(Boolean);
-  return `<button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" data-branch-key="${escapeAttribute(key)}" aria-pressed="${selected}" title="${escapeAttribute(title)}"><span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span><span class="branch-name">${escapeHtml(displayName)}</span>${meta.length > 0 ? `<span class="branch-row-meta">${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span>` : ""}</button>`;
+  ].filter(Boolean).map((value) => `<span>${escapeHtml(value)}</span>`);
+  if (branch.linkedWorktreePath) {
+    meta.push(`<span class="branch-worktree-badge">${escapeHtml((model.localization ?? DEFAULT_LOCALIZATION).catalog.history.worktreeBadge)}</span>`);
+  }
+  return `<button class="branch-row kind-${branch.kind} ${branch.linkedWorktreePath ? "has-linked-worktree" : ""} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" data-branch-key="${escapeAttribute(key)}" aria-pressed="${selected}" title="${escapeAttribute(title)}"><span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span><span class="branch-name">${escapeHtml(displayName)}</span>${meta.length > 0 ? `<span class="branch-row-meta">${meta.join("")}</span>` : ""}</button>`;
 }
 
 function emptyState(title: string, detail: string): string {
