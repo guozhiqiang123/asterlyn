@@ -58,8 +58,28 @@
 }
 
 .change-group > .group-header .group-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   font-weight: 650;
+}
+
+.change-scan-status {
+  display: inline-grid;
+  flex: 0 0 12px;
+  place-items: center;
+}
+
+.change-scan-status:not(.active) {
+  display: none;
+}
+
+.change-scan-status .spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
 }
 
 .change-group > .group-header .tree-chevron,

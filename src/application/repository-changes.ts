@@ -17,3 +17,23 @@ export function mergeTrackedChanges(
     ),
   };
 }
+
+/**
+ * Keeps the last accepted untracked projection visible while a new tracked-first
+ * repository read is waiting for its untracked supplement.
+ */
+export function mergeRefreshingWorkingTree(
+  current: RepositorySnapshot,
+  incoming: RepositorySnapshot,
+): RepositorySnapshot {
+  if (
+    current.root !== incoming.root ||
+    incoming.untrackedState !== "pending" ||
+    current.untrackedState === "pending"
+  ) return incoming;
+  const merged = mergeTrackedChanges(current, {
+    root: incoming.root,
+    changes: incoming.changes,
+  });
+  return { ...incoming, changes: merged.changes };
+}

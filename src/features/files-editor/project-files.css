@@ -90,6 +90,12 @@
   text-overflow: ellipsis;
 }
 
+.project-node-loading {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
 .project-directory.file-status-ignored > summary {
   color: var(--file-ignored);
 }

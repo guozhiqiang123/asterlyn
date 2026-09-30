@@ -44,6 +44,23 @@ accepted remote result is the authoritative HEAD/refs/History reconciliation. On
 result was accepted does recovery perform the local HEAD/refs/History fallback. This preserves fast
 local file discovery while preventing the old double History refresh.
 
+**Amendment, 2026-09-30.** A tracked-first revalidation keeps the last accepted untracked rows in
+the pending working-tree projection until the matching supplement completes. Pending remains the
+canonical safety state, so Git mutations still fail closed; presentation places its compact progress
+indicator in a fixed slot inside the first retained group instead of inserting a temporary row or
+replacing the groups with a loading surface. Virtual History updates keep the native scrolling host
+and its list element mounted, start a paginatable first page on the same invariant full-height
+virtual canvas used by later pages, cache the commit-graph projection until history data changes, patch only the
+translated row window, and never write a captured `scrollTop` back during a native scrollbar
+interaction. History scroll is presentation and pagination intent only:
+approaching the bottom may append older commits, while returning to the top never starts a refresh.
+Authoritative repository reconciliation owns newly arrived commits instead. Changes keeps its outer
+layout, toolbar, scroll host, list, and commit-composer identities across tracked-first and untracked
+supplement phases; only the scan notice, changed rows, and derived control state are patched. Context
+menus close for direct dismissal intent (outside pointer, wheel/touch scroll, Escape, resize, blur),
+or when their feature identity is no longer current; programmatic scroll caused by a projection
+refresh is not dismissal intent.
+
 ## Consequences
 
 - Stable selections, disclosure, scroll, and context menus survive semantic no-op refreshes.
@@ -52,6 +69,10 @@ local file discovery while preventing the old double History refresh.
 - External changes still enter canonical state before presentation changes.
 - A real remote or local Git change produces one affected-surface update rather than two broad
   workbench replacements.
+- Foreground recovery may visibly mark provisional untracked truth, but it does not blank the last
+  accepted rows or replace a native scrolling host that the user is manipulating.
+- Scroll position never doubles as refresh authorization; refresh comes from explicit or watcher
+  reconciliation and is projected without replacing stable interaction containers.
 - Slice comparison is bounded by the accepted snapshot. History retains separate paging and
   virtual-mount limits.
 - Manual project replacement and Git capability loss may still use a complete render because their

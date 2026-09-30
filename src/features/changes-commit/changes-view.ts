@@ -52,6 +52,47 @@ export interface ChangeTreeRenderWindow {
   end: number;
 }
 
+export interface ChangeNavigationPatch {
+  bindingRoots: HTMLElement[];
+  windowStart: number;
+}
+
+export function patchCommitComposer(current: HTMLElement, markup: string): boolean {
+  const staging = current.ownerDocument.createElement("div");
+  staging.innerHTML = markup;
+  const next = staging.querySelector<HTMLElement>("#commit-tool");
+  const currentForm = current.querySelector<HTMLElement>(":scope > .commit-form");
+  const nextForm = next?.querySelector<HTMLElement>(":scope > .commit-form");
+  if (!next || !currentForm || !nextForm) {
+    if (next) current.replaceWith(next);
+    return false;
+  }
+  const label = next.getAttribute("aria-label");
+  if (label) current.setAttribute("aria-label", label);
+  const textarea = currentForm.querySelector<HTMLTextAreaElement>("#commit-message");
+  const nextTextarea = nextForm.querySelector<HTMLTextAreaElement>("#commit-message");
+  if (textarea && nextTextarea) textarea.placeholder = nextTextarea.placeholder;
+  const hint = currentForm.querySelector<HTMLElement>(".commit-hint");
+  const nextHint = nextForm.querySelector<HTMLElement>(".commit-hint");
+  if (hint && nextHint) hint.innerHTML = nextHint.innerHTML;
+  const actions = currentForm.querySelector<HTMLElement>(".commit-actions");
+  const blocker = currentForm.querySelector<HTMLElement>(".commit-blocker");
+  const nextBlocker = nextForm.querySelector<HTMLElement>(".commit-blocker");
+  if (!nextBlocker) blocker?.remove();
+  else if (blocker) blocker.replaceWith(nextBlocker);
+  else actions?.before(nextBlocker);
+  for (const id of ["commit-button", "stash-changes-button"]) {
+    const button = currentForm.querySelector<HTMLButtonElement>(`#${id}`);
+    const candidate = nextForm.querySelector<HTMLButtonElement>(`#${id}`);
+    if (!button || !candidate) continue;
+    button.disabled = candidate.disabled;
+    button.title = candidate.title;
+    button.querySelector(".commit-button-label")!.textContent =
+      candidate.querySelector(".commit-button-label")!.textContent;
+  }
+  return true;
+}
+
 export function renderChangeNavigation(
   snapshot: RepositorySnapshot,
   state: ChangesCommitState,
@@ -65,6 +106,106 @@ export function renderChangeNavigation(
       ${renderChangeResults(snapshot, state, scrollTop, clientHeight, copy)}
     </div>
   </div>`;
+}
+
+export function patchChangeNavigation(
+  host: HTMLElement,
+  bannerMarkup: string,
+  snapshot: RepositorySnapshot,
+  state: ChangesCommitState,
+  scrollTop = 0,
+  clientHeight = 0,
+  copy: ChangesCopy = EN_US.changes,
+): ChangeNavigationPatch | null {
+  const staging = host.ownerDocument.createElement("div");
+  staging.innerHTML = `${bannerMarkup}${renderChangeNavigation(snapshot, state, scrollTop, clientHeight, copy)}`;
+  const currentNavigation = host.querySelector<HTMLElement>(":scope > .changes-navigation");
+  const nextNavigation = staging.querySelector<HTMLElement>(":scope > .changes-navigation");
+  if (!currentNavigation || !nextNavigation) return null;
+  const bindingRoots: HTMLElement[] = [];
+  const banner = syncChangeChild(host, currentNavigation, staging, ".git-operation-banner");
+  if (banner) bindingRoots.push(banner);
+  syncChangeToolbar(currentNavigation, nextNavigation);
+  const results = patchChangeResults(currentNavigation, nextNavigation);
+  if (results) bindingRoots.push(results);
+  const window = changeTreeRenderWindow(changeViewRows(snapshot, state, copy).length, scrollTop, clientHeight);
+  return { bindingRoots, windowStart: window?.start ?? 0 };
+}
+
+function syncChangeChild(
+  host: HTMLElement,
+  anchor: HTMLElement,
+  staging: HTMLElement,
+  selector: string,
+): HTMLElement | null {
+  const current = host.querySelector<HTMLElement>(`:scope > ${selector}`);
+  const next = staging.querySelector<HTMLElement>(`:scope > ${selector}`);
+  if (!next) {
+    current?.remove();
+    return null;
+  }
+  if (current?.outerHTML === next.outerHTML) return null;
+  if (current) current.replaceWith(next);
+  else anchor.before(next);
+  return next;
+}
+
+function syncChangeToolbar(currentNavigation: HTMLElement, nextNavigation: HTMLElement): void {
+  const current = currentNavigation.querySelector<HTMLElement>(":scope > .change-toolbar");
+  const next = nextNavigation.querySelector<HTMLElement>(":scope > .change-toolbar");
+  if (!current || !next) return;
+  current.className = next.className;
+  for (const button of current.querySelectorAll<HTMLButtonElement>("[data-change-action]")) {
+    const action = button.dataset.changeAction;
+    const candidate = action
+      ? next.querySelector<HTMLButtonElement>(`[data-change-action="${action}"]`)
+      : null;
+    if (!candidate) continue;
+    button.className = candidate.className;
+    button.disabled = candidate.disabled;
+    for (const attribute of ["aria-label", "aria-pressed", "title"]) {
+      const value = candidate.getAttribute(attribute);
+      if (value === null) button.removeAttribute(attribute);
+      else button.setAttribute(attribute, value);
+    }
+  }
+}
+
+function patchChangeResults(
+  currentNavigation: HTMLElement,
+  nextNavigation: HTMLElement,
+): HTMLElement | null {
+  const current = currentNavigation.querySelector<HTMLElement>(":scope > .change-results");
+  const next = nextNavigation.querySelector<HTMLElement>(":scope > .change-results");
+  if (!current || !next) return null;
+  const currentList = current.querySelector<HTMLElement>(":scope > .change-list");
+  const nextList = next.querySelector<HTMLElement>(":scope > .change-list");
+  if (!currentList || !nextList) {
+    if (current.innerHTML === next.innerHTML) return null;
+    current.innerHTML = next.innerHTML;
+    return current;
+  }
+  syncChangeChild(current, currentList, next, ".untracked-scan");
+  syncChangeScanStatuses(currentList, nextList);
+  currentList.className = nextList.className;
+  for (const attribute of ["role", "aria-label", "aria-rowcount"]) {
+    const value = nextList.getAttribute(attribute);
+    if (value === null) currentList.removeAttribute(attribute);
+    else currentList.setAttribute(attribute, value);
+  }
+  if (currentList.innerHTML === nextList.innerHTML) return null;
+  currentList.innerHTML = nextList.innerHTML;
+  return currentList;
+}
+
+function syncChangeScanStatuses(currentList: HTMLElement, nextList: HTMLElement): void {
+  for (const current of currentList.querySelectorAll<HTMLElement>("[data-change-scan-status]")) {
+    const group = current.dataset.changeScanStatus;
+    const next = group
+      ? nextList.querySelector<HTMLElement>(`[data-change-scan-status="${group}"]`)
+      : null;
+    if (next) current.className = next.className;
+  }
 }
 
 export function changeViewRows(
@@ -163,12 +304,13 @@ function renderChangeResults(
   clientHeight: number,
   copy: ChangesCopy,
 ): string {
+  const scanNotice = untrackedScanNotice(snapshot, copy);
   if (snapshot.changes.length === 0) {
     if (snapshot.untrackedState === "pending") {
-      return `<div class="change-no-results"><span class="spinner"></span><strong>${escapeHtml(copy.checkingUntracked)}</strong><span>${escapeHtml(copy.trackedReady)}</span></div>`;
+      return scanNotice;
     }
     if (snapshot.untrackedState === "failed") {
-      return `<div class="change-no-results"><strong>${escapeHtml(copy.untrackedFailed)}</strong><span>${escapeHtml(copy.refreshToRetry)}</span></div>`;
+      return scanNotice;
     }
     return `<div class="change-no-results"><span class="empty-icon">${icon("check", 22)}</span><strong>${escapeHtml(copy.workingTreeClean)}</strong><span>${escapeHtml(copy.noLocalChanges)}</span></div>`;
   }
@@ -182,7 +324,18 @@ function renderChangeResults(
   const bottomSpacer = bottomCount > 0
     ? `<div class="change-virtual-spacer" aria-hidden="true" style="height:${bottomCount * CHANGE_TREE_ROW_HEIGHT}px"></div>`
     : "";
-  return `<div class="change-list compact-file-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.changedFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => renderChangeRow(state, row, (window?.start ?? 0) + offset, rows.length, copy)).join("")}${bottomSpacer}</div>${untrackedScanNotice(snapshot, copy)}`;
+  const persistentNotice = snapshot.untrackedState === "failed" ? scanNotice : "";
+  return `${persistentNotice}<div class="change-list compact-file-tree virtual-tree" role="tree" aria-label="${escapeAttribute(copy.changedFiles)}" aria-rowcount="${rows.length}">${topSpacer}${visible.map((row, offset) => {
+    const index = (window?.start ?? 0) + offset;
+    return renderChangeRow(
+      state,
+      row,
+      index,
+      rows.length,
+      copy,
+      snapshot.untrackedState === "pending" && index === 0,
+    );
+  }).join("")}${bottomSpacer}</div>`;
 }
 
 function appendGroupRows(
@@ -234,6 +387,7 @@ function renderChangeRow(
   index: number,
   rowCount: number,
   copy: ChangesCopy,
+  scanningUntracked = false,
 ): string {
   const position = `aria-posinset="${index + 1}" aria-setsize="${rowCount}"`;
   if (row.kind === "group") {
@@ -241,7 +395,7 @@ function renderChangeRow(
       <div class="group-header" data-change-disclosure="group:${row.group}">
         <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 12)}</span></button>
-        <span class="group-title">${escapeHtml(row.title)}<b>${escapeHtml(copy.fileCount(row.changes.length))}</b></span>
+        <span class="group-title">${escapeHtml(row.title)}<b>${escapeHtml(copy.fileCount(row.changes.length))}</b><span class="change-scan-status${scanningUntracked ? " active" : ""}" data-change-scan-status="${row.group}" aria-hidden="true"><span class="spinner"></span></span></span>
       </div>
     </div>`;
   }

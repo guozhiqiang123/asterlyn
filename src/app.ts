@@ -95,7 +95,7 @@ import {
   changeDisclosureKeys,
   changeTreeRenderWindow,
   changeViewRows,
-  renderChangeNavigation,
+  patchCommitComposer, patchChangeNavigation, renderChangeNavigation,
 } from "./features/changes-commit/changes-view";
 import {
   changesContextTargetIsCurrent,
@@ -2451,11 +2451,7 @@ export class AsterlynApp {
       if (!result) return;
       acceptedTransition = result;
       const opened = result.project;
-      const next = this.repositoryIntegration.acceptManualRefresh(
-        opened.root,
-        opened.repository,
-        generation,
-      );
+      const next = this.repositoryIntegration.acceptManualRefresh(opened.root, opened.repository, generation, snapshot);
       this.workspaceWatch.recordAuthoritativeRefresh();
       if (!next) return;
       pendingRoot = next.root;
@@ -3950,7 +3946,7 @@ export class AsterlynApp {
     renderRepositoryProjectionSlices(snapshot, slices, {
       changesVisible: this.shellState.layout.leftTool === "changes", branchDetailVisible: this.gitHistoryPresentationRuntime.detailState.gitDetail === "branch",
       renderCapability: () => { this.applyWorkbenchLayout(false); this.renderActivityRail(); },
-      renderChanges: () => this.renderLeftTool(), renderEditor: () => this.renderEditor(),
+      renderChanges: () => this.patchChangesProjection(snapshot), renderEditor: () => this.renderEditor(),
       renderRefs: (value, detail) => { this.renderBranchPane(value); if (detail) this.renderGitDetailPane(value); },
       renderStatus: (value) => this.renderStatus(value),
       renderTransient: () => {
@@ -4161,19 +4157,26 @@ export class AsterlynApp {
     }
   }
 
+  private patchChangesProjection(snapshot: RepositorySnapshot): void {
+    if (this.shellState.layout.leftTool !== "changes") return;
+    const body = this.query("#navigator-body"), host = body.querySelector<HTMLElement>(".changes-tool-navigation"), results = host?.querySelector<HTMLElement>("#change-results"), copy = this.localShellCopy();
+    if (!host || !results) return this.renderLeftTool();
+    renderChangesNavigatorHeader(navigatorHeaderHost(this.root), copy.changes, snapshot.changes.length, this.localization.catalog.changes.changedFileCount(snapshot.changes.length), copy.hideChanges);
+    const patch = patchChangeNavigation(host, renderGitOperationBanner(snapshot.operation, this.localization.catalog.gitOperations), snapshot, this.changesState, results.scrollTop, results.clientHeight, this.localization.catalog.changes);
+    if (!patch) return this.renderLeftTool();
+    this.changeTreeWindowStart = patch.windowStart; for (const bindingRoot of patch.bindingRoots) this.bindChangeEvents(bindingRoot); results.onscroll = () => this.handleChangeTreeScroll(results); this.refreshShortcutPresentation();
+  }
+
   private renderBranchPane(snapshot: RepositorySnapshot): void {
     if (this.shellState.layout.bottomTool !== "branches") return;
-    this.query("#branch-navigation-body").innerHTML =
-      this.renderBranchNavigation(snapshot);
-    this.renderBranchCount(snapshot);
-    this.bindBranchEvents();
+    this.query("#branch-navigation-body").innerHTML = this.renderBranchNavigation(snapshot);
+    this.renderBranchCount(snapshot); this.bindBranchEvents();
   }
 
   private renderHistoryPane(): void {
     if (!this.windowSession.repository.state.snapshot || this.shellState.layout.bottomTool !== "branches") return;
     const commits = this.filteredHistoryCommits();
-    this.query("#history-navigation-body").innerHTML =
-      this.renderHistoryNavigation();
+    this.query("#history-navigation-body").innerHTML = this.renderHistoryNavigation();
     this.historyListView.mount(this.query("#history-results"), {
       selectCommit: (key, restoreFocus, extend, toggle) =>
         this.selectHistoryCommit(key, restoreFocus, extend, toggle),
@@ -4187,10 +4190,9 @@ export class AsterlynApp {
       },
       scroll: (host) => this.handleHistoryScroll(host),
     });
-    this.renderHistoryCount(commits.length);
-    this.bindHistoryEvents(); this.refreshShortcutPresentation();
+    this.historyListView.render(this.historyListPresentation());
+    this.renderHistoryCount(commits.length); this.bindHistoryEvents(); this.refreshShortcutPresentation();
   }
-
   private renderGitDetailPane(snapshot = this.windowSession.repository.state.snapshot): void {
     if (!snapshot || this.shellState.layout.bottomTool !== "branches") return;
     this.commitDetailSplitterDisposer?.();
@@ -4783,8 +4785,8 @@ export class AsterlynApp {
     };
   }
 
-  private bindChangeEvents(): void {
-    this.root.querySelectorAll<HTMLButtonElement>("[data-change-action]").forEach((button) => {
+  private bindChangeEvents(scope: ParentNode = this.root): void {
+    scope.querySelectorAll<HTMLButtonElement>("[data-change-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const action = button.dataset.changeAction;
         if (action === "refresh") {
@@ -4808,14 +4810,14 @@ export class AsterlynApp {
       });
     });
 
-    this.root.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
+    scope.querySelectorAll<HTMLInputElement>("[data-include-path]").forEach((checkbox) => {
       checkbox.addEventListener("click", (event) => event.stopPropagation());
       checkbox.addEventListener("change", () => {
         const path = checkbox.dataset.includePath;
         if (path) this.setChangePathsIncluded([path], checkbox.checked);
       });
     });
-    this.root.querySelectorAll<HTMLInputElement>("[data-include-group]").forEach((checkbox) => {
+    scope.querySelectorAll<HTMLInputElement>("[data-include-group]").forEach((checkbox) => {
       checkbox.addEventListener("click", (event) => event.stopPropagation());
       checkbox.addEventListener("change", () => {
         const snapshot = this.windowSession.repository.state.snapshot;
@@ -4827,7 +4829,7 @@ export class AsterlynApp {
         );
       });
     });
-    this.root.querySelectorAll<HTMLInputElement>("[data-include-directory]").forEach((checkbox) => {
+    scope.querySelectorAll<HTMLInputElement>("[data-include-directory]").forEach((checkbox) => {
       checkbox.addEventListener("click", (event) => event.stopPropagation());
       checkbox.addEventListener("change", () => {
         const snapshot = this.windowSession.repository.state.snapshot;
@@ -4846,7 +4848,7 @@ export class AsterlynApp {
         );
       });
     });
-    this.root.querySelectorAll<HTMLElement>("[data-change-disclosure]").forEach((control) => {
+    scope.querySelectorAll<HTMLElement>("[data-change-disclosure]").forEach((control) => {
       control.addEventListener("click", () => {
         const key = control.dataset.changeDisclosure;
         if (!key) return;
@@ -4855,14 +4857,14 @@ export class AsterlynApp {
         this.renderLeftTool();
       });
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-resolve-conflict]").forEach((button) => {
+    scope.querySelectorAll<HTMLButtonElement>("[data-resolve-conflict]").forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         const path = button.dataset.resolveConflict;
         if (path) this.openChangeConflict(path);
       });
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-git-operation-action]").forEach((button) => {
+    scope.querySelectorAll<HTMLButtonElement>("[data-git-operation-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const action = button.dataset.gitOperationAction;
         if (action === "continue" || action === "skip" || action === "abort") {
@@ -4870,7 +4872,7 @@ export class AsterlynApp {
         }
       });
     });
-    this.root.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
+    scope.querySelectorAll<HTMLElement>("[data-change-path]").forEach((row) => {
       row.addEventListener("click", (event) => {
         if ((event.target as HTMLElement).closest(".change-checkbox")) return;
         const path = row.dataset.changePath;
@@ -7931,11 +7933,9 @@ export class AsterlynApp {
   }
 
   private refreshCommitComposer(): void {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const current = this.root.querySelector<HTMLElement>("#commit-tool");
+    const snapshot = this.windowSession.repository.state.snapshot, current = this.root.querySelector<HTMLElement>("#commit-tool");
     if (!snapshot || !current) return;
-    current.outerHTML = this.renderCommitComposer(snapshot);
-    this.bindCommitComposer();
+    if (!patchCommitComposer(current, this.renderCommitComposer(snapshot))) this.bindCommitComposer(); this.refreshShortcutPresentation();
   }
 
   private bindChangeCommitSplitter(): void {

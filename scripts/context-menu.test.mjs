@@ -190,6 +190,9 @@ test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", 
   assert.match(host, /active\.session\.dismissed\?\.\(\)/u);
   assert.match(host, /revalidate\(\): void/u);
   assert.match(host, /!active\.session\.isCurrent\(\)/u);
+  assert.match(host, /addEventListener\("wheel"/u);
+  assert.match(host, /addEventListener\("touchmove"/u);
+  assert.doesNotMatch(host, /addEventListener\("scroll"/u);
   assert.match(host, /secondary\.textContent = item\.secondaryText/u);
   assert.match(host, /secondary\.title = item\.secondaryText/u);
   assert.match(lazyHost, /import\("\.\/context-menu-host\.ts"\)/u);

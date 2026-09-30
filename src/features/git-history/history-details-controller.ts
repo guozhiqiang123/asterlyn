@@ -114,7 +114,6 @@ interface GitHistoryDetailsControllerOptions {
   readonly rowLimit: number;
   readonly scrollThreshold?: number;
   readonly detailsCacheLimit?: number;
-  readonly now?: () => number;
   readonly messages?: HistoryControllerMessages;
 }
 
@@ -127,13 +126,10 @@ export class GitHistoryDetailsController {
   private readonly pageSize: number;
   private readonly rowLimit: number;
   private readonly scrollThreshold: number;
-  private readonly now: () => number;
   private readonly detailsCache: RecentValueCache<CommitDetails>;
   private messages: HistoryControllerMessages;
   private pageSequence = 0;
   private detailsSequence = 0;
-  private topRefreshArmed = false;
-  private topRefreshAt = 0;
   private referencesVersion = "";
   private disposed = false;
 
@@ -142,7 +138,6 @@ export class GitHistoryDetailsController {
     this.pageSize = options.pageSize ?? HISTORY_PAGE_SIZE;
     this.rowLimit = options.rowLimit;
     this.scrollThreshold = options.scrollThreshold ?? HISTORY_SCROLL_THRESHOLD;
-    this.now = options.now ?? Date.now;
     this.messages = options.messages ?? DEFAULT_MESSAGES;
     this.detailsCache = new RecentValueCache(
       options.detailsCacheLimit ?? COMMIT_DETAILS_CACHE_LIMIT,
@@ -240,7 +235,6 @@ export class GitHistoryDetailsController {
       historyQueryKey(previous.query) === historyQueryKey(normalizedQuery)
     ) return;
     this.pageSequence += 1;
-    this.topRefreshArmed = false;
     if (selectionChanged || referencesChanged) this.detailsSequence += 1;
     this.referencesVersion = referencesVersion;
     this.value = {
@@ -295,7 +289,6 @@ export class GitHistoryDetailsController {
     const selectionChanged = this.value.selectedCommit !== null;
     this.pageSequence += 1;
     this.detailsSequence += 1;
-    this.topRefreshArmed = false;
     this.value = {
       ...this.value,
       history: pending.state,
@@ -365,19 +358,9 @@ export class GitHistoryDetailsController {
 
   handleScroll(metrics: HistoryScrollMetrics): void {
     if (this.value.history.status !== "ready") return;
-    if (metrics.scrollTop > this.scrollThreshold) this.topRefreshArmed = true;
     const distanceFromBottom =
       metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop;
     if (distanceFromBottom <= this.scrollThreshold) void this.loadOlder();
-    if (
-      metrics.scrollTop <= 2 &&
-      this.topRefreshArmed &&
-      this.now() - this.topRefreshAt > 800
-    ) {
-      this.topRefreshArmed = false;
-      this.topRefreshAt = this.now();
-      void this.refreshLoaded();
-    }
   }
 
   retryPaging(): void {
@@ -704,7 +687,6 @@ export class GitHistoryDetailsController {
   private invalidateRequests(): void {
     this.pageSequence += 1;
     this.detailsSequence += 1;
-    this.topRefreshArmed = false;
   }
 
   private emit(change: HistoryDetailsChange): void {

@@ -258,6 +258,7 @@ export class RepositoryIntegrationCoordinator {
     workspaceRoot: string,
     snapshot: RepositorySnapshot | null,
     generation: number,
+    previousSnapshot: RepositorySnapshot | null = null,
   ): RepositorySnapshot | null {
     this.ensureActive();
     if (!this.session.matches(generation, workspaceRoot)) return null;
@@ -282,7 +283,14 @@ export class RepositoryIntegrationCoordinator {
     this.targets.operations.installSnapshot(snapshot);
     this.actions.reconcileRefreshedHistory(snapshot, false);
     this.actions.reconcileWorkingDocument(snapshot);
-    this.actions.renderWorkspace();
+    if (previousSnapshot?.root === snapshot.root && previousSnapshot.gitDir === snapshot.gitDir) {
+      const slices = changedProjectionSlices(previousSnapshot, snapshot, [
+        "workingTree", "head", "refs", "history", "operation", "openDocuments",
+      ]);
+      if (slices.length > 0) this.actions.renderRepositorySlices(snapshot, slices);
+    } else {
+      this.actions.renderWorkspace();
+    }
     this.actions.loadVisibleCommitDetails();
     this.actions.loadProjectFiles(snapshot.root, generation);
     return snapshot;

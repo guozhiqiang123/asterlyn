@@ -54,7 +54,7 @@ test("large project trees mount no more than the shared architecture budget", ()
   assert.match(html, /project-virtual-spacer/);
 });
 
-test("an ignored directory shows a row-local spinner while its children load", () => {
+test("an ignored directory keeps its folder icon and shows loading after its name", () => {
   const tree = buildProjectTree([{ path: "build", kind: "directory", status: "ignored" }]);
   const html = renderProjectNavigation({
     ...state(),
@@ -64,7 +64,7 @@ test("an ignored directory shows a row-local spinner while its children load", (
 
   assert.match(html, /data-project-directory="build"/u);
   assert.match(html, /aria-busy="true"/u);
-  assert.match(html, /class="spinner"/u);
+  assert.match(html, /<svg class="icon"[^>]*>.*?<\/svg><span class="project-node-label">build<\/span><span class="spinner project-node-loading" aria-hidden="true"><\/span>/u);
   assert.doesNotMatch(html, /project-tree-notice/u);
 });
 

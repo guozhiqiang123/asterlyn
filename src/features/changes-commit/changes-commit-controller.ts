@@ -141,9 +141,16 @@ export class ChangesCommitController {
     snapshot: RepositorySnapshot | null,
     options: SnapshotInstallOptions = {},
   ): void {
+    const previousSnapshot = this.snapshot;
+    const previousExcludedPaths = new Set(this.state.excludedPaths);
     const previousSelection = this.state.selectedChange?.path ?? null;
     const previousDiffPath = this.state.workingDiffPath;
-    const rootChanged = this.snapshot?.root !== snapshot?.root;
+    const rootChanged = previousSnapshot?.root !== snapshot?.root;
+    const changesChanged = rootChanged || !sameFileChanges(
+      previousSnapshot?.changes ?? [],
+      snapshot?.changes ?? [],
+    );
+    const scanStateChanged = previousSnapshot?.untrackedState !== snapshot?.untrackedState;
     this.snapshot = snapshot;
     if (rootChanged) {
       this.repositoryGeneration += 1;
@@ -162,11 +169,14 @@ export class ChangesCommitController {
     if (rootChanged || options.clearSelection) this.state.selectedChange = null;
     this.chooseValidSelection();
     const selectionChanged = previousSelection !== (this.state.selectedChange?.path ?? null);
+    const inclusionChanged = changesChanged ||
+      !sameStringSets(previousExcludedPaths, this.state.excludedPaths);
     const retainedDiff = !rootChanged && previousDiffPath !== null &&
       Boolean(snapshot?.changes.some((change) => change.path === previousDiffPath));
     this.diffSequence += 1;
-    const diffStateChanged = !retainedDiff ||
-      this.state.workingPatchLoading || this.state.workingPatchError !== null;
+    const diffStateChanged = previousDiffPath !== null && (
+      !retainedDiff || this.state.workingPatchLoading || this.state.workingPatchError !== null
+    );
     if (!retainedDiff) {
       this.state.workingPatch = null;
       this.state.workingDiffBase = null;
@@ -175,12 +185,14 @@ export class ChangesCommitController {
     }
     this.state.workingPatchLoading = false;
     this.state.workingPatchError = null;
+    const navigationChanged = changesChanged || scanStateChanged;
+    if (!navigationChanged && !selectionChanged && !inclusionChanged && !diffStateChanged) return;
     this.emit({
       reason: "snapshot",
-      navigationChanged: true,
+      navigationChanged,
       selectionChanged,
-      inclusionChanged: true,
-      composerChanged: true,
+      inclusionChanged,
+      composerChanged: inclusionChanged,
       diffChanged: diffStateChanged,
     });
   }
@@ -614,4 +626,18 @@ function imageDiffsEqual(a: ImageDiffPreview | null, b: ImageDiffPreview | null)
     a.before?.byteLength === b.before?.byteLength &&
     a.after?.dataUrl === b.after?.dataUrl &&
     a.after?.byteLength === b.after?.byteLength;
+}
+
+function sameFileChanges(left: readonly FileChange[], right: readonly FileChange[]): boolean {
+  return left.length === right.length && left.every((change, index) => {
+    const next = right[index];
+    if (!next) return false;
+    return change.path === next.path && change.originalPath === next.originalPath &&
+      change.indexStatus === next.indexStatus && change.worktreeStatus === next.worktreeStatus &&
+      change.conflicted === next.conflicted && change.submodule === next.submodule;
+  });
+}
+
+function sameStringSets(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  return left.size === right.size && Array.from(left).every((value) => right.has(value));
 }

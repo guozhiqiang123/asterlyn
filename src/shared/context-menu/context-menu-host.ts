@@ -130,7 +130,11 @@ export class ContextMenuHost implements ContextMenuPort {
     this.document.addEventListener("keydown", (event) => {
       if (this.active === active) this.handleKeydown(active, event);
     }, options);
-    this.document.addEventListener("scroll", (event) => {
+    this.document.addEventListener("wheel", (event) => {
+      if (this.active !== active || active.layer.contains(event.target as Node)) return;
+      this.closeActive(active.session.ownerId, true);
+    }, options);
+    this.document.addEventListener("touchmove", (event) => {
       if (this.active !== active || active.layer.contains(event.target as Node)) return;
       this.closeActive(active.session.ownerId, true);
     }, options);

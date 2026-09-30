@@ -192,16 +192,11 @@ test("dispose invalidates requests and removes listeners", async () => {
   assert.equal(controller.state.history.status, "loading");
 });
 
-test("scroll boundaries append older commits and refresh the loaded window", async () => {
-  let now = 1_000;
-  const gateway = gatewayWithHistory([
-    Promise.resolve(page([commit("c")], 2, false)),
-    Promise.resolve(page([commit("new"), commit("a"), commit("b"), commit("c")], 0, false)),
-  ]);
+test("scrolling appends older commits without turning a return to the top into refresh intent", async () => {
+  const gateway = gatewayWithHistory([Promise.resolve(page([commit("c")], 2, false))]);
   const controller = new GitHistoryDetailsController(gateway, {
     pageSize: 2,
     rowLimit: 10,
-    now: () => now,
   });
   controller.installSnapshot(
     "/workspace",
@@ -214,15 +209,9 @@ test("scroll boundaries append older commits and refresh the loaded window", asy
   await settle();
   assert.deepEqual(controller.state.history.commits.map(({ oid }) => oid), ["a", "b", "c"]);
 
-  now = 2_000;
   controller.handleScroll({ scrollTop: 0, scrollHeight: 300, clientHeight: 100 });
   await settle();
-  assert.deepEqual(controller.state.history.commits.map(({ oid }) => oid), [
-    "new",
-    "a",
-    "b",
-    "c",
-  ]);
+  assert.deepEqual(controller.state.history.commits.map(({ oid }) => oid), ["a", "b", "c"]);
 });
 
 function createController(gateway) {

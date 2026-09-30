@@ -5,7 +5,10 @@ import type {
   TrackedChangeScan,
   UntrackedScan,
 } from "../models.ts";
-import { mergeTrackedChanges } from "./repository-changes.ts";
+import {
+  mergeRefreshingWorkingTree,
+  mergeTrackedChanges,
+} from "./repository-changes.ts";
 import {
   createSessionInvalidation,
   mergeSessionInvalidations,
@@ -215,10 +218,16 @@ function mergeRepositorySlices(
 ): RepositorySnapshot | null {
   if (!current || !incoming) return incoming;
   const selected = new Set(slices);
+  const workingTree = selected.has("workingTree")
+    ? mergeRefreshingWorkingTree(current, incoming)
+    : null;
   return {
     ...current,
     ...(selected.has("workingTree")
-      ? { changes: incoming.changes, untrackedState: incoming.untrackedState }
+      ? {
+          changes: workingTree!.changes,
+          untrackedState: workingTree!.untrackedState,
+        }
       : {}),
     ...(selected.has("head") ? { branch: incoming.branch } : {}),
     ...(selected.has("refs")

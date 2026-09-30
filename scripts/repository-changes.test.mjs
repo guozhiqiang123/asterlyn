@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeTrackedChanges } from "../src/application/repository-changes.ts";
+import {
+  mergeRefreshingWorkingTree,
+  mergeTrackedChanges,
+} from "../src/application/repository-changes.ts";
 
 function change(path, worktreeStatus) {
   return {
@@ -70,6 +73,41 @@ test("a path that became tracked is not duplicated by a preserved untracked row"
       },
     ],
   });
+
+  assert.equal(merged.changes.length, 1);
+  assert.equal(merged.changes[0].path, "notes.txt");
+  assert.equal(merged.changes[0].indexStatus, "added");
+});
+
+test("a pending foreground refresh retains the last settled untracked rows", () => {
+  const current = snapshot();
+  const incoming = {
+    ...snapshot(),
+    changes: [change("fresh.ts", "modified")],
+    untrackedState: "pending",
+  };
+
+  const merged = mergeRefreshingWorkingTree(current, incoming);
+
+  assert.equal(merged.untrackedState, "pending");
+  assert.deepEqual(
+    merged.changes.map(({ path, worktreeStatus }) => [path, worktreeStatus]),
+    [
+      ["fresh.ts", "modified"],
+      ["notes.txt", "untracked"],
+    ],
+  );
+});
+
+test("a pending refresh does not duplicate an untracked path that became tracked", () => {
+  const current = snapshot();
+  const incoming = {
+    ...snapshot(),
+    changes: [{ ...change("notes.txt", "unmodified"), indexStatus: "added" }],
+    untrackedState: "pending",
+  };
+
+  const merged = mergeRefreshingWorkingTree(current, incoming);
 
   assert.equal(merged.changes.length, 1);
   assert.equal(merged.changes[0].path, "notes.txt");

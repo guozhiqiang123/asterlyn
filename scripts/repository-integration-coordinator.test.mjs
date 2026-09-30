@@ -258,6 +258,23 @@ test("manual refresh reconciles one canonical snapshot without duplicating routi
   fixture.dispose();
 });
 
+test("manual refresh of the same Git capability keeps the mounted shell and routes changed slices", () => {
+  const fixture = integrationFixture();
+  const previous = snapshot("/repo");
+  const refreshed = snapshot("/repo", [{ path: "src/refreshed.ts", conflicted: false }]);
+
+  fixture.coordinator.acceptManualRefresh(
+    "/repo",
+    refreshed,
+    fixture.session.generation,
+    previous,
+  );
+
+  assert.equal(fixture.records.renders, 0);
+  assert.deepEqual(fixture.records.sliceRenders, [["workingTree", "openDocuments"]]);
+  fixture.dispose();
+});
+
 test("manual refresh keeps an ordinary workspace and disables Git projections", () => {
   const fixture = integrationFixture();
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -81,7 +82,35 @@ test("large history windows mount no more than the row budget", () => {
   assert.ok(window.start > 0);
   assert.ok(window.end < commits.length);
   assert.ok(mounted <= HISTORY_MOUNT_LIMIT);
-  assert.match(html, /history-virtual-spacer/);
+  assert.match(html, /history-list virtualized/);
+  assert.match(html, /height:140006px/);
+  assert.match(html, /history-virtual-window/);
+});
+
+test("a paginatable first page starts virtualized before it crosses the mount limit", () => {
+  const commits = Array.from({ length: 150 }, (_, index) => commit(`c${index}`, [], []));
+  const window = historyRenderWindow(commits.length, 28 * 100, 700, true);
+  const html = renderHistoryList({ ...presentation(commits), hasMore: true }, window);
+
+  assert.ok(window);
+  assert.ok(window.end - window.start <= HISTORY_MOUNT_LIMIT);
+  assert.match(html, /history-list virtualized/);
+  assert.match(html, /height:4206px/);
+});
+
+test("virtual History updates preserve the native scrolling host", async () => {
+  const source = await readFile(
+    new URL("../src/features/git-history/history-list-view.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /currentList\.innerHTML = nextList\.innerHTML/u);
+  assert.match(source, /currentList\.setAttribute\("style"[^\n]+\n\s*currentList\.className[^\n]+\n\s*currentList\.innerHTML/u);
+  assert.match(source, /this\.projection = historyListProjection\(presentation\)/u);
+  assert.match(source, /presentation\.hasMore \|\| this\.projection\.entries\.length > HISTORY_MOUNT_LIMIT/u);
+  assert.match(source, /renderHistoryList\(this\.presentation, window, this\.projection\)/u);
+  assert.doesNotMatch(source, /this\.host\.scrollTop\s*=\s*scrollTop/u);
+  assert.doesNotMatch(source, /this\.host\.scrollLeft\s*=\s*scrollLeft/u);
 });
 
 function presentation(commits) {

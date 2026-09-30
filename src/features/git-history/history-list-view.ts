@@ -55,12 +55,20 @@ export interface HistoryListActions {
   scroll(host: HTMLElement): void;
 }
 
+interface HistoryListProjection {
+  entries: HistoryDisplayEntry[];
+  graph: ReturnType<typeof projectCommitGraph>;
+  graphWidth: number;
+}
+
 export class GitHistoryListView {
   private host: HTMLElement | null = null;
   private actions: HistoryListActions | null = null;
   private presentation: HistoryListPresentation | null = null;
+  private projection: HistoryListProjection | null = null;
   private renderFrame: number | null = null;
   private renderedWindow: HistoryRenderWindow | null = null;
+  private virtualized = false;
 
   mount(host: HTMLElement, actions: HistoryListActions): void {
     if (this.host === host) {
@@ -82,13 +90,21 @@ export class GitHistoryListView {
     this.host = null;
     this.actions = null;
     this.presentation = null;
+    this.projection = null;
     this.renderedWindow = null;
+    this.virtualized = false;
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
     this.renderFrame = null;
   }
 
   render(presentation: HistoryListPresentation): void {
     this.presentation = presentation;
+    this.projection = historyListProjection(presentation);
+    if (presentation.status !== "ready" || this.projection.entries.length === 0) {
+      this.virtualized = false;
+    } else if (presentation.hasMore || this.projection.entries.length > HISTORY_MOUNT_LIMIT) {
+      this.virtualized = true;
+    }
     this.renderCurrentWindow(true);
   }
 
@@ -107,18 +123,38 @@ export class GitHistoryListView {
   private renderCurrentWindow(force = false): void {
     if (!this.host || !this.presentation) return;
     const scrollTop = this.host.scrollTop;
-    const scrollLeft = this.host.scrollLeft;
-    const entries = historyDisplayEntries(this.presentation);
-    const window = historyRenderWindow(entries.length, scrollTop, this.host.clientHeight);
+    const entries = this.projection?.entries ?? historyDisplayEntries(this.presentation);
+    const window = historyRenderWindow(
+      entries.length,
+      scrollTop,
+      this.host.clientHeight,
+      this.virtualized,
+    );
     if (
       !force &&
       this.renderedWindow?.start === window?.start &&
       this.renderedWindow?.end === window?.end
     ) return;
     this.renderedWindow = window;
-    this.host.innerHTML = renderHistoryList(this.presentation, window);
-    this.host.scrollTop = scrollTop;
-    this.host.scrollLeft = scrollLeft;
+    const markup = renderHistoryList(this.presentation, window, this.projection);
+    if (!this.patchReadyList(markup)) this.host.innerHTML = markup;
+  }
+
+  private patchReadyList(markup: string): boolean {
+    if (!this.host) return false;
+    const currentList = this.host.querySelector<HTMLElement>(":scope > .history-list");
+    if (!currentList) return false;
+    const staging = this.host.ownerDocument.createElement("div");
+    staging.innerHTML = markup;
+    const nextList = staging.querySelector<HTMLElement>(":scope > .history-list");
+    if (!nextList) return false;
+
+    currentList.setAttribute("style", nextList.getAttribute("style") ?? "");
+    currentList.className = nextList.className;
+    currentList.innerHTML = nextList.innerHTML;
+    syncOptionalSibling(this.host, currentList, staging, ".history-text-error", "before");
+    syncOptionalSibling(this.host, currentList, staging, ".history-page-status", "after");
+    return true;
   }
 
   updateSelection(key: string, selectedKeys: readonly string[] = [key]): void {
@@ -136,7 +172,7 @@ export class GitHistoryListView {
     let target = Array.from(this.host.querySelectorAll<HTMLButtonElement>("[data-commit-key]"))
       .find((row) => row.dataset.commitKey === key);
     if (!target && this.presentation) {
-      const index = historyDisplayEntries(this.presentation).findIndex(
+      const index = (this.projection?.entries ?? historyDisplayEntries(this.presentation)).findIndex(
         (entry) => entry.kind === "commit" && commitKey(entry.commit) === key,
       );
       if (index >= 0) {
@@ -207,9 +243,32 @@ export class GitHistoryListView {
   };
 }
 
+function syncOptionalSibling(
+  host: HTMLElement,
+  list: HTMLElement,
+  staging: HTMLElement,
+  selector: string,
+  position: "before" | "after",
+): void {
+  const current = host.querySelector<HTMLElement>(`:scope > ${selector}`);
+  const next = staging.querySelector<HTMLElement>(`:scope > ${selector}`);
+  if (!next) {
+    current?.remove();
+    return;
+  }
+  if (current) {
+    current.replaceWith(next);
+  } else if (position === "before") {
+    host.insertBefore(next, list);
+  } else {
+    list.after(next);
+  }
+}
+
 export function renderHistoryList(
   presentation: HistoryListPresentation,
   renderWindow: HistoryRenderWindow | null = null,
+  preparedProjection: HistoryListProjection | null = null,
 ): string {
   const localization = presentation.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.history;
@@ -230,11 +289,8 @@ export function renderHistoryList(
     return `${textError}<div class="history-no-results"><strong>${escapeHtml(copy.noMatchingCommits)}</strong><span>${escapeHtml(copy.tryCommitSearch)}</span></div>${renderPagingStatus(presentation)}`;
   }
 
-  const entries = historyDisplayEntries(presentation);
-  const graph = projectCommitGraph(entries.map((entry) => entry.graphCommit), {
-    bridgeOmittedParents: presentation.bridgeOmittedParents,
-  });
-  const graphWidth = Math.max(22, 14 + (graph.laneCount - 1) * 12);
+  const projection = preparedProjection ?? historyListProjection(presentation);
+  const { entries, graph, graphWidth } = projection;
   const roots = new Map(presentation.repositoryRoots.map((root) => [root.id, root]));
   const multipleRoots = presentation.repositoryRoots.length > 1;
   const boundedWindow = clampHistoryRenderWindow(renderWindow, entries.length);
@@ -268,23 +324,29 @@ export function renderHistoryList(
       return `<button class="history-row ${selected ? "selected" : ""} ${active ? "active" : ""}" type="button" role="option" data-commit="${escapeAttribute(commit.oid)}" data-commit-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-posinset="${index + 1}" aria-setsize="${entries.length}" title="${escapeAttribute(commit.subject)}">${renderCommitGraph(graph.rows[index]!, graphWidth, false, localization, commit.outgoing === true)}<span class="history-subject">${escapeHtml(commit.subject)}</span><span class="history-references">${references}${rootBadge}</span><span class="history-author" title="${escapeAttribute(`${commit.authorName} <${commit.authorEmail}>`)}">${escapeHtml(commit.authorName)}</span><time class="history-date" datetime="${new Date(commit.authoredAt * 1000).toISOString()}">${escapeHtml(authoredAt)}</time></button>`;
     })
     .join("");
-  const topSpacer = boundedWindow && boundedWindow.start > 0
-    ? `<div class="history-virtual-spacer" aria-hidden="true" style="height:${boundedWindow.start * HISTORY_ROW_HEIGHT}px"></div>`
-    : "";
-  const bottomCount = boundedWindow ? entries.length - boundedWindow.end : 0;
-  const bottomSpacer = bottomCount > 0
-    ? `<div class="history-virtual-spacer" aria-hidden="true" style="height:${bottomCount * HISTORY_ROW_HEIGHT}px"></div>`
-    : "";
+  const virtualRows = boundedWindow
+    ? `<div class="history-virtual-window" style="transform:translateY(${boundedWindow.start * HISTORY_ROW_HEIGHT}px)">${rows}</div>`
+    : rows;
+  const virtualClass = boundedWindow ? " virtualized" : "";
+  const virtualHeight = boundedWindow ? `;height:${entries.length * HISTORY_ROW_HEIGHT + 6}px` : "";
+  return `${textError}<div class="history-list${virtualClass}" role="listbox" aria-multiselectable="true" aria-label="${escapeAttribute(copy.commitHistory)}" style="--history-graph-width:${graphWidth}px${virtualHeight}">${virtualRows}</div>${renderPagingStatus(presentation)}`;
+}
 
-  return `${textError}<div class="history-list" role="listbox" aria-multiselectable="true" aria-label="${escapeAttribute(copy.commitHistory)}" style="--history-graph-width:${graphWidth}px">${topSpacer}${rows}${bottomSpacer}</div>${renderPagingStatus(presentation)}`;
+function historyListProjection(presentation: HistoryListPresentation): HistoryListProjection {
+  const entries = historyDisplayEntries(presentation);
+  const graph = projectCommitGraph(entries.map((entry) => entry.graphCommit), {
+    bridgeOmittedParents: presentation.bridgeOmittedParents,
+  });
+  return { entries, graph, graphWidth: Math.max(22, 14 + (graph.laneCount - 1) * 12) };
 }
 
 export function historyRenderWindow(
   entryCount: number,
   scrollTop: number,
   clientHeight: number,
+  virtualized = entryCount > HISTORY_MOUNT_LIMIT,
 ): HistoryRenderWindow | null {
-  if (entryCount <= HISTORY_MOUNT_LIMIT) return null;
+  if (!virtualized) return null;
   const visibleRows = Math.max(1, Math.ceil(Math.max(0, clientHeight) / HISTORY_ROW_HEIGHT));
   const windowSize = Math.min(
     HISTORY_MOUNT_LIMIT,
@@ -321,7 +383,7 @@ function clampHistoryRenderWindow(
   renderWindow: HistoryRenderWindow | null,
   entryCount: number,
 ): HistoryRenderWindow | null {
-  if (!renderWindow || entryCount <= HISTORY_MOUNT_LIMIT) return null;
+  if (!renderWindow) return null;
   const start = Math.max(0, Math.min(Math.floor(renderWindow.start), entryCount));
   const end = Math.max(start, Math.min(Math.floor(renderWindow.end), entryCount));
   return end - start <= HISTORY_MOUNT_LIMIT

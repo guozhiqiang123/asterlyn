@@ -15,6 +15,38 @@ test("snapshot reconciliation retains valid inclusion and selection identities",
   assert.deepEqual(controller.includedChanges().map(({ path }) => path), ["c.txt"]);
 });
 
+test("untracked scan state updates navigation without invalidating stable inclusion or Diff state", () => {
+  const controller = new ChangesCommitController(gateway());
+  const events = [];
+  const current = snapshot([change("a.txt")]);
+  controller.installSnapshot(current);
+  controller.subscribe((event) => events.push(event));
+
+  controller.installSnapshot({ ...current, changes: current.changes.map((item) => ({ ...item })), untrackedState: "pending" });
+  assert.deepEqual(events, [{
+    reason: "snapshot",
+    navigationChanged: true,
+    selectionChanged: false,
+    inclusionChanged: false,
+    composerChanged: false,
+    diffChanged: false,
+  }]);
+
+  events.length = 0;
+  controller.installSnapshot({ ...current, changes: current.changes.map((item) => ({ ...item })) });
+  assert.deepEqual(events, [{
+    reason: "snapshot",
+    navigationChanged: true,
+    selectionChanged: false,
+    inclusionChanged: false,
+    composerChanged: false,
+    diffChanged: false,
+  }]);
+  events.length = 0;
+  controller.installSnapshot({ ...current, changes: current.changes.map((item) => ({ ...item })) });
+  assert.deepEqual(events, []);
+});
+
 test("latest change selection owns working Diff completion", async () => {
   const first = deferred();
   const second = deferred();

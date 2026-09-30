@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -93,6 +94,48 @@ test("large change trees mount no more than the architecture budget", () => {
   assert.ok(window.end < changes.length);
   assert.ok(mounted <= CHANGE_TREE_MOUNT_LIMIT);
   assert.match(html, /change-virtual-spacer/);
+});
+
+test("pending untracked discovery stays inside the first retained group without shifting rows", () => {
+  const current = {
+    ...snapshot([
+      change("src/tracked.ts"),
+      change("notes.txt", "untracked"),
+    ]),
+    untrackedState: "pending",
+  };
+  const html = renderChangeNavigation(current, state());
+
+  assert.doesNotMatch(html, /class="untracked-scan/u);
+  assert.match(html, /data-change-group="changes"[\s\S]*data-change-scan-status="changes"\s+aria-hidden="true"/u);
+  assert.match(html, /data-change-path="notes\.txt"/u);
+  assert.doesNotMatch(html, /change-no-results/u);
+});
+
+test("pending discovery without retained rows keeps a standalone progress state", () => {
+  const html = renderChangeNavigation({
+    ...snapshot([]),
+    untrackedState: "pending",
+  }, state());
+
+  assert.match(html, /class="untracked-scan/u);
+  assert.doesNotMatch(html, /change-no-results/u);
+});
+
+test("incremental Changes refresh preserves the toolbar, scroll host, and list identities", async () => {
+  const [source, app] = await Promise.all([
+    readFile(new URL("../src/features/changes-commit/changes-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(source, /function patchChangeResults/u);
+  assert.match(source, /function syncChangeScanStatuses/u);
+  assert.match(source, /currentList\.innerHTML = nextList\.innerHTML/u);
+  assert.match(source, /syncChangeToolbar\(currentNavigation, nextNavigation\)/u);
+  assert.match(source, /function patchCommitComposer/u);
+  assert.doesNotMatch(source, /host\.innerHTML\s*=/u);
+  assert.match(app, /renderChanges: \(\) => this\.patchChangesProjection\(snapshot\)/u);
+  assert.doesNotMatch(app, /current\.outerHTML = this\.renderCommitComposer/u);
 });
 
 test("Revert supports staged additions but rejects untracked and copied paths", () => {
