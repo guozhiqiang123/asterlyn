@@ -192,16 +192,16 @@ export class GitHistoryContextRuntime {
     const target = this.commandTarget(action);
     if (!target) return;
     if (isBranchCommand(action)) {
-      this.branchActions.executeCommand(action, target as BranchContextTarget);
+      await this.branchActions.executeCommand(action, target as BranchContextTarget);
     } else if (action === "compare-selection") {
       this.rangeActions.executeCompareCommand(target as HistoryCommitRangeTarget);
     } else if (action.startsWith("file-")) {
-      this.fileActions.executeCommand(
+      await this.fileActions.executeCommand(
         action.slice("file-".length) as CommitFileCommandAction,
         target as CommitDetailFileContextTarget,
       );
     } else {
-      this.folderActions.executeCommand(
+      await this.folderActions.executeCommand(
         action.slice("folder-".length) as CommitFolderCommandAction,
         target as CommitDetailDirectoryContextTarget,
       );
@@ -267,5 +267,5 @@ export class GitHistoryContextRuntime {
 function isBranchCommand(
   action: HistoryContextCommandAction,
 ): action is BranchContextCommandAction {
-  return action === "ref-history" || action.startsWith("branch-") || action.startsWith("tag-");
+  return action.startsWith("ref-") || action.startsWith("branch-") || action.startsWith("tag-");
 }

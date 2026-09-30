@@ -184,7 +184,8 @@ without Asterlyn claiming common editor or terminal keys.
 | Delete local branch | destructive | `git.branch.delete` | **Custom**, unassigned and confirmed |
 | Checkout/merge/delete local tag | write/destructive | `git.tag.checkout`, `git.tag.merge`, `git.tag.deleteLocal` | **Custom**, destructive action unassigned and confirmed |
 | Push/delete tag on selected remote | network write/destructive | `git.tag.push`, `git.tag.deleteRemote` | **Custom**, exact selected remote is revalidated; destructive action unassigned and confirmed |
-| Copy ref names and paths | read | selection-specific copy commands | **Gap** |
+| Copy selected ref short/full names | read | `git.ref.copyName`, `git.ref.copyFullName` | **Custom** |
+| Copy selected historical file/folder names and paths | read | `history.file.copyName`, `history.file.copyRelativePath`, `history.file.copyAbsolutePath`, `history.folder.copyName`, `history.folder.copyRelativePath`, `history.folder.copyAbsolutePath` | **Custom** |
 
 Dynamic branch, tag, commit, and file identities never enter persisted keybindings as arguments. A
 selection command resolves and revalidates the current exact target when invoked.

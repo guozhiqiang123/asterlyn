@@ -88,6 +88,12 @@ test("folder provider routes immutable range actions and clears context highligh
     ["history", target.oid],
     ["highlight", false],
   ]);
+  await provider.executeCommand("copy-name", target);
+  await provider.executeCommand("copy-absolute-path", target);
+  assert.deepEqual(events.slice(-4), [
+    ["copy", "src"], ["status", "Folder name copied"],
+    ["copy", "/workspace/src"], ["status", "Absolute folder path copied"],
+  ]);
 });
 
 test("folder Diff controller keeps the exact bounded descendants and explicit selection", () => {

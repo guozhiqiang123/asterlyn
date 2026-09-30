@@ -103,6 +103,12 @@ test("commit file provider invokes no action while opening and routes exact targ
     ["history", 2], ["copy", "src/new.ts"],
     ["status", "Workspace-relative path copied"], ["highlight", false],
   ]);
+  await provider.executeCommand("copy-name", target);
+  await provider.executeCommand("copy-absolute-path", target);
+  assert.deepEqual(events.slice(-4), [
+    ["copy", "new.ts"], ["status", "File name copied"],
+    ["copy", "/workspace/src/new.ts"], ["status", "Absolute path copied"],
+  ]);
 });
 
 test("restore policy gives editor safety precedence over execution", () => {

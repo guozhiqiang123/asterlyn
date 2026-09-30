@@ -25,7 +25,7 @@ const ENABLED = { kind: "enabled" } as const;
 
 export type CommitFileCommandAction =
   | "show-diff" | "open-historical" | "compare-current" | "open-current"
-  | "restore" | "history";
+  | "restore" | "history" | "copy-name" | "copy-relative-path" | "copy-absolute-path";
 
 export interface CommitFileContextRuntime {
   current(target: CommitDetailFileContextTarget): boolean;
@@ -110,7 +110,7 @@ export class CommitFileContextActions {
     return ENABLED;
   }
 
-  executeCommand(action: CommitFileCommandAction, target: CommitDetailFileContextTarget): void {
+  async executeCommand(action: CommitFileCommandAction, target: CommitDetailFileContextTarget): Promise<void> {
     if (!this.runtime.current(target)) {
       this.runtime.blocked(this.copy().commitFileContextMenu.targetChanged);
       return;
@@ -121,6 +121,23 @@ export class CommitFileContextActions {
       return;
     }
     try {
+      if (action === "copy-name" || action === "copy-relative-path" || action === "copy-absolute-path") {
+        const labels = this.copy().commitFileContextMenu;
+        const pathActions = workspacePathCopyActions(OWNER_ID, target, {
+          copy: labels.copyPath, fileName: labels.fileName,
+          relativePath: labels.relativePath, absolutePath: labels.absolutePath,
+        });
+        const actionId = `${OWNER_ID}.${action}`;
+        const text = textForCopyAction(pathActions, actionId);
+        if (text === null) throw new Error(`Unknown commit file copy action: ${action}`);
+        const result = await this.clipboard.writeText(text);
+        if (result.status === "failure") {
+          this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+          return;
+        }
+        this.runtime.status(copyFeedback(actionId, labels));
+        return;
+      }
       this.invoke(`${OWNER_ID}.${action}`, target);
     } catch (error) {
       this.runtime.error(error);

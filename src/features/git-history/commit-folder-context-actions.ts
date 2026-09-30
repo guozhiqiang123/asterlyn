@@ -23,7 +23,9 @@ export const COMMIT_FOLDER_CONTEXT_OWNER_ID = "git-history.commit-folder-context
 const OWNER_ID = COMMIT_FOLDER_CONTEXT_OWNER_ID;
 const ENABLED = { kind: "enabled" } as const;
 
-export type CommitFolderCommandAction = "show-changes" | "reveal" | "history";
+export type CommitFolderCommandAction =
+  | "show-changes" | "reveal" | "history"
+  | "copy-name" | "copy-relative-path" | "copy-absolute-path";
 
 export interface CommitFolderContextRuntime {
   current(target: CommitDetailDirectoryContextTarget): boolean;
@@ -102,7 +104,7 @@ export class CommitFolderContextActions {
     return action === "reveal" ? this.runtime.policy(target).reveal : ENABLED;
   }
 
-  executeCommand(action: CommitFolderCommandAction, target: CommitDetailDirectoryContextTarget): void {
+  async executeCommand(action: CommitFolderCommandAction, target: CommitDetailDirectoryContextTarget): Promise<void> {
     if (!this.runtime.current(target)) {
       this.runtime.blocked(this.copy().commitFolderContextMenu.targetChanged);
       return;
@@ -113,6 +115,23 @@ export class CommitFolderContextActions {
       return;
     }
     try {
+      if (action === "copy-name" || action === "copy-relative-path" || action === "copy-absolute-path") {
+        const labels = this.copy().commitFolderContextMenu;
+        const pathActions = workspacePathCopyActions(OWNER_ID, target, {
+          copy: labels.copyPath, fileName: labels.folderName,
+          relativePath: labels.relativePath, absolutePath: labels.absolutePath,
+        });
+        const actionId = `${OWNER_ID}.${action}`;
+        const text = textForCopyAction(pathActions, actionId);
+        if (text === null) throw new Error(`Unknown commit folder copy action: ${action}`);
+        const result = await this.clipboard.writeText(text);
+        if (result.status === "failure") {
+          this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+          return;
+        }
+        this.runtime.status(copyPathFeedback(actionId, labels));
+        return;
+      }
       this.invoke(`${OWNER_ID}.${action}`, target);
     } catch (error) {
       this.runtime.error(error);

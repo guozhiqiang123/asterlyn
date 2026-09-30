@@ -46,6 +46,8 @@ export const HISTORY_CONTEXT_COMMANDS: readonly HistoryContextCommandDefinition[
   context(HISTORY_COMMANDS.revealFolder, "folder-reveal", (copy) => copy.commitFolderContextMenu.revealInFiles, "history reveal focused folder files"),
   context(HISTORY_COMMANDS.folderHistory, "folder-history", (copy) => copy.commitFolderContextMenu.historyUpToCommit, "history focused folder path up to commit"),
   context(HISTORY_COMMANDS.refHistory, "ref-history", (copy) => copy.branchContextMenu.viewHistory, "git selected branch tag reference history"),
+  context(HISTORY_COMMANDS.copyRefName, "ref-copy-name", (copy) => copy.branchContextMenu.shortName, "copy selected branch tag short name"),
+  context(HISTORY_COMMANDS.copyRefFullName, "ref-copy-full-name", (copy) => copy.branchContextMenu.fullReference, "copy selected branch tag full reference"),
   context(HISTORY_COMMANDS.switchBranch, "branch-switch", (copy) => copy.branchMutation.titles.switch, "git switch selected local branch"),
   context(HISTORY_COMMANDS.checkoutRemoteBranch, "branch-checkout-remote", (copy) => copy.branchMutation.titles.checkoutRemote, "git checkout selected remote branch"),
   context(HISTORY_COMMANDS.createBranch, "branch-create", (copy) => copy.branchMutation.titles.create, "git create branch from selected reference"),
@@ -58,6 +60,12 @@ export const HISTORY_CONTEXT_COMMANDS: readonly HistoryContextCommandDefinition[
   context(HISTORY_COMMANDS.pushTag, "tag-push", (copy) => copy.tagMutation.titles.push, "git push selected tag to selected remote"),
   context(HISTORY_COMMANDS.deleteLocalTag, "tag-delete-local", (copy) => copy.tagMutation.titles.deleteLocal, "git delete selected local tag"),
   context(HISTORY_COMMANDS.deleteRemoteTag, "tag-delete-remote", (copy) => copy.tagMutation.titles.deleteRemote, "git delete selected tag from selected remote"),
+  context(HISTORY_COMMANDS.copyFileName, "file-copy-name", (copy) => copy.commitFileContextMenu.fileName, "copy selected historical file name"),
+  context(HISTORY_COMMANDS.copyFileRelativePath, "file-copy-relative-path", (copy) => copy.commitFileContextMenu.relativePath, "copy selected historical file relative path"),
+  context(HISTORY_COMMANDS.copyFileAbsolutePath, "file-copy-absolute-path", (copy) => copy.commitFileContextMenu.absolutePath, "copy selected historical file absolute path"),
+  context(HISTORY_COMMANDS.copyFolderName, "folder-copy-name", (copy) => copy.commitFolderContextMenu.folderName, "copy focused historical folder name"),
+  context(HISTORY_COMMANDS.copyFolderRelativePath, "folder-copy-relative-path", (copy) => copy.commitFolderContextMenu.relativePath, "copy focused historical folder relative path"),
+  context(HISTORY_COMMANDS.copyFolderAbsolutePath, "folder-copy-absolute-path", (copy) => copy.commitFolderContextMenu.absolutePath, "copy focused historical folder absolute path"),
 ];
 
 function history(

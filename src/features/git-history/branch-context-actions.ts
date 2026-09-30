@@ -123,6 +123,7 @@ export class BranchContextActions {
       ...this.runtime.policyOptions(target), reasons: this.copy().branchContextMenu,
     });
     if (action === "ref-history") return ENABLED;
+    if (action === "ref-copy-name" || action === "ref-copy-full-name") return ENABLED;
     if (action === "branch-switch") return target.branch.kind !== "tag" && policy.switchTarget
       ? policy.switch : blocked(this.copy().branchContextMenu.targetChanged);
     if (action === "branch-checkout-remote") return target.branch.kind === "remote" && policy.remoteCheckout
@@ -148,7 +149,7 @@ export class BranchContextActions {
     return policy.tagMutation;
   }
 
-  executeCommand(action: BranchContextCommandAction, target: BranchContextTarget): void {
+  async executeCommand(action: BranchContextCommandAction, target: BranchContextTarget): Promise<void> {
     const availability = this.commandAvailability(action, target);
     if (availability.kind !== "enabled") {
       this.runtime.blocked(availability.kind === "busy" ? availability.label : availability.reason);
@@ -160,6 +161,19 @@ export class BranchContextActions {
       ...this.runtime.policyOptions(target), reasons: this.copy().branchContextMenu,
     });
     try {
+      if (action === "ref-copy-name" || action === "ref-copy-full-name") {
+        const labels = this.copy().branchContextMenu;
+        const actionId = `${OWNER_ID}.${action === "ref-copy-name" ? "copy-short" : "copy-full"}`;
+        const text = textForCopyAction(branchCopyActions(target.branch, labels), actionId);
+        if (text === null) throw new Error(`Unknown Branches copy action: ${action}`);
+        const result = await this.clipboard.writeText(text);
+        if (result.status === "failure") {
+          this.runtime.error(result.error ?? new Error(labels.clipboardUnavailable));
+          return;
+        }
+        this.runtime.status(action === "ref-copy-name" ? labels.copiedShort : labels.copiedFull);
+        return;
+      }
       this.invokeCommand(action, target, policy);
     } catch (error) {
       this.runtime.error(error);

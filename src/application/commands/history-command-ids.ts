@@ -1,7 +1,7 @@
 import { commandId } from "./command-service.ts";
 
 export type BranchContextCommandAction =
-  | "ref-history"
+  | "ref-history" | "ref-copy-name" | "ref-copy-full-name"
   | "branch-switch" | "branch-checkout-remote" | "branch-create" | "branch-rename"
   | "branch-merge" | "branch-rebase" | "branch-delete"
   | "tag-checkout" | "tag-merge" | "tag-push" | "tag-delete-local" | "tag-delete-remote";
@@ -10,7 +10,9 @@ export type HistoryContextCommandAction =
   | "load-more" | "compare-selection"
   | "file-show-diff" | "file-open-historical" | "file-compare-current"
   | "file-open-current" | "file-restore" | "file-history"
+  | "file-copy-name" | "file-copy-relative-path" | "file-copy-absolute-path"
   | "folder-show-changes" | "folder-reveal" | "folder-history"
+  | "folder-copy-name" | "folder-copy-relative-path" | "folder-copy-absolute-path"
   | BranchContextCommandAction;
 
 export const HISTORY_COMMANDS = {
@@ -39,6 +41,8 @@ export const HISTORY_COMMANDS = {
   revealFolder: commandId("history.folder.reveal"),
   folderHistory: commandId("history.folder.history"),
   refHistory: commandId("git.ref.history"),
+  copyRefName: commandId("git.ref.copyName"),
+  copyRefFullName: commandId("git.ref.copyFullName"),
   switchBranch: commandId("git.branch.switch"),
   checkoutRemoteBranch: commandId("git.branch.checkoutRemote"),
   createBranch: commandId("git.branch.create"),
@@ -51,4 +55,10 @@ export const HISTORY_COMMANDS = {
   pushTag: commandId("git.tag.push"),
   deleteLocalTag: commandId("git.tag.deleteLocal"),
   deleteRemoteTag: commandId("git.tag.deleteRemote"),
+  copyFileName: commandId("history.file.copyName"),
+  copyFileRelativePath: commandId("history.file.copyRelativePath"),
+  copyFileAbsolutePath: commandId("history.file.copyAbsolutePath"),
+  copyFolderName: commandId("history.folder.copyName"),
+  copyFolderRelativePath: commandId("history.folder.copyRelativePath"),
+  copyFolderAbsolutePath: commandId("history.folder.copyAbsolutePath"),
 } as const;

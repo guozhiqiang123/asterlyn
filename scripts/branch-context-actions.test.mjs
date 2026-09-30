@@ -212,4 +212,10 @@ test("provider opens without executing and routes history, copy, and reviewed mu
     ["operation", "merge", branch.fullName],
     ["mutation", "delete", branch.fullName, ""],
   ]);
+  await provider.executeCommand("ref-copy-name", target(branch));
+  await provider.executeCommand("ref-copy-full-name", target(branch));
+  assert.deepEqual(events.slice(-4), [
+    ["copy", branch.name], ["status", "Branch name copied"],
+    ["copy", branch.fullName], ["status", "Full branch reference copied"],
+  ]);
 });
