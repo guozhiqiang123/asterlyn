@@ -216,7 +216,7 @@ selection command resolves and revalidates the current exact target when invoked
 | Open outgoing Diff/current file | navigation | `remote.push.file.diff`, `remote.push.file.openCurrent` | **Custom** |
 | Toggle Push file tree; expand/collapse | presentation | `remote.push.files.view.toggle`, `remote.push.files.expandAll`, `remote.push.files.collapseAll` | **Custom** |
 | Load more outgoing commits | read | `remote.push.loadMore` | **Custom** |
-| Navigate/present outgoing Diff | navigation/presentation | shared `diff.*` commands when Push Diff is active | **Gap** |
+| Navigate/present outgoing Diff | navigation/presentation | shared `diff.*` commands when Push Diff is active | **Custom**; dialog-scoped commands route through Push Diff controls |
 | Save/recheck authentication | credential | authentication dialog | **Local**; focus and secret-handling boundary owns Enter/Escape |
 
 ## 10. Reviewed Git operations and conflict resolution

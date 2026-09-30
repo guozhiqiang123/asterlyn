@@ -12,7 +12,7 @@ const SURFACE_SCOPES: readonly CommandFocusScope[] = [
   "workbench", "input", "editor", "diff", "history", "terminal",
 ];
 const EDITOR_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "editor"];
-const DIFF_SCOPES: readonly CommandFocusScope[] = ["workbench", "diff"];
+const DIFF_SCOPES: readonly CommandFocusScope[] = ["workbench", "diff", "dialog"];
 
 export const FILES_EDITOR_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   files(FILES_COMMANDS.locateActive, "#locate-project-file", (copy) => copy.locateCurrentFile, "locate reveal current active file"),
@@ -25,15 +25,15 @@ export const FILES_EDITOR_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   editor(EDITOR_COMMANDS.markdownSource, '[data-markdown-mode="source"]', (catalog) => catalog.editor.sourceTitle, "markdown source edit"),
   editor(EDITOR_COMMANDS.markdownSplit, '[data-markdown-mode="split"]', (catalog) => catalog.editor.splitTitle, "markdown split preview"),
   editor(EDITOR_COMMANDS.markdownPreview, '[data-markdown-mode="preview"]', (catalog) => catalog.editor.previewTitle, "markdown rendered preview"),
-  diff(DIFF_COMMANDS.previousChange, '[data-diff-action="previous-change"]', (copy) => copy.previousChange, "diff previous hunk change"),
-  diff(DIFF_COMMANDS.nextChange, '[data-diff-action="next-change"]', (copy) => copy.nextChange, "diff next hunk change"),
-  diff(DIFF_COMMANDS.previousFile, '[data-diff-action="previous-file"]', (copy) => copy.previousFile, "diff previous file"),
-  diff(DIFF_COMMANDS.nextFile, '[data-diff-action="next-file"]', (copy) => copy.nextFile, "diff next file"),
-  diff(DIFF_COMMANDS.openSource, '[data-diff-action="open-source"]', (copy) => copy.openSource, "diff source reveal project"),
-  diff(DIFF_COMMANDS.toggleUnchanged, '[data-diff-action="toggle-unchanged"]', (copy) => copy.expandUnchanged, "diff unchanged context expand collapse"),
-  diff(DIFF_COMMANDS.unified, '[data-diff-layout="unified"]', (copy) => copy.unifiedTitle, "diff unified layout"),
-  diff(DIFF_COMMANDS.split, '[data-diff-layout="split"]', (copy) => copy.sideBySideTitle, "diff split side by side layout"),
-  diff(DIFF_COMMANDS.toggleWhitespace, "[data-diff-whitespace]", (copy) => copy.whitespaceTitle, "diff whitespace characters"),
+  diff(DIFF_COMMANDS.previousChange, '#push-diff-backdrop [data-push-diff-action="previous-change"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-action="previous-change"]', (copy) => copy.previousChange, "diff previous hunk change"),
+  diff(DIFF_COMMANDS.nextChange, '#push-diff-backdrop [data-push-diff-action="next-change"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-action="next-change"]', (copy) => copy.nextChange, "diff next hunk change"),
+  diff(DIFF_COMMANDS.previousFile, '#push-diff-backdrop [data-push-diff-action="previous-file"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-action="previous-file"]', (copy) => copy.previousFile, "diff previous file"),
+  diff(DIFF_COMMANDS.nextFile, '#push-diff-backdrop [data-push-diff-action="next-file"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-action="next-file"]', (copy) => copy.nextFile, "diff next file"),
+  diff(DIFF_COMMANDS.openSource, '#push-diff-backdrop [data-push-diff-action="open-source"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-action="open-source"]', (copy) => copy.openSource, "diff source reveal project"),
+  diff(DIFF_COMMANDS.toggleUnchanged, '#push-diff-backdrop [data-push-diff-action="toggle-unchanged"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-action="toggle-unchanged"]', (copy) => copy.expandUnchanged, "diff unchanged context expand collapse"),
+  diff(DIFF_COMMANDS.unified, '#push-diff-backdrop [data-push-diff-layout="unified"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-layout="unified"]', (copy) => copy.unifiedTitle, "diff unified layout"),
+  diff(DIFF_COMMANDS.split, '#push-diff-backdrop [data-push-diff-layout="split"], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-layout="split"]', (copy) => copy.sideBySideTitle, "diff split side by side layout"),
+  diff(DIFF_COMMANDS.toggleWhitespace, "#push-diff-backdrop [data-push-diff-whitespace], .app-shell:not(:has(#push-diff-backdrop)) [data-diff-whitespace]", (copy) => copy.whitespaceTitle, "diff whitespace characters"),
 ];
 
 export interface ProjectFilesContextCommandDefinition {

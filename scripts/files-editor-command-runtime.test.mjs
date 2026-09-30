@@ -57,11 +57,12 @@ test("Files, Editor, and Diff commands invoke the existing enabled button route"
   const targets = new Map([
     ["#locate-project-file", locate],
     ['.editor-tab[aria-selected="true"] [data-close-editor-tab-index], .editor-tab[aria-selected="true"] [data-close-editor-pinned-preview-index], .editor-tab[aria-selected="true"] [data-close-editor-preview]', close],
-    ['[data-diff-action="next-change"]', nextChange],
   ]);
   const registry = new CommandRegistry();
   const release = registerFilesEditorCommands(registry, {
-    root: { querySelector: (selector) => targets.get(selector) ?? null },
+    root: { querySelector: (selector) => selector.includes('[data-diff-action="next-change"]')
+      ? nextChange
+      : targets.get(selector) ?? null },
     catalog,
   });
 
