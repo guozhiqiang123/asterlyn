@@ -1,5 +1,7 @@
 import {
   CommandRegistry,
+  TOOL_FOCUS_SCOPES,
+  WORKBENCH_FOCUS_SCOPES,
   type CommandAvailability,
   type CommandDescriptor,
   type CommandFocusScope,
@@ -10,15 +12,6 @@ import type { LocaleCatalog, NavigationCommandId } from "../localization/catalog
 import type { ActivityTool } from "../shell/activity-order.ts";
 import { WORKBENCH_DOM_COMMANDS } from "../presentation/workbench-command-targets.ts";
 import { registerDomCommands } from "./dom-command-runtime.ts";
-
-const WORKBENCH_SCOPES: readonly CommandFocusScope[] = [
-  "workbench",
-  "input",
-  "editor",
-  "diff",
-  "history",
-];
-const TOOL_SCOPES: readonly CommandFocusScope[] = [...WORKBENCH_SCOPES, "terminal"];
 
 export interface WorkbenchCommandRuntimeOptions {
   readonly root: ParentNode;
@@ -65,7 +58,7 @@ export function registerWorkbenchCommands(
     category: CommandDescriptor["category"],
     availability: () => CommandAvailability,
     execute: CommandDescriptor["execute"],
-    scopes: readonly CommandFocusScope[] = WORKBENCH_SCOPES,
+    scopes: readonly CommandFocusScope[] = WORKBENCH_FOCUS_SCOPES,
   ): CommandDescriptor => ({
     id,
     category,
@@ -80,7 +73,7 @@ export function registerWorkbenchCommands(
     {
       id: WORKBENCH_COMMANDS.commandPalette,
       category: "workbench",
-      userBindingScopes: [...WORKBENCH_SCOPES, "terminal"],
+      userBindingScopes: TOOL_FOCUS_SCOPES,
       title: () => options.catalog().navigation.titles.commands,
       detail: () => options.catalog().navigation.hints.commands,
       keywords: () => "commands actions palette",
@@ -128,7 +121,7 @@ export function registerWorkbenchCommands(
     {
       id: WORKBENCH_COMMANDS.historyFind,
       category: "view",
-      userBindingScopes: ["history"],
+      userBindingScopes: ["history", "history-input"],
       title: () => options.catalog().navigation.commands["find-current"].label,
       detail: () => options.catalog().navigation.commands["find-current"].detail,
       keywords: () => "history filter search",
@@ -162,7 +155,7 @@ export function registerWorkbenchCommands(
       "workbench",
       enabled,
       () => options.openSettings(),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.closeSettings,
@@ -180,7 +173,7 @@ export function registerWorkbenchCommands(
       "view",
       workspace,
       () => options.toggleTool("files"),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleSearch,
@@ -188,7 +181,7 @@ export function registerWorkbenchCommands(
       "view",
       workspace,
       () => options.toggleTool("search"),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleChanges,
@@ -196,7 +189,7 @@ export function registerWorkbenchCommands(
       "view",
       git,
       () => options.toggleTool("changes"),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleGit,
@@ -204,7 +197,7 @@ export function registerWorkbenchCommands(
       "view",
       git,
       () => options.toggleTool("branches"),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleStash,
@@ -212,7 +205,7 @@ export function registerWorkbenchCommands(
       "view",
       git,
       () => options.toggleTool("stash"),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.toggleTerminal,
@@ -220,7 +213,7 @@ export function registerWorkbenchCommands(
       "view",
       workspace,
       () => options.toggleTool("terminal"),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.hideLeftTool,
@@ -232,7 +225,7 @@ export function registerWorkbenchCommands(
           ? enabled()
           : { enabled: false, reason: options.catalog().settings.keybindings.leftToolRequired },
       () => options.hideLeftTool(),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
     navigation(
       WORKBENCH_COMMANDS.hideBottomTool,
@@ -244,7 +237,7 @@ export function registerWorkbenchCommands(
           ? enabled()
           : { enabled: false, reason: options.catalog().settings.keybindings.bottomToolRequired },
       () => options.hideBottomTool(),
-      TOOL_SCOPES,
+      TOOL_FOCUS_SCOPES,
     ),
   ];
   const releases = descriptors.map((descriptor) => registry.register(descriptor));

@@ -50,6 +50,26 @@ button. Such commands normally ship **unassigned** so users opt in deliberately.
 appear in Settings and the command palette while unavailable commands remain visible with a precise
 blocked reason.
 
+### macOS Android Studio compatibility defaults
+
+The macOS defaults include a maintained compatibility layer derived from the effective, currently
+used Android Studio **2026.1.4** keymap `macOS copy1` (parent `Mac OS X 10.5+`), inspected on
+2026-09-30. Only shortcuts with an equivalent Asterlyn command and the same safety semantics are
+carried over. The implementation is a manually authored Asterlyn mapping: it does not import an IDE
+keymap, copy IDE implementation code, or depend on Android Studio at runtime.
+
+The active keymap explicitly removes shortcuts for Go to File, Refresh, Replace, Show Diff, and
+several IDE-only actions. Asterlyn does not resurrect those removed IDE bindings. Existing Asterlyn
+navigation defaults remain available where they do not collide with the compatibility layer. On
+macOS, Refresh moves from Command+R to the active IDE's Reload All from Disk equivalent,
+Command+Shift+Y, so Command+R can retain the user's Rename convention. Modifier-only Search
+Everywhere gestures, actions without an Asterlyn semantic equivalent, and direct destructive
+operations remain outside the preset.
+
+When this compatibility snapshot is updated, review the effective parent plus personal overrides,
+record the source product/keymap/date here, update the per-surface rows below, and run the automated
+platform-resolution and conflict gates. Never infer a shortcut from an action name alone.
+
 ## 1. Workbench and project
 
 | User action | Family | Command / local route | State / default |
@@ -60,7 +80,7 @@ blocked reason.
 | Go to file | navigation | `workspace.quickOpen.open` | **Default:** Primary+P |
 | Open recent files | navigation | `workspace.recentFiles.open` | **Default:** Primary+E |
 | Find in files / reviewed replace | navigation | `workspace.search.open` | **Default:** Primary+Shift+F |
-| Refresh project and local Git state | read | `workbench.refresh` | **Default:** Primary+R |
+| Refresh project and local Git state | read | `workbench.refresh` | **Default:** Command+Shift+Y on macOS; Primary+R on Windows/Linux |
 | Open Settings | navigation | `workbench.settings.open` | **Default:** Primary+, |
 | Return from Settings | navigation | `workbench.settings.close` | **Custom**; Escape remains **Local** |
 | Dismiss visible error toast | presentation | `workbench.notification.dismiss` | **Custom**, available only while a notification is visible |
@@ -72,31 +92,31 @@ blocked reason.
 
 | User action | Family | Command | State / default |
 | --- | --- | --- | --- |
-| Show/hide Files | presentation | `workbench.tool.files.toggle` | **Custom** |
-| Show/hide Search results | presentation | `workbench.tool.search.toggle` | **Custom** |
-| Show/hide Changes | presentation | `workbench.tool.changes.toggle` | **Custom** |
-| Show/hide Branches and Log | presentation | `workbench.tool.branches.toggle` | **Custom** |
+| Show/hide Files | presentation | `workbench.tool.files.toggle` | **Default:** Command+1 on macOS; **Custom** elsewhere |
+| Show/hide Search results | presentation | `workbench.tool.search.toggle` | **Default:** Command+3 on macOS; **Custom** elsewhere |
+| Show/hide Changes | presentation | `workbench.tool.changes.toggle` | **Default:** Command+0 on macOS; **Custom** elsewhere |
+| Show/hide Branches and Log | presentation | `workbench.tool.branches.toggle` | **Default:** Command+9 on macOS; **Custom** elsewhere |
 | Show/hide Stash | presentation | `workbench.tool.stash.toggle` | **Custom** |
-| Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Custom** |
+| Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Default:** Option+F12 on macOS; **Custom** elsewhere |
 | Hide the active left tool | presentation | `workbench.tool.left.hide` | **Custom** |
 | Hide the active bottom tool | presentation | `workbench.tool.bottom.hide` | **Custom** |
 | Resize tool panes | presentation | keyboard-operable splitters | **Local** |
 
-Default number/chord bindings for tool windows are intentionally omitted: these presentation
-commands are registered and discoverable, while users choose combinations that fit their workflow
-without Asterlyn claiming common editor or terminal keys.
+The macOS tool-window numbers mirror the maintained Android Studio compatibility snapshot. Other
+platforms remain unassigned until an installed-platform keymap is deliberately selected and
+verified; Asterlyn does not translate Command-number bindings speculatively.
 
 ## 3. Files
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Locate the active editor file | navigation | `files.active.locate` | **Custom** |
-| Expand selected folder recursively | presentation | `files.folder.expand` | **Custom** |
-| Collapse selected folder recursively | presentation | `files.folder.collapse` | **Custom** |
-| Open selected file | navigation | `files.selection.open` | **Custom**; Enter/double-click remains **Local** |
-| Create file at selected target | write | `files.file.create` | **Custom** |
-| Rename selected item | write | `files.selection.rename` | **Custom** |
-| Cut, copy, paste selected item | write | `files.selection.cut`, `files.selection.copy`, `files.selection.paste` | **Custom** |
+| Locate the active editor file | navigation | `files.active.locate` | **Default:** Option+F1 on macOS; **Custom** elsewhere |
+| Expand selected folder recursively | presentation | `files.folder.expand` | **Default:** Control+= on macOS; **Custom** elsewhere |
+| Collapse selected folder recursively | presentation | `files.folder.collapse` | **Default:** Control+- on macOS; **Custom** elsewhere |
+| Open selected file | navigation | `files.selection.open` | **Default:** F4 and Option+S on macOS; Enter/double-click remains **Local** |
+| Create file at selected target | write | `files.file.create` | **Default:** Command+N on macOS; **Custom** elsewhere |
+| Rename selected item | write | `files.selection.rename` | **Default:** Command+R on macOS; **Custom** elsewhere |
+| Cut, copy, paste selected item | write | `files.selection.cut`, `files.selection.copy`, `files.selection.paste` | **Default:** Command+X/C/V on macOS Files focus; **Custom** elsewhere |
 | Reveal selected item in the OS file manager | navigation | `files.selection.reveal` | **Custom** |
 | Copy name, relative path, absolute path | read | `files.selection.copyName`, `files.selection.copyRelativePath`, `files.selection.copyAbsolutePath` | **Custom** |
 | Show Git history for selected path | navigation | `files.selection.history` | **Custom** |
@@ -123,18 +143,22 @@ without Asterlyn claiming common editor or terminal keys.
 
 ## 5. Editor, Markdown, and Diff
 
+The keyboard-event target, rather than the last selected tree row, owns Editor/Diff routing. Every
+CodeMirror surface keeps read-only content focusable through the shared focus-ownership extension;
+this is a routing and accessibility contract, not permission to modify a read-only document.
+
 | User action | Family | Command / local route | State / default |
 | --- | --- | --- | --- |
 | Find/replace in active editor or Diff | editing | `editor.find.open` | **Default:** Primary+F in editor/Diff scopes |
 | Save active editable file | write | `editor.file.save` | **Default:** Primary+S |
-| Close active tab/preview | navigation | `editor.tab.close` | **Custom**; dirty confirmation remains intact |
-| Activate previous/next tab | navigation | `editor.tab.previous`, `editor.tab.next` | **Custom**; follows the visible tab order and wraps |
-| Open the tab list | navigation | `editor.tabList.toggle` | **Custom** |
+| Close active tab/preview | navigation | `editor.tab.close` | **Default:** Control+Shift+F4 on macOS; dirty confirmation remains intact; Command+W stays window-reserved |
+| Activate previous/next tab | navigation | `editor.tab.previous`, `editor.tab.next` | **Default:** Control+Shift+Left/Right on macOS; follows the visible tab order and wraps |
+| Open the tab list | navigation | `editor.tabList.toggle` | **Default:** Control+Shift+Down on macOS; **Custom** elsewhere |
 | Select a tab or close a named tab | navigation | tab/list component interaction | **Local** dynamic target |
 | Markdown Source / Split / Preview | presentation | `editor.markdown.source`, `editor.markdown.split`, `editor.markdown.preview` | **Custom** |
-| Previous/next changed hunk | navigation | `diff.change.previous`, `diff.change.next` | **Custom** |
-| Previous/next file in current Diff set | navigation | `diff.file.previous`, `diff.file.next` | **Custom** |
-| Open current Diff source file | navigation | `diff.source.open` | **Custom** |
+| Previous/next changed hunk | navigation | `diff.change.previous`, `diff.change.next` | **Default:** Control+Shift+Left/Right on macOS Diff focus; **Custom** elsewhere |
+| Previous/next file in current Diff set | navigation | `diff.file.previous`, `diff.file.next` | **Default:** Command+Shift+[/] on macOS; **Custom** elsewhere |
+| Open current Diff source file | navigation | `diff.source.open` | **Default:** F4 and Option+S on macOS Diff focus; **Custom** elsewhere |
 | Expand/collapse unchanged Diff context | presentation | `diff.unchanged.toggle` | **Custom** |
 | Unified / side-by-side Diff | presentation | `diff.layout.unified`, `diff.layout.split` | **Custom** |
 | Show/hide whitespace | presentation | `diff.whitespace.toggle` | **Custom** |
@@ -148,13 +172,13 @@ without Asterlyn claiming common editor or terminal keys.
 | Refresh Changes | read | `changes.refresh` | **Custom**; routes through canonical project refresh |
 | Include/exclude selected path in commit | write selection | `changes.selection.include.toggle` | **Custom** |
 | Open selected working Diff | navigation | `changes.selection.diff.open` | **Custom** |
-| Jump to selected source file | navigation | `changes.selection.source.open` | **Custom** |
+| Jump to selected source file | navigation | `changes.selection.source.open` | **Default:** F4 and Option+S on macOS Changes focus |
 | Restore selected tracked change to `HEAD` | destructive | `changes.selection.restore` | **Custom**, unassigned and confirmed/recoverable |
 | Move selected untracked path to Trash | destructive | `changes.selection.trash` | **Custom**, unassigned and confirmed |
 | Resolve selected conflict | write | `changes.selection.conflict.resolve` | **Custom** |
 | Show selected path history | navigation | `changes.selection.history` | **Custom** |
 | Copy selected change name, relative path, absolute path | read | `changes.selection.copyName`, `changes.selection.copyRelativePath`, `changes.selection.copyAbsolutePath` | **Custom** |
-| Toggle tree/flat view | presentation | `changes.view.toggle` | **Custom** |
+| Toggle tree/flat view | presentation | `changes.view.toggle` | **Default:** Control+P on macOS; **Custom** elsewhere |
 | Expand/collapse all Changes folders | presentation | `changes.folders.expandAll`, `changes.folders.collapseAll` | **Custom** |
 | Stage all Unversioned / Trash all Unversioned | write/destructive | `changes.unversioned.stageAll`, `changes.unversioned.trashAll` | **Custom**; Trash remains unassigned and confirmed |
 | Commit included files | write | `changes.commit.create` | **Custom**; Primary+Enter remains **Local** while the commit message is focused |
@@ -181,12 +205,12 @@ without Asterlyn claiming common editor or terminal keys.
 | Toggle commit-file tree/flat, expand/collapse | presentation | `history.files.view.toggle`, `history.files.expandAll`, `history.files.collapseAll` | **Custom** |
 | Swap the before/after sides of a commit comparison | presentation | `history.comparison.swap` | **Custom** |
 | Open selected historical file Diff | navigation | `history.file.diff.open` | **Custom** |
-| Open historical file, compare current, open current | navigation | `history.file.openHistorical`, `history.file.compareCurrent`, `history.file.openCurrent` | **Custom** |
+| Open historical file, compare current, open current | navigation | `history.file.openHistorical`, `history.file.compareCurrent`, `history.file.openCurrent` | Open current is **Default:** F4 and Option+S on macOS History focus; the others are **Custom** |
 | Restore file from selected commit | destructive | `history.file.restore` | **Custom**, unassigned and confirmed |
 | Show selected file history up to the commit | navigation | `history.file.history` | **Custom** |
 | Show folder changes / reveal in Files / path history | navigation | `history.folder.changes`, `history.folder.reveal`, `history.folder.history` | **Custom**; folder commands use the focused directory |
 | Show branch/tag history | navigation | `git.ref.history` | **Custom**; exact current ref is revalidated |
-| Switch/checkout/create/rename branch | write | `git.branch.switch`, `git.branch.checkoutRemote`, `git.branch.create`, `git.branch.rename` | **Custom** |
+| Switch/checkout/create/rename branch | write | `git.branch.switch`, `git.branch.checkoutRemote`, `git.branch.create`, `git.branch.rename` | Create is **Default:** Command+Option+N and Rename is **Default:** Command+R on macOS History focus; the others are **Custom** |
 | Merge/rebase selected ref | write | `git.branch.merge`, `git.branch.rebase` | **Custom**, reviewed Git-operation route only |
 | Delete local branch | destructive | `git.branch.delete` | **Custom**, unassigned and confirmed |
 | Checkout/merge/delete local tag | write/destructive | `git.tag.checkout`, `git.tag.merge`, `git.tag.deleteLocal` | **Custom**, destructive action unassigned and confirmed |
@@ -216,8 +240,8 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Update current branch | network write | `remote.update.open` | **Custom**, opens existing review/strategy flow |
-| Review Push | network write | `remote.push.open` | **Custom**, opens existing Push review |
+| Update current branch | network write | `remote.update.open` | **Default:** Command+T on macOS, opens existing review/strategy flow; **Custom** elsewhere |
+| Review Push | network write | `remote.push.open` | **Default:** Command+Shift+K on macOS, opens existing Push review; **Custom** elsewhere |
 | Cancel active remote operation | network write | `remote.operation.cancel` | **Custom**, unassigned |
 | Manage remotes | write | `remote.manage.open` | **Custom** |
 | Confirm Update or Push | network write | dialog confirmation | **Local**; never a global shortcut |
@@ -233,7 +257,7 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Target command | State |
 | --- | --- | --- | --- |
-| Open Git operations launcher | navigation | `git.operation.open` | **Custom**; opens the existing reviewed-operation setup route |
+| Open Git operations launcher | navigation | `git.operation.open` | **Default:** Control+V on macOS; opens the existing reviewed-operation setup route; **Custom** elsewhere |
 | Review recoverable operations | navigation | `git.operation.recovery.open` | **Custom**; retains recovery listing, verification, and undo safeguards |
 | Prepare Merge/Cherry-pick/Rebase/Squash | write | launcher/form controls | **Local** until a complete exact plan exists |
 | Execute, Continue, Skip, Abort | destructive/write | reviewed operation dialog/banner | **Local**; no global default and no bypass of confirmation |
@@ -244,7 +268,7 @@ selection command resolves and revalidates the current exact target when invoked
 
 | User action | Family | Command / route | State |
 | --- | --- | --- | --- |
-| Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Custom**, explicit terminal interception only when assigned |
+| Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Default:** Option+F12 on macOS with explicit terminal interception; **Custom** elsewhere |
 | Open command palette from Terminal | navigation | `workbench.commandPalette.open` | **Default:** Primary+Shift+P, explicitly intercepted |
 | Clear terminal display | presentation | `terminal.clear` | **Custom**; terminal-scoped and explicitly intercepted only when assigned |
 | Start a new session after idle/exit/error | process | `terminal.session.restart` | **Custom**; reuses the supervised close/start lifecycle |

@@ -194,6 +194,22 @@ dialog | shortcut-recorder | settings | terminal | text-editor | diff-editor |
 history | files | changes | branches | workbench-input | workbench
 ```
 
+Implementation note (2026-09-30): the concrete resolver uses mutually exclusive `files`,
+`changes`, `search`, `stash`, `history`, `editor`, and `diff` scopes. `history-input` preserves the
+History find shortcut without exposing other History commands while typing. `remote`,
+`replacement`, and generic `dialog` are distinct modal scopes, and ordinary editable controls route
+to `input`. Workbench-wide scope sets are centralized; feature commands declare only their owning
+surface. Automated gates require every shipped binding scope to be declared by its command and
+reject exact or prefix conflicts in every overlapping scope.
+
+Focus scope is determined from the actual keyboard-event target, not from the last selected feature
+model. Every CodeMirror adapter therefore installs the shared focus-ownership extension. When a
+document side is read-only and CodeMirror removes `contenteditable`, the extension gives its content
+an explicit tab stop and transfers pointer focus to that content without enabling mutation. Text,
+read-only Diff, editable Diff, and conflict views must all retain this extension, including after a
+dynamic read-only reconfiguration. A visible caret or text selection alone is not accepted as proof
+that the editor owns keyboard routing.
+
 The snapshot also carries typed capabilities such as workspace open, Git repository available,
 editable document active, dirty document, modal open, and command surface open. Application code
 may define predicates from these fields; users cannot author expressions in v1.
@@ -378,6 +394,11 @@ The adapter uses one reconfigurable compartment per retained editor state. A pro
 reconfigures mounted and cached editor states without recreating documents, losing history, or
 mounting hidden views. Read-only Diff never receives mutation commands; editable Diff receives save
 only through the same command service.
+
+All CodeMirror families also use one focus-ownership extension. Read-only content stays focusable
+and reports a `.cm-editor` event target so application shortcuts resolve in `diff` or `editor`
+scope after a pointer click. This affects routing only: the `EditorState.readOnly` and
+`EditorView.editable` facets remain the mutation authority.
 
 ### Terminal
 

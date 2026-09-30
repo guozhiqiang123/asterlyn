@@ -1,4 +1,5 @@
 import type { CommandFocusScope } from "../application/commands/command-service.ts";
+import type { BottomTool, LeftTool } from "./layout-state.ts";
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
 import type { KeybindingController } from "../features/keybindings/keybinding-controller.ts";
 import type { LocaleCatalog } from "../localization/catalog.ts";
@@ -149,17 +150,32 @@ export function shortcutFocusScope(
   target: EventTarget | null,
   settingsOpen: boolean,
   activeDocumentKind: string,
-  bottomTool: string | null,
+  leftTool: LeftTool,
+  bottomTool: BottomTool,
 ): CommandFocusScope {
   if (settingsOpen) return "settings";
   if (!(target instanceof Element)) return "workbench";
-  if (target.closest("[role='alertdialog'], [role='dialog']:not(.command-surface)")) return "dialog";
+  const editable = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement || Boolean(target.closest("[contenteditable='true']"));
+  if (target.closest("#push-diff-backdrop")) return "diff";
+  if (target.closest("#remote-action-dialog")) return editable ? "input" : "remote";
+  if (target.closest("#workspace-replacement-dialog")) return editable ? "input" : "replacement";
+  if (target.closest("[role='alertdialog'], [role='dialog']:not(.command-surface)")) {
+    return editable ? "input" : "dialog";
+  }
   if (target.closest(".xterm")) return "terminal";
   if (target.closest(".cm-editor")) return activeDocumentKind === "project-file" ? "editor" : "diff";
-  if (target.closest("#bottom-tool") && bottomTool === "branches") return "history";
-  if (
-    target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement || target.closest("[contenteditable='true']")
-  ) return "input";
+  if (target.closest("#bottom-tool") && bottomTool === "branches") {
+    return editable ? "history-input" : "history";
+  }
+  if (editable) return "input";
+  if (target.closest("#left-tool")) {
+    if (leftTool === "files") return "files";
+    if (leftTool === "changes") return "changes";
+  }
+  if (target.closest("#bottom-tool")) {
+    if (bottomTool === "stash") return "stash";
+    if (bottomTool === "find" || bottomTool === "replace") return "search";
+  }
   return "workbench";
 }

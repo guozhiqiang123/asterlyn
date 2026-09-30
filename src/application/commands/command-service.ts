@@ -9,12 +9,39 @@ export type CommandCategory =
 export type CommandFocusScope =
   | "workbench"
   | "input"
+  | "files"
+  | "changes"
+  | "search"
+  | "stash"
   | "editor"
   | "diff"
   | "history"
+  | "history-input"
   | "terminal"
   | "settings"
+  | "remote"
+  | "replacement"
   | "dialog";
+
+/** Non-modal scopes where workbench-level commands remain eligible. */
+export const WORKBENCH_FOCUS_SCOPES: readonly CommandFocusScope[] = [
+  "workbench",
+  "input",
+  "files",
+  "changes",
+  "search",
+  "stash",
+  "editor",
+  "diff",
+  "history",
+  "history-input",
+];
+
+/** Workbench scopes plus the terminal boundary used by explicit tool-window shortcuts. */
+export const TOOL_FOCUS_SCOPES: readonly CommandFocusScope[] = [
+  ...WORKBENCH_FOCUS_SCOPES,
+  "terminal",
+];
 
 export type CommandInvocationSource = "keyboard" | "palette" | "button";
 

@@ -1,4 +1,8 @@
-import type { CommandFocusScope, CommandId } from "../application/commands/command-service.ts";
+import {
+  WORKBENCH_FOCUS_SCOPES,
+  type CommandFocusScope,
+  type CommandId,
+} from "../application/commands/command-service.ts";
 import {
   REMOTE_COMMANDS,
   type RemoteCommandAction,
@@ -6,9 +10,8 @@ import {
 import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
-const GLOBAL_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "editor", "diff", "history"];
-const CANCEL_SCOPES: readonly CommandFocusScope[] = [...GLOBAL_SCOPES, "dialog"];
-const REVIEW_SCOPES: readonly CommandFocusScope[] = ["dialog"];
+const CANCEL_SCOPES: readonly CommandFocusScope[] = [...WORKBENCH_FOCUS_SCOPES, "remote"];
+const REVIEW_SCOPES: readonly CommandFocusScope[] = ["remote"];
 
 export interface RemoteCommandDefinition {
   readonly id: CommandId;
@@ -21,10 +24,10 @@ export interface RemoteCommandDefinition {
 }
 
 export const REMOTE_COMMAND_DEFINITIONS: readonly RemoteCommandDefinition[] = [
-  remote(REMOTE_COMMANDS.openUpdate, "open-update", GLOBAL_SCOPES, (catalog) => catalog.remote.update, "remote update pull current branch", "#remote-update"),
-  remote(REMOTE_COMMANDS.openPush, "open-push", GLOBAL_SCOPES, (catalog) => catalog.remote.push, "remote push publish review current branch", "#remote-push"),
+  remote(REMOTE_COMMANDS.openUpdate, "open-update", WORKBENCH_FOCUS_SCOPES, (catalog) => catalog.remote.update, "remote update pull current branch", "#remote-update"),
+  remote(REMOTE_COMMANDS.openPush, "open-push", WORKBENCH_FOCUS_SCOPES, (catalog) => catalog.remote.push, "remote push publish review current branch", "#remote-push"),
   remote(REMOTE_COMMANDS.cancelOperation, "cancel-operation", CANCEL_SCOPES, (catalog) => catalog.remote.cancelRemoteOperation, "cancel active remote update push", "#cancel-remote-operation"),
-  remote(REMOTE_COMMANDS.manage, "manage", GLOBAL_SCOPES, (catalog) => catalog.remote.management.title, "manage add edit delete git remotes"),
+  remote(REMOTE_COMMANDS.manage, "manage", WORKBENCH_FOCUS_SCOPES, (catalog) => catalog.remote.management.title, "manage add edit delete git remotes"),
   remote(REMOTE_COMMANDS.openFileDiff, "open-file-diff", REVIEW_SCOPES, (catalog) => catalog.remote.openOutgoingDiff, "push review selected outgoing file diff", '[data-push-file-action="diff"]'),
   remote(REMOTE_COMMANDS.openCurrentFile, "open-current-file", REVIEW_SCOPES, (catalog) => catalog.editor.openSource, "push review open selected current file", '[data-push-file-action="open"]'),
   remote(REMOTE_COMMANDS.toggleFileView, "toggle-file-view", REVIEW_SCOPES, (catalog) => catalog.remote.showPushedFilesAs(`${catalog.remote.flatList} / ${catalog.remote.folderTree}`), "push review files tree flat view", '[data-push-file-action="view"]'),

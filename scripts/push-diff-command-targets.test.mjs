@@ -23,6 +23,6 @@ test("shared Diff commands prefer Push Diff controls and support dialog scope", 
     assert.ok(definition, `${id} must remain registered`);
     assert.equal(definition.selector.startsWith(pushSelector), true, `${id} must prefer Push Diff`);
     assert.match(definition.selector, /not\(:has\(#push-diff-backdrop\)\)/u);
-    assert.equal(definition.scopes.includes("dialog"), true, `${id} must be dialog-scoped`);
+    assert.deepEqual(definition.scopes, ["diff"], `${id} must stay inside Diff focus`);
   }
 });

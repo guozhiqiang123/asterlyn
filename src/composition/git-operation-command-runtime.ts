@@ -1,13 +1,14 @@
-import type {
-  CommandAvailability,
-  CommandDescriptor,
-  CommandFocusScope,
-  CommandRegistry,
+import {
+  WORKBENCH_FOCUS_SCOPES,
+  type CommandAvailability,
+  type CommandDescriptor,
+  type CommandFocusScope,
+  type CommandRegistry,
 } from "../application/commands/command-service.ts";
 import { GIT_OPERATION_COMMANDS } from "../application/commands/git-operation-command-ids.ts";
 import type { LocaleCatalog } from "../localization/catalog.ts";
 
-const SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "editor", "diff", "history"];
+const SCOPES: readonly CommandFocusScope[] = WORKBENCH_FOCUS_SCOPES;
 
 export interface GitOperationCommandRuntimeOptions {
   readonly catalog: () => LocaleCatalog;

@@ -96,5 +96,32 @@ test("text editing and accessible navigation combinations are protected", () => 
   editor.capture(keyboard("Tab"));
   assert.equal(editor.viewModel().recording.validationError, "reserved");
   editor.dispose();
+
+  for (const scope of ["history-input", "settings"]) {
+    const scopedRegistry = new CommandRegistry();
+    scopedRegistry.register({
+      id: commandA,
+      category: "workbench",
+      userBindingScopes: [scope],
+      title: () => "A",
+      detail: () => "",
+      availability: () => ({ enabled: true }),
+      execute: () => undefined,
+    });
+    const scoped = new KeybindingController(
+      scopedRegistry,
+      new KeybindingStore(new MemoryStorage()),
+      [],
+      "windows",
+    );
+    scoped.startRecording(commandA, null);
+    scoped.capture(keyboard("c", { ctrlKey: true }));
+    assert.equal(
+      scoped.viewModel().recording.validationError,
+      "protected",
+      `${scope} must retain text-editing safety`,
+    );
+    scoped.dispose();
+  }
   dispose();
 });

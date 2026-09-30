@@ -4,6 +4,7 @@ import {
   type CommandRegistry,
 } from "../../application/commands/command-service.ts";
 import {
+  defaultKeybindingsForPlatform,
   formatKeySequence,
   normalizeKeyboardEvent,
   sequenceSignature,
@@ -105,7 +106,7 @@ export class KeybindingController {
     this.registry = registry;
     this.store = store;
     this.platform = platform;
-    this.defaults = defaults.filter((rule) => !rule.platform || rule.platform === platform);
+    this.defaults = defaultKeybindingsForPlatform(defaults, platform);
     this.rebuild();
     this.releases = [
       registry.subscribe(() => this.changed()),
@@ -524,7 +525,10 @@ function reservedSequence(
   platform: KeybindingPlatform,
   scopes: readonly CommandFocusScope[],
 ): "reserved" | "protected" | null {
-  const editable = scopes.some((scope) => scope === "editor" || scope === "diff" || scope === "input");
+  const editable = scopes.some((scope) =>
+    scope === "editor" || scope === "diff" || scope === "input" ||
+    scope === "history-input" || scope === "settings"
+  );
   for (const stroke of sequence) {
     const hasModifier = stroke.primary || stroke.control || stroke.alt || stroke.meta;
     const bareNavigation = !stroke.primary && !stroke.control && !stroke.alt && !stroke.meta &&

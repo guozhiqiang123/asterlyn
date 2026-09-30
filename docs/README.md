@@ -39,6 +39,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/2026-09-29-audit-remediation-plan.md`](engineering/2026-09-29-audit-remediation-plan.md) — ordered credential, workspace-recovery, terminal-flow-control, lifecycle, and ownership hardening plan.
 - [`benchmarks/2026-09-29-architecture-audit-remediation.md`](benchmarks/2026-09-29-architecture-audit-remediation.md) — AR1–AR5 implementation, fault evidence, full local validation, performance bounds, and remaining release limits.
 - [`benchmarks/2026-09-29-keyboard-shortcut-management.md`](benchmarks/2026-09-29-keyboard-shortcut-management.md) — command/keybinding implementation, stress budgets, lifecycle evidence, and local package acceptance.
+- [`benchmarks/2026-09-30-android-studio-keymap-defaults.md`](benchmarks/2026-09-30-android-studio-keymap-defaults.md) — verified macOS Android Studio keymap compatibility defaults, safety omissions, conflict isolation, and performance evidence.
 - [`engineering/versioned-reconciliation-plan.md`](engineering/versioned-reconciliation-plan.md) — watcher/reconciliation risks, phased implementation, invariants, and acceptance matrix.
 - [`engineering/context-action-system.md`](engineering/context-action-system.md) — whole-draft audit, context-action architecture, R5 prerequisites, surface ownership, and delivery sequence.
 - [`engineering/intraline-diff-highlighting-plan.md`](engineering/intraline-diff-highlighting-plan.md) — Android Studio-style line and inline Diff semantics across editable and read-only implementations.

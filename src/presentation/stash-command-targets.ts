@@ -7,7 +7,7 @@ import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
 const STASH_SCOPES: readonly CommandFocusScope[] = [
-  "workbench", "input", "editor", "diff", "history",
+  "stash",
 ];
 
 export interface StashCommandDefinition {

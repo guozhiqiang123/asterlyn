@@ -6,7 +6,7 @@ import {
 import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
-const HISTORY_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "history"];
+const HISTORY_SCOPES: readonly CommandFocusScope[] = ["history"];
 
 export const HISTORY_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   history(HISTORY_COMMANDS.openBranchMenu, "#current-branch-menu", (copy) => copy.topbarBranchMenu.ariaLabel, "current branch menu local remote branches actions"),

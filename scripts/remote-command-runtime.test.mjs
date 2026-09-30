@@ -71,7 +71,7 @@ test("Remote commands register localized metadata, dialog scopes, and live callb
   assert.deepEqual(registry.get(REMOTE_COMMANDS.openPush).availability(), {
     enabled: false, reason: "blocked",
   });
-  assert.deepEqual(registry.get(REMOTE_COMMANDS.openFileDiff).userBindingScopes, ["dialog"]);
+  assert.deepEqual(registry.get(REMOTE_COMMANDS.openFileDiff).userBindingScopes, ["remote"]);
   await registry.get(REMOTE_COMMANDS.manage).execute("palette");
   await registry.get(REMOTE_COMMANDS.loadMore).execute("keyboard");
   assert.deepEqual(actions, ["manage", "load-more"]);

@@ -6,7 +6,7 @@ import {
 import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
-const SEARCH_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "editor", "diff", "history"];
+const SEARCH_SCOPES: readonly CommandFocusScope[] = ["search"];
 
 export interface SearchCommandDefinition {
   readonly id: CommandId;
@@ -28,7 +28,7 @@ export const SEARCH_COMMAND_DEFINITIONS: readonly SearchCommandDefinition[] = [
 export const SEARCH_REPLACEMENT_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   {
     id: SEARCH_COMMANDS.previewReplacement, category: "workspace",
-    selector: "#workspace-replacement-preview", scopes: ["workbench", "input"],
+    selector: "#workspace-replacement-preview", scopes: ["search", "input"],
     title: (catalog) => catalog.navigation.previewReplace,
     detail: (catalog) => catalog.replacement.safeWorkspaceEdit,
     keywords: "search replace preview review workspace files",
@@ -36,7 +36,7 @@ export const SEARCH_REPLACEMENT_DOM_COMMANDS: readonly DomCommandDefinition[] = 
   },
   {
     id: SEARCH_COMMANDS.applyReplacement, category: "workspace",
-    selector: "#replacement-apply", scopes: ["dialog"],
+    selector: "#replacement-apply", scopes: ["replacement"],
     title: (catalog) => catalog.replacement.reviewAndApply,
     detail: (catalog) => catalog.replacement.safeWorkspaceEdit,
     keywords: "search replace apply reviewed selected files",

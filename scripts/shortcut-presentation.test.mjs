@@ -5,6 +5,7 @@ import { WORKBENCH_COMMANDS } from "../src/application/commands/workbench-comman
 import {
   refreshCommandCenterShortcut,
   refreshCommandShortcut,
+  shortcutFocusScope,
 } from "../src/shell/shortcut-presentation.ts";
 
 function element(children = {}) {
@@ -56,4 +57,58 @@ test("command center visible and accessible labels follow the effective binding"
   assert.equal(key.textContent, "⌘K ⌘P");
   assert.equal(button.title, "Search files and commands (Command+K Command+P)");
   assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+K Meta+P");
+});
+
+test("focus routing keeps every shortcut surface mutually exclusive and protects text inputs", () => {
+  class FakeElement {
+    constructor(selectors = []) { this.selectors = new Set(selectors); }
+    closest(selector) { return this.selectors.has(selector) ? this : null; }
+  }
+  class FakeInput extends FakeElement {}
+  class FakeTextArea extends FakeElement {}
+  class FakeSelect extends FakeElement {}
+  const previous = {
+    Element: globalThis.Element,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+    HTMLSelectElement: globalThis.HTMLSelectElement,
+  };
+  Object.assign(globalThis, {
+    Element: FakeElement,
+    HTMLInputElement: FakeInput,
+    HTMLTextAreaElement: FakeTextArea,
+    HTMLSelectElement: FakeSelect,
+  });
+
+  const scope = (target, leftTool = null, bottomTool = null, documentKind = "project-file") =>
+    shortcutFocusScope(target, false, documentKind, leftTool, bottomTool);
+  try {
+    assert.equal(shortcutFocusScope(null, true, "empty", null, null), "settings");
+    assert.equal(scope(null), "workbench");
+    assert.equal(scope(new FakeElement(["#left-tool"]), "files"), "files");
+    assert.equal(scope(new FakeElement(["#left-tool"]), "changes"), "changes");
+    assert.equal(scope(new FakeElement(["#bottom-tool"]), null, "find"), "search");
+    assert.equal(scope(new FakeElement(["#bottom-tool"]), null, "replace"), "search");
+    assert.equal(scope(new FakeElement(["#bottom-tool"]), null, "stash"), "stash");
+    assert.equal(scope(new FakeElement(["#bottom-tool"]), null, "branches"), "history");
+    assert.equal(scope(new FakeInput(["#bottom-tool"]), null, "branches"), "history-input");
+    assert.equal(scope(new FakeInput(["#left-tool"]), "changes"), "input");
+    assert.equal(scope(new FakeElement([".cm-editor"])), "editor");
+    assert.equal(scope(new FakeElement([".cm-editor"]), null, null, "diff"), "diff");
+    assert.equal(
+      scope(new FakeElement(["#push-diff-backdrop", "#remote-action-dialog", "[role='alertdialog'], [role='dialog']:not(.command-surface)"])),
+      "diff",
+    );
+    assert.equal(scope(new FakeElement(["#remote-action-dialog"])), "remote");
+    assert.equal(scope(new FakeInput(["#remote-action-dialog"])), "input");
+    assert.equal(scope(new FakeElement(["#workspace-replacement-dialog"])), "replacement");
+    assert.equal(scope(new FakeInput(["#workspace-replacement-dialog"])), "input");
+    assert.equal(
+      scope(new FakeElement(["[role='alertdialog'], [role='dialog']:not(.command-surface)"])),
+      "dialog",
+    );
+    assert.equal(scope(new FakeElement([".xterm"])), "terminal");
+  } finally {
+    Object.assign(globalThis, previous);
+  }
 });

@@ -1,11 +1,10 @@
-import type { CommandFocusScope, CommandId } from "../application/commands/command-service.ts";
+import {
+  TOOL_FOCUS_SCOPES,
+  type CommandId,
+} from "../application/commands/command-service.ts";
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
 import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
-
-const GLOBAL_SCOPES: readonly CommandFocusScope[] = [
-  "workbench", "input", "editor", "diff", "history", "terminal",
-];
 
 export const WORKBENCH_DOM_COMMANDS: readonly DomCommandDefinition[] = [
   workbench(WORKBENCH_COMMANDS.toggleRepositoryMenu, "#repository-switcher", (catalog) => catalog.shell.openProjectMenu, "project repository recent menu switch open"),
@@ -19,7 +18,7 @@ function workbench(
   keywords: string,
 ): DomCommandDefinition {
   return {
-    id, selector, title, keywords, category: "workbench", scopes: GLOBAL_SCOPES,
+    id, selector, title, keywords, category: "workbench", scopes: TOOL_FOCUS_SCOPES,
     detail: (catalog) => catalog.shell.projectMenu,
     blockedReason: (catalog) => catalog.shell.dismissError,
   };

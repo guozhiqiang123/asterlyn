@@ -22,10 +22,36 @@ state stores only replacements, disabled defaults, and additions under the versi
 `asterlyn.keybindings.v1` key. Parsing is bounded and fail-closed; profiles contain no arguments,
 paths, scripts, or predicates. A dedicated synchronization channel reloads other windows.
 
+A stable shipped rule may declare a platform-specific sequence while retaining one binding ID.
+This lets verified platform conventions evolve without orphaning a user's replacement or disabled
+state. Platform compatibility sets are authored as Asterlyn configuration from equivalent action
+semantics; external IDE keymaps are never loaded at runtime or copied into the repository.
+
+Each key event is assigned one primary focus scope. Files, Changes, Search, Stash, History, Editor,
+and Diff use mutually exclusive surface scopes; editable controls use `input`, with a dedicated
+`history-input` scope retaining only History's find contract. Remote review, replacement review,
+and generic dialogs are also separate, while the nested Push Diff is classified as Diff. A shipped
+binding's scopes must be declared by its command, and surface commands may not declare another
+surface's scope. Architecture tests enforce both invariants and dispatch the same reused shortcut
+through every eligible and ineligible surface.
+
+The event target is the focus-scope authority. All CodeMirror families install one shared
+focus-ownership extension because a read-only CodeMirror content node otherwise loses native focus
+when `contenteditable` is removed even though selection remains visible. The extension gives only
+read-only content an explicit tab stop and focuses it on pointer interaction; it does not change the
+separate read-only or editable facets. Text, historical Diff, editable Diff, and conflict views must
+retain this contract so their application commands cannot fall through to a stale outer surface.
+
 The resolver compiles exact sequences and two-stroke prefixes by focus scope. It rejects IME,
 dead-key, AltGraph, modifier-only, window-reserved, accessible-navigation, and unsafe text-editing
 captures. Exact and prefix conflicts require an explicit replacement. Unknown command overrides
 survive upgrades but never execute.
+
+On macOS, Option can transform `KeyboardEvent.key` into a symbol or dead key even though desktop
+shortcut conventions name the underlying letter or digit. For Option-modified alphanumeric strokes,
+normalization therefore uses `KeyboardEvent.code` only to recover that stable base key; all other
+strokes retain logical-key matching. This keeps displayed, recorded, and dispatched shortcuts such
+as Option+S and Command+Option+N consistent without changing IME or AltGraph fail-closed behavior.
 
 One capture-phase window listener owns application-command routing. Capturing lets a matched custom
 editor binding take deterministic precedence over CodeMirror without rebuilding retained editor

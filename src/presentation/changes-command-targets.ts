@@ -8,7 +8,7 @@ import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 
 const CHANGES_SCOPES: readonly CommandFocusScope[] = [
-  "workbench", "input", "editor", "diff", "history",
+  "changes",
 ];
 
 export interface ChangesContextCommandDefinition {

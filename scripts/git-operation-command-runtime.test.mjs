@@ -28,7 +28,10 @@ test("Git operation commands reuse guarded launcher and recovery routes", async 
   await registry.get(GIT_OPERATION_COMMANDS.open).execute("keyboard");
   await registry.get(GIT_OPERATION_COMMANDS.openRecoveries).execute("keyboard");
   assert.deepEqual(calls, ["operation", "recovery"]);
-  assert.deepEqual(registry.get(GIT_OPERATION_COMMANDS.open).userBindingScopes, ["workbench", "input", "editor", "diff", "history"]);
+  assert.deepEqual(registry.get(GIT_OPERATION_COMMANDS.open).userBindingScopes, [
+    "workbench", "input", "files", "changes", "search", "stash",
+    "editor", "diff", "history", "history-input",
+  ]);
 
   release();
   assert.deepEqual(registry.list(), []);

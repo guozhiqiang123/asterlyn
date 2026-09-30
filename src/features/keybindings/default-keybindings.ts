@@ -1,47 +1,40 @@
-import type { CommandFocusScope } from "../../application/commands/command-service.ts";
+import { WORKBENCH_FOCUS_SCOPES } from "../../application/commands/command-service.ts";
 import { WORKBENCH_COMMANDS } from "../../application/commands/workbench-command-ids.ts";
 import { primarySequence } from "./keybinding-normalizer.ts";
 import type { DefaultKeybindingRule } from "./keybinding-model.ts";
-
-const WORKBENCH_SCOPES: readonly CommandFocusScope[] = [
-  "workbench",
-  "input",
-  "editor",
-  "diff",
-  "history",
-];
+import { ANDROID_STUDIO_MACOS_KEYBINDINGS } from "./android-studio-macos-keybindings.ts";
 
 export const DEFAULT_KEYBINDINGS: readonly DefaultKeybindingRule[] = [
   {
     id: "workbench.command-palette.primary",
     commandId: WORKBENCH_COMMANDS.commandPalette,
     sequence: primarySequence("p", true),
-    scopes: [...WORKBENCH_SCOPES, "terminal"],
+    scopes: [...WORKBENCH_FOCUS_SCOPES, "terminal"],
     terminalPolicy: "intercept",
   },
   {
     id: "workspace.open-repository.primary",
     commandId: WORKBENCH_COMMANDS.openRepository,
     sequence: primarySequence("o"),
-    scopes: WORKBENCH_SCOPES,
+    scopes: WORKBENCH_FOCUS_SCOPES,
   },
   {
     id: "workspace.quick-open.primary",
     commandId: WORKBENCH_COMMANDS.quickOpen,
     sequence: primarySequence("p"),
-    scopes: WORKBENCH_SCOPES,
+    scopes: WORKBENCH_FOCUS_SCOPES,
   },
   {
     id: "workspace.recent-files.primary",
     commandId: WORKBENCH_COMMANDS.recentFiles,
     sequence: primarySequence("e"),
-    scopes: WORKBENCH_SCOPES,
+    scopes: WORKBENCH_FOCUS_SCOPES,
   },
   {
     id: "workspace.search.primary",
     commandId: WORKBENCH_COMMANDS.workspaceSearch,
     sequence: primarySequence("f", true),
-    scopes: WORKBENCH_SCOPES,
+    scopes: WORKBENCH_FOCUS_SCOPES,
   },
   {
     id: "editor.find.primary",
@@ -53,7 +46,7 @@ export const DEFAULT_KEYBINDINGS: readonly DefaultKeybindingRule[] = [
     id: "history.find.primary",
     commandId: WORKBENCH_COMMANDS.historyFind,
     sequence: primarySequence("f"),
-    scopes: ["history"],
+    scopes: ["history", "history-input"],
   },
   {
     id: "editor.save.primary",
@@ -65,13 +58,15 @@ export const DEFAULT_KEYBINDINGS: readonly DefaultKeybindingRule[] = [
     id: "workbench.refresh.primary",
     commandId: WORKBENCH_COMMANDS.refresh,
     sequence: primarySequence("r"),
-    scopes: WORKBENCH_SCOPES,
+    platformSequences: { macos: primarySequence("y", true) },
+    scopes: WORKBENCH_FOCUS_SCOPES,
   },
   {
     id: "workbench.settings.primary",
     commandId: WORKBENCH_COMMANDS.openSettings,
     sequence: primarySequence(","),
-    scopes: [...WORKBENCH_SCOPES, "terminal"],
+    scopes: [...WORKBENCH_FOCUS_SCOPES, "terminal"],
     terminalPolicy: "intercept",
   },
+  ...ANDROID_STUDIO_MACOS_KEYBINDINGS,
 ];

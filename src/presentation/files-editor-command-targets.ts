@@ -1,4 +1,8 @@
-import type { CommandFocusScope, CommandId } from "../application/commands/command-service.ts";
+import {
+  WORKBENCH_FOCUS_SCOPES,
+  type CommandFocusScope,
+  type CommandId,
+} from "../application/commands/command-service.ts";
 import {
   DIFF_COMMANDS,
   EDITOR_COMMANDS,
@@ -8,14 +12,12 @@ import type { LocaleCatalog } from "../localization/catalog.ts";
 import type { DomCommandDefinition } from "./dom-command-definition.ts";
 import type { ProjectFilesContextCommandAction } from "../features/files-editor/project-files-context-actions.ts";
 
-const SURFACE_SCOPES: readonly CommandFocusScope[] = [
-  "workbench", "input", "editor", "diff", "history", "terminal",
-];
-const EDITOR_SCOPES: readonly CommandFocusScope[] = ["workbench", "input", "editor"];
-const DIFF_SCOPES: readonly CommandFocusScope[] = ["workbench", "diff", "dialog"];
+const FILES_SCOPES: readonly CommandFocusScope[] = ["files"];
+const EDITOR_SCOPES: readonly CommandFocusScope[] = ["editor"];
+const DIFF_SCOPES: readonly CommandFocusScope[] = ["diff"];
 
 export const FILES_EDITOR_DOM_COMMANDS: readonly DomCommandDefinition[] = [
-  files(FILES_COMMANDS.locateActive, "#locate-project-file", (copy) => copy.locateCurrentFile, "locate reveal current active file"),
+  files(FILES_COMMANDS.locateActive, "#locate-project-file", (copy) => copy.locateCurrentFile, "locate reveal current active file", WORKBENCH_FOCUS_SCOPES),
   files(FILES_COMMANDS.expandFolder, "#expand-project-folder", (copy) => copy.expandSelectedFolder, "expand recursive folder tree"),
   files(FILES_COMMANDS.collapseFolder, "#collapse-project-folder", (copy) => copy.collapseSelectedFolder, "collapse recursive folder tree"),
   files(FILES_COMMANDS.openRecoveries, "[data-workspace-mutation-recovery-open]", (copy) => copy.contextMenu.recoveryTitle, "review recover file operation records"),
@@ -81,9 +83,10 @@ function files(
   selector: string,
   title: (copy: LocaleCatalog["projectFiles"]) => string,
   keywords: string,
+  scopes: readonly CommandFocusScope[] = FILES_SCOPES,
 ): DomCommandDefinition {
   return {
-    id, selector, keywords, category: "workspace", scopes: SURFACE_SCOPES,
+    id, selector, keywords, category: "workspace", scopes,
     title: (catalog) => title(catalog.projectFiles),
     detail: (catalog) => catalog.projectFiles.projectFiles,
     blockedReason: (catalog) => catalog.settings.keybindings.workspaceRequired,
@@ -97,7 +100,7 @@ function filesContext(
   keywords: string,
 ): ProjectFilesContextCommandDefinition {
   return {
-    id, action, keywords, scopes: SURFACE_SCOPES,
+    id, action, keywords, scopes: FILES_SCOPES,
     title: (catalog) => title(catalog.projectFiles),
     detail: (catalog) => catalog.projectFiles.projectFiles,
   };

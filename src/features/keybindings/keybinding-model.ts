@@ -20,6 +20,7 @@ export interface DefaultKeybindingRule {
   readonly id: string;
   readonly commandId: CommandId;
   readonly sequence: KeySequence;
+  readonly platformSequences?: Partial<Record<KeybindingPlatform, KeySequence>>;
   readonly scopes: readonly CommandFocusScope[];
   readonly platform?: KeybindingPlatform;
   readonly terminalPolicy?: "intercept" | "pass-through";

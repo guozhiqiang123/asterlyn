@@ -50,8 +50,8 @@ test("Search commands register stable metadata and delegate execution", async ()
   });
 
   assert.equal(registry.get(SEARCH_COMMANDS.locateCurrent).title(), EN_US.projectFiles.locateCurrentFile);
-  assert.ok(registry.get(SEARCH_COMMANDS.toggleResultsView).userBindingScopes.includes("workbench"));
-  assert.deepEqual(registry.get(SEARCH_COMMANDS.applyReplacement).userBindingScopes, ["dialog"]);
+  assert.deepEqual(registry.get(SEARCH_COMMANDS.toggleResultsView).userBindingScopes, ["search"]);
+  assert.deepEqual(registry.get(SEARCH_COMMANDS.applyReplacement).userBindingScopes, ["replacement"]);
   await registry.get(SEARCH_COMMANDS.previewReplacement).execute("keyboard");
   await registry.get(SEARCH_COMMANDS.applyReplacement).execute("keyboard");
   await registry.get(SEARCH_COMMANDS.collapseResults).execute("keyboard");

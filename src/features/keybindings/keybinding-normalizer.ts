@@ -1,4 +1,5 @@
 import type {
+  DefaultKeybindingRule,
   KeySequence,
   KeyStroke,
   KeybindingPlatform,
@@ -27,11 +28,16 @@ export function keybindingPlatform(
 }
 
 export function normalizeKeyboardEvent(
-  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey" | "isComposing" | "getModifierState">,
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey" | "isComposing" | "getModifierState"> &
+    Partial<Pick<KeyboardEvent, "code">>,
   platform: KeybindingPlatform,
 ): KeyStroke | null {
-  if (event.isComposing || event.getModifierState?.("AltGraph")) return null;
-  const raw = NAMED_KEYS.get(event.key) ?? event.key;
+  if (event.getModifierState?.("AltGraph")) return null;
+  const optionBaseKey = platform === "macos" && event.altKey
+    ? macOptionBaseKey(event.code)
+    : null;
+  if (event.isComposing && !optionBaseKey) return null;
+  const raw = optionBaseKey ?? NAMED_KEYS.get(event.key) ?? event.key;
   if (REJECTED_KEYS.has(raw) || MODIFIER_KEYS.has(raw)) return null;
   const key = raw.length === 1 ? raw.toLowerCase() : raw;
   const primary = platform === "macos" ? event.metaKey : event.ctrlKey;
@@ -43,6 +49,14 @@ export function normalizeKeyboardEvent(
     shift: event.shiftKey,
     meta: platform !== "macos" && event.metaKey,
   };
+}
+
+/** Option changes KeyboardEvent.key into symbols or dead keys; IDE shortcuts use the base key. */
+function macOptionBaseKey(code: string | undefined): string | null {
+  if (!code) return null;
+  if (/^Key[A-Z]$/u.test(code)) return code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/u.test(code)) return code.slice(5);
+  return null;
 }
 
 export function strokeSignature(stroke: KeyStroke): string {
@@ -104,12 +118,31 @@ function displayKey(key: string): string {
 }
 
 export function primarySequence(key: string, shift = false): KeySequence {
+  return keySequence(key, { primary: true, shift });
+}
+
+export function keySequence(
+  key: string,
+  modifiers: Partial<Omit<KeyStroke, "key">> = {},
+): KeySequence {
   return [{
     key: key.length === 1 ? key.toLowerCase() : key,
-    primary: true,
-    control: false,
-    alt: false,
-    shift,
-    meta: false,
+    primary: modifiers.primary ?? false,
+    control: modifiers.control ?? false,
+    alt: modifiers.alt ?? false,
+    shift: modifiers.shift ?? false,
+    meta: modifiers.meta ?? false,
   }];
+}
+
+export function defaultKeybindingsForPlatform(
+  rules: readonly DefaultKeybindingRule[],
+  platform: KeybindingPlatform,
+): readonly DefaultKeybindingRule[] {
+  return rules
+    .filter((rule) => !rule.platform || rule.platform === platform)
+    .map((rule) => ({
+      ...rule,
+      sequence: rule.platformSequences?.[platform] ?? rule.sequence,
+    }));
 }
