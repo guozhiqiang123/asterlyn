@@ -89,7 +89,9 @@ class AsterlynSearchPanel implements Panel {
     this.searchField = searchTextArea(view.state.phrase("Find"), query.search);
     this.searchField.setAttribute("main-field", "true");
     searchShell.append(this.searchField, this.options(query));
-    this.dom.append(searchShell, this.navigationActions());
+    const commands = this.navigationActions();
+    const close = this.closeAction();
+    this.dom.append(searchShell, commands, close);
 
     this.replaceField = view.state.readOnly ? null : input(view.state.phrase("Replace"), query.replace);
     if (this.replaceField) this.dom.append(this.replacementRow(this.replaceField));
@@ -139,25 +141,41 @@ class AsterlynSearchPanel implements Panel {
 
   private navigationActions(): HTMLElement {
     const actions = element("span", "asterlyn-search-actions");
-    const previous = action("↑", this.view.state.phrase("previous"));
+    const previous = action("↑", this.view.state.phrase("previous"), "asterlyn-search-command");
     previous.addEventListener("click", () => findPrevious(this.view));
-    const next = action("↓", this.view.state.phrase("next"));
+    const next = action("↓", this.view.state.phrase("next"), "asterlyn-search-command");
     next.addEventListener("click", () => findNext(this.view));
-    const all = action(this.view.state.phrase("all"), this.view.state.phrase("all"));
+    const all = action(
+      this.view.state.phrase("all"),
+      this.view.state.phrase("all"),
+      "asterlyn-search-command",
+    );
     all.addEventListener("click", () => selectMatches(this.view));
-    const close = action("×", this.view.state.phrase("close"));
-    close.addEventListener("click", () => closeSearchPanel(this.view));
-    actions.append(previous, next, all, close);
+    actions.append(previous, next, all);
     return actions;
+  }
+
+  private closeAction(): HTMLButtonElement {
+    const close = action("×", this.view.state.phrase("close"), "asterlyn-search-close");
+    close.addEventListener("click", () => closeSearchPanel(this.view));
+    return close;
   }
 
   private replacementRow(field: HTMLInputElement): HTMLElement {
     const row = element("div", "asterlyn-search-replace-row");
     const shell = element("div", "asterlyn-search-replace-shell");
     shell.append(field);
-    const replace = action(this.view.state.phrase("replace"), this.view.state.phrase("replace"));
+    const replace = action(
+      this.view.state.phrase("replace"),
+      this.view.state.phrase("replace"),
+      "asterlyn-search-command",
+    );
     replace.addEventListener("click", () => replaceNext(this.view));
-    const all = action(this.view.state.phrase("replace all"), this.view.state.phrase("replace all"));
+    const all = action(
+      this.view.state.phrase("replace all"),
+      this.view.state.phrase("replace all"),
+      "asterlyn-search-command",
+    );
     all.addEventListener("click", () => replaceAll(this.view));
     row.append(shell, replace, all);
     return row;
@@ -245,11 +263,12 @@ function searchTextArea(label: string, value: string): HTMLTextAreaElement {
   return field;
 }
 
-function action(label: string, title: string): HTMLButtonElement {
+function action(label: string, title: string, className?: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
   button.title = title;
   button.setAttribute("aria-label", title);
+  if (className) button.className = className;
   return button;
 }

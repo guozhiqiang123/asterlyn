@@ -28,7 +28,7 @@ export function demoExecuteTagMutation(
   if (request.kind === "create") {
     if (existing) throw new Error(`Tag '${name}' already exists.`);
     next.branches.push({
-      repositoryId: ".", fullName, name, oid: request.commitOid, current: false, kind: "tag",
+      repositoryId: ".", fullName, name, oid: request.commitOid, current: false, kind: "tag", primaryWorktreePath: null, linkedWorktreePath: null,
       upstream: null, tracking: null, committedAt: commit.authoredAt, subject: commit.subject,
     });
     nextCommit.decorations.push(`tag: ${name}`);
@@ -45,7 +45,11 @@ export function demoExecuteTagMutation(
       head: null, oid: request.commitOid, upstream: null, upstreamRemote: null, upstreamRef: null,
       ahead: 0, behind: 0, detached: true, unborn: false,
     };
-    next.branches = next.branches.map((candidate) => ({ ...candidate, current: false }));
+    next.branches = next.branches.map((candidate) => ({
+      ...candidate,
+      current: false,
+      primaryWorktreePath: candidate.kind === "local" ? null : candidate.primaryWorktreePath,
+    }));
     return next;
   }
   next.branches = next.branches.filter((candidate) => candidate.fullName !== fullName);

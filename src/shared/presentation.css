@@ -307,6 +307,10 @@
   line-height: 1.55;
 }
 
+.empty-state-action {
+  margin-top: 18px;
+}
+
 .loading-block {
   min-height: 110px;
   gap: 10px;

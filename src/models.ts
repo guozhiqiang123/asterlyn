@@ -32,7 +32,7 @@ export interface RemoteSummary {
 
 export interface AppUpdateCheckResult { ok: boolean; currentVersion: string; latestVersion: string | null; hasUpdate: boolean; releaseUrl: string; checkedAtEpochMs: number; error: string | null; }
 
-export type { GitResetMode, GitResetPlan, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest } from "./git-reviewed-models.ts";
+export type { BranchMutationKind, BranchMutationPlan, BranchMutationRequest, GitResetMode, GitResetPlan, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest, WorktreeCreationPlan, WorktreeCreationRequest, WorktreeRemovalReview } from "./git-reviewed-models.ts";
 
 export type RemoteTransport = "https" | "ssh" | "local" | "other";
 
@@ -291,41 +291,8 @@ export interface BranchSummary {
   tracking: string | null;
   committedAt: number;
   subject: string;
-}
-
-export type BranchMutationKind = "switch" | "create" | "checkoutRemote" | "rename" | "delete";
-
-export interface BranchMutationRequest {
-  kind: BranchMutationKind;
-  sourceFullName: string;
-  sourceOid: string;
-  newName: string | null;
-  deleteRemote: boolean;
-}
-
-export interface RemoteBranchDeletionTarget {
-  remote: string;
-  branchFullName: string;
-  trackingFullName: string;
-  oid: string;
-}
-
-export interface BranchMutationPlan {
-  repositoryRoot: string;
-  kind: BranchMutationKind;
-  sourceFullName: string;
-  sourceOid: string;
-  sourceKind: "local" | "remote" | "commit";
-  sourceName: string;
-  targetFullName: string | null;
-  newName: string | null;
-  startHeadRef: string;
-  startHeadOid: string;
-  upstream: string | null;
-  mergedIntoCurrent: boolean | null;
-  deleteRemote: boolean;
-  remoteDeletion: RemoteBranchDeletionTarget | null;
-  previewToken: string;
+  primaryWorktreePath: string | null;
+  linkedWorktreePath: string | null;
 }
 
 export interface RepositorySnapshot {

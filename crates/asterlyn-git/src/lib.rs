@@ -22,7 +22,8 @@ pub use model::{
     RemoteMutationRequest, RemoteSummary, RemoteTransport, RepositoryReadPlan,
     RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult, StashCatalog, StashEntry,
     StashMutationKind, StashMutationRequest, TagMutationKind, TagMutationRequest,
-    TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
+    TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion, WorktreeCreationPlan,
+    WorktreeCreationRequest, WorktreeRemovalReview,
 };
 pub use process::CancellationToken;
 pub use repository::GitRepository;

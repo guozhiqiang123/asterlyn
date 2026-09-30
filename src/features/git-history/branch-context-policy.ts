@@ -6,6 +6,7 @@ export interface BranchContextPolicyReasons {
   readonly busy: string;
   readonly cleanRequired: string;
   readonly localBranchRequired: string;
+  readonly worktreeCheckedOut: string;
 }
 
 export interface BranchContextPolicyOptions {
@@ -23,9 +24,13 @@ export interface BranchContextPolicy {
   readonly remoteCheckout: boolean;
   readonly switch: ContextMenuAvailability;
   readonly create: ContextMenuAvailability;
+  readonly createWorktree: ContextMenuAvailability;
+  readonly linkedWorktreeActions: boolean;
+  readonly openWorktree: ContextMenuAvailability;
   readonly integrate: ContextMenuAvailability;
   readonly rename: ContextMenuAvailability;
   readonly delete: ContextMenuAvailability;
+  readonly removeWorktree: ContextMenuAvailability;
   readonly update: ContextMenuAvailability;
   readonly push: ContextMenuAvailability;
   readonly currentBranchName: string | null;
@@ -47,6 +52,22 @@ export function branchContextPolicy(
     : options.clean
       ? enabled()
       : blocked(options.cleanReason || options.reasons.cleanRequired);
+  const checkedOutElsewhere = !target.branch.current && Boolean(
+    target.branch.primaryWorktreePath || target.branch.linkedWorktreePath,
+  );
+  const primaryPath = snapshot.branches.find((branch) =>
+    branch.repositoryId === "." && branch.primaryWorktreePath
+  )?.primaryWorktreePath ?? null;
+  const linkedWorktreeActions = Boolean(
+    writable && target.branch.kind === "local" && target.branch.linkedWorktreePath &&
+    primaryPath && snapshot.root === primaryPath,
+  );
+  const switchMutation = checkedOutElsewhere
+    ? blocked(options.reasons.worktreeCheckedOut)
+    : cleanMutation;
+  const checkedOutMutation = checkedOutElsewhere
+    ? blocked(options.reasons.worktreeCheckedOut)
+    : mutation;
   const trackingLocals = target.branch.kind === "remote" && writable
     ? snapshot.branches.filter((branch) =>
         branch.repositoryId === "." && branch.kind === "local" &&
@@ -68,11 +89,15 @@ export function branchContextPolicy(
     writable,
     switchTarget,
     remoteCheckout: writable && target.branch.kind === "remote" && trackingLocals.length === 0,
-    switch: cleanMutation,
+    switch: switchMutation,
     create: cleanMutation,
+    createWorktree: mutation,
+    linkedWorktreeActions,
+    openWorktree: mutation,
     integrate: mutation,
-    rename: mutation,
-    delete: mutation,
+    rename: checkedOutMutation,
+    delete: checkedOutMutation,
+    removeWorktree: mutation,
     update: options.updateBlocked ? blocked(options.updateBlocked) : mutation,
     push: options.pushBlocked ? blocked(options.pushBlocked) : mutation,
     currentBranchName,

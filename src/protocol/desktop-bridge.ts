@@ -66,6 +66,8 @@ import type {
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
   AppUpdateCheckResult,
+  WorktreeCreationPlan,
+  WorktreeCreationRequest,
 } from "../models";
 import type { WindowChromeMode } from "./window-chrome.ts";
 import type { TerminalBridge } from "./terminal.ts";
@@ -102,6 +104,11 @@ export interface WorkspaceBridge {
     repositoryRoot: string,
     workspacePath: string,
     kind: WorkspaceEntryKind,
+  ): Promise<WorkspaceRevealResult>;
+  revealRegisteredWorktree(
+    repositoryRoot: string,
+    sourceFullName: string,
+    sourceOid: string,
   ): Promise<WorkspaceRevealResult>;
   inspectWorkspaceEntry(
     repositoryRoot: string,
@@ -357,6 +364,14 @@ export interface GitOperationBridge {
     repositoryRoot: string,
     plan: BranchMutationPlan,
     operationId: string,
+  ): Promise<RepositoryMutationOutcome>;
+  prepareWorktreeCreation(
+    repositoryRoot: string,
+    request: WorktreeCreationRequest,
+  ): Promise<WorktreeCreationPlan>;
+  executeWorktreeCreation(
+    repositoryRoot: string,
+    plan: WorktreeCreationPlan,
   ): Promise<RepositoryMutationOutcome>;
   executeTagMutation(
     repositoryRoot: string,

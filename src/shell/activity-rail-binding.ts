@@ -44,7 +44,7 @@ export class ActivityRailBinding {
         if (button.getAttribute("aria-disabled") !== "true") this.callbacks.activate(tool);
       });
       button.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
+        if (event.button !== 0 || button.getAttribute("aria-disabled") === "true") return;
         this.drag = {
           source: tool,
           pointerId: event.pointerId,
@@ -55,6 +55,7 @@ export class ActivityRailBinding {
         };
       });
       button.addEventListener("keydown", (event) => {
+        if (button.getAttribute("aria-disabled") === "true") return;
         if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
         event.preventDefault();
         this.callbacks.commitOrder(

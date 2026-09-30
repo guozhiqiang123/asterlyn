@@ -94,7 +94,10 @@ export function buildPathCopyGroup(
     id,
     label: labels.copy,
     availability: ENABLED,
-    children: actions.map(copyCommandItem),
+    children: actions.map((action) => ({
+      ...copyCommandItem(action),
+      secondaryText: action.text,
+    })),
   };
 }
 

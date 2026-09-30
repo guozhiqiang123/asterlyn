@@ -1,5 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } from "./keybinding-zh-CN.ts";
-import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
+import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { ZH_CN_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 import { ZH_CN_STASH_COPY } from "./stash-copy.ts";
 
@@ -377,15 +377,15 @@ export const ZH_CN = {
     branchContextMenu: {
       ariaLabel: (name) => `${name} 的分支操作`, tagAriaLabel: (name) => `${name} 的标签操作`, viewHistory: "查看分支历史",
       switchTo: (name) => `切换到 ${name}`, checkoutRemote: "检出为本地分支…",
-      newBranchFrom: "从此处新建分支…", mergeIntoCurrent: "合并到当前分支…",
+      newBranchFrom: "从此处新建分支…", newWorktree: "新建工作树…", openWorktree: "打开工作树…", revealWorktree: "在文件管理器中显示", revealedWorktree: "已在系统文件管理器中打开工作树", mergeIntoCurrent: "合并到当前分支…",
       rebaseCurrentOnto: "将当前分支变基到此处…", update: "更新…", push: "推送…",
       rename: "重命名…", copyBranch: "复制分支", copyTag: "复制标签", shortName: "简短名称",
-      fullReference: "完整引用", deleteLocal: "删除本地分支…", copiedShort: "已复制分支名称", checkoutTag: "检出标签…", mergeTagInto: (tag, branch) => `将“${tag}”合并到“${branch ?? "当前分支"}”…`, pushTagTo: (remote) => `推送到 ${remote}…`, deleteLocalTag: "删除本地标签…", deleteRemoteTag: (remote) => `从 ${remote} 删除…`,
+      fullReference: "完整引用", deleteLocal: "删除本地分支…", removeWorktree: "删除工作树…", copiedShort: "已复制分支名称", checkoutTag: "检出标签…", mergeTagInto: (tag, branch) => `将“${tag}”合并到“${branch ?? "当前分支"}”…`, pushTagTo: (remote) => `推送到 ${remote}…`, deleteLocalTag: "删除本地标签…", deleteRemoteTag: (remote) => `从 ${remote} 删除…`,
       copiedFull: "已复制完整分支引用", clipboardUnavailable: "系统剪贴板不可用",
-      busy: "另一个仓库操作仍在进行中", cleanRequired: "切换分支前请提交或移除所有工作区更改", localBranchRequired: "合并此标签前请先检出现有本地分支",
+      busy: "另一个仓库操作仍在进行中", cleanRequired: "切换分支前请提交或移除所有工作区更改", localBranchRequired: "合并此标签前请先检出现有本地分支", worktreeCheckedOut: "此分支已在关联工作树中检出",
       targetChanged: "分支已发生变化，请重新打开菜单",
     },
-    branchMutation: ZH_CN_BRANCH_MUTATION_COPY, tagMutation: ZH_CN_TAG_MUTATION_COPY,
+    branchMutation: ZH_CN_BRANCH_MUTATION_COPY, worktreeCreation: ZH_CN_WORKTREE_CREATION_COPY, tagMutation: ZH_CN_TAG_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `${subject} 的提交操作`, copyCommitId: "复制提交 ID",
       cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…", resetToHere: ZH_GIT_RESET_COPY.menuItem,
@@ -470,7 +470,7 @@ export const ZH_CN = {
     comparisonAria: (before, after) => `从 ${before} 到 ${after} 的变更`,
     noRefs: "没有引用", refsAppearHere: "分支和标签会显示在这里。", branchOrTag: "分支或标签",
     filterBranchesAndTags: "筛选分支和标签", noMatchingRefs: "没有匹配的引用", tryAnotherRef: "请尝试其他分支、远程或标签名称。",
-    groups: { local: "本地", remote: "远程", tag: "标签" }, activateAgainForAllRefs: "再次激活可显示所有引用",
+    groups: { local: "本地", remote: "远程", tag: "标签" }, activateAgainForAllRefs: "再次激活可显示所有引用", primaryWorktreeBadge: "主工作区", worktreeBadge: "工作树", availableBranchBadge: "未检出",
     roots: (count) => `${count} 个 Git 根目录`, allRefs: "所有引用", allRefsTitle: "本地分支、远程跟踪分支和标签的历史记录",
     upToCommit: (shortOid) => `截至 ${shortOid}`,
     historyStartsAt: (shortOid, repositoryId) => `${repositoryId} 中从精确提交 ${shortOid} 开始的历史`,

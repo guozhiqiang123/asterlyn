@@ -32,10 +32,25 @@ export function renderBranchMutationDialog(
   const remote = plan.remoteDeletion
     ? `<li><span>${escapeHtml(copy.remoteBranch)}</span><code>${escapeHtml(plan.remoteDeletion.remote)}:${escapeHtml(plan.remoteDeletion.branchFullName)} · ${escapeHtml(plan.remoteDeletion.oid.slice(0, 12))}</code></li>`
     : "";
-  const remoteOption = `<label class="branch-mutation-remote-option"><input id="branch-mutation-delete-remote" type="checkbox" ${dialog.request.deleteRemote ? "checked" : ""} ${dialog.busy || !plan.upstream ? "disabled" : ""}/><span>${escapeHtml(copy.deleteRemote)}</span></label>${plan.upstream ? "" : `<small class="branch-mutation-option-detail">${escapeHtml(copy.deleteRemoteUnavailable)}</small>`}`;
-  const consequence = plan.remoteDeletion ? copy.localAndRemote : copy.localOnly;
-  const action = plan.remoteDeletion ? copy.deleteLocalAndRemote : copy.actions[kind];
-  return `<section class="dialog branch-mutation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="branch-mutation-dialog-title" aria-describedby="branch-mutation-description">${heading}<p id="branch-mutation-description">${escapeHtml(copy.descriptions[kind])}</p><div class="branch-mutation-review"><ul><li><span>${escapeHtml(copy.source)}</span><code>${escapeHtml(plan.sourceFullName)}</code></li><li><span>${escapeHtml(copy.object)}</span><code>${escapeHtml(plan.sourceOid)}</code></li>${destination}<li><span>${escapeHtml(copy.currentHead)}</span><code>${escapeHtml(plan.startHeadRef)} · ${escapeHtml(plan.startHeadOid.slice(0, 12))}</code></li>${upstream}${remote}</ul>${merged}${remoteOption}<p>${escapeHtml(consequence)}</p></div>${error}<div class="dialog-actions"><button class="secondary-button" id="branch-mutation-cancel" data-branch-mutation-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="danger-button" id="branch-mutation-execute" type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? copy.working : action)}</button></div></section>`;
+  const worktree = plan.worktreeReview
+    ? `<li><span>${escapeHtml(copy.worktreePath)}</span><code>${escapeHtml(plan.worktreeReview.path)}</code></li><li><span>${escapeHtml(copy.primaryWorktreeHead)}</span><code>${escapeHtml(plan.worktreeReview.primaryHeadRef ?? "detached")} · ${escapeHtml(plan.worktreeReview.primaryHeadOid.slice(0, 12))}</code></li>`
+    : "";
+  const changedPaths = plan.worktreeReview?.changedPaths.length
+    ? `<ul class="branch-mutation-warning-paths">${plan.worktreeReview.changedPaths.map((path) => `<li><code>${escapeHtml(path)}</code></li>`).join("")}</ul>`
+    : "";
+  const worktreeWarning = plan.worktreeReview?.forceRequired
+    ? `<div class="branch-mutation-warning" role="note"><strong>${escapeHtml(copy.worktreeWarnings)}</strong>${plan.worktreeReview.totalChangedPaths > 0 ? `<p>${escapeHtml(copy.worktreeChanges(plan.worktreeReview.totalChangedPaths))}</p>${changedPaths}${plan.worktreeReview.changesTruncated ? `<small>${escapeHtml(copy.worktreeChangesTruncated)}</small>` : ""}` : ""}${plan.worktreeReview.unmergedCommitCount > 0 ? `<p>${escapeHtml(copy.worktreeUnmergedCommits(plan.worktreeReview.unmergedCommitCount))}</p>` : ""}<p>${escapeHtml(copy.forceWorktreeConsequence)}</p></div>`
+    : "";
+  const remoteOption = kind === "delete"
+    ? `<label class="branch-mutation-remote-option"><input id="branch-mutation-delete-remote" type="checkbox" ${dialog.request.deleteRemote ? "checked" : ""} ${dialog.busy || !plan.upstream ? "disabled" : ""}/><span>${escapeHtml(copy.deleteRemote)}</span></label>${plan.upstream ? "" : `<small class="branch-mutation-option-detail">${escapeHtml(copy.deleteRemoteUnavailable)}</small>`}`
+    : "";
+  const consequence = kind === "removeWorktree"
+    ? copy.worktreeOnly
+    : plan.remoteDeletion ? copy.localAndRemote : copy.localOnly;
+  const action = plan.worktreeReview?.forceRequired
+    ? copy.forceDeleteWorktree
+    : plan.remoteDeletion ? copy.deleteLocalAndRemote : copy.actions[kind];
+  return `<section class="dialog branch-mutation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="branch-mutation-dialog-title" aria-describedby="branch-mutation-description">${heading}<p id="branch-mutation-description">${escapeHtml(copy.descriptions[kind])}</p><div class="branch-mutation-review"><ul><li><span>${escapeHtml(copy.source)}</span><code>${escapeHtml(plan.sourceFullName)}</code></li><li><span>${escapeHtml(copy.object)}</span><code>${escapeHtml(plan.sourceOid)}</code></li>${destination}${worktree}<li><span>${escapeHtml(copy.currentHead)}</span><code>${escapeHtml(plan.startHeadRef)} · ${escapeHtml(plan.startHeadOid.slice(0, 12))}</code></li>${upstream}${remote}</ul>${merged}${worktreeWarning}${remoteOption}<p>${escapeHtml(consequence)}</p></div>${error}<div class="dialog-actions"><button class="secondary-button" id="branch-mutation-cancel" data-branch-mutation-close type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="danger-button" id="branch-mutation-execute" type="button" ${dialog.busy ? "disabled" : ""}>${escapeHtml(dialog.busy ? copy.working : action)}</button></div></section>`;
 }
 
 function localError(error: string, copy: BranchMutationCopy): string {

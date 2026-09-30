@@ -33,6 +33,7 @@ export interface DesktopCommandMap {
   list_project_files: { args: { repositoryRoot: string; }; result: Model.ProjectFileList };
   list_ignored_project_directory: { args: { repositoryRoot: string; workspacePath: string; }; result: Model.ProjectFileList };
   reveal_workspace_entry: { args: { repositoryRoot: string; workspacePath: string; kind: Model.WorkspaceEntryKind; }; result: Model.WorkspaceRevealResult };
+  reveal_registered_worktree: { args: { repositoryRoot: string; sourceFullName: string; sourceOid: string; }; result: Model.WorkspaceRevealResult };
   inspect_workspace_entry: { args: { repositoryRoot: string; workspacePath: string; }; result: Model.WorkspaceEntryInspection };
   plan_workspace_mutation: { args: { repositoryRoot: string; planId: string; operation: Model.WorkspaceMutationOperation; collisionPolicy: Model.WorkspaceCollisionPolicy; }; result: Model.WorkspaceMutationPreview };
   execute_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: Model.WorkspaceMutationOutcome };
@@ -82,6 +83,8 @@ export interface DesktopCommandMap {
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
   prepare_branch_mutation: { args: { repositoryRoot: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
   execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  prepare_worktree_creation: { args: { repositoryRoot: string; request: Model.WorktreeCreationRequest; }; result: Model.WorktreeCreationPlan };
+  execute_worktree_creation: { args: { repositoryRoot: string; plan: Model.WorktreeCreationPlan; }; result: Model.RepositoryMutationOutcome };
   execute_tag_mutation: { args: { repositoryRoot: string; request: Model.TagMutationRequest; operationId: string; }; result: Model.RepositoryMutationOutcome };
   execute_stash_mutation: { args: { repositoryRoot: string; request: Model.StashMutationRequest; }; result: Model.RepositoryMutationOutcome };
   prepare_remote_mutation: { args: { repositoryRoot: string; request: Model.RemoteMutationRequest; }; result: Model.RemoteMutationPlan };
@@ -138,6 +141,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   list_project_files: "projectFileList",
   list_ignored_project_directory: "projectFileList",
   reveal_workspace_entry: "workspaceRevealResult",
+  reveal_registered_worktree: "workspaceRevealResult",
   inspect_workspace_entry: "workspaceEntryInspection",
   plan_workspace_mutation: "workspaceMutationPreview",
   execute_workspace_mutation: "workspaceMutationOutcome",
@@ -187,6 +191,8 @@ export const DESKTOP_RESULT_VALIDATORS: {
   create_branch: "repositoryMutationOutcome",
   prepare_branch_mutation: "branchMutationPlan",
   execute_branch_mutation: "repositoryMutationOutcome",
+  prepare_worktree_creation: "worktreeCreationPlan",
+  execute_worktree_creation: "repositoryMutationOutcome",
   execute_tag_mutation: "repositoryMutationOutcome",
   execute_stash_mutation: "repositoryMutationOutcome",
   prepare_remote_mutation: "remoteMutationPlan",

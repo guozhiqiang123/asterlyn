@@ -51,19 +51,19 @@ export function renderShellView(model: ShellViewModel): string {
       </nav>
       <section class="workbench" id="workbench">
         <div class="editor-row" id="editor-row">
-          <aside class="navigator tool-window" id="left-tool" aria-label="${escapeHtml(copy.leftToolWindow)}">
+          <aside class="navigator tool-window" id="left-tool" aria-label="${escapeHtml(copy.leftToolWindow)}" ${model.workspaceOpen ? "" : "hidden"}>
             <div class="panel-header" id="navigator-header"><div class="navigator-title-group"><h1 id="navigator-title">${escapeHtml(copy.files)}</h1><span class="panel-count" id="navigator-count">0</span></div><div class="navigator-header-actions" data-navigator-header-controls><div class="navigator-context-actions" id="navigator-actions"></div><button class="compact-icon-button tool-window-hide" id="hide-left-tool" type="button" aria-label="${escapeHtml(copy.hideFiles)}" title="${escapeHtml(copy.hideFiles)}">${icon("close", 14)}</button></div></div>
-            <div class="navigator-body" id="navigator-body" tabindex="-1">${loadingBlock(copy.waitingForProject)}</div>
+            <div class="navigator-body" id="navigator-body" tabindex="-1">${emptyState(copy.noProject, copy.openFolder, "folder")}</div>
           </aside>
-          <div class="workbench-splitter vertical" id="left-splitter" aria-label="${escapeHtml(copy.resizeLeft)}"></div>
+          <div class="workbench-splitter vertical" id="left-splitter" aria-label="${escapeHtml(copy.resizeLeft)}" ${model.workspaceOpen ? "" : "hidden"}></div>
           <section class="content-panel editor-panel" id="editor-panel" aria-label="${escapeHtml(copy.editor)}">
             <div class="editor-tabbar-shell"><div class="editor-tabbar" id="editor-tabbar"><span class="editor-tab active">${escapeHtml(copy.welcome)}</span></div><div class="editor-context-actions" id="editor-context-actions"></div><div class="editor-tab-menu-anchor" id="editor-tab-menu-anchor"><button class="editor-tab-menu-toggle" id="editor-tab-menu-toggle" type="button" aria-label="${escapeHtml(copy.showOpenFiles)}" title="${escapeHtml(copy.showOpenFiles)}" aria-haspopup="menu" aria-expanded="false" disabled>${icon("chevron-down", 15)}</button><div class="editor-tab-menu hidden" id="editor-tab-menu" role="menu" aria-label="${escapeHtml(copy.openFiles)}"></div></div></div>
             <div class="content-header" id="content-header"><div class="content-title-group"><span class="content-kicker">${escapeHtml(copy.welcome)}</span><h2>${escapeHtml(copy.editorName(BRAND.name))}</h2></div></div>
             <div class="content-body" id="content-body">${emptyState(copy.openFolder, copy.openFolderDetail, "folder")}</div>
           </section>
         </div>
-        <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="${escapeHtml(copy.resizeGit)}"></div>
-        <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}">
+        <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="${escapeHtml(copy.resizeGit)}" ${model.workspaceOpen ? "" : "hidden"}></div>
+        <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}" ${model.workspaceOpen ? "" : "hidden"}>
           <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
           <div class="git-tool-grid" id="git-tool-grid">
             <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body" tabindex="-1"></div></section>
@@ -99,6 +99,7 @@ export function renderShellView(model: ShellViewModel): string {
     <div class="dialog-backdrop hidden changes-restore-dialog-backdrop" id="changes-restore-review-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden remote-dialog-backdrop" id="remote-action-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="branch-mutation-dialog" role="presentation"></div>
+    <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="worktree-creation-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="tag-mutation-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="commit-file-restore-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="git-operation-dialog" role="presentation"></div>
@@ -109,19 +110,20 @@ export function renderShellView(model: ShellViewModel): string {
 function activityButton(tool: ActivityTool, model: ShellViewModel, copy: ShellCopy): string {
   const labels = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal } as const;
   const icons = { files: "folder", search: "search", branches: "branch", changes: "changes", stash: "stash", terminal: "terminal" } as const;
-  const active = tool === "search"
+  const requestedActive = tool === "search"
     ? model.shell.layout.bottomTool === "find" || model.shell.layout.bottomTool === "replace"
     : tool === "branches" || tool === "stash" || tool === "terminal"
       ? model.shell.layout.bottomTool === tool
       : model.shell.layout.leftTool === tool;
   const enabled = model.workspaceOpen && (tool === "files" || tool === "search" || tool === "terminal" || model.gitAvailable);
+  const active = enabled && requestedActive;
   const label = labels[tool];
   const title = enabled
     ? copy.toolReorder(label)
     : tool === "files" || tool === "search" || tool === "terminal"
       ? copy.openFolderFirst
       : copy.gitUnavailableReorder;
-  return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown">${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;
+  return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown" ${enabled ? "" : "disabled"}>${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;
 }
 
 function repositoryDialog(copy: ShellCopy, common: LocaleCatalog["common"]): string {
@@ -130,10 +132,6 @@ function repositoryDialog(copy: ShellCopy, common: LocaleCatalog["common"]): str
 
 function repositoryTargetDialog(copy: ShellCopy, common: LocaleCatalog["common"]): string {
   return `<div class="dialog-backdrop hidden" id="repository-target-dialog" role="presentation"><section class="dialog repository-target-dialog" role="dialog" aria-modal="true" aria-labelledby="repository-target-title"><div class="dialog-heading"><h2 id="repository-target-title">${escapeHtml(copy.whereOpenProject)}</h2><button class="icon-button" id="repository-target-close" type="button" aria-label="${escapeHtml(copy.cancelOpeningProject)}">${icon("close", 18)}</button></div><p>${escapeHtml(copy.targetWindowDetail)}</p><code class="repository-target-path" id="repository-target-path"></code><div class="dialog-actions"><button class="secondary-button" id="repository-target-cancel" type="button">${escapeHtml(common.cancel)}</button><button class="secondary-button" id="repository-target-current" type="button">${escapeHtml(copy.currentWindow)}</button><button class="primary-button" id="repository-target-new" type="button">${escapeHtml(copy.newWindow)}</button></div></section></div>`;
-}
-
-function loadingBlock(label: string): string {
-  return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(label)}</span></div>`;
 }
 
 function emptyState(title: string, detail: string, iconName: string): string {

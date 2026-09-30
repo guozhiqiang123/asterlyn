@@ -651,6 +651,10 @@ pub struct BranchSummary {
     pub tracking: Option<String>,
     pub committed_at: i64,
     pub subject: String,
+    #[serde(default)]
+    pub primary_worktree_path: Option<String>,
+    #[serde(default)]
+    pub linked_worktree_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -669,6 +673,7 @@ pub enum BranchMutationKind {
     CheckoutRemote,
     Rename,
     Delete,
+    RemoveWorktree,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -716,6 +721,7 @@ impl BranchMutationKind {
             Self::CheckoutRemote => "checkout-remote",
             Self::Rename => "rename",
             Self::Delete => "delete",
+            Self::RemoveWorktree => "remove-worktree",
         }
     }
 }
@@ -728,6 +734,10 @@ pub struct BranchMutationRequest {
     pub source_oid: String,
     pub new_name: Option<String>,
     pub delete_remote: bool,
+    #[serde(default)]
+    pub force_worktree_removal: bool,
+    #[serde(default)]
+    pub reviewed_worktree_token: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -737,6 +747,47 @@ pub struct RemoteBranchDeletionTarget {
     pub branch_full_name: String,
     pub tracking_full_name: String,
     pub oid: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeRemovalReview {
+    pub path: String,
+    pub changed_paths: Vec<String>,
+    pub total_changed_paths: u32,
+    pub changes_truncated: bool,
+    pub primary_head_ref: Option<String>,
+    pub primary_head_oid: String,
+    pub unmerged_commit_count: u32,
+    pub force_required: bool,
+    pub force_authorized: bool,
+    pub review_token: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeCreationRequest {
+    pub source_full_name: String,
+    pub source_oid: String,
+    pub parent_directory: String,
+    pub project_name: String,
+    pub new_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeCreationPlan {
+    pub repository_root: String,
+    pub source_full_name: String,
+    pub source_name: String,
+    pub source_oid: String,
+    pub parent_directory: String,
+    pub project_name: String,
+    pub destination_path: String,
+    pub new_branch: Option<String>,
+    pub start_head_ref: String,
+    pub start_head_oid: String,
+    pub preview_token: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -754,6 +805,7 @@ pub struct BranchMutationPlan {
     pub start_head_oid: String,
     pub upstream: Option<String>,
     pub merged_into_current: Option<bool>,
+    pub worktree_review: Option<WorktreeRemovalReview>,
     pub delete_remote: bool,
     pub remote_deletion: Option<RemoteBranchDeletionTarget>,
     pub preview_token: String,

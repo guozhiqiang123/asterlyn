@@ -151,7 +151,7 @@ import {
 import { LazyDiffEditor } from "./features/files-editor/lazy-editor-runtime";
 import {
   contentHeading as renderContentHeading,
-  emptyState as renderEditorEmptyState,
+  editorWelcomePresentation,
   loadingBlock as renderEditorLoadingBlock,
   renderDiffControls as renderEditorDiffControls,
   renderEditorTabMenu as renderEditorTabMenuView,
@@ -190,6 +190,7 @@ import { ShellEventBinding } from "./shell/shell-event-binding";
 import { WindowChromeBinding } from "./shell/window-chrome-binding";
 import { refreshWorkbenchShortcutPresentation, shortcutFocusScope } from "./shell/shortcut-presentation.ts";
 import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
+import { hideWorkspaceToolWindows } from "./shell/workspace-availability.ts";
 import { WindowSession } from "./application/window-session";
 import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts";
 import { historyPathApplyShortcut } from "./composition/history-shortcut-presentation.ts";
@@ -683,11 +684,10 @@ export class AsterlynApp {
     );
     this.gitHistoryMutationRuntime = new GitHistoryMutationRuntime({
       root,
-      branch: { gateway: {
-        prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
-        execute: (plan) => this.executeReviewedBranchMutation(plan),
-        errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      branch: { gateway: { prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
+        execute: (plan) => this.executeReviewedBranchMutation(plan), errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.branchMutation },
+      worktree: { gateway: { chooseDirectory: (path) => bridge.chooseRepositoryDirectory(path), prepare: (...args) => bridge.prepareWorktreeCreation(...args), execute: (plan) => { const copy = this.localization.catalog.history.worktreeCreation; return this.runBranchMutation(copy.progress(plan.projectName), copy.completed(plan.destinationPath), (root) => bridge.executeWorktreeCreation(root, plan), null); }, errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors) }, copy: () => this.localization.catalog.history.worktreeCreation },
       tag: { gateway: {
         execute: async (request) => { const copy = this.localization.catalog.history.tagMutation; const checkout = request.kind === "checkout";
           const succeeded = await this.runBranchMutation(copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
@@ -922,13 +922,14 @@ export class AsterlynApp {
             };
           },
           showHistory: (target) => this.showBranchContextHistory(target),
-          openMutation: (kind, branch, suggestedName) => {
-            const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
-            if (repositoryRoot) this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName);
-          },
+          openMutation: (kind, branch, suggestedName) => { const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
+            if (repositoryRoot) this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName); },
+          openWorktreeCreation: (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (snapshot) this.gitHistoryMutationRuntime.worktree.open(snapshot.root, snapshot.branches, branch); },
+          openWorktree: (path) => void this.requestRepositoryTarget(path),
+          revealWorktree: async (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (!snapshot) return; await bridge.revealRegisteredWorktree(snapshot.root, branch.fullName, branch.oid);
+            this.setStatus(this.localization.catalog.history.branchContextMenu.revealedWorktree, "success"); },
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
-          openRemoteAction: (kind, returnFocus) =>
-            this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
+          openRemoteAction: (kind, returnFocus) => this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
           tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
           selectedTagRemote: () => this.windowSession.repository.state.snapshot?.remotes.find((remote) => remote.name === this.remoteState.selectedRemote && remote.pushSupported)?.name ?? null, tagRemoteUnavailable: () => this.localization.catalog.remote.policy.selectConfigured,
           openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
@@ -1741,6 +1742,7 @@ export class AsterlynApp {
     this.bindWorkbenchSplitters();
     this.renderActivityRail();
     this.renderRepositoryMenu();
+    this.renderEditor();
     void this.activateConfiguredEditorFont();
 
     if (bridge.isDemo) {
@@ -1757,7 +1759,6 @@ export class AsterlynApp {
     await restoreRecentRepository(
       window.localStorage,
       (recent) => this.openRepository(recent, false),
-      () => this.chooseRepository(),
     );
   }
 
@@ -1813,7 +1814,7 @@ export class AsterlynApp {
     this.renderActivityRail();
     this.renderRepositoryMenu();
     this.renderStatus(this.windowSession.repository.state.snapshot);
-    if (this.windowSession.workspace.state.root) this.renderEditor();
+    this.renderEditor();
     if (this.shellState.layout.leftTool) this.renderLeftTool();
     this.bottomToolRuntime.relocalize();
     if (this.filesEditorRuntime.commands.state.mode) this.renderCommandSurface();
@@ -3871,6 +3872,7 @@ export class AsterlynApp {
 
   private renderActivityRail(): void {
     const copy = this.localShellCopy();
+    if (!this.windowSession.workspace.state.root) hideWorkspaceToolWindows(this.root);
     const rail = this.query<HTMLElement>(".activity-rail");
     const spacer = this.query<HTMLElement>(".rail-spacer");
     for (const tool of this.shellState.activityOrder) {
@@ -3881,14 +3883,16 @@ export class AsterlynApp {
       const tool = button.dataset.tool as ActivityTool;
       const enabled = Boolean(this.windowSession.workspace.state.root &&
         (tool === "files" || tool === "search" || tool === "terminal" || this.windowSession.repository.state.snapshot));
-      const active =
+      const requestedActive =
         tool === "search"
           ? this.shellState.layout.bottomTool === "find" || this.shellState.layout.bottomTool === "replace"
           : tool === "branches" || tool === "stash" || tool === "terminal"
             ? this.shellState.layout.bottomTool === tool
             : this.shellState.layout.leftTool === tool;
+      const active = enabled && requestedActive;
       button.classList.toggle("active", active);
       button.classList.toggle("unavailable", !enabled);
+      button.disabled = !enabled;
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
       const label = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
@@ -3917,6 +3921,7 @@ export class AsterlynApp {
   }
 
   private applyWorkbenchLayout(persist: boolean): void {
+    if (!this.windowSession.workspace.state.root) return hideWorkspaceToolWindows(this.root);
     this.workbenchLayoutRuntime.apply(persist);
   }
 
@@ -5800,9 +5805,7 @@ export class AsterlynApp {
   }
 
   private renderEditor(): void {
-    const workspaceRoot = this.windowSession.workspace.state.root;
     const snapshot = this.windowSession.repository.state.snapshot;
-    if (!workspaceRoot) return;
     const document = this.activeDocument();
     const retainedEditorKeys = this.editorState.session.textTabs.map((tab) => tab.id);
     if (document.kind === "historical-file") retainedEditorKeys.push(editorDocumentKey(document));
@@ -5845,15 +5848,10 @@ export class AsterlynApp {
     if (revealActiveTab) this.revealActiveEditorTab();
 
     if (document.kind === "welcome") {
-      const copy = this.localization.catalog.editor;
-      this.showEditorHtml(
-        "welcome",
-        renderEditorEmptyState(
-          copy.workspaceReady,
-          copy.workspaceReadyDetail,
-          "folder",
-        ),
-      );
+      const welcome = editorWelcomePresentation(Boolean(this.windowSession.workspace.state.root),
+        this.localization.catalog.locale, this.localization.catalog.shell, this.localization.catalog.editor);
+      this.showEditorHtml(welcome.key, welcome.html);
+      if (welcome.actionId) this.query<HTMLButtonElement>(`#${welcome.actionId}`).onclick = () => { void this.chooseRepository(); };
       return;
     }
 
@@ -8582,6 +8580,8 @@ export class AsterlynApp {
         await this.requestRepositoryTarget(choice.path);
       } else if (choice.kind === "unsupported") {
         this.openRepositoryDialog();
+      } else {
+        this.renderActivityRail(); this.renderEditor();
       }
     } catch (error) {
       this.showError(error);

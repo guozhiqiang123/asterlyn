@@ -1,8 +1,8 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
-import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts";
+import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts"; import type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
-export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
+export type { BranchMutationCopy } from "./branch-mutation-copy.ts"; export type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 export interface CommonCopy {
   ready: string;
   operationFailed: string;
@@ -880,7 +880,7 @@ export interface HistoryCopy {
   topbarBranchMenu: TopbarBranchMenuCopy;
   reset: GitResetCopy;
   branchContextMenu: BranchContextMenuCopy;
-  branchMutation: BranchMutationCopy; tagMutation: TagMutationCopy;
+  branchMutation: BranchMutationCopy; worktreeCreation: WorktreeCreationCopy; tagMutation: TagMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
   rangeContextMenu: HistoryCommitRangeContextMenuCopy;
   commitFolderContextMenu: HistoryCommitFolderContextMenuCopy;
@@ -905,7 +905,7 @@ export interface HistoryCopy {
   noMatchingRefs: string;
   tryAnotherRef: string;
   groups: Record<"local" | "remote" | "tag", string>;
-  activateAgainForAllRefs: string;
+  activateAgainForAllRefs: string; primaryWorktreeBadge: string; worktreeBadge: string; availableBranchBadge: string;
   roots(count: number): string;
   allRefs: string;
   allRefsTitle: string;
@@ -1053,7 +1053,7 @@ export interface BranchContextMenuCopy {
   viewHistory: string;
   switchTo(name: string): string;
   checkoutRemote: string;
-  newBranchFrom: string;
+  newBranchFrom: string; newWorktree: string; openWorktree: string; revealWorktree: string; revealedWorktree: string;
   mergeIntoCurrent: string;
   rebaseCurrentOnto: string;
   update: string;
@@ -1062,12 +1062,12 @@ export interface BranchContextMenuCopy {
   copyBranch: string; copyTag: string;
   shortName: string;
   fullReference: string;
-  deleteLocal: string; checkoutTag: string; mergeTagInto(tag: string, branch: string | null): string; pushTagTo(remote: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;
+  deleteLocal: string; removeWorktree: string; checkoutTag: string; mergeTagInto(tag: string, branch: string | null): string; pushTagTo(remote: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;
   copiedShort: string;
   copiedFull: string;
   clipboardUnavailable: string;
   busy: string;
-  cleanRequired: string; localBranchRequired: string;
+  cleanRequired: string; localBranchRequired: string; worktreeCheckedOut: string;
   targetChanged: string;
 }
 

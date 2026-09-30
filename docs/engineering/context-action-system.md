@@ -143,7 +143,8 @@ type MenuAvailability =
 
 type ContextMenuItem =
   | { kind: "command"; id: string; actionId: string; label: string;
-      availability: MenuAvailability; shortcut?: string; tone?: "normal" | "danger" }
+      secondaryText?: string; availability: MenuAvailability;
+      shortcut?: string; tone?: "normal" | "danger" }
   | { kind: "check" | "radio"; id: string; actionId: string; label: string;
       checked: boolean; availability: MenuAvailability }
   | { kind: "submenu"; id: string; label: string; availability: MenuAvailability;
@@ -455,6 +456,40 @@ their features; the composition root only wires ports.
 
 Exit: a feature can open a fully accessible no-domain menu and invoke the same method as an existing
 toolbar/ordinary-click entry without synthetic DOM activation or a central action switch.
+
+### CA1.1 — Copy Path value previews
+
+Status: **locally accepted on 2026-09-30**.
+
+Every second-level command under a `Copy Path` submenu must show the exact text that command will
+write to the system clipboard as secondary text. The shared path-copy builder owns this contract so
+Files, Changes, commit-detail files, commit-detail folders, workspace-root targets, and future
+consumers cannot drift. Copy-ref and copy-commit commands remain unchanged because they are not
+members of a `Copy Path` group.
+
+The menu action model gains an optional presentation-only secondary-text field. The shared host
+renders it beneath the action label, exposes the complete value as hover text, and keeps the value
+in the button's accessible name. Long single paths wrap within the submenu instead of being
+truncated. Multi-selection previews retain every newline-separated path in full; when their total
+height exceeds the viewport, the existing bounded menu scroll owns navigation without hiding text.
+
+Acceptance:
+
+- each path-copy child carries secondary text equal to its `TextCopyAction.text` value;
+- file name, workspace-relative path, absolute path, workspace root, Windows path, and multi-file
+  newline payloads remain byte-for-byte identical between preview and clipboard write;
+- the shared host renders the secondary line only when provided, escapes it through DOM text
+  assignment, and supplies the full value through native hover text;
+- long and multi-line previews remain fully visible through wrapping and menu scrolling while
+  retaining keyboard focus, type-ahead behavior, edge placement, and the one-submenu-depth contract;
+- focused context-action tests, the full frontend suite, TypeScript checking, production build, and
+  installed macOS rendered smoke verification pass before local acceptance.
+
+Acceptance evidence: all 771 frontend tests, TypeScript checking, and the production frontend build
+passed. The release macOS arm64 application and its installed `/Applications/Asterlyn.app` copy
+both passed strict code-signature verification and rendered-shell smoke checks. The distributable
+archive is `Asterlyn-copy-path-full-preview-20260930-macos-arm64.zip`; the replaced installation
+remains recoverable from the user's Trash.
 
 ### R5 — Workspace mutation foundation
 

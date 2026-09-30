@@ -320,11 +320,52 @@ test("desktop response validation accepts representative valid payloads", () => 
     startHeadOid: "b".repeat(40),
     upstream: "origin/old",
     mergedIntoCurrent: null,
+    worktreeReview: null,
     deleteRemote: false,
     remoteDeletion: null,
     previewToken: "reviewed-plan",
   };
   assert.deepEqual(validateDesktopResult("prepare_branch_mutation", branchPlan), branchPlan);
+  const worktreePlan = {
+    ...branchPlan,
+    kind: "removeWorktree",
+    sourceFullName: "refs/heads/topic",
+    sourceName: "topic",
+    upstream: null,
+    worktreeReview: {
+      path: "/worktrees/topic", changedPaths: [], totalChangedPaths: 0, changesTruncated: false,
+      primaryHeadRef: "refs/heads/main", primaryHeadOid: "b".repeat(40),
+      unmergedCommitCount: 0, forceRequired: false, forceAuthorized: false,
+      reviewToken: "worktree-review",
+    },
+  };
+  assert.deepEqual(validateDesktopResult("prepare_branch_mutation", worktreePlan), worktreePlan);
+  const creationPlan = {
+    repositoryRoot: "/repo",
+    sourceFullName: "refs/heads/main",
+    sourceName: "main",
+    sourceOid: "a".repeat(40),
+    parentDirectory: "/worktrees",
+    projectName: "repo-main",
+    destinationPath: "/worktrees/repo-main",
+    newBranch: null,
+    startHeadRef: "refs/heads/main",
+    startHeadOid: "a".repeat(40),
+    previewToken: "reviewed-worktree-creation",
+  };
+  assert.deepEqual(
+    validateDesktopResult("prepare_worktree_creation", creationPlan),
+    creationPlan,
+  );
+  const remoteCreationPlan = {
+    ...creationPlan,
+    sourceFullName: "refs/remotes/origin/main",
+    sourceName: "origin/main",
+  };
+  assert.deepEqual(
+    validateDesktopResult("prepare_worktree_creation", remoteCreationPlan),
+    remoteCreationPlan,
+  );
 });
 
 test("desktop response validation rejects malformed results", () => {
@@ -363,10 +404,40 @@ test("desktop response validation rejects malformed results", () => {
       sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
       targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
       startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: true,
+      worktreeReview: null,
       deleteRemote: false, remoteDeletion: null,
       previewToken: "reviewed-plan",
     }),
     /supported branch mutation kind/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_branch_mutation", {
+      repositoryRoot: "/repo", kind: "removeWorktree", sourceFullName: "refs/heads/topic",
+      sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
+      targetFullName: null, newName: null, startHeadRef: "refs/heads/main",
+      startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: null,
+      worktreeReview: null,
+      deleteRemote: false, remoteDeletion: null,
+      previewToken: "reviewed-plan",
+    }),
+    /worktreeReview must be present only for worktree removal/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_branch_mutation", {
+      repositoryRoot: "/repo", kind: "rename", sourceFullName: "refs/heads/topic",
+      sourceOid: "a".repeat(40), sourceKind: "local", sourceName: "topic",
+      targetFullName: "refs/heads/renamed", newName: "renamed", startHeadRef: "refs/heads/main",
+      startHeadOid: "b".repeat(40), upstream: null, mergedIntoCurrent: null,
+      worktreeReview: {
+        path: "/worktrees/topic", changedPaths: [], totalChangedPaths: 0, changesTruncated: false,
+        primaryHeadRef: "refs/heads/main", primaryHeadOid: "b".repeat(40),
+        unmergedCommitCount: 0, forceRequired: false, forceAuthorized: false,
+        reviewToken: "worktree-review",
+      },
+      deleteRemote: false, remoteDeletion: null,
+      previewToken: "reviewed-plan",
+    }),
+    /worktreeReview must be present only for worktree removal/,
   );
   assert.throws(
     () => validateDesktopResult("read_commit_file", {
@@ -384,6 +455,22 @@ test("desktop response validation rejects malformed results", () => {
       image: null,
     }),
     /full object IDs/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_worktree_creation", {
+      repositoryRoot: "/repo",
+      sourceFullName: "refs/tags/v1.0",
+      sourceName: "v1.0",
+      sourceOid: "a".repeat(40),
+      parentDirectory: "/worktrees",
+      projectName: "repo-main",
+      destinationPath: "/worktrees/repo-main",
+      newBranch: null,
+      startHeadRef: "refs/heads/main",
+      startHeadOid: "a".repeat(40),
+      previewToken: "reviewed-worktree-creation",
+    }),
+    /local or remote-tracking branch/,
   );
   assert.throws(
     () => validateDesktopResult("compare_commit_file_to_current", {

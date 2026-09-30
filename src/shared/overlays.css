@@ -130,6 +130,7 @@
   --dialog-titlebar-height: 38px;
   --dialog-geometry-min-width: 320px;
   --dialog-geometry-min-height: 160px;
+  --dialog-close-edge-offset: -10px;
   width: min(510px, calc(100vw - 44px));
   padding: 0 18px 18px;
   border: 1px solid var(--border-strong);
@@ -144,6 +145,11 @@
   height: var(--dialog-titlebar-height);
   align-items: center;
   justify-content: space-between;
+}
+
+.dialog-heading > .icon-button {
+  flex: 0 0 auto;
+  margin-right: var(--dialog-close-edge-offset);
 }
 
 .dialog-geometry-managed.dialog,

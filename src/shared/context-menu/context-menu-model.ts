@@ -7,6 +7,7 @@ interface ContextMenuActionBase {
   readonly id: string;
   readonly actionId: string;
   readonly label: string;
+  readonly secondaryText?: string;
   readonly availability: ContextMenuAvailability;
   readonly tone?: "normal" | "danger";
 }
@@ -116,6 +117,9 @@ function validateGroup(
     else if (ids.has(item.id)) errors.push(`duplicate item id ${item.id}`);
     else ids.add(item.id);
     if (!item.label.trim()) errors.push(`${location} item ${item.id || index} has no label`);
+    if (item.kind !== "submenu" && item.secondaryText !== undefined && !item.secondaryText.trim()) {
+      errors.push(`${location} item ${item.id || index} has empty secondary text`);
+    }
     validateAvailability(item.availability, `${location} item ${item.id || index}`, errors);
     if (item.kind === "submenu") {
       if (!allowSubmenus) errors.push(`submenu ${item.id} exceeds the one-level limit`);

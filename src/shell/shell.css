@@ -400,9 +400,8 @@
   color: white;
 }
 
-.activity-button.unavailable {
-  color: var(--text-faint);
-}
+.activity-button.unavailable { color: var(--text-faint); cursor: default; opacity: 0.46; }
+.activity-button.unavailable:hover, .activity-button.unavailable:active { background: transparent; color: var(--text-faint); cursor: default; }
 
 .activity-button.dragging {
   opacity: 0.42;
@@ -633,9 +632,9 @@
 }
 
 .command-surface-close {
-  width: 28px;
-  height: 28px;
-  margin: 2px 0 0;
+  width: 30px;
+  height: 30px;
+  margin: 1px -2px 0 0;
 }
 
 .command-surface-input {

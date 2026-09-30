@@ -67,6 +67,7 @@ test("branch menu matrix keeps writes scoped to one top-level ref", () => {
       assert.equal(menuIds.includes("git-branches.context-actions.delete"), true);
     } else {
       assert.equal(menuIds.includes("git-branches.context-actions.checkout-remote"), true);
+      assert.equal(menuIds.includes("git-branches.context-actions.create-worktree"), true);
       assert.equal(menuIds.includes("git-branches.context-actions.rename"), false);
       assert.equal(menuIds.includes("git-branches.context-actions.delete"), false);
     }
@@ -93,6 +94,91 @@ test("remote tracking relationship switches the exact local branch and logical r
   assert.deepEqual(ids(model), [
     "git-branches.context-actions.history", "git-branches.context-actions.copy",
   ]);
+});
+
+test("linked worktree branches expose removal instead of local branch deletion", async () => {
+  const linked = { ...local("topic"), linkedWorktreePath: "/worktrees/topic" };
+  const primary = { ...local("main", true), primaryWorktreePath: "/repo" };
+  const currentSnapshot = snapshot([primary, linked]);
+  const selectedTarget = target(linked);
+  const policy = branchContextPolicy(selectedTarget, currentSnapshot, options);
+  const model = branchContextMenuModel(
+    selectedTarget,
+    policy,
+    branchCopyActions(linked, EN_US.history.branchContextMenu),
+    EN_US.history,
+  );
+  assert.equal(ids(model).includes("git-branches.context-actions.remove-worktree"), true);
+  assert.equal(ids(model).includes("git-branches.context-actions.delete"), false);
+  assert.equal(ids(model).includes("git-branches.context-actions.open-worktree"), true);
+  assert.equal(ids(model).includes("git-branches.context-actions.reveal-worktree"), true);
+  assert.equal(ids(model).includes("git-branches.context-actions.create-worktree"), true);
+  assert.equal(policy.switch.kind, "blocked");
+
+  const events = [];
+  let session;
+  const provider = new BranchContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => true, highlight: () => {}, snapshot: () => currentSnapshot,
+      policyOptions: () => ({ ...options }), showHistory: () => {},
+      openMutation: (kind, branch) => events.push([kind, branch.fullName]),
+      openWorktreeCreation: (branch) => events.push(["createWorktree", branch.fullName]),
+      openWorktree: (path) => events.push(["openWorktree", path]),
+      revealWorktree: (branch) => events.push(["revealWorktree", branch.fullName]),
+      openGitOperation: () => {}, openRemoteAction: () => {}, tagRemotes: () => [],
+      openTagMutation: () => {}, blocked: () => {}, status: () => {}, error: () => {},
+    },
+    () => EN_US.history,
+  );
+  provider.open({ target: selectedTarget, anchor: { x: 1, y: 2 }, trigger: {}, restoreFocus() {} });
+  await session.invoke("git-branches.context-actions.remove-worktree");
+  await session.invoke("git-branches.context-actions.create-worktree");
+  await session.invoke("git-branches.context-actions.open-worktree");
+  await session.invoke("git-branches.context-actions.reveal-worktree");
+  assert.deepEqual(events, [
+    ["removeWorktree", linked.fullName],
+    ["createWorktree", linked.fullName],
+    ["openWorktree", linked.linkedWorktreePath],
+    ["revealWorktree", linked.fullName],
+  ]);
+});
+
+test("linked worktree navigation is absent when the current window is not the primary worktree", () => {
+  const linked = { ...local("topic", true), linkedWorktreePath: "/worktrees/topic" };
+  const primary = { ...local("main"), primaryWorktreePath: "/repo" };
+  const linkedSnapshot = { ...snapshot([primary, linked]), root: "/worktrees/topic" };
+  const selected = target(linked);
+  const policy = branchContextPolicy(selected, linkedSnapshot, options);
+  const model = branchContextMenuModel(
+    selected,
+    policy,
+    branchCopyActions(linked, EN_US.history.branchContextMenu),
+    EN_US.history,
+  );
+  assert.equal(policy.linkedWorktreeActions, false);
+  assert.equal(ids(model).includes("git-branches.context-actions.open-worktree"), false);
+  assert.equal(ids(model).includes("git-branches.context-actions.reveal-worktree"), false);
+});
+
+test("a branch checked out in the primary worktree cannot be switched, renamed, or deleted elsewhere", () => {
+  const primary = { ...local("main"), primaryWorktreePath: "/repo" };
+  const currentSnapshot = snapshot([local("linked", true), primary]);
+  const selectedTarget = target(primary);
+  const policy = branchContextPolicy(selectedTarget, currentSnapshot, options);
+  const model = branchContextMenuModel(
+    selectedTarget,
+    policy,
+    branchCopyActions(primary, EN_US.history.branchContextMenu),
+    EN_US.history,
+  );
+
+  assert.equal(policy.switch.kind, "blocked");
+  assert.equal(policy.rename.kind, "blocked");
+  assert.equal(policy.delete.kind, "blocked");
+  assert.equal(ids(model).includes("git-branches.context-actions.remove-worktree"), false);
+  assert.equal(ids(model).includes("git-branches.context-actions.delete"), true);
 });
 
 test("tag menu exposes detached checkout, merge, exact remote push, and local or remote deletion", async () => {
@@ -132,6 +218,7 @@ test("tag menu exposes detached checkout, merge, exact remote push, and local or
       policyOptions: () => ({ ...options }),
       showHistory: () => {},
       openMutation: () => {},
+      openWorktreeCreation: () => {}, openWorktree: () => {}, revealWorktree: () => {},
       openGitOperation: (kind, name) => events.push(["operation", kind, name]),
       openRemoteAction: () => {},
       tagRemotes: () => ["origin"],
@@ -178,6 +265,8 @@ test("provider opens without executing and routes history, copy, and reviewed mu
       snapshot: () => currentSnapshot,
       policyOptions: () => ({ ...options }), showHistory: () => events.push(["history"]),
       openMutation: (kind, selected, name) => events.push(["mutation", kind, selected.fullName, name]),
+      openWorktreeCreation: (selected) => events.push(["worktree", selected.fullName]),
+      openWorktree: () => {}, revealWorktree: () => {},
       openGitOperation: (kind, name) => events.push(["operation", kind, name]),
       openRemoteAction: (kind) => events.push(["remote", kind]),
       tagRemotes: () => [],
@@ -197,11 +286,13 @@ test("provider opens without executing and routes history, copy, and reviewed mu
   await session.invoke("git-branches.context-actions.copy-full");
   await session.invoke("git-branches.context-actions.merge");
   await session.invoke("git-branches.context-actions.rename");
+  await session.invoke("git-branches.context-actions.create-worktree");
   assert.deepEqual(events.slice(1), [
     ["highlight", false],
     ["history"], ["copy", branch.fullName], ["status", "Full branch reference copied"],
     ["operation", "merge", branch.fullName],
     ["mutation", "rename", branch.fullName, branch.name],
+    ["worktree", branch.fullName],
   ]);
 
   assert.deepEqual(provider.commandAvailability("branch-merge", target(branch)), { kind: "enabled" });

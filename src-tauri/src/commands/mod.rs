@@ -20,12 +20,12 @@ pub(crate) use commit_file_restore::{
 pub(crate) use git_operations::{
     cancel_remote_operation, commit_changes, configure_remote_ssh, create_branch,
     execute_branch_mutation, execute_git_operation, execute_git_reset, execute_remote_mutation,
-    execute_stash_mutation, execute_tag_mutation, fetch_remote, prepare_branch_mutation,
-    prepare_git_operation, prepare_git_reset, prepare_remote_mutation, pull_current, push_current,
-    read_conflict_content, read_git_operation, read_push_file_commit, read_push_preview,
-    read_remote_authentication, resolve_conflict, revert_changes, run_git_operation_action,
-    stage_paths, stash_changes, store_remote_https_credential, switch_branch,
-    trash_untracked_paths, unstage_paths,
+    execute_stash_mutation, execute_tag_mutation, execute_worktree_creation, fetch_remote,
+    prepare_branch_mutation, prepare_git_operation, prepare_git_reset, prepare_remote_mutation,
+    prepare_worktree_creation, pull_current, push_current, read_conflict_content,
+    read_git_operation, read_push_file_commit, read_push_preview, read_remote_authentication,
+    resolve_conflict, revert_changes, run_git_operation_action, stage_paths, stash_changes,
+    store_remote_https_credential, switch_branch, trash_untracked_paths, unstage_paths,
 };
 pub(crate) use git_reads::{
     cancel_untracked_scan, compare_commit_file_to_current, read_commit_comparison_details,
@@ -50,7 +50,8 @@ pub(crate) use workspace::{
     inspect_workspace_entry, list_ignored_project_directory, list_project_files,
     list_workspace_mutation_recoveries, list_workspace_replacement_recoveries,
     plan_workspace_mutation, preview_workspace_replacement, read_text_file,
-    read_workspace_replacement_diff, reveal_workspace_entry, rollback_workspace_mutation,
-    rollback_workspace_replacement, save_text_file, search_workspace_text,
+    read_workspace_replacement_diff, reveal_registered_worktree, reveal_workspace_entry,
+    rollback_workspace_mutation, rollback_workspace_replacement, save_text_file,
+    search_workspace_text,
 };
 pub(crate) use workspace_watch::{start_workspace_watch, stop_workspace_watch};

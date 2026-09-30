@@ -41,6 +41,9 @@ export interface BranchContextRuntime {
     branch: BranchSummary,
     suggestedName: string,
   ): void;
+  openWorktreeCreation(branch: BranchSummary): void;
+  openWorktree(path: string): void;
+  revealWorktree(branch: BranchSummary): void | Promise<void>;
   openGitOperation(kind: "merge" | "rebase", fullName: string): void;
   openRemoteAction(kind: "pull" | "push", returnFocus: HTMLElement): void | Promise<void>;
   tagRemotes(target: BranchContextTarget): readonly string[];
@@ -195,6 +198,17 @@ export class BranchContextActions {
     switch (actionId) {
       case `${OWNER_ID}.update`: return this.runtime.openRemoteAction("pull", request.trigger);
       case `${OWNER_ID}.push`: return this.runtime.openRemoteAction("push", request.trigger);
+      case `${OWNER_ID}.create-worktree`:
+        return this.runtime.openWorktreeCreation(target.branch);
+      case `${OWNER_ID}.open-worktree`:
+        if (target.branch.linkedWorktreePath) {
+          return this.runtime.openWorktree(target.branch.linkedWorktreePath);
+        }
+        return;
+      case `${OWNER_ID}.reveal-worktree`:
+        return this.runtime.revealWorktree(target.branch);
+      case `${OWNER_ID}.remove-worktree`:
+        return this.runtime.openMutation("removeWorktree", target.branch, "");
       default: {
         for (const [index, remote] of tagRemotes.entries()) {
           if (actionId === `${OWNER_ID}.tag-push-${index}`) {
@@ -305,12 +319,23 @@ export function branchContextMenuModel(
   }
   const items: ContextMenuItem[] = [command("history", labels.viewHistory, ENABLED)];
   if (policy.writable) {
+    if (policy.linkedWorktreeActions) {
+      items.push(
+        { kind: "separator" },
+        command("open-worktree", labels.openWorktree, policy.openWorktree),
+        command("reveal-worktree", labels.revealWorktree, policy.openWorktree),
+        { kind: "separator" },
+      );
+    }
     if (policy.switchTarget) {
       items.push(command("switch", labels.switchTo(policy.switchTarget.name), policy.switch));
     } else if (policy.remoteCheckout) {
       items.push(command("checkout-remote", labels.checkoutRemote, policy.switch));
     }
     items.push(command("create", labels.newBranchFrom, policy.create));
+    if (target.branch.kind === "local" || target.branch.kind === "remote") {
+      items.push(command("create-worktree", labels.newWorktree, policy.createWorktree));
+    }
     if (!target.branch.current) {
       items.push(
         command("merge", labels.mergeIntoCurrent, policy.integrate),
@@ -339,7 +364,9 @@ export function branchContextMenuModel(
   if (policy.writable && target.branch.kind === "local" && !target.branch.current) {
     items.push(
       { kind: "separator" },
-      command("delete", labels.deleteLocal, policy.delete, "danger"),
+      target.branch.linkedWorktreePath
+        ? command("remove-worktree", labels.removeWorktree, policy.removeWorktree, "danger")
+        : command("delete", labels.deleteLocal, policy.delete, "danger"),
     );
   }
   return { ariaLabel: labels.ariaLabel(target.branch.name), items };

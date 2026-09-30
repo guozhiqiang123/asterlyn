@@ -133,12 +133,22 @@ function branchRow(
   const activeMatches = matchingBranches(branch, model);
   const allMatches = matchingBranches(branch, model, true);
   const selected = branchIsSelected(branch, model);
+  const historyCopy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
   const exclusive = allMatches.length === model.selectedRefs.size &&
     allMatches.every((candidate) => model.selectedRefs.has(branchKey(candidate)));
   const iconName = branch.current ? "head" : branch.kind === "tag" ? "tag" : "branch";
-  const title = exclusive
-    ? `${branch.name} — ${branch.subject} — ${(model.localization ?? DEFAULT_LOCALIZATION).catalog.history.activateAgainForAllRefs}`
-    : `${branch.name} — ${branch.subject}`;
+  const checkoutTitle = branch.kind !== "local"
+    ? []
+    : [
+        branch.primaryWorktreePath ? `${historyCopy.primaryWorktreeBadge}: ${branch.primaryWorktreePath}` : "",
+        branch.linkedWorktreePath ? `${historyCopy.worktreeBadge}: ${branch.linkedWorktreePath}` : "",
+        !branch.primaryWorktreePath && !branch.linkedWorktreePath ? historyCopy.availableBranchBadge : "",
+      ].filter(Boolean);
+  const title = [
+    `${branch.name} — ${branch.subject}`,
+    exclusive ? historyCopy.activateAgainForAllRefs : "",
+    ...checkoutTitle,
+  ].filter(Boolean).join(" — ");
   const root = model.snapshot.repositoryRoots.find((item) => item.id === branch.repositoryId);
   const meta = [
     branch.current ? "HEAD" : "",
@@ -147,8 +157,16 @@ function branchRow(
       : model.snapshot.repositoryRoots.length > 1
         ? (root?.displayName ?? branch.repositoryId)
         : "",
-  ].filter(Boolean);
-  return `<button class="branch-row kind-${branch.kind} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" data-branch-key="${escapeAttribute(key)}" aria-pressed="${selected}" title="${escapeAttribute(title)}"><span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span><span class="branch-name">${escapeHtml(displayName)}</span>${meta.length > 0 ? `<span class="branch-row-meta">${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span>` : ""}</button>`;
+  ].filter(Boolean).map((value) => `<span>${escapeHtml(value)}</span>`);
+  if (branch.primaryWorktreePath) {
+    meta.push(`<span class="branch-primary-worktree-badge">${escapeHtml(historyCopy.primaryWorktreeBadge)}</span>`);
+  }
+  if (branch.linkedWorktreePath) {
+    meta.push(`<span class="branch-worktree-badge">${escapeHtml(historyCopy.worktreeBadge)}</span>`);
+  } else if (branch.kind === "local" && !branch.primaryWorktreePath) {
+    meta.push(`<span class="branch-available-badge">${escapeHtml(historyCopy.availableBranchBadge)}</span>`);
+  }
+  return `<button class="branch-row kind-${branch.kind} ${branch.primaryWorktreePath ? "has-primary-worktree" : ""} ${branch.linkedWorktreePath ? "has-linked-worktree" : ""} ${nested ? "nested" : ""} ${selected ? "selected" : ""}" type="button" data-branch="${escapeAttribute(branch.fullName)}" data-branch-key="${escapeAttribute(key)}" aria-pressed="${selected}" title="${escapeAttribute(title)}"><span class="branch-glyph ${branch.current ? "current" : ""}">${icon(iconName, 14)}</span><span class="branch-name">${escapeHtml(displayName)}</span>${meta.length > 0 ? `<span class="branch-row-meta">${meta.join("")}</span>` : ""}</button>`;
 }
 
 function emptyState(title: string, detail: string): string {

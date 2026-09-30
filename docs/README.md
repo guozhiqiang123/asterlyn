@@ -35,6 +35,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
 - [`engineering/architecture-refactoring.md`](engineering/architecture-refactoring.md) — current architecture audit, target boundaries, migration order, and refactoring gates.
+- [`engineering/empty-workspace-startup-plan.md`](engineering/empty-workspace-startup-plan.md) — first-launch cancellation, disabled project tools, and the actionable Welcome state.
 - [`engineering/foundation-hardening.md`](engineering/foundation-hardening.md) — post-CM4 feature freeze, executable boundary plan, migration sequence, and acceptance gates.
 - [`engineering/2026-09-29-audit-remediation-plan.md`](engineering/2026-09-29-audit-remediation-plan.md) — ordered credential, workspace-recovery, terminal-flow-control, lifecycle, and ownership hardening plan.
 - [`benchmarks/2026-09-29-architecture-audit-remediation.md`](benchmarks/2026-09-29-architecture-audit-remediation.md) — AR1–AR5 implementation, fault evidence, full local validation, performance bounds, and remaining release limits.
@@ -45,6 +46,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/intraline-diff-highlighting-plan.md`](engineering/intraline-diff-highlighting-plan.md) — Android Studio-style line and inline Diff semantics across editable and read-only implementations.
 - [`engineering/dialog-window-geometry-plan.md`](engineering/dialog-window-geometry-plan.md) — shared movement, resizing, persistence, and confirmation behavior for application-owned dialogs.
 - [`engineering/stash-tool-window-plan.md`](engineering/stash-tool-window-plan.md) — bottom two-column Stash manager, exact-object mutations, context actions, and read-only Diff delivery plan.
+- [`engineering/git-worktree-actions-plan.md`](engineering/git-worktree-actions-plan.md) — primary/linked/available branch checkout identity, reviewed removal, Android Studio-style creation, primary-window Open/Reveal actions, and acceptance gates.
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds and artifact trust boundary.

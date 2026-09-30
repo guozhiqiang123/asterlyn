@@ -14,6 +14,7 @@ import type {
   StashMutationRequest,
   TagMutationRequest,
   WorkingTreeMutationOutcome,
+  WorktreeCreationPlan,
 } from "../../models.ts";
 import type { GitOperationBridge } from "../../protocol/desktop-bridge.ts";
 import { invokeDesktopCommand } from "./desktop-command-adapter.ts";
@@ -63,6 +64,16 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       plan,
       operationId,
+    }),
+  prepareWorktreeCreation: (repositoryRoot, request) =>
+    invokeDesktopCommand<WorktreeCreationPlan>("prepare_worktree_creation", {
+      repositoryRoot,
+      request,
+    }),
+  executeWorktreeCreation: (repositoryRoot, plan) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_worktree_creation", {
+      repositoryRoot,
+      plan,
     }),
   executeTagMutation: (repositoryRoot, request: TagMutationRequest, operationId) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_tag_mutation", {

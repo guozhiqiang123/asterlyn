@@ -582,12 +582,11 @@ test("custom branch mode validates branch name and handles custom branch push", 
   controller.dispose();
 });
 
-test("push dialog view excludes origin/HEAD and origin from branch dropdown and includes __new__", async () => {
+test("push dialog consumes backend-filtered remote branches and includes __new__", async () => {
   const { renderRemoteDialogContent } = await import("../src/features/remote-push/remote-push-view.ts");
   const repo = snapshot({
     branches: [
       { name: "main", fullName: "refs/heads/main", kind: "local" },
-      { name: "origin", fullName: "refs/remotes/origin/HEAD", kind: "remote" },
       { name: "origin/feature-x", fullName: "refs/remotes/origin/feature-x", kind: "remote" },
     ],
   });
@@ -616,10 +615,5 @@ test("push dialog view excludes origin/HEAD and origin from branch dropdown and 
   assert.match(branchOptionsHtml, /<option value="main" selected>main<\/option>/);
   assert.doesNotMatch(branchOptionsHtml, /main \(New\)/);
   assert.match(html, /class="push-branch-badge new">New<\/span>/);
-  // Verify origin and HEAD are NOT present as branch choices
-  assert.doesNotMatch(branchOptionsHtml, /<option value="origin"/);
-  assert.doesNotMatch(branchOptionsHtml, /<option value="HEAD"/);
-
   controller.dispose();
 });
-

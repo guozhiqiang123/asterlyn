@@ -34,6 +34,7 @@ use crate::process::{
 
 mod commit_details;
 mod stash_creation;
+mod worktree;
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
@@ -533,13 +534,21 @@ impl GitRepository {
             [
                 "for-each-ref",
                 "--sort=-committerdate",
-                "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(upstream:track)%00%(committerdate:unix)%00%(subject)",
+                crate::parser::BRANCH_REFERENCE_FORMAT_ARG,
                 "refs/heads",
                 "refs/remotes",
                 "refs/tags",
             ],
         )?;
-        parse_branches(&refs.stdout)
+        let mut branches = parse_branches(&refs.stdout)?;
+        let worktrees = self.registered_worktrees()?;
+        for branch in branches.iter_mut().filter(|branch| {
+            branch.kind == crate::model::BranchKind::Local && branch.repository_id == "."
+        }) {
+            branch.primary_worktree_path = worktree::primary_path(&worktrees, &branch.full_name);
+            branch.linked_worktree_path = worktree::linked_path(&worktrees, &branch.full_name);
+        }
+        Ok(branches)
     }
 
     fn tracked_root_snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
@@ -3323,6 +3332,20 @@ impl GitRepository {
                     .to_string(),
             });
         }
+        if request.kind != BranchMutationKind::RemoveWorktree
+            && (request.force_worktree_removal || request.reviewed_worktree_token.is_some())
+        {
+            return Err(GitError::InvalidInput {
+                field: "force worktree removal".to_string(),
+                message: "force is available only for linked worktree removal".to_string(),
+            });
+        }
+        if request.force_worktree_removal != request.reviewed_worktree_token.is_some() {
+            return Err(GitError::InvalidInput {
+                field: "force worktree removal".to_string(),
+                message: "forced removal requires the exact reviewed warning token".to_string(),
+            });
+        }
         let start_name = self
             .current_branch()?
             .ok_or_else(|| GitError::UnsafeOperation {
@@ -3339,7 +3362,8 @@ impl GitRepository {
         let (source_kind, source_name, source_oid, upstream) = match request.kind {
             BranchMutationKind::Switch
             | BranchMutationKind::Rename
-            | BranchMutationKind::Delete => {
+            | BranchMutationKind::Delete
+            | BranchMutationKind::RemoveWorktree => {
                 let source = reference
                     .filter(|candidate| {
                         candidate.kind == crate::model::BranchKind::Local
@@ -3431,8 +3455,26 @@ impl GitRepository {
                     blockers: Vec::new(),
                 });
             }
+            BranchMutationKind::RemoveWorktree if current_source => {
+                return Err(GitError::UnsafeOperation {
+                    operation: "prepare linked worktree removal".to_string(),
+                    message: "the current Git worktree cannot delete itself".to_string(),
+                    blockers: vec![self.root.to_string_lossy().into_owned()],
+                });
+            }
             _ => {}
         }
+
+        let worktree_review = if request.kind == BranchMutationKind::RemoveWorktree {
+            Some(self.worktree_removal_review(
+                &request.source_full_name,
+                &source_oid,
+                request.force_worktree_removal,
+                request.reviewed_worktree_token.as_deref(),
+            )?)
+        } else {
+            None
+        };
 
         let checked_out = if source_kind == BranchMutationSourceKind::Local {
             self.branch_worktree_checkout_count(&request.source_full_name)?
@@ -3484,7 +3526,9 @@ impl GitRepository {
                 }
                 (Some(name.to_string()), Some(target))
             }
-            BranchMutationKind::Switch | BranchMutationKind::Delete => (None, None),
+            BranchMutationKind::Switch
+            | BranchMutationKind::Delete
+            | BranchMutationKind::RemoveWorktree => (None, None),
         };
         let merged_into_current = if request.kind == BranchMutationKind::Delete {
             let merged = self.is_ancestor(&source_oid, &start_head_oid)?;
@@ -3531,6 +3575,14 @@ impl GitRepository {
             &start_head_ref,
             &start_head_oid,
             upstream.as_deref().unwrap_or(""),
+            worktree_review
+                .as_ref()
+                .map_or("", |review| review.review_token.as_str()),
+            if request.force_worktree_removal {
+                "force"
+            } else {
+                "ordinary"
+            },
             if merged_into_current == Some(true) {
                 "merged"
             } else {
@@ -3571,6 +3623,7 @@ impl GitRepository {
             start_head_oid,
             upstream,
             merged_into_current,
+            worktree_review,
             delete_remote: request.delete_remote,
             remote_deletion,
             preview_token,
@@ -3623,6 +3676,14 @@ impl GitRepository {
             source_oid: plan.source_oid.clone(),
             new_name: plan.new_name.clone(),
             delete_remote: plan.delete_remote,
+            force_worktree_removal: plan
+                .worktree_review
+                .as_ref()
+                .is_some_and(|review| review.force_authorized),
+            reviewed_worktree_token: plan
+                .worktree_review
+                .as_ref()
+                .and_then(|review| review.force_authorized.then(|| review.review_token.clone())),
         };
         let refreshed = self.prepare_branch_mutation(&request)?;
         if refreshed.preview_token != plan.preview_token {
@@ -3640,6 +3701,7 @@ impl GitRepository {
             BranchMutationKind::CheckoutRemote => self.create_branch_from(plan, true),
             BranchMutationKind::Rename => self.rename_branch_from_plan(plan),
             BranchMutationKind::Delete => self.delete_branch_from_plan(plan),
+            BranchMutationKind::RemoveWorktree => self.remove_worktree_from_plan(plan),
         }
     }
 
@@ -3760,19 +3822,6 @@ impl GitRepository {
             true,
         )?;
         Ok(())
-    }
-
-    fn branch_worktree_checkout_count(&self, full_name: &str) -> Result<usize, GitError> {
-        let output = self.run_read(
-            "read linked worktree branches",
-            ["worktree", "list", "--porcelain", "-z"],
-        )?;
-        let expected = format!("branch {full_name}");
-        Ok(output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|field| String::from_utf8_lossy(field).trim() == expected)
-            .count())
     }
 
     pub fn prepare_remote_mutation(
@@ -9074,6 +9123,8 @@ mod tests {
             source_oid: source_oid.clone(),
             new_name: Some("feature/from-source".to_string()),
             delete_remote: false,
+            force_worktree_removal: false,
+            reviewed_worktree_token: None,
         };
         let plan = repository
             .prepare_branch_mutation(&request)
@@ -9126,6 +9177,8 @@ mod tests {
             source_oid,
             new_name: Some("topic".to_string()),
             delete_remote: false,
+            force_worktree_removal: false,
+            reviewed_worktree_token: None,
         };
         let plan = repository
             .prepare_branch_mutation(&request)
@@ -9164,6 +9217,8 @@ mod tests {
                 source_oid: oid.clone(),
                 new_name: Some("new-name".to_string()),
                 delete_remote: false,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect("rename plan");
         repository
@@ -9181,6 +9236,8 @@ mod tests {
                 source_oid: oid.clone(),
                 new_name: None,
                 delete_remote: false,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect("delete plan");
         assert_eq!(delete.merged_into_current, Some(true));
@@ -9221,6 +9278,8 @@ mod tests {
                 source_oid: oid,
                 new_name: None,
                 delete_remote: true,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect("remote deletion plan");
         let target = plan.remote_deletion.as_ref().expect("exact remote target");
@@ -9265,6 +9324,8 @@ mod tests {
                 source_oid: topic_oid,
                 new_name: None,
                 delete_remote: true,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect("remote deletion plan");
         git(
@@ -9296,6 +9357,8 @@ mod tests {
                 source_oid: stale_oid.clone(),
                 new_name: None,
                 delete_remote: false,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect("switch plan");
         git(
@@ -9323,6 +9386,8 @@ mod tests {
                 source_oid: side_oid,
                 new_name: None,
                 delete_remote: false,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect_err("unmerged deletion is blocked");
         assert!(unmerged.to_string().contains("already merged"));
@@ -9342,6 +9407,8 @@ mod tests {
                 source_oid: linked_oid,
                 new_name: None,
                 delete_remote: false,
+                force_worktree_removal: false,
+                reviewed_worktree_token: None,
             })
             .expect_err("linked worktree deletion is blocked");
         assert!(linked.to_string().contains("another Git worktree"));

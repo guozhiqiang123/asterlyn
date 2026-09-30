@@ -1,5 +1,5 @@
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_EN_US } from "./keybinding-en-US.ts";
-import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts";
+import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { EN_US_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts"; import { EN_US_STASH_COPY } from "./stash-copy.ts";
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
@@ -497,17 +497,17 @@ export const EN_US: LocaleCatalog = {
     branchContextMenu: {
       ariaLabel: (name) => `Branch actions for ${name}`, tagAriaLabel: (name) => `Tag actions for ${name}`,
       viewHistory: "View Branch History", switchTo: (name) => `Switch to ${name}`,
-      checkoutRemote: "Check Out as Local Branch…", newBranchFrom: "New Branch from Here…",
+      checkoutRemote: "Check Out as Local Branch…", newBranchFrom: "New Branch from Here…", newWorktree: "New Worktree…", openWorktree: "Open Worktree…", revealWorktree: "Reveal in File Manager", revealedWorktree: "Opened the worktree in the system file manager",
       mergeIntoCurrent: "Merge into Current Branch…", rebaseCurrentOnto: "Rebase Current Branch onto Here…",
       update: "Update…", push: "Push…", rename: "Rename…", copyBranch: "Copy Branch", copyTag: "Copy Tag",
-      shortName: "Short Name", fullReference: "Full Reference", deleteLocal: "Delete Local Branch…", checkoutTag: "Check Out Tag…", mergeTagInto: (tag, branch) => `Merge '${tag}' into '${branch ?? "current branch"}'…`, pushTagTo: (remote) => `Push to ${remote}…`, deleteLocalTag: "Delete Local Tag…", deleteRemoteTag: (remote) => `Delete from ${remote}…`,
+      shortName: "Short Name", fullReference: "Full Reference", deleteLocal: "Delete Local Branch…", removeWorktree: "Delete Worktree…", checkoutTag: "Check Out Tag…", mergeTagInto: (tag, branch) => `Merge '${tag}' into '${branch ?? "current branch"}'…`, pushTagTo: (remote) => `Push to ${remote}…`, deleteLocalTag: "Delete Local Tag…", deleteRemoteTag: (remote) => `Delete from ${remote}…`,
       copiedShort: "Branch name copied", copiedFull: "Full branch reference copied",
       clipboardUnavailable: "The system clipboard is unavailable",
       busy: "Another repository operation is still in progress",
-      cleanRequired: "Commit or remove all working-tree changes before switching branches", localBranchRequired: "Check out an existing local branch before merging this tag",
+      cleanRequired: "Commit or remove all working-tree changes before switching branches", localBranchRequired: "Check out an existing local branch before merging this tag", worktreeCheckedOut: "This branch is checked out in a linked worktree",
       targetChanged: "The branch changed; open its menu again",
     },
-    branchMutation: EN_US_BRANCH_MUTATION_COPY, tagMutation: EN_US_TAG_MUTATION_COPY,
+    branchMutation: EN_US_BRANCH_MUTATION_COPY, worktreeCreation: EN_US_WORKTREE_CREATION_COPY, tagMutation: EN_US_TAG_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `Commit actions for ${subject}`,
       copyCommitId: "Copy Commit ID", cherryPick: "Cherry-pick…", revertCommit: "Revert Commit…", resetToHere: EN_GIT_RESET_COPY.menuItem,
@@ -601,7 +601,7 @@ export const EN_US: LocaleCatalog = {
     noRefs: "No refs", refsAppearHere: "Branches and tags will appear here.", branchOrTag: "Branch or tag",
     filterBranchesAndTags: "Filter branches and tags", noMatchingRefs: "No matching refs",
     tryAnotherRef: "Try another branch, remote, or tag name.", groups: { local: "Local", remote: "Remote", tag: "Tags" },
-    activateAgainForAllRefs: "Activate again to show all refs", roots: (count) => `${count} Git roots`,
+    activateAgainForAllRefs: "Activate again to show all refs", primaryWorktreeBadge: "PRIMARY", worktreeBadge: "WORKTREE", availableBranchBadge: "AVAILABLE", roots: (count) => `${count} Git roots`,
     allRefs: "All refs", allRefsTitle: "History from local branches, remote-tracking branches, and tags",
     upToCommit: (shortOid) => `Up to ${shortOid}`,
     historyStartsAt: (shortOid, repositoryId) => `History starts at exact commit ${shortOid} in ${repositoryId}`,

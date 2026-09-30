@@ -18,6 +18,12 @@ function plan(request) {
     newName: request.newName, startHeadRef: "refs/heads/main", startHeadOid: "a".repeat(40),
     upstream: request.kind === "delete" ? "origin/topic" : null,
     mergedIntoCurrent: request.kind === "delete" ? true : null,
+    worktreeReview: request.kind === "removeWorktree" ? {
+      path: "/worktrees/topic", changedPaths: [], totalChangedPaths: 0, changesTruncated: false,
+      primaryHeadRef: "refs/heads/main", primaryHeadOid: "a".repeat(40),
+      unmergedCommitCount: 0, forceRequired: false,
+      forceAuthorized: request.forceWorktreeRemoval ?? false, reviewToken: "worktree-review",
+    } : null,
     deleteRemote: request.deleteRemote,
     remoteDeletion: request.deleteRemote ? {
       remote: "origin", branchFullName: "refs/heads/topic",
@@ -45,6 +51,7 @@ test("named non-destructive mutations prepare and execute in one submission", as
   assert.deepEqual(calls[0], ["prepare", "/repo", {
     kind: "create", sourceFullName: branch.fullName, sourceOid: branch.oid,
     newName: "feature/menu", deleteRemote: false,
+    forceWorktreeRemoval: false, reviewedWorktreeToken: null,
   }]);
   assert.deepEqual(calls[1], ["execute", "token"]);
 });
@@ -75,6 +82,56 @@ test("switch prepares and executes directly without a confirmation state", async
   controller.open("/repo", "switch", branch);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(calls, ["prepare", "execute"]);
+  assert.equal(controller.state.dialog, null);
+});
+
+test("worktree removal reviews the exact path and retains explicit confirmation", async () => {
+  const controller = new BranchMutationController({
+    async prepare(_root, request) { return plan(request); },
+    async execute() { return true; },
+    errorMessage: String,
+  });
+  controller.open("/repo", "removeWorktree", { ...branch, linkedWorktreePath: "/worktrees/topic" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(controller.state.dialog.plan.worktreeReview.path, "/worktrees/topic");
+  const html = renderBranchMutationDialog(controller.state, EN_US.history.branchMutation);
+  assert.match(html, /\/worktrees\/topic/u);
+  assert.match(html, /Delete Worktree/u);
+  assert.doesNotMatch(html, /branch-mutation-delete-remote/u);
+  assert.notEqual(controller.state.dialog, null);
+});
+
+test("warning review prepares an exact forced plan before deleting the worktree", async () => {
+  const requests = [];
+  let executed = null;
+  const controller = new BranchMutationController({
+    async prepare(_root, request) {
+      requests.push({ ...request });
+      const value = plan(request);
+      value.worktreeReview = {
+        ...value.worktreeReview,
+        changedPaths: ["draft.txt"], totalChangedPaths: 1,
+        unmergedCommitCount: 2, forceRequired: true,
+        forceAuthorized: request.forceWorktreeRemoval,
+      };
+      return value;
+    },
+    async execute(value) { executed = value; return true; },
+    errorMessage: String,
+  });
+  controller.open("/repo", "removeWorktree", { ...branch, linkedWorktreePath: "/worktrees/topic" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const html = renderBranchMutationDialog(controller.state, EN_US.history.branchMutation);
+  assert.match(html, /1 uncommitted worktree path/u);
+  assert.match(html, /2 commits are not contained/u);
+  assert.match(html, /Force Delete Worktree/u);
+  await controller.execute();
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].forceWorktreeRemoval, true);
+  assert.equal(requests[1].reviewedWorktreeToken, "worktree-review");
+  assert.equal(executed.worktreeReview.forceAuthorized, true);
   assert.equal(controller.state.dialog, null);
 });
 
