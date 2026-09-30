@@ -204,8 +204,11 @@ selection command resolves and revalidates the current exact target when invoked
 | Toggle stash-file tree/flat view | presentation | `stash.files.view.toggle` | **Custom** |
 | Expand/collapse stash folders | presentation | `stash.files.expandAll`, `stash.files.collapseAll` | **Custom** |
 | Open selected stash-file Diff | navigation | `stash.file.diff.open` | **Custom** |
+| Open selected stash-file Diff in a pinned tab | navigation | `stash.file.diff.openNewTab` | **Custom** |
 | Apply selected stash | write | `stash.selection.apply` | **Custom**; exact current stash is revalidated |
 | Pop selected stash | destructive | `stash.selection.pop` | **Custom**, deliberately unassigned |
+| Open advanced Unstash options | write | `stash.selection.unstash` | **Custom**; preserves Apply/Pop/index/new-branch review controls |
+| Drop selected stash / clear repository stashes | destructive | `stash.selection.drop`, `stash.clear` | **Custom**, unassigned and confirmed; Clear remains blocked for truncated catalogs |
 | Select stash/file or disclose folder | navigation | list/tree behavior | **Local** |
 
 ## 9. Remote update and Push

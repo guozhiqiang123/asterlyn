@@ -32,8 +32,12 @@ test("Stash command descriptors keep localized metadata and delegate live policy
   assert.equal(registry.get(STASH_COMMANDS.apply).title(), EN_US.stash.apply);
   assert.equal(registry.get(STASH_COMMANDS.openFileDiff).availability().enabled, true);
   await registry.get(STASH_COMMANDS.openFileDiff).execute("keyboard");
+  await registry.get(STASH_COMMANDS.openFileDiffNewTab).execute("keyboard");
+  await registry.get(STASH_COMMANDS.unstash).execute("keyboard");
+  await registry.get(STASH_COMMANDS.drop).execute("keyboard");
+  await registry.get(STASH_COMMANDS.clear).execute("keyboard");
   await registry.get(STASH_COMMANDS.pop).execute("palette");
-  assert.deepEqual(actions, ["open-diff", "pop"]);
+  assert.deepEqual(actions, ["open-diff", "open-diff-new-tab", "unstash", "drop", "clear", "pop"]);
   enabled = false;
   assert.deepEqual(registry.get(STASH_COMMANDS.apply).availability(), {
     enabled: false, reason: "apply unavailable",
@@ -92,12 +96,17 @@ test("Stash feature commands revalidate selection and preserve mutation routes",
 
   assert.deepEqual(runtime.commandAvailability("open-diff"), { enabled: true });
   await runtime.executeCommand("open-diff");
+  await runtime.executeCommand("open-diff-new-tab");
   await runtime.executeCommand("toggle-view");
   assert.equal(runtime.controller.state.fileView, "flat");
   await runtime.executeCommand("apply");
+  await runtime.executeCommand("drop");
+  await runtime.executeCommand("clear");
   assert.deepEqual(events.filter(([kind]) => kind === "diff" || kind === "mutation"), [
-    ["diff", "src/app.ts"], ["mutation", "apply", selected.oid],
+    ["diff", "src/app.ts"], ["diff", "src/app.ts"], ["mutation", "apply", selected.oid],
+    ["mutation", "drop", selected.oid], ["mutation", "clear", null],
   ]);
+  assert.equal(runtime.pinnedDocuments().length, 1);
 
   clean = false;
   assert.deepEqual(runtime.commandAvailability("pop"), {

@@ -196,14 +196,18 @@ export class StashRuntime {
     if (action === "refresh") return { enabled: true };
     const entry = this.controller.selectedEntry();
     if (!entry) return { enabled: false, reason: copy.selectStash };
-    if (action === "apply" || action === "pop") {
+    if (action === "apply" || action === "pop" || action === "unstash") {
       return this.ports.clean()
         ? { enabled: true }
         : { enabled: false, reason: copy.cleanRequired };
     }
+    if (action === "drop") return { enabled: true };
+    if (action === "clear") return this.controller.state.truncatedRepositoryIds.includes(entry.repositoryId)
+      ? { enabled: false, reason: copy.truncated }
+      : { enabled: true };
     const files = this.controller.state.details?.files ?? [];
     if (action === "toggle-view") return { enabled: true };
-    if (action === "open-diff") {
+    if (action === "open-diff" || action === "open-diff-new-tab") {
       return this.controller.selectedFile()
         ? { enabled: true }
         : { enabled: false, reason: copy.noFiles };
@@ -227,7 +231,10 @@ export class StashRuntime {
       this.controller.collapseDirectories([".", ...stashFileDirectoryPaths(buildCommitFileTree(files))]);
       return;
     }
-    if (action === "open-diff") { this.openSelectedFile(false); return; }
+    if (action === "open-diff" || action === "open-diff-new-tab") {
+      this.openSelectedFile(action === "open-diff-new-tab");
+      return;
+    }
     const entry = this.controller.selectedEntry();
     if (entry) await this.handleAction(action, entry);
   }

@@ -26,8 +26,12 @@ export const STASH_COMMAND_DEFINITIONS: readonly StashCommandDefinition[] = [
   stash(STASH_COMMANDS.expandAll, "expand-all", (catalog) => catalog.history.expandChangedFolders, "stash expand all folders", "#stash-file-expand-all"),
   stash(STASH_COMMANDS.collapseAll, "collapse-all", (catalog) => catalog.history.collapseChangedFolders, "stash collapse all folders", "#stash-file-collapse-all"),
   stash(STASH_COMMANDS.openFileDiff, "open-diff", (catalog) => catalog.stash.showDiff, "open selected stash file diff"),
+  stash(STASH_COMMANDS.openFileDiffNewTab, "open-diff-new-tab", (catalog) => catalog.stash.showDiffNewTab, "open selected stash file diff new pinned tab"),
   stash(STASH_COMMANDS.apply, "apply", (catalog) => catalog.stash.apply, "apply selected stash keep", '[data-stash-action="apply"]'),
   stash(STASH_COMMANDS.pop, "pop", (catalog) => catalog.stash.pop, "pop apply remove selected stash", '[data-stash-action="pop"]'),
+  stash(STASH_COMMANDS.unstash, "unstash", (catalog) => catalog.stash.unstash, "open selected stash advanced apply pop branch options"),
+  stash(STASH_COMMANDS.drop, "drop", (catalog) => catalog.stash.drop, "drop delete selected stash confirmed"),
+  stash(STASH_COMMANDS.clear, "clear", (catalog) => catalog.stash.clear, "clear delete all repository stashes confirmed"),
 ];
 
 export const STASH_SHORTCUT_TARGETS: readonly DomCommandDefinition[] =
