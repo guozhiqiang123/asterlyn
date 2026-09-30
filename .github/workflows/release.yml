@@ -1,0 +1,301 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: Release quality gates
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require main source and matching version
+        env:
+          ASTERLYN_EVENT_NAME: ${{ github.event_name }}
+          ASTERLYN_RELEASE_REF: ${{ github.ref }}
+          ASTERLYN_RELEASE_SHA: ${{ github.sha }}
+          ASTERLYN_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          if [ "$ASTERLYN_EVENT_NAME" = "workflow_dispatch" ] && [ "$ASTERLYN_RELEASE_REF" != "refs/heads/main" ]; then
+            echo "Manual release rehearsals may only run from main." >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$ASTERLYN_RELEASE_SHA" origin/main || {
+            echo "Release source must be reachable from origin/main." >&2
+            exit 1
+          }
+          node scripts/verify-release-version.mjs "$ASTERLYN_RELEASE_TAG"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+          components: rustfmt, clippy
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check and build frontend
+        run: npm run check && npm run build
+
+      - name: Test delivery scripts
+        run: npm run test:scripts
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Install desktop test dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
+
+      - name: Test native workspace watcher
+        run: cargo test --locked -p asterlyn --lib native_backend -- --ignored
+
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+
+  sbom:
+    name: Generate dependency evidence
+    needs: quality
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+
+      - name: Generate CycloneDX manifests
+        run: |
+          npm ci --ignore-scripts
+          mkdir -p release-sbom
+          npm sbom --sbom-format cyclonedx > release-sbom/asterlyn-frontend.cdx.json
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx --format json --all --target all
+          find crates src-tauri -type f -name '*.cdx.json' -exec cp '{}' release-sbom/ \;
+          expected=6
+          actual=$(find release-sbom -maxdepth 1 -type f -name '*.cdx.json' | wc -l | tr -d ' ')
+          if [ "$actual" -ne "$expected" ]; then
+            echo "Expected $expected CycloneDX manifests; found $actual." >&2
+            exit 1
+          fi
+
+      - name: Upload dependency evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asterlyn-release-sbom
+          path: release-sbom/*.cdx.json
+          if-no-files-found: error
+          retention-days: 14
+
+  package:
+    name: Package ${{ matrix.label }}
+    needs: quality
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb,rpm
+            bundle_root: target/x86_64-unknown-linux-gnu/release/bundle
+            smoke_executable: target/x86_64-unknown-linux-gnu/release/asterlyn
+            release_platform: linux
+            apple_signing_identity: ""
+          - label: Windows x86_64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            bundle_root: target/x86_64-pc-windows-msvc/release/bundle
+            smoke_executable: target/x86_64-pc-windows-msvc/release/asterlyn.exe
+            release_platform: windows
+            apple_signing_identity: ""
+          - label: macOS Apple Silicon
+            platform: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            bundle_root: target/aarch64-apple-darwin/release/bundle
+            smoke_executable: target/aarch64-apple-darwin/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn
+            release_platform: macos
+            apple_signing_identity: "-"
+          - label: macOS Intel
+            platform: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+            bundle_root: target/x86_64-apple-darwin/release/bundle
+            smoke_executable: target/x86_64-apple-darwin/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn
+            release_platform: macos
+            apple_signing_identity: "-"
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Set up Rust target
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux desktop dependencies
+        if: matrix.release_platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            rpm \
+            xvfb \
+            xdg-utils
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build native release artifacts
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ matrix.apple_signing_identity }}
+        run: npm run tauri -- build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
+
+      - name: Verify ad-hoc macOS signature
+        if: matrix.release_platform == 'macos'
+        env:
+          ASTERLYN_APP_PATH: ${{ matrix.bundle_root }}/macos/Asterlyn.app
+        run: |
+          codesign --verify --deep --strict --verbose=2 "$ASTERLYN_APP_PATH"
+          signature=$(codesign --display --verbose=4 "$ASTERLYN_APP_PATH" 2>&1)
+          printf '%s\n' "$signature" | grep -F 'Signature=adhoc'
+          if printf '%s\n' "$signature" | grep -q '^Authority='; then
+            echo "A commercial Apple signing authority unexpectedly entered the zero-cost release." >&2
+            exit 1
+          fi
+
+      - name: Verify unsigned Windows installer
+        if: matrix.release_platform == 'windows'
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem "${{ matrix.bundle_root }}\nsis\*-setup.exe")
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one NSIS installer; found $($installers.Count)."
+          }
+          $signature = Get-AuthenticodeSignature $installers[0].FullName
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::NotSigned) {
+            throw "Expected an unsigned Windows installer; found $($signature.Status)."
+          }
+
+      - name: Smoke native app on Linux
+        if: matrix.release_platform == 'linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" node scripts/smoke-native-app.mjs "${{ matrix.smoke_executable }}"
+
+      - name: Smoke native app
+        if: matrix.release_platform != 'linux'
+        run: node scripts/smoke-native-app.mjs "${{ matrix.smoke_executable }}"
+
+      - name: Stage release assets and checksums
+        run: node scripts/release-artifacts.mjs stage "${{ matrix.bundle_root }}" release-assets "${{ matrix.target }}" "${{ matrix.release_platform }}"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asterlyn-release-${{ matrix.target }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [sbom, package]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+
+      - name: Download package assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: asterlyn-release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify complete release set
+        run: node scripts/release-artifacts.mjs verify release-assets x86_64-unknown-linux-gnu x86_64-pc-windows-msvc aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASTERLYN_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          notes=$(cat <<'EOF'
+          > [!IMPORTANT]
+          > This zero-cost distribution is intentionally not backed by commercial platform certificates. The Windows installer is unsigned. The macOS application uses an ad-hoc integrity signature and is not notarized, so first launch may require approval in System Settings → Privacy & Security.
+
+          > [!重要]
+          > 本版本未购买商业平台证书：Windows 安装程序未签名；macOS 应用仅使用 ad-hoc 完整性签名且未经 Apple 公证，首次打开可能需要在“系统设置 → 隐私与安全性”中手动允许。
+          EOF
+          )
+          gh release create "$ASTERLYN_RELEASE_TAG" release-assets/* \
+            --verify-tag \
+            --title "Asterlyn $ASTERLYN_RELEASE_TAG" \
+            --generate-notes \
+            --notes "$notes"

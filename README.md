@@ -10,6 +10,18 @@ This is a new implementation. Rebased is used as a behavioral and interaction re
 
 M1 builds a usable Git workbench: open a local repository, inspect branch and working-tree state, view changes and history, stage/unstage paths, and create commits. See [`docs/milestones/m1-git-gui-first.md`](docs/milestones/m1-git-gui-first.md).
 
+## Downloads
+
+Installers for Windows x86_64, macOS Apple Silicon/Intel, and Linux x86_64 are published on the
+[`Releases`](https://github.com/guozhiqiang123/asterlyn/releases/latest) page. Each Release includes
+`SHA256SUMS` and CycloneDX dependency manifests.
+
+The first public distribution intentionally uses no commercial platform certificate. Windows may
+show an unknown-publisher warning. The macOS application is ad-hoc signed but not notarized, so its
+first launch may require explicit approval in **System Settings → Privacy & Security**. These limits
+are also stated on every Release; a `.sig` or checksum must not be mistaken for platform publisher
+trust.
+
 ## Repository map
 
 - `crates/asterlyn-git`: UI-independent Git adapter and parsers.

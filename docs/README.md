@@ -49,7 +49,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/git-worktree-actions-plan.md`](engineering/git-worktree-actions-plan.md) — primary/linked/available branch checkout identity, reviewed removal, Android Studio-style creation, primary-window Open/Reveal actions, and acceptance gates.
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
-- [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds and artifact trust boundary.
+- [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
 
 ## Design and references

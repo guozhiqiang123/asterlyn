@@ -92,3 +92,10 @@ Performance budgets are guardrails. They may change only through a documented de
 ## Release channels
 
 Use development builds first, then preview, then stable only after migration/rollback and crash-rate evidence. Preview data must remain forward-migratable; stable users are never used as schema testers.
+
+The first public distribution uses the zero-cost policy recorded in [`ci.md`](ci.md): Windows
+installers remain unsigned and macOS DMGs are ad-hoc signed without notarization. CI must verify
+those exact states rather than silently accepting whichever identity a runner exposes. Every Release
+includes SHA-256 checksums, CycloneDX dependency evidence, native liveness results, and explicit
+installation-trust limitations. Certificate-backed signing may replace this policy only through a
+documented workflow and clean-machine acceptance change.

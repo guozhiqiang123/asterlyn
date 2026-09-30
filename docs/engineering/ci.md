@@ -8,7 +8,7 @@
 - Windows x86_64 on the current GitHub-hosted Windows image.
 - macOS Apple Silicon and Intel on the current GitHub-hosted macOS image.
 
-The workflow uploads unsigned, short-lived workflow artifacts plus a SHA-256 manifest for every target. It does not create a Git tag or GitHub Release and does not receive signing, notarization, updater, or publishing credentials.
+The workflow uploads unsigned Windows/Linux and ad-hoc-signed macOS short-lived workflow artifacts plus a SHA-256 manifest for every target. It does not create a Git tag or GitHub Release and does not receive signing, notarization, updater, or publishing credentials.
 
 After bundling, each target launches its freshly built native executable against a disposable Git repository containing both tracked and untracked changes. The process must remain alive for a six-second observation window and is then terminated as a process tree. The launcher gives Linux a disposable XDG application profile so its temporary repository cannot enter an installed user's recent-project state. Linux runs under a temporary Xvfb display; Windows and macOS run directly on their hosted runners. An early exit fails the target and reports bounded stdout/stderr diagnostics.
 
@@ -27,7 +27,8 @@ mutations.
 - Pull requests use `pull_request`, never the privileged `pull_request_target` event.
 - External actions are pinned to immutable commit hashes. The adjacent version comments document the reviewed upstream release.
 - Dependency installation uses `npm ci` and Cargo's committed lock file.
-- Signing and release publication use separate workflows. Signing requires the protected `macos-signing` environment and an explicitly approved manual dispatch from `main`; release publication remains outside both packaging workflows.
+- Preview and release publication remain separate. The preview workflow is read-only. The Release workflow is also read-only while testing and packaging; only its final tag-only publication job receives `contents: write`.
+- Commercial signing and notarization credentials are intentionally absent. The release workflow fails if a macOS package acquires a certificate-backed authority or if a Windows installer is anything other than `NotSigned`.
 
 ## In-application Release discovery
 
@@ -47,28 +48,25 @@ installation remain later release-channel work under the existing trust gates.
 
 ## Evidence policy
 
-A green matrix proves that compilation, bundling, and bounded process-liveness smoke checks succeeded on the named hosted-runner images. It does not prove that the window painted correctly or that user interaction worked. Before an artifact becomes a release candidate, record its hash and perform a launch/workflow smoke test on real hardware or a declared equivalent interactive environment. Unsigned macOS artifacts use ad-hoc signing only to preserve bundle integrity; they are not notarized and should not be presented as end-user releases.
+A green matrix proves that compilation, bundling, and bounded process-liveness smoke checks succeeded on the named hosted-runner images. It does not prove that the window painted correctly or that user interaction worked. Before an artifact becomes a release candidate, record its hash and perform a launch/workflow smoke test on real hardware or a declared equivalent interactive environment. macOS artifacts use ad-hoc signing only to preserve bundle integrity and are not notarized; every public Release must disclose that limitation and the supported System Settings approval path.
 
 When a pinned action is updated, review its release notes and source provenance, change the hash and version comment together, and treat the resulting workflow run as new acceptance evidence.
 
-## Signed macOS distribution
+## Zero-cost GitHub Release
 
-`Signed macOS package` is isolated from pull requests, ordinary pushes, preview packaging, and release publication. It accepts only a manual dispatch whose source is `refs/heads/main`, checks out `github.sha` without persisted credentials, and has repository-content read permission. The `macos-signing` environment must require release-maintainer approval, prevent self-review, restrict deployment to protected `main`, and disable administrative bypass where the repository plan supports those controls. Apple Silicon runs on `macos-15`; Intel runs on `macos-15-intel`, so each package is compiled and tested on matching hardware rather than cross-built on one runner.
+`Release` implements the accepted first-version distribution policy without commercial platform certificates. A manual dispatch from `main` is a complete rehearsal: it runs the release quality gates, generates dependency evidence, builds every package, verifies platform signing policy, launches every native executable, stages exact public assets, and uploads short-lived workflow artifacts, but it cannot publish. A `v*.*.*` tag whose commit is reachable from `origin/main` runs the same graph and enables the final publication job. The tag must exactly match the synchronized versions in the npm lock/package metadata, Tauri configuration, and every first-party Cargo package.
 
-Configure four environment secrets without committing or pasting them into project files:
+The public package set is:
 
-- `APPLE_CERTIFICATE`: the base64-encoded `.p12` containing a **Developer ID Application** certificate and its private key.
-- `APPLE_CERTIFICATE_PASSWORD`: the `.p12` export password.
-- `APPLE_ID`: the Apple Developer account used for notarization.
-- `APPLE_PASSWORD`: an app-specific Apple password, not the account password.
+- Linux x86_64: AppImage, Debian package, and RPM package.
+- Windows x86_64: one unsigned NSIS installer. PowerShell must report `NotSigned`; an unexpected Authenticode signature fails the job.
+- macOS Apple Silicon and Intel: one DMG per architecture. `APPLE_SIGNING_IDENTITY=-` requests ad-hoc signing; `codesign --verify --deep --strict` must pass, `Signature=adhoc` must be present, and any certificate authority fails the job. No notarization request is made.
 
-Configure `APPLE_TEAM_ID` as a protected environment variable. The workflow generates a one-run keychain password, imports exactly one Developer ID Application identity, checks that its team matches `APPLE_TEAM_ID`, and never falls back to ad-hoc signing. Certificate material is removed and the runner's keychain search list is restored even after failure.
+Every target performs a bounded native-process smoke test and publishes a target-specific SHA-256 manifest. The publication job downloads all four target sets plus CycloneDX manifests for the frontend and five Rust packages, verifies every package against its originating manifest, emits one combined `SHA256SUMS`, and only then creates the GitHub Release. Release notes disclose Windows' unknown-publisher warning and macOS' unnotarized first-launch approval requirement in English and Chinese.
 
-Tauri signs with hardened runtime, submits the application to Apple, and staples the accepted ticket before constructing the DMG. The workflow uploads nothing unless it can verify the Developer ID authority, expected team, secure timestamp, hardened-runtime flag, architecture, nested signatures, Gatekeeper assessment, and stapled tickets. It then mounts the DMG, copies the application with `ditto`, repeats signature/Gatekeeper/ticket checks on that installed form, and runs the native liveness smoke check. Both architectures must pass before a combined checksum manifest is emitted. The workflow deliberately does not create or modify a GitHub Release.
+The only write authority is the tag-only `publish` job's ephemeral GitHub token. No Apple certificate, Apple account, Windows certificate, updater private key, or persistent checkout credential enters the workflow. A later move to Developer ID/notarization or Windows Authenticode is a policy change, not a secret-injection shortcut: update this document, the workflow assertions, user-facing release notes, and clean-machine acceptance evidence together.
 
-The related [AndroidLogDesktop configuration](https://github.com/yifanfengshun930115-afk/AndroidLogDesktop/blob/master/src-tauri/tauri.conf.json) was inspected because a transferred package did not show the reported warning. It declares only `signingIdentity: "-"`; its [packaging workflow](https://github.com/yifanfengshun930115-afk/AndroidLogDesktop/blob/master/.github/workflows/desktop-packages.yml) has no Developer ID or notarization credentials and performs no Gatekeeper verification. That is useful ad-hoc preview behavior but cannot establish Apple trust. A difference caused by download quarantine, prior user approval, or transfer route must not be treated as a release-signing guarantee.
-
-As of 2026-09-10, the repository has no `macos-signing` environment, signing secrets, protected `main` rule, or accepted signed run. The workflow and fail-closed checks are ready, but the macOS warning is not accepted as fixed until those controls are provisioned and the resulting DMG passes a clean-machine install/open test. Do not weaken Gatekeeper with `xattr`, instruct users to bypass it, or present the ad-hoc preview DMG as the signed artifact.
+This policy accepts installation friction in exchange for zero certificate cost. It does not represent ad-hoc signing as Apple trust, and support instructions must use the operating system's visible approval UI rather than removing quarantine attributes. Automatic installation remains out of scope; the application only discovers the latest GitHub Release and opens its page.
 
 ## Accepted packaging evidence — 2026-09-08
 

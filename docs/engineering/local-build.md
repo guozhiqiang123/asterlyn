@@ -139,6 +139,6 @@ The memory helper launches only the supplied local binary and repository, waits 
 - After a local Asterlyn bug fix passes its checks, replace the existing installed app with the freshly built native bundle. Codex verifies the bundle and performs the installation. If the app is running, stop it before replacement and relaunch it afterward; the user has authorized this without a separate shutdown confirmation. Verify that the installed bundle matches the accepted build. Never install an older bundle when the current build fails.
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.
 - The preview matrix and its trust boundary are documented in [`ci.md`](ci.md).
-- Signing/notarization credentials belong in protected CI facilities, never repository files.
+- The current public Release intentionally uses unsigned Windows packages and ad-hoc macOS signing without notarization. If commercial signing is adopted later, its credentials belong in protected CI facilities, never repository files.
 - Record compiler/runtime versions, artifact hashes, SBOM, startup/memory evidence, and smoke-test results with each preview or stable release.
 - The user-owned Linux sysroot is not bundled into the application; Linux uses the supported system WebKitGTK runtime.
