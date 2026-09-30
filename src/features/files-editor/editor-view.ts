@@ -9,7 +9,7 @@ import {
   type TextTabState,
 } from "./editor-session.ts";
 import type { AppPreferences } from "../../preferences.ts";
-import type { EditorCopy } from "../../localization/catalog.ts";
+import type { EditorCopy, ShellCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 
 export interface EditorTabsViewModel {
@@ -172,6 +172,41 @@ export function emptyState(
   iconName: "folder" | "history" | "changes" = "folder",
 ): string {
   return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div>`;
+}
+
+export function actionableEmptyState(
+  title: string,
+  detail: string,
+  actionId: string,
+  actionLabel: string,
+  iconName: "folder" | "history" | "changes" = "folder",
+): string {
+  return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 24)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><button class="primary-button empty-state-action" id="${escapeAttribute(actionId)}" type="button">${escapeHtml(actionLabel)}</button></div>`;
+}
+
+export interface EditorWelcomePresentation {
+  readonly key: string;
+  readonly html: string;
+  readonly actionId: string | null;
+}
+
+export function editorWelcomePresentation(
+  workspaceOpen: boolean,
+  locale: string,
+  shellCopy: ShellCopy,
+  editorCopy: EditorCopy,
+): EditorWelcomePresentation {
+  if (workspaceOpen) return {
+    key: "welcome:workspace",
+    html: emptyState(editorCopy.workspaceReady, editorCopy.workspaceReadyDetail, "folder"),
+    actionId: null,
+  };
+  const actionId = "open-project-from-welcome";
+  return {
+    key: `welcome:no-project:${locale}`,
+    html: actionableEmptyState(shellCopy.openFolder, shellCopy.openFolderDetail, actionId, shellCopy.openFolder),
+    actionId,
+  };
 }
 
 export function loadingBlock(label: string): string {

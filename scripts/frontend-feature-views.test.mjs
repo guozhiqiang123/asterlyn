@@ -13,6 +13,7 @@ import {
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
 import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
 import {
+  actionableEmptyState,
   contentHeading,
   renderDiffControls,
   renderEditorTabMenu,
@@ -33,6 +34,7 @@ import {
 import { renderSettingsNavigation, renderSettingsSection } from "../src/features/settings/settings-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
+import { hideWorkspaceToolWindows } from "../src/shell/workspace-availability.ts";
 import { createCommandSurfaceState, openCommandSurface } from "../src/features/files-editor/navigation.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
 import { EN_US } from "../src/localization/en-US.ts";
@@ -74,6 +76,81 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.doesNotMatch(html, /id="refresh-button"/);
   assert.doesNotMatch(html, /id="git-recoveries-open"/);
   assert.match(html, /class="status-indicator success" id="status-indicator"/);
+});
+
+test("empty workspace is ready, hides tool windows, and disables every activity entry", () => {
+  const shell = new ShellController(memoryStorage());
+  const html = renderShellView({
+    shell: shell.state,
+    workspaceOpen: false,
+    gitAvailable: false,
+    demo: false,
+    windowControlsAvailable: false,
+  });
+
+  for (const tool of shell.state.activityOrder) {
+    const button = activityButtonMarkup(html, tool);
+    assert.match(button, /\sdisabled(?:\s|>)/u);
+    assert.match(button, /aria-disabled="true"/u);
+    assert.match(button, /aria-pressed="false"/u);
+    assert.doesNotMatch(button, /\bactive\b/u);
+  }
+  assert.match(html, /id="left-tool"[^>]*\bhidden\b/u);
+  assert.match(html, /id="left-splitter"[^>]*\bhidden\b/u);
+  assert.match(html, /id="bottom-tool"[^>]*\bhidden\b/u);
+  assert.match(html, /id="bottom-splitter"[^>]*\bhidden\b/u);
+  assert.doesNotMatch(html, /Waiting for a project|class="spinner"/u);
+});
+
+test("ordinary folders enable workspace activities while Git activities stay disabled", () => {
+  const shell = new ShellController(memoryStorage());
+  const html = renderShellView({
+    shell: shell.state,
+    workspaceOpen: true,
+    gitAvailable: false,
+    demo: false,
+    windowControlsAvailable: false,
+  });
+
+  for (const tool of ["files", "search", "terminal"]) {
+    const button = activityButtonMarkup(html, tool);
+    assert.doesNotMatch(button, /\sdisabled(?:\s|>)/u);
+    assert.match(button, /aria-disabled="false"/u);
+  }
+  for (const tool of ["branches", "changes", "stash"]) {
+    const button = activityButtonMarkup(html, tool);
+    assert.match(button, /\sdisabled(?:\s|>)/u);
+    assert.match(button, /aria-disabled="true"/u);
+  }
+});
+
+test("empty-workspace reconciliation closes tool windows restored by stale layout state", () => {
+  const elements = new Map([
+    ["#workbench", fakeElement()], ["#left-tool", fakeElement()],
+    ["#left-splitter", fakeElement()], ["#bottom-tool", fakeElement()],
+    ["#bottom-splitter", fakeElement()],
+  ]);
+  elements.get("#workbench").classList.add("left-tool-open", "bottom-tool-open");
+  hideWorkspaceToolWindows({ querySelector: (selector) => elements.get(selector) ?? null });
+
+  assert.equal(elements.get("#workbench").classList.contains("left-tool-open"), false);
+  assert.equal(elements.get("#workbench").classList.contains("bottom-tool-open"), false);
+  for (const selector of ["#left-tool", "#left-splitter", "#bottom-tool", "#bottom-splitter"]) {
+    assert.equal(elements.get(selector).getAttribute("hidden"), "");
+  }
+});
+
+test("actionable empty state exposes an explicit project-folder button", () => {
+  const html = actionableEmptyState(
+    "Open a project folder",
+    "Choose an ordinary folder or Git repository.",
+    "open-project-from-welcome",
+    "Open a project folder",
+  );
+
+  assert.match(html, /class="primary-button empty-state-action"/u);
+  assert.match(html, /id="open-project-from-welcome"/u);
+  assert.match(html, />Open a project folder<\/button>/u);
 });
 
 test("shell search shortcut uses the native macOS convention", () => {
@@ -1160,6 +1237,7 @@ function fakeElement() {
     title: "",
     classList: {
       add(...names) { names.forEach((name) => classes.add(name)); },
+      remove(...names) { names.forEach((name) => classes.delete(name)); },
       contains(name) { return classes.has(name); },
       toggle(name, force) {
         const enabled = force ?? !classes.has(name);
@@ -1184,4 +1262,10 @@ function memoryStorage() {
     removeItem(key) { values.delete(key); },
     setItem(key, value) { values.set(key, String(value)); },
   };
+}
+
+function activityButtonMarkup(html, tool) {
+  const markup = html.match(new RegExp(`<button class="activity-button[^>]*data-tool="${tool}"[^>]*>`))?.[0];
+  assert.ok(markup, `missing ${tool} activity button`);
+  return markup;
 }

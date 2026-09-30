@@ -400,9 +400,8 @@
   color: white;
 }
 
-.activity-button.unavailable {
-  color: var(--text-faint);
-}
+.activity-button.unavailable { color: var(--text-faint); cursor: default; opacity: 0.46; }
+.activity-button.unavailable:hover, .activity-button.unavailable:active { background: transparent; color: var(--text-faint); cursor: default; }
 
 .activity-button.dragging {
   opacity: 0.42;
