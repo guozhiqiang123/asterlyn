@@ -173,6 +173,23 @@ test("settings view keeps one selected section and bounded preference controls",
   assert.match(versionControl, /value="ask" selected/);
   assert.match(versionControl, /value="rebase" selected/);
   assert.doesNotMatch(versionControl, /id="setting-ask-before-remote-update"[^>]*checked/);
+
+  const updates = renderSettingsSection({
+    section: "updates",
+    preferences: DEFAULT_APP_PREFERENCES,
+  }, { id: null, kind: "idle" }, EN_US.settings, {
+    status: "available",
+    currentVersion: "0.1.0",
+    latestVersion: "v0.2.0",
+    releaseUrl: "https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.2.0",
+    checkedAtEpochMs: 1_700_000_000_000,
+    error: null,
+    openingRelease: false,
+  });
+  assert.match(updates, /Application Updates/);
+  assert.match(updates, /Asterlyn v0\.2\.0 is available/);
+  assert.match(updates, /id="setting-check-for-updates"/);
+  assert.match(updates, /id="setting-open-update-release"/);
 });
 
 test("new-file staging choice defaults to a safe untracked action and optional memory", () => {

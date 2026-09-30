@@ -19,6 +19,8 @@ import type { SettingsSection, SettingsState } from "./settings-controller.ts";
 import type { SettingsCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 import { renderSelectControl } from "../../shared/select-control.ts";
+import { BRAND } from "../../brand.ts";
+import type { AppUpdateState } from "./app-update-controller.ts";
 
 export interface EditorFontPresentationStatus {
   id: EditorFontId | null;
@@ -42,6 +44,10 @@ export function renderSettingsSection(
   state: SettingsState,
   fontStatus: EditorFontPresentationStatus,
   copy: SettingsCopy = EN_US.settings,
+  update: AppUpdateState = {
+    status: "idle", currentVersion: BRAND.version, latestVersion: null,
+    releaseUrl: BRAND.releaseUrl, checkedAtEpochMs: null, error: null, openingRelease: false,
+  },
 ): string {
   const preferences = state.preferences;
   switch (state.section) {
@@ -77,7 +83,31 @@ export function renderSettingsSection(
         copy.codeDescription,
         `${settingsRow(copy.syntaxHighlighting, copy.syntaxDescription, `<span class="setting-value-pill success">${escapeHtml(copy.available)}</span>`)}${settingsRow(copy.formatting, copy.formattingDescription, `<span class="setting-planned">${escapeHtml(copy.planned)}</span>`)}`,
       );
+    case "updates":
+      return settingsGroup(copy.updatesTitle, copy.updatesDescription, appUpdatePanel(update, copy));
   }
+}
+
+function appUpdatePanel(state: AppUpdateState, copy: SettingsCopy): string {
+  const checking = state.status === "checking";
+  const status = state.status === "available"
+    ? copy.updateAvailable(state.latestVersion ?? "")
+    : state.status === "current"
+      ? copy.updateCurrent(state.currentVersion)
+      : state.status === "error"
+        ? copy.updateFailed
+        : checking ? copy.updateChecking : copy.updateIdle;
+  const detail = state.error
+    ? `<span class="app-update-error" title="${escapeAttribute(state.error)}">${escapeHtml(state.error)}</span>`
+    : "";
+  const checked = state.checkedAtEpochMs === null
+    ? ""
+    : `<span class="app-update-checked">${escapeHtml(copy.updateLastChecked(state.checkedAtEpochMs))}</span>`;
+  return `<div class="app-update-panel update-${state.status}"><div class="app-update-versions"><div><span>${escapeHtml(copy.currentVersionLabel)}</span><strong>v${escapeHtml(normalizeVersion(state.currentVersion))}</strong></div><div><span>${escapeHtml(copy.latestVersionLabel)}</span><strong>${state.latestVersion ? `v${escapeHtml(normalizeVersion(state.latestVersion))}` : "—"}</strong></div></div><div class="app-update-status" role="status" aria-live="polite"><strong>${escapeHtml(status)}</strong><span>${escapeHtml(copy.updateSource)}</span>${detail}${checked}</div><div class="app-update-actions"><button class="primary-button" id="setting-check-for-updates" type="button" ${checking ? "disabled" : ""}>${escapeHtml(checking ? copy.checkingForUpdates : copy.checkForUpdates)}</button><button class="secondary-button" id="setting-open-update-release" type="button" ${state.openingRelease ? "disabled" : ""}>${escapeHtml(state.openingRelease ? copy.openingReleasePage : copy.openReleasePage)}</button></div></div>`;
+}
+
+function normalizeVersion(version: string): string {
+  return version.replace(/^v/i, "");
 }
 
 function settingsGroup(title: string, description: string, rows: string): string {

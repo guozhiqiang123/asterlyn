@@ -5,6 +5,8 @@ import type { WindowChromeMode } from "./window-chrome";
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 
 export interface DesktopCommandMap {
+  check_for_app_updates: { args: Record<string, never>; result: Model.AppUpdateCheckResult };
+  open_app_update_release: { args: { releaseUrl: string; }; result: void };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   initial_repository: { args: Record<string, never>; result: string | null };
   existing_project_directories: { args: { paths: Array<string>; }; result: Array<string> };
@@ -108,6 +110,8 @@ export type DesktopCommandName = keyof DesktopCommandMap;
 export const DESKTOP_RESULT_VALIDATORS: {
   readonly [Command in DesktopCommandName]: string;
 } = {
+  check_for_app_updates: "appUpdateCheckResult",
+  open_app_update_release: "void",
   window_chrome_mode: "windowChromeMode",
   initial_repository: "nullableString",
   existing_project_directories: "stringArray",

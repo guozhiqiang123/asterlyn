@@ -65,7 +65,7 @@ export const ZH_CN = {
   },
   settings: {
     planned: "计划中", available: "可用",
-    sections: { general: "常规", appearance: "外观", editor: "编辑器", keybindings: "快捷键", "version-control": "版本控制", code: "代码" },
+    sections: { general: "常规", appearance: "外观", editor: "编辑器", keybindings: "快捷键", "version-control": "版本控制", code: "代码", updates: "更新" },
     keybindings: KEYBINDING_ZH_CN,
     generalTitle: "常规", generalDescription: "应用范围的行为与界面语言。", languageLabel: "应用语言",
     languageDescription: "选择固定的界面语言，或跟随操作系统。", languageSystem: "跟随系统", languageEnglish: "English", languageChinese: "简体中文",
@@ -97,6 +97,12 @@ export const ZH_CN = {
     downloadingFont: (label) => `正在下载并校验 ${label}…`, downloadedFont: "已下载、校验并缓存",
     uncachedFont: "已在当前窗口加载；本地缓存不可用", cachedFont: "已从校验过的本地缓存加载", fontReady: "当前窗口已就绪",
     retryFont: (label) => `重试 ${label}`, editorFontAria: "编辑器字体系列",
+    updatesTitle: "应用更新", updatesDescription: "从 Asterlyn 官方 GitHub Release 检查新版本，不会自动下载或安装。",
+    updateSource: "来源：github.com/guozhiqiang123/asterlyn", currentVersionLabel: "当前版本", latestVersionLabel: "最新 Release",
+    updateIdle: "可以开始检查 GitHub Release。", updateChecking: "正在检查 GitHub Release…", updateFailed: "无法检查更新。",
+    updateCurrent: (version) => `Asterlyn v${version.replace(/^v/i, "")} 已是最新版本。`, updateAvailable: (version) => `发现 Asterlyn ${version}。`,
+    checkForUpdates: "检查更新", checkingForUpdates: "检查中…", openReleasePage: "Release 页面", openingReleasePage: "正在打开…",
+    updateLastChecked: (epochMs) => `最近检查：${new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`,
   },
   navigation: {
     navigationMode: "导航模式",

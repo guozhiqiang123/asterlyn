@@ -70,6 +70,7 @@ import {
 } from "../../protocol/window-chrome.ts";
 import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-bridge";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
+import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
 
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
@@ -144,6 +145,7 @@ interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
 }
 
 const demoBridge: DesktopBridge = {
+  ...demoAppUpdateBridge,
   isDemo: !isTauri,
   native: false,
 

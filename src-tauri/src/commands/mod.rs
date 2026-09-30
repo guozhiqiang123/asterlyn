@@ -1,3 +1,4 @@
+mod app_updates;
 mod commit_file_restore;
 mod git_operations;
 mod git_recovery;
@@ -11,6 +12,7 @@ mod terminal;
 mod workspace;
 mod workspace_watch;
 
+pub(crate) use app_updates::{check_for_app_updates, open_app_update_release};
 pub(crate) use commit_file_restore::{
     execute_commit_file_restore, finalize_commit_file_restore, list_commit_file_restore_recoveries,
     prepare_commit_file_restore, rollback_commit_file_restore,

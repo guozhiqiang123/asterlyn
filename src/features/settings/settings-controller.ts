@@ -7,7 +7,7 @@ import {
   type PreferenceSyncPort,
 } from "./preference-store.ts";
 
-export type SettingsSection = "general" | "appearance" | "editor" | "keybindings" | "version-control" | "code";
+export type SettingsSection = "general" | "appearance" | "editor" | "keybindings" | "version-control" | "code" | "updates";
 
 export interface SettingsState {
   section: SettingsSection;

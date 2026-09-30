@@ -40,6 +40,10 @@ test("Settings and presentation composition owns subscriptions and disposal", ()
       querySelector: () => null,
     },
     nativeAppearance: { setTheme: async () => {} },
+    appUpdates: {
+      checkForAppUpdates: async () => { throw new Error("not used"); },
+      openAppUpdateRelease: async () => {},
+    },
     settingsChanged: () => {
       settingsChanged += 1;
     },

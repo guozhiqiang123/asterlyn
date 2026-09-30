@@ -249,6 +249,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            check_for_app_updates,
+            open_app_update_release,
             initial_repository,
             window_chrome_mode,
             existing_project_directories,

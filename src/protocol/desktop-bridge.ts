@@ -65,6 +65,7 @@ import type {
   WorkspaceRevealResult,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
+  AppUpdateCheckResult,
 } from "../models";
 import type { WindowChromeMode } from "./window-chrome.ts";
 import type { TerminalBridge } from "./terminal.ts";
@@ -73,6 +74,11 @@ export type DirectoryChoice =
   | { kind: "selected"; path: string }
   | { kind: "cancelled" }
   | { kind: "unsupported" };
+
+export interface AppUpdateBridge {
+  checkForAppUpdates(): Promise<AppUpdateCheckResult>;
+  openAppUpdateRelease(releaseUrl: string): Promise<void>;
+}
 
 export interface DesktopShellBridge {
   readonly isDemo: boolean;
@@ -430,4 +436,4 @@ export interface GitOperationBridge {
   ): Promise<GitOperationMutationOutcome>;
 }
 
-export type DesktopBridge = DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge;
+export type DesktopBridge = AppUpdateBridge & DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge;

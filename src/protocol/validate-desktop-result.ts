@@ -38,6 +38,22 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "stringArray":
       assert(isStringArray(value), command, "expected an array of strings");
       break;
+    case "appUpdateCheckResult": {
+      const result = record(value, command);
+      strings(result, command, "currentVersion", "releaseUrl");
+      nullableStrings(result, command, "latestVersion", "error");
+      booleans(result, command, "ok", "hasUpdate");
+      numbers(result, command, "checkedAtEpochMs");
+      assert(!result.hasUpdate || result.ok === true, command, "an available update requires a successful check");
+      assert(
+        result.ok
+          ? result.latestVersion !== null && result.error === null
+          : result.latestVersion === null && typeof result.error === "string" && result.error.length > 0,
+        command,
+        "success must include a latest version and failures must include an error",
+      );
+      break;
+    }
     case "windowChromeMode":
       assert(
         value === "macos-native" || value === "custom-right",

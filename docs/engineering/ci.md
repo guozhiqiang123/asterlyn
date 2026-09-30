@@ -29,6 +29,22 @@ mutations.
 - Dependency installation uses `npm ci` and Cargo's committed lock file.
 - Signing and release publication use separate workflows. Signing requires the protected `macos-signing` environment and an explicitly approved manual dispatch from `main`; release publication remains outside both packaging workflows.
 
+## In-application Release discovery
+
+Settings exposes a manual update check against the fixed
+`https://github.com/guozhiqiang123/asterlyn/releases/latest` endpoint. The native boundary follows
+the GitHub redirect, compares its Release tag with the packaged Cargo version, and returns only
+structured version, timestamp, status, and repository-scoped Release URL data to the frontend. The
+request is bounded by connection and total timeouts, runs outside the UI thread, and accepts no
+repository or request URL from workspace content. Opening the result is separately allowlisted to
+this repository's Release pages.
+
+This is discovery only: Asterlyn does not download, verify, install, or activate an artifact. A
+missing Release or unavailable network is a visible checked error, not evidence that the current
+build is latest. Preview workflow artifacts are not Releases and therefore never appear as an
+available update. Signed update manifests, artifact verification, rollback, and automatic
+installation remain later release-channel work under the existing trust gates.
+
 ## Evidence policy
 
 A green matrix proves that compilation, bundling, and bounded process-liveness smoke checks succeeded on the named hosted-runner images. It does not prove that the window painted correctly or that user interaction worked. Before an artifact becomes a release candidate, record its hash and perform a launch/workflow smoke test on real hardware or a declared equivalent interactive environment. Unsigned macOS artifacts use ad-hoc signing only to preserve bundle integrity; they are not notarized and should not be presented as end-user releases.

@@ -178,10 +178,8 @@ import {
   type SettingsSection,
   type SettingsState,
 } from "./features/settings/settings-controller";
-import {
-  renderSettingsNavigation,
-  renderSettingsSection,
-} from "./features/settings/settings-view";
+import { renderSettingsNavigation, renderSettingsSection } from "./features/settings/settings-view";
+import { bindAppUpdateControls } from "./features/settings/app-update-binding.ts";
 import { bindKeybindingSettings } from "./features/keybindings/keybinding-settings-binding.ts";
 import { renderKeybindingSettings } from "./features/keybindings/keybinding-view.ts";
 import { ShellController, type ShellState } from "./shell/shell-controller";
@@ -539,6 +537,7 @@ export class AsterlynApp {
     });
     this.settingsPresentationRuntime = new SettingsPresentationRuntime({
       storage: window.localStorage,
+      appUpdates: bridge,
       preferenceSync: createBrowserPreferenceSync(window),
       systemPresentation: createBrowserSystemPresentationPort(window),
       document,
@@ -2053,6 +2052,7 @@ export class AsterlynApp {
       )
       : renderSettingsSection(
         this.settingsState, this.editorFontStatus, this.localization.catalog.settings,
+        this.settingsPresentationRuntime.updates.state,
       );
     this.bindSettingsEvents();
     if (focusSelector) {
@@ -2066,8 +2066,8 @@ export class AsterlynApp {
       });
     }
   }
-
   private bindSettingsEvents(): void {
+    bindAppUpdateControls(this.root, this.settingsPresentationRuntime.updates, () => this.shellState.page === "settings" && this.renderSettingsPage());
     this.root
       .querySelectorAll<HTMLButtonElement>("[data-settings-section]")
       .forEach((button) => {

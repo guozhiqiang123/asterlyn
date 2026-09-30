@@ -13,6 +13,23 @@ test("generated desktop command types match the versioned protocol schema", asyn
   assert.equal(generated, await generateDesktopProtocol());
 });
 
+test("app update responses require coherent GitHub Release state", () => {
+  const result = validateDesktopResult("check_for_app_updates", {
+    ok: true,
+    currentVersion: "0.1.0",
+    latestVersion: "v0.2.0",
+    hasUpdate: true,
+    releaseUrl: "https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.2.0",
+    checkedAtEpochMs: 1_700_000_000_000,
+    error: null,
+  });
+  assert.equal(result.hasUpdate, true);
+  assert.throws(
+    () => validateDesktopResult("check_for_app_updates", { ...result, ok: false, hasUpdate: false }),
+    /success must include a latest version and failures must include an error/,
+  );
+});
+
 test("historical file reads remain wired through the native command boundary", async () => {
   const [commands, restoreCommands, runtime, adapter] = await Promise.all([
     readFile(new URL("../src-tauri/src/commands/git_reads.rs", import.meta.url), "utf8"),

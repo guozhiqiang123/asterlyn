@@ -125,17 +125,11 @@ export interface TerminalCopy {
 }
 
 export interface SettingsCopy {
-  planned: string;
-  available: string;
-  sections: Record<"general" | "appearance" | "editor" | "keybindings" | "version-control" | "code", string>;
-  keybindings: KeybindingCopy;
-  generalTitle: string;
-  generalDescription: string;
-  languageLabel: string;
-  languageDescription: string;
-  languageSystem: string;
-  languageEnglish: string;
-  languageChinese: string;
+  planned: string; available: string;
+  sections: Record<"general" | "appearance" | "editor" | "keybindings" | "version-control" | "code" | "updates", string>; keybindings: KeybindingCopy;
+  generalTitle: string; generalDescription: string;
+  languageLabel: string; languageDescription: string;
+  languageSystem: string; languageEnglish: string; languageChinese: string;
   appearanceTitle: string;
   appearanceDescription: string;
   themeLabel: string;
@@ -202,6 +196,13 @@ export interface SettingsCopy {
   fontReady: string;
   retryFont(label: string): string;
   editorFontAria: string;
+  updatesTitle: string; updatesDescription: string; updateSource: string;
+  currentVersionLabel: string; latestVersionLabel: string;
+  updateIdle: string; updateChecking: string; updateFailed: string;
+  updateCurrent(version: string): string; updateAvailable(version: string): string;
+  checkForUpdates: string; checkingForUpdates: string;
+  openReleasePage: string; openingReleasePage: string;
+  updateLastChecked(epochMs: number): string;
 }
 
 export type NavigationCommandId =

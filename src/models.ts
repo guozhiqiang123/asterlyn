@@ -30,6 +30,8 @@ export interface RemoteSummary {
   pushSupported: boolean;
 }
 
+export interface AppUpdateCheckResult { ok: boolean; currentVersion: string; latestVersion: string | null; hasUpdate: boolean; releaseUrl: string; checkedAtEpochMs: number; error: string | null; }
+
 export type { GitResetMode, GitResetPlan, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest } from "./git-reviewed-models.ts";
 
 export type RemoteTransport = "https" | "ssh" | "local" | "other";

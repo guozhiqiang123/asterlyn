@@ -1,6 +1,8 @@
 {
   "version": 1,
   "commands": [
+    { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
+    { "name": "open_app_update_release", "args": { "releaseUrl": "string" }, "result": "void", "validator": "void" },
     { "name": "window_chrome_mode", "args": {}, "result": "WindowChromeMode", "validator": "windowChromeMode" },
     { "name": "initial_repository", "args": {}, "result": "nullable:string", "validator": "nullableString" },
     { "name": "existing_project_directories", "args": { "paths": "array:string" }, "result": "array:string", "validator": "stringArray" },
