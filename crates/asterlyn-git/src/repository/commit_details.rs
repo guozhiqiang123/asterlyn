@@ -1,7 +1,5 @@
 use super::*;
 
-const REFERENCE_FORMAT: &str = "%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(upstream:track)%00%(committerdate:unix)%00%(subject)";
-
 impl GitRepository {
     pub fn commit_details(&self, oid: &str) -> Result<CommitDetails, GitError> {
         validate_object_id(oid)?;
@@ -113,15 +111,11 @@ impl GitRepository {
                 OsString::from("for-each-ref"),
                 OsString::from(format!("--contains={oid}")),
                 OsString::from("--sort=refname"),
-                OsString::from(format!("--format={REFERENCE_FORMAT}")),
+                OsString::from(crate::parser::BRANCH_REFERENCE_FORMAT_ARG),
                 OsString::from("refs/heads"),
                 OsString::from("refs/remotes"),
             ],
         )?;
-        let mut branches = parse_branches(&refs.stdout)?;
-        branches.retain(|branch| {
-            !branch.full_name.starts_with("refs/remotes/") || !branch.full_name.ends_with("/HEAD")
-        });
-        Ok(branches)
+        parse_branches(&refs.stdout)
     }
 }

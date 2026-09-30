@@ -300,7 +300,7 @@ function renderPushRoute(model: RemotePushDialogViewModel, preview: PushPreview 
           branchName = b.name.slice(slash + 1);
         }
       }
-      if (branchName && branchName !== "HEAD" && branchName !== selectedRemote && !branchName.endsWith("/HEAD")) {
+      if (branchName) {
         existingRemoteBranches.add(branchName);
       }
     }

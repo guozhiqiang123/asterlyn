@@ -534,7 +534,7 @@ impl GitRepository {
             [
                 "for-each-ref",
                 "--sort=-committerdate",
-                "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(upstream:track)%00%(committerdate:unix)%00%(subject)",
+                crate::parser::BRANCH_REFERENCE_FORMAT_ARG,
                 "refs/heads",
                 "refs/remotes",
                 "refs/tags",

@@ -265,6 +265,21 @@ and stale-plan rejection, collision/overlap/Git-metadata blocking, primary-windo
 availability, reuse of the current/new-window confirmation flow, safe native registered-worktree
 reveal, protocol validation, localization, full regression gates, and installed-package replacement.
 
+## WT6 — Filter remote symbolic default-branch aliases
+
+Git may publish `refs/remotes/<remote>/HEAD` as a symbolic alias of the remote's default branch.
+This is navigation metadata rather than a distinct remote-tracking branch, so it must not appear as
+an extra branch row or receive branch actions such as New Worktree.
+
+- The shared backend reference format includes `%(symref)` and the common branch parser discards
+  symbolic refs inside `refs/remotes/` before producing `BranchSummary` values.
+- Direct remote-tracking refs remain visible even when they point to the same object as the symbolic
+  alias; filtering is based on Git identity, not display name or duplicate object ID.
+- Commit-detail and remote-push frontend filters are removed after the backend becomes authoritative,
+  preventing multiple layers from applying divergent `origin`, `HEAD`, or suffix heuristics.
+- Parser, snapshot, presentation, full regression, packaging, and installed-app checks cover the
+  unified behavior.
+
 ## Validation matrix
 
 | Gate | Required result |
@@ -302,7 +317,7 @@ reveal, protocol validation, localization, full regression gates, and installed-
 - **Frontend:** TypeScript checking, the 770-test script suite, production Vite build, ownership
   budgets, protocol validation, and `git diff --check` passed.
 - **Native:** Rust formatting, strict all-target workspace Clippy, and workspace tests passed. The
-  `asterlyn-git` crate passed 132 tests; two unrelated operating-system watcher tests remain ignored
+  `asterlyn-git` crate passed 133 tests; two unrelated operating-system watcher tests remain ignored
   by their existing contract.
 - **Worktree coverage:** porcelain paths with spaces, detached records, locked/prunable state,
   malformed UTF-8, duplicate branch associations, primary/linked/available presentation, clean
@@ -311,20 +326,22 @@ reveal, protocol validation, localization, full regression gates, and installed-
   removal retained the local branch. New coverage also passed for detached and new-branch creation,
   exact remote-tracking sources, invalid names, existing/colliding/overlapping destinations, local
   and remote menu eligibility, native folder chooser cancellation, compact primary-project-based
-  default names, primary-only Open/Reveal behavior, and exact registered-path reveal.
+  default names, primary-only Open/Reveal behavior, exact registered-path reveal, and backend-only
+  symbolic remote-alias filtering. The installed Branches panel showed `REMOTE 1` for the opened
+  repository, with only the real `origin/main` ref counted.
 - **Accepted package:**
-  `target/release/bundle/macos/Asterlyn-remote-worktree-20260930-macos-arm64.zip`, 9,031,500 bytes,
-  SHA-256 `b755282f5d7bca549a218d7ec3f11cd5b9689248b5f283adefe0d61ba6e0fee9`.
-- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,930,672 bytes,
+  `target/release/bundle/macos/Asterlyn-filter-remote-head-20260930-macos-arm64.zip`, 9,031,248
+  bytes, SHA-256 `ffb13ce8eeba58067e97090c05e9fcae725e32888410ea6dd59cc83f65380fd0`.
+- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,930,448 bytes,
   SHA-256
-  `b05192c07d99c6bb7d63ea0b3db6b0a00cd104d7362f1cb38722bfd790b61793`, exactly matching the
+  `e9650204a56f5fd3b1b8abda40eb4db2d3374c330d776f22799c42d7a2bc82a6`, exactly matching the
   packaged executable. The arm64 bundle is ad-hoc signed with hardened runtime, passed strict
   signature verification, passed the six-second isolated native smoke, and rendered the expected
   application-shell marker within the 15-second bound from both the build and installed paths. The
   relaunched installed application also exposed an on-screen 1320 x 821 Asterlyn window through
   CoreGraphics.
 - **Replaced installation backup:** moved to the recoverable macOS Trash location
-  `/Users/gzq/.Trash/Asterlyn.app.backup-remote-worktree-20260930-135748` after installed
+  `/Users/gzq/.Trash/Asterlyn.app.backup-filter-remote-head-20260930-141555` after installed
   verification.
 - **Host:** macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1, and Git
   2.48.1. Windows/Linux compilation and installed interaction remain platform-specific follow-up
