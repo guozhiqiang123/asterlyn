@@ -15,6 +15,7 @@ import {
   registerStashCommands,
   type StashCommandRuntimeOptions,
 } from "./stash-command-runtime.ts";
+import { registerHistoryCommands } from "./history-command-runtime.ts";
 
 export interface ApplicationCommandRuntimeOptions
   extends WorkbenchCommandRuntimeOptions, FilesEditorCommandRuntimeOptions,
@@ -29,6 +30,7 @@ export function registerApplicationCommands(
     registerFilesEditorCommands(registry, options),
     registerChangesCommands(registry, options),
     registerStashCommands(registry, options),
+    registerHistoryCommands(registry, options),
   ];
   return () => { for (const release of releases.reverse()) release(); };
 }

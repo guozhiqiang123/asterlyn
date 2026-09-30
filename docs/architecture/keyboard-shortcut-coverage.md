@@ -165,13 +165,14 @@ without Asterlyn claiming common editor or terminal keys.
 | User action | Family | Command / target command | State |
 | --- | --- | --- | --- |
 | Focus History filter | navigation | `history.find.focus` | **Default:** Primary+F in History scope |
-| Toggle History regex / match case | presentation | `history.filter.regex.toggle`, `.case.toggle` | **Gap** |
-| Open branch/user/date/path/graph filters | navigation | `history.filter.branch.open`, `.user.open`, `.date.open`, `.path.open`, `.graph.open` | **Gap** |
+| Toggle History regex / match case | presentation | `history.filter.regex.toggle`, `history.filter.case.toggle` | **Custom** |
+| Open branch/user/date/path/graph filters | navigation | `history.filter.branch.open`, `history.filter.user.open`, `history.filter.date.open`, `history.filter.path.open`, `history.filter.graph.open` | **Custom** |
 | Clear one/all active History filters | presentation | `history.filter.clearCurrent`, `.clearAll` | **Gap** |
 | Select commits and ranges | navigation | History list keyboard/pointer contract | **Local** |
 | Open selected commit/range comparison | navigation | `history.selection.compare` | **Gap** |
 | Load more history | read | `history.loadMore` | **Gap** |
-| Toggle commit-file tree/flat, expand/collapse | presentation | `history.files.view.toggle`, `.expandAll`, `.collapseAll` | **Gap** |
+| Toggle commit-file tree/flat, expand/collapse | presentation | `history.files.view.toggle`, `history.files.expandAll`, `history.files.collapseAll` | **Custom** |
+| Swap the before/after sides of a commit comparison | presentation | `history.comparison.swap` | **Custom** |
 | Open historical file, compare current, open current | navigation | `history.file.openHistorical`, `.compareCurrent`, `.openCurrent` | **Gap** |
 | Restore file from selected commit | destructive | `history.file.restore` | **Gap**, unassigned and confirmed |
 | Show folder changes / reveal in Files / path history | navigation | `history.folder.changes`, `.reveal`, `.history` | **Gap** |

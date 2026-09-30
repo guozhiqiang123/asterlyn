@@ -4175,7 +4175,7 @@ export class AsterlynApp {
       scroll: (host) => this.handleHistoryScroll(host),
     });
     this.renderHistoryCount(commits.length);
-    this.bindHistoryEvents();
+    this.bindHistoryEvents(); this.refreshShortcutPresentation();
   }
 
   private renderGitDetailPane(snapshot = this.windowSession.repository.state.snapshot): void {
@@ -4183,7 +4183,7 @@ export class AsterlynApp {
     this.commitDetailSplitterDisposer?.();
     this.commitDetailSplitterDisposer = null;
     this.query("#git-detail-body").innerHTML = this.renderGitDetail(snapshot);
-    this.bindGitDetailEvents(snapshot);
+    this.bindGitDetailEvents(snapshot); this.refreshShortcutPresentation();
   }
 
   private async loadProjectFiles(
