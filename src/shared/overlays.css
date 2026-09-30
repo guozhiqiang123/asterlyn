@@ -382,8 +382,8 @@ dialog.dialog-geometry-managed {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 
 ::-webkit-scrollbar-thumb {

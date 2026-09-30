@@ -117,7 +117,7 @@
 .content-body.editable-diff-surface .editable-diff-scrollbar-pane {
   flex: 1 1 0;
   min-width: 0;
-  height: 10px;
+  height: var(--scrollbar-size);
   overflow-x: auto;
   overflow-y: hidden;
 }

@@ -70,6 +70,30 @@ test("owned styles remain below the architecture decomposition trigger", async (
   }
 });
 
+test("scrollbar hit targets share the global 12px size token", async () => {
+  const [tokens, overlays, editableDiff, replacementTool] = await Promise.all([
+    readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/overlays.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
+    readFile(
+      new URL("../src/features/files-editor/workspace-replacement-tool.css", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(tokens, /--scrollbar-size:\s*12px;/u);
+  assert.match(
+    overlays,
+    /::\-webkit-scrollbar\s*\{[^}]*width:\s*var\(--scrollbar-size\);[^}]*height:\s*var\(--scrollbar-size\);/s,
+  );
+  for (const source of [editableDiff, replacementTool]) {
+    assert.match(
+      source,
+      /\.editable-diff-scrollbar-pane\s*\{[^}]*height:\s*var\(--scrollbar-size\);/s,
+    );
+  }
+});
+
 test("each owned stylesheet has one explicit entry point", async () => {
   for (const [path, owner] of ownedStyles) {
     const source = await readFile(new URL(`../src/${owner}`, import.meta.url), "utf8");
