@@ -340,6 +340,23 @@ test("desktop response validation accepts representative valid payloads", () => 
     },
   };
   assert.deepEqual(validateDesktopResult("prepare_branch_mutation", worktreePlan), worktreePlan);
+  const creationPlan = {
+    repositoryRoot: "/repo",
+    sourceFullName: "refs/heads/main",
+    sourceName: "main",
+    sourceOid: "a".repeat(40),
+    parentDirectory: "/worktrees",
+    projectName: "repo-main",
+    destinationPath: "/worktrees/repo-main",
+    newBranch: null,
+    startHeadRef: "refs/heads/main",
+    startHeadOid: "a".repeat(40),
+    previewToken: "reviewed-worktree-creation",
+  };
+  assert.deepEqual(
+    validateDesktopResult("prepare_worktree_creation", creationPlan),
+    creationPlan,
+  );
 });
 
 test("desktop response validation rejects malformed results", () => {
@@ -429,6 +446,22 @@ test("desktop response validation rejects malformed results", () => {
       image: null,
     }),
     /full object IDs/,
+  );
+  assert.throws(
+    () => validateDesktopResult("prepare_worktree_creation", {
+      repositoryRoot: "/repo",
+      sourceFullName: "refs/remotes/origin/main",
+      sourceName: "main",
+      sourceOid: "a".repeat(40),
+      parentDirectory: "/worktrees",
+      projectName: "repo-main",
+      destinationPath: "/worktrees/repo-main",
+      newBranch: null,
+      startHeadRef: "refs/heads/main",
+      startHeadOid: "a".repeat(40),
+      previewToken: "reviewed-worktree-creation",
+    }),
+    /local branch/,
   );
   assert.throws(
     () => validateDesktopResult("compare_commit_file_to_current", {

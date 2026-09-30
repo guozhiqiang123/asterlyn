@@ -219,6 +219,28 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       );
       break;
     }
+    case "worktreeCreationPlan": {
+      const result = record(value, command);
+      strings(
+        result,
+        command,
+        "repositoryRoot",
+        "sourceFullName",
+        "sourceName",
+        "sourceOid",
+        "parentDirectory",
+        "projectName",
+        "destinationPath",
+        "startHeadRef",
+        "startHeadOid",
+        "previewToken",
+      );
+      nullableStrings(result, command, "newBranch");
+      assert(String(result.sourceFullName).startsWith("refs/heads/"), command, "sourceFullName must be a local branch");
+      assert(Boolean(result.projectName), command, "projectName must not be empty");
+      assert(Boolean(result.destinationPath), command, "destinationPath must not be empty");
+      break;
+    }
     case "remoteMutationPlan": {
       const result = record(value, command);
       strings(

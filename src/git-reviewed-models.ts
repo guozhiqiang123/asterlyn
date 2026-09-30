@@ -69,6 +69,28 @@ export interface WorktreeRemovalReview {
   reviewToken: string;
 }
 
+export interface WorktreeCreationRequest {
+  sourceFullName: string;
+  sourceOid: string;
+  parentDirectory: string;
+  projectName: string;
+  newBranch: string | null;
+}
+
+export interface WorktreeCreationPlan {
+  repositoryRoot: string;
+  sourceFullName: string;
+  sourceName: string;
+  sourceOid: string;
+  parentDirectory: string;
+  projectName: string;
+  destinationPath: string;
+  newBranch: string | null;
+  startHeadRef: string;
+  startHeadOid: string;
+  previewToken: string;
+}
+
 export interface BranchMutationPlan {
   repositoryRoot: string;
   kind: BranchMutationKind;

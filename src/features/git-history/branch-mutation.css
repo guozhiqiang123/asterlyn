@@ -146,3 +146,65 @@
   background: var(--danger-bg);
   color: var(--danger-text);
 }
+
+.worktree-creation-dialog {
+  width: min(500px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+}
+
+.worktree-creation-dialog > p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.worktree-creation-form {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.worktree-creation-form > label:not(.worktree-creation-check) {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.worktree-creation-form input[type="text"],
+.worktree-creation-form .select-control { width: 100%; }
+
+.worktree-creation-check {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 108px;
+}
+
+.worktree-location-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  gap: 6px;
+}
+
+.worktree-location-row input[readonly] { color: var(--text-muted); }
+.worktree-location-button { padding-inline: 8px; }
+
+.worktree-destination,
+.worktree-creation-form > .branch-mutation-error,
+.worktree-creation-form > .dialog-actions { grid-column: 1 / -1; }
+
+.worktree-destination {
+  display: grid;
+  gap: 4px;
+  margin-left: 108px;
+  color: var(--text-muted);
+}
+
+.worktree-destination code { overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .worktree-creation-form { grid-template-columns: 1fr; }
+  .worktree-creation-check,
+  .worktree-destination { margin-left: 0; }
+}

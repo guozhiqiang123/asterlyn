@@ -32,7 +32,7 @@ export interface RemoteSummary {
 
 export interface AppUpdateCheckResult { ok: boolean; currentVersion: string; latestVersion: string | null; hasUpdate: boolean; releaseUrl: string; checkedAtEpochMs: number; error: string | null; }
 
-export type { BranchMutationKind, BranchMutationPlan, BranchMutationRequest, GitResetMode, GitResetPlan, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest, WorktreeRemovalReview } from "./git-reviewed-models.ts";
+export type { BranchMutationKind, BranchMutationPlan, BranchMutationRequest, GitResetMode, GitResetPlan, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest, WorktreeCreationPlan, WorktreeCreationRequest, WorktreeRemovalReview } from "./git-reviewed-models.ts";
 
 export type RemoteTransport = "https" | "ssh" | "local" | "other";
 

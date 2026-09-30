@@ -31,6 +31,12 @@ export const tauriWorkspaceBridge: WorkspaceBridge = {
       workspacePath,
       kind,
     }),
+  revealRegisteredWorktree: (repositoryRoot, sourceFullName, sourceOid) =>
+    invokeDesktopCommand<WorkspaceRevealResult>("reveal_registered_worktree", {
+      repositoryRoot,
+      sourceFullName,
+      sourceOid,
+    }),
   inspectWorkspaceEntry: (repositoryRoot, workspacePath) =>
     invokeDesktopCommand<WorkspaceEntryInspection>("inspect_workspace_entry", {
       repositoryRoot,

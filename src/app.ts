@@ -680,11 +680,10 @@ export class AsterlynApp {
     );
     this.gitHistoryMutationRuntime = new GitHistoryMutationRuntime({
       root,
-      branch: { gateway: {
-        prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
-        execute: (plan) => this.executeReviewedBranchMutation(plan),
-        errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      branch: { gateway: { prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
+        execute: (plan) => this.executeReviewedBranchMutation(plan), errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.branchMutation },
+      worktree: { gateway: { chooseDirectory: (path) => bridge.chooseRepositoryDirectory(path), prepare: (...args) => bridge.prepareWorktreeCreation(...args), execute: (plan) => { const copy = this.localization.catalog.history.worktreeCreation; return this.runBranchMutation(copy.progress(plan.projectName), copy.completed(plan.destinationPath), (root) => bridge.executeWorktreeCreation(root, plan), null); }, errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors) }, copy: () => this.localization.catalog.history.worktreeCreation },
       tag: { gateway: {
         execute: async (request) => { const copy = this.localization.catalog.history.tagMutation; const checkout = request.kind === "checkout";
           const succeeded = await this.runBranchMutation(copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
@@ -915,13 +914,14 @@ export class AsterlynApp {
             };
           },
           showHistory: (target) => this.showBranchContextHistory(target),
-          openMutation: (kind, branch, suggestedName) => {
-            const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
-            if (repositoryRoot) this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName);
-          },
+          openMutation: (kind, branch, suggestedName) => { const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
+            if (repositoryRoot) this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName); },
+          openWorktreeCreation: (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (snapshot) this.gitHistoryMutationRuntime.worktree.open(snapshot.root, snapshot.branches, branch); },
+          openWorktree: (path) => void this.requestRepositoryTarget(path),
+          revealWorktree: async (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (!snapshot) return; await bridge.revealRegisteredWorktree(snapshot.root, branch.fullName, branch.oid);
+            this.setStatus(this.localization.catalog.history.branchContextMenu.revealedWorktree, "success"); },
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
-          openRemoteAction: (kind, returnFocus) =>
-            this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
+          openRemoteAction: (kind, returnFocus) => this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
           tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
           openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
         },

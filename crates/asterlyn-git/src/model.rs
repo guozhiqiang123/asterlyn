@@ -766,6 +766,32 @@ pub struct WorktreeRemovalReview {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct WorktreeCreationRequest {
+    pub source_full_name: String,
+    pub source_oid: String,
+    pub parent_directory: String,
+    pub project_name: String,
+    pub new_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeCreationPlan {
+    pub repository_root: String,
+    pub source_full_name: String,
+    pub source_name: String,
+    pub source_oid: String,
+    pub parent_directory: String,
+    pub project_name: String,
+    pub destination_path: String,
+    pub new_branch: Option<String>,
+    pub start_head_ref: String,
+    pub start_head_oid: String,
+    pub preview_token: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct BranchMutationPlan {
     pub repository_root: String,
     pub kind: BranchMutationKind,

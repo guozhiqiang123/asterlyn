@@ -57,6 +57,30 @@ pub(crate) fn reveal_workspace_entry(
 }
 
 #[tauri::command]
+pub(crate) fn reveal_registered_worktree(
+    repository_root: String,
+    source_full_name: String,
+    source_oid: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RevealWorkspaceEntryResult, WorkspaceError> {
+    let root = active_workspaces
+        .require_git(window.label(), &repository_root)
+        .map_err(|error| WorkspaceError::NotAuthorized {
+            message: error.to_string(),
+        })?;
+    let repository = GitRepository::open(&root).map_err(|error| WorkspaceError::InvalidPath {
+        message: error.to_string(),
+    })?;
+    let target = repository
+        .registered_linked_worktree_path_from_primary(&source_full_name, &source_oid)
+        .map_err(|error| WorkspaceError::InvalidPath {
+            message: error.to_string(),
+        })?;
+    reveal_in_system_file_manager(&target, WorkspaceEntryKind::Directory)
+}
+
+#[tauri::command]
 pub(crate) async fn inspect_workspace_entry(
     repository_root: String,
     workspace_path: String,

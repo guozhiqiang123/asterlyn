@@ -24,6 +24,9 @@ export interface BranchContextPolicy {
   readonly remoteCheckout: boolean;
   readonly switch: ContextMenuAvailability;
   readonly create: ContextMenuAvailability;
+  readonly createWorktree: ContextMenuAvailability;
+  readonly linkedWorktreeActions: boolean;
+  readonly openWorktree: ContextMenuAvailability;
   readonly integrate: ContextMenuAvailability;
   readonly rename: ContextMenuAvailability;
   readonly delete: ContextMenuAvailability;
@@ -51,6 +54,13 @@ export function branchContextPolicy(
       : blocked(options.cleanReason || options.reasons.cleanRequired);
   const checkedOutElsewhere = !target.branch.current && Boolean(
     target.branch.primaryWorktreePath || target.branch.linkedWorktreePath,
+  );
+  const primaryPath = snapshot.branches.find((branch) =>
+    branch.repositoryId === "." && branch.primaryWorktreePath
+  )?.primaryWorktreePath ?? null;
+  const linkedWorktreeActions = Boolean(
+    writable && target.branch.kind === "local" && target.branch.linkedWorktreePath &&
+    primaryPath && snapshot.root === primaryPath,
   );
   const switchMutation = checkedOutElsewhere
     ? blocked(options.reasons.worktreeCheckedOut)
@@ -81,6 +91,9 @@ export function branchContextPolicy(
     remoteCheckout: writable && target.branch.kind === "remote" && trackingLocals.length === 0,
     switch: switchMutation,
     create: cleanMutation,
+    createWorktree: mutation,
+    linkedWorktreeActions,
+    openWorktree: mutation,
     integrate: mutation,
     rename: checkedOutMutation,
     delete: checkedOutMutation,

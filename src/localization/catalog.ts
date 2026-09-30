@@ -1,8 +1,8 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
-import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts";
+import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts"; import type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
-export type { BranchMutationCopy } from "./branch-mutation-copy.ts";
+export type { BranchMutationCopy } from "./branch-mutation-copy.ts"; export type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 export interface CommonCopy {
   ready: string;
   operationFailed: string;
@@ -887,7 +887,7 @@ export interface HistoryCopy {
   topbarBranchMenu: TopbarBranchMenuCopy;
   reset: GitResetCopy;
   branchContextMenu: BranchContextMenuCopy;
-  branchMutation: BranchMutationCopy; tagMutation: TagMutationCopy;
+  branchMutation: BranchMutationCopy; worktreeCreation: WorktreeCreationCopy; tagMutation: TagMutationCopy;
   commitContextMenu: HistoryCommitContextMenuCopy;
   rangeContextMenu: HistoryCommitRangeContextMenuCopy;
   commitFolderContextMenu: HistoryCommitFolderContextMenuCopy;
@@ -1060,7 +1060,7 @@ export interface BranchContextMenuCopy {
   viewHistory: string;
   switchTo(name: string): string;
   checkoutRemote: string;
-  newBranchFrom: string;
+  newBranchFrom: string; newWorktree: string; openWorktree: string; revealWorktree: string; revealedWorktree: string;
   mergeIntoCurrent: string;
   rebaseCurrentOnto: string;
   update: string;

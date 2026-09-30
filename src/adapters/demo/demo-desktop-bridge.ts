@@ -71,9 +71,11 @@ import {
 import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-bridge";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
+import { createDemoWorktreeBridge } from "./demo-worktree-bridge.ts";
 
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
+const demoWorktreeBridge = createDemoWorktreeBridge(() => browserSnapshot, (next) => { browserSnapshot = next; });
 let browserGitEnabled = true;
 const browserCommitFiles = new Map<string, CommitFileChange[]>();
 const cancelledDemoScans = new Set<string>(), cancelledDemoRemoteOperations = new Set<string>();
@@ -146,6 +148,7 @@ interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
 
 const demoBridge: DesktopBridge = {
   ...demoAppUpdateBridge,
+  ...demoWorktreeBridge,
   isDemo: !isTauri,
   native: false,
 

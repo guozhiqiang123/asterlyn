@@ -16,6 +16,7 @@ test("Git History mutation runtime owns both reviewed dialog lifecycles", () => 
       gateway: {},
       copy: () => ({}),
     },
+    worktree: { gateway: {}, copy: () => ({}) },
     tag: { gateway: {}, copy: () => ({}) },
     fileRestore: {
       gateway: {},

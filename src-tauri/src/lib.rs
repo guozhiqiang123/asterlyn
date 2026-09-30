@@ -9,7 +9,8 @@ use asterlyn_git::{
     ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
     RemoteMutationPlan, RemoteMutationRequest, RepositoryReadPlan, RepositorySliceSnapshot,
     RepositorySnapshot, StashCatalog, StashMutationKind, StashMutationRequest, TagMutationKind,
-    TagMutationRequest, TrackedChangeScan, UntrackedScan,
+    TagMutationRequest, TrackedChangeScan, UntrackedScan, WorktreeCreationPlan,
+    WorktreeCreationRequest,
 };
 use asterlyn_terminal::TerminalSessions;
 use asterlyn_workspace::{
@@ -272,6 +273,7 @@ pub fn run() {
             list_project_files,
             list_ignored_project_directory,
             reveal_workspace_entry,
+            reveal_registered_worktree,
             inspect_workspace_entry,
             plan_workspace_mutation,
             execute_workspace_mutation,
@@ -326,6 +328,8 @@ pub fn run() {
             create_branch,
             prepare_branch_mutation,
             execute_branch_mutation,
+            prepare_worktree_creation,
+            execute_worktree_creation,
             execute_tag_mutation,
             execute_stash_mutation,
             prepare_remote_mutation,

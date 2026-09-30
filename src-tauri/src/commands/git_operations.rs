@@ -299,6 +299,53 @@ pub(crate) async fn execute_branch_mutation(
 }
 
 #[tauri::command]
+pub(crate) async fn prepare_worktree_creation(
+    repository_root: String,
+    request: WorktreeCreationRequest,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<WorktreeCreationPlan, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "prepare linked worktree creation",
+            move |repository| repository.prepare_worktree_creation(&request),
+        )
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn execute_worktree_creation(
+    repository_root: String,
+    plan: WorktreeCreationPlan,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "create linked worktree",
+            move |repository| {
+                repository.execute_worktree_creation(&plan)?;
+                repository
+                    .tracked_snapshot(COMMIT_LIMIT)
+                    .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+            },
+        )
+        .await
+}
+
+#[tauri::command]
 pub(crate) async fn execute_tag_mutation(
     repository_root: String,
     request: TagMutationRequest,

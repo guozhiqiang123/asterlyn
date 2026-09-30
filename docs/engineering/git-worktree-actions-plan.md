@@ -1,12 +1,13 @@
 # Git worktree actions plan
 
-- **Status:** Follow-up locally accepted and installed
+- **Status:** Completed and installed locally
 - **Date:** 2026-09-30
 - **Baseline:** `d08e0d8`
 - **Working branch:** `codex/delete-worktree-action`
 - **Scope:** Detect primary and linked Git worktrees in the Branches tool, show all local branches
-  as `PRIMARY` / `WORKTREE` / `AVAILABLE`, and provide reviewed ordinary or explicitly forced
-  linked-worktree removal. A “New Worktree from Here” workflow remains a separate follow-up.
+  as `PRIMARY` / `WORKTREE` / `AVAILABLE`, provide reviewed ordinary or explicitly forced
+  linked-worktree removal, create a worktree from an exact local branch, and expose safe open and
+  file-manager actions for registered linked worktrees.
 
 ## Objective
 
@@ -209,28 +210,56 @@ deleting a host directory.
 - Keep structural blockers non-overridable, retain the branch, rerun the full gates, and replace the
   local installation with a newly accepted package.
 
-## Follow-up: New Worktree from Here
+## WT5 — Android Studio-style New Worktree
 
-The Android Studio-style creation flow is a compatible follow-up, not a prerequisite for safe
-removal. It is a medium-sized incremental change because WT1 supplies identification and WT2
-supplies reviewed mutation/reconciliation infrastructure.
+The Branches context menu adds **New Worktree from…** for one exact local branch. Creation has its
+own typed request, reviewed plan, controller, dialog, and desktop commands; it does not overload
+branch mutation or accept a renderer-selected command line.
 
-A future dialog would include:
+The dialog mirrors the useful structure of Android Studio's New Worktree surface while retaining
+Asterlyn's existing visual system:
 
-- reviewed source branch and exact object;
-- optional **New branch** checkbox and validated branch name;
-- project name and parent location, with the final path shown before execution;
-- directory selection through the native picker rather than free-form arbitrary host access;
-- detached creation when no new branch is selected, because Git normally forbids checking the same
-  branch out in a second worktree;
-- `git worktree add --detach <path> <exact-oid>` or
-  `git worktree add -b <validated-name> <path> <exact-oid>`;
-- checks that the destination does not exist, is not inside Git metadata, does not overlap an
-  authorized open project, and remains unchanged between review and execution;
-- optional post-create opening/focusing as a separate user choice.
+- **From branch** is a local-branch selector initialized to the right-clicked branch; changing it
+  updates the exact source ref/object used by preparation.
+- **New branch** is optional. Enabling it reveals a validated local branch name. Leaving it disabled
+  creates a detached worktree at the selected source object so an already checked-out source branch
+  is never checked out twice.
+- **Project name** is one filesystem component and defaults to `<repository>-<branch-leaf>`.
+- **Location** is a parent directory selected through the native folder chooser, not an arbitrary
+  command-line fragment.
+- The derived final path is shown continuously as `<location>/<project name>` before creation.
+- **Cancel** and **Create Worktree** are the only terminal actions; creation does not automatically
+  open, focus, or authorize a new project window.
 
-This follow-up must have its own reviewed creation plan. It must not overload the removal plan or
-accept a renderer-selected command line.
+The backend canonicalizes the selected parent, validates the project component and optional branch,
+binds the exact source object/current HEAD/registered-worktree set/destination into a short-lived
+plan, and rejects existing destinations, Git metadata paths, or overlap with any registered
+worktree. Execution prepares the plan again under the repository mutation lock, then invokes either
+`git worktree add --detach <path> <exact-oid>` or
+`git worktree add -b <validated-name> <path> <exact-oid>`. It never falls back to manual directory
+creation or cleanup. Repository refresh remains authoritative after success.
+
+When the currently opened repository is the primary worktree, the context menu for an exact local
+branch associated with one linked worktree additionally exposes:
+
+- **Open Worktree**, which passes the exact backend-reported registered path into the existing
+  project-target workflow. An already opened worktree window is focused; otherwise the existing
+  confirmation surface offers **Current Window** or **New Window**. No second open-project dialog or
+  alternate window policy is introduced.
+- **Reveal in File Manager**, which asks the native boundary to re-resolve the exact branch to one
+  registered linked worktree before opening that directory in Finder, File Explorer, or the Linux
+  file manager. The renderer cannot submit an arbitrary reveal path.
+
+These actions are absent for ordinary branches, detached worktrees, ambiguous logical rows, and
+when the current window already represents a linked worktree. The registered path returned by the
+repository snapshot is presentation identity only; the native reveal command repeats repository
+authorization and worktree association checks at activation time.
+
+Acceptance covers menu availability, branch selection, native chooser cancellation, field
+validation, destination preview, detached and new-branch creation, exact-object and stale-plan
+rejection, collision/overlap/Git-metadata blocking, primary-window-only Open/Reveal availability,
+reuse of the current/new-window confirmation flow, safe native registered-worktree reveal,
+protocol validation, localization, full regression gates, and installed-package replacement.
 
 ## Validation matrix
 
@@ -262,29 +291,38 @@ accept a renderer-selected command line.
 
 ## Completion record
 
-- **Accepted branch:** `codex/delete-worktree-action`; initial implementation commit `a33ee5a` plus
-  the checkout-state and force-review follow-up. The exact completion-record commit is reported in
-  the handoff because a commit cannot embed its own hash.
-- **Frontend:** TypeScript checking, the 765-test script suite, production Vite build, ownership
+- **Accepted branch:** `codex/delete-worktree-action`; initial implementation commit `a33ee5a`,
+  checkout-state and force-review follow-up `dcecf8678423319a0b45ad68c4f04001273a064e`, plus the
+  New/Open/Reveal follow-up. The exact completion-record commit is reported in the handoff because
+  a commit cannot embed its own hash.
+- **Frontend:** TypeScript checking, the 768-test script suite, production Vite build, ownership
   budgets, protocol validation, and `git diff --check` passed.
 - **Native:** Rust formatting, strict all-target workspace Clippy, and workspace tests passed. The
-  `asterlyn-git` crate passed 127 tests; two unrelated operating-system watcher tests remain ignored
+  `asterlyn-git` crate passed 130 tests; two unrelated operating-system watcher tests remain ignored
   by their existing contract.
 - **Worktree coverage:** porcelain paths with spaces, detached records, locked/prunable state,
   malformed UTF-8, duplicate branch associations, primary/linked/available presentation, clean
   removal, dirty and primary-uncontained warning review, stale force-token rejection, exact forced
   removal, locked, missing, current, and stale targets passed. Successful ordinary and forced
-  removal retained the local branch.
+  removal retained the local branch. New coverage also passed for detached and new-branch creation,
+  invalid names, existing/colliding/overlapping destinations, menu eligibility, native folder
+  chooser cancellation, primary-only Open/Reveal behavior, and exact registered-path reveal.
 - **Accepted package:**
-  `target/release/bundle/macos/Asterlyn-worktree-safety-20260930-macos-arm64.zip`, 8,961,076 bytes,
-  SHA-256 `974ee9f07d741e07127f8118dfca31001c9b44ea5003f9769bf847d010896cc5`.
-- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,662,496 bytes,
-  SHA-256 `0405db609df7578984e79094614ca20ddf68f47f9094b5589cb5c94b8a69139e`, exactly matching the
+  `target/release/bundle/macos/Asterlyn-worktree-create-open-reveal-20260930-macos-arm64.zip`,
+  9,031,045 bytes, SHA-256
+  `74830910b005026472da8967a503649fc30c6caffd93f65f6cf649d8c6eb684c`.
+- **Installed executable:** `/Applications/Asterlyn.app/Contents/MacOS/asterlyn`, 23,930,512 bytes,
+  SHA-256
+  `41c84380afba24f0a7ffeb776fce8de367d8caa6ecfa0efa7ceaf05566f5493a`, exactly matching the
   packaged executable. The arm64 bundle is ad-hoc signed with hardened runtime, passed strict
-  signature verification, and rendered the application shell during the six-second isolated native
-  smoke from both the build and installed paths.
+  signature verification, and passed the six-second isolated native smoke from both the build and
+  installed paths. The relaunched installed application exposed an on-screen 1320 x 821 Asterlyn
+  window through CoreGraphics. On this host, System Events reported zero accessibility windows for
+  both the previous accepted package and this package, so the accessibility-marker smoke remained
+  unavailable rather than being treated as a product regression.
 - **Replaced installation backup:** moved to the recoverable macOS Trash location
-  `/Users/gzq/.Trash/Asterlyn.app.backup-worktree-safety-20260930` after installed verification.
+  `/Users/gzq/.Trash/Asterlyn.app.backup-worktree-create-open-reveal-20260930-130533` after installed
+  verification.
 - **Host:** macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1, and Git
   2.48.1. Windows/Linux compilation and installed interaction remain platform-specific follow-up
   gates; this local preview is neither Developer ID signed nor notarized.

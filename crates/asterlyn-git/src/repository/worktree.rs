@@ -1,11 +1,15 @@
 use std::ffi::OsString;
-use std::path::Path;
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 use super::{
     GitRepository, branch_mutation_token, run_from, stale_branch_plan, validate_object_id,
 };
 use crate::error::GitError;
-use crate::model::{BranchMutationPlan, WorktreeRemovalReview};
+use crate::model::{
+    BranchKind, BranchMutationPlan, WorktreeCreationPlan, WorktreeCreationRequest,
+    WorktreeRemovalReview,
+};
 use crate::parser::parse_status;
 
 const REVIEWED_CHANGE_LIMIT: usize = 20;
@@ -36,6 +40,203 @@ pub(super) fn linked_path(worktrees: &[RegisteredWorktree], full_name: &str) -> 
 }
 
 impl GitRepository {
+    pub fn prepare_worktree_creation(
+        &self,
+        request: &WorktreeCreationRequest,
+    ) -> Result<WorktreeCreationPlan, GitError> {
+        self.ensure_no_repository_operation("prepare linked worktree creation")?;
+        validate_object_id(&request.source_oid)?;
+        let source = self
+            .read_references()?
+            .into_iter()
+            .find(|candidate| {
+                candidate.repository_id == "."
+                    && candidate.kind == BranchKind::Local
+                    && candidate.full_name == request.source_full_name
+            })
+            .ok_or_else(|| GitError::InvalidInput {
+                field: "source branch".to_string(),
+                message: "select an existing local branch".to_string(),
+            })?;
+        if source.oid != request.source_oid {
+            return Err(stale_worktree_creation(
+                "the selected source branch moved to a different commit",
+            ));
+        }
+
+        let parent = canonical_parent(&request.parent_directory)?;
+        let project_name = validate_project_name(&request.project_name)?;
+        let destination = parent.join(project_name);
+        ensure_destination_absent(&destination)?;
+        let worktrees = self.registered_worktrees()?;
+        for registered in &worktrees {
+            let registered_path = Path::new(&registered.path);
+            let comparable =
+                fs::canonicalize(registered_path).unwrap_or_else(|_| registered_path.to_path_buf());
+            if paths_overlap(&destination, &comparable) {
+                return Err(GitError::UnsafeOperation {
+                    operation: "prepare linked worktree creation".to_string(),
+                    message: "the destination overlaps a registered Git worktree".to_string(),
+                    blockers: vec![registered.path.clone()],
+                });
+            }
+        }
+        if paths_overlap(&destination, self.git_directory()) {
+            return Err(GitError::UnsafeOperation {
+                operation: "prepare linked worktree creation".to_string(),
+                message: "the destination overlaps repository metadata".to_string(),
+                blockers: vec![self.git_directory().to_string_lossy().into_owned()],
+            });
+        }
+
+        let new_branch = request
+            .new_branch
+            .as_deref()
+            .map(|name| self.validate_branch_name(name))
+            .transpose()?
+            .map(str::to_string);
+        if let Some(name) = new_branch.as_deref()
+            && self.reference_exists(&format!("refs/heads/{name}"))?
+        {
+            return Err(GitError::InvalidInput {
+                field: "new branch".to_string(),
+                message: format!("'{name}' already exists"),
+            });
+        }
+
+        let start_head_oid = self.resolve_commit("HEAD", "read worktree creation HEAD")?;
+        let start_head_ref = self.current_branch()?.map_or_else(
+            || "DETACHED".to_string(),
+            |name| format!("refs/heads/{name}"),
+        );
+        let parent_directory = parent.to_string_lossy().into_owned();
+        let destination_path = destination.to_string_lossy().into_owned();
+        let worktree_identity = worktrees
+            .iter()
+            .map(|item| {
+                format!(
+                    "{}\0{}\0{}\0{}",
+                    item.path,
+                    item.branch.as_deref().unwrap_or("detached"),
+                    item.head_oid.as_deref().unwrap_or(""),
+                    item.locked || item.prunable,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\0");
+        let preview_token = branch_mutation_token(&[
+            "create-worktree",
+            &request.source_full_name,
+            &source.oid,
+            &parent_directory,
+            project_name,
+            &destination_path,
+            new_branch.as_deref().unwrap_or("detached"),
+            &start_head_ref,
+            &start_head_oid,
+            &worktree_identity,
+        ]);
+        Ok(WorktreeCreationPlan {
+            repository_root: self.root().to_string_lossy().into_owned(),
+            source_full_name: request.source_full_name.clone(),
+            source_name: source.name,
+            source_oid: source.oid,
+            parent_directory,
+            project_name: project_name.to_string(),
+            destination_path,
+            new_branch,
+            start_head_ref,
+            start_head_oid,
+            preview_token,
+        })
+    }
+
+    pub fn execute_worktree_creation(&self, plan: &WorktreeCreationPlan) -> Result<(), GitError> {
+        if plan.repository_root != self.root().to_string_lossy() {
+            return Err(stale_worktree_creation(
+                "the reviewed plan belongs to another repository",
+            ));
+        }
+        let refreshed = self.prepare_worktree_creation(&WorktreeCreationRequest {
+            source_full_name: plan.source_full_name.clone(),
+            source_oid: plan.source_oid.clone(),
+            parent_directory: plan.parent_directory.clone(),
+            project_name: plan.project_name.clone(),
+            new_branch: plan.new_branch.clone(),
+        })?;
+        if refreshed.preview_token != plan.preview_token {
+            return Err(stale_worktree_creation(
+                "HEAD, the source branch, destination, or registered worktrees changed",
+            ));
+        }
+        let mut arguments = vec![OsString::from("worktree"), OsString::from("add")];
+        if let Some(branch) = plan.new_branch.as_deref() {
+            arguments.extend([
+                OsString::from("--no-track"),
+                OsString::from("-b"),
+                OsString::from(branch),
+            ]);
+        } else {
+            arguments.push(OsString::from("--detach"));
+        }
+        arguments.extend([
+            OsString::from(&plan.destination_path),
+            OsString::from(&plan.source_oid),
+        ]);
+        self.run_mutation("create reviewed linked worktree", arguments)?;
+        Ok(())
+    }
+
+    pub fn registered_linked_worktree_path_from_primary(
+        &self,
+        full_name: &str,
+        source_oid: &str,
+    ) -> Result<PathBuf, GitError> {
+        validate_object_id(source_oid)?;
+        let source = self.read_references()?.into_iter().find(|candidate| {
+            candidate.repository_id == "."
+                && candidate.kind == BranchKind::Local
+                && candidate.full_name == full_name
+        });
+        if source.as_ref().map(|branch| branch.oid.as_str()) != Some(source_oid) {
+            return Err(stale_worktree_creation("the selected local branch changed"));
+        }
+        let worktrees = self.registered_worktrees()?;
+        let primary = worktrees.first().ok_or_else(|| GitError::Parse {
+            context: "Git worktree list".to_string(),
+            message: "Git returned no primary worktree".to_string(),
+        })?;
+        if !same_existing_directory(self.root(), Path::new(&primary.path)) {
+            return Err(GitError::UnsafeOperation {
+                operation: "reveal linked worktree".to_string(),
+                message: "open the primary worktree before revealing a linked worktree".to_string(),
+                blockers: Vec::new(),
+            });
+        }
+        let matches = worktrees
+            .iter()
+            .skip(1)
+            .filter(|item| item.branch.as_deref() == Some(full_name))
+            .collect::<Vec<_>>();
+        let [linked] = matches.as_slice() else {
+            return Err(GitError::UnsafeOperation {
+                operation: "reveal linked worktree".to_string(),
+                message: "the branch is not associated with exactly one linked worktree"
+                    .to_string(),
+                blockers: matches.into_iter().map(|item| item.path.clone()).collect(),
+            });
+        };
+        let path = PathBuf::from(&linked.path);
+        if linked.prunable || !path.is_dir() {
+            return Err(GitError::UnsafeOperation {
+                operation: "reveal linked worktree".to_string(),
+                message: "the registered linked worktree directory is unavailable".to_string(),
+                blockers: vec![linked.path.clone()],
+            });
+        }
+        Ok(path)
+    }
+
     pub(super) fn branch_worktree_checkout_count(
         &self,
         full_name: &str,
@@ -220,6 +421,115 @@ impl GitRepository {
                 message: error.to_string(),
             })?;
         Ok(u32::try_from(count).unwrap_or(u32::MAX))
+    }
+}
+
+fn canonical_parent(value: &str) -> Result<PathBuf, GitError> {
+    let path = Path::new(value);
+    if value.trim() != value || value.is_empty() || !path.is_absolute() {
+        return Err(GitError::InvalidInput {
+            field: "worktree location".to_string(),
+            message: "select an existing absolute parent directory".to_string(),
+        });
+    }
+    let canonical = fs::canonicalize(path).map_err(|error| GitError::Io {
+        operation: "resolve worktree parent directory".to_string(),
+        message: error.to_string(),
+    })?;
+    if !canonical.is_dir() {
+        return Err(GitError::InvalidInput {
+            field: "worktree location".to_string(),
+            message: "select an existing parent directory".to_string(),
+        });
+    }
+    Ok(canonical)
+}
+
+fn ensure_destination_absent(path: &Path) -> Result<(), GitError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Err(GitError::InvalidInput {
+            field: "worktree destination".to_string(),
+            message: "the destination already exists".to_string(),
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(GitError::Io {
+            operation: "inspect worktree destination".to_string(),
+            message: error.to_string(),
+        }),
+    }
+}
+
+fn validate_project_name(value: &str) -> Result<&str, GitError> {
+    let invalid_windows_name = value
+        .trim_end_matches([' ', '.'])
+        .split('.')
+        .next()
+        .is_some_and(|stem| {
+            matches!(
+                stem.to_ascii_uppercase().as_str(),
+                "CON"
+                    | "PRN"
+                    | "AUX"
+                    | "NUL"
+                    | "COM1"
+                    | "COM2"
+                    | "COM3"
+                    | "COM4"
+                    | "COM5"
+                    | "COM6"
+                    | "COM7"
+                    | "COM8"
+                    | "COM9"
+                    | "LPT1"
+                    | "LPT2"
+                    | "LPT3"
+                    | "LPT4"
+                    | "LPT5"
+                    | "LPT6"
+                    | "LPT7"
+                    | "LPT8"
+                    | "LPT9"
+            )
+        });
+    let one_component = Path::new(value).components().count() == 1
+        && matches!(
+            Path::new(value).components().next(),
+            Some(Component::Normal(_))
+        );
+    if value.is_empty()
+        || value.trim() != value
+        || value.len() > 120
+        || value.ends_with('.')
+        || !one_component
+        || invalid_windows_name
+        || value
+            .chars()
+            .any(|character| character.is_control() || "<>:\"/\\|?*".contains(character))
+    {
+        return Err(GitError::InvalidInput {
+            field: "project name".to_string(),
+            message: "enter one portable folder name".to_string(),
+        });
+    }
+    Ok(value)
+}
+
+fn paths_overlap(left: &Path, right: &Path) -> bool {
+    left == right || left.starts_with(right) || right.starts_with(left)
+}
+
+fn same_existing_directory(left: &Path, right: &Path) -> bool {
+    matches!(
+        (fs::canonicalize(left), fs::canonicalize(right)),
+        (Ok(left), Ok(right)) if left == right
+    )
+}
+
+fn stale_worktree_creation(message: &str) -> GitError {
+    GitError::UnsafeOperation {
+        operation: "execute linked worktree creation".to_string(),
+        message: message.to_string(),
+        blockers: Vec::new(),
     }
 }
 
@@ -566,6 +876,124 @@ mod tests {
             git_stdout(directory.path(), &["rev-parse", "refs/heads/linked"]),
             linked_oid
         );
+    }
+
+    #[test]
+    fn creates_detached_worktree_from_checked_out_branch_at_exact_object() {
+        let directory = repository_fixture();
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/main"]);
+        let parent = tempfile::tempdir().unwrap();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = WorktreeCreationRequest {
+            source_full_name: "refs/heads/main".to_string(),
+            source_oid: source_oid.clone(),
+            parent_directory: parent.path().to_string_lossy().into_owned(),
+            project_name: "main-review".to_string(),
+            new_branch: None,
+        };
+
+        let plan = repository
+            .prepare_worktree_creation(&request)
+            .expect("detached plan");
+        repository
+            .execute_worktree_creation(&plan)
+            .expect("detached worktree creation");
+
+        let destination = parent.path().join("main-review");
+        assert_eq!(git_stdout(&destination, &["rev-parse", "HEAD"]), source_oid);
+        assert!(git_stdout(&destination, &["branch", "--show-current"]).is_empty());
+    }
+
+    #[test]
+    fn creates_new_branch_and_rejects_stale_or_colliding_creation() {
+        let directory = repository_fixture();
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/main"]);
+        let parent = tempfile::tempdir().unwrap();
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let request = WorktreeCreationRequest {
+            source_full_name: "refs/heads/main".to_string(),
+            source_oid,
+            parent_directory: parent.path().to_string_lossy().into_owned(),
+            project_name: "feature-worktree".to_string(),
+            new_branch: Some("feature/worktree".to_string()),
+        };
+        let plan = repository
+            .prepare_worktree_creation(&request)
+            .expect("new branch plan");
+        fs::create_dir(parent.path().join("feature-worktree")).unwrap();
+        let stale = repository
+            .execute_worktree_creation(&plan)
+            .expect_err("late destination collision invalidates plan");
+        assert!(stale.to_string().contains("destination already exists"));
+        fs::remove_dir(parent.path().join("feature-worktree")).unwrap();
+
+        let refreshed = repository
+            .prepare_worktree_creation(&request)
+            .expect("refreshed new branch plan");
+        repository
+            .execute_worktree_creation(&refreshed)
+            .expect("new branch worktree creation");
+        let destination = parent.path().join("feature-worktree");
+        assert_eq!(
+            git_stdout(&destination, &["branch", "--show-current"]),
+            "feature/worktree"
+        );
+        assert!(repository.prepare_worktree_creation(&request).is_err());
+    }
+
+    #[test]
+    fn creation_rejects_invalid_names_and_registered_worktree_overlap() {
+        let directory = repository_fixture();
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/main"]);
+        let repository = GitRepository::open(directory.path()).expect("repository opens");
+        let overlapping = WorktreeCreationRequest {
+            source_full_name: "refs/heads/main".to_string(),
+            source_oid: source_oid.clone(),
+            parent_directory: directory.path().to_string_lossy().into_owned(),
+            project_name: "nested".to_string(),
+            new_branch: None,
+        };
+        let overlap = repository
+            .prepare_worktree_creation(&overlapping)
+            .expect_err("a destination inside the primary worktree is blocked");
+        assert!(overlap.to_string().contains("overlaps"));
+
+        let parent = tempfile::tempdir().unwrap();
+        let invalid_name = repository
+            .prepare_worktree_creation(&WorktreeCreationRequest {
+                parent_directory: parent.path().to_string_lossy().into_owned(),
+                project_name: "../escape".to_string(),
+                ..overlapping
+            })
+            .expect_err("the project name is one safe path component");
+        assert!(invalid_name.to_string().contains("portable folder name"));
+    }
+
+    #[test]
+    fn resolves_reveal_only_from_primary_for_one_registered_linked_branch() {
+        let directory = repository_fixture();
+        git(directory.path(), &["branch", "linked"]);
+        let source_oid = git_stdout(directory.path(), &["rev-parse", "refs/heads/linked"]);
+        let parent = tempfile::tempdir().unwrap();
+        let linked_path = parent.path().join("linked");
+        git(
+            directory.path(),
+            &["worktree", "add", linked_path.to_str().unwrap(), "linked"],
+        );
+        let primary = GitRepository::open(directory.path()).expect("primary repository opens");
+        let resolved = primary
+            .registered_linked_worktree_path_from_primary("refs/heads/linked", &source_oid)
+            .expect("primary resolves registered linked worktree");
+        assert_eq!(
+            fs::canonicalize(resolved).unwrap(),
+            fs::canonicalize(&linked_path).unwrap()
+        );
+
+        let linked = GitRepository::open(&linked_path).expect("linked repository opens");
+        let error = linked
+            .registered_linked_worktree_path_from_primary("refs/heads/linked", &source_oid)
+            .expect_err("linked window cannot reveal through primary-only action");
+        assert!(error.to_string().contains("primary worktree"));
     }
 
     fn repository_fixture() -> tempfile::TempDir {

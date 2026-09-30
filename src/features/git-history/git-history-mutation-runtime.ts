@@ -15,6 +15,12 @@ import { GitResetBinding } from "./git-reset-binding.ts";
 import { GitResetController, type GitResetGateway } from "./git-reset-controller.ts";
 import { TagMutationController, type TagMutationGateway } from "./tag-mutation-controller.ts";
 import { TagMutationDialogBinding } from "./tag-mutation-dialog-binding.ts";
+import type { WorktreeCreationCopy } from "../../localization/worktree-creation-copy.ts";
+import {
+  WorktreeCreationController,
+  type WorktreeCreationGateway,
+} from "./worktree-creation-controller.ts";
+import { WorktreeCreationDialogBinding } from "./worktree-creation-dialog-binding.ts";
 
 export interface GitHistoryMutationRuntimeOptions {
   readonly root: HTMLElement;
@@ -23,6 +29,10 @@ export interface GitHistoryMutationRuntimeOptions {
     readonly copy: () => BranchMutationCopy;
   };
   readonly tag: { readonly gateway: TagMutationGateway; readonly copy: () => TagMutationCopy };
+  readonly worktree: {
+    readonly gateway: WorktreeCreationGateway;
+    readonly copy: () => WorktreeCreationCopy;
+  };
   readonly fileRestore: {
     readonly gateway: CommitFileRestoreGateway;
     readonly copy: () => HistoryCommitFileContextMenuCopy;
@@ -35,11 +45,13 @@ export interface GitHistoryMutationRuntimeOptions {
 export class GitHistoryMutationRuntime {
   readonly branch: BranchMutationController;
   readonly tag: TagMutationController;
+  readonly worktree: WorktreeCreationController;
   readonly fileRestore: CommitFileRestoreController;
   readonly reset: GitResetController | null;
 
   private readonly branchBinding: BranchMutationDialogBinding;
   private readonly tagBinding: TagMutationDialogBinding;
+  private readonly worktreeBinding: WorktreeCreationDialogBinding;
   private readonly fileRestoreBinding: CommitFileRestoreDialogBinding;
   private readonly resetBinding: GitResetBinding | null;
   private disposed = false;
@@ -53,6 +65,12 @@ export class GitHistoryMutationRuntime {
     );
     this.tag = new TagMutationController(options.tag.gateway);
     this.tagBinding = new TagMutationDialogBinding(options.root, this.tag, options.tag.copy);
+    this.worktree = new WorktreeCreationController(options.worktree.gateway);
+    this.worktreeBinding = new WorktreeCreationDialogBinding(
+      options.root,
+      this.worktree,
+      options.worktree.copy,
+    );
     this.fileRestore = new CommitFileRestoreController(options.fileRestore.gateway);
     this.fileRestoreBinding = new CommitFileRestoreDialogBinding(
       options.root,
@@ -69,6 +87,7 @@ export class GitHistoryMutationRuntime {
   render(): void {
     this.branchBinding.render();
     this.tagBinding.render();
+    this.worktreeBinding.render();
     this.fileRestoreBinding.render();
     this.resetBinding?.render();
   }
@@ -76,6 +95,7 @@ export class GitHistoryMutationRuntime {
   refreshCopy(): void {
     this.branchBinding.refreshCopy();
     this.tagBinding.refreshCopy();
+    this.worktreeBinding.refreshCopy();
     this.fileRestoreBinding.refreshCopy();
     this.resetBinding?.refreshCopy();
   }
@@ -85,10 +105,12 @@ export class GitHistoryMutationRuntime {
     this.disposed = true;
     this.branchBinding.dispose();
     this.tagBinding.dispose();
+    this.worktreeBinding.dispose();
     this.fileRestoreBinding.dispose();
     this.resetBinding?.dispose();
     this.branch.dispose();
     this.tag.dispose();
+    this.worktree.dispose();
     this.fileRestore.dispose();
     this.reset?.dispose();
   }
