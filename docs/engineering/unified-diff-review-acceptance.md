@@ -1,6 +1,6 @@
 # Unified Diff review acceptance
 
-- **Status:** Pending implementation
+- **Status:** Automated acceptance complete; installed build awaiting manual visual acceptance
 - **Plan:** [`unified-diff-review-workflow-plan.md`](unified-diff-review-workflow-plan.md)
 - **Started:** 2026-10-08
 
@@ -25,14 +25,14 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 | Surface | Required evidence | Status |
 | --- | --- | --- |
-| Read-only split Diff | headers, navigation, resizing, synchronized scroll, unchanged expansion | Pending |
-| Read-only unified Diff | navigation, unchanged expansion, visible whitespace | Pending |
-| Editable working Diff | Result priority, Revert, undo, save ownership, exact text | Pending |
-| Workspace replacement Diff | shared controls, consumer action, cancel/apply safety | Pending |
-| Three-pane conflict | aligned blocks, two-sided actions, manual edit, cancel, save and stage | Pending |
-| Long-line fixture | independent content ownership and synchronized horizontal navigation | Pending |
-| Large-gap fixture | identical folds and expansion across every visible pane | Pending |
-| Reduced motion | stable connectors without animated geometry | Pending |
+| Read-only split Diff | headers, navigation, resizing, synchronized scroll, unchanged expansion | Ready for manual acceptance |
+| Read-only unified Diff | navigation, unchanged expansion, visible whitespace | Ready for manual acceptance |
+| Editable working Diff | Result priority, Revert, undo, save ownership, exact text | Ready for manual acceptance |
+| Workspace replacement Diff | shared controls, consumer action, cancel/apply safety | Ready for manual acceptance |
+| Three-pane conflict | aligned blocks, two-sided actions, manual edit, cancel, save and stage | Ready for manual acceptance |
+| Long-line fixture | independent content ownership and synchronized horizontal navigation | Ready for manual acceptance |
+| Large-gap fixture | identical folds and expansion across every visible pane | Ready for manual acceptance |
+| Reduced motion | stable connectors without animated geometry | Ready for manual acceptance |
 
 ## Phase evidence
 
@@ -109,3 +109,27 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   markup, labels, state, and accessibility behavior.
 - Shared review modules live under `src/shared/diff-review/`, preventing cross-feature imports; the
   architecture dependency and source-ownership budget suites remain green.
+
+### Phase 8 — package and acceptance evidence
+
+- The complete frontend suite passed: 885 tests, 0 failures. TypeScript checking, the production
+  frontend build, and `git diff --check` also passed.
+- The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
+  release executable and the installed executable each rendered the application shell inside the
+  six-second native smoke bound.
+- The accepted macOS arm64 archive is
+  `target/release/bundle/macos/Asterlyn-unified-diff-review-20261008-macos-arm64-signed.zip`,
+  9,146,214 bytes, SHA-256
+  `df064544388393b88275c8e05b2a28519bb46eec59f8420ca76f3a8364d09475`.
+- The packaged and installed executables are both 24,046,032 bytes with SHA-256
+  `f4c110c5e13639989fbdb4a172bdfba7d0cd61de4fdaa14d6d7e6547bd990c82`. The bundle is an arm64
+  application with an ad-hoc hardened-runtime signature and passed strict deep signature
+  verification before and after installation.
+- `/Applications/Asterlyn.app` was replaced and relaunched against this worktree. The previous
+  installation remains recoverable at
+  `/Users/gzq/.Trash/Asterlyn-before-unified-diff-review-20261008-130247.app`.
+- Host evidence: macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1,
+  and Git 2.48.1.
+- The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,
+  interaction, geometry, exact-text, and installed-rendering checks are complete, but dark/light,
+  English/Chinese, and reduced-motion visual inspection still requires a human acceptance pass.
