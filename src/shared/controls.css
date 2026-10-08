@@ -6,18 +6,14 @@
  */
 .content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control,
 .replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control,
-.conflict-three-pane .cm-merge-revert > button.diff-change-control {
-  position: absolute;
-  left: 50%;
+.conflict-three-pane .conflict-change-controls > button.diff-change-control {
   display: grid;
   width: var(--diff-change-control-width, 26px);
   min-width: var(--diff-change-control-width, 26px);
   max-width: var(--diff-change-control-width, 26px);
   height: 26px;
-  margin: 7px 0 0;
   padding: 0;
   place-items: center;
-  transform: translateX(-50%);
   appearance: none;
   border: 0;
   border-radius: 4px;
@@ -29,6 +25,27 @@
   line-height: 0;
 }
 
+.content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control,
+.replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control {
+  position: absolute;
+  left: 50%;
+  margin: 7px 0 0;
+  transform: translateX(-50%);
+}
+
+.conflict-three-pane .conflict-change-controls {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  gap: 2px;
+  margin: 7px 0 0;
+  transform: translateX(-50%);
+}
+
+.conflict-three-pane .conflict-change-controls[hidden] {
+  display: none;
+}
+
 .diff-change-control > .icon {
   display: block;
   width: 15px;
@@ -38,14 +55,20 @@
 
 .content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control:hover:not(:disabled),
 .replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control:hover:not(:disabled),
-.conflict-three-pane .cm-merge-revert > button.diff-change-control:hover:not(:disabled) {
+.conflict-three-pane .conflict-change-controls > button.diff-change-control:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text);
 }
 
+.conflict-three-pane .conflict-change-controls > button.diff-change-control.is-selected {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent);
+  color: var(--accent-text);
+}
+
 .content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control:disabled,
 .replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control:disabled,
-.conflict-three-pane .cm-merge-revert > button.diff-change-control:disabled {
+.conflict-three-pane .conflict-change-controls > button.diff-change-control:disabled {
   cursor: default;
   opacity: 0.45;
 }

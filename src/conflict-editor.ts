@@ -31,6 +31,12 @@ import {
   type ExactTextContent,
   type TextChange,
 } from "./features/files-editor/text-content.ts";
+import {
+  ConflictResolutionModel,
+  type ConflictResolutionDecision,
+  type ConflictResolutionSide,
+  type ConflictSourceRange,
+} from "./conflict-resolution-model.ts";
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
 import { icon } from "./icons.ts";
@@ -74,6 +80,9 @@ export class ConflictEditor {
   private changePending = false;
   private changeFrame: number | null = null;
   private synchronizing = false;
+  private applyingConflictDecision = false;
+  private resolutionModel: ConflictResolutionModel | null = null;
+  private conflictControlObserver: MutationObserver | null = null;
   private preferences: AppPreferences | null = null;
   private readonly resultReadOnly = new Compartment();
   private readonly resultEditable = new Compartment();
@@ -96,9 +105,10 @@ export class ConflictEditor {
     this.serializedResult = result;
     this.onChange = onChange;
 
-    const ours = conflict.ours ?? "";
-    const theirs = conflict.theirs ?? "";
-    const base = conflict.base ?? "";
+    const ours = decodeExactText(conflict.ours ?? "").text;
+    const theirs = decodeExactText(conflict.theirs ?? "").text;
+    const base = decodeExactText(conflict.base ?? "").text;
+    this.resolutionModel = ConflictResolutionModel.create(base, ours, theirs, this.exactResult.text);
     const root = document.createElement("section");
     root.className = "conflict-three-pane";
     root.setAttribute("aria-label", copy.conflictInputs);
@@ -144,7 +154,7 @@ export class ConflictEditor {
       },
       gutter: false,
       revertControls: "a-to-b",
-      renderRevertControl: () => this.directionButton("right", copy),
+      renderRevertControl: () => this.conflictControls("ours", "right", copy),
       collapseUnchanged: { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
@@ -170,7 +180,7 @@ export class ConflictEditor {
       },
       gutter: false,
       revertControls: "b-to-a",
-      renderRevertControl: () => this.directionButton("left", copy),
+      renderRevertControl: () => this.conflictControls("theirs", "left", copy),
       collapseUnchanged: { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
@@ -179,6 +189,7 @@ export class ConflictEditor {
     mirrorBinding.view = this.rightMerge.a;
     theirsBinding.view = this.rightMerge.b;
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
+    this.observeConflictControls(root);
     this.mountScrollbars(root);
     this.loadLanguage(conflict.path);
   }
@@ -242,10 +253,11 @@ export class ConflictEditor {
     ] });
     for (const merge of [this.leftMerge, this.rightMerge]) {
       merge?.dom.classList.toggle("conflict-result-readonly", readOnly);
-      for (const control of merge?.dom.querySelectorAll<HTMLButtonElement>(".conflict-apply-change") ?? []) {
+      for (const control of merge?.dom.querySelectorAll<HTMLButtonElement>(".conflict-change-controls button") ?? []) {
         control.disabled = readOnly;
       }
     }
+    this.syncConflictControls();
   }
 
   destroy(): void {
@@ -255,12 +267,16 @@ export class ConflictEditor {
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.diffScrollbars = null;
+    this.conflictControlObserver?.disconnect();
+    this.conflictControlObserver = null;
     this.leftMerge?.destroy();
     this.rightMerge?.destroy();
     this.leftMerge = null;
     this.rightMerge = null;
     this.bindings = [];
     this.synchronizing = false;
+    this.applyingConflictDecision = false;
+    this.resolutionModel = null;
   }
 
   private extensions(
@@ -322,6 +338,13 @@ export class ConflictEditor {
       changes.push({ from, to, insert: inserted.toString() });
     });
     this.exactResult = applyExactTextChanges(this.exactResult, changes);
+    if (!this.applyingConflictDecision) {
+      this.resolutionModel?.observeManualChanges(
+        changes,
+        update.startState.doc.length,
+        update.state.doc.toString(),
+      );
+    }
     this.serializedResult = null;
     this.changePending = true;
     for (const binding of this.bindings) {
@@ -339,6 +362,7 @@ export class ConflictEditor {
       this.changeFrame = window.requestAnimationFrame(() => {
         this.changeFrame = null;
         this.flushChanges();
+        this.syncConflictControls();
       });
     }
   }
@@ -363,15 +387,123 @@ export class ConflictEditor {
     };
   }
 
-  private directionButton(direction: "left" | "right", copy: GitOperationCopy): HTMLButtonElement {
+  private conflictControls(
+    side: ConflictResolutionSide,
+    direction: "left" | "right",
+    copy: GitOperationCopy,
+  ): HTMLDivElement {
+    const group = document.createElement("div");
+    group.className = "conflict-change-controls";
+    group.dataset.side = side;
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", side === "ours" ? copy.ours : copy.theirs);
+    group.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    const apply = this.conflictActionButton(
+      "accepted",
+      side === "ours" ? copy.acceptOursChange : copy.acceptTheirsChange,
+      direction === "right" ? "double-chevron-right" : "double-chevron-left",
+    );
+    const ignore = this.conflictActionButton(
+      "ignored",
+      side === "ours" ? copy.ignoreOursChange : copy.ignoreTheirsChange,
+      "close",
+    );
+    for (const button of [apply, ignore]) {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.activateConflictDecision(group, button.dataset.decision as "accepted" | "ignored");
+      });
+    }
+    group.append(apply, ignore);
+    return group;
+  }
+
+  private conflictActionButton(
+    decision: Exclude<ConflictResolutionDecision, "pending">,
+    label: string,
+    iconName: "double-chevron-right" | "double-chevron-left" | "close",
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "diff-change-control conflict-apply-change";
-    button.innerHTML = icon(direction === "right" ? "double-chevron-right" : "double-chevron-left", 15);
-    const label = direction === "right" ? copy.acceptOursChange : copy.acceptTheirsChange;
+    button.className = `diff-change-control conflict-${decision === "accepted" ? "apply" : "ignore"}-change`;
+    button.dataset.decision = decision;
+    button.innerHTML = icon(iconName, 15);
     button.title = label;
     button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", "false");
     return button;
+  }
+
+  private activateConflictDecision(
+    group: HTMLDivElement,
+    decision: Exclude<ConflictResolutionDecision, "pending">,
+  ): void {
+    if (this.resultReadOnlyValue) return;
+    const side = group.dataset.side as ConflictResolutionSide | undefined;
+    const source = side ? this.sourceRangeForControl(group, side) : null;
+    const result = this.leftMerge?.b;
+    if (!side || !source || !result || !this.resolutionModel) return;
+    const changes = this.resolutionModel.applyDecision(side, decision, source, result.state.doc.toString());
+    if (changes.length === 0) {
+      this.syncConflictControls();
+      return;
+    }
+    this.applyingConflictDecision = true;
+    try {
+      result.dispatch({ changes, userEvent: `input.conflict.${decision}` });
+    } finally {
+      this.applyingConflictDecision = false;
+    }
+    this.syncConflictControls();
+  }
+
+  private sourceRangeForControl(
+    group: HTMLDivElement,
+    side: ConflictResolutionSide,
+  ): ConflictSourceRange | null {
+    const merge = side === "ours" ? this.leftMerge : this.rightMerge;
+    const index = Number(group.dataset.chunk);
+    const chunk = Number.isInteger(index) ? merge?.chunks[index] : null;
+    if (!chunk) return null;
+    return side === "ours"
+      ? { from: chunk.fromA, to: chunk.toA }
+      : { from: chunk.fromB, to: chunk.toB };
+  }
+
+  private observeConflictControls(root: HTMLElement): void {
+    this.conflictControlObserver?.disconnect();
+    this.conflictControlObserver = new MutationObserver(() => this.syncConflictControls());
+    this.conflictControlObserver.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-chunk"],
+    });
+    window.requestAnimationFrame(() => this.syncConflictControls());
+  }
+
+  private syncConflictControls(): void {
+    if (!this.resolutionModel) return;
+    for (const merge of [this.leftMerge, this.rightMerge]) {
+      merge?.dom.querySelectorAll<HTMLDivElement>(".conflict-change-controls[data-chunk]")
+        .forEach((group) => {
+          const side = group.dataset.side as ConflictResolutionSide | undefined;
+          const source = side ? this.sourceRangeForControl(group, side) : null;
+          const state = side && source ? this.resolutionModel?.decision(side, source) : null;
+          group.hidden = state === null;
+          for (const button of group.querySelectorAll<HTMLButtonElement>("button[data-decision]")) {
+            const selected = button.dataset.decision === state;
+            button.classList.toggle("is-selected", selected);
+            button.setAttribute("aria-pressed", String(selected));
+            button.disabled = this.resultReadOnlyValue;
+          }
+        });
+    }
   }
 
   private mountScrollbars(root: HTMLElement): void {

@@ -355,6 +355,7 @@ export const ZH_CN = {
     openConflict: "打开冲突", readingConflict: "正在读取基准、当前版本、传入版本和工作树内容…", conflictUnavailable: "冲突不可用。",
     resolve: (path) => `解决 ${path}`, conflictInputs: "冲突输入", base: "基准", ours: "当前版本", theirs: "传入版本",
     acceptOursChange: "将这处当前版本更改应用到结果", acceptTheirsChange: "将这处传入版本更改应用到结果",
+    ignoreOursChange: "忽略这处当前版本更改", ignoreTheirsChange: "忽略这处传入版本更改",
     resolvedResult: "解决结果", binaryConflict: "二进制冲突无法作为文本编辑。请在外部工具中解决，或选择删除。",
     resolvedFileContent: "已解决的文件内容", resolveSafetyNote: "保存时会验证上方打开的准确暂存区阶段和工作树版本，写入结果、暂存文件并确认暂存对象。",
     resolveAsDeleted: "以删除方式解决", resolving: "正在解决…", saveAndStage: "保存并暂存",

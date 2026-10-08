@@ -203,6 +203,10 @@ test("conflict editor keeps Ours and Theirs immutable around one synchronized Re
   assert.match(source, /resultSide === "primary"/);
   assert.match(source, /target\.dispatch\(\{ changes:/);
   assert.match(source, /mergeDiffSemanticHighlighting/u);
+  assert.match(source, /ConflictResolutionModel\.create\(base, ours, theirs, this\.exactResult\.text\)/u);
+  assert.match(source, /conflictControls\("ours", "right", copy\)/u);
+  assert.match(source, /conflictControls\("theirs", "left", copy\)/u);
+  assert.match(source, /observeManualChanges\(/u);
 });
 
 test("Diff position navigation outlines the complete current change block", async () => {

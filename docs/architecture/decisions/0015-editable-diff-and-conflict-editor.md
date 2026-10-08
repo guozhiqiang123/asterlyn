@@ -90,8 +90,8 @@ The conflict editor renders Ours, Result, and Theirs as full CodeMirror document
 are read-only; Result is freely editable and preserves an exact marker-free worktree resolution.
 An unresolved marker document is reconstructed conservatively from Base/Ours/Theirs. Base is not a
 fourth visible pane: it drives
-base-to-ours and base-to-theirs change classification. Center gutters provide directional controls
-that apply one reviewed change region into Result. Added/deleted, binary, or otherwise ambiguous
+base-to-ours and base-to-theirs change classification. Center gutters provide independent Apply and
+Ignore controls for each reviewed side change. Added/deleted, binary, or otherwise ambiguous
 files keep explicit fail-closed handling instead of guessing a merge result. All panes share syntax,
 theme, font, whitespace, linked scroll, keyboard, and bounded-document policies with the ordinary
 editor.
@@ -117,6 +117,15 @@ owners without a graph of pairwise feedback links. The two conflict MergeView ou
 vertical ownership and use a vertical-only link, while only the right edge exposes the vertical
 scrollbar. Directional conflict controls use the shared SVG icon registry and the same 26-pixel
 decorated hit target as the editable Diff revert control.
+
+Each conflict control group now contains an Apply arrow and an Ignore cross. The controls stop
+CodeMirror's built-in one-way replacement event and delegate to a Base-anchored transient decision
+model. Result ranges are mapped through every accepted action and manual edit. Accepting both sides
+therefore composes Ours then Theirs exactly once in either click order instead of allowing the
+second side to overwrite the first; identical side content is deduplicated. A manual edit or undo
+that touches a tracked block resets its stale action state and becomes that block's new neutral
+fallback. These decisions remain frontend-only; `Save and Stage` still sends only the exact Result
+through the existing revision-token boundary.
 
 ### Dependency boundary
 
@@ -148,6 +157,8 @@ startup shell, application services, domain models, or persisted state.
 11. Raw Git conflict markers are never presented as the initial editable Result.
 12. A docked horizontal-scroll surface has one synchronization coordinator and one shared extent;
     it does not compose cyclic pairwise links.
+13. Conflict Apply/Ignore state is anchored to immutable Base ranges, never serialized as Git truth,
+    and must not let the second accepted side erase the first accepted side.
 
 ## Delivery sequence
 

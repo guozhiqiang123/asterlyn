@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ConflictResolutionModel } from "../src/features/git-operations/conflict-resolution-model.ts";
+import { ConflictResolutionModel } from "../src/conflict-resolution-model.ts";
 
 test("conflict actions compose Ours then Theirs in either click order", () => {
   const fixture = () => {

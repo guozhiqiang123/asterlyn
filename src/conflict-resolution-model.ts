@@ -1,7 +1,7 @@
 import { ChangeSet } from "@codemirror/state";
 import type { Change } from "@codemirror/merge";
-import { lineAwareDiff } from "../files-editor/line-aware-diff.ts";
-import type { TextChange } from "../files-editor/text-content.ts";
+import { lineAwareDiff } from "./features/files-editor/line-aware-diff.ts";
+import type { TextChange } from "./features/files-editor/text-content.ts";
 
 export type ConflictResolutionSide = "ours" | "theirs";
 export type ConflictResolutionDecision = "pending" | "accepted" | "ignored";
