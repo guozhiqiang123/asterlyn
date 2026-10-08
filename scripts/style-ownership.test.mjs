@@ -291,7 +291,7 @@ test("replacement window owns one horizontal scrollbar and compact patch control
   assert.match(replacement, /\.cm-mergeView \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
   assert.match(replacement, /\.cm-scroller::\-webkit-scrollbar\s*\{[^}]*display:\s*none;/s);
   assert.match(replacement, /\.cm-merge-revert\s*\{[^}]*width:\s*36px;[^}]*flex:\s*0 0 36px;/s);
-  assert.match(replacement, /\.editable-diff-revert\s*\{[^}]*width:\s*28px;[^}]*height:\s*26px;/s);
+  assert.match(replacement, /--diff-change-control-width:\s*28px;/u);
   assert.match(shared, /\.compact-file-tree\s*\{[^}]*--compact-file-tree-row-height:\s*25px;[^}]*--compact-file-tree-row-gap:\s*4px;[^}]*--compact-file-tree-font-size:\s*var\(--ui-font-size, 13px\);[^}]*--compact-file-tree-font-weight:\s*400;/s);
   assert.match(project, /\.project-directory > summary,[^{]*\{[^}]*gap:\s*var\(--compact-file-tree-row-gap\);[^}]*font-size:\s*var\(--compact-file-tree-font-size\);[^}]*font-weight:\s*var\(--compact-file-tree-font-weight\);/s);
   assert.match(replacement, /\.replacement-tool-file\s*\{[^}]*height:\s*var\(--compact-file-tree-row-height\);[^}]*color:\s*var\(--compact-file-tree-color\);[^}]*font-size:\s*var\(--compact-file-tree-font-size\);[^}]*font-weight:\s*var\(--compact-file-tree-font-weight\);/s);
@@ -352,29 +352,35 @@ test("every change overview ruler shares one scrollbar-clearance surface", async
 });
 
 test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {
-  const [theme, diff, editor] = await Promise.all([
+  const [theme, diff, controls, editor] = await Promise.all([
     readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/controls.css", import.meta.url), "utf8"),
     readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
   ]);
   // CodeMirror renders collapsed unchanged rows as a real widget, so the app theme owns its color.
   assert.match(theme, /"\.cm-collapsedLines":\s*\{[^}]*color:\s*"var\(--info-text\)",[^}]*background:\s*"linear-gradient/s);
   assert.match(diff, /\.cm-merge-revert\s*\{[^}]*width:\s*32px;[^}]*flex:\s*0 0 32px;/s);
-  assert.match(diff, /\.editable-diff-revert\s*\{[^}]*width:\s*26px;[^}]*height:\s*26px;[^}]*margin-top:\s*7px;[^}]*transform:\s*translateX\(-50%\);/s);
+  assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*width:\s*var\(--diff-change-control-width, 26px\);[^}]*height:\s*26px;[^}]*margin:\s*7px 0 0;[^}]*transform:\s*translateX\(-50%\);/s);
+  assert.match(editor, /button\.className = "diff-change-control editable-diff-revert"/u);
   // All visible horizontal owners share one coordinator, avoiding pairwise feedback loops.
   assert.match(editor, /linkHorizontalScrollGroup\(\[\s*paneA,\s*paneB,\s*this\.mergeView\.a\.scrollDOM,\s*this\.mergeView\.b\.scrollDOM,\s*\]\)/s);
 });
 
-test("conflict Diff owns three aligned docked scrollbars and decorated apply controls", async () => {
-  const [css, editor, icons] = await Promise.all([
+test("conflict Diff owns three aligned docked scrollbars and the shared Diff control", async () => {
+  const [css, controls, editor, icons] = await Promise.all([
     readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/controls.css", import.meta.url), "utf8"),
     readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/icons.ts", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.conflict-three-pane\s*\{[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\) auto;/s);
   assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*minmax\(0, 1fr\)[^}]*minmax\(0, 1fr\)[^}]*minmax\(0, 1fr\)[^}]*auto;/s);
   assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
-  assert.match(css, /\.conflict-apply-change\s*\{[^}]*width:\s*26px;[^}]*height:\s*26px;[^}]*margin-top:\s*7px;[^}]*background:\s*var\(--bg-elevated\);/s);
+  assert.match(controls, /\.conflict-three-pane \.cm-merge-revert > button\.diff-change-control/u);
+  assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*min-width:\s*var\(--diff-change-control-width, 26px\);[^}]*max-width:\s*var\(--diff-change-control-width, 26px\);[^}]*background:\s*var\(--bg-elevated\);/s);
+  assert.match(controls, /\.diff-change-control > \.icon\s*\{[^}]*width:\s*15px;[^}]*height:\s*15px;/s);
+  assert.match(editor, /button\.className = "diff-change-control conflict-apply-change"/u);
   assert.match(editor, /const sharedWidth = Math\.max\(\.\.\.scrollers\.map\(\(scroller\) => scroller\.scrollWidth\)\)/u);
   assert.match(editor, /linkHorizontalScrollGroup\(\[\.\.\.panes, \.\.\.scrollers\]\)/u);
   assert.match(icons, /"double-chevron-right"/u);

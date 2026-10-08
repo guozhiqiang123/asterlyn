@@ -366,7 +366,7 @@ export class ConflictEditor {
   private directionButton(direction: "left" | "right", copy: GitOperationCopy): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "conflict-apply-change";
+    button.className = "diff-change-control conflict-apply-change";
     button.innerHTML = icon(direction === "right" ? "double-chevron-right" : "double-chevron-left", 15);
     const label = direction === "right" ? copy.acceptOursChange : copy.acceptTheirsChange;
     button.title = label;

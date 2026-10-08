@@ -113,35 +113,6 @@
   background: var(--surface-chrome);
 }
 
-.conflict-apply-change {
-  position: relative;
-  left: 50%;
-  display: grid;
-  width: 26px;
-  height: 26px;
-  margin-top: 7px;
-  padding: 0;
-  place-items: center;
-  transform: translateX(-50%);
-  border: 0;
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--text-soft);
-  cursor: pointer;
-  font: inherit;
-  line-height: 0;
-}
-
-.conflict-apply-change:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.conflict-apply-change:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
 .conflict-scrollbars {
   display: grid;
   width: 100%;

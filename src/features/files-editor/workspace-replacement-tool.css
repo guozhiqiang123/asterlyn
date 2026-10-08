@@ -247,6 +247,7 @@
   position: relative;
   display: flex;
   --diff-action-gutter-width: 36px;
+  --diff-change-control-width: 28px;
   flex-direction: column;
 }
 
@@ -296,33 +297,6 @@
   flex: 0 0 36px;
   border-inline: 1px solid var(--border);
   background: var(--surface-chrome);
-}
-
-.replacement-tool-diff.editable-diff-surface .editable-diff-revert {
-  left: 50%;
-  display: grid;
-  width: 28px;
-  height: 26px;
-  margin-top: 7px;
-  padding: 0;
-  place-items: center;
-  transform: translateX(-50%);
-  border: 0;
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--text-soft);
-  cursor: pointer;
-  font: inherit;
-}
-
-.replacement-tool-diff.editable-diff-surface .editable-diff-revert:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.replacement-tool-diff.editable-diff-surface .editable-diff-revert:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .replacement-tool-diff.editable-diff-surface .editable-diff-scrollbar-spacer {

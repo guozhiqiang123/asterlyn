@@ -1,4 +1,55 @@
 /* Shared controls and interaction states. */
+/*
+ * CodeMirror positions merge controls with a document-relative `top`. The shared 7px offset adds
+ * back editor content padding and centres every Diff action on the changed line. The scoped
+ * selectors intentionally outrank CodeMirror's `.cm-merge-revert button` defaults.
+ */
+.content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control,
+.replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control,
+.conflict-three-pane .cm-merge-revert > button.diff-change-control {
+  position: absolute;
+  left: 50%;
+  display: grid;
+  width: var(--diff-change-control-width, 26px);
+  min-width: var(--diff-change-control-width, 26px);
+  max-width: var(--diff-change-control-width, 26px);
+  height: 26px;
+  margin: 7px 0 0;
+  padding: 0;
+  place-items: center;
+  transform: translateX(-50%);
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  line-height: 0;
+}
+
+.diff-change-control > .icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+}
+
+.content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control:hover:not(:disabled),
+.replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control:hover:not(:disabled),
+.conflict-three-pane .cm-merge-revert > button.diff-change-control:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control:disabled,
+.replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control:disabled,
+.conflict-three-pane .cm-merge-revert > button.diff-change-control:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .project-node-row.selected,
 .change-row.selected,
 .change-row.primary,

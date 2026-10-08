@@ -691,7 +691,7 @@ export class EditableDiffEditor {
   private revertButton(action?: (event: MouseEvent) => void): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "editable-diff-revert";
+    button.className = "diff-change-control editable-diff-revert";
     this.applyControlPresentation(button, {
       label: this.copy.revertDiffChange,
       title: this.copy.revertDiffChange,

@@ -139,33 +139,6 @@
   height: 1px;
 }
 
-/*
- * CodeMirror positions this control with a document-relative `top` while the gutter is a sibling of
- * the editor rows, so the editor content's own 10px top padding has to be added back; the remaining
- * 3px centre the box on that changed line instead of hanging it above the line.
- */
-.content-body.editable-diff-surface .editable-diff-revert {
-  left: 50%;
-  display: grid;
-  width: 26px;
-  height: 26px;
-  margin-top: 7px;
-  place-items: center;
-  transform: translateX(-50%);
-  border: 0;
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--text-soft);
-  cursor: pointer;
-  font: inherit;
-  font-size: 15px;
-}
-
-.content-body.editable-diff-surface .editable-diff-revert:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
 .content-body.editable-diff-surface .cm-diff-lineNumbers-after {
   border-right: 0;
   border-left: 1px solid var(--border);
