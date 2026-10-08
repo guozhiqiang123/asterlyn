@@ -187,12 +187,16 @@ test("editable Diff uses one gutter marker system and can disable unchanged coll
 });
 
 test("editable Diff control synchronization cannot feed its own MutationObserver", async () => {
-  const source = await readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8");
-  assert.match(source, /button\.dataset\.controlIcon !== controlIcon \|\| button\.dataset\.controlLabel !== control\.label/u);
-  assert.match(source, /button\.dataset\.controlIcon = controlIcon;/u);
-  assert.match(source, /button\.dataset\.controlLabel = control\.label;/u);
-  assert.match(source, /if \(button\.title !== control\.title\) button\.title = control\.title;/u);
-  assert.match(source, /if \(button\.disabled !== disabled\) button\.disabled = disabled;/u);
+  const [source, actions] = await Promise.all([
+    readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/diff-review/diff-review-action-gutter.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(source, /syncDiffReviewActionButton/u);
+  assert.match(actions, /button\.dataset\.controlIcon !== iconName \|\| button\.dataset\.controlLabel !== presentation\.label/u);
+  assert.match(actions, /button\.dataset\.controlIcon = iconName;/u);
+  assert.match(actions, /button\.dataset\.controlLabel = presentation\.label;/u);
+  assert.match(actions, /if \(button\.title !== title\) button\.title = title;/u);
+  assert.match(actions, /if \(button\.disabled !== \(presentation\.disabled === true\)\)/u);
 });
 
 test("conflict editor keeps Ours and Theirs immutable around one synchronized Result", async () => {

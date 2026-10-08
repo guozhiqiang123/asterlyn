@@ -46,7 +46,10 @@ import {
 import { createDiffSideLabels, createDiffUnifiedLabel, syncDiffSideLabels } from "./features/files-editor/diff-side-labels.ts";
 import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
-import { icon } from "./icons.ts";
+import {
+  createDiffReviewActionButton,
+  syncDiffReviewActionButton,
+} from "./features/files-editor/diff-review/diff-review-action-gutter.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -730,13 +733,12 @@ export class EditableDiffEditor {
   }
 
   private revertButton(action?: (event: MouseEvent) => void): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "diff-change-control editable-diff-revert";
-    this.applyControlPresentation(button, {
+    const button = createDiffReviewActionButton({
+      id: "revert",
       label: this.copy.revertDiffChange,
       title: this.copy.revertDiffChange,
       icon: "revert",
+      className: "editable-diff-revert",
     });
     const unified = action ? this.interactions?.unifiedControl : null;
     if (unified) this.applyControlPresentation(button, unified);
@@ -797,17 +799,14 @@ export class EditableDiffEditor {
     button: HTMLButtonElement,
     control: EditableDiffControlPresentation,
   ): void {
-    const controlIcon = control.icon ?? "";
-    if (button.dataset.controlIcon !== controlIcon || button.dataset.controlLabel !== control.label) {
-      if (control.icon) button.innerHTML = icon(control.icon, 15);
-      else button.textContent = control.label;
-      button.dataset.controlIcon = controlIcon;
-      button.dataset.controlLabel = control.label;
-    }
-    if (button.title !== control.title) button.title = control.title;
-    if (button.getAttribute("aria-label") !== control.title) button.setAttribute("aria-label", control.title);
-    const disabled = control.disabled === true;
-    if (button.disabled !== disabled) button.disabled = disabled;
+    syncDiffReviewActionButton(button, {
+      id: "revert",
+      label: control.label,
+      title: control.title,
+      icon: control.icon,
+      disabled: control.disabled,
+      className: "editable-diff-revert",
+    });
   }
 
   private loadLanguage(): void {

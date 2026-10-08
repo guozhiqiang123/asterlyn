@@ -40,7 +40,6 @@ import {
 import { ConflictCollapseCoordinator, type ConflictCollapseSide } from "./conflict-collapse.ts";
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
-import { icon } from "./icons.ts";
 import { linkHorizontalScrollGroup, linkVerticalScrollByDocument } from "./presentation/linked-scroll.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
@@ -50,6 +49,14 @@ import { projectConflictDiff } from "./features/files-editor/diff-review/diff-re
 import type { DiffReviewSnapshot, DiffReviewSummary } from "./features/files-editor/diff-review/diff-review-model.ts";
 import { createDiffReviewPaneHeaders } from "./features/files-editor/diff-review/diff-review-pane-header.ts";
 import { attachSplitter } from "./presentation/splitter.ts";
+import {
+  createDiffReviewActionGroup,
+} from "./features/files-editor/diff-review/diff-review-action-gutter.ts";
+import {
+  diffReviewBlockDecorations,
+  setDiffReviewBlockDecorations,
+} from "./features/files-editor/diff-review/diff-review-block-decoration.ts";
+import type { DiffReviewBlock, DiffReviewPaneId } from "./features/files-editor/diff-review/diff-review-model.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -61,6 +68,7 @@ interface ViewBinding {
   whitespace: Compartment;
   changeIndicators: EditorChangeIndicators | null;
   referenceTracksResult: boolean;
+  paneId: "ours" | "result" | "theirs";
 }
 
 interface ConflictScrollbars {
@@ -146,10 +154,10 @@ export class ConflictEditor {
 
     const leftHost = root.querySelector<HTMLElement>(".conflict-left-merge")!;
     const rightHost = root.querySelector<HTMLElement>(".conflict-right-merge")!;
-    const oursBinding = this.binding();
-    const primaryBinding = this.binding();
-    const mirrorBinding = this.binding();
-    const theirsBinding = this.binding();
+    const oursBinding = this.binding("ours");
+    const primaryBinding = this.binding("result");
+    const mirrorBinding = this.binding("result");
+    const theirsBinding = this.binding("theirs");
     this.leftMerge = new MergeView({
       parent: leftHost,
       a: {
@@ -207,6 +215,7 @@ export class ConflictEditor {
     theirsBinding.view = this.rightMerge.a;
     theirsBinding.view.dom.classList.add("conflict-theirs-pane");
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
+    this.syncReviewDecorations();
     this.mountSplitLayout(root);
     for (const binding of this.bindings) this.collapseCoordinator.register(binding.view);
     this.observeConflictControls(root);
@@ -263,6 +272,7 @@ export class ConflictEditor {
       });
     }
     this.leftMerge.b.focus();
+    this.syncReviewDecorations();
     return true;
   }
 
@@ -385,6 +395,7 @@ export class ConflictEditor {
       binding.changeIndicators?.extension ?? [],
       this.collapseCoordinator?.extension(collapseSide) ?? [],
       mergeDiffSemanticHighlighting,
+      diffReviewBlockDecorations,
       history(), drawSelection(), highlightActiveLine(),
       highlightActiveLineGutter(), asterlynSearch(), highlightSelectionMatches(), asterlynSyntaxHighlighting,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),
@@ -424,6 +435,7 @@ export class ConflictEditor {
         this.changeFrame = null;
         this.flushChanges();
         this.syncConflictControls();
+        this.syncReviewDecorations();
       });
     }
   }
@@ -438,13 +450,14 @@ export class ConflictEditor {
     });
   }
 
-  private binding(): ViewBinding {
+  private binding(paneId: "ours" | "result" | "theirs"): ViewBinding {
     return {
       view: null as unknown as EditorView,
       language: new Compartment(), indent: new Compartment(), tabSize: new Compartment(),
       theme: new Compartment(), phrases: new Compartment(), whitespace: new Compartment(),
       changeIndicators: null,
       referenceTracksResult: false,
+      paneId,
     };
   }
 
@@ -453,26 +466,31 @@ export class ConflictEditor {
     direction: "left" | "right",
     copy: GitOperationCopy,
   ): HTMLDivElement {
-    const group = document.createElement("div");
-    group.className = "conflict-change-controls";
-    group.dataset.side = side;
-    group.setAttribute("role", "group");
-    group.setAttribute("aria-label", side === "ours" ? copy.ours : copy.theirs);
+    const applyId = side === "ours" ? "apply-ours" : "apply-theirs";
+    const ignoreId = side === "ours" ? "ignore-ours" : "ignore-theirs";
+    const group = createDiffReviewActionGroup(side, side === "ours" ? copy.ours : copy.theirs, [
+      {
+        id: applyId,
+        label: side === "ours" ? copy.acceptOursChange : copy.acceptTheirsChange,
+        icon: direction === "right" ? "double-chevron-right" : "double-chevron-left",
+        className: "conflict-apply-change",
+      },
+      {
+        id: ignoreId,
+        label: side === "ours" ? copy.ignoreOursChange : copy.ignoreTheirsChange,
+        icon: "close",
+        className: "conflict-ignore-change",
+      },
+    ]);
     group.addEventListener("mousedown", (event) => {
       event.preventDefault();
       event.stopPropagation();
     });
 
-    const apply = this.conflictActionButton(
-      "accepted",
-      side === "ours" ? copy.acceptOursChange : copy.acceptTheirsChange,
-      direction === "right" ? "double-chevron-right" : "double-chevron-left",
-    );
-    const ignore = this.conflictActionButton(
-      "ignored",
-      side === "ours" ? copy.ignoreOursChange : copy.ignoreTheirsChange,
-      "close",
-    );
+    const apply = group.querySelector<HTMLButtonElement>(`[data-review-action="${applyId}"]`)!;
+    const ignore = group.querySelector<HTMLButtonElement>(`[data-review-action="${ignoreId}"]`)!;
+    apply.dataset.decision = "accepted";
+    ignore.dataset.decision = "ignored";
     for (const button of [apply, ignore]) {
       button.addEventListener("click", (event) => {
         event.preventDefault();
@@ -480,24 +498,7 @@ export class ConflictEditor {
         this.activateConflictDecision(group, button.dataset.decision as "accepted" | "ignored");
       });
     }
-    group.append(apply, ignore);
     return group;
-  }
-
-  private conflictActionButton(
-    decision: Exclude<ConflictResolutionDecision, "pending">,
-    label: string,
-    iconName: "double-chevron-right" | "double-chevron-left" | "close",
-  ): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `diff-change-control conflict-${decision === "accepted" ? "apply" : "ignore"}-change`;
-    button.dataset.decision = decision;
-    button.innerHTML = icon(iconName, 15);
-    button.title = label;
-    button.setAttribute("aria-label", label);
-    button.setAttribute("aria-pressed", "false");
-    return button;
   }
 
   private activateConflictDecision(
@@ -512,6 +513,7 @@ export class ConflictEditor {
     const changes = this.resolutionModel.applyDecision(side, decision, source, result.state.doc.toString());
     if (changes.length === 0) {
       this.syncConflictControls();
+      this.syncReviewDecorations();
       return;
     }
     this.applyingConflictDecision = true;
@@ -521,6 +523,7 @@ export class ConflictEditor {
       this.applyingConflictDecision = false;
     }
     this.syncConflictControls();
+    this.syncReviewDecorations();
   }
 
   private sourceRangeForControl(
@@ -564,6 +567,24 @@ export class ConflictEditor {
             button.disabled = this.resultReadOnlyValue;
           }
         });
+    }
+  }
+
+  private syncReviewDecorations(): void {
+    const snapshot = this.reviewSnapshot();
+    if (!snapshot) return;
+    const activeId = this.activeReviewBlock >= 0 ? snapshot.blocks[this.activeReviewBlock]?.id : null;
+    for (const binding of this.bindings) {
+      const decorations = snapshot.blocks.flatMap((block) => {
+        const range = block.ranges[binding.paneId];
+        return range ? [{
+          from: range.from,
+          to: range.to,
+          status: paneReviewStatus(block, binding.paneId),
+          active: block.id === activeId,
+        }] : [];
+      });
+      binding.view.dispatch({ effects: setDiffReviewBlockDecorations.of(decorations) });
     }
   }
 
@@ -713,4 +734,17 @@ function normalizeConflictPercentages(oursValue: number, resultValue: number): {
   const ours = clampConflictPercentage(oursValue);
   const result = Math.max(18, Math.min(100 - ours - 18, Number.isFinite(resultValue) ? resultValue : 46));
   return { ours, result };
+}
+
+function paneReviewStatus(
+  block: DiffReviewBlock,
+  paneId: Extract<DiffReviewPaneId, "ours" | "result" | "theirs">,
+): DiffReviewBlock["status"] {
+  if (paneId === "result") return block.status;
+  const side = paneId;
+  const accepted = block.actions.find((action) => action.side === side && action.id === `apply-${side}`);
+  const ignored = block.actions.find((action) => action.side === side && action.id === `ignore-${side}`);
+  if (accepted?.selected) return "accepted";
+  if (ignored?.selected) return "ignored";
+  return "pending";
 }

@@ -1,0 +1,42 @@
+.cm-line.cm-diff-review-block {
+  box-shadow: inset 3px 0 transparent;
+}
+
+.cm-line.cm-diff-review-pending {
+  box-shadow: inset 3px 0 color-mix(in srgb, var(--danger-text) 58%, transparent);
+}
+
+.cm-line.cm-diff-review-accepted,
+.cm-line.cm-diff-review-reverted {
+  box-shadow: inset 3px 0 color-mix(in srgb, var(--success-text) 64%, transparent);
+}
+
+.cm-line.cm-diff-review-ignored {
+  box-shadow: inset 3px 0 color-mix(in srgb, var(--text-faint) 55%, transparent);
+  color: color-mix(in srgb, currentColor 72%, var(--text-faint));
+}
+
+.cm-line.cm-diff-review-manual {
+  box-shadow: inset 3px 0 color-mix(in srgb, var(--warning-text) 72%, transparent);
+}
+
+.cm-line.cm-diff-review-active {
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    color-mix(in srgb, var(--accent) 9%, transparent)
+  );
+}
+
+.cm-line.cm-diff-review-active.cm-diff-review-block-start {
+  border-top: 1px solid color-mix(in srgb, var(--accent) 58%, transparent);
+}
+
+.cm-line.cm-diff-review-active.cm-diff-review-block-end {
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 58%, transparent);
+}
+
+.diff-review-action:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+

@@ -14,6 +14,7 @@ import "./features/files-editor/project-files.css";
 import "./features/files-editor/welcome.css";
 import "./features/files-editor/files-editor.css";
 import "./features/files-editor/editable-diff.css";
+import "./features/files-editor/diff-review.css";
 import "./features/files-editor/change-overview.css";
 import "./features/files-editor/workspace-search.css";
 import "./features/files-editor/workspace-replacement-tool.css";

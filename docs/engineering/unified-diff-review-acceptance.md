@@ -68,3 +68,12 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - Editable two-pane and conflict three-pane widths are pointer-draggable, keyboard-adjustable,
   double-click resettable, bounded, and persisted in workbench layout state.
 - Conflict action gutters remain fixed-width while pane widths change, preserving control geometry.
+
+### Phase 4 — shared block decoration and actions
+
+- Editable Revert and conflict Apply/Ignore controls now use one action renderer, hit target,
+  icon geometry, selected state, disabled state, focus treatment, and accessibility contract.
+- Conflict block state is projected into Ours, Result, and Theirs as pending, accepted, ignored, or
+  manually edited without depending on color alone.
+- Previous/next conflict navigation marks the same active Base-owned block in every pane and moves
+  focus to the writable Result.
