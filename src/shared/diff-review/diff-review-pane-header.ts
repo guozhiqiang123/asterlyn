@@ -94,4 +94,3 @@ function appendPaneLabel(target: HTMLElement, label: string): void {
   }
   target.append(labelNode);
 }
-

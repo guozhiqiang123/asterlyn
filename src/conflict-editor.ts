@@ -21,7 +21,7 @@ import {
   editorChangeIndicatorCopy,
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
-import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
+import { LINE_AWARE_DIFF_CONFIG } from "./shared/diff-review/line-aware-diff.ts";
 import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
 import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
 import {
@@ -45,18 +45,19 @@ import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
-import { projectConflictDiff } from "./features/files-editor/diff-review/diff-review-projection.ts";
-import type { DiffReviewSnapshot, DiffReviewSummary } from "./features/files-editor/diff-review/diff-review-model.ts";
-import { createDiffReviewPaneHeaders } from "./features/files-editor/diff-review/diff-review-pane-header.ts";
+import { projectConflictDiff } from "./shared/diff-review/diff-review-projection.ts";
+import type { DiffReviewSnapshot, DiffReviewSummary } from "./shared/diff-review/diff-review-model.ts";
+import { createDiffReviewPaneHeaders } from "./shared/diff-review/diff-review-pane-header.ts";
 import { attachSplitter } from "./presentation/splitter.ts";
 import {
   createDiffReviewActionGroup,
-} from "./features/files-editor/diff-review/diff-review-action-gutter.ts";
+} from "./shared/diff-review/diff-review-action-gutter.ts";
 import {
   diffReviewBlockDecorations,
   setDiffReviewBlockDecorations,
-} from "./features/files-editor/diff-review/diff-review-block-decoration.ts";
-import type { DiffReviewBlock, DiffReviewPaneId } from "./features/files-editor/diff-review/diff-review-model.ts";
+} from "./shared/diff-review/diff-review-block-decoration.ts";
+import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
+import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -108,6 +109,7 @@ export class ConflictEditor {
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
   private splitDisposers: Array<() => void> = [];
   private conflictRoot: HTMLElement | null = null;
+  private reviewOverlay: DiffReviewOverlay | null = null;
 
   mount(
     parent: HTMLElement,
@@ -220,6 +222,8 @@ export class ConflictEditor {
     for (const binding of this.bindings) this.collapseCoordinator.register(binding.view);
     this.observeConflictControls(root);
     this.mountScrollbars(root);
+    this.mountReviewOverlay(root);
+    this.syncReviewDecorations();
     this.loadLanguage(conflict.path);
   }
 
@@ -247,6 +251,15 @@ export class ConflictEditor {
 
   reviewSummary(): DiffReviewSummary | null {
     return this.reviewSnapshot()?.summary ?? null;
+  }
+
+  unchangedExpanded(): boolean {
+    return this.collapseCoordinator?.isExpanded() ?? true;
+  }
+
+  setUnchangedExpanded(expanded: boolean): void {
+    this.collapseCoordinator?.setExpanded(expanded);
+    this.requestMeasure();
   }
 
   navigateChange(direction: 1 | -1): boolean {
@@ -333,6 +346,8 @@ export class ConflictEditor {
     this.diffScrollbars = null;
     for (const dispose of this.splitDisposers.splice(0)) dispose();
     this.conflictRoot = null;
+    this.reviewOverlay?.destroy();
+    this.reviewOverlay = null;
     this.collapseCoordinator?.destroy();
     this.collapseCoordinator = null;
     this.conflictControlObserver?.disconnect();
@@ -574,6 +589,7 @@ export class ConflictEditor {
     const snapshot = this.reviewSnapshot();
     if (!snapshot) return;
     const activeId = this.activeReviewBlock >= 0 ? snapshot.blocks[this.activeReviewBlock]?.id : null;
+    this.reviewOverlay?.setSnapshot({ ...snapshot, activeBlockId: activeId });
     for (const binding of this.bindings) {
       const decorations = snapshot.blocks.flatMap((block) => {
         const range = block.ranges[binding.paneId];
@@ -586,6 +602,19 @@ export class ConflictEditor {
       });
       binding.view.dispatch({ effects: setDiffReviewBlockDecorations.of(decorations) });
     }
+  }
+
+  private mountReviewOverlay(root: HTMLElement): void {
+    if (!this.leftMerge || !this.rightMerge) return;
+    this.reviewOverlay?.destroy();
+    this.reviewOverlay = new DiffReviewOverlay(root, {
+      ours: this.leftMerge.a,
+      result: this.leftMerge.b,
+      theirs: this.rightMerge.a,
+    }, [
+      { from: "ours", to: "result" },
+      { from: "result", to: "theirs" },
+    ]);
   }
 
   private mountScrollbars(root: HTMLElement): void {
@@ -702,6 +731,7 @@ export class ConflictEditor {
     const leftEditors = this.leftMerge.dom.querySelectorAll<HTMLElement>(".cm-mergeViewEditor");
     if (leftEditors[0]) leftEditors[0].style.flex = `0 0 ${oursWidth}px`;
     if (leftEditors[1]) leftEditors[1].style.flex = `0 0 ${resultWidth}px`;
+    this.reviewOverlay?.schedule();
     this.requestMeasure();
   }
 

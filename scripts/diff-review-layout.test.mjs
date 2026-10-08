@@ -28,17 +28,17 @@ test("conflict layout always leaves every pane a readable minimum", () => {
 });
 
 test("two-pane and three-pane editors use the shared header and splitter contracts", async () => {
-  const [editable, conflict, labels] = await Promise.all([
+  const [editable, editableSplitter, conflict, labels] = await Promise.all([
     readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review/editable-diff-review-splitter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/diff-side-labels.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(labels, /createDiffReviewPaneHeaders/u);
   assert.match(editable, /editableSplitPercentage \?\? 42/u);
-  assert.match(editable, /attachSplitter\(splitter/u);
+  assert.match(editableSplitter, /attachSplitter\(splitter/u);
   assert.match(conflict, /createDiffReviewPaneHeaders/u);
   assert.equal((conflict.match(/attachSplitter\(/g) ?? []).length, 2);
   assert.match(conflict, /normalizeConflictPercentages/u);
 });
-

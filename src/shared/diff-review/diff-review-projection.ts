@@ -1,5 +1,5 @@
-import type { SourceDiffRow } from "../../../diff-presentation.ts";
-import type { ConflictResolutionBlockSnapshot } from "../../../conflict-resolution-model.ts";
+import type { SourceDiffRow } from "../../diff-presentation.ts";
+import type { ConflictResolutionBlockSnapshot } from "../../conflict-resolution-model.ts";
 import {
   CONFLICT_DIFF_CAPABILITIES,
   EDITABLE_DIFF_CAPABILITIES,
@@ -172,4 +172,3 @@ function conflictActions(block: ConflictResolutionBlockSnapshot): readonly DiffR
   }
   return actions;
 }
-

@@ -7,7 +7,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
-import { lineAwareDiff } from "./features/files-editor/line-aware-diff.ts";
+import { lineAwareDiff } from "./shared/diff-review/line-aware-diff.ts";
 
 type MergeSide = "a" | "b" | null;
 type MergeChunks = NonNullable<ReturnType<typeof getChunks>>["chunks"];

@@ -189,7 +189,7 @@ test("editable Diff uses one gutter marker system and can disable unchanged coll
 test("editable Diff control synchronization cannot feed its own MutationObserver", async () => {
   const [source, actions] = await Promise.all([
     readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
-    readFile(new URL("../src/features/files-editor/diff-review/diff-review-action-gutter.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review/diff-review-action-gutter.ts", import.meta.url), "utf8"),
   ]);
   assert.match(source, /syncDiffReviewActionButton/u);
   assert.match(actions, /button\.dataset\.controlIcon !== iconName \|\| button\.dataset\.controlLabel !== presentation\.label/u);

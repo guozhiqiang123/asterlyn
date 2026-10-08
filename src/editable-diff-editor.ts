@@ -23,8 +23,6 @@ import {
   diffBlockFromOffsets,
   setActiveEditableDiffBlock,
 } from "./features/files-editor/editable-diff-change-highlight.ts";
-import { linkHorizontalScrollGroup } from "./presentation/linked-scroll.ts";
-import { attachSplitter } from "./presentation/splitter.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { DiffPresentation, DiffSideLabels } from "./diff-presentation.ts";
 import {
@@ -45,11 +43,14 @@ import {
 } from "./editor-change-indicators.ts";
 import { createDiffSideLabels, createDiffUnifiedLabel, syncDiffSideLabels } from "./features/files-editor/diff-side-labels.ts";
 import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
-import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
+import { LINE_AWARE_DIFF_CONFIG } from "./shared/diff-review/line-aware-diff.ts";
 import {
   createDiffReviewActionButton,
   syncDiffReviewActionButton,
-} from "./features/files-editor/diff-review/diff-review-action-gutter.ts";
+} from "./shared/diff-review/diff-review-action-gutter.ts";
+import { EditableDiffReviewSurface } from "./shared/diff-review/editable-diff-review-surface.ts";
+import { attachEditableDiffReviewSplitter } from "./shared/diff-review/editable-diff-review-splitter.ts";
+import { EditableDiffScrollbars } from "./shared/diff-review/editable-diff-scrollbars.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -61,16 +62,6 @@ interface ViewBinding {
   whitespace: Compartment;
   changeIndicators: EditorChangeIndicators | null;
   comparisonSide: "a" | "b" | null;
-}
-
-interface DiffScrollbars {
-  container: HTMLDivElement;
-  paneA: HTMLDivElement;
-  contentA: HTMLDivElement;
-  paneB: HTMLDivElement;
-  contentB: HTMLDivElement;
-  corner: HTMLDivElement;
-  resizeObserver: ResizeObserver;
 }
 
 export interface EditableDiffControlPresentation {
@@ -113,13 +104,13 @@ export class EditableDiffEditor {
   private onChange: (content: string) => void = () => undefined;
   private interactions: EditableDiffInteractions | null = null;
   private copy: EditorCopy;
-  private scrollDispose: (() => void) | null = null;
   private splitDispose: (() => void) | null = null;
-  private diffScrollbars: DiffScrollbars | null = null;
+  private diffScrollbars: EditableDiffScrollbars | null = null;
   private changePending = false;
   private changeFrame: number | null = null;
   private synchronizing = false;
   private revertObserver: MutationObserver | null = null;
+  private reviewSurface: EditableDiffReviewSurface | null = null;
 
   constructor(copy: EditorCopy) {
     this.copy = copy;
@@ -228,6 +219,7 @@ export class EditableDiffEditor {
       }
       if (baseChanged || contentChanged) this.clearActiveChangeHighlights();
       this.syncRevertControls();
+      this.refreshReviewOverlay();
       this.restoreScroll(scroll, true);
       return;
     }
@@ -422,11 +414,11 @@ export class EditableDiffEditor {
   }
 
   private releaseScrollLink(): void {
-    this.scrollDispose?.();
-    this.scrollDispose = null;
     this.splitDispose?.();
     this.splitDispose = null;
-    this.diffScrollbars?.container.remove();
+    this.reviewSurface?.destroy();
+    this.reviewSurface = null;
+    this.diffScrollbars?.destroy();
     this.diffScrollbars = null;
   }
 
@@ -468,6 +460,11 @@ export class EditableDiffEditor {
 
     const left = this.binding();
     const right = this.binding();
+    this.reviewSurface = new EditableDiffReviewSurface(
+      this.baseContent,
+      this.exactContent.text,
+      this.expandedUnchanged,
+    );
     this.mergeView = new MergeView({
       parent,
       a: {
@@ -476,7 +473,7 @@ export class EditableDiffEditor {
           reference: this.exactContent.text,
           documentSide: "a",
           overview: false,
-        }),
+        }, "before"),
       },
       b: {
         doc: this.exactContent.text,
@@ -484,110 +481,41 @@ export class EditableDiffEditor {
           reference: this.baseContent,
           documentSide: "b",
           overview: true,
-        }),
+        }, "after"),
       },
       orientation: "a-b",
       gutter: false,
       revertControls: "a-to-b",
       renderRevertControl: () => this.revertButton(),
-      collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
     this.mergeView.dom.prepend(createDiffSideLabels(this.sideLabels, document, true));
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
+    this.reviewSurface.mount(parent, left.view, right.view);
+    this.refreshReviewOverlay();
     this.mountSplitControl(parent);
     this.observeRevertControls();
-    const container = document.createElement("div");
-    container.className = "editable-diff-scrollbars";
-    container.setAttribute("aria-hidden", "true");
+    this.diffScrollbars = new EditableDiffScrollbars(parent, this.mergeView);
+    queueMicrotask(() => this.refreshReviewOverlay());
+  }
 
-    const paneA = document.createElement("div");
-    paneA.className = "editable-diff-scrollbar-pane editable-diff-scrollbar-a";
-    const contentA = document.createElement("div");
-    contentA.className = "editable-diff-scrollbar-content";
-    paneA.appendChild(contentA);
-
-    const spacer = document.createElement("div");
-    spacer.className = "editable-diff-scrollbar-spacer";
-
-    const paneB = document.createElement("div");
-    paneB.className = "editable-diff-scrollbar-pane editable-diff-scrollbar-b";
-    const contentB = document.createElement("div");
-    contentB.className = "editable-diff-scrollbar-content";
-    paneB.appendChild(contentB);
-
-    const corner = document.createElement("div");
-    corner.className = "editable-diff-scrollbar-corner";
-
-    container.appendChild(paneA);
-    container.appendChild(spacer);
-    container.appendChild(paneB);
-    container.appendChild(corner);
-    parent.appendChild(container);
-
-    const resizeObserver = new ResizeObserver(() => {
-      this.updateScrollbars();
-    });
-    resizeObserver.observe(this.mergeView.dom);
-    resizeObserver.observe(this.mergeView.a.scrollDOM);
-    resizeObserver.observe(this.mergeView.b.scrollDOM);
-
-    this.diffScrollbars = {
-      container,
-      paneA,
-      contentA,
-      paneB,
-      contentB,
-      corner,
-      resizeObserver,
-    };
-    this.updateScrollbars();
-    const disposeScrollGroup = linkHorizontalScrollGroup([
-      paneA,
-      paneB,
-      this.mergeView.a.scrollDOM,
-      this.mergeView.b.scrollDOM,
-    ]);
-    this.scrollDispose = () => {
-      disposeScrollGroup();
-      resizeObserver.disconnect();
-    };
+  private refreshReviewOverlay(): void {
+    const merge = this.mergeView;
+    if (merge) this.reviewSurface?.refresh(getChunks(merge.b.state)?.chunks ?? []);
   }
 
   private mountSplitControl(parent: HTMLElement): void {
     const merge = this.mergeView;
     if (!merge) return;
-    let percentage = clampSplitPercentage(this.presentation.editableSplitPercentage ?? 42);
-    const apply = () => {
-      parent.style.setProperty("--diff-before-width", `${percentage}%`);
-      merge.dom.style.setProperty("--diff-before-width", `${percentage}%`);
-      this.requestMeasure();
-    };
-    apply();
-    const splitter = document.createElement("div");
-    splitter.className = "workbench-splitter vertical editable-diff-splitter";
-    splitter.setAttribute("aria-label", "Resize Diff sides");
-    merge.dom.append(splitter);
-    this.splitDispose = attachSplitter(splitter, {
-      orientation: "vertical",
-      getValue: () => Math.max(1, merge.dom.clientWidth - 32) * percentage / 100,
-      getRange: () => {
-        const width = Math.max(1, merge.dom.clientWidth - 32);
-        return { minimum: width * 0.25, maximum: width * 0.75 };
-      },
-      onChange: (value) => {
-        percentage = clampSplitPercentage(value / Math.max(1, merge.dom.clientWidth - 32) * 100);
+    this.splitDispose = attachEditableDiffReviewSplitter(parent, merge.dom, {
+      initialPercentage: this.presentation.editableSplitPercentage ?? 42,
+      label: "Resize Diff sides",
+      onMeasure: () => this.requestMeasure(),
+      onChange: (percentage, committed) => {
         this.presentation = { ...this.presentation, editableSplitPercentage: percentage };
-        apply();
-        this.presentation.onEditableSplitPercentageChange?.(percentage, false);
-      },
-      onCommit: () => this.presentation.onEditableSplitPercentageChange?.(percentage, true),
-      onReset: () => {
-        percentage = 42;
-        this.presentation = { ...this.presentation, editableSplitPercentage: percentage };
-        apply();
+        this.presentation.onEditableSplitPercentageChange?.(percentage, committed);
       },
     });
   }
@@ -619,6 +547,7 @@ export class EditableDiffEditor {
       documentSide: "a" | "b";
       overview: boolean;
     },
+    collapseSide?: "before" | "after",
   ): Extension[] {
     const preferences = this.preferences!;
     if (comparison) {
@@ -654,6 +583,7 @@ export class EditableDiffEditor {
       codeMirrorFocusOwnership,
       gutterSide ? diffLineNumberGutter(gutterSide) : lineNumbers(),
       binding.changeIndicators?.extension ?? [],
+      collapseSide ? this.reviewSurface?.extension(collapseSide) ?? [] : [],
       mergeDiffSemanticHighlighting,
       activeEditableDiffBlockDecoration,
       history(),
@@ -691,6 +621,7 @@ export class EditableDiffEditor {
     }
     this.changePending = true;
     this.updateScrollbars();
+    queueMicrotask(() => this.refreshReviewOverlay());
     if (isRevert) {
       this.flushChanges();
       this.interactions?.revert?.(this.content());
@@ -704,26 +635,7 @@ export class EditableDiffEditor {
   }
 
   private updateScrollbars(): void {
-    if (!this.diffScrollbars || !this.mergeView) return;
-    const a = this.mergeView.a.scrollDOM;
-    const b = this.mergeView.b.scrollDOM;
-    if (!a.isConnected || !b.isConnected) return;
-    const widthA = a.scrollWidth;
-    const widthB = b.scrollWidth;
-    const sharedWidth = Math.max(widthA, widthB);
-    this.diffScrollbars.contentA.style.width = `${sharedWidth}px`;
-    this.diffScrollbars.contentB.style.width = `${sharedWidth}px`;
-
-    const verticalScrollbarWidth = Math.max(
-      0,
-      this.mergeView.dom.offsetWidth - this.mergeView.dom.clientWidth,
-    );
-    this.diffScrollbars.corner.style.width = `${verticalScrollbarWidth}px`;
-    this.diffScrollbars.corner.style.flex = `0 0 ${verticalScrollbarWidth}px`;
-
-    const hasOverflowA = widthA > a.clientWidth;
-    const hasOverflowB = widthB > b.clientWidth;
-    this.diffScrollbars.container.style.display = (hasOverflowA || hasOverflowB) ? "flex" : "none";
+    this.diffScrollbars?.update();
   }
 
   private currentView(): EditorView {
@@ -819,8 +731,4 @@ export class EditableDiffEditor {
       }
     });
   }
-}
-
-function clampSplitPercentage(value: number): number {
-  return Math.max(25, Math.min(75, Number.isFinite(value) ? value : 42));
 }

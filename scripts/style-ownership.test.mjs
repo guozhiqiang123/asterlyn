@@ -22,6 +22,7 @@ const ownedStyles = [
   ["features/files-editor/files-editor.css", "main.ts"],
   ["features/files-editor/editable-diff.css", "main.ts"],
   ["features/files-editor/change-overview.css", "main.ts"],
+  ["shared/diff-review.css", "main.ts"],
   ["features/files-editor/workspace-search.css", "main.ts"],
   ["features/files-editor/workspace-replacement-tool.css", "main.ts"],
   ["features/git-history/git-history.css", "main.ts"],
@@ -317,8 +318,8 @@ test("Diff side labels share the editor grid instead of approximating its divide
     readFile(new URL("../src/features/files-editor/workspace-replacement-tool.css", import.meta.url), "utf8"),
   ]);
   assert.match(editor, /grid\.append\(createDiffSideLabels\(this\.sideLabels, window\.document\)\)/u);
-  assert.match(editable, /this\.mergeView\.dom\.prepend\(createDiffSideLabels\(this\.sideLabels\)\)/u);
-  assert.match(labels, /header\.append\(before, divider, after\)/u);
+  assert.match(editable, /this\.mergeView\.dom\.prepend\(createDiffSideLabels\(this\.sideLabels, document, true\)\)/u);
+  assert.match(labels, /createDiffReviewPaneHeaders\(\[[\s\S]*actionGutters: true, className: "diff-side-labels"/u);
   assert.match(filesCss, /\.diff-split-grid\s*\{[^}]*grid-template-columns:[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\);/s);
   const editableCss = await readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8");
   assert.match(editableCss, /\.diff-side-labels\s*\{[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width, 5px\)/s);
@@ -352,40 +353,43 @@ test("every change overview ruler shares one scrollbar-clearance surface", async
 });
 
 test("merged Diff restates its collapsed rows and centres the revert control on the change", async () => {
-  const [theme, diff, controls, editor] = await Promise.all([
+  const [theme, diff, controls, editor, scrollbars] = await Promise.all([
     readFile(new URL("../src/editor-theme.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/controls.css", import.meta.url), "utf8"),
     readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review/editable-diff-scrollbars.ts", import.meta.url), "utf8"),
   ]);
   // CodeMirror renders collapsed unchanged rows as a real widget, so the app theme owns its color.
   assert.match(theme, /"\.cm-collapsedLines":\s*\{[^}]*color:\s*"var\(--info-text\)",[^}]*background:\s*"linear-gradient/s);
   assert.match(diff, /\.cm-merge-revert\s*\{[^}]*width:\s*32px;[^}]*flex:\s*0 0 32px;/s);
   assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*width:\s*var\(--diff-change-control-width, 26px\);[^}]*height:\s*26px;/s);
   assert.match(controls, /\.replacement-tool-diff\.editable-diff-surface \.cm-merge-revert > button\.diff-change-control\s*\{[^}]*margin:\s*7px 0 0;[^}]*transform:\s*translateX\(-50%\);/s);
-  assert.match(editor, /button\.className = "diff-change-control editable-diff-revert"/u);
+  assert.match(editor, /createDiffReviewActionButton\(\{[^}]*className: "editable-diff-revert"/su);
   // All visible horizontal owners share one coordinator, avoiding pairwise feedback loops.
-  assert.match(editor, /linkHorizontalScrollGroup\(\[\s*paneA,\s*paneB,\s*this\.mergeView\.a\.scrollDOM,\s*this\.mergeView\.b\.scrollDOM,\s*\]\)/s);
+  assert.match(scrollbars, /linkHorizontalScrollGroup\(\[\s*paneA\.pane,\s*paneB\.pane,\s*merge\.a\.scrollDOM,\s*merge\.b\.scrollDOM,\s*\]\)/s);
 });
 
 test("conflict Diff owns three aligned docked scrollbars and the shared Diff control", async () => {
-  const [css, controls, editor, icons] = await Promise.all([
+  const [css, controls, editor, actionGutter, icons] = await Promise.all([
     readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/controls.css", import.meta.url), "utf8"),
     readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review/diff-review-action-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/icons.ts", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.conflict-three-pane\s*\{[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\) auto;/s);
-  assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*minmax\(0, 1fr\)[^}]*minmax\(0, 1fr\)[^}]*minmax\(0, 1fr\)[^}]*auto;/s);
+  assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*var\(--conflict-ours-width, 27%\)[^}]*var\(--conflict-result-width, 46%\)[^}]*var\(--conflict-theirs-width, 27%\)[^}]*auto;/s);
   assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
   assert.match(css, /--conflict-action-gutter-width:\s*58px;/u);
   assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control/u);
   assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control\s*\{[^}]*position:\s*relative;[^}]*margin:\s*0;[^}]*transform:\s*none;/s);
   assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*min-width:\s*var\(--diff-change-control-width, 26px\);[^}]*max-width:\s*var\(--diff-change-control-width, 26px\);[^}]*background:\s*var\(--bg-elevated\);/s);
   assert.match(controls, /\.diff-change-control > \.icon\s*\{[^}]*width:\s*15px;[^}]*height:\s*15px;/s);
-  assert.match(editor, /group\.className = "conflict-change-controls"/u);
-  assert.match(editor, /this\.conflictActionButton\(\s*"accepted"/u);
-  assert.match(editor, /this\.conflictActionButton\(\s*"ignored"/u);
+  assert.match(editor, /createDiffReviewActionGroup\(side/u);
+  assert.match(actionGutter, /group\.className = "diff-review-action-group conflict-change-controls"/u);
+  assert.match(editor, /dataset\.decision = "accepted"/u);
+  assert.match(editor, /dataset\.decision = "ignored"/u);
   assert.match(editor, /event\.stopPropagation\(\)/u);
   assert.match(editor, /this\.resolutionModel\.applyDecision\(side, decision, source/u);
   assert.match(editor, /const sharedWidth = Math\.max\(\.\.\.scrollers\.map\(\(scroller\) => scroller\.scrollWidth\)\)/u);

@@ -3,7 +3,7 @@ import {
   createDiffReviewPaneHeaders,
   diffReviewPaneLabelParts,
   syncDiffReviewPaneHeaders,
-} from "./diff-review/diff-review-pane-header.ts";
+} from "../../shared/diff-review/diff-review-pane-header.ts";
 
 export function createDiffSideLabels(
   labels: DiffSideLabels,

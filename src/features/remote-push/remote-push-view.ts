@@ -2,8 +2,8 @@ import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
 import { identifyDiffSides, type DiffSideLabels } from "../../diff-presentation.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
-import { READ_ONLY_DIFF_CAPABILITIES } from "../files-editor/diff-review/diff-review-model.ts";
-import { renderDiffReviewToolbar } from "../files-editor/diff-review/diff-review-toolbar.ts";
+import { READ_ONLY_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
 import { renderSelectControl } from "../../shared/select-control.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type {

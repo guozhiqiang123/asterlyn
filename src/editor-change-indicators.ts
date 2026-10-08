@@ -9,7 +9,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import type { EditorCopy } from "./localization/catalog.ts";
-import { LINE_AWARE_DIFF_CONFIG } from "./features/files-editor/line-aware-diff.ts";
+import { LINE_AWARE_DIFF_CONFIG } from "./shared/diff-review/line-aware-diff.ts";
 import { attachOverviewRuler, removeOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
 
 export type EditorChangeIndicatorKind = "added" | "modified" | "deleted";

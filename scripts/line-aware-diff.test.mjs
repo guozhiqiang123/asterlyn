@@ -6,7 +6,7 @@ import { Text } from "@codemirror/state";
 import {
   LINE_AWARE_DIFF_CONFIG,
   lineAwareDiff,
-} from "../src/features/files-editor/line-aware-diff.ts";
+} from "../src/shared/diff-review/line-aware-diff.ts";
 
 test("line-aware diff keeps isolated insertions separate in a large source file", () => {
   const beforeLines = Array.from({ length: 8_000 }, (_, index) => `const value${index} = ${index};`);

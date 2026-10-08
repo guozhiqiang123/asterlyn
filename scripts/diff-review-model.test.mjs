@@ -7,7 +7,7 @@ import {
   projectConflictDiff,
   projectStaticSplitDiff,
   projectTwoWayDiff,
-} from "../src/features/files-editor/diff-review/diff-review-projection.ts";
+} from "../src/shared/diff-review/diff-review-projection.ts";
 
 test("static patches group presentation rows into stable read-only review blocks", () => {
   const patch = [
@@ -90,4 +90,3 @@ test("conflict decisions feed shared selected and reviewed states", () => {
 function projection(base, ours, theirs, result) {
   return projectConflictDiff(ConflictResolutionModel.create(base, ours, theirs, result).snapshots());
 }
-

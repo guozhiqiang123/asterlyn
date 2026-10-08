@@ -4,7 +4,7 @@ import type { EditableDiffEditor, EditableDiffInteractions } from "../../editabl
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import type { GitConflictContent } from "../../models.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
-import type { DiffReviewSummary } from "./diff-review/diff-review-model.ts";
+import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import type { AppPreferences } from "../../preferences.ts";
 
 interface EditableDiffMount {
@@ -261,6 +261,14 @@ export class LazyConflictEditor {
 
   reviewSummary(): DiffReviewSummary | null {
     return this.implementation?.reviewSummary() ?? null;
+  }
+
+  unchangedExpanded(): boolean {
+    return this.implementation?.unchangedExpanded() ?? false;
+  }
+
+  setUnchangedExpanded(expanded: boolean): void {
+    this.implementation?.setUnchangedExpanded(expanded);
   }
 
   requestMeasure(): void {

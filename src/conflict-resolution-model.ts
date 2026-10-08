@@ -1,6 +1,6 @@
 import { ChangeSet } from "@codemirror/state";
 import type { Change } from "@codemirror/merge";
-import { lineAwareDiff } from "./features/files-editor/line-aware-diff.ts";
+import { lineAwareDiff } from "./shared/diff-review/line-aware-diff.ts";
 import type { TextChange } from "./features/files-editor/text-content.ts";
 
 export type ConflictResolutionSide = "ours" | "theirs";

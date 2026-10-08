@@ -1,5 +1,5 @@
-import { icon } from "../../../icons.ts";
-import type { DiffLayout } from "../../../diff-presentation.ts";
+import { icon } from "../../icons.ts";
+import type { DiffLayout } from "../../diff-presentation.ts";
 import type { DiffReviewCapabilities } from "./diff-review-model.ts";
 
 export type DiffReviewToolbarNamespace = "editor" | "push";
@@ -99,4 +99,3 @@ function escapeHtml(value: string): string {
 function escapeAttribute(value: string): string {
   return escapeHtml(value).replaceAll("`", "&#96;");
 }
-

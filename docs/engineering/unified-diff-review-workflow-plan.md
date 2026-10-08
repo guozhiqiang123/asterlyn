@@ -264,7 +264,8 @@ Add `Apply non-conflicting changes: Ours / All / Theirs` after block classificat
 
 ### Shared presentation layer
 
-Add modules under `src/features/files-editor/diff-review/`:
+Add presentation-neutral modules under `src/shared/diff-review/` so Git operations, Push, and the
+files editor can depend on them without creating cross-feature imports:
 
 - `diff-review-model.ts`: capability, pane, block, summary, and status types;
 - `diff-review-projection.ts`: two-way and conflict adapters over existing models;
@@ -275,9 +276,11 @@ Add modules under `src/features/files-editor/diff-review/`:
 - `diff-review-collapse.ts`: common full-document fold coordinator;
 - `diff-review-geometry.ts`: measured block rectangles and connector paths;
 - `diff-review-overlay.ts`: SVG overlay lifecycle; and
-- `diff-review-layout.ts`: two-pane and three-pane ratios, splitter registration, and reset.
+- `editable-diff-review-splitter.ts`: editable two-pane splitter registration and reset;
+- `editable-diff-scrollbars.ts`: docked horizontal scrollbar ownership; and
+- `editable-diff-review-surface.ts`: editable folding and connector lifecycle.
 
-Shared CSS belongs in `src/features/files-editor/diff-review.css`. Surface CSS may define only
+Shared CSS belongs in `src/shared/diff-review.css`. Surface CSS may define only
 composition-specific grid placement and exceptional capabilities. `shared/controls.css` keeps truly
 generic button primitives, not conflict-specific layout rules.
 

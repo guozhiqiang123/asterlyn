@@ -77,3 +77,13 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   manually edited without depending on color alone.
 - Previous/next conflict navigation marks the same active Base-owned block in every pane and moves
   focus to the writable Result.
+
+### Phase 5 — folding, scroll, and connector geometry
+
+- Two-pane editable Diff and three-pane conflict folds now use one anchor-owned coordinator; fold
+  IDs and unchanged-line counts are projected consistently into every visible document.
+- Conflict unchanged regions can be expanded or collapsed from the shared toolbar as one operation.
+- Two-pane and three-pane editors render frame-coalesced SVG block connectors measured through
+  public CodeMirror coordinates; overlays are clipped to visible content and never receive input.
+- Existing document-anchored vertical synchronization and grouped horizontal scroll ownership are
+  retained, while resize, fold, edit, splitter, and scroll events invalidate connector geometry.

@@ -835,11 +835,9 @@ export class AsterlynApp {
         activeDocument: () => this.activeDocument(),
         activate: (document) => this.activateDiffPreview(document), renderEditor: () => this.renderEditor(),
         preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
-        presentation: () => this.diffPresentation(),
-        editorCopy: () => this.localization.catalog.editor,
-        status: (message) => this.setStatus(message, "warning"),
+        presentation: () => this.diffPresentation(), editorCopy: () => this.localization.catalog.editor,
+        status: (message) => this.setStatus(message, "warning"), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
         resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
-        setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
           list: (root) => bridge.listGitWorktreeRecoveries(root),
@@ -7037,18 +7035,8 @@ export class AsterlynApp {
         this.resizeWorkbench("diffBeforePercent", value);
         if (committed) this.persistWorkbenchLayout();
       },
-      editableSplitPercentage: this.shellState.layout.editableDiffBeforePercent,
-      onEditableSplitPercentageChange: (value, committed) => {
-        this.resizeWorkbench("editableDiffBeforePercent", value);
-        if (committed) this.persistWorkbenchLayout();
-      },
-      conflictOursPercentage: this.shellState.layout.conflictOursPercent,
-      conflictResultPercentage: this.shellState.layout.conflictResultPercent,
-      onConflictSplitPercentageChange: (ours, result, committed) => {
-        this.resizeWorkbench("conflictOursPercent", ours);
-        this.resizeWorkbench("conflictResultPercent", result);
-        if (committed) this.persistWorkbenchLayout();
-      },
+      editableSplitPercentage: this.shellState.layout.editableDiffBeforePercent, conflictOursPercentage: this.shellState.layout.conflictOursPercent, conflictResultPercentage: this.shellState.layout.conflictResultPercent,
+      onEditableSplitPercentageChange: (value, committed) => { this.resizeWorkbench("editableDiffBeforePercent", value); if (committed) this.persistWorkbenchLayout(); }, onConflictSplitPercentageChange: (ours, result, committed) => { this.resizeWorkbench("conflictOursPercent", ours); this.resizeWorkbench("conflictResultPercent", result); if (committed) this.persistWorkbenchLayout(); },
     };
   }
 

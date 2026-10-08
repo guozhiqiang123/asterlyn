@@ -1,5 +1,5 @@
 import { presentableDiff } from "@codemirror/merge";
-import { wordDiffRanges } from "./features/files-editor/word-diff.ts";
+import { wordDiffRanges } from "./shared/diff-review/word-diff.ts";
 
 export type DiffLayout = "unified" | "split";
 

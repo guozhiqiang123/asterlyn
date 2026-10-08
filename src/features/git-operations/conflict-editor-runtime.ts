@@ -4,9 +4,9 @@ import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts
 import type { GitConflictContent, RepositorySnapshot } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { DiffPresentation } from "../../diff-presentation.ts";
-import type { DiffReviewSummary } from "../files-editor/diff-review/diff-review-model.ts";
-import { CONFLICT_DIFF_CAPABILITIES } from "../files-editor/diff-review/diff-review-model.ts";
-import { renderDiffReviewToolbar } from "../files-editor/diff-review/diff-review-toolbar.ts";
+import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
+import { CONFLICT_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
 import type {
   GitOperationChange,
   GitOperationController,
@@ -35,6 +35,8 @@ interface ConflictEditorSurfacePort {
   flushConflict(): string | null;
   navigateDiffChange(direction: 1 | -1): boolean;
   conflictReviewSummary(): DiffReviewSummary | null;
+  conflictUnchangedExpanded(): boolean;
+  setConflictUnchangedExpanded(expanded: boolean): void;
 }
 
 export interface ConflictEditorRuntimeOptions {
@@ -134,6 +136,11 @@ export class ConflictEditorRuntime {
       </div>`;
     this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-action]").forEach((button) => {
       button.addEventListener("click", () => {
+        if (button.dataset.diffAction === "toggle-unchanged") {
+          surface.setConflictUnchangedExpanded(!surface.conflictUnchangedExpanded());
+          this.options.renderEditor();
+          return;
+        }
         const direction = button.dataset.diffAction === "next-change" ? 1 : -1;
         if (!surface.navigateDiffChange(direction)) this.options.status(this.options.editorCopy().noFileChange(direction === 1 ? "next" : "previous"));
       });
@@ -152,9 +159,10 @@ export class ConflictEditorRuntime {
     const copy = this.options.copy();
     return renderDiffReviewToolbar({
       namespace: "editor",
-      capabilities: { ...CONFLICT_DIFF_CAPABILITIES, toggleUnchanged: false },
+      capabilities: CONFLICT_DIFF_CAPABILITIES,
       ready,
       showWhitespace: this.options.preferences().showWhitespace,
+      expandedUnchanged: this.options.surface.conflictUnchangedExpanded(),
       summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pending, summary.total) : null,
       copy: {
         toolbar: editor.diffToolbar,

@@ -40,3 +40,48 @@
   outline-offset: 1px;
 }
 
+.diff-review-overlay {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.diff-review-connector {
+  fill: color-mix(in srgb, var(--text-faint) 10%, transparent);
+  stroke: color-mix(in srgb, var(--border-strong) 60%, transparent);
+  stroke-width: 1;
+}
+
+.diff-review-connector-pending {
+  fill: color-mix(in srgb, var(--danger-text) 9%, transparent);
+  stroke: color-mix(in srgb, var(--danger-text) 35%, transparent);
+}
+
+.diff-review-connector-accepted,
+.diff-review-connector-reverted {
+  fill: color-mix(in srgb, var(--success-text) 8%, transparent);
+  stroke: color-mix(in srgb, var(--success-text) 34%, transparent);
+}
+
+.diff-review-connector-ignored {
+  opacity: 0.42;
+}
+
+.diff-review-connector-manual {
+  fill: color-mix(in srgb, var(--warning-text) 10%, transparent);
+  stroke: color-mix(in srgb, var(--warning-text) 42%, transparent);
+}
+
+.diff-review-connector.is-active {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke-width: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-review-connector { transition: none; }
+}

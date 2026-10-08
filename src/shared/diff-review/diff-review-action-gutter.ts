@@ -1,4 +1,4 @@
-import { icon } from "../../../icons.ts";
+import { icon } from "../../icons.ts";
 import type { DiffReviewActionId } from "./diff-review-model.ts";
 
 export type DiffReviewActionIcon =
@@ -65,4 +65,3 @@ export function createDiffReviewActionGroup(
   for (const action of actions) group.append(createDiffReviewActionButton(action, owner));
   return group;
 }
-

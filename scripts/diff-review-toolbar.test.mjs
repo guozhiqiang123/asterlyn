@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   CONFLICT_DIFF_CAPABILITIES,
   READ_ONLY_DIFF_CAPABILITIES,
-} from "../src/features/files-editor/diff-review/diff-review-model.ts";
-import { renderDiffReviewToolbar } from "../src/features/files-editor/diff-review/diff-review-toolbar.ts";
+} from "../src/shared/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../src/shared/diff-review/diff-review-toolbar.ts";
 
 const copy = {
   toolbar: "Review",
@@ -76,4 +76,3 @@ test("conflict toolbar hides unsupported file and layout actions and announces p
   assert.doesNotMatch(html, /data-diff-layout/);
   assert.match(html, /data-diff-whitespace/);
 });
-

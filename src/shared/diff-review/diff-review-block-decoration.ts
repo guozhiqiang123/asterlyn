@@ -40,4 +40,3 @@ export const diffReviewBlockDecorations = StateField.define({
   },
   provide: (field) => EditorView.decorations.from(field),
 });
-

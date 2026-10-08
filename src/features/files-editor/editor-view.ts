@@ -11,8 +11,8 @@ import {
 import type { AppPreferences } from "../../preferences.ts";
 import type { EditorCopy, ShellCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
-import { READ_ONLY_DIFF_CAPABILITIES } from "./diff-review/diff-review-model.ts";
-import { renderDiffReviewToolbar } from "./diff-review/diff-review-toolbar.ts";
+import { READ_ONLY_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
 
 export interface EditorTabsViewModel {
   readonly session: EditorSession;

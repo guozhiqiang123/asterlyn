@@ -156,17 +156,10 @@ export class EditorSurface {
 
   isTextTabMounted(tabId: string): boolean { return this.mountedTextTabId === tabId; }
 
-  navigateDiffChange(direction: 1 | -1): boolean {
-    return this.mountedConflictKey
-      ? this.conflictEditor.navigateChange(direction)
-      : this.mountedEditableDiffTabId
-      ? this.editableDiffEditor.navigateChange(direction)
-      : this.diffEditor.navigateChange(direction);
-  }
-
-  conflictReviewSummary() {
-    return this.mountedConflictKey ? this.conflictEditor.reviewSummary() : null;
-  }
+  navigateDiffChange(direction: 1 | -1): boolean { return this.mountedConflictKey ? this.conflictEditor.navigateChange(direction) : this.mountedEditableDiffTabId ? this.editableDiffEditor.navigateChange(direction) : this.diffEditor.navigateChange(direction); }
+  conflictReviewSummary() { return this.mountedConflictKey ? this.conflictEditor.reviewSummary() : null; }
+  conflictUnchangedExpanded(): boolean { return this.mountedConflictKey ? this.conflictEditor.unchangedExpanded() : false; }
+  setConflictUnchangedExpanded(expanded: boolean): void { if (this.mountedConflictKey) this.conflictEditor.setUnchangedExpanded(expanded); }
 
   setReadOnly(readOnly: boolean): void {
     this.textEditor.setReadOnly(readOnly);
