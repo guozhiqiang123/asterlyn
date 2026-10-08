@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ConflictEditorRuntime, conflictReviewCompletionReady } from "../src/features/git-operations/conflict-editor-runtime.ts";
+import { ConflictEditorRuntime, conflictFileNavigation, conflictReviewCompletionReady } from "../src/features/git-operations/conflict-editor-runtime.ts";
 import { GitOperationController } from "../src/features/git-operations/git-operation-controller.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
@@ -65,6 +65,29 @@ test("a stash-pop worktree conflict opens the three-pane editor without operatio
 
   assert.equal(controller.state.conflict?.path, "one.txt");
   assert.equal(harness.active().kind, "conflict-resolution");
+});
+
+test("conflict file navigation follows the exact deduplicated conflict order", () => {
+  const repository = snapshot();
+  repository.operation.conflicts.push({
+    path: "operation-only.txt",
+    baseOid: "b".repeat(40),
+    oursOid: "o".repeat(40),
+    theirsOid: "t".repeat(40),
+  });
+
+  assert.deepEqual(conflictFileNavigation(repository, "one.txt"), {
+    previous: null,
+    next: "two.txt",
+  });
+  assert.deepEqual(conflictFileNavigation(repository, "two.txt"), {
+    previous: "one.txt",
+    next: "operation-only.txt",
+  });
+  assert.deepEqual(conflictFileNavigation(repository, "operation-only.txt"), {
+    previous: "two.txt",
+    next: null,
+  });
 });
 
 test("Cancel reuses discard confirmation and clears only the transient draft", async () => {
@@ -135,6 +158,8 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     status(message) { statuses.push(message); },
     resolve(deleteFile) { resolutions.push(deleteFile); },
     setWhitespace() {},
+    conflictSourceAvailable() { return true; },
+    revealConflictSource() {},
     confirmDiscard: async () => confirmations.discard ?? true,
     async notifyBlockedSwitch() { blockedNotices += 1; },
   });

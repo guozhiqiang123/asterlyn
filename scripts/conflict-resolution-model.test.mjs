@@ -213,44 +213,6 @@ test("independent blocks keep later Result ranges mapped after an earlier length
   assert.equal(model.hasChanges("theirs", first.theirs), false);
 });
 
-test("bulk All applies one-sided blocks and leaves divergent conflicts pending", () => {
-  const base = "one\nkeep one\ntwo\nkeep two\nthree\n";
-  const model = ConflictResolutionModel.create(
-    base,
-    "ours one\nkeep one\ntwo\nkeep two\nours three\n",
-    "one\nkeep one\ntheirs two\nkeep two\ntheirs three\n",
-    base,
-  );
-
-  const bulk = model.applyNonConflicting("all", base);
-  const result = applyChanges(base, bulk.changes);
-  const snapshots = model.snapshots();
-
-  assert.equal(result, "ours one\nkeep one\ntheirs two\nkeep two\nthree\n");
-  assert.equal(bulk.appliedBlocks, 2);
-  assert.equal(bulk.skippedManualBlocks, 0);
-  assert.equal(snapshots.filter((block) =>
-    (block.oursChanged && block.oursDecision === "pending") ||
-    (block.theirsChanged && block.theirsDecision === "pending"),
-  ).length, 1);
-});
-
-test("directional bulk apply resolves identical sides once and skips manual blocks", () => {
-  const identical = ConflictResolutionModel.create("base", "same", "same", "base");
-  const applied = identical.applyNonConflicting("ours", "base");
-  assert.equal(applyChanges("base", applied.changes), "same");
-  assert.equal(identical.snapshots()[0].oursDecision, "accepted");
-  assert.equal(identical.snapshots()[0].theirsDecision, "ignored");
-
-  const manual = ConflictResolutionModel.create("base", "ours", "base", "base");
-  manual.observeManualChanges([{ from: 0, to: 4, insert: "custom" }], 4, "custom");
-  const skipped = manual.applyNonConflicting("ours", "custom");
-  assert.deepEqual(skipped.changes, []);
-  assert.equal(skipped.appliedBlocks, 0);
-  assert.equal(skipped.skippedManualBlocks, 1);
-  assert.equal(manual.snapshots()[0].manuallyEdited, true);
-});
-
 function applyDecision(fixture, side, decision, source) {
   return applyModelDecision(fixture.model, side, decision, source, fixture.result);
 }

@@ -22,16 +22,6 @@
   outline-offset: 1px;
 }
 
-.diff-review-bulk-actions > span {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  border-right: 1px solid var(--border);
-  color: var(--text-faint);
-  font-size: 9px;
-  white-space: nowrap;
-}
-
 .diff-review-overlay {
   position: absolute;
   z-index: 1;

@@ -35,14 +35,18 @@ test("conflict review state is decorated in every registered pane", async () => 
   assert.doesNotMatch(styles, /box-shadow:\s*inset\s+3px/u);
 });
 
-test("bulk non-conflicting changes enter Result as one undoable transaction", async () => {
-  const [source, resolutionHistory] = await Promise.all([
+test("conflict review exposes only per-block decisions", async () => {
+  const [source, runtime, toolbar, resolutionHistory] = await Promise.all([
     readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-operations/conflict-editor-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review/diff-review-toolbar.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/conflict-resolution-history.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(source, /applyNonConflicting\(scope/u);
-  assert.match(source, /result\.dispatch\(conflictResolutionTransaction\(/u);
-  assert.match(source, /bulk\.changes, `input\.conflict\.bulk\.\$\{scope\}`/u);
+  assert.match(source, /createDiffReviewActionGroup/u);
+  assert.match(source, /activateConflictDecision/u);
+  assert.doesNotMatch(source, /applyNonConflicting|data-diff-bulk/u);
+  assert.doesNotMatch(runtime, /applyNonConflicting|data-diff-bulk|bulkActions/u);
+  assert.doesNotMatch(toolbar, /data-diff-bulk|bulkActions/u);
   assert.match(resolutionHistory, /invertedEffects\.of/u);
   assert.match(resolutionHistory, /isolateHistory\.of\("full"\)/u);
 });

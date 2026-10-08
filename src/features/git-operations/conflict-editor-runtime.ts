@@ -7,7 +7,6 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import { CONFLICT_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
-import type { ConflictBulkApplyScope } from "../../conflict-resolution-model.ts";
 import type {
   GitOperationChange,
   GitOperationController,
@@ -37,10 +36,6 @@ interface ConflictEditorSurfacePort {
   flushConflict(): string | null;
   navigateDiffChange(direction: 1 | -1): boolean;
   conflictReviewSummary(): DiffReviewSummary | null;
-  applyNonConflictingConflict(scope: ConflictBulkApplyScope): {
-    readonly appliedBlocks: number;
-    readonly skippedManualBlocks: number;
-  };
   conflictUnchangedExpanded(): boolean;
   setConflictUnchangedExpanded(expanded: boolean): void;
 }
@@ -62,6 +57,8 @@ export interface ConflictEditorRuntimeOptions {
   status(message: string): void;
   resolve(deleteFile: boolean): void;
   setWhitespace(showWhitespace: boolean): void;
+  conflictSourceAvailable(path: string): boolean;
+  revealConflictSource(): void;
   confirmDiscard(): Promise<boolean>;
   notifyBlockedSwitch(): Promise<void>;
 }
@@ -145,32 +142,36 @@ export class ConflictEditorRuntime {
     const canSave = !resolving && state.conflict?.binary === false && conflictReviewCompletionReady(summary);
     this.query("#content-header").innerHTML = `${contentHeading(basename(document.path), document.path)}
       <div class="header-actions conflict-editor-actions">
-        ${this.toolbar(summary, Boolean(conflict && !conflict.binary))}
+        ${this.toolbar(summary, Boolean(conflict && !conflict.binary), document.path)}
         <button class="secondary-button" id="conflict-resolve-cancel" type="button" ${resolving ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button>
         <button class="secondary-button destructive-secondary" id="conflict-resolve-delete" type="button" ${resolving || !state.conflict ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button>
         <button class="primary-button" id="conflict-resolve-save" type="button" ${canSave ? "" : "disabled"}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button>
       </div>`;
     this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-action]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (button.dataset.diffAction === "toggle-unchanged") {
+        const action = button.dataset.diffAction;
+        if (action === "toggle-unchanged") {
           surface.setConflictUnchangedExpanded(!surface.conflictUnchangedExpanded());
           this.options.renderEditor();
           return;
         }
-        const direction = button.dataset.diffAction === "next-change" ? 1 : -1;
+        if (action === "previous-file" || action === "next-file") {
+          const target = conflictFileNavigation(this.options.snapshot(), document.path)[
+            action === "next-file" ? "next" : "previous"
+          ];
+          if (target) void this.open(target);
+          return;
+        }
+        if (action === "open-source") {
+          this.options.revealConflictSource();
+          return;
+        }
+        const direction = action === "next-change" ? 1 : -1;
         if (!surface.navigateDiffChange(direction)) this.options.status(this.options.editorCopy().noFileChange(direction === 1 ? "next" : "previous"));
       });
     });
     this.query("#content-header").querySelector<HTMLButtonElement>("[data-diff-whitespace]")?.addEventListener("click", () => {
       this.options.setWhitespace(!this.options.preferences().showWhitespace);
-    });
-    this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-bulk]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const scope = button.dataset.diffBulk as ConflictBulkApplyScope;
-        const applied = surface.applyNonConflictingConflict(scope);
-        this.options.status(copy.bulkConflictApplied(applied.appliedBlocks, applied.skippedManualBlocks));
-        this.options.renderEditor();
-      });
     });
     root.querySelector<HTMLButtonElement>("#conflict-resolve-cancel")?.addEventListener("click", () => void this.requestCancel());
     root.querySelector<HTMLButtonElement>("#conflict-resolve-delete")?.addEventListener("click", () => this.options.resolve(true));
@@ -178,31 +179,28 @@ export class ConflictEditorRuntime {
     return true;
   }
 
-  private toolbar(summary: DiffReviewSummary | null, ready: boolean): string {
+  private toolbar(summary: DiffReviewSummary | null, ready: boolean, path: string): string {
     const editor = this.options.editorCopy();
     const copy = this.options.copy();
+    const files = conflictFileNavigation(this.options.snapshot(), path);
     return renderDiffReviewToolbar({
       namespace: "editor",
       capabilities: CONFLICT_DIFF_CAPABILITIES,
       ready,
       showWhitespace: this.options.preferences().showWhitespace,
       expandedUnchanged: this.options.surface.conflictUnchangedExpanded(),
+      previousFileAvailable: files.previous !== null,
+      nextFileAvailable: files.next !== null,
+      sourceAvailable: this.options.conflictSourceAvailable(path),
       summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pendingConflicts, summary.total) : null,
-      bulkActions: summary ? {
-        label: copy.applyNonConflicting,
-        ours: copy.ours,
-        all: copy.applyAllNonConflicting,
-        theirs: copy.theirs,
-        disabled: summary.nonConflicting + summary.identical === 0,
-      } : undefined,
       copy: {
         toolbar: editor.diffToolbar,
         navigation: editor.diffNavigation,
         previousBlock: copy.previousConflict,
         nextBlock: copy.nextConflict,
-        previousFile: editor.previousFile,
-        nextFile: editor.nextFile,
-        openSource: editor.openSource,
+        previousFile: copy.previousConflictFile,
+        nextFile: copy.nextConflictFile,
+        openSource: copy.revealConflictFile,
         collapseUnchanged: editor.collapseUnchanged,
         expandUnchanged: editor.expandUnchanged,
         presentation: editor.diffPresentation,
@@ -262,6 +260,21 @@ export class ConflictEditorRuntime {
     if (!element) throw new Error(`Missing conflict editor element: ${selector}`);
     return element;
   }
+}
+
+export function conflictFileNavigation(
+  snapshot: RepositorySnapshot | null,
+  path: string,
+): { readonly previous: string | null; readonly next: string | null } {
+  const paths = [...new Set([
+    ...(snapshot?.changes.filter((change) => change.conflicted).map((change) => change.path) ?? []),
+    ...(snapshot?.operation?.conflicts.map((conflict) => conflict.path) ?? []),
+  ])];
+  const index = paths.indexOf(path);
+  return {
+    previous: index > 0 ? paths[index - 1] ?? null : null,
+    next: index >= 0 ? paths[index + 1] ?? null : null,
+  };
 }
 
 export function conflictReviewCompletionReady(summary: DiffReviewSummary | null): boolean {

@@ -33,8 +33,6 @@ import {
 } from "./features/files-editor/text-content.ts";
 import {
   ConflictResolutionModel,
-  type ConflictBulkApplyResult,
-  type ConflictBulkApplyScope,
   type ConflictResolutionDecision,
   type ConflictResolutionSide,
   type ConflictSourceRange,
@@ -252,23 +250,6 @@ export class ConflictEditor {
 
   reviewSummary(): DiffReviewSummary | null {
     return this.reviewSnapshot()?.summary ?? null;
-  }
-
-  applyNonConflicting(scope: ConflictBulkApplyScope): ConflictBulkApplyResult {
-    const result = this.leftMerge?.b;
-    if (!result || !this.resolutionModel || this.resultReadOnlyValue) {
-      return { changes: [], appliedBlocks: 0, skippedManualBlocks: 0 };
-    }
-    const before = this.resolutionModel.historyState();
-    const bulk = this.resolutionModel.applyNonConflicting(scope, result.state.doc.toString());
-    if (bulk.appliedBlocks > 0) {
-      result.dispatch(conflictResolutionTransaction(
-        before, this.resolutionModel.historyState(), bulk.changes, `input.conflict.bulk.${scope}`,
-      ));
-    }
-    this.syncConflictControls();
-    this.syncReviewDecorations();
-    return bulk;
   }
 
   unchangedExpanded(): boolean {

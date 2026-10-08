@@ -51,7 +51,6 @@ export interface DiffReviewCapabilities {
   readonly toggleUnchanged: boolean;
   readonly toggleLayout: boolean;
   readonly toggleWhitespace: boolean;
-  readonly applyNonConflicting: boolean;
   readonly cancel: boolean;
   readonly finish: boolean;
 }
@@ -82,7 +81,6 @@ export const READ_ONLY_DIFF_CAPABILITIES: DiffReviewCapabilities = Object.freeze
   toggleUnchanged: true,
   toggleLayout: true,
   toggleWhitespace: true,
-  applyNonConflicting: false,
   cancel: false,
   finish: false,
 });
@@ -101,12 +99,11 @@ export const EMBEDDED_EDITABLE_DIFF_CAPABILITIES: DiffReviewCapabilities = Objec
 
 export const CONFLICT_DIFF_CAPABILITIES: DiffReviewCapabilities = Object.freeze({
   navigateBlocks: true,
-  navigateFiles: false,
-  openSource: false,
+  navigateFiles: true,
+  openSource: true,
   toggleUnchanged: true,
   toggleLayout: false,
   toggleWhitespace: true,
-  applyNonConflicting: true,
   cancel: true,
   finish: true,
 });

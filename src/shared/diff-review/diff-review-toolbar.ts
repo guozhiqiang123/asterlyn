@@ -36,13 +36,6 @@ export interface DiffReviewToolbarViewModel {
   readonly nextFileAvailable?: boolean;
   readonly sourceAvailable?: boolean;
   readonly summary?: string | null;
-  readonly bulkActions?: {
-    readonly label: string;
-    readonly ours: string;
-    readonly all: string;
-    readonly theirs: string;
-    readonly disabled?: boolean;
-  };
   readonly className?: string;
   readonly copy: DiffReviewToolbarCopy;
 }
@@ -81,18 +74,9 @@ export function renderDiffReviewToolbar(model: DiffReviewToolbarViewModel): stri
       <button type="button" ${layout}="split" aria-pressed="${model.layout === "split"}" title="${escapeAttribute(copy.splitTitle)}" ${model.layoutLocked ? "disabled" : ""}>${escapeHtml(copy.split)}</button>` : ""}
       ${model.capabilities.toggleWhitespace ? `<button type="button" ${whitespace} aria-pressed="${model.showWhitespace ?? false}" title="${escapeAttribute(copy.whitespaceTitle)}">${escapeHtml(copy.whitespace)}</button>` : ""}
     </div>` : "";
-  const bulk = model.capabilities.applyNonConflicting && model.bulkActions
-    ? `<div class="diff-controls diff-review-bulk-actions" role="group" aria-label="${escapeAttribute(model.bulkActions.label)}">
-      <span>${escapeHtml(model.bulkActions.label)}</span>
-      ${bulkButton("ours", model.bulkActions.ours, model.ready && !model.bulkActions.disabled)}
-      ${bulkButton("all", model.bulkActions.all, model.ready && !model.bulkActions.disabled)}
-      ${bulkButton("theirs", model.bulkActions.theirs, model.ready && !model.bulkActions.disabled)}
-    </div>`
-    : "";
   return `<div class="diff-toolbar diff-review-toolbar ${escapeAttribute(model.className ?? "")}" aria-label="${escapeAttribute(copy.toolbar)}">
     <div class="diff-navigation-controls" role="group" aria-label="${escapeAttribute(copy.navigation)}">${navigation}</div>
     ${model.summary ? `<span class="diff-review-summary" role="status">${escapeHtml(model.summary)}</span>` : ""}
-    ${bulk}
     ${presentation}
   </div>`;
 }
@@ -117,10 +101,6 @@ function toolbarAttributes(namespace: DiffReviewToolbarNamespace): {
     layout: "data-diff-layout",
     whitespace: "data-diff-whitespace",
   };
-}
-
-function bulkButton(scope: "ours" | "all" | "theirs", label: string, enabled: boolean): string {
-  return `<button type="button" data-diff-bulk="${scope}" title="${escapeAttribute(label)}" ${enabled ? "" : "disabled"}>${escapeHtml(label)}</button>`;
 }
 
 function iconButton(
