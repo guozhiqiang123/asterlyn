@@ -113,21 +113,21 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 8 — package and acceptance evidence
 
-- The complete frontend suite passed: 893 tests, 0 failures. TypeScript checking, the production
+- The complete frontend suite passed: 894 tests, 0 failures. TypeScript checking, the production
   frontend build, and `git diff --check` also passed.
 - The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
   installed executable launched the Flutter conflict workspace successfully after replacement.
 - The accepted macOS arm64 archive is
-  `target/release/bundle/macos/Asterlyn-conflict-review-20261008-150600-macos-arm64.zip`,
-  9,147,815 bytes, SHA-256
-  `5fb2c55866d52d87cb8e2b36aa8350f8110ad9c95f121c68b8a20074a03ec44a`.
+  `target/release/bundle/macos/Asterlyn-conflict-undo-20261008-170816-macos-arm64.zip`,
+  9,148,403 bytes, SHA-256
+  `a9998a9a4baabb9b7b98ba37c38c9fda1feb93bc39f7b56a26d2a7da55399858`.
 - The packaged and installed executables are both 24,046,032 bytes with SHA-256
-  `9e1c72a682c75fc4088afa397393e052c09a7a853c3c6e5ac87476c577b304fb`. The bundle is an arm64
+  `3af8f457ccd3840cefe36ca270969014d4728e5ae5979da95e6311a60aad3f91`. The bundle is an arm64
   application with an ad-hoc hardened-runtime signature and passed strict deep signature
   verification before and after installation.
 - `/Applications/Asterlyn.app` was replaced and relaunched against `/Users/gzq/flutter`. The previous
   installation remains recoverable at
-  `/Users/gzq/.Trash/Asterlyn-before-conflict-review-20261008-150629.app`.
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-undo-20261008-170837.app`.
 - The final visual refinement removes the redundant 3px per-line conflict-status rail while keeping
   the 5px Diff gutter, connector fill, action state, active-block emphasis, and ignored-text
   treatment. Connector edge strokes were also removed so Patch ranges do not paint 1px colored
@@ -146,6 +146,9 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - Switching to another conflict is guarded before Changes selection mutates. Content edits and
   decision-only drafts both show a modal instructing the user to save or cancel the current
   resolution, while the current row and editor stay active.
+- Conflict Apply and Ignore decisions participate in the same isolated Undo/Redo event as Result
+  text. The regression sequence Apply Ours, Apply Theirs, Undo, Ignore Theirs ends with Ours accepted,
+  Theirs ignored, and zero pending conflicts; decision-only actions also undo and redo explicitly.
 - Host evidence: macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1,
   and Git 2.48.1.
 - The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,

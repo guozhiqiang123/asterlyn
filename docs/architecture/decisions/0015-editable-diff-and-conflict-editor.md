@@ -164,6 +164,11 @@ content edits or recorded review decisions; when either exists, a modal instruct
 or cancel the current resolution. The target row is not selected and the editor document is not
 changed until that guard passes, keeping navigation and editor identity atomic.
 
+Conflict actions also carry their before/after decision snapshots in the same isolated CodeMirror
+history event as the Result edit. Undo and Redo therefore restore text and explicit side decisions
+together; decision-only actions remain undoable even when they do not change Result text. Manual
+edits continue to invalidate affected decisions instead of inferring acceptance from matching text.
+
 ### Dependency boundary
 
 Adopt exact package `@codemirror/merge` **6.12.2** from the public npm distribution under the MIT
