@@ -157,6 +157,7 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     editorCopy: () => EN_US.editor,
     status(message) { statuses.push(message); },
     resolve(deleteFile) { resolutions.push(deleteFile); },
+    setDiffLayout() {},
     setWhitespace() {},
     conflictSourceAvailable() { return true; },
     revealConflictSource() {},

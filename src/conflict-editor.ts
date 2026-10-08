@@ -39,6 +39,8 @@ import {
 } from "./conflict-resolution-model.ts";
 import { conflictResolutionHistoryExtension, conflictResolutionHistoryState, conflictResolutionTransaction } from "./conflict-resolution-history.ts";
 import { ConflictCollapseCoordinator, type ConflictCollapseSide } from "./conflict-collapse.ts";
+import { ConflictSplitLayout } from "./conflict-split-layout.ts";
+import { projectUnifiedConflictCards, setUnifiedConflictReview, unifiedConflictReviewExtension } from "./conflict-unified-review.ts";
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
 import { linkHorizontalScrollGroup, linkVerticalScrollByDocument } from "./presentation/linked-scroll.ts";
@@ -49,7 +51,6 @@ import type { DiffPresentation } from "./diff-presentation.ts";
 import { conflictActionGroupVisible, projectConflictDiff } from "./shared/diff-review/diff-review-projection.ts";
 import type { DiffReviewSnapshot, DiffReviewSummary } from "./shared/diff-review/diff-review-model.ts";
 import { createDiffReviewPaneHeaders } from "./shared/diff-review/diff-review-pane-header.ts";
-import { attachSplitter } from "./presentation/splitter.ts";
 import { createDiffReviewActionGroup } from "./shared/diff-review/diff-review-action-gutter.ts";
 import {
   diffReviewBlockDecorations,
@@ -57,7 +58,6 @@ import {
 } from "./shared/diff-review/diff-review-block-decoration.ts";
 import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
 import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
-import { CONFLICT_EQUAL_PERCENTAGE, CONFLICT_PANE_MIN_PERCENTAGE, conflictPaneLayout, normalizeConflictPercentages, resizeConflictOursPercentage } from "./shared/diff-review/conflict-diff-review-layout.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -80,7 +80,7 @@ interface ConflictScrollbars {
   readonly resizeObserver: ResizeObserver;
 }
 
-/** Three-column conflict editor built from two synchronized merge projections. */
+/** Conflict editor with one persistent Result and split or unified three-way presentation. */
 export class ConflictEditor {
   private leftMerge: MergeView | null = null;
   private rightMerge: MergeView | null = null;
@@ -106,9 +106,17 @@ export class ConflictEditor {
   private phrases: Readonly<Record<string, string>> = {};
   private activeReviewBlock = -1;
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
-  private splitDisposers: Array<() => void> = [];
+  private splitLayout: ConflictSplitLayout | null = null;
   private conflictRoot: HTMLElement | null = null;
   private reviewOverlay: DiffReviewOverlay | null = null;
+  private ours = "";
+  private theirs = "";
+  private copy: GitOperationCopy | null = null;
+  private readonly unifiedDecision = (
+    side: ConflictResolutionSide,
+    decision: Exclude<ConflictResolutionDecision, "pending">,
+    source: ConflictSourceRange,
+  ) => this.applyConflictDecision(side, decision, source);
 
   mount(
     parent: HTMLElement,
@@ -130,12 +138,16 @@ export class ConflictEditor {
     const ours = decodeExactText(conflict.ours ?? "").text;
     const theirs = decodeExactText(conflict.theirs ?? "").text;
     const base = decodeExactText(conflict.base ?? "").text;
+    this.ours = ours;
+    this.theirs = theirs;
+    this.copy = copy;
     this.resolutionModel = ConflictResolutionModel.create(base, ours, theirs, this.exactResult.text);
     this.activeReviewBlock = -1;
     this.collapseCoordinator = new ConflictCollapseCoordinator(base, ours, this.exactResult.text, theirs);
     const root = document.createElement("section");
-    root.className = "conflict-three-pane";
+    root.className = `conflict-three-pane conflict-layout-${presentation.layout}`;
     root.setAttribute("aria-label", copy.conflictInputs);
+    root.style.setProperty("--conflict-source-tab-size", String(preferences.editorTabSize));
     const review = projectConflictDiff(this.resolutionModel.snapshots());
     root.dataset.oursChanges = String(review.blocks.filter((block) => block.actions.some((action) => action.side === "ours")).length);
     root.dataset.theirsChanges = String(review.blocks.filter((block) => block.actions.some((action) => action.side === "theirs")).length);
@@ -217,7 +229,11 @@ export class ConflictEditor {
     theirsBinding.view.dom.classList.add("conflict-theirs-pane");
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
     this.syncReviewDecorations();
-    this.mountSplitLayout(root);
+    this.splitLayout = new ConflictSplitLayout(root, this.leftMerge, this.rightMerge, presentation, () => {
+      this.reviewOverlay?.schedule();
+      for (const binding of this.bindings) binding.view.requestMeasure();
+      this.updateScrollbars();
+    });
     for (const binding of this.bindings) this.collapseCoordinator.register(binding.view);
     this.observeConflictControls(root);
     this.mountScrollbars(root);
@@ -295,6 +311,7 @@ export class ConflictEditor {
 
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
+    this.conflictRoot?.style.setProperty("--conflict-source-tab-size", String(preferences.editorTabSize));
     for (const binding of this.bindings) {
       binding.view.dispatch({ effects: [
         binding.tabSize.reconfigure(EditorState.tabSize.of(preferences.editorTabSize)),
@@ -304,6 +321,15 @@ export class ConflictEditor {
           : []),
       ] });
     }
+  }
+
+  setPresentation(presentation: DiffPresentation): void {
+    this.presentation = { ...presentation };
+    this.splitLayout?.setPresentation(presentation);
+    this.conflictRoot?.classList.toggle("conflict-layout-unified", presentation.layout === "unified");
+    this.conflictRoot?.classList.toggle("conflict-layout-split", presentation.layout === "split");
+    this.syncUnifiedReview();
+    this.requestMeasure();
   }
 
   setTheme(theme: EffectiveTheme): void {
@@ -334,6 +360,7 @@ export class ConflictEditor {
       }
     }
     this.syncConflictControls();
+    this.syncUnifiedReview();
   }
 
   destroy(): void {
@@ -343,7 +370,8 @@ export class ConflictEditor {
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.diffScrollbars = null;
-    for (const dispose of this.splitDisposers.splice(0)) dispose();
+    this.splitLayout?.destroy();
+    this.splitLayout = null;
     this.conflictRoot = null;
     this.reviewOverlay?.destroy();
     this.reviewOverlay = null;
@@ -358,6 +386,7 @@ export class ConflictEditor {
     this.bindings = [];
     this.synchronizing = false;
     this.resolutionModel = null; this.activeReviewBlock = -1;
+    this.copy = null; this.ours = ""; this.theirs = "";
   }
 
   private extensions(
@@ -408,6 +437,7 @@ export class ConflictEditor {
       this.collapseCoordinator?.extension(collapseSide) ?? [],
       mergeDiffSemanticHighlighting,
       diffReviewBlockDecorations,
+      resultSide === "primary" ? unifiedConflictReviewExtension : [],
       resultSide === "primary" ? conflictResolutionHistoryExtension : [],
       history(), drawSelection(), highlightActiveLine(),
       highlightActiveLineGutter(), asterlynSearch(), highlightSelectionMatches(), asterlynSyntaxHighlighting,
@@ -529,11 +559,19 @@ export class ConflictEditor {
     group: HTMLDivElement,
     decision: Exclude<ConflictResolutionDecision, "pending">,
   ): void {
-    if (this.resultReadOnlyValue) return;
     const side = group.dataset.side as ConflictResolutionSide | undefined;
     const source = side ? this.sourceRangeForControl(group, side) : null;
+    if (!side || !source) return;
+    this.applyConflictDecision(side, decision, source);
+  }
+
+  private applyConflictDecision(
+    side: ConflictResolutionSide,
+    decision: Exclude<ConflictResolutionDecision, "pending">,
+    source: ConflictSourceRange,
+  ): void {
     const result = this.leftMerge?.b;
-    if (!side || !source || !result || !this.resolutionModel) return;
+    if (this.resultReadOnlyValue || !result || !this.resolutionModel) return;
     const before = this.resolutionModel.historyState();
     const changes = this.resolutionModel.applyDecision(side, decision, source, result.state.doc.toString());
     result.dispatch(conflictResolutionTransaction(
@@ -604,6 +642,22 @@ export class ConflictEditor {
       });
       binding.view.dispatch({ effects: setDiffReviewBlockDecorations.of(decorations) });
     }
+    this.syncUnifiedReview(snapshot, activeId);
+  }
+
+  private syncUnifiedReview(snapshot = this.reviewSnapshot(), activeBlockId: string | null = null): void {
+    const result = this.leftMerge?.b;
+    const model = this.resolutionModel;
+    if (!result || !model) return;
+    const review = snapshot && this.copy && this.presentation.layout === "unified"
+      ? {
+          cards: projectUnifiedConflictCards(model.snapshots(), { ...snapshot, activeBlockId }, this.ours, this.theirs),
+          copy: this.copy,
+          readOnly: this.resultReadOnlyValue,
+          decide: this.unifiedDecision,
+        }
+      : null;
+    result.dispatch({ effects: setUnifiedConflictReview.of(review) });
   }
 
   private mountReviewOverlay(root: HTMLElement): void {
@@ -631,7 +685,7 @@ export class ConflictEditor {
       this.rightMerge.a.scrollDOM,
     ];
     const resizeObserver = new ResizeObserver(() => {
-      this.applySplitLayout();
+      this.splitLayout?.apply();
       this.updateScrollbars();
     });
     this.diffScrollbars = { container, panes, contents, corner, resizeObserver };
@@ -652,97 +706,6 @@ export class ConflictEditor {
       disposeHorizontal();
       resizeObserver.disconnect();
     };
-  }
-
-  private mountSplitLayout(root: HTMLElement): void {
-    for (const dispose of this.splitDisposers.splice(0)) dispose();
-    let ours = this.presentation.conflictOursPercentage ?? CONFLICT_EQUAL_PERCENTAGE;
-    let result = this.presentation.conflictResultPercentage ?? CONFLICT_EQUAL_PERCENTAGE;
-    ({ ours, result } = normalizeConflictPercentages(ours, result));
-    this.presentation = {
-      ...this.presentation,
-      conflictOursPercentage: ours,
-      conflictResultPercentage: result,
-    };
-    const first = document.createElement("div");
-    first.className = "workbench-splitter vertical conflict-splitter conflict-splitter-ours";
-    first.setAttribute("aria-label", "Resize Ours and Result");
-    const second = document.createElement("div");
-    second.className = "workbench-splitter vertical conflict-splitter conflict-splitter-theirs";
-    second.setAttribute("aria-label", "Resize Result and Theirs");
-    root.append(first, second);
-    const contentWidth = () => conflictPaneLayout(root.clientWidth, ours, result).contentWidth;
-    const apply = () => {
-      this.presentation = {
-        ...this.presentation,
-        conflictOursPercentage: ours,
-        conflictResultPercentage: result,
-      };
-      this.applySplitLayout();
-    };
-    const reset = () => { ours = CONFLICT_EQUAL_PERCENTAGE; result = CONFLICT_EQUAL_PERCENTAGE; apply(); };
-    this.splitDisposers.push(
-      attachSplitter(first, {
-        orientation: "vertical",
-        getValue: () => contentWidth() * ours / 100,
-        getRange: () => {
-          const minimum = CONFLICT_PANE_MIN_PERCENTAGE / 100;
-          return {
-            minimum: contentWidth() * minimum,
-            maximum: contentWidth() * ((ours + result) / 100 - minimum),
-          };
-        },
-        onChange: (value) => {
-          ({ ours, result } = resizeConflictOursPercentage(
-            ours,
-            result,
-            value / contentWidth() * 100,
-          ));
-          apply();
-          this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
-        },
-        onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
-        onReset: reset,
-      }),
-      attachSplitter(second, {
-        orientation: "vertical",
-        getValue: () => contentWidth() * (ours + result) / 100,
-        getRange: () => ({
-          minimum: contentWidth() * (ours + CONFLICT_PANE_MIN_PERCENTAGE) / 100,
-          maximum: contentWidth() * (100 - CONFLICT_PANE_MIN_PERCENTAGE) / 100,
-        }),
-        onChange: (value) => {
-          result = value / contentWidth() * 100 - ours;
-          ({ ours, result } = normalizeConflictPercentages(ours, result));
-          apply();
-          this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
-        },
-        onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
-        onReset: reset,
-      }),
-    );
-    apply();
-  }
-
-  private applySplitLayout(): void {
-    const root = this.conflictRoot;
-    if (!root || !this.leftMerge) return;
-    const layout = conflictPaneLayout(
-      root.clientWidth,
-      this.presentation.conflictOursPercentage ?? CONFLICT_EQUAL_PERCENTAGE,
-      this.presentation.conflictResultPercentage ?? CONFLICT_EQUAL_PERCENTAGE,
-    );
-    const { oursWidth, resultWidth, theirsWidth } = layout;
-    root.style.setProperty("--conflict-ours-width", `${oursWidth}px`);
-    root.style.setProperty("--conflict-result-width", `${resultWidth}px`);
-    root.style.setProperty("--conflict-theirs-width", `${theirsWidth}px`);
-    const leftEditors = this.leftMerge.dom.querySelectorAll<HTMLElement>(".cm-mergeViewEditor");
-    if (leftEditors[0]) leftEditors[0].style.flex = `0 0 ${oursWidth}px`;
-    if (leftEditors[1]) leftEditors[1].style.flex = `0 0 ${resultWidth}px`;
-    const theirsEditor = this.rightMerge?.a.dom.closest<HTMLElement>(".cm-mergeViewEditor");
-    if (theirsEditor) theirsEditor.style.flex = `0 0 ${theirsWidth}px`;
-    this.reviewOverlay?.schedule();
-    this.requestMeasure();
   }
 
   private updateScrollbars(): void {

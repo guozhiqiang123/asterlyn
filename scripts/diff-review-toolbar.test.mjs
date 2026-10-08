@@ -89,7 +89,7 @@ test("replacement presentation delegates toolbar markup to the shared renderer",
   assert.doesNotMatch(source, /data-replacement-tool-change|data-replacement-tool-unchanged/u);
 });
 
-test("conflict toolbar includes file navigation without unsupported layout or bulk actions", () => {
+test("conflict toolbar includes three-way layout switching without bulk actions", () => {
   const html = renderDiffReviewToolbar({
     namespace: "editor",
     capabilities: { ...CONFLICT_DIFF_CAPABILITIES, toggleUnchanged: false },
@@ -98,6 +98,7 @@ test("conflict toolbar includes file navigation without unsupported layout or bu
     previousFileAvailable: true,
     nextFileAvailable: true,
     sourceAvailable: true,
+    layout: "unified",
     showWhitespace: false,
     copy,
   });
@@ -107,7 +108,8 @@ test("conflict toolbar includes file navigation without unsupported layout or bu
   assert.match(html, /previous-file/);
   assert.match(html, /next-file/);
   assert.match(html, /open-source/);
-  assert.doesNotMatch(html, /data-diff-layout/);
+  assert.match(html, /data-diff-layout="unified" aria-pressed="true"/);
+  assert.match(html, /data-diff-layout="split" aria-pressed="false"/);
   assert.match(html, /data-diff-whitespace/);
   assert.doesNotMatch(html, /data-diff-bulk/);
 });

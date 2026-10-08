@@ -837,7 +837,7 @@ export class AsterlynApp {
         renderEditor: () => this.renderEditor(),
         preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
         presentation: () => this.diffPresentation(), editorCopy: () => this.localization.catalog.editor,
-        status: (message) => this.setStatus(message, "warning"), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }), conflictSourceAvailable: (path) => this.filesEditorRuntime.files.fileForWorkspacePath(path) !== null,
+        status: (message) => this.setStatus(message, "warning"), setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }), conflictSourceAvailable: (path) => this.filesEditorRuntime.files.fileForWorkspacePath(path) !== null,
         revealConflictSource: () => this.locateCurrentProjectFile(), resolve: (deleteFile) => void this.resolveGitConflict(deleteFile), notifyBlockedSwitch: async () => { await this.dialogRuntime.confirm(switchConflictBlockedNotice(this.localization.catalog)); },
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,

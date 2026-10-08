@@ -205,3 +205,151 @@
 .conflict-splitter-theirs {
   left: calc(var(--conflict-ours-width, var(--conflict-equal-pane-width)) + var(--conflict-action-gutter-width) + var(--conflict-result-width, var(--conflict-equal-pane-width)) + 29px);
 }
+
+.conflict-layout-unified {
+  grid-template-rows: 27px minmax(0, 1fr);
+}
+
+.conflict-layout-unified .conflict-pane-labels {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.conflict-layout-unified .conflict-pane-labels > :not([data-pane-id="result"]),
+.conflict-layout-unified .conflict-right-merge,
+.conflict-layout-unified .conflict-scrollbars,
+.conflict-layout-unified .conflict-splitter,
+.conflict-layout-unified .diff-review-overlay,
+.conflict-layout-unified .conflict-left-merge .cm-merge-revert,
+.conflict-layout-unified .conflict-left-merge .cm-mergeViewEditor:first-child {
+  display: none !important;
+}
+
+.conflict-layout-unified .conflict-pane-labels > [data-pane-id="result"] {
+  grid-column: 1;
+}
+
+.conflict-layout-unified .conflict-merge-content {
+  display: block;
+}
+
+.conflict-layout-unified .conflict-left-merge,
+.conflict-layout-unified .conflict-left-merge > .cm-mergeView,
+.conflict-layout-unified .conflict-left-merge .cm-mergeViewEditors,
+.conflict-layout-unified .conflict-left-merge .cm-mergeViewEditor:last-child,
+.conflict-layout-unified .conflict-left-merge .cm-mergeViewEditor:last-child > .cm-editor {
+  width: 100%;
+  height: 100%;
+}
+
+.conflict-layout-unified .conflict-left-merge .cm-mergeViewEditor:last-child {
+  flex: 1 1 100% !important;
+}
+
+.conflict-layout-unified .conflict-left-merge > .cm-mergeView {
+  overflow: hidden;
+}
+
+.conflict-layout-unified .conflict-left-merge .cm-scroller {
+  overflow: auto;
+  scrollbar-width: auto;
+}
+
+.conflict-layout-unified .conflict-left-merge .cm-scroller::-webkit-scrollbar {
+  display: block;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+.conflict-unified-source {
+  box-sizing: border-box;
+  width: calc(100% - 18px);
+  margin: 6px 9px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-chrome);
+  color: var(--text);
+  font-family: var(--editor-font-family);
+}
+
+.conflict-unified-source > header {
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 7px 2px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.conflict-unified-source > header > strong {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-soft);
+  font-family: var(--ui-font-family);
+  font-size: 11px;
+}
+
+.conflict-unified-source > header small {
+  color: var(--text-faint);
+  font: inherit;
+  font-weight: 400;
+}
+
+.conflict-unified-source > pre {
+  min-height: 24px;
+  margin: 0;
+  padding: 5px 10px 6px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--surface-chrome) 72%, transparent);
+  font: inherit;
+  line-height: 1.55;
+  tab-size: var(--conflict-source-tab-size, 2);
+  white-space: pre;
+}
+
+.conflict-unified-source-ours > pre {
+  background: color-mix(in srgb, var(--editor-diff-removed-bg) 72%, var(--surface-chrome));
+}
+
+.conflict-unified-source-theirs > pre {
+  background: color-mix(in srgb, var(--editor-diff-added-bg) 72%, var(--surface-chrome));
+}
+
+.conflict-unified-source > pre.is-empty {
+  color: var(--text-faint);
+  font-family: var(--ui-font-family);
+  font-style: italic;
+}
+
+.conflict-unified-source.is-active {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.conflict-unified-source.is-ignored > pre {
+  opacity: 0.54;
+}
+
+.conflict-unified-source .conflict-change-controls {
+  position: static;
+  left: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  transform: none;
+}
+
+.conflict-unified-decision {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  color: var(--text-soft);
+  font: 600 15px/1 var(--ui-font-family);
+}
+
+.conflict-unified-source.is-accepted .conflict-unified-decision {
+  color: var(--success-text);
+}

@@ -189,6 +189,7 @@ export class EditorSurface {
   setDiffPresentation(presentation: DiffPresentation): void {
     this.diffEditor.setPresentation(presentation);
     this.editableDiffEditor.setPresentation(presentation);
+    this.conflictEditor.setPresentation(presentation);
   }
 
   requestMeasure(): void {

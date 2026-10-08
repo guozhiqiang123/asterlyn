@@ -57,10 +57,11 @@ test("the first conflict splitter transfers width only between Ours and Result",
 });
 
 test("two-pane and three-pane editors use the shared header and splitter contracts", async () => {
-  const [editable, editableSplitter, conflict, labels] = await Promise.all([
+  const [editable, editableSplitter, conflict, conflictSplitter, labels] = await Promise.all([
     readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/diff-review/editable-diff-review-splitter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/conflict-split-layout.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/diff-side-labels.ts", import.meta.url), "utf8"),
   ]);
 
@@ -68,10 +69,12 @@ test("two-pane and three-pane editors use the shared header and splitter contrac
   assert.match(editable, /editableSplitPercentage \?\? 42/u);
   assert.match(editableSplitter, /attachSplitter\(splitter/u);
   assert.match(conflict, /createDiffReviewPaneHeaders/u);
-  assert.equal((conflict.match(/attachSplitter\(/g) ?? []).length, 2);
-  assert.match(conflict, /normalizeConflictPercentages/u);
-  assert.match(conflict, /this\.rightMerge\?\.a\.dom\.closest<HTMLElement>/u);
-  assert.match(conflict, /theirsEditor\.style\.flex = `0 0 \$\{theirsWidth\}px`/u);
+  assert.match(conflict, /new ConflictSplitLayout/u);
+  assert.equal((conflictSplitter.match(/attachSplitter\(/g) ?? []).length, 2);
+  assert.match(conflictSplitter, /normalizeConflictPercentages/u);
+  assert.match(conflictSplitter, /this\.rightMerge\.a\.dom\.closest<HTMLElement>/u);
+  assert.match(conflictSplitter, /theirsEditor\.style\.flex = `0 0 \$\{theirsWidth\}px`/u);
   assert.match(conflict, /resizeObserver\.observe\(root\)/u);
-  assert.match(conflict, /const reset = \(\) => \{ ours = CONFLICT_EQUAL_PERCENTAGE; result = CONFLICT_EQUAL_PERCENTAGE; apply\(\); \};/u);
+  assert.match(conflictSplitter, /this\.ours = CONFLICT_EQUAL_PERCENTAGE/u);
+  assert.match(conflictSplitter, /this\.result = CONFLICT_EQUAL_PERCENTAGE/u);
 });

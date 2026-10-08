@@ -194,13 +194,14 @@ export class LazyEditableDiffEditor {
   }
 }
 
-/** Defers the three-pane merge runtime until an unresolved path is opened. */
+/** Defers the split/unified conflict runtime until an unresolved path is opened. */
 export class LazyConflictEditor {
   private implementation: ConflictEditor | null = null;
   private loading: Promise<ConflictEditor> | null = null;
   private pendingMount: ConflictMount | null = null;
   private mountGeneration = 0;
   private preferences: AppPreferences | null = null;
+  private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private resultReadOnly = false;
@@ -218,6 +219,7 @@ export class LazyConflictEditor {
   ): void {
     const mount = { parent, conflict, result, preferences, presentation, copy, editorCopy, onChange, onReady };
     this.pendingMount = mount;
+    this.presentation = { ...presentation };
     if (this.implementation) {
       this.install(this.implementation, mount);
       return;
@@ -282,6 +284,12 @@ export class LazyConflictEditor {
     this.implementation?.setPreferences(preferences);
   }
 
+  setPresentation(presentation: DiffPresentation): void {
+    this.presentation = { ...presentation };
+    if (this.pendingMount) this.pendingMount = { ...this.pendingMount, presentation };
+    this.implementation?.setPresentation(presentation);
+  }
+
   setTheme(theme: EffectiveTheme): void {
     this.theme = theme;
     this.implementation?.setTheme(theme);
@@ -312,7 +320,7 @@ export class LazyConflictEditor {
       mount.conflict,
       mount.result,
       this.preferences ?? mount.preferences,
-      mount.presentation,
+      this.presentation,
       mount.copy,
       mount.editorCopy,
       mount.onChange,

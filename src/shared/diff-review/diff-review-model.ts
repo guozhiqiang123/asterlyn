@@ -102,7 +102,7 @@ export const CONFLICT_DIFF_CAPABILITIES: DiffReviewCapabilities = Object.freeze(
   navigateFiles: true,
   openSource: true,
   toggleUnchanged: true,
-  toggleLayout: false,
+  toggleLayout: true,
   toggleWhitespace: true,
   cancel: true,
   finish: true,

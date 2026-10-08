@@ -56,6 +56,7 @@ export interface ConflictEditorRuntimeOptions {
   editorCopy(): EditorCopy;
   status(message: string): void;
   resolve(deleteFile: boolean): void;
+  setDiffLayout(layout: "unified" | "split"): void;
   setWhitespace(showWhitespace: boolean): void;
   conflictSourceAvailable(path: string): boolean;
   revealConflictSource(): void;
@@ -173,6 +174,12 @@ export class ConflictEditorRuntime {
     this.query("#content-header").querySelector<HTMLButtonElement>("[data-diff-whitespace]")?.addEventListener("click", () => {
       this.options.setWhitespace(!this.options.preferences().showWhitespace);
     });
+    this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-layout]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const layout = button.dataset.diffLayout;
+        if (layout === "split" || layout === "unified") this.options.setDiffLayout(layout);
+      });
+    });
     root.querySelector<HTMLButtonElement>("#conflict-resolve-cancel")?.addEventListener("click", () => void this.requestCancel());
     root.querySelector<HTMLButtonElement>("#conflict-resolve-delete")?.addEventListener("click", () => this.options.resolve(true));
     root.querySelector<HTMLButtonElement>("#conflict-resolve-save")?.addEventListener("click", () => void this.requestSave());
@@ -187,6 +194,7 @@ export class ConflictEditorRuntime {
       namespace: "editor",
       capabilities: CONFLICT_DIFF_CAPABILITIES,
       ready,
+      layout: this.options.presentation().layout,
       showWhitespace: this.options.preferences().showWhitespace,
       expandedUnchanged: this.options.surface.conflictUnchangedExpanded(),
       previousFileAvailable: files.previous !== null,
