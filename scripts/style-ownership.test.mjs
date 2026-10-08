@@ -371,8 +371,9 @@ test("merged Diff restates its collapsed rows and centres the revert control on 
 });
 
 test("conflict Diff owns three aligned docked scrollbars and the shared Diff control", async () => {
-  const [css, controls, editor, actionGutter, icons] = await Promise.all([
+  const [css, filesCss, controls, editor, actionGutter, icons] = await Promise.all([
     readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/files-editor.css", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/controls.css", import.meta.url), "utf8"),
     readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/diff-review/diff-review-action-gutter.ts", import.meta.url), "utf8"),
@@ -382,6 +383,8 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*var\(--conflict-ours-width, 27%\)[^}]*var\(--conflict-result-width, 46%\)[^}]*var\(--conflict-theirs-width, 27%\)[^}]*auto;/s);
   assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
   assert.match(css, /--conflict-action-gutter-width:\s*58px;/u);
+  assert.match(css, /\.conflict-editor-actions > \.primary-button,[^}]*\.conflict-editor-actions > \.secondary-button\s*\{[^}]*white-space:\s*nowrap;/s);
+  assert.match(filesCss, /\.diff-controls button\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control/u);
   assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control\s*\{[^}]*position:\s*relative;[^}]*margin:\s*0;[^}]*transform:\s*none;/s);
   assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*min-width:\s*var\(--diff-change-control-width, 26px\);[^}]*max-width:\s*var\(--diff-change-control-width, 26px\);[^}]*background:\s*var\(--bg-elevated\);/s);

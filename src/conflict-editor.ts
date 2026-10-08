@@ -58,6 +58,10 @@ import {
 } from "./shared/diff-review/diff-review-block-decoration.ts";
 import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
 import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
+import {
+  conflictPaneLayout,
+  normalizeConflictPercentages,
+} from "./shared/diff-review/conflict-diff-review-layout.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -672,8 +676,8 @@ export class ConflictEditor {
 
   private mountSplitLayout(root: HTMLElement): void {
     for (const dispose of this.splitDisposers.splice(0)) dispose();
-    let ours = clampConflictPercentage(this.presentation.conflictOursPercentage ?? 27);
-    let result = clampConflictPercentage(this.presentation.conflictResultPercentage ?? 46);
+    let ours = this.presentation.conflictOursPercentage ?? 27;
+    let result = this.presentation.conflictResultPercentage ?? 46;
     ({ ours, result } = normalizeConflictPercentages(ours, result));
     this.presentation = {
       ...this.presentation,
@@ -687,7 +691,7 @@ export class ConflictEditor {
     second.className = "workbench-splitter vertical conflict-splitter conflict-splitter-theirs";
     second.setAttribute("aria-label", "Resize Result and Theirs");
     root.append(first, second);
-    const contentWidth = () => Math.max(1, root.clientWidth - 116);
+    const contentWidth = () => conflictPaneLayout(root.clientWidth, ours, result).contentWidth;
     const apply = () => {
       this.presentation = {
         ...this.presentation,
@@ -736,20 +740,20 @@ export class ConflictEditor {
   private applySplitLayout(): void {
     const root = this.conflictRoot;
     if (!root || !this.leftMerge) return;
-    const contentWidth = Math.max(1, root.clientWidth - 116);
-    const normalized = normalizeConflictPercentages(
+    const layout = conflictPaneLayout(
+      root.clientWidth,
       this.presentation.conflictOursPercentage ?? 27,
       this.presentation.conflictResultPercentage ?? 46,
     );
-    const oursWidth = contentWidth * normalized.ours / 100;
-    const resultWidth = contentWidth * normalized.result / 100;
-    const theirsWidth = Math.max(0, contentWidth - oursWidth - resultWidth);
+    const { oursWidth, resultWidth, theirsWidth } = layout;
     root.style.setProperty("--conflict-ours-width", `${oursWidth}px`);
     root.style.setProperty("--conflict-result-width", `${resultWidth}px`);
     root.style.setProperty("--conflict-theirs-width", `${theirsWidth}px`);
     const leftEditors = this.leftMerge.dom.querySelectorAll<HTMLElement>(".cm-mergeViewEditor");
     if (leftEditors[0]) leftEditors[0].style.flex = `0 0 ${oursWidth}px`;
     if (leftEditors[1]) leftEditors[1].style.flex = `0 0 ${resultWidth}px`;
+    const theirsEditor = this.rightMerge?.a.dom.closest<HTMLElement>(".cm-mergeViewEditor");
+    if (theirsEditor) theirsEditor.style.flex = `0 0 ${theirsWidth}px`;
     this.reviewOverlay?.schedule();
     this.requestMeasure();
   }
@@ -773,16 +777,6 @@ export class ConflictEditor {
     const hasOverflow = scrollers.some((scroller) => scroller.scrollWidth > scroller.clientWidth);
     this.diffScrollbars.container.style.display = hasOverflow ? "grid" : "none";
   }
-}
-
-function clampConflictPercentage(value: number): number {
-  return Math.max(18, Math.min(64, Number.isFinite(value) ? value : 27));
-}
-
-function normalizeConflictPercentages(oursValue: number, resultValue: number): { ours: number; result: number } {
-  const ours = clampConflictPercentage(oursValue);
-  const result = Math.max(18, Math.min(100 - ours - 18, Number.isFinite(resultValue) ? resultValue : 46));
-  return { ours, result };
 }
 
 function paneReviewStatus(

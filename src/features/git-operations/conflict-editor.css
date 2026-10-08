@@ -3,11 +3,34 @@
 }
 
 .conflict-editor-actions {
+  overflow: hidden;
   min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .conflict-editor-actions .diff-review-toolbar {
+  overflow: hidden;
   min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.conflict-editor-actions .diff-review-summary {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.conflict-editor-actions .diff-controls,
+.conflict-editor-actions .diff-navigation-controls,
+.conflict-editor-actions > .primary-button,
+.conflict-editor-actions > .secondary-button {
+  flex: 0 0 auto;
+}
+
+.conflict-editor-actions > .primary-button,
+.conflict-editor-actions > .secondary-button {
+  white-space: nowrap;
 }
 
 .conflict-editor-actions .destructive-secondary {

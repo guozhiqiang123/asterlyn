@@ -360,6 +360,7 @@
   color: var(--text-faint);
   cursor: pointer;
   font-size: 9px;
+  white-space: nowrap;
 }
 
 .diff-controls button:last-child {
