@@ -112,25 +112,29 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 8 — package and acceptance evidence
 
-- The complete frontend suite passed: 885 tests, 0 failures. TypeScript checking, the production
+- The complete frontend suite passed: 886 tests, 0 failures. TypeScript checking, the production
   frontend build, and `git diff --check` also passed.
 - The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
   release executable and the installed executable each rendered the application shell inside the
   six-second native smoke bound.
 - The accepted macOS arm64 archive is
-  `target/release/bundle/macos/Asterlyn-unified-diff-review-no-status-rail-20261008-macos-arm64.zip`,
-  9,146,050 bytes, SHA-256
-  `0d3f7ffe5de7ea1c548bdb09f9e28a315247b1261373c5397656eb0b52f6494d`.
+  `target/release/bundle/macos/Asterlyn-conflict-layout-toolbar-fix-20261008-macos-arm64.zip`,
+  9,147,008 bytes, SHA-256
+  `e04be1167042455b994e0c3daed3f9252e2670b632a73db56fb4c2e9624dc6ba`.
 - The packaged and installed executables are both 24,046,032 bytes with SHA-256
-  `76625e13a187c4f01f4ed18b8f654d63fb31547de6ff699183fcdda319b25c1c`. The bundle is an arm64
+  `320b880dc2bda196c10b39ee1a3b745a2ee62d1e5ba573dabe45fabf9299ce09`. The bundle is an arm64
   application with an ad-hoc hardened-runtime signature and passed strict deep signature
   verification before and after installation.
 - `/Applications/Asterlyn.app` was replaced and relaunched against this worktree. The previous
   installation remains recoverable at
-  `/Users/gzq/.Trash/Asterlyn-before-no-status-rail-20261008-132018.app`.
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-layout-20261008-132804.app`.
 - The final visual refinement removes the redundant 3px per-line conflict-status rail while keeping
   the 5px Diff gutter, connector status, action state, active-block emphasis, and ignored-text
   treatment. A focused source-level regression prevents the removed inset rail from returning.
+- Splitter projection now computes all three content widths from one gutter-exclusive layout and
+  explicitly resizes the visible Theirs editor, so extreme drags still occupy the full container.
+  Conflict toolbar summaries shrink before controls, while bulk and completion buttons retain
+  single-line labels and fixed hit targets.
 - Host evidence: macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1,
   and Git 2.48.1.
 - The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,
