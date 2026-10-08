@@ -103,9 +103,12 @@ grouped from left to right:
 5. unchanged-line expansion and visible-whitespace controls; and
 6. surface-specific actions.
 
-Two-pane surfaces retain split/unified switching. Conflict resolution remains three-pane and does
-not present a misleading unified mode. The toolbar uses command IDs rather than one-off click
-handlers so buttons, shortcuts, menus, and the command palette share availability and execution.
+Two-pane surfaces retain split/unified switching. Conflict resolution supports both an aligned
+three-pane layout and a true three-way unified layout. The unified layout is not a two-way Diff in
+disguise: common Result content appears once, and every Base-owned conflict block presents its Ours
+source fragment, editable Result range, and Theirs source fragment together. The toolbar uses
+command IDs rather than one-off click handlers so buttons, shortcuts, menus, and the command palette
+share availability and execution.
 
 The first delivery keeps whitespace as a display preference. Ignore-whitespace comparison is a
 separate algorithmic policy and must not be disguised as the existing `showWhitespace` setting. A
@@ -410,6 +413,23 @@ Every phase is committed separately and must leave the branch buildable.
 
 **Commit:** `docs record unified diff review acceptance`
 
+### Phase 9 — true three-way unified conflict review
+
+1. Enable the shared split/unified control for conflict resolution without adding conflict-wide
+   Ours/All/Theirs actions.
+2. Keep the existing editable Result `EditorView` mounted in both layouts. Unified presentation is
+   supplied by non-serializable block widgets, so layout switching preserves exact bytes, selection,
+   scroll, Undo/Redo history, and transient per-side decisions.
+3. Project each Base-owned block as an Ours source card, the real editable Result range, and a Theirs
+   source card. Source-card actions carry immutable source ranges directly and use the same
+   Apply/Ignore transaction path as split gutters.
+4. Keep common lines, syntax highlighting, folding, search, whitespace display, navigation, manual
+   editing, completion gating, and save/stage ownership on the one Result document.
+5. Hide split-only connectors, splitters, duplicate source editors, and docked scrollbars in unified
+   mode; restore them without recomputing or replacing Result state when switching back.
+
+**Commit:** `feat add unified conflict review`
+
 ## Test and acceptance matrix
 
 ### Model tests
@@ -428,6 +448,10 @@ Every phase is committed separately and must leave the branch buildable.
 - Action controls own the correct block after remount, fold, edit, and localization changes.
 - Source and Result decorations expose pending, accepted, ignored, reverted, manual, and readonly
   states without color-only meaning.
+- Conflict split/unified switching keeps the same Result editor state and never serializes source
+  cards into the file.
+- Unified conflict cards preserve explicit per-side Apply/Ignore decisions, including Undo/Redo and
+  the save gate after switching layouts.
 - Splitters enforce minimums, reset defaults, persist committed values, and request editor measure.
 
 ### Geometry and scrolling tests
