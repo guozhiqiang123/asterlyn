@@ -654,6 +654,7 @@ export class ConflictEditor {
   private mountReviewOverlay(root: HTMLElement): void {
     if (!this.leftMerge || !this.rightMerge) return;
     this.reviewOverlay?.destroy();
+    const viewport = root.querySelector<HTMLElement>(".conflict-merge-content") ?? root;
     this.reviewOverlay = new DiffReviewOverlay(root, {
       ours: this.leftMerge.a,
       result: this.leftMerge.b,
@@ -661,7 +662,7 @@ export class ConflictEditor {
     }, [
       { from: "ours", to: "result" },
       { from: "result", to: "theirs" },
-    ]);
+    ], viewport);
   }
 
   private mountScrollbars(root: HTMLElement): void {

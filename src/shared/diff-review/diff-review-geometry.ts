@@ -8,10 +8,44 @@ export interface DiffReviewMeasuredRect {
   readonly bottom: number;
 }
 
+export interface DiffReviewOverlayFrame {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+  readonly pageLeft: number;
+  readonly pageTop: number;
+}
+
+interface RectBounds {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+export function diffReviewOverlayFrame(
+  root: RectBounds,
+  viewport: RectBounds,
+): DiffReviewOverlayFrame {
+  const pageLeft = Math.max(root.left, viewport.left);
+  const pageTop = Math.max(root.top, viewport.top);
+  const pageRight = Math.min(root.right, viewport.right);
+  const pageBottom = Math.min(root.bottom, viewport.bottom);
+  return {
+    left: pageLeft - root.left,
+    top: pageTop - root.top,
+    width: Math.max(0, pageRight - pageLeft),
+    height: Math.max(0, pageBottom - pageTop),
+    pageLeft,
+    pageTop,
+  };
+}
+
 export function measureDiffReviewRange(
   view: EditorView,
   range: DiffReviewRange,
-  root: DOMRect,
+  root: Pick<DOMRect, "left" | "top">,
 ): DiffReviewMeasuredRect | null {
   const from = Math.min(view.state.doc.length, Math.max(0, range.from));
   const to = Math.min(view.state.doc.length, Math.max(from, range.to));

@@ -25,7 +25,13 @@ export class EditableDiffReviewSurface {
   mount(parent: HTMLElement, before: EditorView, after: EditorView): void {
     this.collapse?.register(before);
     this.collapse?.register(after);
-    this.overlay = new DiffReviewOverlay(parent, { before, after }, [{ from: "before", to: "after" }]);
+    const viewport = before.dom.closest<HTMLElement>(".cm-mergeView") ?? parent;
+    this.overlay = new DiffReviewOverlay(
+      parent,
+      { before, after },
+      [{ from: "before", to: "after" }],
+      viewport,
+    );
   }
 
   refresh(chunks: readonly Chunk[]): void {

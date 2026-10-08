@@ -77,6 +77,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  background: var(--surface-chrome);
 }
 
 .content-body.editable-diff-surface .cm-mergeViewEditors > .cm-mergeViewEditor:first-child {
@@ -119,7 +120,7 @@
   width: 32px;
   flex: 0 0 32px;
   border-inline: 1px solid var(--border);
-  background: var(--surface-chrome);
+  background: transparent;
 }
 
 .content-body.editable-diff-surface .cm-mergeView .cm-scroller {
