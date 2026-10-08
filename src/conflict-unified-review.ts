@@ -1,4 +1,4 @@
-import { RangeSetBuilder, StateEffect, StateField, Text, type Extension } from "@codemirror/state";
+import { StateEffect, StateField, Text, type Extension, type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import type {
   ConflictResolutionBlockSnapshot,
@@ -7,6 +7,7 @@ import type {
   ConflictSourceRange,
 } from "./conflict-resolution-model.ts";
 import type { GitOperationCopy } from "./localization/catalog.ts";
+import { icon } from "./icons.ts";
 import type { DiffReviewBlockStatus, DiffReviewSnapshot } from "./shared/diff-review/diff-review-model.ts";
 import { createDiffReviewActionGroup } from "./shared/diff-review/diff-review-action-gutter.ts";
 
@@ -67,22 +68,22 @@ export const unifiedConflictReviewExtension: Extension = StateField.define<Decor
     const effect = transaction.effects.find((candidate) => candidate.is(setUnifiedConflictReview));
     if (!effect) return decorations.map(transaction.changes);
     if (!effect.value) return Decoration.none;
-    const builder = new RangeSetBuilder<Decoration>();
+    const widgets: Range<Decoration>[] = [];
     for (const card of effect.value.cards) {
       const from = lineStart(transaction.newDoc, card.result.from);
       const to = lineEnd(transaction.newDoc, card.result.from, card.result.to);
-      builder.add(from, from, Decoration.widget({
+      widgets.push(Decoration.widget({
         widget: new UnifiedConflictSourceWidget(card, card.ours, effect.value),
         block: true,
         side: -1,
-      }));
-      builder.add(to, to, Decoration.widget({
+      }).range(from));
+      widgets.push(Decoration.widget({
         widget: new UnifiedConflictSourceWidget(card, card.theirs, effect.value),
         block: true,
         side: 1,
-      }));
+      }).range(to));
     }
-    return builder.finish();
+    return Decoration.set(widgets, true);
   },
   provide: (field) => EditorView.decorations.from(field),
 });
@@ -194,11 +195,14 @@ class UnifiedConflictSourceWidget extends WidgetType {
   private decisionIndicator(): HTMLElement {
     const accepted = this.source.decision === "accepted";
     const indicator = document.createElement("span");
-    indicator.className = "conflict-unified-decision";
-    indicator.setAttribute("aria-label", accepted
+    const label = accepted
       ? this.source.side === "ours" ? this.review.copy.acceptOursChange : this.review.copy.acceptTheirsChange
-      : this.source.side === "ours" ? this.review.copy.ignoreOursChange : this.review.copy.ignoreTheirsChange);
-    indicator.textContent = accepted ? "✓" : "×";
+      : this.source.side === "ours" ? this.review.copy.ignoreOursChange : this.review.copy.ignoreTheirsChange;
+    indicator.className = `conflict-unified-decision is-${this.source.decision}`;
+    indicator.setAttribute("role", "status");
+    indicator.setAttribute("aria-label", label);
+    indicator.title = label;
+    indicator.innerHTML = icon(accepted ? "check" : "close", 15);
     return indicator;
   }
 }

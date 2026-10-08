@@ -262,11 +262,12 @@
 
 .conflict-unified-source {
   box-sizing: border-box;
-  width: calc(100% - 18px);
-  margin: 6px 9px;
+  width: 100%;
+  margin: 6px 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border-block: 1px solid var(--border);
+  border-inline: 0;
+  border-radius: 0;
   background: var(--surface-chrome);
   color: var(--text);
   font-family: var(--editor-font-family);
@@ -301,7 +302,7 @@
 .conflict-unified-source > pre {
   min-height: 24px;
   margin: 0;
-  padding: 5px 10px 6px;
+  padding: 5px 0 6px;
   overflow-x: auto;
   background: color-mix(in srgb, var(--surface-chrome) 72%, transparent);
   font: inherit;
@@ -346,10 +347,23 @@
   height: 26px;
   flex: 0 0 26px;
   place-items: center;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--border);
   color: var(--text-soft);
-  font: 600 15px/1 var(--ui-font-family);
 }
 
-.conflict-unified-source.is-accepted .conflict-unified-decision {
+.conflict-unified-decision > .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.conflict-unified-decision.is-accepted {
+  background: color-mix(in srgb, var(--success-text) 12%, var(--bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success-text) 42%, var(--border));
   color: var(--success-text);
+}
+
+.conflict-unified-decision.is-ignored {
+  color: var(--text-faint);
 }

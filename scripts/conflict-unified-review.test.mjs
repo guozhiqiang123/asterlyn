@@ -56,6 +56,37 @@ test("unified source widgets are presentation-only and never enter Result bytes"
   assert.equal(shown.doc, state.doc, "layout decoration must not replace the Result document");
 });
 
+test("coincident unified cards sort by position and widget side across file refreshes", () => {
+  const source = (side, text) => ({
+    side, text, range: { from: 0, to: 0 }, firstLine: 1, lastLine: 1,
+    changed: true, decision: "pending",
+  });
+  const cards = [0, 1].map((id) => ({
+    id,
+    result: { from: 0, to: 0 },
+    status: "pending",
+    active: id === 0,
+    ours: source("ours", `ours ${id}`),
+    theirs: source("theirs", `theirs ${id}`),
+  }));
+  const review = {
+    cards,
+    copy: EN_US.gitOperations,
+    readOnly: false,
+    decide() {},
+  };
+  const state = EditorState.create({ doc: "result\n", extensions: [unifiedConflictReviewExtension] });
+
+  const firstFile = state.update({ effects: setUnifiedConflictReview.of(review) }).state;
+  const nextFile = firstFile.update({ effects: setUnifiedConflictReview.of({
+    ...review,
+    cards: cards.map((card) => ({ ...card, ours: { ...card.ours, text: `next ${card.id}` } })),
+  }) }).state;
+
+  assert.equal(firstFile.doc.toString(), "result\n");
+  assert.equal(nextFile.doc.toString(), "result\n");
+});
+
 test("unified cards project the same explicit per-side decisions as split gutters", () => {
   const model = ConflictResolutionModel.create(base, ours, theirs, result);
   const source = model.snapshots()[0].ours;
@@ -79,4 +110,17 @@ test("layout switching reconfigures the mounted Result instead of recreating it"
   assert.doesNotMatch(presentation, /destroy\(|new MergeView|\.mount\(/u);
   assert.match(editor, /resultSide === "primary" \? unifiedConflictReviewExtension : \[\]/u);
   assert.match(surface, /this\.conflictEditor\.setPresentation\(presentation\)/u);
+});
+
+test("unified source patches align with Result and completed decisions retain a full control shell", async () => {
+  const [widget, styles] = await Promise.all([
+    readFile(new URL("../src/conflict-unified-review.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(styles, /\.conflict-unified-source \{[\s\S]*?width: 100%;[\s\S]*?margin: 6px 0;[\s\S]*?border-inline: 0;/u);
+  assert.match(styles, /\.conflict-unified-source > pre \{[\s\S]*?padding: 5px 0 6px;/u);
+  assert.match(widget, /indicator\.className = `conflict-unified-decision is-\$\{this\.source\.decision\}`/u);
+  assert.match(widget, /indicator\.innerHTML = icon\(accepted \? "check" : "close", 15\)/u);
+  assert.match(styles, /\.conflict-unified-decision \{[\s\S]*?border-radius: 4px;[\s\S]*?background: var\(--bg-elevated\);[\s\S]*?box-shadow:/u);
 });
