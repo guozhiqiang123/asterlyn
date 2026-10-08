@@ -112,22 +112,22 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 8 — package and acceptance evidence
 
-- The complete frontend suite passed: 889 tests, 0 failures. TypeScript checking, the production
+- The complete frontend suite passed: 892 tests, 0 failures. TypeScript checking, the production
   frontend build, and `git diff --check` also passed.
 - The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
   release executable and the installed executable each rendered the application shell inside the
   six-second native smoke bound.
 - The accepted macOS arm64 archive is
-  `target/release/bundle/macos/Asterlyn-conflict-equal-columns-20261008-macos-arm64.zip`,
-  9,147,329 bytes, SHA-256
-  `d873e58c9b54e96bb0cf9c48db0900dd9f59fc4719a2fb0dbab814f68d86d86e`.
+  `target/release/bundle/macos/Asterlyn-explicit-conflict-decisions-20261008-macos-arm64.zip`,
+  9,147,335 bytes, SHA-256
+  `96de965a3a5cd08f678b38a285e6918a9bebe09a0fbcdf7bc184dee9ee14cca4`.
 - The packaged and installed executables are both 24,046,032 bytes with SHA-256
-  `7085ad07be5177cbff1c3713e4ef7cb1b05f63add3d5b365c28d90c0bf3f98a4`. The bundle is an arm64
+  `c8fe61955950f9d509dab83dc2b642361ea07b8b83de44e29a976f34c0827e62`. The bundle is an arm64
   application with an ad-hoc hardened-runtime signature and passed strict deep signature
   verification before and after installation.
 - `/Applications/Asterlyn.app` was replaced and relaunched against this worktree. The previous
   installation remains recoverable at
-  `/Users/gzq/.Trash/Asterlyn-before-conflict-equal-20261008-134500.app`.
+  `/Users/gzq/.Trash/Asterlyn-before-explicit-conflicts-20261008-141500.app`.
 - The final visual refinement removes the redundant 3px per-line conflict-status rail while keeping
   the 5px Diff gutter, connector fill, action state, active-block emphasis, and ignored-text
   treatment. Connector edge strokes were also removed so Patch ranges do not paint 1px colored
