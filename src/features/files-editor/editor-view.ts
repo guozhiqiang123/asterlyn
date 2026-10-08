@@ -11,6 +11,8 @@ import {
 import type { AppPreferences } from "../../preferences.ts";
 import type { EditorCopy, ShellCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import { READ_ONLY_DIFF_CAPABILITIES } from "./diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "./diff-review/diff-review-toolbar.ts";
 
 export interface EditorTabsViewModel {
   readonly session: EditorSession;
@@ -132,22 +134,41 @@ export function renderMarkdownModeControls(tab: TextTabState | null, copy: Edito
 
 export function renderDiffControls(model: DiffControlsViewModel): string {
   const copy = model.copy ?? EN_US.editor;
-  return `<div class="diff-toolbar" aria-label="${escapeAttribute(copy.diffToolbar)}">
-    <div class="diff-navigation-controls" role="group" aria-label="${escapeAttribute(copy.diffNavigation)}">
-      <button class="compact-icon-button" type="button" data-diff-action="previous-change" aria-label="${escapeAttribute(copy.previousChange)}" title="${escapeAttribute(copy.previousChange)}" ${model.textReady ? "" : "disabled"}>${icon("up", 15)}</button>
-      <button class="compact-icon-button" type="button" data-diff-action="next-change" aria-label="${escapeAttribute(copy.nextChange)}" title="${escapeAttribute(copy.nextChange)}" ${model.textReady ? "" : "disabled"}>${icon("down", 15)}</button>
-      <span class="diff-control-separator" aria-hidden="true"></span>
-      <button class="compact-icon-button" type="button" data-diff-action="previous-file" aria-label="${escapeAttribute(copy.previousFile)}" title="${escapeAttribute(copy.previousFile)}" ${model.previousFile ? "" : "disabled"}>${icon("back", 15)}</button>
-      <button class="compact-icon-button" type="button" data-diff-action="next-file" aria-label="${escapeAttribute(copy.nextFile)}" title="${escapeAttribute(copy.nextFile)}" ${model.nextFile ? "" : "disabled"}>${icon("forward", 15)}</button>
-      <button class="compact-icon-button" type="button" data-diff-action="open-source" aria-label="${escapeAttribute(copy.openSource)}" title="${escapeAttribute(copy.openSource)}" ${model.canOpenSource ? "" : "disabled"}>${icon("locate", 15)}</button>
-      <button class="compact-icon-button ${model.expanded ? "active" : ""}" type="button" data-diff-action="toggle-unchanged" aria-label="${escapeAttribute(model.expanded ? copy.collapseUnchanged : copy.expandUnchanged)}" title="${escapeAttribute(model.expanded ? copy.collapseUnchanged : copy.expandUnchanged)}" aria-pressed="${model.expanded}" ${model.textReady ? "" : "disabled"}>${icon(model.expanded ? "collapse" : "expand", 15)}</button>
-    </div>
-    ${model.imageDiff ? "" : `<div class="diff-controls" role="group" aria-label="${escapeAttribute(copy.diffPresentation)}">
-      <button type="button" data-diff-layout="unified" aria-pressed="${model.preferences.diffLayout === "unified"}" title="${escapeAttribute(copy.unifiedTitle)}" ${model.layoutLocked ? "disabled" : ""}>${escapeHtml(copy.unified)}</button>
-      <button type="button" data-diff-layout="split" aria-pressed="${model.preferences.diffLayout === "split"}" title="${escapeAttribute(copy.sideBySideTitle)}" ${model.layoutLocked ? "disabled" : ""}>${escapeHtml(copy.sideBySide)}</button>
-      <button type="button" data-diff-whitespace aria-pressed="${model.preferences.showWhitespace}" title="${escapeAttribute(copy.whitespaceTitle)}">${escapeHtml(copy.whitespace)}</button>
-    </div>`}
-  </div>`;
+  return renderDiffReviewToolbar({
+    namespace: "editor",
+    capabilities: READ_ONLY_DIFF_CAPABILITIES,
+    ready: model.textReady,
+    image: model.imageDiff,
+    layoutLocked: model.layoutLocked,
+    layout: model.preferences.diffLayout,
+    showWhitespace: model.preferences.showWhitespace,
+    expandedUnchanged: model.expanded,
+    previousFileAvailable: model.previousFile !== null,
+    nextFileAvailable: model.nextFile !== null,
+    sourceAvailable: model.canOpenSource,
+    copy: toolbarCopy(copy),
+  });
+}
+
+function toolbarCopy(copy: EditorCopy) {
+  return {
+    toolbar: copy.diffToolbar,
+    navigation: copy.diffNavigation,
+    previousBlock: copy.previousChange,
+    nextBlock: copy.nextChange,
+    previousFile: copy.previousFile,
+    nextFile: copy.nextFile,
+    openSource: copy.openSource,
+    collapseUnchanged: copy.collapseUnchanged,
+    expandUnchanged: copy.expandUnchanged,
+    presentation: copy.diffPresentation,
+    unified: copy.unified,
+    unifiedTitle: copy.unifiedTitle,
+    split: copy.sideBySide,
+    splitTitle: copy.sideBySideTitle,
+    whitespace: copy.whitespace,
+    whitespaceTitle: copy.whitespaceTitle,
+  };
 }
 
 export function contentHeading(title: string, subtitle: string): string {

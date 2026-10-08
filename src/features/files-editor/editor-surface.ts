@@ -157,9 +157,15 @@ export class EditorSurface {
   isTextTabMounted(tabId: string): boolean { return this.mountedTextTabId === tabId; }
 
   navigateDiffChange(direction: 1 | -1): boolean {
-    return this.mountedEditableDiffTabId
+    return this.mountedConflictKey
+      ? this.conflictEditor.navigateChange(direction)
+      : this.mountedEditableDiffTabId
       ? this.editableDiffEditor.navigateChange(direction)
       : this.diffEditor.navigateChange(direction);
+  }
+
+  conflictReviewSummary() {
+    return this.mountedConflictKey ? this.conflictEditor.reviewSummary() : null;
   }
 
   setReadOnly(readOnly: boolean): void {

@@ -30,7 +30,7 @@ export const EDITOR_COMMANDS = {
   markdownPreview: commandId("editor.markdown.preview"),
 } as const;
 
-export const DIFF_COMMANDS = {
+export const DIFF_REVIEW_COMMANDS = {
   previousChange: commandId("diff.change.previous"),
   nextChange: commandId("diff.change.next"),
   previousFile: commandId("diff.file.previous"),
@@ -41,3 +41,6 @@ export const DIFF_COMMANDS = {
   split: commandId("diff.layout.split"),
   toggleWhitespace: commandId("diff.whitespace.toggle"),
 } as const;
+
+/** @deprecated Use the review-oriented name for new call sites. */
+export const DIFF_COMMANDS = DIFF_REVIEW_COMMANDS;

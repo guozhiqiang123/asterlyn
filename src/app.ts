@@ -838,6 +838,7 @@ export class AsterlynApp {
         editorCopy: () => this.localization.catalog.editor,
         status: (message) => this.setStatus(message, "warning"),
         resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
+        setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
           list: (root) => bridge.listGitWorktreeRecoveries(root),

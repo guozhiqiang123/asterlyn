@@ -646,6 +646,9 @@ export interface GitOperationCopy {
   acceptTheirsChange: string;
   ignoreOursChange: string;
   ignoreTheirsChange: string;
+  previousConflict: string;
+  nextConflict: string;
+  conflictReviewSummary(conflicts: number, pending: number, total: number): string;
   resolvedResult: string;
   binaryConflict: string;
   resolvedFileContent: string;

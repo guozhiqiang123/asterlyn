@@ -45,6 +45,8 @@ import { linkHorizontalScrollGroup, linkVerticalScrollByDocument } from "./prese
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
+import { projectConflictDiff } from "./features/files-editor/diff-review/diff-review-projection.ts";
+import type { DiffReviewSnapshot, DiffReviewSummary } from "./features/files-editor/diff-review/diff-review-model.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -91,6 +93,7 @@ export class ConflictEditor {
   private resultReadOnlyValue = false;
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
+  private activeReviewBlock = -1;
 
   mount(
     parent: HTMLElement,
@@ -111,6 +114,7 @@ export class ConflictEditor {
     const theirs = decodeExactText(conflict.theirs ?? "").text;
     const base = decodeExactText(conflict.base ?? "").text;
     this.resolutionModel = ConflictResolutionModel.create(base, ours, theirs, this.exactResult.text);
+    this.activeReviewBlock = -1;
     this.collapseCoordinator = new ConflictCollapseCoordinator(base, ours, this.exactResult.text, theirs);
     const root = document.createElement("section");
     root.className = "conflict-three-pane";
@@ -216,6 +220,40 @@ export class ConflictEditor {
     return view ? openSearchPanel(view) : false;
   }
 
+  reviewSnapshot(): DiffReviewSnapshot | null {
+    return this.resolutionModel ? projectConflictDiff(this.resolutionModel.snapshots()) : null;
+  }
+
+  reviewSummary(): DiffReviewSummary | null {
+    return this.reviewSnapshot()?.summary ?? null;
+  }
+
+  navigateChange(direction: 1 | -1): boolean {
+    const blocks = this.resolutionModel?.snapshots() ?? [];
+    if (blocks.length === 0 || !this.leftMerge || !this.rightMerge) return false;
+    const next = this.activeReviewBlock < 0
+      ? direction === 1 ? 0 : blocks.length - 1
+      : this.activeReviewBlock + direction;
+    if (next < 0 || next >= blocks.length) return false;
+    this.activeReviewBlock = next;
+    const block = blocks[next]!;
+    const targets = [
+      { view: this.leftMerge.a, range: block.ours },
+      { view: this.leftMerge.b, range: block.result },
+      { view: this.rightMerge.b, range: block.result },
+      { view: this.rightMerge.a, range: block.theirs },
+    ];
+    for (const { view, range } of targets) {
+      const position = Math.min(view.state.doc.length, range.from);
+      view.dispatch({
+        selection: { anchor: position },
+        effects: EditorView.scrollIntoView(position, { y: "center" }),
+      });
+    }
+    this.leftMerge.b.focus();
+    return true;
+  }
+
   requestMeasure(): void {
     for (const binding of this.bindings) binding.view.requestMeasure();
     this.updateScrollbars();
@@ -283,6 +321,7 @@ export class ConflictEditor {
     this.synchronizing = false;
     this.applyingConflictDecision = false;
     this.resolutionModel = null;
+    this.activeReviewBlock = -1;
   }
 
   private extensions(

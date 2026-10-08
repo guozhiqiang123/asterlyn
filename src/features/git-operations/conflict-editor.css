@@ -2,6 +2,19 @@
   overflow: hidden;
 }
 
+.conflict-editor-actions {
+  min-width: 0;
+}
+
+.conflict-editor-actions .diff-review-toolbar {
+  min-width: 0;
+}
+
+.conflict-editor-actions .destructive-secondary {
+  border-color: color-mix(in srgb, var(--danger-text) 35%, var(--border-strong));
+  color: var(--danger-text);
+}
+
 .conflict-three-pane {
   display: grid;
   --conflict-action-gutter-width: 58px;

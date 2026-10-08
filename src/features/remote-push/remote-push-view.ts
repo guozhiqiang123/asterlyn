@@ -2,6 +2,8 @@ import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
 import { identifyDiffSides, type DiffSideLabels } from "../../diff-presentation.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
+import { READ_ONLY_DIFF_CAPABILITIES } from "../files-editor/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../files-editor/diff-review/diff-review-toolbar.ts";
 import { renderSelectControl } from "../../shared/select-control.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
 import type {
@@ -441,8 +443,38 @@ function renderPushDiffDialog(model: RemotePushDialogViewModel): string {
       : diff.image
         ? `<section class="image-diff-surface" aria-label="${escapeAttribute(editor.imageDiff)}">${diff.image.before ? imagePreviewCard(diff.image.before, sideLabels.before, localization) : emptyImageSide(sideLabels.before, editor.fileDidNotExist)}${diff.image.after ? imagePreviewCard(diff.image.after, sideLabels.after, localization) : emptyImageSide(sideLabels.after, editor.fileRemoved)}</section>`
         : '<div class="push-diff-editor-host" id="push-diff-editor-host"></div>';
-  const unchanged = diff.expandedUnchanged ? editor.collapseUnchanged : editor.expandUnchanged;
-  return `<div class="push-diff-backdrop" id="push-diff-backdrop" role="presentation"><section class="dialog push-diff-dialog" role="dialog" aria-modal="true" aria-labelledby="push-diff-title"><div class="dialog-heading push-diff-heading"><div><h2 id="push-diff-title">${escapeHtml(basename(diff.file.path))}</h2><small>${escapeHtml(diff.file.path)}${diff.oid ? ` · ${escapeHtml(diff.oid.slice(0, 8))}` : ""}</small></div><button class="icon-button" id="push-diff-close" type="button" aria-label="${escapeAttribute(copy.closePushedDiff)}" title="${escapeAttribute(localization.catalog.common.close)}">${icon("close", 18)}</button></div><div class="diff-toolbar push-diff-toolbar" aria-label="${escapeAttribute(copy.pushedDiffToolbar)}"><div class="diff-navigation-controls" role="group" aria-label="${escapeAttribute(editor.diffNavigation)}"><button class="compact-icon-button" type="button" data-push-diff-action="previous-change" aria-label="${escapeAttribute(editor.previousChange)}" title="${escapeAttribute(editor.previousChange)}" ${!diff.patch ? "disabled" : ""}>${icon("up", 15)}</button><button class="compact-icon-button" type="button" data-push-diff-action="next-change" aria-label="${escapeAttribute(editor.nextChange)}" title="${escapeAttribute(editor.nextChange)}" ${!diff.patch ? "disabled" : ""}>${icon("down", 15)}</button><span class="diff-control-separator" aria-hidden="true"></span><button class="compact-icon-button" type="button" data-push-diff-action="previous-file" aria-label="${escapeAttribute(copy.previousPushedFile)}" title="${escapeAttribute(copy.previousPushedFile)}" ${hasPrevious ? "" : "disabled"}>${icon("back", 15)}</button><button class="compact-icon-button" type="button" data-push-diff-action="next-file" aria-label="${escapeAttribute(copy.nextPushedFile)}" title="${escapeAttribute(copy.nextPushedFile)}" ${hasNext ? "" : "disabled"}>${icon("forward", 15)}</button><button class="compact-icon-button" type="button" data-push-diff-action="open-source" aria-label="${escapeAttribute(editor.openSource)}" title="${escapeAttribute(editor.openSource)}" ${model.selectedProjectFileAvailable ? "" : "disabled"}>${icon("locate", 15)}</button><button class="compact-icon-button ${diff.expandedUnchanged ? "active" : ""}" type="button" data-push-diff-action="toggle-unchanged" aria-label="${escapeAttribute(unchanged)}" title="${escapeAttribute(unchanged)}" aria-pressed="${diff.expandedUnchanged}" ${!diff.patch ? "disabled" : ""}>${icon(diff.expandedUnchanged ? "collapse" : "expand", 15)}</button></div>${image ? "" : `<div class="diff-controls" role="group" aria-label="${escapeAttribute(editor.diffPresentation)}"><button type="button" data-push-diff-layout="unified" aria-pressed="${preferences.diffLayout === "unified"}" title="${escapeAttribute(editor.unifiedTitle)}">${escapeHtml(editor.unified)}</button><button type="button" data-push-diff-layout="split" aria-pressed="${preferences.diffLayout === "split"}" title="${escapeAttribute(editor.sideBySideTitle)}">${escapeHtml(editor.sideBySide)}</button><button type="button" data-push-diff-whitespace aria-pressed="${preferences.showWhitespace}" title="${escapeAttribute(editor.whitespaceTitle)}">${escapeHtml(editor.whitespace)}</button></div>`}</div><div class="push-diff-body ${image ? "image-surface" : "diff-surface"}" id="push-diff-body">${body}</div></section></div>`;
+  const toolbar = renderDiffReviewToolbar({
+    namespace: "push",
+    capabilities: READ_ONLY_DIFF_CAPABILITIES,
+    ready: Boolean(diff.patch),
+    image,
+    layout: preferences.diffLayout,
+    showWhitespace: preferences.showWhitespace,
+    expandedUnchanged: diff.expandedUnchanged,
+    previousFileAvailable: hasPrevious,
+    nextFileAvailable: hasNext,
+    sourceAvailable: model.selectedProjectFileAvailable,
+    className: "push-diff-toolbar",
+    copy: {
+      toolbar: copy.pushedDiffToolbar,
+      navigation: editor.diffNavigation,
+      previousBlock: editor.previousChange,
+      nextBlock: editor.nextChange,
+      previousFile: copy.previousPushedFile,
+      nextFile: copy.nextPushedFile,
+      openSource: editor.openSource,
+      collapseUnchanged: editor.collapseUnchanged,
+      expandUnchanged: editor.expandUnchanged,
+      presentation: editor.diffPresentation,
+      unified: editor.unified,
+      unifiedTitle: editor.unifiedTitle,
+      split: editor.sideBySide,
+      splitTitle: editor.sideBySideTitle,
+      whitespace: editor.whitespace,
+      whitespaceTitle: editor.whitespaceTitle,
+    },
+  });
+  return `<div class="push-diff-backdrop" id="push-diff-backdrop" role="presentation"><section class="dialog push-diff-dialog" role="dialog" aria-modal="true" aria-labelledby="push-diff-title"><div class="dialog-heading push-diff-heading"><div><h2 id="push-diff-title">${escapeHtml(basename(diff.file.path))}</h2><small>${escapeHtml(diff.file.path)}${diff.oid ? ` · ${escapeHtml(diff.oid.slice(0, 8))}` : ""}</small></div><button class="icon-button" id="push-diff-close" type="button" aria-label="${escapeAttribute(copy.closePushedDiff)}" title="${escapeAttribute(localization.catalog.common.close)}">${icon("close", 18)}</button></div>${toolbar}<div class="push-diff-body ${image ? "image-surface" : "diff-surface"}" id="push-diff-body">${body}</div></section></div>`;
 }
 
 export function pushDiffSideLabels(

@@ -312,6 +312,15 @@
   gap: 7px;
 }
 
+.diff-review-summary {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .diff-navigation-controls {
   gap: 1px;
 }

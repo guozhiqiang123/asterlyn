@@ -4,6 +4,7 @@ import type { EditableDiffEditor, EditableDiffInteractions } from "../../editabl
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import type { GitConflictContent } from "../../models.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
+import type { DiffReviewSummary } from "./diff-review/diff-review-model.ts";
 import type { AppPreferences } from "../../preferences.ts";
 
 interface EditableDiffMount {
@@ -244,6 +245,20 @@ export class LazyConflictEditor {
       if (generation === this.mountGeneration) editor.openFindReplace();
     });
     return true;
+  }
+
+  navigateChange(direction: 1 | -1): boolean {
+    if (this.implementation) return this.implementation.navigateChange(direction);
+    if (!this.pendingMount) return false;
+    const generation = this.mountGeneration;
+    void this.load().then((editor) => {
+      if (generation === this.mountGeneration) editor.navigateChange(direction);
+    });
+    return true;
+  }
+
+  reviewSummary(): DiffReviewSummary | null {
+    return this.implementation?.reviewSummary() ?? null;
   }
 
   requestMeasure(): void {

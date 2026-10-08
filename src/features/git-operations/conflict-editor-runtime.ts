@@ -3,6 +3,9 @@ import { icon } from "../../icons.ts";
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import type { GitConflictContent, RepositorySnapshot } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
+import type { DiffReviewSummary } from "../files-editor/diff-review/diff-review-model.ts";
+import { CONFLICT_DIFF_CAPABILITIES } from "../files-editor/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../files-editor/diff-review/diff-review-toolbar.ts";
 import type {
   GitOperationChange,
   GitOperationController,
@@ -28,6 +31,8 @@ interface ConflictEditorSurfacePort {
   ): void;
   setConflictReadOnly(readOnly: boolean): void;
   flushConflict(): string | null;
+  navigateDiffChange(direction: 1 | -1): boolean;
+  conflictReviewSummary(): DiffReviewSummary | null;
 }
 
 export interface ConflictEditorRuntimeOptions {
@@ -44,6 +49,7 @@ export interface ConflictEditorRuntimeOptions {
   editorCopy(): EditorCopy;
   status(message: string): void;
   resolve(deleteFile: boolean): void;
+  setWhitespace(showWhitespace: boolean): void;
 }
 
 /** Owns the persistent editor-region presentation for one Git conflict draft. */
@@ -85,11 +91,6 @@ export class ConflictEditorRuntime {
     const copy = this.options.copy();
     const resolving = state.loading === "resolve";
     surface.setConflictReadOnly(resolving);
-    this.query("#content-header").innerHTML = `${contentHeading(basename(document.path), document.path)}
-      <div class="header-actions conflict-editor-actions">
-        <button class="secondary-button" id="conflict-resolve-delete" type="button" ${resolving || !state.conflict ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button>
-        <button class="primary-button" id="conflict-resolve-save" type="button" ${resolving || state.conflict?.binary !== false ? "disabled" : ""}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button>
-      </div>`;
     const conflict = state.conflict;
     if (state.loading === "conflict") {
       surface.showHtml(editorDocumentContentKey(document, "loading"), loadingBlock(copy.readingConflict), () => undefined);
@@ -119,9 +120,57 @@ export class ConflictEditorRuntime {
       );
       surface.setConflictReadOnly(resolving);
     }
+    const summary = surface.conflictReviewSummary();
+    this.query("#content-header").innerHTML = `${contentHeading(basename(document.path), document.path)}
+      <div class="header-actions conflict-editor-actions">
+        ${this.toolbar(summary, Boolean(conflict && !conflict.binary))}
+        <button class="secondary-button" id="conflict-resolve-cancel" type="button" ${resolving ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button>
+        <button class="secondary-button destructive-secondary" id="conflict-resolve-delete" type="button" ${resolving || !state.conflict ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button>
+        <button class="primary-button" id="conflict-resolve-save" type="button" ${resolving || state.conflict?.binary !== false ? "disabled" : ""}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button>
+      </div>`;
+    this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const direction = button.dataset.diffAction === "next-change" ? 1 : -1;
+        if (!surface.navigateDiffChange(direction)) this.options.status(this.options.editorCopy().noFileChange(direction === 1 ? "next" : "previous"));
+      });
+    });
+    this.query("#content-header").querySelector<HTMLButtonElement>("[data-diff-whitespace]")?.addEventListener("click", () => {
+      this.options.setWhitespace(!this.options.preferences().showWhitespace);
+    });
+    root.querySelector<HTMLButtonElement>("#conflict-resolve-cancel")?.addEventListener("click", () => this.options.editor.closePreview());
     root.querySelector<HTMLButtonElement>("#conflict-resolve-delete")?.addEventListener("click", () => this.options.resolve(true));
     root.querySelector<HTMLButtonElement>("#conflict-resolve-save")?.addEventListener("click", () => this.options.resolve(false));
     return true;
+  }
+
+  private toolbar(summary: DiffReviewSummary | null, ready: boolean): string {
+    const editor = this.options.editorCopy();
+    const copy = this.options.copy();
+    return renderDiffReviewToolbar({
+      namespace: "editor",
+      capabilities: { ...CONFLICT_DIFF_CAPABILITIES, toggleUnchanged: false },
+      ready,
+      showWhitespace: this.options.preferences().showWhitespace,
+      summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pending, summary.total) : null,
+      copy: {
+        toolbar: editor.diffToolbar,
+        navigation: editor.diffNavigation,
+        previousBlock: copy.previousConflict,
+        nextBlock: copy.nextConflict,
+        previousFile: editor.previousFile,
+        nextFile: editor.nextFile,
+        openSource: editor.openSource,
+        collapseUnchanged: editor.collapseUnchanged,
+        expandUnchanged: editor.expandUnchanged,
+        presentation: editor.diffPresentation,
+        unified: editor.unified,
+        unifiedTitle: editor.unifiedTitle,
+        split: editor.sideBySide,
+        splitTitle: editor.sideBySideTitle,
+        whitespace: editor.whitespace,
+        whitespaceTitle: editor.whitespaceTitle,
+      },
+    });
   }
 
   capture(): void {

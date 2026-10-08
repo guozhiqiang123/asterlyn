@@ -50,3 +50,11 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   blocks without treating raw Diff fragments as user-facing conflicts.
 - Manual Result edits are retained as explicit model state and are cleared only by a later deliberate
   block decision.
+
+### Phase 2 — shared toolbar and commands
+
+- Ordinary editor Diff and Push Diff now render through one capability-driven toolbar.
+- Existing stable command IDs remain compatible through the `DIFF_REVIEW_COMMANDS` name.
+- Conflict resolution now exposes previous/next block navigation, progress, whitespace display,
+  Cancel, Save and Stage, and a visually separate delete-resolution action in the same header.
+- Unsupported conflict file navigation and unified/split controls are omitted instead of disabled.
