@@ -22,6 +22,9 @@ block can accept both sides into Result without the second action overwriting th
   silently claiming that an old decision is still applied.
 - Save and Stage retains the existing exact revision-token boundary; action state is transient
   presentation state and is never serialized as Git truth.
+- Ours, Result, and Theirs use one Base-owned fold topology. A fold expands in all panes, and the
+  linked vertical scroll maps through the duplicated Result document instead of assuming identical
+  MergeView spacer heights.
 
 ## Architecture
 
@@ -34,6 +37,8 @@ block can accept both sides into Result without the second action overwriting th
    the primary Result view.
 4. Keep the existing primary/mirror Result synchronization, language support, scrolling, styling,
    draft protection, and native resolve boundary.
+5. Keep Theirs as the right MergeView's real source side and reverse only its visual orientation, so
+   right-side controls and the third horizontal scroller are both anchored to visible Theirs rows.
 
 ## Acceptance
 
@@ -42,14 +47,20 @@ block can accept both sides into Result without the second action overwriting th
 - Insert/insert, replace/replace, delete/modify, identical-side, adjacent independent, CRLF, manual
   editing, undo, read-only save state, and remounted controls have automated coverage.
 - Controls retain the shared 26-pixel Diff action geometry and remain centered in the widened gutter.
+- Both Apply and Ignore remain visible in each group; all three bottom horizontal scrollbars move
+  their corresponding content; folds and vertically corresponding Result positions remain aligned.
 - Full script tests, TypeScript check, production build, native package replacement, installed-binary
   hash verification, and a relaunched installed app close the task.
 
 ## Verification
 
-- Script suite: 855 passed, 0 failed.
+- Script suite: 858 passed, 0 failed.
 - TypeScript check and production web build: passed.
-- Native tests: 62 passed, 0 failed, 2 ignored; native rendered-shell smoke: passed.
+- Native workspace tests: 271 passed, 0 failed, 2 ignored; native process smoke: passed.
+- The macOS session was locked during final verification, so the Accessibility-based rendered-shell
+  probe could not enumerate application windows. The system window server independently confirmed
+  the final binary rendered an on-screen 1320-by-820 Asterlyn window.
 - The packaged and installed executables both have SHA-256
-  `e087387c0747ef7df774f17c7d6d98a3989d7a992c61e64763e68bda6ae98dd4`.
-- `/Applications/Asterlyn.app` was replaced and the installed application was relaunched.
+  `1538252ed36b92d65dd8c86bfed50eef9bb0eae0358a8afcaaf3e71027e09194`.
+- `/Applications/Asterlyn.app` was replaced, relaunched, and opened against a three-conflict visual
+  fixture for manual acceptance.

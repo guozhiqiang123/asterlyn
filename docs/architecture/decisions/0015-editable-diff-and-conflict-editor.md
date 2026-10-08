@@ -127,6 +127,16 @@ that touches a tracked block resets its stale action state and becomes that bloc
 fallback. These decisions remain frontend-only; `Save and Stage` still sends only the exact Result
 through the existing revision-token boundary.
 
+The three visible panes also share one Base-owned unchanged-range topology. The union of
+Base-to-Ours, Base-to-Result, and Base-to-Theirs changes defines each collapsible interval; that
+interval is projected into all four editor instances, including both Result copies, with one fold
+identity and one displayed Base line count. Expanding a fold expands the matching interval in every
+pane. The right MergeView keeps Theirs as its actual source document and only reverses the visual
+orientation, so action controls and the third horizontal scrollbar are positioned from the visible
+Theirs rows rather than from the hidden Result mirror. The two outer vertical scroll owners map
+through a shared Result document position instead of copying raw pixels, keeping the three panes
+aligned when pair-specific merge spacers have different heights.
+
 ### Dependency boundary
 
 Adopt exact package `@codemirror/merge` **6.12.2** from the public npm distribution under the MIT
@@ -159,6 +169,8 @@ startup shell, application services, domain models, or persisted state.
     it does not compose cyclic pairwise links.
 13. Conflict Apply/Ignore state is anchored to immutable Base ranges, never serialized as Git truth,
     and must not let the second accepted side erase the first accepted side.
+14. Conflict folds have one Base-owned identity across all panes, and linked vertical scrolling is
+    anchored to Result document positions rather than assuming equal decorated pixel heights.
 
 ## Delivery sequence
 
