@@ -479,7 +479,7 @@ export const EN_US: LocaleCatalog = {
     resolveSafetyNote: "Saving verifies the exact index stages and worktree revision opened above, writes the result, stages it, and confirms the staged blob.",
     resolveAsDeleted: "Resolve as Deleted", resolving: "Resolving…", saveAndStage: "Save and Stage",
     closeDialog: "Close Git operation dialog", notPresent: "Not present", loadingReview: "Loading Git operation review…",
-    discardConflict: "Discard the unsaved conflict result? Copy any text you need first. Cancel keeps the result open.",
+    discardConflict: "Discard the unsaved conflict result? Copy any text you need first. Cancel keeps the result open.", finishConflictBeforeSwitch: "Finish and save the current conflict resolution, or cancel it, before opening another conflict file.",
     cancel: "Cancel",
     unavailableForFolder: "Git operations are unavailable for this folder", alreadyInProgress: (name) => `${name} is already in progress`,
     saveBeforeReview: "Save or undo editor changes, then review the Git operation again",

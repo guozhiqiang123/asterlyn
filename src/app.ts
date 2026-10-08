@@ -80,7 +80,7 @@ import { createRemoteRuntime } from "./features/remote-push/create-remote-runtim
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import { bindPushPreviewSplitter } from "./features/remote-push/push-preview-splitter.ts";
 import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts";
-import { discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
+import { discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, switchConflictBlockedNotice, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
 import {
   pushReviewFiles,
   pushDiffSideLabels,
@@ -833,11 +833,12 @@ export class AsterlynApp {
         root, editor: this.filesEditorRuntime.editor, surface: this.editorSurface,
         snapshot: () => this.windowSession.repository.state.snapshot,
         activeDocument: () => this.activeDocument(),
-        activate: (document) => this.activateDiffPreview(document), renderEditor: () => this.renderEditor(),
+        activate: (document) => this.activateDiffPreview(document), selectConflict: (path) => { if (this.changesRuntime.controller.selectConflict(path)) this.markChangeSelection(path); },
+        renderEditor: () => this.renderEditor(),
         preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
         presentation: () => this.diffPresentation(), editorCopy: () => this.localization.catalog.editor,
         status: (message) => this.setStatus(message, "warning"), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
-        resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
+        resolve: (deleteFile) => void this.resolveGitConflict(deleteFile), notifyBlockedSwitch: async () => { await this.dialogRuntime.confirm(switchConflictBlockedNotice(this.localization.catalog)); },
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
           list: (root) => bridge.listGitWorktreeRecoveries(root),
@@ -1443,7 +1444,7 @@ export class AsterlynApp {
         setIncluded: (target, included) => this.setChangePathsIncluded([target.path], included),
         showDiff: (target) => this.openChangesContextDiff(target),
         jumpToSource: (target) => this.openChangesContextSource(target),
-        resolveConflict: (target) => this.gitOperationRuntime.openConflict(target.path),
+        resolveConflict: (target) => { void this.gitOperationRuntime.openConflict(target.path); },
         restore: (target) => this.restoreChangesContextTarget(target),
         trash: (target) => this.workspaceTrashRuntime.controller.request(target),
         stageAll: (target) => unversionedGroupMutations.stage(target),
@@ -7791,9 +7792,8 @@ export class AsterlynApp {
   private openChangeConflict(path: string): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     const conflict = snapshot?.changes.find((change) => change.path === path && change.conflicted);
-    if (!snapshot || !conflict || !this.changesRuntime.controller.selectConflict(path)) return;
-    this.markChangeSelection(path);
-    this.gitOperationRuntime.openConflict(path);
+    if (!snapshot || !conflict) return;
+    void this.gitOperationRuntime.openConflict(path);
   }
 
   private openChangesContextDiff(target: ChangesFileContextTarget): void {

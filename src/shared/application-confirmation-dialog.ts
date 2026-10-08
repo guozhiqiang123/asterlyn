@@ -2,7 +2,7 @@ export interface ApplicationConfirmationRequest {
   readonly title: string;
   readonly message: string;
   readonly confirmLabel: string;
-  readonly cancelLabel: string;
+  readonly cancelLabel?: string;
   readonly destructive?: boolean;
 }
 
@@ -58,15 +58,15 @@ export class ApplicationConfirmationDialog {
     this.host.innerHTML = `<section class="dialog application-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="application-confirmation-title" aria-describedby="application-confirmation-message">
       <div class="dialog-heading"><h2 id="application-confirmation-title"></h2></div>
       <div class="application-confirmation-message" id="application-confirmation-message"></div>
-      <div class="dialog-actions"><button class="secondary-button" data-application-confirmation-cancel type="button"></button><button class="${request.destructive ? "danger-button" : "primary-button"}" data-application-confirmation-accept type="button"></button></div>
+      <div class="dialog-actions">${request.cancelLabel ? `<button class="secondary-button" data-application-confirmation-cancel type="button"></button>` : ""}<button class="${request.destructive ? "danger-button" : "primary-button"}" data-application-confirmation-accept type="button"></button></div>
     </section>`;
     this.host.querySelector<HTMLElement>("#application-confirmation-title")!.textContent = request.title;
     this.host.querySelector<HTMLElement>("#application-confirmation-message")!.textContent = request.message;
-    const cancel = this.host.querySelector<HTMLButtonElement>("[data-application-confirmation-cancel]")!;
+    const cancel = this.host.querySelector<HTMLButtonElement>("[data-application-confirmation-cancel]");
     const accept = this.host.querySelector<HTMLButtonElement>("[data-application-confirmation-accept]")!;
-    cancel.textContent = request.cancelLabel;
+    if (cancel) cancel.textContent = request.cancelLabel ?? "";
     accept.textContent = request.confirmLabel;
-    cancel.addEventListener("click", () => this.finish(false));
+    cancel?.addEventListener("click", () => this.finish(false));
     accept.addEventListener("click", () => this.finish(true));
     this.host.onclick = (event) => {
       if (event.target === this.host) this.finish(false);

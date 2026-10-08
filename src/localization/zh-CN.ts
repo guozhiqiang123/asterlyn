@@ -364,6 +364,7 @@ export const ZH_CN = {
     resolveAsDeleted: "以删除方式解决", resolving: "正在解决…", saveAndStage: "保存并暂存",
     closeDialog: "关闭 Git 操作对话框", notPresent: "不存在", loadingReview: "正在加载 Git 操作审查…",
     discardConflict: "要丢弃未保存的冲突解决结果吗？请先复制需要的文本。取消将保留当前结果。",
+    finishConflictBeforeSwitch: "请先完成并保存当前冲突解决，或取消当前解决，再打开其他冲突文件。",
     cancel: "取消",
     unavailableForFolder: "此文件夹无法执行 Git 操作", alreadyInProgress: (name) => `${name}操作已在进行中`,
     saveBeforeReview: "请保存或撤销编辑器更改，然后重新审查 Git 操作", saveBeforeChangingActive: "更改当前 Git 操作前，请保存或撤销编辑器更改",

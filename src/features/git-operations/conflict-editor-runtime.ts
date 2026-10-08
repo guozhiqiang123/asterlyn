@@ -53,6 +53,7 @@ export interface ConflictEditorRuntimeOptions {
   snapshot(): RepositorySnapshot | null;
   activeDocument(): EditorDocument;
   activate(document: ConflictDocument): void;
+  selectConflict(path: string): void;
   renderEditor(): void;
   preferences(): AppPreferences;
   presentation(): DiffPresentation;
@@ -62,29 +63,32 @@ export interface ConflictEditorRuntimeOptions {
   resolve(deleteFile: boolean): void;
   setWhitespace(showWhitespace: boolean): void;
   confirmDiscard(): Promise<boolean>;
+  notifyBlockedSwitch(): Promise<void>;
 }
 
 /** Owns the persistent editor-region presentation for one Git conflict draft. */
 export class ConflictEditorRuntime {
   private readonly options: ConflictEditorRuntimeOptions;
+  private blockedSwitchNotice: Promise<void> | null = null;
 
   constructor(options: ConflictEditorRuntimeOptions) {
     this.options = options;
   }
 
-  async open(path: string): Promise<void> {
+  async open(path: string): Promise<boolean> {
     const { controller } = this.options;
     const snapshot = this.options.snapshot();
     if (!snapshot?.changes.some((change) => change.path === path && change.conflicted) &&
-      !snapshot?.operation?.conflicts.some((conflict) => conflict.path === path)) return;
-    if (controller.hasUnsavedConflict() && controller.state.conflict?.path !== path) {
-      this.options.status(this.options.copy().discardConflict);
-      return;
+      !snapshot?.operation?.conflicts.some((conflict) => conflict.path === path)) return false;
+    if (controller.state.conflict?.path !== path && this.hasUnsavedReview()) {
+      await this.notifyBlockedSwitch();
+      return false;
     }
+    this.options.selectConflict(path);
     const opening = controller.openConflict(path);
     this.options.activate({ kind: "conflict-resolution", repositoryRoot: snapshot.root, path });
     this.options.renderEditor();
-    await opening;
+    return opening;
   }
 
   handleChange(change: GitOperationChange): void {
@@ -183,7 +187,7 @@ export class ConflictEditorRuntime {
       ready,
       showWhitespace: this.options.preferences().showWhitespace,
       expandedUnchanged: this.options.surface.conflictUnchangedExpanded(),
-      summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pending, summary.total) : null,
+      summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pendingConflicts, summary.total) : null,
       bulkActions: summary ? {
         label: copy.applyNonConflicting,
         ours: copy.ours,
@@ -241,6 +245,18 @@ export class ConflictEditorRuntime {
     return true;
   }
 
+  private hasUnsavedReview(): boolean {
+    const summary = this.options.surface.conflictReviewSummary();
+    return this.options.controller.hasUnsavedConflict() || Boolean(
+      summary && (summary.reviewed > 0 || summary.manual > 0),
+    );
+  }
+
+  private async notifyBlockedSwitch(): Promise<void> {
+    this.blockedSwitchNotice ??= this.options.notifyBlockedSwitch();
+    try { await this.blockedSwitchNotice; } finally { this.blockedSwitchNotice = null; }
+  }
+
   private query<T extends Element = HTMLElement>(selector: string): T {
     const element = this.options.root.querySelector<T>(selector);
     if (!element) throw new Error(`Missing conflict editor element: ${selector}`);
@@ -249,7 +265,7 @@ export class ConflictEditorRuntime {
 }
 
 export function conflictReviewCompletionReady(summary: DiffReviewSummary | null): boolean {
-  return summary !== null && summary.pending === 0;
+  return summary !== null && summary.pendingConflicts === 0;
 }
 
 function basename(path: string): string {

@@ -68,9 +68,8 @@ export class GitOperationRuntime {
     this.binding.openSetup(kind, targets, message);
   }
 
-  openConflict(path: string): void {
-    if (this.conflictEditor) void this.conflictEditor.open(path);
-    else void this.controller.openConflict(path);
+  openConflict(path: string): Promise<boolean> {
+    return this.conflictEditor?.open(path) ?? this.controller.openConflict(path);
   }
 
   renderConflict(document: EditorDocument): boolean {

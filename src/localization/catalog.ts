@@ -660,6 +660,7 @@ export interface GitOperationCopy {
   notPresent: string;
   loadingReview: string;
   discardConflict: string;
+  finishConflictBeforeSwitch: string;
   cancel: string;
   unavailableForFolder: string;
   alreadyInProgress(name: string): string;

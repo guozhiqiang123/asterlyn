@@ -50,6 +50,7 @@ test("conflict projection classifies one-sided, identical, divergent, and manual
   const oneSided = projection("base", "ours", "base", "base");
   assert.equal(oneSided.blocks[0].kind, "modified");
   assert.equal(oneSided.summary.nonConflicting, 1);
+  assert.equal(oneSided.summary.pendingConflicts, 0);
 
   const identical = projection("base", "same", "same", "base");
   assert.equal(identical.blocks[0].kind, "identical");
@@ -67,6 +68,7 @@ test("conflict projection classifies one-sided, identical, divergent, and manual
   assert.equal(manual.blocks[0].status, "manual");
   assert.equal(manual.summary.manual, 1);
   assert.equal(manual.summary.pending, 1);
+  assert.equal(manual.summary.pendingConflicts, 1);
 });
 
 test("completed conflict sides stay hidden when merge chunks are rebuilt", () => {
@@ -88,6 +90,7 @@ test("conflict decisions feed shared selected and reviewed states", () => {
   assert.equal(projection.blocks[0].status, "accepted");
   assert.equal(projection.summary.reviewed, 1);
   assert.equal(projection.summary.pending, 0);
+  assert.equal(projection.summary.pendingConflicts, 0);
   assert.equal(
     projection.blocks[0].actions.find((action) => action.id === "apply-ours")?.selected,
     true,

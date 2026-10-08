@@ -12,6 +12,14 @@ export function discardConflictConfirmation(catalog: LocaleCatalog): Application
   };
 }
 
+export function switchConflictBlockedNotice(catalog: LocaleCatalog): ApplicationConfirmationRequest {
+  return {
+    title: catalog.common.confirmation,
+    message: catalog.gitOperations.finishConflictBeforeSwitch,
+    confirmLabel: catalog.common.close,
+  };
+}
+
 export function undoWorktreeConfirmation(
   catalog: LocaleCatalog,
   recovery: GitWorktreeRecovery,

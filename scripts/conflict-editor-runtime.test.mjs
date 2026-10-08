@@ -11,7 +11,7 @@ test("opening a conflict activates an editor document without opening a modal", 
   controller.installSnapshot(snapshot());
   const harness = runtimeHarness(controller);
 
-  await harness.runtime.open("one.txt");
+  assert.equal(await harness.runtime.open("one.txt"), true);
 
   assert.deepEqual(harness.active(), {
     kind: "conflict-resolution",
@@ -20,23 +20,38 @@ test("opening a conflict activates an editor document without opening a modal", 
   });
   assert.equal(controller.state.dialog, null);
   assert.equal(controller.state.conflict?.path, "one.txt");
+  assert.deepEqual(harness.selections(), ["one.txt"]);
   harness.runtime.capture();
   assert.equal(controller.state.conflictResult, "base\n");
   assert.ok(harness.renderCount() >= 1);
 });
 
-test("an edited conflict draft blocks replacing the editor with another conflict", async () => {
+test("an edited conflict draft blocks selection and editor activation for another conflict", async () => {
   const controller = new GitOperationController(gateway());
   controller.installSnapshot(snapshot());
   const harness = runtimeHarness(controller);
   await harness.runtime.open("one.txt");
   controller.setConflictResult("edited result");
 
-  await harness.runtime.open("two.txt");
+  assert.equal(await harness.runtime.open("two.txt"), false);
 
   assert.equal(harness.active().path, "one.txt");
   assert.equal(controller.state.conflict?.path, "one.txt");
-  assert.equal(harness.statuses().at(-1), EN_US.gitOperations.discardConflict);
+  assert.deepEqual(harness.selections(), ["one.txt"]);
+  assert.equal(harness.blockedNotices(), 1);
+});
+
+test("decision-only conflict drafts also block switching before selection changes", async () => {
+  const controller = new GitOperationController(gateway());
+  controller.installSnapshot(snapshot());
+  const harness = runtimeHarness(controller, snapshot(), { reviewPending: 1 });
+  assert.equal(await harness.runtime.open("one.txt"), true);
+  assert.equal(controller.hasUnsavedConflict(), false);
+
+  assert.equal(await harness.runtime.open("two.txt"), false);
+  assert.deepEqual(harness.selections(), ["one.txt"]);
+  assert.equal(harness.active().path, "one.txt");
+  assert.equal(harness.blockedNotices(), 1);
 });
 
 test("a stash-pop worktree conflict opens the three-pane editor without operation metadata", async () => {
@@ -77,10 +92,16 @@ test("Save and Stage stays blocked until every conflict block is explicitly comp
   assert.equal(await pending.runtime.requestSave(), false);
   assert.deepEqual(pending.resolutions(), []);
 
-  const completed = runtimeHarness(controller, snapshot(), { reviewPending: 0 });
+  const completedController = new GitOperationController(gateway());
+  completedController.installSnapshot(snapshot());
+  const completed = runtimeHarness(completedController, snapshot(), { reviewPending: 0 });
+  await completed.runtime.open("one.txt");
   assert.equal(await completed.runtime.requestSave(), true);
   assert.deepEqual(completed.resolutions(), [false]);
   assert.equal(conflictReviewCompletionReady(null), false);
+  assert.equal(conflictReviewCompletionReady({
+    ...reviewSummary(16, 0), total: 18, conflicts: 0, nonConflicting: 16,
+  }), true);
 });
 
 function runtimeHarness(controller, repository = snapshot(), confirmations = {}) {
@@ -88,6 +109,8 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
   let renders = 0;
   const statuses = [];
   const resolutions = [];
+  const selections = [];
+  let blockedNotices = 0;
   const runtime = new ConflictEditorRuntime({
     root: { querySelector() { return null; } },
     controller,
@@ -95,12 +118,15 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     surface: {
       flushConflict() { return null; },
       conflictReviewSummary() {
-        return confirmations.reviewPending === undefined ? null : reviewSummary(confirmations.reviewPending);
+        return active.kind !== "conflict-resolution" || confirmations.reviewPending === undefined
+          ? null
+          : reviewSummary(confirmations.reviewPending);
       },
     },
     snapshot: () => repository,
     activeDocument: () => active,
     activate(document) { active = document; },
+    selectConflict(path) { selections.push(path); },
     renderEditor() { renders += 1; },
     preferences: () => DEFAULT_APP_PREFERENCES,
     presentation: () => ({ layout: "split", showWhitespace: false }),
@@ -110,6 +136,7 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     resolve(deleteFile) { resolutions.push(deleteFile); },
     setWhitespace() {},
     confirmDiscard: async () => confirmations.discard ?? true,
+    async notifyBlockedSwitch() { blockedNotices += 1; },
   });
   return {
     runtime,
@@ -117,11 +144,13 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     renderCount: () => renders,
     statuses: () => statuses,
     resolutions: () => resolutions,
+    selections: () => selections,
+    blockedNotices: () => blockedNotices,
   };
 }
 
-function reviewSummary(pending) {
-  return { total: 2, conflicts: 2, nonConflicting: 0, identical: 0, pending, reviewed: 2 - pending, manual: 0 };
+function reviewSummary(pending, pendingConflicts = pending) {
+  return { total: 2, conflicts: 2, nonConflicting: 0, identical: 0, pending, pendingConflicts, reviewed: 2 - pending, manual: 0 };
 }
 
 function gateway() {
