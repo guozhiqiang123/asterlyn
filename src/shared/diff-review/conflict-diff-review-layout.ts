@@ -1,5 +1,6 @@
 export const CONFLICT_ACTION_GUTTER_WIDTH = 58;
 export const CONFLICT_PANE_MIN_PERCENTAGE = 18;
+export const CONFLICT_EQUAL_PERCENTAGE = 100 / 3;
 
 export interface ConflictPanePercentages {
   readonly ours: number;
@@ -20,11 +21,17 @@ export function normalizeConflictPercentages(
   const minimum = CONFLICT_PANE_MIN_PERCENTAGE;
   const ours = Math.max(
     minimum,
-    Math.min(100 - minimum * 2, Number.isFinite(oursValue) ? oursValue : 27),
+    Math.min(
+      100 - minimum * 2,
+      Number.isFinite(oursValue) ? oursValue : CONFLICT_EQUAL_PERCENTAGE,
+    ),
   );
   const result = Math.max(
     minimum,
-    Math.min(100 - ours - minimum, Number.isFinite(resultValue) ? resultValue : 46),
+    Math.min(
+      100 - ours - minimum,
+      Number.isFinite(resultValue) ? resultValue : CONFLICT_EQUAL_PERCENTAGE,
+    ),
   );
   return { ours, result };
 }

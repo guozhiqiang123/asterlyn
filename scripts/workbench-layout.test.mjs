@@ -162,6 +162,30 @@ test("older v1 layouts gain newly shared pane dimensions", () => {
   );
 });
 
+test("legacy conflict defaults migrate to equal thirds without resetting other layout", () => {
+  const loaded = loadWorkbenchLayout(memoryStorage(JSON.stringify({
+    ...WORKBENCH_LAYOUT_DEFAULTS,
+    leftWidth: 412,
+    conflictOursPercent: 27,
+    conflictResultPercent: 46,
+  })));
+
+  assert.equal(loaded.leftWidth, 412);
+  assert.equal(loaded.conflictOursPercent, 100 / 3);
+  assert.equal(loaded.conflictResultPercent, 100 / 3);
+});
+
+test("custom conflict proportions survive layout loading", () => {
+  const loaded = loadWorkbenchLayout(memoryStorage(JSON.stringify({
+    ...WORKBENCH_LAYOUT_DEFAULTS,
+    conflictOursPercent: 30,
+    conflictResultPercent: 40,
+  })));
+
+  assert.equal(loaded.conflictOursPercent, 30);
+  assert.equal(loaded.conflictResultPercent, 40);
+});
+
 test("splitter values honor direction and range", () => {
   const range = { minimum: 200, maximum: 500 };
   assert.equal(resizeValue(300, 80, 1, range), 380);

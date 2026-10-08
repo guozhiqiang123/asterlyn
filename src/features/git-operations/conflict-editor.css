@@ -42,6 +42,7 @@
   position: relative;
   display: grid;
   --conflict-action-gutter-width: 58px;
+  --conflict-equal-pane-width: calc(33.333333% - 38.666667px);
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -51,7 +52,7 @@
 
 .conflict-pane-labels {
   display: grid;
-  grid-template-columns: minmax(0, var(--conflict-ours-width, 27%)) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, 46%)) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, 27%));
+  grid-template-columns: minmax(0, var(--conflict-ours-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, var(--conflict-equal-pane-width)));
   border-bottom: 1px solid var(--border);
   background: var(--surface-chrome);
 }
@@ -80,7 +81,7 @@
   overflow: hidden;
   min-width: 0;
   min-height: 0;
-  grid-template-columns: minmax(0, var(--conflict-ours-width, 27%)) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, 46%)) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, 27%));
+  grid-template-columns: minmax(0, var(--conflict-ours-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, var(--conflict-equal-pane-width)));
 }
 
 .conflict-left-merge,
@@ -162,7 +163,7 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(0, var(--conflict-ours-width, 27%)) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, 46%)) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, 27%)) auto;
+  grid-template-columns: minmax(0, var(--conflict-ours-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, var(--conflict-equal-pane-width))) auto;
   border-top: 1px solid var(--border);
   background: var(--surface-chrome);
 }
@@ -198,9 +199,9 @@
 }
 
 .conflict-splitter-ours {
-  left: calc(var(--conflict-ours-width, 27%) + 29px);
+  left: calc(var(--conflict-ours-width, var(--conflict-equal-pane-width)) + 29px);
 }
 
 .conflict-splitter-theirs {
-  left: calc(var(--conflict-ours-width, 27%) + var(--conflict-action-gutter-width) + var(--conflict-result-width, 46%) + 29px);
+  left: calc(var(--conflict-ours-width, var(--conflict-equal-pane-width)) + var(--conflict-action-gutter-width) + var(--conflict-result-width, var(--conflict-equal-pane-width)) + 29px);
 }

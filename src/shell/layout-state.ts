@@ -1,3 +1,5 @@
+import { CONFLICT_EQUAL_PERCENTAGE } from "../shared/diff-review/conflict-diff-review-layout.ts";
+
 export type LeftTool = "files" | "changes" | null;
 export type BottomTool = "branches" | "stash" | "terminal" | "find" | "replace" | null;
 
@@ -61,8 +63,8 @@ export const WORKBENCH_LAYOUT_DEFAULTS: WorkbenchLayout = Object.freeze({
   changesCommitHeight: 230,
   diffBeforePercent: 50,
   editableDiffBeforePercent: 42,
-  conflictOursPercent: 27,
-  conflictResultPercent: 46,
+  conflictOursPercent: CONFLICT_EQUAL_PERCENTAGE,
+  conflictResultPercent: CONFLICT_EQUAL_PERCENTAGE,
 });
 
 export const WORKBENCH_LIMITS = Object.freeze({
@@ -267,20 +269,32 @@ export function loadWorkbenchLayout(storage: LayoutStorage): WorkbenchLayout {
     if (!candidate || candidate.version !== 1) {
       return { ...WORKBENCH_LAYOUT_DEFAULTS };
     }
+    const migrated = migrateLegacyConflictDefaults(candidate);
     return {
       ...WORKBENCH_LAYOUT_DEFAULTS,
-      ...candidate,
+      ...migrated,
       version: 1,
-      leftTool: isLeftTool(candidate.leftTool)
-        ? candidate.leftTool
+      leftTool: isLeftTool(migrated.leftTool)
+        ? migrated.leftTool
         : WORKBENCH_LAYOUT_DEFAULTS.leftTool,
-      bottomTool: isBottomTool(candidate.bottomTool)
-        ? candidate.bottomTool
+      bottomTool: isBottomTool(migrated.bottomTool)
+        ? migrated.bottomTool
         : WORKBENCH_LAYOUT_DEFAULTS.bottomTool,
     };
   } catch {
     return { ...WORKBENCH_LAYOUT_DEFAULTS };
   }
+}
+
+function migrateLegacyConflictDefaults(
+  layout: Partial<WorkbenchLayout>,
+): Partial<WorkbenchLayout> {
+  if (layout.conflictOursPercent !== 27 || layout.conflictResultPercent !== 46) return layout;
+  return {
+    ...layout,
+    conflictOursPercent: CONFLICT_EQUAL_PERCENTAGE,
+    conflictResultPercent: CONFLICT_EQUAL_PERCENTAGE,
+  };
 }
 
 export function saveWorkbenchLayout(

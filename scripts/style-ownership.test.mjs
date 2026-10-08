@@ -380,7 +380,8 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
     readFile(new URL("../src/icons.ts", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.conflict-three-pane\s*\{[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\) auto;/s);
-  assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*var\(--conflict-ours-width, 27%\)[^}]*var\(--conflict-result-width, 46%\)[^}]*var\(--conflict-theirs-width, 27%\)[^}]*auto;/s);
+  assert.match(css, /--conflict-equal-pane-width:\s*calc\(33\.333333% - 38\.666667px\);/u);
+  assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*var\(--conflict-ours-width, var\(--conflict-equal-pane-width\)\)[^}]*var\(--conflict-result-width, var\(--conflict-equal-pane-width\)\)[^}]*var\(--conflict-theirs-width, var\(--conflict-equal-pane-width\)\)[^}]*auto;/s);
   assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
   assert.match(css, /--conflict-action-gutter-width:\s*58px;/u);
   assert.match(css, /\.conflict-editor-actions > \.primary-button,[^}]*\.conflict-editor-actions > \.secondary-button\s*\{[^}]*white-space:\s*nowrap;/s);

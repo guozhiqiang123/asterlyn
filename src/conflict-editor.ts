@@ -58,7 +58,7 @@ import {
 } from "./shared/diff-review/diff-review-block-decoration.ts";
 import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
 import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
-import { CONFLICT_PANE_MIN_PERCENTAGE, conflictPaneLayout, normalizeConflictPercentages, resizeConflictOursPercentage } from "./shared/diff-review/conflict-diff-review-layout.ts";
+import { CONFLICT_EQUAL_PERCENTAGE, CONFLICT_PANE_MIN_PERCENTAGE, conflictPaneLayout, normalizeConflictPercentages, resizeConflictOursPercentage } from "./shared/diff-review/conflict-diff-review-layout.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -674,8 +674,8 @@ export class ConflictEditor {
 
   private mountSplitLayout(root: HTMLElement): void {
     for (const dispose of this.splitDisposers.splice(0)) dispose();
-    let ours = this.presentation.conflictOursPercentage ?? 27;
-    let result = this.presentation.conflictResultPercentage ?? 46;
+    let ours = this.presentation.conflictOursPercentage ?? CONFLICT_EQUAL_PERCENTAGE;
+    let result = this.presentation.conflictResultPercentage ?? CONFLICT_EQUAL_PERCENTAGE;
     ({ ours, result } = normalizeConflictPercentages(ours, result));
     this.presentation = {
       ...this.presentation,
@@ -698,6 +698,7 @@ export class ConflictEditor {
       };
       this.applySplitLayout();
     };
+    const reset = () => { ours = CONFLICT_EQUAL_PERCENTAGE; result = CONFLICT_EQUAL_PERCENTAGE; apply(); };
     this.splitDisposers.push(
       attachSplitter(first, {
         orientation: "vertical",
@@ -719,7 +720,7 @@ export class ConflictEditor {
           this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
         },
         onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
-        onReset: () => { ({ ours, result } = resizeConflictOursPercentage(ours, result, 27)); apply(); },
+        onReset: reset,
       }),
       attachSplitter(second, {
         orientation: "vertical",
@@ -735,7 +736,7 @@ export class ConflictEditor {
           this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
         },
         onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
-        onReset: () => { result = 46; ({ ours, result } = normalizeConflictPercentages(ours, result)); apply(); },
+        onReset: reset,
       }),
     );
     apply();
@@ -746,8 +747,8 @@ export class ConflictEditor {
     if (!root || !this.leftMerge) return;
     const layout = conflictPaneLayout(
       root.clientWidth,
-      this.presentation.conflictOursPercentage ?? 27,
-      this.presentation.conflictResultPercentage ?? 46,
+      this.presentation.conflictOursPercentage ?? CONFLICT_EQUAL_PERCENTAGE,
+      this.presentation.conflictResultPercentage ?? CONFLICT_EQUAL_PERCENTAGE,
     );
     const { oursWidth, resultWidth, theirsWidth } = layout;
     root.style.setProperty("--conflict-ours-width", `${oursWidth}px`);

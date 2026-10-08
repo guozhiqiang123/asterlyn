@@ -115,7 +115,7 @@ future policy may affect presentation grouping only; it must never change bytes 
 
 - Read-only two-pane comparisons default to 50/50.
 - Editable two-pane comparisons default to 42/58 so the writable current side has priority.
-- Conflict resolution defaults to 27/46/27 for Ours/Result/Theirs.
+- Conflict resolution defaults to equal thirds for Ours/Result/Theirs; the two fixed action gutters are excluded before the available editor width is divided.
 - Every split is draggable, keyboard-adjustable, bounded by readable minimum widths, double-click
   resettable, and persisted in workbench layout state rather than repository state.
 - Result remains visually central and is labelled as the writable outcome. Source panes are labelled
@@ -358,7 +358,7 @@ Every phase is committed separately and must leave the branch buildable.
 
 1. Replace two-pane and conflict label markup with shared pane headers.
 2. Reuse the splitter utility in editable MergeView surfaces.
-3. Persist 50/50 read-only, 42/58 editable, and 27/46/27 conflict defaults and user adjustments.
+3. Persist 50/50 read-only, 42/58 editable, and equal-third conflict defaults and user adjustments; migrate only the legacy 27/46/27 conflict default so custom proportions remain intact.
 4. Add branch/revision identities and writable/read-only indicators.
 
 **Commit:** `feat unify diff review layout`

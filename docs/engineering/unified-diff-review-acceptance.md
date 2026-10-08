@@ -63,7 +63,7 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 - Read-only, editable, and conflict surfaces now use one pane-header renderer with explicit writable
   metadata and preserved revision casing.
-- Read-only split Diff keeps a 50/50 default, editable Diff uses 42/58, and conflict uses 27/46/27
+- Read-only split Diff keeps a 50/50 default, editable Diff uses 42/58, and conflict uses equal thirds after excluding the two fixed action gutters
   so Result receives deliberate visual priority.
 - Editable two-pane and conflict three-pane widths are pointer-draggable, keyboard-adjustable,
   double-click resettable, bounded, and persisted in workbench layout state.
