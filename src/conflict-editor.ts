@@ -723,7 +723,6 @@ export class ConflictEditor {
       this.rightMerge.dom.offsetWidth - this.rightMerge.dom.clientWidth,
     );
     this.diffScrollbars.corner.style.width = `${verticalScrollbarWidth}px`;
-    this.diffScrollbars.corner.style.flex = `0 0 ${verticalScrollbarWidth}px`;
     const hasOverflow = scrollers.some((scroller) => scroller.scrollWidth > scroller.clientWidth);
     this.diffScrollbars.container.style.display = hasOverflow ? "grid" : "none";
   }

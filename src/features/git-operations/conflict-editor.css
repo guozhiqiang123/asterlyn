@@ -133,6 +133,11 @@
   scrollbar-width: none;
 }
 
+.conflict-right-merge > .cm-mergeView {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .conflict-right-merge .cm-mergeViewEditor:first-child {
   display: none;
 }
@@ -160,10 +165,11 @@
 }
 
 .conflict-scrollbars {
+  position: relative;
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(0, var(--conflict-ours-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, var(--conflict-equal-pane-width))) auto;
+  grid-template-columns: minmax(0, var(--conflict-ours-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-result-width, var(--conflict-equal-pane-width))) var(--conflict-action-gutter-width) minmax(0, var(--conflict-theirs-width, var(--conflict-equal-pane-width)));
   border-top: 1px solid var(--border);
   background: var(--surface-chrome);
 }
@@ -181,8 +187,14 @@
 }
 
 .conflict-scrollbar-corner {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
   width: 0;
   background: var(--surface-chrome);
+  pointer-events: none;
 }
 
 .conflict-scrollbar-content {

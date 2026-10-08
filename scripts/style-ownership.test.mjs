@@ -379,9 +379,17 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
     readFile(new URL("../src/shared/diff-review/diff-review-action-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/icons.ts", import.meta.url), "utf8"),
   ]);
+  const scrollbarStart = css.indexOf(".conflict-scrollbars {");
+  const scrollbarRule = css.slice(scrollbarStart, css.indexOf("}\n", scrollbarStart) + 1);
   assert.match(css, /\.conflict-three-pane\s*\{[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\) auto;/s);
   assert.match(css, /--conflict-equal-pane-width:\s*calc\(33\.333333% - 38\.666667px\);/u);
-  assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*var\(--conflict-ours-width, var\(--conflict-equal-pane-width\)\)[^}]*var\(--conflict-result-width, var\(--conflict-equal-pane-width\)\)[^}]*var\(--conflict-theirs-width, var\(--conflict-equal-pane-width\)\)[^}]*auto;/s);
+  assert.match(scrollbarRule, /position:\s*relative;/u);
+  assert.match(scrollbarRule, /--conflict-ours-width/u);
+  assert.match(scrollbarRule, /--conflict-result-width/u);
+  assert.match(scrollbarRule, /--conflict-theirs-width/u);
+  assert.doesNotMatch(scrollbarRule, /\)\s+auto;/u);
+  assert.match(css, /\.conflict-scrollbar-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.conflict-right-merge > \.cm-mergeView\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/s);
   assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
   assert.match(css, /--conflict-action-gutter-width:\s*58px;/u);
   assert.match(css, /\.conflict-editor-actions > \.primary-button,[^}]*\.conflict-editor-actions > \.secondary-button\s*\{[^}]*white-space:\s*nowrap;/s);
@@ -397,6 +405,7 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.match(editor, /event\.stopPropagation\(\)/u);
   assert.match(editor, /this\.resolutionModel\.applyDecision\(side, decision, source/u);
   assert.match(editor, /const sharedWidth = Math\.max\(\.\.\.scrollers\.map\(\(scroller\) => scroller\.scrollWidth\)\)/u);
+  assert.doesNotMatch(editor, /corner\.style\.flex/u);
   assert.match(editor, /linkHorizontalScrollGroup\(\[\.\.\.panes, \.\.\.scrollers\]\)/u);
   assert.match(editor, /this\.rightMerge\.a\.scrollDOM/u);
   assert.match(icons, /"double-chevron-right"/u);
