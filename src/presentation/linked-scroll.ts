@@ -82,6 +82,7 @@ export function linkVerticalScrollByDocument(
     ),
     true,
     scheduler,
+    "immediate",
   );
 }
 
@@ -173,6 +174,7 @@ function linkMappedScrollElements(
   ) => Position,
   synchronizeImmediately: boolean,
   scheduler: ScrollFrameScheduler,
+  scrollTiming: "frame" | "immediate" = "frame",
 ): () => void {
   let suppressedFirst: Position | null = null;
   let suppressedSecond: Position | null = null;
@@ -224,6 +226,10 @@ function linkMappedScrollElements(
     target: LinkedScrollElement,
     targetName: "first" | "second",
   ) => {
+    if (scrollTiming === "immediate") {
+      mirror(source, target, targetName);
+      return;
+    }
     pending = { source, target, targetName };
     if (framePending) return;
     framePending = true;

@@ -221,7 +221,7 @@ test("proportional vertical linking maps unequal document heights in both direct
   assert.equal(preview.scrollTop, 750);
 });
 
-test("document-anchored vertical linking aligns the same Result block across unequal decorations", () => {
+test("document-anchored vertical linking aligns the same Result block before the next frame", () => {
   const first = new FakeScroller(500, 400);
   const second = new FakeScroller(500, 500);
   const firstDocument = new FakeDocumentView([
@@ -238,12 +238,16 @@ test("document-anchored vertical linking aligns the same Result block across une
   linkVerticalScrollByDocument(first, second, firstDocument, secondDocument, scheduler);
 
   first.userScroll(0, 30);
-  scheduler.flush();
   assert.equal(second.scrollTop, 50);
+  assert.equal(scheduler.size, 0);
+  second.flush();
+  assert.equal(first.scrollTop, 30);
 
   second.userScroll(0, 80);
-  scheduler.flush();
   assert.equal(first.scrollTop, 50);
+  assert.equal(scheduler.size, 0);
+  first.flush();
+  assert.equal(second.scrollTop, 80);
 });
 
 test("proportional linking coalesces a scroll burst to the latest animation frame", () => {
