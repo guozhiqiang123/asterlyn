@@ -5,6 +5,13 @@ import type { TextChange } from "./features/files-editor/text-content.ts";
 
 export type ConflictResolutionSide = "ours" | "theirs";
 export type ConflictResolutionDecision = "pending" | "accepted" | "ignored";
+export type ConflictBulkApplyScope = ConflictResolutionSide | "all";
+
+export interface ConflictBulkApplyResult {
+  readonly changes: readonly TextChange[];
+  readonly appliedBlocks: number;
+  readonly skippedManualBlocks: number;
+}
 
 export interface ConflictSourceRange {
   readonly from: number;
@@ -156,6 +163,28 @@ export class ConflictResolutionModel {
     return changes;
   }
 
+  applyNonConflicting(
+    scope: ConflictBulkApplyScope,
+    currentResult: string,
+  ): ConflictBulkApplyResult {
+    const relevant = this.blocks.filter((block) => isBulkRelevant(block, scope));
+    const skippedManualBlocks = relevant.filter((block) => block.manuallyEdited).length;
+    const applicable = relevant.filter((block) =>
+      !block.manuallyEdited && changedDecisions(block).every((decision) => decision === "pending"),
+    );
+    for (const block of applicable) applyBulkDecision(block, scope);
+    const changes = applicable
+      .map((block): TextChange | null => {
+        const insert = resolvedBlockText(block);
+        const current = currentResult.slice(block.result.from, block.result.to);
+        return current === insert ? null : { from: block.result.from, to: block.result.to, insert };
+      })
+      .filter((change): change is TextChange => change !== null)
+      .sort((left, right) => left.from - right.from || left.to - right.to);
+    this.mapResultRanges(changes, currentResult.length);
+    return { changes, appliedBlocks: applicable.length, skippedManualBlocks };
+  }
+
   observeManualChanges(
     changes: readonly TextChange[],
     resultLengthBefore: number,
@@ -215,6 +244,30 @@ function setDecisionForSide(
 ): void {
   if (side === "ours") block.oursDecision = decision;
   else block.theirsDecision = decision;
+}
+
+function changedDecisions(block: ConflictResolutionBlock): ConflictResolutionDecision[] {
+  return [
+    block.oursChanged ? block.oursDecision : null,
+    block.theirsChanged ? block.theirsDecision : null,
+  ].filter((decision): decision is ConflictResolutionDecision => decision !== null);
+}
+
+function isBulkRelevant(block: ConflictResolutionBlock, scope: ConflictBulkApplyScope): boolean {
+  const nonConflicting = block.oursChanged !== block.theirsChanged || block.oursText === block.theirsText;
+  if (!nonConflicting) return false;
+  if (block.oursChanged && block.theirsChanged) return true;
+  return scope === "all" || (scope === "ours" ? block.oursChanged : block.theirsChanged);
+}
+
+function applyBulkDecision(block: ConflictResolutionBlock, scope: ConflictBulkApplyScope): void {
+  block.manuallyEdited = false;
+  if (block.oursChanged) {
+    block.oursDecision = scope === "theirs" ? "ignored" : "accepted";
+  }
+  if (block.theirsChanged) {
+    block.theirsDecision = scope === "ours" ? "ignored" : "accepted";
+  }
 }
 
 function resolvedBlockText(block: ConflictResolutionBlock): string {

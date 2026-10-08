@@ -6,6 +6,7 @@ import type { GitConflictContent } from "../../models.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import type { AppPreferences } from "../../preferences.ts";
+import type { ConflictBulkApplyResult, ConflictBulkApplyScope } from "../../conflict-resolution-model.ts";
 
 interface EditableDiffMount {
   parent: HTMLElement;
@@ -261,6 +262,12 @@ export class LazyConflictEditor {
 
   reviewSummary(): DiffReviewSummary | null {
     return this.implementation?.reviewSummary() ?? null;
+  }
+
+  applyNonConflicting(scope: ConflictBulkApplyScope): ConflictBulkApplyResult {
+    return this.implementation?.applyNonConflicting(scope) ?? {
+      changes: [], appliedBlocks: 0, skippedManualBlocks: 0,
+    };
   }
 
   unchangedExpanded(): boolean {

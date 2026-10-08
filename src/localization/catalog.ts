@@ -639,9 +639,7 @@ export interface GitOperationCopy {
   conflictUnavailable: string;
   resolve(path: string): string;
   conflictInputs: string;
-  base: string;
-  ours: string;
-  theirs: string;
+  base: string; ours: string; theirs: string;
   acceptOursChange: string;
   acceptTheirsChange: string;
   ignoreOursChange: string;
@@ -649,8 +647,10 @@ export interface GitOperationCopy {
   previousConflict: string;
   nextConflict: string;
   conflictReviewSummary(conflicts: number, pending: number, total: number): string;
-  resolvedResult: string;
-  editableResult: string;
+  resolvedResult: string; editableResult: string;
+  applyNonConflicting: string; applyAllNonConflicting: string;
+  bulkConflictApplied(applied: number, skippedManual: number): string;
+  pendingConflictWarning(pending: number): string; continueSaveAndStage: string;
   binaryConflict: string;
   resolvedFileContent: string;
   resolveSafetyNote: string;

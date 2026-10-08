@@ -80,7 +80,7 @@ import { createRemoteRuntime } from "./features/remote-push/create-remote-runtim
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import { bindPushPreviewSplitter } from "./features/remote-push/push-preview-splitter.ts";
 import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts";
-import { discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
+import { discardConflictConfirmation, saveConflictWithPendingConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
 import {
   pushReviewFiles,
   pushDiffSideLabels,
@@ -837,7 +837,7 @@ export class AsterlynApp {
         preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
         presentation: () => this.diffPresentation(), editorCopy: () => this.localization.catalog.editor,
         status: (message) => this.setStatus(message, "warning"), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
-        resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
+        resolve: (deleteFile) => void this.resolveGitConflict(deleteFile), confirmPending: (pending) => this.dialogRuntime.confirm(saveConflictWithPendingConfirmation(this.localization.catalog, pending)),
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
           list: (root) => bridge.listGitWorktreeRecoveries(root),

@@ -33,6 +33,8 @@ import {
 } from "./features/files-editor/text-content.ts";
 import {
   ConflictResolutionModel,
+  type ConflictBulkApplyResult,
+  type ConflictBulkApplyScope,
   type ConflictResolutionDecision,
   type ConflictResolutionSide,
   type ConflictSourceRange,
@@ -49,9 +51,7 @@ import { projectConflictDiff } from "./shared/diff-review/diff-review-projection
 import type { DiffReviewSnapshot, DiffReviewSummary } from "./shared/diff-review/diff-review-model.ts";
 import { createDiffReviewPaneHeaders } from "./shared/diff-review/diff-review-pane-header.ts";
 import { attachSplitter } from "./presentation/splitter.ts";
-import {
-  createDiffReviewActionGroup,
-} from "./shared/diff-review/diff-review-action-gutter.ts";
+import { createDiffReviewActionGroup } from "./shared/diff-review/diff-review-action-gutter.ts";
 import {
   diffReviewBlockDecorations,
   setDiffReviewBlockDecorations,
@@ -251,6 +251,25 @@ export class ConflictEditor {
 
   reviewSummary(): DiffReviewSummary | null {
     return this.reviewSnapshot()?.summary ?? null;
+  }
+
+  applyNonConflicting(scope: ConflictBulkApplyScope): ConflictBulkApplyResult {
+    const result = this.leftMerge?.b;
+    if (!result || !this.resolutionModel || this.resultReadOnlyValue) {
+      return { changes: [], appliedBlocks: 0, skippedManualBlocks: 0 };
+    }
+    const bulk = this.resolutionModel.applyNonConflicting(scope, result.state.doc.toString());
+    if (bulk.changes.length > 0) {
+      this.applyingConflictDecision = true;
+      try {
+        result.dispatch({ changes: bulk.changes, userEvent: `input.conflict.bulk.${scope}` });
+      } finally {
+        this.applyingConflictDecision = false;
+      }
+    }
+    this.syncConflictControls();
+    this.syncReviewDecorations();
+    return bulk;
   }
 
   unchangedExpanded(): boolean {

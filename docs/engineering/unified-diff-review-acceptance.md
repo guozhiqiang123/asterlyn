@@ -87,3 +87,15 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   public CodeMirror coordinates; overlays are clipped to visible content and never receive input.
 - Existing document-anchored vertical synchronization and grouped horizontal scroll ownership are
   retained, while resize, fold, edit, splitter, and scroll events invalidate connector geometry.
+
+### Phase 6 — conflict workflow completion
+
+- `Ours`, `All`, and `Theirs` apply only untouched non-conflicting blocks; genuine divergent blocks
+  stay pending and manually edited blocks are reported and preserved.
+- A bulk application enters Result as one CodeMirror transaction, so the complete operation is one
+  undo step while the transient decision model and block decorations update together.
+- `Save and Stage` remains available for manual resolutions but requires explicit confirmation while
+  pending blocks remain; the existing exact revision token, staged-blob verification, and mutation
+  path remain unchanged.
+- Conflict Cancel now uses the existing discard confirmation for a dirty Result, clears only the
+  transient draft, and performs no Git mutation.

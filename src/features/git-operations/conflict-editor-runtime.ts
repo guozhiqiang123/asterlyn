@@ -7,6 +7,7 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import { CONFLICT_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
+import type { ConflictBulkApplyScope } from "../../conflict-resolution-model.ts";
 import type {
   GitOperationChange,
   GitOperationController,
@@ -35,6 +36,10 @@ interface ConflictEditorSurfacePort {
   flushConflict(): string | null;
   navigateDiffChange(direction: 1 | -1): boolean;
   conflictReviewSummary(): DiffReviewSummary | null;
+  applyNonConflictingConflict(scope: ConflictBulkApplyScope): {
+    readonly appliedBlocks: number;
+    readonly skippedManualBlocks: number;
+  };
   conflictUnchangedExpanded(): boolean;
   setConflictUnchangedExpanded(expanded: boolean): void;
 }
@@ -55,6 +60,8 @@ export interface ConflictEditorRuntimeOptions {
   status(message: string): void;
   resolve(deleteFile: boolean): void;
   setWhitespace(showWhitespace: boolean): void;
+  confirmDiscard(): Promise<boolean>;
+  confirmPending(pending: number): Promise<boolean>;
 }
 
 /** Owns the persistent editor-region presentation for one Git conflict draft. */
@@ -122,7 +129,10 @@ export class ConflictEditorRuntime {
         copy,
         this.options.editorCopy(),
         () => undefined,
-        (content) => controller.setConflictResult(content),
+        (content) => {
+          controller.setConflictResult(content);
+          this.options.renderEditor();
+        },
       );
       surface.setConflictReadOnly(resolving);
     }
@@ -148,9 +158,17 @@ export class ConflictEditorRuntime {
     this.query("#content-header").querySelector<HTMLButtonElement>("[data-diff-whitespace]")?.addEventListener("click", () => {
       this.options.setWhitespace(!this.options.preferences().showWhitespace);
     });
-    root.querySelector<HTMLButtonElement>("#conflict-resolve-cancel")?.addEventListener("click", () => this.options.editor.closePreview());
+    this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-bulk]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const scope = button.dataset.diffBulk as ConflictBulkApplyScope;
+        const applied = surface.applyNonConflictingConflict(scope);
+        this.options.status(copy.bulkConflictApplied(applied.appliedBlocks, applied.skippedManualBlocks));
+        this.options.renderEditor();
+      });
+    });
+    root.querySelector<HTMLButtonElement>("#conflict-resolve-cancel")?.addEventListener("click", () => void this.requestCancel());
     root.querySelector<HTMLButtonElement>("#conflict-resolve-delete")?.addEventListener("click", () => this.options.resolve(true));
-    root.querySelector<HTMLButtonElement>("#conflict-resolve-save")?.addEventListener("click", () => this.options.resolve(false));
+    root.querySelector<HTMLButtonElement>("#conflict-resolve-save")?.addEventListener("click", () => void this.requestSave(summary?.pending ?? 0));
     return true;
   }
 
@@ -164,6 +182,13 @@ export class ConflictEditorRuntime {
       showWhitespace: this.options.preferences().showWhitespace,
       expandedUnchanged: this.options.surface.conflictUnchangedExpanded(),
       summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pending, summary.total) : null,
+      bulkActions: summary ? {
+        label: copy.applyNonConflicting,
+        ours: copy.ours,
+        all: copy.applyAllNonConflicting,
+        theirs: copy.theirs,
+        disabled: summary.nonConflicting + summary.identical === 0,
+      } : undefined,
       copy: {
         toolbar: editor.diffToolbar,
         navigation: editor.diffNavigation,
@@ -189,6 +214,30 @@ export class ConflictEditorRuntime {
     if (this.options.activeDocument().kind !== "conflict-resolution") return;
     const content = this.options.surface.flushConflict();
     if (content !== null) this.options.controller.setConflictResult(content);
+  }
+
+  async requestCancel(): Promise<boolean> {
+    this.capture();
+    const { controller } = this.options;
+    const conflict = controller.state.conflict;
+    const result = controller.state.conflictResult;
+    if (controller.hasUnsavedConflict() && !(await this.options.confirmDiscard())) return false;
+    if (controller.state.conflict !== conflict || controller.state.conflictResult !== result) return false;
+    if (!controller.closeDialog(true)) return false;
+    this.options.editor.closePreview();
+    return true;
+  }
+
+  async requestSave(pending: number): Promise<boolean> {
+    this.capture();
+    const { controller } = this.options;
+    const conflict = controller.state.conflict;
+    const result = controller.state.conflictResult;
+    const currentPending = this.options.surface.conflictReviewSummary()?.pending ?? pending;
+    if (currentPending > 0 && !(await this.options.confirmPending(currentPending))) return false;
+    if (controller.state.conflict !== conflict || controller.state.conflictResult !== result) return false;
+    this.options.resolve(false);
+    return true;
   }
 
   private query<T extends Element = HTMLElement>(selector: string): T {

@@ -9,6 +9,7 @@ import {
 } from "./editor-session.ts";
 import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
 import type { AppPreferences } from "../../preferences.ts";
+import type { ConflictBulkApplyResult, ConflictBulkApplyScope } from "../../conflict-resolution-model.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
@@ -158,6 +159,7 @@ export class EditorSurface {
 
   navigateDiffChange(direction: 1 | -1): boolean { return this.mountedConflictKey ? this.conflictEditor.navigateChange(direction) : this.mountedEditableDiffTabId ? this.editableDiffEditor.navigateChange(direction) : this.diffEditor.navigateChange(direction); }
   conflictReviewSummary() { return this.mountedConflictKey ? this.conflictEditor.reviewSummary() : null; }
+  applyNonConflictingConflict(scope: ConflictBulkApplyScope): ConflictBulkApplyResult { return this.conflictEditor.applyNonConflicting(scope); }
   conflictUnchangedExpanded(): boolean { return this.mountedConflictKey ? this.conflictEditor.unchangedExpanded() : false; }
   setConflictUnchangedExpanded(expanded: boolean): void { if (this.mountedConflictKey) this.conflictEditor.setUnchangedExpanded(expanded); }
 

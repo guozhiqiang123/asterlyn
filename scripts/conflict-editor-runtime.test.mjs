@@ -52,30 +52,66 @@ test("a stash-pop worktree conflict opens the three-pane editor without operatio
   assert.equal(harness.active().kind, "conflict-resolution");
 });
 
-function runtimeHarness(controller, repository = snapshot()) {
+test("Cancel reuses discard confirmation and clears only the transient draft", async () => {
+  const controller = new GitOperationController(gateway());
+  controller.installSnapshot(snapshot());
+  const rejected = runtimeHarness(controller, snapshot(), { discard: false });
+  await rejected.runtime.open("one.txt");
+  controller.setConflictResult("edited result");
+
+  assert.equal(await rejected.runtime.requestCancel(), false);
+  assert.equal(controller.state.conflict?.path, "one.txt");
+
+  const accepted = runtimeHarness(controller, snapshot(), { discard: true });
+  assert.equal(await accepted.runtime.requestCancel(), true);
+  assert.equal(controller.state.conflict, null);
+  assert.equal(accepted.active().kind, "welcome");
+});
+
+test("Save and Stage confirms pending blocks without weakening resolve verification", async () => {
+  const controller = new GitOperationController(gateway());
+  controller.installSnapshot(snapshot());
+  const rejected = runtimeHarness(controller, snapshot(), { pending: false });
+  await rejected.runtime.open("one.txt");
+
+  assert.equal(await rejected.runtime.requestSave(2), false);
+  assert.deepEqual(rejected.resolutions(), []);
+
+  const accepted = runtimeHarness(controller, snapshot(), { pending: true });
+  assert.equal(await accepted.runtime.requestSave(2), true);
+  assert.deepEqual(accepted.resolutions(), [false]);
+});
+
+function runtimeHarness(controller, repository = snapshot(), confirmations = {}) {
   let active = { kind: "welcome" };
   let renders = 0;
   const statuses = [];
+  const resolutions = [];
   const runtime = new ConflictEditorRuntime({
     root: { querySelector() { return null; } },
     controller,
     editor: { closePreview() { active = { kind: "welcome" }; } },
-    surface: { flushConflict() { return null; } },
+    surface: { flushConflict() { return null; }, conflictReviewSummary() { return null; } },
     snapshot: () => repository,
     activeDocument: () => active,
     activate(document) { active = document; },
     renderEditor() { renders += 1; },
     preferences: () => DEFAULT_APP_PREFERENCES,
+    presentation: () => ({ layout: "split", showWhitespace: false }),
     copy: () => EN_US.gitOperations,
     editorCopy: () => EN_US.editor,
     status(message) { statuses.push(message); },
-    resolve() {},
+    resolve(deleteFile) { resolutions.push(deleteFile); },
+    setWhitespace() {},
+    confirmDiscard: async () => confirmations.discard ?? true,
+    confirmPending: async () => confirmations.pending ?? true,
   });
   return {
     runtime,
     active: () => active,
     renderCount: () => renders,
     statuses: () => statuses,
+    resolutions: () => resolutions,
   };
 }
 

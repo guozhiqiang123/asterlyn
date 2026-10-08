@@ -66,6 +66,12 @@ test("conflict toolbar hides unsupported file and layout actions and announces p
     capabilities: { ...CONFLICT_DIFF_CAPABILITIES, toggleUnchanged: false },
     ready: true,
     summary: "2 conflicts · 1 pending",
+    bulkActions: {
+      label: "Apply non-conflicting changes",
+      ours: "Ours",
+      all: "All",
+      theirs: "Theirs",
+    },
     showWhitespace: false,
     copy,
   });
@@ -75,4 +81,7 @@ test("conflict toolbar hides unsupported file and layout actions and announces p
   assert.doesNotMatch(html, /previous-file/);
   assert.doesNotMatch(html, /data-diff-layout/);
   assert.match(html, /data-diff-whitespace/);
+  assert.match(html, /data-diff-bulk="ours"/);
+  assert.match(html, /data-diff-bulk="all"/);
+  assert.match(html, /data-diff-bulk="theirs"/);
 });

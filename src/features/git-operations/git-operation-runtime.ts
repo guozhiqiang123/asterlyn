@@ -23,7 +23,7 @@ export interface GitOperationRuntimeOptions {
   readonly copy: () => GitOperationCopy;
   readonly actions: GitOperationDialogActions;
   readonly changed: (change: GitOperationChange) => void;
-  readonly conflictEditor?: Omit<ConflictEditorRuntimeOptions, "controller">;
+  readonly conflictEditor?: Omit<ConflictEditorRuntimeOptions, "controller" | "confirmDiscard">;
   readonly recovery?: {
     readonly actions: GitWorktreeRecoveryActions;
     readonly copy: () => RecoveryCopy;
@@ -44,7 +44,11 @@ export class GitOperationRuntime {
   constructor(options: GitOperationRuntimeOptions) {
     this.controller = new GitOperationController(options.gateway, options.initialCopy);
     this.conflictEditor = options.conflictEditor
-      ? new ConflictEditorRuntime({ ...options.conflictEditor, controller: this.controller })
+      ? new ConflictEditorRuntime({
+          ...options.conflictEditor,
+          controller: this.controller,
+          confirmDiscard: options.actions.confirmDiscard,
+        })
       : null;
     this.recovery = options.recovery;
     this.binding = new GitOperationDialogBinding(

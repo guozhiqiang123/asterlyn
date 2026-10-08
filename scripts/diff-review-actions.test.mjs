@@ -30,3 +30,9 @@ test("conflict review state is decorated in every registered pane", async () => 
     assert.match(styles, new RegExp(`cm-diff-review-${state}`));
   }
 });
+
+test("bulk non-conflicting changes enter Result as one undoable transaction", async () => {
+  const source = await readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8");
+  assert.match(source, /applyNonConflicting\(scope/u);
+  assert.match(source, /result\.dispatch\(\{ changes: bulk\.changes, userEvent: `input\.conflict\.bulk\.\$\{scope\}` \}\)/u);
+});
