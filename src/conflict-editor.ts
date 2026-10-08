@@ -471,8 +471,8 @@ export class ConflictEditor {
     const chunk = Number.isInteger(index) ? merge?.chunks[index] : null;
     if (!chunk) return null;
     return side === "ours"
-      ? { from: chunk.fromA, to: chunk.toA }
-      : { from: chunk.fromB, to: chunk.toB };
+      ? { from: chunk.fromA, to: chunk.endA }
+      : { from: chunk.fromB, to: chunk.endB };
   }
 
   private observeConflictControls(root: HTMLElement): void {

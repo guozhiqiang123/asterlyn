@@ -1,6 +1,6 @@
 # Conflict resolution actions plan
 
-- **Status:** In progress
+- **Status:** Implemented
 - **Date:** 2026-10-08
 
 ## Objective
@@ -44,3 +44,12 @@ block can accept both sides into Result without the second action overwriting th
 - Controls retain the shared 26-pixel Diff action geometry and remain centered in the widened gutter.
 - Full script tests, TypeScript check, production build, native package replacement, installed-binary
   hash verification, and a relaunched installed app close the task.
+
+## Verification
+
+- Script suite: 855 passed, 0 failed.
+- TypeScript check and production web build: passed.
+- Native tests: 62 passed, 0 failed, 2 ignored; native rendered-shell smoke: passed.
+- The packaged and installed executables both have SHA-256
+  `e087387c0747ef7df774f17c7d6d98a3989d7a992c61e64763e68bda6ae98dd4`.
+- `/Applications/Asterlyn.app` was replaced and the installed application was relaunched.

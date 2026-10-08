@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ConflictResolutionModel } from "../src/conflict-resolution-model.ts";
+import {
+  applyExactTextChanges,
+  decodeExactText,
+  encodeExactText,
+} from "../src/features/files-editor/text-content.ts";
 
 test("conflict actions compose Ours then Theirs in either click order", () => {
   const fixture = () => {
@@ -64,6 +69,29 @@ test("insertions at the same Base position compose without losing either side", 
   let current = applyModelDecision(model, "ours", "accepted", block.ours, base);
   current = applyModelDecision(model, "theirs", "accepted", block.theirs, current);
   assert.equal(current, "header\nours\ntheirs\nfooter\n");
+});
+
+test("two-sided actions preserve the Result document's CRLF policy", () => {
+  const base = decodeExactText("start\r\nbase\r\nend\r\n");
+  const ours = decodeExactText("start\r\nours\r\nend\r\n").text;
+  const theirs = decodeExactText("start\r\ntheirs\r\nend\r\n").text;
+  const model = ConflictResolutionModel.create(base.text, ours, theirs, base.text);
+  const block = model.snapshots()[0];
+  const oursChanges = model.applyDecision("ours", "accepted", block.ours, base.text);
+  const afterOurs = applyExactTextChanges(base, oursChanges);
+  const theirsChanges = model.applyDecision("theirs", "accepted", block.theirs, afterOurs.text);
+  const combined = applyExactTextChanges(afterOurs, theirsChanges);
+
+  assert.equal(encodeExactText(combined), "start\r\nours\r\ntheirs\r\nend\r\n");
+});
+
+test("delete versus modify remains deterministic when both sides are accepted", () => {
+  const base = "start\nbase\nend\n";
+  const model = ConflictResolutionModel.create(base, "start\nend\n", "start\ntheirs\nend\n", base);
+  const block = model.snapshots()[0];
+  let current = applyModelDecision(model, "ours", "accepted", block.ours, base);
+  current = applyModelDecision(model, "theirs", "accepted", block.theirs, current);
+  assert.equal(current, "start\ntheirs\nend\n");
 });
 
 test("ignoring an accepted side recomputes from the remaining decision", () => {
