@@ -113,22 +113,21 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 8 — package and acceptance evidence
 
-- The complete frontend suite passed: 892 tests, 0 failures. TypeScript checking, the production
+- The complete frontend suite passed: 893 tests, 0 failures. TypeScript checking, the production
   frontend build, and `git diff --check` also passed.
 - The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
-  release executable and the installed executable each rendered the application shell inside the
-  six-second native smoke bound.
+  installed executable launched the Flutter conflict workspace successfully after replacement.
 - The accepted macOS arm64 archive is
-  `target/release/bundle/macos/Asterlyn-explicit-conflict-decisions-20261008-macos-arm64.zip`,
-  9,147,335 bytes, SHA-256
-  `96de965a3a5cd08f678b38a285e6918a9bebe09a0fbcdf7bc184dee9ee14cca4`.
+  `target/release/bundle/macos/Asterlyn-conflict-review-20261008-150600-macos-arm64.zip`,
+  9,147,815 bytes, SHA-256
+  `5fb2c55866d52d87cb8e2b36aa8350f8110ad9c95f121c68b8a20074a03ec44a`.
 - The packaged and installed executables are both 24,046,032 bytes with SHA-256
-  `c8fe61955950f9d509dab83dc2b642361ea07b8b83de44e29a976f34c0827e62`. The bundle is an arm64
+  `9e1c72a682c75fc4088afa397393e052c09a7a853c3c6e5ac87476c577b304fb`. The bundle is an arm64
   application with an ad-hoc hardened-runtime signature and passed strict deep signature
   verification before and after installation.
-- `/Applications/Asterlyn.app` was replaced and relaunched against this worktree. The previous
+- `/Applications/Asterlyn.app` was replaced and relaunched against `/Users/gzq/flutter`. The previous
   installation remains recoverable at
-  `/Users/gzq/.Trash/Asterlyn-before-explicit-conflicts-20261008-141500.app`.
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-review-20261008-150629.app`.
 - The final visual refinement removes the redundant 3px per-line conflict-status rail while keeping
   the 5px Diff gutter, connector fill, action state, active-block emphasis, and ignored-text
   treatment. Connector edge strokes were also removed so Patch ranges do not paint 1px colored
