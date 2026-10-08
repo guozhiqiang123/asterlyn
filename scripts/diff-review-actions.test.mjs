@@ -26,9 +26,12 @@ test("conflict review state is decorated in every registered pane", async () => 
   assert.match(conflict, /setDiffReviewBlockDecorations\.of/u);
   assert.match(conflict, /paneReviewStatus/u);
   assert.match(decoration, /cm-diff-review-\$\{block\.status\}/u);
-  for (const state of ["pending", "accepted", "ignored", "manual", "active"]) {
-    assert.match(styles, new RegExp(`cm-diff-review-${state}`));
+  assert.match(styles, /cm-diff-review-active/u);
+  assert.match(styles, /cm-diff-review-ignored/u);
+  for (const state of ["pending", "accepted", "ignored", "manual"]) {
+    assert.match(styles, new RegExp(`diff-review-connector-${state}`));
   }
+  assert.doesNotMatch(styles, /box-shadow:\s*inset\s+3px/u);
 });
 
 test("bulk non-conflicting changes enter Result as one undoable transaction", async () => {
