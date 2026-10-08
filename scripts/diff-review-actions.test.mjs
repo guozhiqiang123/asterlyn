@@ -28,6 +28,11 @@ test("conflict review state is decorated in every registered pane", async () => 
   assert.match(conflict, /paneReviewStatus/u);
   assert.match(decoration, /cm-diff-review-\$\{block\.status\}/u);
   assert.match(styles, /cm-diff-review-active/u);
+  assert.match(styles, /cm-diff-review-active\.cm-diff-review-block-start\.cm-diff-review-block-end/u);
+  assert.match(styles, /inset 1px 0 0 var\(--focus-ring-bright\)/u);
+  assert.match(styles, /inset -1px 0 0 var\(--focus-ring-bright\)/u);
+  assert.match(styles, /inset 0 1px 0 var\(--focus-ring-bright\)/u);
+  assert.match(styles, /inset 0 -1px 0 var\(--focus-ring-bright\)/u);
   assert.match(styles, /cm-diff-review-ignored/u);
   for (const state of ["pending", "accepted", "ignored", "manual"]) {
     assert.match(styles, new RegExp(`diff-review-connector-${state}`));
