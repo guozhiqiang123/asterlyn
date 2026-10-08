@@ -91,6 +91,13 @@ export const EDITABLE_DIFF_CAPABILITIES: DiffReviewCapabilities = Object.freeze(
   finish: true,
 });
 
+export const EMBEDDED_EDITABLE_DIFF_CAPABILITIES: DiffReviewCapabilities = Object.freeze({
+  ...EDITABLE_DIFF_CAPABILITIES,
+  navigateFiles: false,
+  openSource: false,
+  finish: false,
+});
+
 export const CONFLICT_DIFF_CAPABILITIES: DiffReviewCapabilities = Object.freeze({
   navigateBlocks: true,
   navigateFiles: false,

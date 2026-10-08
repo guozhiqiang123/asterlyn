@@ -137,6 +137,21 @@ Theirs rows rather than from the hidden Result mirror. The two outer vertical sc
 through a shared Result document position instead of copying raw pixels, keeping the three panes
 aligned when pair-specific merge spacers have different heights.
 
+**Amendment, 2026-10-08 — unified review presentation.** Read-only, editable, replacement, Push,
+and conflict text comparisons now project into one shared review contract: pane identities, stable
+block ranges, capabilities, progress, and review state. One toolbar renderer owns block navigation,
+unchanged expansion, layout, whitespace, and conflict-only bulk actions while retaining isolated
+command attributes for editor, Push, and replacement hosts. One pane-header renderer and one action
+renderer own writable metadata, hit targets, focus, selected state, and accessibility.
+
+Editable and conflict surfaces use the same anchor-owned folding coordinator and public
+CodeMirror-coordinate geometry. Frame-coalesced SVG connectors are presentation-only, clipped to
+visible content, and never intercept input. Conflict review state remains transient: bulk
+Ours/All/Theirs applies only untouched non-conflicting blocks in one undoable Result transaction,
+manual blocks and divergent conflicts are preserved, pending completion requires confirmation, and
+Cancel reuses the established dirty-draft confirmation. Save and Stage still crosses the exact
+revision-token and verified stage-zero boundary described above.
+
 ### Dependency boundary
 
 Adopt exact package `@codemirror/merge` **6.12.2** from the public npm distribution under the MIT
@@ -171,6 +186,10 @@ startup shell, application services, domain models, or persisted state.
     and must not let the second accepted side erase the first accepted side.
 14. Conflict folds have one Base-owned identity across all panes, and linked vertical scrolling is
     anchored to Result document positions rather than assuming equal decorated pixel heights.
+15. Text Diff consumers share the same capability-driven toolbar, pane-header, block-state, fold,
+    and geometry contracts; consumer-specific commands remain isolated by explicit attributes.
+16. Bulk conflict actions may touch only pending non-conflicting blocks in one Result transaction;
+    they never overwrite manual blocks, auto-resolve divergent overlaps, or bypass completion safety.
 
 ## Delivery sequence
 

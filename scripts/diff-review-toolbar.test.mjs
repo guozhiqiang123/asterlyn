@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   CONFLICT_DIFF_CAPABILITIES,
+  EMBEDDED_EDITABLE_DIFF_CAPABILITIES,
   READ_ONLY_DIFF_CAPABILITIES,
 } from "../src/shared/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../src/shared/diff-review/diff-review-toolbar.ts";
@@ -58,6 +60,33 @@ test("Push Diff reuses the toolbar while keeping its command target namespace", 
 
   assert.match(html, /data-push-diff-action="next-change"/);
   assert.match(html, /data-push-diff-layout="unified" aria-pressed="true"/);
+});
+
+test("replacement Diff reuses the toolbar with isolated command targets", () => {
+  const html = renderDiffReviewToolbar({
+    namespace: "replacement",
+    capabilities: EMBEDDED_EDITABLE_DIFF_CAPABILITIES,
+    ready: true,
+    layout: "split",
+    expandedUnchanged: true,
+    copy,
+  });
+
+  assert.match(html, /data-replacement-tool-action="next-change"/);
+  assert.match(html, /data-replacement-tool-action="toggle-unchanged"/);
+  assert.match(html, /data-replacement-tool-layout="split" aria-pressed="true"/);
+  assert.match(html, /data-replacement-tool-whitespace/);
+  assert.doesNotMatch(html, /previous-file|open-source|data-diff-action/);
+});
+
+test("replacement presentation delegates toolbar markup to the shared renderer", async () => {
+  const source = await readFile(new URL(
+    "../src/features/files-editor/workspace-replacement-presentation-runtime.ts",
+    import.meta.url,
+  ), "utf8");
+  assert.match(source, /renderDiffReviewToolbar\(\{/u);
+  assert.match(source, /namespace: "replacement"/u);
+  assert.doesNotMatch(source, /data-replacement-tool-change|data-replacement-tool-unchanged/u);
 });
 
 test("conflict toolbar hides unsupported file and layout actions and announces progress", () => {

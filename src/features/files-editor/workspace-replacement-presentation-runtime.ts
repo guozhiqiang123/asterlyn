@@ -14,6 +14,8 @@ import { projectTreeRows } from "./project-files-view.ts";
 import { renderWorkspaceReplacementDialog } from "./workspace-navigation-view.ts";
 import type { WorkspaceReplacementController, WorkspaceReplacementFileSession, WorkspaceReplacementRecoveryAction } from "./workspace-replacement-controller.ts";
 import { buildWorkspaceReplacementActionDocument, replacementActionForChunk } from "./workspace-replacement-diff-session.ts";
+import { EMBEDDED_EDITABLE_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
+import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
 
 export interface WorkspaceReplacementPresentationOptions {
   readonly controller: WorkspaceReplacementController;
@@ -122,9 +124,26 @@ export class WorkspaceReplacementPresentationRuntime {
     const replacementText = this.options.controller.state.text;
     const draftChanged = replacementText !== state.request.replacement;
     const files = this.renderFiles(state.preview.files);
+    const diffToolbar = renderDiffReviewToolbar({
+      namespace: "replacement",
+      capabilities: EMBEDDED_EDITABLE_DIFF_CAPABILITIES,
+      ready: this.selectedPath !== null,
+      layout: presentation.layout,
+      showWhitespace: presentation.showWhitespace,
+      expandedUnchanged: this.expandedUnchanged,
+      copy: {
+        toolbar: editor.diffToolbar, navigation: editor.diffNavigation,
+        previousBlock: editor.previousChange, nextBlock: editor.nextChange,
+        previousFile: editor.previousFile, nextFile: editor.nextFile, openSource: editor.openSource,
+        collapseUnchanged: editor.collapseUnchanged, expandUnchanged: editor.expandUnchanged,
+        presentation: editor.diffPresentation, unified: editor.unified, unifiedTitle: editor.unifiedTitle,
+        split: editor.sideBySide, splitTitle: editor.sideBySideTitle,
+        whitespace: editor.whitespace, whitespaceTitle: editor.whitespaceTitle,
+      },
+    });
     host.innerHTML = `<div class="replacement-tool-layout">
       <aside class="replacement-tool-files"><div class="replacement-tool-summary" role="group" aria-label="${escapeAttribute(copy.replacementMapping)}"><span>${escapeHtml(copy.replaceLabel)}</span><code title="${escapeAttribute(state.request.query)}">${escapeHtml(state.request.query)}</code><label for="replacement-tool-text">${escapeHtml(copy.withLabel)}</label><input id="replacement-tool-text" type="text" value="${escapeAttribute(replacementText)}" /><small class="replacement-tool-draft ${draftChanged ? "" : "hidden"}">${escapeHtml(copy.previewChanged)}</small></div><div class="replacement-tool-file-toolbar"><button class="compact-icon-button ${this.fileView === "tree" ? "active" : ""}" data-replacement-file-view type="button" aria-pressed="${this.fileView === "tree"}" title="${escapeAttribute(this.fileView === "tree" ? copy.flatView : copy.treeView)}">${icon("eye", 14)}</button><button class="compact-icon-button" data-replacement-expand type="button" title="${escapeAttribute(copy.expandAll)}" ${this.fileView === "tree" ? "" : "disabled"}>${icon("expand", 14)}</button><button class="compact-icon-button" data-replacement-collapse type="button" title="${escapeAttribute(copy.collapseAll)}" ${this.fileView === "tree" ? "" : "disabled"}>${icon("collapse", 14)}</button></div><div class="replacement-tool-file-list compact-file-tree ${this.fileView}" role="${this.fileView === "tree" ? "tree" : "listbox"}">${files}</div></aside><div class="workbench-splitter vertical replacement-tool-splitter" id="replacement-tool-splitter" aria-label="${escapeAttribute(copy.resizeFileList)}"></div>
-      <section class="replacement-tool-comparison"><div class="replacement-tool-toolbar"><strong id="replacement-tool-path">${escapeHtml(this.selectedPath ?? "")}</strong><div class="replacement-tool-actions"><span class="replacement-tool-save-state" id="replacement-tool-save-state"></span><button class="compact-icon-button" data-replacement-tool-change="previous" type="button" aria-label="${escapeAttribute(editor.previousChange)}" title="${escapeAttribute(editor.previousChange)}">${icon("up", 15)}</button><button class="compact-icon-button" data-replacement-tool-change="next" type="button" aria-label="${escapeAttribute(editor.nextChange)}" title="${escapeAttribute(editor.nextChange)}">${icon("down", 15)}</button><span class="diff-control-separator" aria-hidden="true"></span><button class="compact-icon-button ${this.expandedUnchanged ? "active" : ""}" data-replacement-tool-unchanged type="button" aria-pressed="${this.expandedUnchanged}"></button><div class="diff-controls" role="group" aria-label="${escapeAttribute(editor.diffPresentation)}"><button type="button" data-replacement-tool-layout="unified" aria-pressed="${presentation.layout === "unified"}" title="${escapeAttribute(editor.unifiedTitle)}">${escapeHtml(editor.unified)}</button><button type="button" data-replacement-tool-layout="split" aria-pressed="${presentation.layout === "split"}" title="${escapeAttribute(editor.sideBySideTitle)}">${escapeHtml(editor.sideBySide)}</button><button type="button" data-replacement-tool-whitespace aria-pressed="${presentation.showWhitespace}" title="${escapeAttribute(editor.whitespaceTitle)}">${escapeHtml(editor.whitespace)}</button></div><button class="primary-button replacement-tool-review" id="replacement-tool-review" type="button" ${draftChanged ? "disabled" : ""}>${escapeHtml(copy.reviewAndApply)}</button><button class="secondary-button replacement-tool-save hidden" id="replacement-tool-save" type="button" disabled>${escapeHtml(copy.saveFile)}</button></div></div><div class="replacement-tool-diff diff-surface editable-diff-surface" id="replacement-tool-diff"></div></section>
+      <section class="replacement-tool-comparison"><div class="replacement-tool-toolbar"><strong id="replacement-tool-path">${escapeHtml(this.selectedPath ?? "")}</strong><div class="replacement-tool-actions"><span class="replacement-tool-save-state" id="replacement-tool-save-state"></span>${diffToolbar}<button class="primary-button replacement-tool-review" id="replacement-tool-review" type="button" ${draftChanged ? "disabled" : ""}>${escapeHtml(copy.reviewAndApply)}</button><button class="secondary-button replacement-tool-save hidden" id="replacement-tool-save" type="button" disabled>${escapeHtml(copy.saveFile)}</button></div></div><div class="replacement-tool-diff diff-surface editable-diff-surface" id="replacement-tool-diff"></div></section>
     </div>`;
     this.syncUnchangedButton();
     this.bindTool();
@@ -263,17 +282,20 @@ export class WorkspaceReplacementPresentationRuntime {
         this.expandedDirectories = new Set();
         this.renderFileList();
       });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-replacement-tool-change]").forEach((button) => {
-      button.addEventListener("click", () => this.editor.navigateChange(
-        button.dataset.replacementToolChange === "next" ? 1 : -1,
-      ));
-    });
-    this.root.querySelector<HTMLButtonElement>("[data-replacement-tool-unchanged]")
-      ?.addEventListener("click", () => {
-        this.expandedUnchanged = !this.expandedUnchanged;
-        this.syncUnchangedButton();
-        this.mountSelectedSession();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-replacement-tool-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.replacementToolAction;
+        if (action === "previous-change" || action === "next-change") {
+          this.editor.navigateChange(action === "next-change" ? 1 : -1);
+          return;
+        }
+        if (action === "toggle-unchanged") {
+          this.expandedUnchanged = !this.expandedUnchanged;
+          this.syncUnchangedButton();
+          this.mountSelectedSession();
+        }
       });
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-replacement-tool-layout]").forEach((button) => {
       button.addEventListener("click", () => {
         const layout = button.dataset.replacementToolLayout;
@@ -414,7 +436,7 @@ export class WorkspaceReplacementPresentationRuntime {
   }
 
   private syncUnchangedButton(): void {
-    const button = this.root.querySelector<HTMLButtonElement>("[data-replacement-tool-unchanged]");
+    const button = this.root.querySelector<HTMLButtonElement>('[data-replacement-tool-action="toggle-unchanged"]');
     if (!button) return;
     const copy = this.options.editorCopy();
     const label = this.expandedUnchanged ? copy.collapseUnchanged : copy.expandUnchanged;

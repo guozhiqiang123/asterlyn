@@ -99,3 +99,13 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   path remain unchanged.
 - Conflict Cancel now uses the existing discard confirmation for a dirty Result, clears only the
   transient draft, and performs no Git mutation.
+
+### Phase 7 — surface migration and cleanup
+
+- History, commit comparison, stash, working-tree, and ordinary read-only text comparisons continue
+  through the editor Diff adapter; Push, replacement, editable working Diff, and conflict now all
+  render the shared capability-driven toolbar.
+- Editor, Push, and replacement hosts retain isolated command attributes while sharing button
+  markup, labels, state, and accessibility behavior.
+- Shared review modules live under `src/shared/diff-review/`, preventing cross-feature imports; the
+  architecture dependency and source-ownership budget suites remain green.

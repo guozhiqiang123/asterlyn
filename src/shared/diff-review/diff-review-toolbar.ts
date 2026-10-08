@@ -2,7 +2,7 @@ import { icon } from "../../icons.ts";
 import type { DiffLayout } from "../../diff-presentation.ts";
 import type { DiffReviewCapabilities } from "./diff-review-model.ts";
 
-export type DiffReviewToolbarNamespace = "editor" | "push";
+export type DiffReviewToolbarNamespace = "editor" | "push" | "replacement";
 
 export interface DiffReviewToolbarCopy {
   readonly toolbar: string;
@@ -48,9 +48,8 @@ export interface DiffReviewToolbarViewModel {
 }
 
 export function renderDiffReviewToolbar(model: DiffReviewToolbarViewModel): string {
-  const action = model.namespace === "push" ? "data-push-diff-action" : "data-diff-action";
-  const layout = model.namespace === "push" ? "data-push-diff-layout" : "data-diff-layout";
-  const whitespace = model.namespace === "push" ? "data-push-diff-whitespace" : "data-diff-whitespace";
+  const attributes = toolbarAttributes(model.namespace);
+  const { action, layout, whitespace } = attributes;
   const copy = model.copy;
   const expanded = model.expandedUnchanged ?? false;
   const unchanged = expanded ? copy.collapseUnchanged : copy.expandUnchanged;
@@ -96,6 +95,28 @@ export function renderDiffReviewToolbar(model: DiffReviewToolbarViewModel): stri
     ${bulk}
     ${presentation}
   </div>`;
+}
+
+function toolbarAttributes(namespace: DiffReviewToolbarNamespace): {
+  action: string;
+  layout: string;
+  whitespace: string;
+} {
+  if (namespace === "push") return {
+    action: "data-push-diff-action",
+    layout: "data-push-diff-layout",
+    whitespace: "data-push-diff-whitespace",
+  };
+  if (namespace === "replacement") return {
+    action: "data-replacement-tool-action",
+    layout: "data-replacement-tool-layout",
+    whitespace: "data-replacement-tool-whitespace",
+  };
+  return {
+    action: "data-diff-action",
+    layout: "data-diff-layout",
+    whitespace: "data-diff-whitespace",
+  };
 }
 
 function bulkButton(scope: "ours" | "all" | "theirs", label: string, enabled: boolean): string {
