@@ -39,13 +39,16 @@ test("connector geometry joins complete source and target block boundaries", () 
   assert.match(path, /100\.00 60\.00 Z$/u);
 });
 
-test("geometry overlays coalesce updates and avoid private CodeMirror DOM", async () => {
-  const [overlaySource, geometrySource] = await Promise.all([
+test("geometry overlays coalesce updates without painting colored boundary strokes", async () => {
+  const [overlaySource, geometrySource, styles] = await Promise.all([
     readFile(new URL("../src/shared/diff-review/diff-review-overlay.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/diff-review/diff-review-geometry.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review.css", import.meta.url), "utf8"),
   ]);
   assert.match(overlaySource, /requestAnimationFrame/u);
   assert.match(geometrySource, /coordsAtPos/u);
   assert.match(geometrySource, /getBoundingClientRect/u);
   assert.doesNotMatch(`${overlaySource}\n${geometrySource}`, /querySelector\([^)]*cm-/u);
+  assert.match(styles, /\.diff-review-connector\s*\{[^}]*fill:/s);
+  assert.doesNotMatch(styles, /^\s*stroke(?:-width)?:/mu);
 });
