@@ -152,11 +152,17 @@ manual blocks and divergent conflicts are preserved, and Cancel reuses the estab
 confirmation. Save and Stage still crosses the exact
 revision-token and verified stage-zero boundary described above.
 
-**Amendment, 2026-10-08 — explicit conflict completion.** Every changed side of every conflict
-block remains pending until the user explicitly applies or ignores it, even when Result already
+**Amendment, 2026-10-08 — explicit conflict completion.** Each side of a genuinely divergent
+conflict remains pending until the user explicitly applies or ignores it, even when Result already
 matches that side. A completed side's action group stays hidden across MergeView chunk rebuilds;
-manual Result edits reset the affected side decisions. Save and Stage is disabled and fails closed
-until no pending or manually edited block remains. There is no pending-block completion override.
+manual Result edits reset the affected conflict decisions. Save and Stage is disabled and fails
+closed until no divergent conflict remains pending or manually edited. One-sided and identical
+non-conflicting blocks remain optional review actions and never block completion.
+
+Only one transient conflict draft is owned at a time. Opening a different conflict first checks for
+content edits or recorded review decisions; when either exists, a modal instructs the user to save
+or cancel the current resolution. The target row is not selected and the editor document is not
+changed until that guard passes, keeping navigation and editor identity atomic.
 
 ### Dependency boundary
 
