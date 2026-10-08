@@ -141,7 +141,16 @@
 }
 
 .conflict-right-merge .cm-mergeViewEditor:first-child {
-  display: none;
+  flex: 0 0 0 !important;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.conflict-right-merge .cm-mergeViewEditor:first-child > .cm-editor {
+  width: 0;
 }
 
 .conflict-right-merge .conflict-theirs-pane.cm-merge-a .cm-changedLine {

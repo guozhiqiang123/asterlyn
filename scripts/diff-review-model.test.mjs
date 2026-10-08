@@ -83,6 +83,7 @@ test("clean initial merge presents auto-applied changes as reviewed before the f
   assert.equal(review.blocks[1].kind, "conflict");
   assert.equal(review.blocks[1].status, "pending");
   assert.equal(review.summary.pendingConflicts, 1);
+  assert.equal(review.summary.explicitlyReviewed, 0);
 });
 
 test("completed conflict sides stay hidden when merge chunks are rebuilt", () => {
@@ -103,6 +104,7 @@ test("conflict decisions feed shared selected and reviewed states", () => {
 
   assert.equal(projection.blocks[0].status, "accepted");
   assert.equal(projection.summary.reviewed, 1);
+  assert.equal(projection.summary.explicitlyReviewed, 1);
   assert.equal(projection.summary.pending, 0);
   assert.equal(projection.summary.pendingConflicts, 0);
   assert.equal(

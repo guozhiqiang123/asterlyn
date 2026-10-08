@@ -63,6 +63,7 @@ export interface DiffReviewSummary {
   readonly pending: number;
   readonly pendingConflicts: number;
   readonly reviewed: number;
+  readonly explicitlyReviewed: number;
   readonly manual: number;
 }
 
@@ -116,6 +117,7 @@ export function summarizeDiffReviewBlocks(
   let pending = 0;
   let pendingConflicts = 0;
   let reviewed = 0;
+  let explicitlyReviewed = 0;
   let manual = 0;
   for (const block of blocks) {
     if (block.kind === "conflict") {
@@ -126,6 +128,7 @@ export function summarizeDiffReviewBlocks(
     if (block.status === "pending") pending += 1;
     else if (block.status === "manual") { manual += 1; pending += 1; }
     else if (block.status !== "readonly") reviewed += 1;
+    if (block.actions.some((action) => action.selected === true)) explicitlyReviewed += 1;
   }
   return {
     total: blocks.length,
@@ -135,6 +138,7 @@ export function summarizeDiffReviewBlocks(
     pending,
     pendingConflicts,
     reviewed,
+    explicitlyReviewed,
     manual,
   };
 }

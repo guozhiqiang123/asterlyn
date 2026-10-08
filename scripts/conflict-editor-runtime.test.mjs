@@ -54,6 +54,22 @@ test("decision-only conflict drafts also block switching before selection change
   assert.equal(harness.blockedNotices(), 1);
 });
 
+test("automatically merged review presentation does not block untouched conflict switching", async () => {
+  const controller = new GitOperationController(gateway());
+  controller.installSnapshot(snapshot());
+  const harness = runtimeHarness(controller, snapshot(), {
+    reviewPending: 1,
+    explicitlyReviewed: 0,
+  });
+  assert.equal(await harness.runtime.open("one.txt"), true);
+  assert.equal(controller.hasUnsavedConflict(), false);
+
+  assert.equal(await harness.runtime.open("two.txt"), true);
+  assert.deepEqual(harness.selections(), ["one.txt", "two.txt"]);
+  assert.equal(harness.active().path, "two.txt");
+  assert.equal(harness.blockedNotices(), 0);
+});
+
 test("a stash-pop worktree conflict opens the three-pane editor without operation metadata", async () => {
   const repository = snapshot();
   repository.operation = null;
@@ -143,7 +159,11 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
       conflictReviewSummary() {
         return active.kind !== "conflict-resolution" || confirmations.reviewPending === undefined
           ? null
-          : reviewSummary(confirmations.reviewPending);
+          : reviewSummary(
+              confirmations.reviewPending,
+              confirmations.reviewPending,
+              confirmations.explicitlyReviewed,
+            );
       },
     },
     snapshot: () => repository,
@@ -175,8 +195,18 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
   };
 }
 
-function reviewSummary(pending, pendingConflicts = pending) {
-  return { total: 2, conflicts: 2, nonConflicting: 0, identical: 0, pending, pendingConflicts, reviewed: 2 - pending, manual: 0 };
+function reviewSummary(pending, pendingConflicts = pending, explicitlyReviewed = 2 - pending) {
+  return {
+    total: 2,
+    conflicts: 2,
+    nonConflicting: 0,
+    identical: 0,
+    pending,
+    pendingConflicts,
+    reviewed: 2 - pending,
+    explicitlyReviewed,
+    manual: 0,
+  };
 }
 
 function gateway() {

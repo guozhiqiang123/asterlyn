@@ -254,7 +254,7 @@ export class ConflictEditorRuntime {
   private hasUnsavedReview(): boolean {
     const summary = this.options.surface.conflictReviewSummary();
     return this.options.controller.hasUnsavedConflict() || Boolean(
-      summary && (summary.reviewed > 0 || summary.manual > 0),
+      summary && (summary.explicitlyReviewed > 0 || summary.manual > 0),
     );
   }
 
