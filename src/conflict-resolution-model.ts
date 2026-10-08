@@ -19,6 +19,10 @@ export interface ConflictResolutionBlockSnapshot {
   readonly result: ConflictSourceRange;
   readonly oursDecision: ConflictResolutionDecision;
   readonly theirsDecision: ConflictResolutionDecision;
+  readonly oursChanged: boolean;
+  readonly theirsChanged: boolean;
+  readonly sameSideContent: boolean;
+  readonly manuallyEdited: boolean;
 }
 
 interface TaggedChange {
@@ -39,6 +43,7 @@ interface ConflictResolutionBlock {
   readonly theirsChanged: boolean;
   oursDecision: ConflictResolutionDecision;
   theirsDecision: ConflictResolutionDecision;
+  manuallyEdited: boolean;
 }
 
 /**
@@ -91,6 +96,7 @@ export class ConflictResolutionModel {
         theirsChanged,
         oursDecision: initialDecision(oursChanged, oursText, fallbackText),
         theirsDecision: initialDecision(theirsChanged, theirsText, fallbackText),
+        manuallyEdited: false,
       };
     }));
   }
@@ -104,6 +110,10 @@ export class ConflictResolutionModel {
       result: { ...block.result },
       oursDecision: block.oursDecision,
       theirsDecision: block.theirsDecision,
+      oursChanged: block.oursChanged,
+      theirsChanged: block.theirsChanged,
+      sameSideContent: block.oursText === block.theirsText,
+      manuallyEdited: block.manuallyEdited,
     }));
   }
 
@@ -129,7 +139,10 @@ export class ConflictResolutionModel {
   ): readonly TextChange[] {
     const matching = this.matchingBlocks(side, source);
     if (matching.length === 0) return [];
-    for (const block of matching) setDecisionForSide(block, side, decision);
+    for (const block of matching) {
+      setDecisionForSide(block, side, decision);
+      block.manuallyEdited = false;
+    }
 
     const changes = matching
       .map((block): TextChange | null => {
@@ -157,6 +170,7 @@ export class ConflictResolutionModel {
       block.oursDecision = "pending";
       block.theirsDecision = "pending";
       block.fallbackText = resultAfter.slice(block.result.from, block.result.to);
+      block.manuallyEdited = true;
     }
   }
 

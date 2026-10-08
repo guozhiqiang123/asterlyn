@@ -42,3 +42,11 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - Locked immutable read-only Diff and single writable conflict Result ownership.
 - No production behavior changed.
 
+### Phase 1 — shared model and projections
+
+- Added renderer-independent pane, block, action, capability, status, and summary contracts.
+- Added adapters for static patches, live two-way chunks, and Base-anchored conflict blocks.
+- Conflict summaries now distinguish one-sided, identical, divergent, reviewed, pending, and manual
+  blocks without treating raw Diff fragments as user-facing conflicts.
+- Manual Result edits are retained as explicit model state and are cleared only by a later deliberate
+  block decision.
