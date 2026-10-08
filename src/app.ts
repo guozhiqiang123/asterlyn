@@ -835,6 +835,7 @@ export class AsterlynApp {
         activeDocument: () => this.activeDocument(),
         activate: (document) => this.activateDiffPreview(document), renderEditor: () => this.renderEditor(),
         preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
+        presentation: () => this.diffPresentation(),
         editorCopy: () => this.localization.catalog.editor,
         status: (message) => this.setStatus(message, "warning"),
         resolve: (deleteFile) => void this.resolveGitConflict(deleteFile),
@@ -7034,6 +7035,18 @@ export class AsterlynApp {
       splitPercentage: this.shellState.layout.diffBeforePercent,
       onSplitPercentageChange: (value, committed) => {
         this.resizeWorkbench("diffBeforePercent", value);
+        if (committed) this.persistWorkbenchLayout();
+      },
+      editableSplitPercentage: this.shellState.layout.editableDiffBeforePercent,
+      onEditableSplitPercentageChange: (value, committed) => {
+        this.resizeWorkbench("editableDiffBeforePercent", value);
+        if (committed) this.persistWorkbenchLayout();
+      },
+      conflictOursPercentage: this.shellState.layout.conflictOursPercent,
+      conflictResultPercentage: this.shellState.layout.conflictResultPercent,
+      onConflictSplitPercentageChange: (ours, result, committed) => {
+        this.resizeWorkbench("conflictOursPercent", ours);
+        this.resizeWorkbench("conflictResultPercent", result);
         if (committed) this.persistWorkbenchLayout();
       },
     };

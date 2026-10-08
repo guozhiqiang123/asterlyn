@@ -14,6 +14,9 @@ export interface WorkbenchLayout {
   commitSummaryHeight: number;
   changesCommitHeight: number;
   diffBeforePercent: number;
+  editableDiffBeforePercent: number;
+  conflictOursPercent: number;
+  conflictResultPercent: number;
 }
 
 export type WorkbenchLayoutAction =
@@ -30,7 +33,10 @@ export type WorkbenchLayoutAction =
         | "replacementListWidth"
         | "commitSummaryHeight"
         | "changesCommitHeight"
-        | "diffBeforePercent";
+        | "diffBeforePercent"
+        | "editableDiffBeforePercent"
+        | "conflictOursPercent"
+        | "conflictResultPercent";
       value: number;
     }
   | { type: "reset" };
@@ -54,6 +60,9 @@ export const WORKBENCH_LAYOUT_DEFAULTS: WorkbenchLayout = Object.freeze({
   commitSummaryHeight: 145,
   changesCommitHeight: 230,
   diffBeforePercent: 50,
+  editableDiffBeforePercent: 42,
+  conflictOursPercent: 27,
+  conflictResultPercent: 46,
 });
 
 export const WORKBENCH_LIMITS = Object.freeze({
@@ -220,7 +229,34 @@ export function clampWorkbenchLayout(
       WORKBENCH_LIMITS.diffPercentMin,
       WORKBENCH_LIMITS.diffPercentMax,
     ),
+    editableDiffBeforePercent: clamp(
+      finiteOr(
+        layout.editableDiffBeforePercent,
+        WORKBENCH_LAYOUT_DEFAULTS.editableDiffBeforePercent,
+      ),
+      WORKBENCH_LIMITS.diffPercentMin,
+      WORKBENCH_LIMITS.diffPercentMax,
+    ),
+    ...clampConflictPercentages(layout),
   };
+}
+
+function clampConflictPercentages(layout: WorkbenchLayout): {
+  conflictOursPercent: number;
+  conflictResultPercent: number;
+} {
+  const minimum = 18;
+  const ours = clamp(
+    finiteOr(layout.conflictOursPercent, WORKBENCH_LAYOUT_DEFAULTS.conflictOursPercent),
+    minimum,
+    100 - minimum * 2,
+  );
+  const result = clamp(
+    finiteOr(layout.conflictResultPercent, WORKBENCH_LAYOUT_DEFAULTS.conflictResultPercent),
+    minimum,
+    100 - ours - minimum,
+  );
+  return { conflictOursPercent: ours, conflictResultPercent: result };
 }
 
 export function loadWorkbenchLayout(storage: LayoutStorage): WorkbenchLayout {

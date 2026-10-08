@@ -95,7 +95,10 @@ test("layout persistence excludes unrelated session state", () => {
     "branchTreeWidth",
     "changesCommitHeight",
     "commitSummaryHeight",
+    "conflictOursPercent",
+    "conflictResultPercent",
     "diffBeforePercent",
+    "editableDiffBeforePercent",
     "leftTool",
     "leftWidth",
     "replacementListWidth",
@@ -115,6 +118,9 @@ test("viewport clamping preserves usable editor and branch columns", () => {
       commitSummaryHeight: 900,
       changesCommitHeight: 900,
       diffBeforePercent: 99,
+      editableDiffBeforePercent: 2,
+      conflictOursPercent: 90,
+      conflictResultPercent: 90,
     },
     { width: 1_100, height: 700 },
   );
@@ -125,6 +131,9 @@ test("viewport clamping preserves usable editor and branch columns", () => {
   assert.equal(clamped.commitSummaryHeight, 460);
   assert.equal(clamped.changesCommitHeight, 585);
   assert.equal(clamped.diffBeforePercent, 75);
+  assert.equal(clamped.editableDiffBeforePercent, 25);
+  assert.equal(clamped.conflictOursPercent, 64);
+  assert.equal(clamped.conflictResultPercent, 18);
 });
 
 test("all leading side panes share the compact global minimum", () => {

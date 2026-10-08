@@ -395,6 +395,7 @@ export class EditorSurface {
     conflict: GitConflictContent,
     result: string,
     preferences: AppPreferences,
+    presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
     beforeTransition: () => void,
@@ -415,7 +416,7 @@ export class EditorSurface {
     body.classList.add("conflict-editor-surface");
     this.mountedTextTabId = null;
     this.mountedConflictKey = key;
-    this.conflictEditor.mount(body, conflict, result, preferences, copy, editorCopy, onContentChange);
+    this.conflictEditor.mount(body, conflict, result, preferences, presentation, copy, editorCopy, onContentChange);
     this.mountedEditorKey = key;
   }
 

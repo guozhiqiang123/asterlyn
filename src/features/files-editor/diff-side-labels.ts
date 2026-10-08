@@ -1,19 +1,19 @@
 import type { DiffSideLabels } from "../../diff-presentation.ts";
+import {
+  createDiffReviewPaneHeaders,
+  diffReviewPaneLabelParts,
+  syncDiffReviewPaneHeaders,
+} from "./diff-review/diff-review-pane-header.ts";
 
 export function createDiffSideLabels(
   labels: DiffSideLabels,
   owner: Document = document,
+  afterWritable = false,
 ): HTMLElement {
-  const header = owner.createElement("header");
-  header.className = "diff-side-labels";
-  const before = owner.createElement("strong");
-  setDiffSideLabel(before, labels.before);
-  const divider = owner.createElement("span");
-  divider.setAttribute("aria-hidden", "true");
-  const after = owner.createElement("strong");
-  setDiffSideLabel(after, labels.after);
-  header.append(before, divider, after);
-  return header;
+  return createDiffReviewPaneHeaders([
+    { id: "before", label: labels.before },
+    { id: "after", label: labels.after, writable: afterWritable },
+  ], { owner, actionGutters: true, className: "diff-side-labels" });
 }
 
 export function createDiffUnifiedLabel(
@@ -29,10 +29,12 @@ export function createDiffUnifiedLabel(
 export function syncDiffSideLabels(
   parent: HTMLElement | null,
   labels: DiffSideLabels,
+  afterWritable = false,
 ): void {
-  const sides = parent?.querySelectorAll<HTMLElement>(".diff-side-labels strong");
-  if (sides?.[0]) setDiffSideLabel(sides[0], labels.before);
-  if (sides?.[1]) setDiffSideLabel(sides[1], labels.after);
+  syncDiffReviewPaneHeaders(parent?.querySelector<HTMLElement>(".diff-side-labels") ?? null, [
+    { id: "before", label: labels.before },
+    { id: "after", label: labels.after, writable: afterWritable },
+  ]);
   const unified = parent?.querySelector<HTMLElement>(".diff-unified-label");
   if (unified) setUnifiedDiffSideLabel(unified, labels);
 }
@@ -57,15 +59,7 @@ export function diffSideLabelParts(label: string): {
   prefix: string;
   revision: string | null;
 } {
-  const match = /^(.*?)([0-9a-f]{7,40})$/iu.exec(label);
-  return match
-    ? { prefix: match[1] ?? "", revision: (match[2] ?? "").toLowerCase() }
-    : { prefix: label, revision: null };
-}
-
-function setDiffSideLabel(target: HTMLElement, label: string): void {
-  target.replaceChildren();
-  appendDiffSideLabel(target, label);
+  return diffReviewPaneLabelParts(label);
 }
 
 function setUnifiedDiffSideLabel(target: HTMLElement, labels: DiffSideLabels): void {

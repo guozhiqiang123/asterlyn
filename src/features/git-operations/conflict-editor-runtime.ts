@@ -3,6 +3,7 @@ import { icon } from "../../icons.ts";
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import type { GitConflictContent, RepositorySnapshot } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
+import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffReviewSummary } from "../files-editor/diff-review/diff-review-model.ts";
 import { CONFLICT_DIFF_CAPABILITIES } from "../files-editor/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../files-editor/diff-review/diff-review-toolbar.ts";
@@ -24,6 +25,7 @@ interface ConflictEditorSurfacePort {
     conflict: GitConflictContent,
     result: string,
     preferences: AppPreferences,
+    presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
     beforeTransition: () => void,
@@ -45,6 +47,7 @@ export interface ConflictEditorRuntimeOptions {
   activate(document: ConflictDocument): void;
   renderEditor(): void;
   preferences(): AppPreferences;
+  presentation(): DiffPresentation;
   copy(): GitOperationCopy;
   editorCopy(): EditorCopy;
   status(message: string): void;
@@ -113,6 +116,7 @@ export class ConflictEditorRuntime {
         conflict,
         state.conflictResult,
         this.options.preferences(),
+        this.options.presentation(),
         copy,
         this.options.editorCopy(),
         () => undefined,

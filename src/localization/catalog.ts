@@ -650,6 +650,7 @@ export interface GitOperationCopy {
   nextConflict: string;
   conflictReviewSummary(conflicts: number, pending: number, total: number): string;
   resolvedResult: string;
+  editableResult: string;
   binaryConflict: string;
   resolvedFileContent: string;
   resolveSafetyNote: string;

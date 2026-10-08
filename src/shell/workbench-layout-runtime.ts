@@ -13,6 +13,9 @@ export type WorkbenchResizeDimension = keyof Pick<
   | "commitSummaryHeight"
   | "changesCommitHeight"
   | "diffBeforePercent"
+  | "editableDiffBeforePercent"
+  | "conflictOursPercent"
+  | "conflictResultPercent"
 >;
 
 export class WorkbenchLayoutRuntime {
@@ -119,9 +122,14 @@ export class WorkbenchLayoutRuntime {
       commitSummaryHeight: "--commit-summary-height",
       changesCommitHeight: "--changes-commit-height",
       diffBeforePercent: null,
+      editableDiffBeforePercent: null,
+      conflictOursPercent: null,
+      conflictResultPercent: null,
     }[dimension];
     if (property) this.query("#workbench").style.setProperty(property, `${this.layout[dimension]}px`);
-    if (dimension === "leftWidth" || dimension === "bottomHeight" || dimension === "replacementListWidth") {
+    if (dimension === "leftWidth" || dimension === "bottomHeight" || dimension === "replacementListWidth" ||
+        dimension === "editableDiffBeforePercent" || dimension === "conflictOursPercent" ||
+        dimension === "conflictResultPercent") {
       this.requestEditorMeasure();
     }
   }

@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
-import { MergeView, diff } from "@codemirror/merge";
+import { MergeView } from "@codemirror/merge";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -45,8 +45,11 @@ import { linkHorizontalScrollGroup, linkVerticalScrollByDocument } from "./prese
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
+import type { DiffPresentation } from "./diff-presentation.ts";
 import { projectConflictDiff } from "./features/files-editor/diff-review/diff-review-projection.ts";
 import type { DiffReviewSnapshot, DiffReviewSummary } from "./features/files-editor/diff-review/diff-review-model.ts";
+import { createDiffReviewPaneHeaders } from "./features/files-editor/diff-review/diff-review-pane-header.ts";
+import { attachSplitter } from "./presentation/splitter.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -94,18 +97,23 @@ export class ConflictEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private activeReviewBlock = -1;
+  private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
+  private splitDisposers: Array<() => void> = [];
+  private conflictRoot: HTMLElement | null = null;
 
   mount(
     parent: HTMLElement,
     conflict: GitConflictContent,
     result: string,
     preferences: AppPreferences,
+    presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
     onChange: (content: string) => void,
   ): void {
     this.destroy();
     this.preferences = { ...preferences };
+    this.presentation = { ...presentation };
     this.exactResult = decodeExactText(result);
     this.serializedResult = result;
     this.onChange = onChange;
@@ -119,19 +127,22 @@ export class ConflictEditor {
     const root = document.createElement("section");
     root.className = "conflict-three-pane";
     root.setAttribute("aria-label", copy.conflictInputs);
-    root.dataset.oursChanges = String(diff(base, ours, { scanLimit: 1_000, timeout: 250 }).length);
-    root.dataset.theirsChanges = String(diff(base, theirs, { scanLimit: 1_000, timeout: 250 }).length);
-    root.innerHTML = `<header class="conflict-pane-labels">
-      <strong>${escapeHtml(copy.ours)}<small>${root.dataset.oursChanges}</small></strong><span></span>
-      <strong>${escapeHtml(copy.resolvedResult)}</strong><span></span>
-      <strong>${escapeHtml(copy.theirs)}<small>${root.dataset.theirsChanges}</small></strong>
-    </header><div class="conflict-merge-content"><div class="conflict-left-merge"></div><div class="conflict-right-merge"></div></div>
+    const review = projectConflictDiff(this.resolutionModel.snapshots());
+    root.dataset.oursChanges = String(review.blocks.filter((block) => block.actions.some((action) => action.side === "ours")).length);
+    root.dataset.theirsChanges = String(review.blocks.filter((block) => block.actions.some((action) => action.side === "theirs")).length);
+    root.innerHTML = `<div class="conflict-merge-content"><div class="conflict-left-merge"></div><div class="conflict-right-merge"></div></div>
     <div class="conflict-scrollbars" aria-hidden="true">
       <div class="conflict-scrollbar-pane"><div class="conflict-scrollbar-content"></div></div><div class="conflict-scrollbar-spacer"></div>
       <div class="conflict-scrollbar-pane"><div class="conflict-scrollbar-content"></div></div><div class="conflict-scrollbar-spacer"></div>
       <div class="conflict-scrollbar-pane"><div class="conflict-scrollbar-content"></div></div><div class="conflict-scrollbar-corner"></div>
     </div>`;
+    root.prepend(createDiffReviewPaneHeaders([
+      { id: "ours", label: copy.ours, count: Number(root.dataset.oursChanges) },
+      { id: "result", label: copy.resolvedResult, writable: true, writableLabel: copy.editableResult },
+      { id: "theirs", label: copy.theirs, count: Number(root.dataset.theirsChanges) },
+    ], { actionGutters: true, className: "conflict-pane-labels" }));
     parent.replaceChildren(root);
+    this.conflictRoot = root;
 
     const leftHost = root.querySelector<HTMLElement>(".conflict-left-merge")!;
     const rightHost = root.querySelector<HTMLElement>(".conflict-right-merge")!;
@@ -196,6 +207,7 @@ export class ConflictEditor {
     theirsBinding.view = this.rightMerge.a;
     theirsBinding.view.dom.classList.add("conflict-theirs-pane");
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
+    this.mountSplitLayout(root);
     for (const binding of this.bindings) this.collapseCoordinator.register(binding.view);
     this.observeConflictControls(root);
     this.mountScrollbars(root);
@@ -309,6 +321,8 @@ export class ConflictEditor {
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.diffScrollbars = null;
+    for (const dispose of this.splitDisposers.splice(0)) dispose();
+    this.conflictRoot = null;
     this.collapseCoordinator?.destroy();
     this.collapseCoordinator = null;
     this.conflictControlObserver?.disconnect();
@@ -564,7 +578,10 @@ export class ConflictEditor {
       this.leftMerge.b.scrollDOM,
       this.rightMerge.a.scrollDOM,
     ];
-    const resizeObserver = new ResizeObserver(() => this.updateScrollbars());
+    const resizeObserver = new ResizeObserver(() => {
+      this.applySplitLayout();
+      this.updateScrollbars();
+    });
     this.diffScrollbars = { container, panes, contents, corner, resizeObserver };
     this.updateScrollbars();
     const disposeVertical = linkVerticalScrollByDocument(
@@ -582,6 +599,89 @@ export class ConflictEditor {
       disposeHorizontal();
       resizeObserver.disconnect();
     };
+  }
+
+  private mountSplitLayout(root: HTMLElement): void {
+    for (const dispose of this.splitDisposers.splice(0)) dispose();
+    let ours = clampConflictPercentage(this.presentation.conflictOursPercentage ?? 27);
+    let result = clampConflictPercentage(this.presentation.conflictResultPercentage ?? 46);
+    ({ ours, result } = normalizeConflictPercentages(ours, result));
+    this.presentation = {
+      ...this.presentation,
+      conflictOursPercentage: ours,
+      conflictResultPercentage: result,
+    };
+    const first = document.createElement("div");
+    first.className = "workbench-splitter vertical conflict-splitter conflict-splitter-ours";
+    first.setAttribute("aria-label", "Resize Ours and Result");
+    const second = document.createElement("div");
+    second.className = "workbench-splitter vertical conflict-splitter conflict-splitter-theirs";
+    second.setAttribute("aria-label", "Resize Result and Theirs");
+    root.append(first, second);
+    const contentWidth = () => Math.max(1, root.clientWidth - 116);
+    const apply = () => {
+      this.presentation = {
+        ...this.presentation,
+        conflictOursPercentage: ours,
+        conflictResultPercentage: result,
+      };
+      this.applySplitLayout();
+    };
+    this.splitDisposers.push(
+      attachSplitter(first, {
+        orientation: "vertical",
+        getValue: () => contentWidth() * ours / 100,
+        getRange: () => ({
+          minimum: contentWidth() * 0.18,
+          maximum: contentWidth() * (1 - result / 100 - 0.18),
+        }),
+        onChange: (value) => {
+          ours = value / contentWidth() * 100;
+          ({ ours, result } = normalizeConflictPercentages(ours, result));
+          apply();
+          this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
+        },
+        onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
+        onReset: () => { ours = 27; ({ ours, result } = normalizeConflictPercentages(ours, result)); apply(); },
+      }),
+      attachSplitter(second, {
+        orientation: "vertical",
+        getValue: () => contentWidth() * (ours + result) / 100,
+        getRange: () => ({
+          minimum: contentWidth() * (ours / 100 + 0.18),
+          maximum: contentWidth() * 0.82,
+        }),
+        onChange: (value) => {
+          result = value / contentWidth() * 100 - ours;
+          ({ ours, result } = normalizeConflictPercentages(ours, result));
+          apply();
+          this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
+        },
+        onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
+        onReset: () => { result = 46; ({ ours, result } = normalizeConflictPercentages(ours, result)); apply(); },
+      }),
+    );
+    apply();
+  }
+
+  private applySplitLayout(): void {
+    const root = this.conflictRoot;
+    if (!root || !this.leftMerge) return;
+    const contentWidth = Math.max(1, root.clientWidth - 116);
+    const normalized = normalizeConflictPercentages(
+      this.presentation.conflictOursPercentage ?? 27,
+      this.presentation.conflictResultPercentage ?? 46,
+    );
+    const oursWidth = contentWidth * normalized.ours / 100;
+    const resultWidth = contentWidth * normalized.result / 100;
+    const theirsWidth = Math.max(0, contentWidth - oursWidth - resultWidth);
+    root.style.setProperty("--conflict-ours-width", `${oursWidth}px`);
+    root.style.setProperty("--conflict-result-width", `${resultWidth}px`);
+    root.style.setProperty("--conflict-theirs-width", `${theirsWidth}px`);
+    const leftEditors = this.leftMerge.dom.querySelectorAll<HTMLElement>(".cm-mergeViewEditor");
+    if (leftEditors[0]) leftEditors[0].style.flex = `0 0 ${oursWidth}px`;
+    if (leftEditors[1]) leftEditors[1].style.flex = `0 0 ${resultWidth}px`;
+    this.requestMeasure();
   }
 
   private updateScrollbars(): void {
@@ -605,6 +705,12 @@ export class ConflictEditor {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
+function clampConflictPercentage(value: number): number {
+  return Math.max(18, Math.min(64, Number.isFinite(value) ? value : 27));
+}
+
+function normalizeConflictPercentages(oursValue: number, resultValue: number): { ours: number; result: number } {
+  const ours = clampConflictPercentage(oursValue);
+  const result = Math.max(18, Math.min(100 - ours - 18, Number.isFinite(resultValue) ? resultValue : 46));
+  return { ours, result };
 }

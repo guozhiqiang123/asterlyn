@@ -24,6 +24,7 @@ import {
   setActiveEditableDiffBlock,
 } from "./features/files-editor/editable-diff-change-highlight.ts";
 import { linkHorizontalScrollGroup } from "./presentation/linked-scroll.ts";
+import { attachSplitter } from "./presentation/splitter.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { DiffPresentation, DiffSideLabels } from "./diff-presentation.ts";
 import {
@@ -110,6 +111,7 @@ export class EditableDiffEditor {
   private interactions: EditableDiffInteractions | null = null;
   private copy: EditorCopy;
   private scrollDispose: (() => void) | null = null;
+  private splitDispose: (() => void) | null = null;
   private diffScrollbars: DiffScrollbars | null = null;
   private changePending = false;
   private changeFrame: number | null = null;
@@ -419,6 +421,8 @@ export class EditableDiffEditor {
   private releaseScrollLink(): void {
     this.scrollDispose?.();
     this.scrollDispose = null;
+    this.splitDispose?.();
+    this.splitDispose = null;
     this.diffScrollbars?.container.remove();
     this.diffScrollbars = null;
   }
@@ -486,10 +490,11 @@ export class EditableDiffEditor {
       collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
-    this.mergeView.dom.prepend(createDiffSideLabels(this.sideLabels));
+    this.mergeView.dom.prepend(createDiffSideLabels(this.sideLabels, document, true));
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
+    this.mountSplitControl(parent);
     this.observeRevertControls();
     const container = document.createElement("div");
     container.className = "editable-diff-scrollbars";
@@ -548,6 +553,42 @@ export class EditableDiffEditor {
     };
   }
 
+  private mountSplitControl(parent: HTMLElement): void {
+    const merge = this.mergeView;
+    if (!merge) return;
+    let percentage = clampSplitPercentage(this.presentation.editableSplitPercentage ?? 42);
+    const apply = () => {
+      parent.style.setProperty("--diff-before-width", `${percentage}%`);
+      merge.dom.style.setProperty("--diff-before-width", `${percentage}%`);
+      this.requestMeasure();
+    };
+    apply();
+    const splitter = document.createElement("div");
+    splitter.className = "workbench-splitter vertical editable-diff-splitter";
+    splitter.setAttribute("aria-label", "Resize Diff sides");
+    merge.dom.append(splitter);
+    this.splitDispose = attachSplitter(splitter, {
+      orientation: "vertical",
+      getValue: () => Math.max(1, merge.dom.clientWidth - 32) * percentage / 100,
+      getRange: () => {
+        const width = Math.max(1, merge.dom.clientWidth - 32);
+        return { minimum: width * 0.25, maximum: width * 0.75 };
+      },
+      onChange: (value) => {
+        percentage = clampSplitPercentage(value / Math.max(1, merge.dom.clientWidth - 32) * 100);
+        this.presentation = { ...this.presentation, editableSplitPercentage: percentage };
+        apply();
+        this.presentation.onEditableSplitPercentageChange?.(percentage, false);
+      },
+      onCommit: () => this.presentation.onEditableSplitPercentageChange?.(percentage, true),
+      onReset: () => {
+        percentage = 42;
+        this.presentation = { ...this.presentation, editableSplitPercentage: percentage };
+        apply();
+      },
+    });
+  }
+
   private binding(): ViewBinding {
     return {
       view: null as unknown as EditorView,
@@ -563,7 +604,7 @@ export class EditableDiffEditor {
   }
 
   private syncSideLabels(): void {
-    syncDiffSideLabels(this.parent, this.sideLabels);
+    syncDiffSideLabels(this.parent, this.sideLabels, true);
   }
 
   private extensions(
@@ -779,4 +820,8 @@ export class EditableDiffEditor {
       }
     });
   }
+}
+
+function clampSplitPercentage(value: number): number {
+  return Math.max(25, Math.min(75, Number.isFinite(value) ? value : 42));
 }

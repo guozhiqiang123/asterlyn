@@ -8,6 +8,15 @@ export interface DiffPresentation {
   showWhitespace: boolean;
   splitPercentage?: number;
   onSplitPercentageChange?: (value: number, committed: boolean) => void;
+  editableSplitPercentage?: number;
+  onEditableSplitPercentageChange?: (value: number, committed: boolean) => void;
+  conflictOursPercentage?: number;
+  conflictResultPercentage?: number;
+  onConflictSplitPercentageChange?: (
+    ours: number,
+    result: number,
+    committed: boolean,
+  ) => void;
 }
 
 export interface DiffSideLabels {
