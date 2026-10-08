@@ -246,7 +246,15 @@
 }
 
 .conflict-layout-unified .conflict-left-merge > .cm-mergeView {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: auto;
+}
+
+.conflict-layout-unified .conflict-left-merge > .cm-mergeView::-webkit-scrollbar {
+  display: block;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 
 .conflict-layout-unified .conflict-left-merge .cm-scroller {

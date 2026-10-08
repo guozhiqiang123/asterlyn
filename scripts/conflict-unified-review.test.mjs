@@ -124,3 +124,16 @@ test("unified source patches align with Result and completed decisions retain a 
   assert.match(widget, /indicator\.innerHTML = icon\(accepted \? "check" : "close", 15\)/u);
   assert.match(styles, /\.conflict-unified-decision \{[\s\S]*?border-radius: 4px;[\s\S]*?background: var\(--bg-elevated\);[\s\S]*?box-shadow:/u);
 });
+
+test("unified conflict layout keeps CodeMirror's MergeView as the vertical scroll owner", async () => {
+  const styles = await readFile(
+    new URL("../src/features/git-operations/conflict-editor.css", import.meta.url),
+    "utf8",
+  );
+  const scrollOwner = styles.slice(styles.indexOf(
+    ".conflict-layout-unified .conflict-left-merge > .cm-mergeView {",
+  ));
+
+  assert.match(scrollOwner, /^\.conflict-layout-unified \.conflict-left-merge > \.cm-mergeView \{[\s\S]*?overflow-x: hidden;[\s\S]*?overflow-y: auto;[\s\S]*?scrollbar-width: auto;[\s\S]*?\}/u);
+  assert.match(scrollOwner, /\.conflict-layout-unified \.conflict-left-merge > \.cm-mergeView::-webkit-scrollbar \{[\s\S]*?display: block;/u);
+});
