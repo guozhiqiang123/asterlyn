@@ -158,6 +158,9 @@ function conflictStatus(block: ConflictResolutionBlockSnapshot): DiffReviewBlock
     block.oursChanged ? block.oursDecision : null,
     block.theirsChanged ? block.theirsDecision : null,
   ].filter((decision): decision is "pending" | "accepted" | "ignored" => decision !== null);
+  if (block.automaticallyResolved && decisions.every((decision) => decision === "pending")) {
+    return "accepted";
+  }
   if (decisions.some((decision) => decision === "pending")) return "pending";
   return decisions.some((decision) => decision === "accepted") ? "accepted" : "ignored";
 }

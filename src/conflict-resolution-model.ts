@@ -21,6 +21,7 @@ export interface ConflictResolutionBlockSnapshot {
   readonly oursChanged: boolean;
   readonly theirsChanged: boolean;
   readonly sameSideContent: boolean;
+  readonly automaticallyResolved: boolean;
   readonly manuallyEdited: boolean;
 }
 
@@ -30,6 +31,7 @@ export interface ConflictResolutionHistoryState {
     readonly fallbackText: string;
     readonly oursDecision: ConflictResolutionDecision;
     readonly theirsDecision: ConflictResolutionDecision;
+    readonly automaticallyResolved: boolean;
     readonly manuallyEdited: boolean;
   }[];
 }
@@ -50,6 +52,7 @@ interface ConflictResolutionBlock {
   fallbackText: string;
   readonly oursChanged: boolean;
   readonly theirsChanged: boolean;
+  automaticallyResolved: boolean;
   oursDecision: ConflictResolutionDecision;
   theirsDecision: ConflictResolutionDecision;
   manuallyEdited: boolean;
@@ -92,6 +95,10 @@ export class ConflictResolutionModel {
       const fallbackText = result.slice(resultRange.from, resultRange.to);
       const oursChanged = cluster.some(({ side }) => side === "ours");
       const theirsChanged = cluster.some(({ side }) => side === "theirs");
+      const sameSideContent = oursText === theirsText;
+      const automaticallyResolved = (!oursChanged && theirsChanged && fallbackText === theirsText) ||
+        (oursChanged && !theirsChanged && fallbackText === oursText) ||
+        (oursChanged && theirsChanged && sameSideContent && fallbackText === oursText);
       return {
         id,
         base: { from: baseFrom, to: baseTo },
@@ -103,6 +110,7 @@ export class ConflictResolutionModel {
         fallbackText,
         oursChanged,
         theirsChanged,
+        automaticallyResolved,
         oursDecision: "pending",
         theirsDecision: "pending",
         manuallyEdited: false,
@@ -122,6 +130,7 @@ export class ConflictResolutionModel {
       oursChanged: block.oursChanged,
       theirsChanged: block.theirsChanged,
       sameSideContent: block.oursText === block.theirsText,
+      automaticallyResolved: block.automaticallyResolved,
       manuallyEdited: block.manuallyEdited,
     }));
   }
@@ -132,6 +141,7 @@ export class ConflictResolutionModel {
       fallbackText: block.fallbackText,
       oursDecision: block.oursDecision,
       theirsDecision: block.theirsDecision,
+      automaticallyResolved: block.automaticallyResolved,
       manuallyEdited: block.manuallyEdited,
     })) };
   }
@@ -143,6 +153,7 @@ export class ConflictResolutionModel {
       block.fallbackText = saved.fallbackText;
       block.oursDecision = saved.oursDecision;
       block.theirsDecision = saved.theirsDecision;
+      block.automaticallyResolved = saved.automaticallyResolved;
       block.manuallyEdited = saved.manuallyEdited;
     }
     return true;
@@ -211,6 +222,7 @@ export class ConflictResolutionModel {
       block.oursDecision = "pending";
       block.theirsDecision = "pending";
       block.fallbackText = resultAfter.slice(block.result.from, block.result.to);
+      block.automaticallyResolved = false;
       block.manuallyEdited = true;
     }
   }

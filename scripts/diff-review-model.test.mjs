@@ -71,6 +71,20 @@ test("conflict projection classifies one-sided, identical, divergent, and manual
   assert.equal(manual.summary.pendingConflicts, 1);
 });
 
+test("clean initial merge presents auto-applied changes as reviewed before the first conflict", () => {
+  const base = "prefix=old\nanchor\nshared=base\n";
+  const ours = "prefix=old\nanchor\nshared=ours\n";
+  const theirs = "prefix=new\nanchor\nshared=theirs\n";
+  const result = "prefix=new\nanchor\nshared=base\n";
+  const review = projection(base, ours, theirs, result);
+
+  assert.equal(review.blocks[0].kind, "modified");
+  assert.equal(review.blocks[0].status, "accepted");
+  assert.equal(review.blocks[1].kind, "conflict");
+  assert.equal(review.blocks[1].status, "pending");
+  assert.equal(review.summary.pendingConflicts, 1);
+});
+
 test("completed conflict sides stay hidden when merge chunks are rebuilt", () => {
   assert.equal(conflictActionGroupVisible("pending"), true);
   assert.equal(conflictActionGroupVisible("mixed"), true);

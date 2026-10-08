@@ -16,6 +16,7 @@ const block = (overrides = {}) => ({
   oursChanged: true,
   theirsChanged: true,
   sameSideContent: false,
+  automaticallyResolved: false,
   manuallyEdited: false,
   ...overrides,
 });
@@ -55,4 +56,9 @@ test("conflict editor scrolls the Result code position as the single navigation 
   assert.match(method, /EditorView\.scrollIntoView\(position, \{ y: "center" \}\)/u);
   assert.equal(method.match(/\.dispatch\(/gu)?.length, 1);
   assert.doesNotMatch(method, /leftMerge\.a|rightMerge/u);
+});
+
+test("opening a conflict moves the review directly to its first actionable block", async () => {
+  const source = await readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8");
+  assert.match(source, /requestAnimationFrame\(\(\) => \{[\s\S]*this\.activeReviewBlock < 0[\s\S]*this\.navigateChange\(1\)/u);
 });

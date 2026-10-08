@@ -240,6 +240,9 @@ export class ConflictEditor {
     this.mountScrollbars(root);
     this.mountReviewOverlay(root);
     this.syncReviewDecorations();
+    window.requestAnimationFrame(() => {
+      if (this.conflictRoot === root && this.activeReviewBlock < 0) this.navigateChange(1);
+    });
     this.loadLanguage(conflict.path);
   }
 
