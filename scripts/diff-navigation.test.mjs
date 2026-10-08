@@ -198,15 +198,16 @@ test("editable Diff control synchronization cannot feed its own MutationObserver
 test("conflict editor keeps Ours and Theirs immutable around one synchronized Result", async () => {
   const source = await readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8");
   assert.equal(source.match(/new MergeView\(/g)?.length, 2);
-  assert.match(source, /revertControls: "a-to-b"/);
-  assert.match(source, /revertControls: "b-to-a"/);
+  assert.equal(source.match(/revertControls: "a-to-b"/g)?.length, 2);
+  assert.match(source, /orientation: "b-a"/u);
   assert.match(source, /resultSide === "primary"/);
-  assert.match(source, /target\.dispatch\(\{ changes:/);
+  assert.match(source, /target\.dispatch\(\{ changes \}\)/);
   assert.match(source, /mergeDiffSemanticHighlighting/u);
   assert.match(source, /ConflictResolutionModel\.create\(base, ours, theirs, this\.exactResult\.text\)/u);
   assert.match(source, /conflictControls\("ours", "right", copy\)/u);
   assert.match(source, /conflictControls\("theirs", "left", copy\)/u);
   assert.match(source, /observeManualChanges\(/u);
+  assert.match(source, /ConflictCollapseCoordinator/u);
 });
 
 test("Diff position navigation outlines the complete current change block", async () => {
@@ -261,6 +262,7 @@ test("merge Diff layouts preserve CodeMirror's supported outer scroll owner", as
   assert.doesNotMatch(conflictCss, /\.cm-merge-a \.cm-gutters[\s\S]*order:/u);
   assert.match(editable, /gutter: false/u);
   assert.equal(conflict.match(/gutter: false/g)?.length, 2);
-  assert.match(conflict, /linkVerticalScroll\(this\.leftMerge\.dom, this\.rightMerge\.dom\)/u);
+  assert.match(conflict, /linkVerticalScrollByDocument\(/u);
+  assert.match(conflict, /this\.leftMerge\.b,\s*this\.rightMerge\.b,/u);
   assert.match(conflict, /linkHorizontalScrollGroup\(\[\.\.\.panes, \.\.\.scrollers\]\)/u);
 });

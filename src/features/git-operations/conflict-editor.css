@@ -99,6 +99,14 @@
   display: none;
 }
 
+.conflict-right-merge .conflict-theirs-pane.cm-merge-a .cm-changedLine {
+  background-color: var(--editor-diff-added-bg);
+}
+
+.conflict-right-merge .conflict-theirs-pane .cm-source-word-removed {
+  background-color: var(--editor-intraline-added);
+}
+
 .conflict-three-pane .cm-diff-lineNumbers-after {
   border-right: 0;
   border-left: 1px solid var(--border);

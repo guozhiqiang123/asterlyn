@@ -5,6 +5,7 @@ import {
   linkHorizontalScrollGroup,
   linkScrollElements,
   linkVerticalScroll,
+  linkVerticalScrollByDocument,
   linkVerticalScrollProportionally,
 } from "../src/presentation/linked-scroll.ts";
 
@@ -82,6 +83,21 @@ class FakeFrameScheduler {
 
   get size() {
     return this.#callbacks.size;
+  }
+}
+
+class FakeDocumentView {
+  constructor(blocks) {
+    this.blocks = blocks;
+    this.contentHeight = blocks.at(-1).top + blocks.at(-1).height;
+  }
+
+  lineBlockAtHeight(height) {
+    return this.blocks.find((block) => height < block.top + block.height) ?? this.blocks.at(-1);
+  }
+
+  lineBlockAt(position) {
+    return this.blocks.find((block) => block.from <= position && position <= block.to) ?? this.blocks.at(-1);
   }
 }
 
@@ -203,6 +219,31 @@ test("proportional vertical linking maps unequal document heights in both direct
   dispose();
   source.userScroll(0, 40);
   assert.equal(preview.scrollTop, 750);
+});
+
+test("document-anchored vertical linking aligns the same Result block across unequal decorations", () => {
+  const first = new FakeScroller(500, 400);
+  const second = new FakeScroller(500, 500);
+  const firstDocument = new FakeDocumentView([
+    { from: 0, to: 9, top: 0, height: 20 },
+    { from: 10, to: 19, top: 20, height: 20 },
+    { from: 20, to: 29, top: 40, height: 20 },
+  ]);
+  const secondDocument = new FakeDocumentView([
+    { from: 0, to: 9, top: 0, height: 40 },
+    { from: 10, to: 19, top: 40, height: 20 },
+    { from: 20, to: 29, top: 60, height: 40 },
+  ]);
+  const scheduler = new FakeFrameScheduler();
+  linkVerticalScrollByDocument(first, second, firstDocument, secondDocument, scheduler);
+
+  first.userScroll(0, 30);
+  scheduler.flush();
+  assert.equal(second.scrollTop, 50);
+
+  second.userScroll(0, 80);
+  scheduler.flush();
+  assert.equal(first.scrollTop, 50);
 });
 
 test("proportional linking coalesces a scroll burst to the latest animation frame", () => {

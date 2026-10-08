@@ -15,6 +15,19 @@ export interface ScrollFrameScheduler {
   cancel(handle: number): void;
 }
 
+export interface DocumentScrollBlock {
+  readonly from: number;
+  readonly to: number;
+  readonly top: number;
+  readonly height: number;
+}
+
+export interface DocumentScrollView {
+  readonly contentHeight: number;
+  lineBlockAtHeight(height: number): DocumentScrollBlock;
+  lineBlockAt(position: number): DocumentScrollBlock;
+}
+
 export function linkScrollElements(
   first: LinkedScrollElement,
   second: LinkedScrollElement,
@@ -41,6 +54,32 @@ export function linkVerticalScrollProportionally(
     first,
     second,
     proportionalVerticalPosition,
+    true,
+    scheduler,
+  );
+}
+
+/**
+ * Links two independently decorated views through positions in the same document. This is used by
+ * the conflict editor's duplicated Result view: pair-specific spacer widgets may give the two
+ * MergeViews different pixel heights, but an identical Result position remains the stable anchor.
+ */
+export function linkVerticalScrollByDocument(
+  first: LinkedScrollElement,
+  second: LinkedScrollElement,
+  firstDocument: DocumentScrollView,
+  secondDocument: DocumentScrollView,
+  scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
+): () => void {
+  return linkMappedScrollElements(
+    first,
+    second,
+    (source, target) => documentVerticalPosition(
+      source,
+      target,
+      source === first ? firstDocument : secondDocument,
+      source === first ? secondDocument : firstDocument,
+    ),
     true,
     scheduler,
   );
@@ -268,6 +307,25 @@ function proportionalVerticalPosition(
     : 0;
   return {
     top: progress * targetMaximum,
+    left: target.scrollLeft,
+  };
+}
+
+function documentVerticalPosition(
+  source: LinkedScrollElement,
+  target: LinkedScrollElement,
+  sourceDocument: DocumentScrollView,
+  targetDocument: DocumentScrollView,
+): Position {
+  const sourceHeight = Math.min(source.scrollTop, Math.max(0, sourceDocument.contentHeight - 1));
+  const sourceBlock = sourceDocument.lineBlockAtHeight(sourceHeight);
+  const targetBlock = targetDocument.lineBlockAt(sourceBlock.from);
+  const progress = sourceBlock.height > 0
+    ? Math.min(1, Math.max(0, (sourceHeight - sourceBlock.top) / sourceBlock.height))
+    : 0;
+  const mappedTop = targetBlock.top + progress * targetBlock.height;
+  return {
+    top: Math.min(mappedTop, Math.max(0, target.scrollHeight - target.clientHeight)),
     left: target.scrollLeft,
   };
 }

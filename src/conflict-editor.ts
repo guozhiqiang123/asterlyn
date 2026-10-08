@@ -37,10 +37,11 @@ import {
   type ConflictResolutionSide,
   type ConflictSourceRange,
 } from "./conflict-resolution-model.ts";
+import { ConflictCollapseCoordinator, type ConflictCollapseSide } from "./conflict-collapse.ts";
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
 import { icon } from "./icons.ts";
-import { linkHorizontalScrollGroup, linkVerticalScroll } from "./presentation/linked-scroll.ts";
+import { linkHorizontalScrollGroup, linkVerticalScrollByDocument } from "./presentation/linked-scroll.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
@@ -82,6 +83,7 @@ export class ConflictEditor {
   private synchronizing = false;
   private applyingConflictDecision = false;
   private resolutionModel: ConflictResolutionModel | null = null;
+  private collapseCoordinator: ConflictCollapseCoordinator | null = null;
   private conflictControlObserver: MutationObserver | null = null;
   private preferences: AppPreferences | null = null;
   private readonly resultReadOnly = new Compartment();
@@ -109,6 +111,7 @@ export class ConflictEditor {
     const theirs = decodeExactText(conflict.theirs ?? "").text;
     const base = decodeExactText(conflict.base ?? "").text;
     this.resolutionModel = ConflictResolutionModel.create(base, ours, theirs, this.exactResult.text);
+    this.collapseCoordinator = new ConflictCollapseCoordinator(base, ours, this.exactResult.text, theirs);
     const root = document.createElement("section");
     root.className = "conflict-three-pane";
     root.setAttribute("aria-label", copy.conflictInputs);
@@ -136,7 +139,7 @@ export class ConflictEditor {
       parent: leftHost,
       a: {
         doc: ours,
-        extensions: this.extensions(oursBinding, false, editorCopy, undefined, "after", {
+        extensions: this.extensions(oursBinding, false, editorCopy, "ours", undefined, "after", {
           reference: this.exactResult.text,
           documentSide: "a",
           overview: false,
@@ -145,7 +148,7 @@ export class ConflictEditor {
       },
       b: {
         doc: this.exactResult.text,
-        extensions: this.extensions(primaryBinding, true, editorCopy, "primary", "before", {
+        extensions: this.extensions(primaryBinding, true, editorCopy, "result", "primary", "before", {
           reference: ours,
           documentSide: "b",
           overview: true,
@@ -155,40 +158,41 @@ export class ConflictEditor {
       gutter: false,
       revertControls: "a-to-b",
       renderRevertControl: () => this.conflictControls("ours", "right", copy),
-      collapseUnchanged: { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
     this.rightMerge = new MergeView({
       parent: rightHost,
       a: {
-        doc: this.exactResult.text,
-        extensions: this.extensions(mirrorBinding, false, editorCopy, "mirror", "after", {
-          reference: theirs,
-          documentSide: "a",
-          overview: false,
-          referenceTracksResult: false,
-        }),
-      },
-      b: {
         doc: theirs,
-        extensions: this.extensions(theirsBinding, false, editorCopy, undefined, "before", {
+        extensions: this.extensions(theirsBinding, false, editorCopy, "theirs", undefined, "before", {
           reference: this.exactResult.text,
-          documentSide: "b",
+          documentSide: "a",
           overview: true,
           referenceTracksResult: true,
         }),
       },
+      b: {
+        doc: this.exactResult.text,
+        extensions: this.extensions(mirrorBinding, false, editorCopy, "result", "mirror", "after", {
+          reference: theirs,
+          documentSide: "b",
+          overview: false,
+          referenceTracksResult: false,
+        }),
+      },
+      orientation: "b-a",
       gutter: false,
-      revertControls: "b-to-a",
+      revertControls: "a-to-b",
       renderRevertControl: () => this.conflictControls("theirs", "left", copy),
-      collapseUnchanged: { margin: 3, minSize: 8 },
       diffConfig: LINE_AWARE_DIFF_CONFIG,
     });
     oursBinding.view = this.leftMerge.a;
     primaryBinding.view = this.leftMerge.b;
-    mirrorBinding.view = this.rightMerge.a;
-    theirsBinding.view = this.rightMerge.b;
+    mirrorBinding.view = this.rightMerge.b;
+    theirsBinding.view = this.rightMerge.a;
+    theirsBinding.view.dom.classList.add("conflict-theirs-pane");
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
+    for (const binding of this.bindings) this.collapseCoordinator.register(binding.view);
     this.observeConflictControls(root);
     this.mountScrollbars(root);
     this.loadLanguage(conflict.path);
@@ -267,6 +271,8 @@ export class ConflictEditor {
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.diffScrollbars = null;
+    this.collapseCoordinator?.destroy();
+    this.collapseCoordinator = null;
     this.conflictControlObserver?.disconnect();
     this.conflictControlObserver = null;
     this.leftMerge?.destroy();
@@ -283,6 +289,7 @@ export class ConflictEditor {
     binding: ViewBinding,
     editable: boolean,
     editorCopy: EditorCopy,
+    collapseSide: ConflictCollapseSide,
     resultSide?: "primary" | "mirror",
     gutterSide: DiffGutterSide = "before",
     comparison?: {
@@ -323,6 +330,7 @@ export class ConflictEditor {
       codeMirrorFocusOwnership,
       diffLineNumberGutter(gutterSide),
       binding.changeIndicators?.extension ?? [],
+      this.collapseCoordinator?.extension(collapseSide) ?? [],
       mergeDiffSemanticHighlighting,
       history(), drawSelection(), highlightActiveLine(),
       highlightActiveLineGutter(), asterlynSearch(), highlightSelectionMatches(), asterlynSyntaxHighlighting,
@@ -352,10 +360,10 @@ export class ConflictEditor {
         binding.changeIndicators.setBaseline(binding.view, update.state.doc.toString());
       }
     }
-    const target = source === "primary" ? this.rightMerge?.a : this.leftMerge?.b;
+    const target = source === "primary" ? this.rightMerge?.b : this.leftMerge?.b;
     if (target && target.state.doc.toString() !== update.state.doc.toString()) {
       this.synchronizing = true;
-      target.dispatch({ changes: { from: 0, to: target.state.doc.length, insert: update.state.doc.toString() } });
+      target.dispatch({ changes });
       this.synchronizing = false;
     }
     if (this.changeFrame === null) {
@@ -472,7 +480,7 @@ export class ConflictEditor {
     if (!chunk) return null;
     return side === "ours"
       ? { from: chunk.fromA, to: chunk.endA }
-      : { from: chunk.fromB, to: chunk.endB };
+      : { from: chunk.fromA, to: chunk.endA };
   }
 
   private observeConflictControls(root: HTMLElement): void {
@@ -515,12 +523,17 @@ export class ConflictEditor {
     const scrollers = [
       this.leftMerge.a.scrollDOM,
       this.leftMerge.b.scrollDOM,
-      this.rightMerge.b.scrollDOM,
+      this.rightMerge.a.scrollDOM,
     ];
     const resizeObserver = new ResizeObserver(() => this.updateScrollbars());
     this.diffScrollbars = { container, panes, contents, corner, resizeObserver };
     this.updateScrollbars();
-    const disposeVertical = linkVerticalScroll(this.leftMerge.dom, this.rightMerge.dom);
+    const disposeVertical = linkVerticalScrollByDocument(
+      this.leftMerge.dom,
+      this.rightMerge.dom,
+      this.leftMerge.b,
+      this.rightMerge.b,
+    );
     const disposeHorizontal = linkHorizontalScrollGroup([...panes, ...scrollers]);
     resizeObserver.observe(this.leftMerge.dom);
     resizeObserver.observe(this.rightMerge.dom);
@@ -537,7 +550,7 @@ export class ConflictEditor {
     const scrollers = [
       this.leftMerge.a.scrollDOM,
       this.leftMerge.b.scrollDOM,
-      this.rightMerge.b.scrollDOM,
+      this.rightMerge.a.scrollDOM,
     ];
     if (scrollers.some((scroller) => !scroller.isConnected)) return;
     const sharedWidth = Math.max(...scrollers.map((scroller) => scroller.scrollWidth));

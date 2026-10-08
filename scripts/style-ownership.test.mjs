@@ -380,6 +380,7 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
   assert.match(css, /--conflict-action-gutter-width:\s*58px;/u);
   assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control/u);
+  assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control\s*\{[^}]*position:\s*relative;[^}]*margin:\s*0;[^}]*transform:\s*none;/s);
   assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*min-width:\s*var\(--diff-change-control-width, 26px\);[^}]*max-width:\s*var\(--diff-change-control-width, 26px\);[^}]*background:\s*var\(--bg-elevated\);/s);
   assert.match(controls, /\.diff-change-control > \.icon\s*\{[^}]*width:\s*15px;[^}]*height:\s*15px;/s);
   assert.match(editor, /group\.className = "conflict-change-controls"/u);
@@ -389,6 +390,7 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.match(editor, /this\.resolutionModel\.applyDecision\(side, decision, source/u);
   assert.match(editor, /const sharedWidth = Math\.max\(\.\.\.scrollers\.map\(\(scroller\) => scroller\.scrollWidth\)\)/u);
   assert.match(editor, /linkHorizontalScrollGroup\(\[\.\.\.panes, \.\.\.scrollers\]\)/u);
+  assert.match(editor, /this\.rightMerge\.a\.scrollDOM/u);
   assert.match(icons, /"double-chevron-right"/u);
   assert.match(icons, /"double-chevron-left"/u);
 });

@@ -7,11 +7,13 @@
 .content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control,
 .replacement-tool-diff.editable-diff-surface .cm-merge-revert > button.diff-change-control,
 .conflict-three-pane .conflict-change-controls > button.diff-change-control {
+  position: relative;
   display: grid;
   width: var(--diff-change-control-width, 26px);
   min-width: var(--diff-change-control-width, 26px);
   max-width: var(--diff-change-control-width, 26px);
   height: 26px;
+  margin: 0;
   padding: 0;
   place-items: center;
   appearance: none;
@@ -23,6 +25,7 @@
   font: inherit;
   font-size: 15px;
   line-height: 0;
+  transform: none;
 }
 
 .content-body.editable-diff-surface .cm-merge-revert > button.diff-change-control,
@@ -37,6 +40,8 @@
   position: absolute;
   left: 50%;
   display: flex;
+  width: max-content;
+  align-items: center;
   gap: 2px;
   margin: 7px 0 0;
   transform: translateX(-50%);
