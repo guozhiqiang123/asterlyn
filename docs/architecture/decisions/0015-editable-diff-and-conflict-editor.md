@@ -171,9 +171,22 @@ edits continue to invalidate affected decisions instead of inferring acceptance 
 
 The three-pane toolbar mirrors every two-pane review operation that has a valid conflict meaning:
 previous/next block, previous/next conflicted file, reveal the current file in Files, synchronized
-unchanged-range expansion, and visible-whitespace display. File switching reuses the dirty-draft
-guard above. Unified/split switching remains absent because a conflict owns three semantic panes and
-must not hide either source behind a misleading two-pane presentation mode.
+unchanged-range expansion, split/unified layout, and visible-whitespace display. File switching
+reuses the dirty-draft guard above.
+
+**Amendment, 2026-10-08 — true three-way unified conflicts.** Conflict unified mode does not reuse
+the ordinary two-way unified Diff. The existing writable Result `EditorView` remains mounted and
+continues to own the exact document, selection, search, folds, scroll position, and Undo/Redo
+history. A presentation-only StateField places an Ours source card before each Base-owned Result
+block and a Theirs source card after it. Common Result content therefore appears once, while both
+inputs and their individual Apply/Ignore controls remain visible at the decision point.
+
+Source cards hold direct immutable Ours/Theirs ranges from `ConflictResolutionModel`; they never
+derive action identity from transient MergeView chunk DOM. Their controls call the same isolated
+decision transaction used by split gutters, so layout switching preserves decisions and completion
+gating. The split MergeViews stay mounted but their duplicate source panes, connectors, splitters,
+and docked scrollbars are presentation-hidden. Source cards are CodeMirror widgets rather than
+document text and can never be serialized, searched, copied as Result, saved, or staged.
 
 ### Dependency boundary
 
@@ -213,6 +226,8 @@ startup shell, application services, domain models, or persisted state.
     and geometry contracts; consumer-specific commands remain isolated by explicit attributes.
 16. Conflict decisions are made only through the controls beside an individual block; the toolbar
     must not expose bulk Ours/All/Theirs actions that bypass deliberate block-by-block review.
+17. Conflict split/unified switching reuses the same Result editor state; unified source cards are
+    non-serializable presentation and must never enter Result bytes or Git mutation input.
 
 ## Delivery sequence
 

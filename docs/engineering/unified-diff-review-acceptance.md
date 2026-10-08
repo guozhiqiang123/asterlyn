@@ -4,9 +4,9 @@
 - **Plan:** [`unified-diff-review-workflow-plan.md`](unified-diff-review-workflow-plan.md)
 - **Started:** 2026-10-08
 
-This page is the durable acceptance record for the unified two-pane Diff and three-pane conflict
-review workflow. Evidence is added after each independently buildable phase; unchecked items are not
-claims of completion.
+This page is the durable acceptance record for the unified two-pane Diff and split/unified
+three-way conflict review workflow. Evidence is added after each independently buildable phase;
+unchecked items are not claims of completion.
 
 ## Deterministic fixtures
 
@@ -29,7 +29,8 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 | Read-only unified Diff | navigation, unchanged expansion, visible whitespace | Ready for manual acceptance |
 | Editable working Diff | Result priority, Revert, undo, save ownership, exact text | Ready for manual acceptance |
 | Workspace replacement Diff | shared controls, consumer action, cancel/apply safety | Ready for manual acceptance |
-| Three-pane conflict | aligned blocks, two-sided actions, manual edit, cancel, save and stage | Ready for manual acceptance |
+| Split three-way conflict | aligned blocks, two-sided actions, manual edit, cancel, save and stage | Ready for manual acceptance |
+| Unified three-way conflict | one Result stream, paired source cards, layout switching, Undo/Redo | Ready for manual acceptance |
 | Long-line fixture | independent content ownership and synchronized horizontal navigation | Ready for manual acceptance |
 | Large-gap fixture | identical folds and expansion across every visible pane | Ready for manual acceptance |
 | Reduced motion | stable connectors without animated geometry | Ready for manual acceptance |
@@ -58,8 +59,9 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - Conflict resolution now exposes previous/next block and conflicted-file navigation, reveal in
   Files, unchanged expansion, progress, whitespace display, Cancel, Save and Stage, and a visually
   separate delete-resolution action in the same header.
-- Unified/split controls remain omitted because conflict resolution is always a semantic three-pane
-  view; file navigation and reveal reuse the shared command IDs and availability contract.
+- Conflict resolution exposes the shared split/unified control. Unified presentation remains a
+  semantic three-way review rather than collapsing either source into an ordinary two-way Diff;
+  file navigation and reveal reuse the shared command IDs and availability contract.
 
 ### Phase 3 — shared pane headers and resizable layout
 
@@ -160,3 +162,28 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,
   interaction, geometry, exact-text, and installed-rendering checks are complete, but dark/light,
   English/Chinese, and reduced-motion visual inspection still requires a human acceptance pass.
+
+### Phase 9 — true three-way unified conflict review
+
+- Conflict capabilities now expose the shared split/unified control. The selected global Diff
+  layout reaches the mounted conflict editor without remounting it.
+- Unified mode keeps the existing editable Result `EditorView` and injects presentation-only Ours
+  and Theirs source cards around each Base-owned block. Switching layouts therefore retains exact
+  Result bytes, selection, search, folds, scroll, Undo/Redo history, and explicit side decisions.
+- Source-card Apply/Ignore controls carry immutable source ranges and delegate to the same
+  `conflictResolutionTransaction` path as split gutters. The save gate and per-block-only policy are
+  unchanged; no conflict-wide Ours/All/Theirs action was reintroduced.
+- Automated fixtures prove that both source fragments and ranges are retained, source widgets do
+  not change Result bytes, accepted/pending state matches the split projection, and layout switching
+  does not destroy or remount Result.
+- The current frontend suite passes 897 tests. TypeScript checking, production build,
+  `git diff --check`, 271 native tests with 2 existing ignored watcher tests, and rendered native
+  smoke all pass.
+- The accepted macOS arm64 archive is
+  `target/release/bundle/macos/Asterlyn-unified-conflict-20261008-1808-macos-arm64.zip`, 9,149,851
+  bytes, SHA-256 `d344cf88a4ef4809781145163b3dcdf78075549773394b56de05429ddd7b3416`.
+  The packaged and installed executables are both 24,046,032 bytes with SHA-256
+  `6462fa217c9846f356f5237dd368074a4aa44bd337ea9ad0cfe1b2df6545c4df`.
+- The app bundle uses an ad-hoc hardened-runtime signature and passes strict deep verification. It is
+  installed at `/Applications/Asterlyn.app` and open on `/Users/gzq/flutter`; the previous install is
+  recoverable at `/Users/gzq/.Trash/Asterlyn-before-unified-conflict-20261008-1808.app`.
