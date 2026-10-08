@@ -36,7 +36,13 @@ test("conflict review state is decorated in every registered pane", async () => 
 });
 
 test("bulk non-conflicting changes enter Result as one undoable transaction", async () => {
-  const source = await readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8");
+  const [source, resolutionHistory] = await Promise.all([
+    readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/conflict-resolution-history.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(source, /applyNonConflicting\(scope/u);
-  assert.match(source, /result\.dispatch\(\{ changes: bulk\.changes, userEvent: `input\.conflict\.bulk\.\$\{scope\}` \}\)/u);
+  assert.match(source, /result\.dispatch\(conflictResolutionTransaction\(/u);
+  assert.match(source, /bulk\.changes, `input\.conflict\.bulk\.\$\{scope\}`/u);
+  assert.match(resolutionHistory, /invertedEffects\.of/u);
+  assert.match(resolutionHistory, /isolateHistory\.of\("full"\)/u);
 });

@@ -32,6 +32,16 @@ export interface ConflictResolutionBlockSnapshot {
   readonly manuallyEdited: boolean;
 }
 
+export interface ConflictResolutionHistoryState {
+  readonly blocks: readonly {
+    readonly id: number;
+    readonly fallbackText: string;
+    readonly oursDecision: ConflictResolutionDecision;
+    readonly theirsDecision: ConflictResolutionDecision;
+    readonly manuallyEdited: boolean;
+  }[];
+}
+
 interface TaggedChange {
   readonly side: ConflictResolutionSide;
   readonly change: Change;
@@ -124,6 +134,38 @@ export class ConflictResolutionModel {
     }));
   }
 
+  historyState(): ConflictResolutionHistoryState {
+    return { blocks: this.blocks.map((block) => ({
+      id: block.id,
+      fallbackText: block.fallbackText,
+      oursDecision: block.oursDecision,
+      theirsDecision: block.theirsDecision,
+      manuallyEdited: block.manuallyEdited,
+    })) };
+  }
+
+  restoreHistoryState(state: ConflictResolutionHistoryState): boolean {
+    if (!this.historyStateMatches(state)) return false;
+    for (const saved of state.blocks) {
+      const block = this.blocks[saved.id]!;
+      block.fallbackText = saved.fallbackText;
+      block.oursDecision = saved.oursDecision;
+      block.theirsDecision = saved.theirsDecision;
+      block.manuallyEdited = saved.manuallyEdited;
+    }
+    return true;
+  }
+
+  observeHistoryChanges(
+    changes: readonly TextChange[],
+    resultLengthBefore: number,
+    state: ConflictResolutionHistoryState,
+  ): boolean {
+    if (!this.historyStateMatches(state)) return false;
+    this.mapResultRanges(changes, resultLengthBefore);
+    return this.restoreHistoryState(state);
+  }
+
   hasChanges(side: ConflictResolutionSide, source: ConflictSourceRange): boolean {
     return this.matchingBlocks(side, source).length > 0;
   }
@@ -211,6 +253,11 @@ export class ConflictResolutionModel {
       if (side === "ours" ? !block.oursChanged : !block.theirsChanged) return false;
       return rangesTouch(block[side], source);
     });
+  }
+
+  private historyStateMatches(state: ConflictResolutionHistoryState): boolean {
+    return state.blocks.length === this.blocks.length &&
+      state.blocks.every((saved, index) => saved.id === index);
   }
 
   private mapResultRanges(changes: readonly TextChange[], documentLength: number): void {

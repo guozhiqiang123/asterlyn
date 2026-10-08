@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { history, redo, undo } from "@codemirror/commands";
+import { EditorState } from "@codemirror/state";
 
+import {
+  conflictResolutionHistoryExtension,
+  conflictResolutionHistoryState,
+  conflictResolutionTransaction,
+} from "../src/conflict-resolution-history.ts";
 import { ConflictResolutionModel } from "../src/conflict-resolution-model.ts";
 import {
   applyExactTextChanges,
   decodeExactText,
   encodeExactText,
 } from "../src/features/files-editor/text-content.ts";
+import { projectConflictDiff } from "../src/shared/diff-review/diff-review-projection.ts";
 
 test("conflict actions compose Ours then Theirs in either click order", () => {
   const fixture = () => {
@@ -60,6 +68,50 @@ test("accepting both sides keeps both decisions completed after Result compositi
   assert.equal(result, "ours\ntheirs");
   assert.equal(model.snapshots()[0].oursDecision, "accepted");
   assert.equal(model.snapshots()[0].theirsDecision, "accepted");
+});
+
+test("Undo restores the previous side decisions before ignoring the reverted side", () => {
+  const model = ConflictResolutionModel.create("base", "ours", "theirs", "base");
+  const block = model.snapshots()[0];
+  let state = EditorState.create({
+    doc: "base",
+    extensions: [history(), conflictResolutionHistoryExtension],
+  });
+  const dispatchDecision = (side, decision, source) => {
+    const before = model.historyState();
+    const changes = model.applyDecision(side, decision, source, state.doc.toString());
+    const transaction = state.update(conflictResolutionTransaction(
+      before, model.historyState(), changes, `input.conflict.${decision}`,
+    ));
+    state = transaction.state;
+    assert.equal(model.restoreHistoryState(conflictResolutionHistoryState([transaction])), true);
+    return changes;
+  };
+  const dispatchHistory = (command) => {
+    let applied = null;
+    assert.equal(command({ state, dispatch: (transaction) => { applied = transaction; state = transaction.state; } }), true);
+    const restored = conflictResolutionHistoryState([applied]);
+    assert.ok(restored);
+    const changes = transactionChanges(applied);
+    assert.equal(model.observeHistoryChanges(changes, applied.startState.doc.length, restored), true);
+  };
+
+  dispatchDecision("ours", "accepted", block.ours);
+  dispatchDecision("theirs", "accepted", block.theirs);
+  assert.equal(state.doc.toString(), "ours\ntheirs");
+
+  dispatchHistory(undo);
+  assert.equal(state.doc.toString(), "ours");
+  assert.equal(model.snapshots()[0].oursDecision, "accepted");
+  assert.equal(model.snapshots()[0].theirsDecision, "pending");
+
+  assert.deepEqual(dispatchDecision("theirs", "ignored", block.theirs), []);
+  assert.equal(projectConflictDiff(model.snapshots()).summary.pendingConflicts, 0);
+
+  dispatchHistory(undo);
+  assert.equal(model.snapshots()[0].theirsDecision, "pending");
+  dispatchHistory(redo);
+  assert.equal(projectConflictDiff(model.snapshots()).summary.pendingConflicts, 0);
 });
 
 test("equal conflict sides are inserted only once", () => {
@@ -213,4 +265,12 @@ function applyChanges(content, changes) {
     result = `${result.slice(0, change.from)}${change.insert}${result.slice(change.to)}`;
   }
   return result;
+}
+
+function transactionChanges(transaction) {
+  const changes = [];
+  transaction.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+    changes.push({ from, to, insert: inserted.toString() });
+  });
+  return changes;
 }

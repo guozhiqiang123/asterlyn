@@ -39,6 +39,7 @@ import {
   type ConflictResolutionSide,
   type ConflictSourceRange,
 } from "./conflict-resolution-model.ts";
+import { conflictResolutionHistoryExtension, conflictResolutionHistoryState, conflictResolutionTransaction } from "./conflict-resolution-history.ts";
 import { ConflictCollapseCoordinator, type ConflictCollapseSide } from "./conflict-collapse.ts";
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
@@ -96,7 +97,6 @@ export class ConflictEditor {
   private changePending = false;
   private changeFrame: number | null = null;
   private synchronizing = false;
-  private applyingConflictDecision = false;
   private resolutionModel: ConflictResolutionModel | null = null;
   private collapseCoordinator: ConflictCollapseCoordinator | null = null;
   private conflictControlObserver: MutationObserver | null = null;
@@ -259,14 +259,12 @@ export class ConflictEditor {
     if (!result || !this.resolutionModel || this.resultReadOnlyValue) {
       return { changes: [], appliedBlocks: 0, skippedManualBlocks: 0 };
     }
+    const before = this.resolutionModel.historyState();
     const bulk = this.resolutionModel.applyNonConflicting(scope, result.state.doc.toString());
-    if (bulk.changes.length > 0) {
-      this.applyingConflictDecision = true;
-      try {
-        result.dispatch({ changes: bulk.changes, userEvent: `input.conflict.bulk.${scope}` });
-      } finally {
-        this.applyingConflictDecision = false;
-      }
+    if (bulk.appliedBlocks > 0) {
+      result.dispatch(conflictResolutionTransaction(
+        before, this.resolutionModel.historyState(), bulk.changes, `input.conflict.bulk.${scope}`,
+      ));
     }
     this.syncConflictControls();
     this.syncReviewDecorations();
@@ -378,9 +376,7 @@ export class ConflictEditor {
     this.rightMerge = null;
     this.bindings = [];
     this.synchronizing = false;
-    this.applyingConflictDecision = false;
-    this.resolutionModel = null;
-    this.activeReviewBlock = -1;
+    this.resolutionModel = null; this.activeReviewBlock = -1;
   }
 
   private extensions(
@@ -431,6 +427,7 @@ export class ConflictEditor {
       this.collapseCoordinator?.extension(collapseSide) ?? [],
       mergeDiffSemanticHighlighting,
       diffReviewBlockDecorations,
+      resultSide === "primary" ? conflictResolutionHistoryExtension : [],
       history(), drawSelection(), highlightActiveLine(),
       highlightActiveLineGutter(), asterlynSearch(), highlightSelectionMatches(), asterlynSyntaxHighlighting,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, { key: "Mod-f", run: openSearchPanel }]),
@@ -439,21 +436,32 @@ export class ConflictEditor {
   }
 
   private captureResult(update: ViewUpdate, source: "primary" | "mirror"): void {
-    if (!update.docChanged || this.synchronizing) return;
+    if (this.synchronizing) return;
+    const restored = conflictResolutionHistoryState(update.transactions);
+    const decisionInput = update.transactions.some((transaction) => transaction.isUserEvent("input.conflict"));
+    if (!update.docChanged) {
+      if (restored && this.resolutionModel?.restoreHistoryState(restored)) {
+        this.syncConflictControls(); this.syncReviewDecorations();
+        this.onChange(this.content());
+      }
+      return;
+    }
     const changes: TextChange[] = [];
     update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
       changes.push({ from, to, insert: inserted.toString() });
     });
     this.exactResult = applyExactTextChanges(this.exactResult, changes);
-    if (!this.applyingConflictDecision) {
+    const historyRestored = restored && (decisionInput
+      ? this.resolutionModel?.restoreHistoryState(restored)
+      : this.resolutionModel?.observeHistoryChanges(changes, update.startState.doc.length, restored));
+    if (!decisionInput && !historyRestored) {
       this.resolutionModel?.observeManualChanges(
         changes,
         update.startState.doc.length,
         update.state.doc.toString(),
       );
     }
-    this.serializedResult = null;
-    this.changePending = true;
+    this.serializedResult = null; this.changePending = true;
     for (const binding of this.bindings) {
       if (binding.referenceTracksResult && binding.changeIndicators) {
         binding.changeIndicators.setBaseline(binding.view, update.state.doc.toString());
@@ -545,19 +553,11 @@ export class ConflictEditor {
     const source = side ? this.sourceRangeForControl(group, side) : null;
     const result = this.leftMerge?.b;
     if (!side || !source || !result || !this.resolutionModel) return;
+    const before = this.resolutionModel.historyState();
     const changes = this.resolutionModel.applyDecision(side, decision, source, result.state.doc.toString());
-    if (changes.length === 0) {
-      this.syncConflictControls();
-      this.syncReviewDecorations();
-      this.onChange(this.content());
-      return;
-    }
-    this.applyingConflictDecision = true;
-    try {
-      result.dispatch({ changes, userEvent: `input.conflict.${decision}` });
-    } finally {
-      this.applyingConflictDecision = false;
-    }
+    result.dispatch(conflictResolutionTransaction(
+      before, this.resolutionModel.historyState(), changes, `input.conflict.${decision}`,
+    ));
     this.syncConflictControls();
     this.syncReviewDecorations();
   }
