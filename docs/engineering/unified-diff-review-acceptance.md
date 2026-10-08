@@ -63,8 +63,8 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 - Read-only, editable, and conflict surfaces now use one pane-header renderer with explicit writable
   metadata and preserved revision casing.
-- Read-only split Diff keeps a 50/50 default, editable Diff uses 42/58, and conflict uses equal thirds after excluding the two fixed action gutters
-  so Result receives deliberate visual priority.
+- Read-only split Diff keeps a 50/50 default, editable Diff uses 42/58, and conflict uses equal thirds
+  after excluding the two fixed action gutters.
 - Editable two-pane and conflict three-pane widths are pointer-draggable, keyboard-adjustable,
   double-click resettable, bounded, and persisted in workbench layout state.
 - Conflict action gutters remain fixed-width while pane widths change, preserving control geometry.
@@ -112,22 +112,22 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 8 — package and acceptance evidence
 
-- The complete frontend suite passed: 887 tests, 0 failures. TypeScript checking, the production
+- The complete frontend suite passed: 889 tests, 0 failures. TypeScript checking, the production
   frontend build, and `git diff --check` also passed.
 - The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
   release executable and the installed executable each rendered the application shell inside the
   six-second native smoke bound.
 - The accepted macOS arm64 archive is
-  `target/release/bundle/macos/Asterlyn-conflict-splitter-semantics-20261008-macos-arm64.zip`,
-  9,147,224 bytes, SHA-256
-  `53dbf894dea4f5fe073b3c37a2d6f5b32bc2575541289cb5c4ee37d87e490145`.
+  `target/release/bundle/macos/Asterlyn-conflict-equal-columns-20261008-macos-arm64.zip`,
+  9,147,329 bytes, SHA-256
+  `d873e58c9b54e96bb0cf9c48db0900dd9f59fc4719a2fb0dbab814f68d86d86e`.
 - The packaged and installed executables are both 24,046,032 bytes with SHA-256
-  `695625a5ba9f737f371cb72bc2e081d36fc0050365c8f9b88367932be5959e4b`. The bundle is an arm64
+  `7085ad07be5177cbff1c3713e4ef7cb1b05f63add3d5b365c28d90c0bf3f98a4`. The bundle is an arm64
   application with an ad-hoc hardened-runtime signature and passed strict deep signature
   verification before and after installation.
 - `/Applications/Asterlyn.app` was replaced and relaunched against this worktree. The previous
   installation remains recoverable at
-  `/Users/gzq/.Trash/Asterlyn-before-splitter-semantics-20261008-133445.app`.
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-equal-20261008-134500.app`.
 - The final visual refinement removes the redundant 3px per-line conflict-status rail while keeping
   the 5px Diff gutter, connector fill, action state, active-block emphasis, and ignored-text
   treatment. Connector edge strokes were also removed so Patch ranges do not paint 1px colored
@@ -137,6 +137,9 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   Ours and Result, the second only between Result and Theirs, and the outer conflict root is observed
   so workbench resizing reprojects all three panes. Conflict toolbar summaries shrink before
   controls, while bulk and completion buttons retain single-line labels and fixed hit targets.
+- New conflict views and splitter double-click reset divide the gutter-exclusive content width into
+  equal thirds. Persisted 27/46/27 values migrate as the legacy default, while every other saved
+  proportion remains untouched.
 - Host evidence: macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1,
   and Git 2.48.1.
 - The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,
