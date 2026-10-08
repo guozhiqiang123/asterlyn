@@ -9,6 +9,7 @@ import {
 import {
   CONFLICT_ACTION_GUTTER_WIDTH,
   conflictPaneLayout,
+  resizeConflictOursPercentage,
 } from "../src/shared/diff-review/conflict-diff-review-layout.ts";
 
 test("review layouts retain distinct read-only, editable, and conflict defaults", () => {
@@ -43,6 +44,17 @@ test("conflict pixel layout fills the container after extreme splitter movement"
   }
 });
 
+test("the first conflict splitter transfers width only between Ours and Result", () => {
+  const initialTheirs = 100 - 27 - 46;
+  const movedLeft = resizeConflictOursPercentage(27, 46, 18);
+  const movedRight = resizeConflictOursPercentage(27, 46, 70);
+
+  assert.deepEqual(movedLeft, { ours: 18, result: 55 });
+  assert.deepEqual(movedRight, { ours: 55, result: 18 });
+  assert.equal(100 - movedLeft.ours - movedLeft.result, initialTheirs);
+  assert.equal(100 - movedRight.ours - movedRight.result, initialTheirs);
+});
+
 test("two-pane and three-pane editors use the shared header and splitter contracts", async () => {
   const [editable, editableSplitter, conflict, labels] = await Promise.all([
     readFile(new URL("../src/editable-diff-editor.ts", import.meta.url), "utf8"),
@@ -59,4 +71,5 @@ test("two-pane and three-pane editors use the shared header and splitter contrac
   assert.match(conflict, /normalizeConflictPercentages/u);
   assert.match(conflict, /this\.rightMerge\?\.a\.dom\.closest<HTMLElement>/u);
   assert.match(conflict, /theirsEditor\.style\.flex = `0 0 \$\{theirsWidth\}px`/u);
+  assert.match(conflict, /resizeObserver\.observe\(root\)/u);
 });

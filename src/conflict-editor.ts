@@ -58,10 +58,7 @@ import {
 } from "./shared/diff-review/diff-review-block-decoration.ts";
 import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
 import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
-import {
-  conflictPaneLayout,
-  normalizeConflictPercentages,
-} from "./shared/diff-review/conflict-diff-review-layout.ts";
+import { CONFLICT_PANE_MIN_PERCENTAGE, conflictPaneLayout, normalizeConflictPercentages, resizeConflictOursPercentage } from "./shared/diff-review/conflict-diff-review-layout.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -666,6 +663,7 @@ export class ConflictEditor {
     const disposeHorizontal = linkHorizontalScrollGroup([...panes, ...scrollers]);
     resizeObserver.observe(this.leftMerge.dom);
     resizeObserver.observe(this.rightMerge.dom);
+    resizeObserver.observe(root);
     for (const scroller of scrollers) resizeObserver.observe(scroller);
     this.scrollDispose = () => {
       disposeVertical();
@@ -704,25 +702,31 @@ export class ConflictEditor {
       attachSplitter(first, {
         orientation: "vertical",
         getValue: () => contentWidth() * ours / 100,
-        getRange: () => ({
-          minimum: contentWidth() * 0.18,
-          maximum: contentWidth() * (1 - result / 100 - 0.18),
-        }),
+        getRange: () => {
+          const minimum = CONFLICT_PANE_MIN_PERCENTAGE / 100;
+          return {
+            minimum: contentWidth() * minimum,
+            maximum: contentWidth() * ((ours + result) / 100 - minimum),
+          };
+        },
         onChange: (value) => {
-          ours = value / contentWidth() * 100;
-          ({ ours, result } = normalizeConflictPercentages(ours, result));
+          ({ ours, result } = resizeConflictOursPercentage(
+            ours,
+            result,
+            value / contentWidth() * 100,
+          ));
           apply();
           this.presentation.onConflictSplitPercentageChange?.(ours, result, false);
         },
         onCommit: () => this.presentation.onConflictSplitPercentageChange?.(ours, result, true),
-        onReset: () => { ours = 27; ({ ours, result } = normalizeConflictPercentages(ours, result)); apply(); },
+        onReset: () => { ({ ours, result } = resizeConflictOursPercentage(ours, result, 27)); apply(); },
       }),
       attachSplitter(second, {
         orientation: "vertical",
         getValue: () => contentWidth() * (ours + result) / 100,
         getRange: () => ({
-          minimum: contentWidth() * (ours / 100 + 0.18),
-          maximum: contentWidth() * 0.82,
+          minimum: contentWidth() * (ours + CONFLICT_PANE_MIN_PERCENTAGE) / 100,
+          maximum: contentWidth() * (100 - CONFLICT_PANE_MIN_PERCENTAGE) / 100,
         }),
         onChange: (value) => {
           result = value / contentWidth() * 100 - ours;

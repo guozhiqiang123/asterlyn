@@ -48,3 +48,18 @@ export function conflictPaneLayout(
     theirsWidth: contentWidth - oursWidth - resultWidth,
   };
 }
+
+export function resizeConflictOursPercentage(
+  oursValue: number,
+  resultValue: number,
+  nextOursValue: number,
+): ConflictPanePercentages {
+  const current = normalizeConflictPercentages(oursValue, resultValue);
+  const leadingPair = current.ours + current.result;
+  const candidate = Number.isFinite(nextOursValue) ? nextOursValue : current.ours;
+  const ours = Math.max(
+    CONFLICT_PANE_MIN_PERCENTAGE,
+    Math.min(leadingPair - CONFLICT_PANE_MIN_PERCENTAGE, candidate),
+  );
+  return { ours, result: leadingPair - ours };
+}
