@@ -83,7 +83,7 @@ product with two different review languages.
 5. **Meaningful blocks, not raw Diff fragments.** Counts, navigation, actions, and status operate on
    stable review blocks. Raw CodeMirror chunks remain an implementation detail.
 6. **Manual edits are first-class.** A manually edited Result is not silently relabeled as accepted
-   from either source, and a bulk action never overwrites a touched block.
+   from either source, and later per-block decisions never silently overwrite that edit.
 7. **Color is supplementary.** Text, icons, pressed state, accessible labels, and tooltips must
    communicate every status without relying on color alone.
 8. **Bounded work per frame.** Connector and scroll geometry update at most once per animation frame;
@@ -229,7 +229,7 @@ a block:
 
 Conflict-specific progress distinguishes:
 
-- non-conflicting blocks that can be applied automatically;
+- non-conflicting blocks available for optional per-block review;
 - true conflicts where both sides differ;
 - reviewed decisions;
 - manually edited blocks; and
@@ -239,15 +239,13 @@ Conflict-specific progress distinguishes:
 an explicit Apply or Ignore decision. Editing a divergent Result block resets those decisions to
 pending. One-sided and identical non-conflicting blocks remain optional and do not gate completion.
 
-### Bulk conflict actions
+### Explicit per-block conflict actions
 
-Add `Apply non-conflicting changes: Ours / All / Theirs` after block classification is stable.
-
-- A non-conflicting block changes on only one side or has identical content on both sides.
-- Bulk apply executes one deterministic Result transaction so it is one undo step.
-- It operates only on untouched pending blocks and reports manually edited blocks that were skipped.
-- `All` does not auto-resolve genuinely divergent two-sided conflicts.
-- The operation updates the same transient decision model used by individual controls.
+Conflict review intentionally has no toolbar-level `Ours / All / Theirs` shortcut. Each decision is
+made from the Apply or Ignore controls beside the corresponding block so that the affected location
+is visible when the user acts. A non-conflicting block changes on only one side or has identical
+content on both sides; it remains optional and does not gate completion, but any decision the user
+does make still uses the same transient model and undo history as a divergent conflict.
 
 ### Cancel, finish, and destructive actions
 
@@ -385,7 +383,7 @@ Every phase is committed separately and must leave the branch buildable.
 ### Phase 6 — conflict workflow completion
 
 1. Add previous/next conflict progress and reviewed/manual/pending states.
-2. Add bounded bulk application of non-conflicting Ours/All/Theirs blocks.
+2. Keep conflict decisions beside each individual block and omit toolbar-level bulk actions.
 3. Disable Save and Stage until both sides of every divergent conflict have an explicit Apply or
    Ignore decision; do not count pending non-conflicting blocks in this gate.
 4. Preserve draft capture, discard confirmation, stale revision handling, and verified staging.
@@ -420,7 +418,7 @@ Every phase is committed separately and must leave the branch buildable.
 - Correct two-way added/removed/modified and conflict identical/non-conflicting/divergent classes.
 - Manual edits reset only touched decisions.
 - Applying both conflict sides remains deterministic and does not duplicate identical content.
-- Bulk apply skips manual blocks and creates one exact transaction.
+- Conflict action history restores the exact per-block decision and Result transaction.
 - Summary counts use review blocks rather than raw Diff fragments.
 
 ### Presentation tests
@@ -473,7 +471,8 @@ Every phase is committed separately and must leave the branch buildable.
 - Geometry reads occur in a measurement phase and DOM writes in the scheduled presentation phase.
 - Connector work scales with visible review blocks; off-screen blocks do not require path updates.
 - All Diff computation remains bounded by existing scan limits, timeouts, and large-file fallbacks.
-- No bulk action may overwrite a block marked manual or bypass exact revision verification.
+- No toolbar-level bulk conflict action is exposed; per-block actions cannot bypass exact revision
+  verification.
 
 ## Explicit non-goals for the first delivery
 
@@ -495,7 +494,7 @@ The redesign is complete only when:
 5. conflict correspondence is understandable through block boundaries and connectors without manual
    line-number matching;
 6. folds, scrolling, editing, undo, and remounting remain synchronized;
-7. conflict progress, cancel, bulk non-conflicting apply, manual edits, Save and Stage, and destructive
+7. conflict progress, per-block Apply/Ignore, cancel, manual edits, Save and Stage, and destructive
    deletion resolution follow the documented safety behavior;
 8. legacy duplicate review chrome is removed rather than left as dormant parallel code; and
 9. automated gates and fixture-based manual acceptance pass before local installation replacement.

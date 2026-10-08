@@ -55,9 +55,11 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 - Ordinary editor Diff and Push Diff now render through one capability-driven toolbar.
 - Existing stable command IDs remain compatible through the `DIFF_REVIEW_COMMANDS` name.
-- Conflict resolution now exposes previous/next block navigation, progress, whitespace display,
-  Cancel, Save and Stage, and a visually separate delete-resolution action in the same header.
-- Unsupported conflict file navigation and unified/split controls are omitted instead of disabled.
+- Conflict resolution now exposes previous/next block and conflicted-file navigation, reveal in
+  Files, unchanged expansion, progress, whitespace display, Cancel, Save and Stage, and a visually
+  separate delete-resolution action in the same header.
+- Unified/split controls remain omitted because conflict resolution is always a semantic three-pane
+  view; file navigation and reveal reuse the shared command IDs and availability contract.
 
 ### Phase 3 — shared pane headers and resizable layout
 
@@ -90,10 +92,10 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 6 — conflict workflow completion
 
-- `Ours`, `All`, and `Theirs` apply only untouched non-conflicting blocks; genuine divergent blocks
-  stay pending and manually edited blocks are reported and preserved.
-- A bulk application enters Result as one CodeMirror transaction, so the complete operation is one
-  undo step while the transient decision model and block decorations update together.
+- Conflict review exposes Apply/Ignore only beside an individual block. The shared toolbar has no
+  `Ours`, `All`, or `Theirs` bulk shortcut, so every reviewed location remains visible when acted on.
+- Each per-block action enters Result and its transient decision state in the same CodeMirror history
+  event, so Undo and Redo restore them together.
 - `Save and Stage` remains disabled until both sides of every genuinely divergent conflict have an
   explicit Apply or Ignore decision; pending one-sided and identical blocks do not gate completion.
   Manual edits to divergent Result blocks reset their decisions to pending. The existing exact
@@ -113,21 +115,21 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 
 ### Phase 8 — package and acceptance evidence
 
-- The complete frontend suite passed: 894 tests, 0 failures. TypeScript checking, the production
+- The complete frontend suite passed: 893 tests, 0 failures. TypeScript checking, the production
   frontend build, and `git diff --check` also passed.
 - The Rust workspace passed 271 tests with 0 failures and 2 existing ignored watcher tests. The
   installed executable launched the Flutter conflict workspace successfully after replacement.
 - The accepted macOS arm64 archive is
-  `target/release/bundle/macos/Asterlyn-conflict-undo-20261008-170816-macos-arm64.zip`,
-  9,148,403 bytes, SHA-256
-  `a9998a9a4baabb9b7b98ba37c38c9fda1feb93bc39f7b56a26d2a7da55399858`.
+  `target/release/bundle/macos/Asterlyn-conflict-toolbar-20261008-173930-macos-arm64.zip`,
+  9,147,312 bytes, SHA-256
+  `2d60fad6e019a5323cd068a01bf775c08bef6d11e42fd4b40391b0a970372370`.
 - The packaged and installed executables are both 24,046,032 bytes with SHA-256
-  `3af8f457ccd3840cefe36ca270969014d4728e5ae5979da95e6311a60aad3f91`. The bundle is an arm64
+  `189f4f2feaf1b0be056663f08d7a63fcfb58bacc0eae6e4c05d2bac9fb5187c9`. The bundle is an arm64
   application with an ad-hoc hardened-runtime signature and passed strict deep signature
   verification before and after installation.
 - `/Applications/Asterlyn.app` was replaced and relaunched against `/Users/gzq/flutter`. The previous
   installation remains recoverable at
-  `/Users/gzq/.Trash/Asterlyn-before-conflict-undo-20261008-170837.app`.
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-toolbar-20261008-173930.app`.
 - The final visual refinement removes the redundant 3px per-line conflict-status rail while keeping
   the 5px Diff gutter, connector fill, action state, active-block emphasis, and ignored-text
   treatment. Connector edge strokes were also removed so Patch ranges do not paint 1px colored
@@ -136,7 +138,7 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   explicitly resizes the visible Theirs editor. The first splitter now transfers width only between
   Ours and Result, the second only between Result and Theirs, and the outer conflict root is observed
   so workbench resizing reprojects all three panes. Conflict toolbar summaries shrink before
-  controls, while bulk and completion buttons retain single-line labels and fixed hit targets.
+  completion controls, whose labels retain fixed hit targets.
 - New conflict views and splitter double-click reset divide the gutter-exclusive content width into
   equal thirds. Persisted 27/46/27 values migrate as the legacy default, while every other saved
   proportion remains untouched.
@@ -149,6 +151,10 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - Conflict Apply and Ignore decisions participate in the same isolated Undo/Redo event as Result
   text. The regression sequence Apply Ours, Apply Theirs, Undo, Ignore Theirs ends with Ours accepted,
   Theirs ignored, and zero pending conflicts; decision-only actions also undo and redo explicitly.
+- The three conflict-wide Ours/All/Theirs controls and their model, event, localization, and CSS paths
+  are removed. Conflict decisions are available only beside their individual blocks. The toolbar now
+  completes the applicable two-pane command set with previous/next conflicted file and reveal in
+  Files, while retaining previous/next block, unchanged expansion, and visible whitespace.
 - Host evidence: macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1,
   and Git 2.48.1.
 - The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,

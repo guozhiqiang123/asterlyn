@@ -140,16 +140,16 @@ aligned when pair-specific merge spacers have different heights.
 **Amendment, 2026-10-08 — unified review presentation.** Read-only, editable, replacement, Push,
 and conflict text comparisons now project into one shared review contract: pane identities, stable
 block ranges, capabilities, progress, and review state. One toolbar renderer owns block navigation,
-unchanged expansion, layout, whitespace, and conflict-only bulk actions while retaining isolated
-command attributes for editor, Push, and replacement hosts. One pane-header renderer and one action
-renderer own writable metadata, hit targets, focus, selected state, and accessibility.
+unchanged expansion, layout, and whitespace while retaining isolated command attributes for editor,
+Push, and replacement hosts. One pane-header renderer and one action renderer own writable metadata,
+hit targets, focus, selected state, and accessibility.
 
 Editable and conflict surfaces use the same anchor-owned folding coordinator and public
 CodeMirror-coordinate geometry. Frame-coalesced SVG connectors are presentation-only, clipped to
-visible content, and never intercept input. Conflict review state remains transient: bulk
-Ours/All/Theirs applies only untouched non-conflicting blocks in one undoable Result transaction,
-manual blocks and divergent conflicts are preserved, and Cancel reuses the established dirty-draft
-confirmation. Save and Stage still crosses the exact
+visible content, and never intercept input. Conflict review state remains transient and is changed
+only through the Apply/Ignore controls beside an individual block; the toolbar exposes no bulk
+Ours/All/Theirs shortcut. Manual blocks and divergent conflicts are preserved, and Cancel reuses the
+established dirty-draft confirmation. Save and Stage still crosses the exact
 revision-token and verified stage-zero boundary described above.
 
 **Amendment, 2026-10-08 — explicit conflict completion.** Each side of a genuinely divergent
@@ -168,6 +168,12 @@ Conflict actions also carry their before/after decision snapshots in the same is
 history event as the Result edit. Undo and Redo therefore restore text and explicit side decisions
 together; decision-only actions remain undoable even when they do not change Result text. Manual
 edits continue to invalidate affected decisions instead of inferring acceptance from matching text.
+
+The three-pane toolbar mirrors every two-pane review operation that has a valid conflict meaning:
+previous/next block, previous/next conflicted file, reveal the current file in Files, synchronized
+unchanged-range expansion, and visible-whitespace display. File switching reuses the dirty-draft
+guard above. Unified/split switching remains absent because a conflict owns three semantic panes and
+must not hide either source behind a misleading two-pane presentation mode.
 
 ### Dependency boundary
 
@@ -205,8 +211,8 @@ startup shell, application services, domain models, or persisted state.
     anchored to Result document positions rather than assuming equal decorated pixel heights.
 15. Text Diff consumers share the same capability-driven toolbar, pane-header, block-state, fold,
     and geometry contracts; consumer-specific commands remain isolated by explicit attributes.
-16. Bulk conflict actions may touch only pending non-conflicting blocks in one Result transaction;
-    they never overwrite manual blocks, auto-resolve divergent overlaps, or bypass completion safety.
+16. Conflict decisions are made only through the controls beside an individual block; the toolbar
+    must not expose bulk Ours/All/Theirs actions that bypass deliberate block-by-block review.
 
 ## Delivery sequence
 
