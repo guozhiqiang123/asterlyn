@@ -21,7 +21,7 @@ test("opening a conflict activates an editor document without opening a modal", 
   assert.equal(controller.state.dialog, null);
   assert.equal(controller.state.conflict?.path, "one.txt");
   harness.runtime.capture();
-  assert.equal(controller.state.conflictResult, "markers\n");
+  assert.equal(controller.state.conflictResult, "base\n");
   assert.ok(harness.renderCount() >= 1);
 });
 
@@ -90,7 +90,7 @@ function gateway() {
         base: "base\n",
         ours: "ours\n",
         theirs: "theirs\n",
-        worktree: "markers\n",
+        worktree: "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n",
         binary: false,
         revisionToken: `revision:${path}`,
       };

@@ -23,7 +23,7 @@ import {
   diffBlockFromOffsets,
   setActiveEditableDiffBlock,
 } from "./features/files-editor/editable-diff-change-highlight.ts";
-import { linkHorizontalScroll } from "./presentation/linked-scroll.ts";
+import { linkHorizontalScrollGroup } from "./presentation/linked-scroll.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { DiffPresentation, DiffSideLabels } from "./diff-presentation.ts";
 import {
@@ -491,13 +491,6 @@ export class EditableDiffEditor {
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
     this.observeRevertControls();
-    // Both panes keep their own horizontal scroller under one shared vertical scroller, so their
-    // horizontal offsets are linked explicitly.
-    const disposeAB = linkHorizontalScroll(
-      this.mergeView.a.scrollDOM,
-      this.mergeView.b.scrollDOM,
-    );
-
     const container = document.createElement("div");
     container.className = "editable-diff-scrollbars";
     container.setAttribute("aria-hidden", "true");
@@ -526,15 +519,6 @@ export class EditableDiffEditor {
     container.appendChild(corner);
     parent.appendChild(container);
 
-    const disposeSbA = linkHorizontalScroll(
-      paneA,
-      this.mergeView.a.scrollDOM,
-    );
-    const disposeSbB = linkHorizontalScroll(
-      paneB,
-      this.mergeView.b.scrollDOM,
-    );
-
     const resizeObserver = new ResizeObserver(() => {
       this.updateScrollbars();
     });
@@ -542,12 +526,6 @@ export class EditableDiffEditor {
     resizeObserver.observe(this.mergeView.a.scrollDOM);
     resizeObserver.observe(this.mergeView.b.scrollDOM);
 
-    this.scrollDispose = () => {
-      disposeAB();
-      disposeSbA();
-      disposeSbB();
-      resizeObserver.disconnect();
-    };
     this.diffScrollbars = {
       container,
       paneA,
@@ -558,6 +536,16 @@ export class EditableDiffEditor {
       resizeObserver,
     };
     this.updateScrollbars();
+    const disposeScrollGroup = linkHorizontalScrollGroup([
+      paneA,
+      paneB,
+      this.mergeView.a.scrollDOM,
+      this.mergeView.b.scrollDOM,
+    ]);
+    this.scrollDispose = () => {
+      disposeScrollGroup();
+      resizeObserver.disconnect();
+    };
   }
 
   private binding(): ViewBinding {
@@ -678,8 +666,9 @@ export class EditableDiffEditor {
     if (!a.isConnected || !b.isConnected) return;
     const widthA = a.scrollWidth;
     const widthB = b.scrollWidth;
-    this.diffScrollbars.contentA.style.width = `${widthA}px`;
-    this.diffScrollbars.contentB.style.width = `${widthB}px`;
+    const sharedWidth = Math.max(widthA, widthB);
+    this.diffScrollbars.contentA.style.width = `${sharedWidth}px`;
+    this.diffScrollbars.contentB.style.width = `${sharedWidth}px`;
 
     const verticalScrollbarWidth = Math.max(
       0,

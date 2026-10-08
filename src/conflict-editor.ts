@@ -33,7 +33,8 @@ import {
 } from "./features/files-editor/text-content.ts";
 import type { EditorCopy, GitOperationCopy } from "./localization/catalog.ts";
 import type { GitConflictContent } from "./models.ts";
-import { linkScrollElements } from "./presentation/linked-scroll.ts";
+import { icon } from "./icons.ts";
+import { linkHorizontalScrollGroup, linkVerticalScroll } from "./presentation/linked-scroll.ts";
 import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
@@ -50,11 +51,20 @@ interface ViewBinding {
   referenceTracksResult: boolean;
 }
 
+interface ConflictScrollbars {
+  readonly container: HTMLDivElement;
+  readonly panes: readonly HTMLDivElement[];
+  readonly contents: readonly HTMLDivElement[];
+  readonly corner: HTMLDivElement;
+  readonly resizeObserver: ResizeObserver;
+}
+
 /** Three-column conflict editor built from two synchronized merge projections. */
 export class ConflictEditor {
   private leftMerge: MergeView | null = null;
   private rightMerge: MergeView | null = null;
   private scrollDispose: (() => void) | null = null;
+  private diffScrollbars: ConflictScrollbars | null = null;
   private bindings: ViewBinding[] = [];
   private languageLoader = new EditorLanguageLoader();
   private languageActivation = 0;
@@ -98,7 +108,12 @@ export class ConflictEditor {
       <strong>${escapeHtml(copy.ours)}<small>${root.dataset.oursChanges}</small></strong><span></span>
       <strong>${escapeHtml(copy.resolvedResult)}</strong><span></span>
       <strong>${escapeHtml(copy.theirs)}<small>${root.dataset.theirsChanges}</small></strong>
-    </header><div class="conflict-merge-content"><div class="conflict-left-merge"></div><div class="conflict-right-merge"></div></div>`;
+    </header><div class="conflict-merge-content"><div class="conflict-left-merge"></div><div class="conflict-right-merge"></div></div>
+    <div class="conflict-scrollbars" aria-hidden="true">
+      <div class="conflict-scrollbar-pane"><div class="conflict-scrollbar-content"></div></div><div class="conflict-scrollbar-spacer"></div>
+      <div class="conflict-scrollbar-pane"><div class="conflict-scrollbar-content"></div></div><div class="conflict-scrollbar-spacer"></div>
+      <div class="conflict-scrollbar-pane"><div class="conflict-scrollbar-content"></div></div><div class="conflict-scrollbar-corner"></div>
+    </div>`;
     parent.replaceChildren(root);
 
     const leftHost = root.querySelector<HTMLElement>(".conflict-left-merge")!;
@@ -164,7 +179,7 @@ export class ConflictEditor {
     mirrorBinding.view = this.rightMerge.a;
     theirsBinding.view = this.rightMerge.b;
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
-    this.scrollDispose = linkScrollElements(this.leftMerge.dom, this.rightMerge.dom);
+    this.mountScrollbars(root);
     this.loadLanguage(conflict.path);
   }
 
@@ -188,6 +203,7 @@ export class ConflictEditor {
 
   requestMeasure(): void {
     for (const binding of this.bindings) binding.view.requestMeasure();
+    this.updateScrollbars();
   }
 
   setPreferences(preferences: AppPreferences): void {
@@ -238,6 +254,7 @@ export class ConflictEditor {
     this.languageLoader.cancel();
     this.scrollDispose?.();
     this.scrollDispose = null;
+    this.diffScrollbars = null;
     this.leftMerge?.destroy();
     this.rightMerge?.destroy();
     this.leftMerge = null;
@@ -350,11 +367,57 @@ export class ConflictEditor {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "conflict-apply-change";
-    button.textContent = direction === "right" ? "→" : "←";
+    button.innerHTML = icon(direction === "right" ? "double-chevron-right" : "double-chevron-left", 15);
     const label = direction === "right" ? copy.acceptOursChange : copy.acceptTheirsChange;
     button.title = label;
     button.setAttribute("aria-label", label);
     return button;
+  }
+
+  private mountScrollbars(root: HTMLElement): void {
+    if (!this.leftMerge || !this.rightMerge) return;
+    const container = root.querySelector<HTMLDivElement>(".conflict-scrollbars")!;
+    const panes = [...container.querySelectorAll<HTMLDivElement>(".conflict-scrollbar-pane")];
+    const contents = [...container.querySelectorAll<HTMLDivElement>(".conflict-scrollbar-content")];
+    const corner = container.querySelector<HTMLDivElement>(".conflict-scrollbar-corner")!;
+    const scrollers = [
+      this.leftMerge.a.scrollDOM,
+      this.leftMerge.b.scrollDOM,
+      this.rightMerge.b.scrollDOM,
+    ];
+    const resizeObserver = new ResizeObserver(() => this.updateScrollbars());
+    this.diffScrollbars = { container, panes, contents, corner, resizeObserver };
+    this.updateScrollbars();
+    const disposeVertical = linkVerticalScroll(this.leftMerge.dom, this.rightMerge.dom);
+    const disposeHorizontal = linkHorizontalScrollGroup([...panes, ...scrollers]);
+    resizeObserver.observe(this.leftMerge.dom);
+    resizeObserver.observe(this.rightMerge.dom);
+    for (const scroller of scrollers) resizeObserver.observe(scroller);
+    this.scrollDispose = () => {
+      disposeVertical();
+      disposeHorizontal();
+      resizeObserver.disconnect();
+    };
+  }
+
+  private updateScrollbars(): void {
+    if (!this.diffScrollbars || !this.leftMerge || !this.rightMerge) return;
+    const scrollers = [
+      this.leftMerge.a.scrollDOM,
+      this.leftMerge.b.scrollDOM,
+      this.rightMerge.b.scrollDOM,
+    ];
+    if (scrollers.some((scroller) => !scroller.isConnected)) return;
+    const sharedWidth = Math.max(...scrollers.map((scroller) => scroller.scrollWidth));
+    for (const content of this.diffScrollbars.contents) content.style.width = `${sharedWidth}px`;
+    const verticalScrollbarWidth = Math.max(
+      0,
+      this.rightMerge.dom.offsetWidth - this.rightMerge.dom.clientWidth,
+    );
+    this.diffScrollbars.corner.style.width = `${verticalScrollbarWidth}px`;
+    this.diffScrollbars.corner.style.flex = `0 0 ${verticalScrollbarWidth}px`;
+    const hasOverflow = scrollers.some((scroller) => scroller.scrollWidth > scroller.clientWidth);
+    this.diffScrollbars.container.style.display = hasOverflow ? "grid" : "none";
   }
 }
 

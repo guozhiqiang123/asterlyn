@@ -23,6 +23,15 @@ export function linkScrollElements(
   return linkMappedScrollElements(first, second, absolutePosition, false, scheduler);
 }
 
+/** Mirrors only the vertical offset and leaves each element's horizontal owner untouched. */
+export function linkVerticalScroll(
+  first: LinkedScrollElement,
+  second: LinkedScrollElement,
+  scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
+): () => void {
+  return linkMappedScrollElements(first, second, verticalPosition, true, scheduler);
+}
+
 export function linkVerticalScrollProportionally(
   first: LinkedScrollElement,
   second: LinkedScrollElement,
@@ -48,6 +57,70 @@ export function linkHorizontalScroll(
   scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
 ): () => void {
   return linkMappedScrollElements(first, second, horizontalPosition, true, scheduler);
+}
+
+/**
+ * Coordinates an arbitrary set of horizontal scrollers through one frame-scheduled source. Using
+ * one owner avoids the feedback loops and multi-frame latency produced by chaining pairwise links.
+ * Unequal scroll ranges are mapped by progress so every visible scrollbar has the same position.
+ */
+export function linkHorizontalScrollGroup(
+  elements: readonly LinkedScrollElement[],
+  scheduler: ScrollFrameScheduler = defaultScrollFrameScheduler(),
+): () => void {
+  const members = [...new Set(elements)];
+  if (members.length < 2) return () => undefined;
+  const expected = new Map<LinkedScrollElement, number>();
+  const listeners = new Map<LinkedScrollElement, () => void>();
+  let pendingSource: LinkedScrollElement | null = null;
+  let frameHandle = 0;
+  let framePending = false;
+  let disposed = false;
+
+  const flush = () => {
+    framePending = false;
+    frameHandle = 0;
+    const source = pendingSource;
+    pendingSource = null;
+    if (disposed || !source) return;
+    const sourceMaximum = horizontalMaximum(source);
+    const progress = sourceMaximum > 0
+      ? Math.min(1, Math.max(0, source.scrollLeft / sourceMaximum))
+      : 0;
+    for (const target of members) {
+      if (target === source) continue;
+      const left = progress * horizontalMaximum(target);
+      if (Math.abs(target.scrollLeft - left) < 0.5) continue;
+      expected.set(target, left);
+      target.scrollTo(left, target.scrollTop);
+    }
+  };
+  const queue = (source: LinkedScrollElement) => {
+    const anticipated = expected.get(source);
+    if (anticipated !== undefined && Math.abs(source.scrollLeft - anticipated) < 0.5) {
+      expected.delete(source);
+      return;
+    }
+    expected.delete(source);
+    pendingSource = source;
+    if (framePending) return;
+    framePending = true;
+    frameHandle = scheduler.request(flush);
+  };
+  for (const member of members) {
+    const listener = () => queue(member);
+    listeners.set(member, listener);
+    member.addEventListener("scroll", listener);
+  }
+  queue(members[0]!);
+  return () => {
+    disposed = true;
+    pendingSource = null;
+    expected.clear();
+    if (framePending) scheduler.cancel(frameHandle);
+    framePending = false;
+    for (const [member, listener] of listeners) member.removeEventListener("scroll", listener);
+  };
 }
 
 type Position = { top: number; left: number };
@@ -199,6 +272,16 @@ function proportionalVerticalPosition(
   };
 }
 
+function verticalPosition(
+  source: LinkedScrollElement,
+  target: LinkedScrollElement,
+): Position {
+  return {
+    top: Math.min(source.scrollTop, Math.max(0, target.scrollHeight - target.clientHeight)),
+    left: target.scrollLeft,
+  };
+}
+
 function horizontalPosition(
   source: LinkedScrollElement,
   target: LinkedScrollElement,
@@ -210,4 +293,8 @@ function horizontalPosition(
       Math.max(0, target.scrollWidth - target.clientWidth),
     ),
   };
+}
+
+function horizontalMaximum(element: LinkedScrollElement): number {
+  return Math.max(0, element.scrollWidth - element.clientWidth);
 }

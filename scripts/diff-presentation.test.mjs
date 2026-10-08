@@ -136,17 +136,15 @@ test("source diff expands replacements to presentation-oriented word ranges", ()
   ]);
 });
 
-test("source diff retains multiple separated inline replacements", () => {
+test("source diff coalesces nearby word replacements across short punctuation", () => {
   const split = splitUnifiedDiff(
     ["@@ -1 +1 @@", "-foo = oldA + oldB", "+foo = newA + newB"].join("\n"),
   );
   assert.deepEqual(split.rows[0].old.changed, [
-    { from: 6, to: 10, kind: "modified" },
-    { from: 13, to: 17, kind: "modified" },
+    { from: 6, to: 17, kind: "modified" },
   ]);
   assert.deepEqual(split.rows[0].new.changed, [
-    { from: 6, to: 10, kind: "modified" },
-    { from: 13, to: 17, kind: "modified" },
+    { from: 6, to: 17, kind: "modified" },
   ]);
 });
 
@@ -219,7 +217,7 @@ test("source diff aligns a leading inserted line before later replacements", () 
     ],
   );
   assert.deepEqual(split.rows[1].new.changed, [
-    { from: 5, to: 6, kind: "added" },
+    { from: 0, to: 6, kind: "modified" },
   ]);
 });
 
@@ -250,12 +248,10 @@ test("unified diff keeps removed and added rows while sharing precise ranges", (
   );
   assert.deepEqual(unified.rows.map((row) => row.kind), ["removed", "added"]);
   assert.deepEqual(unified.rows[0].changed, [
-    { from: 6, to: 10, kind: "modified" },
-    { from: 13, to: 17, kind: "modified" },
+    { from: 6, to: 17, kind: "modified" },
   ]);
   assert.deepEqual(unified.rows[1].changed, [
-    { from: 6, to: 10, kind: "modified" },
-    { from: 13, to: 17, kind: "modified" },
+    { from: 6, to: 17, kind: "modified" },
   ]);
 });
 

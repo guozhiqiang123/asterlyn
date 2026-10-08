@@ -87,8 +87,9 @@ committable normal change. Selecting or activating Resolve opens a `conflict-res
 preview instead of a modal.
 
 The conflict editor renders Ours, Result, and Theirs as full CodeMirror documents. Ours and Theirs
-are read-only; Result is freely editable and starts from the current worktree conflict result, then
-Ours, then Theirs when no worktree file exists. Base is not a fourth visible pane: it drives
+are read-only; Result is freely editable and preserves an exact marker-free worktree resolution.
+An unresolved marker document is reconstructed conservatively from Base/Ours/Theirs. Base is not a
+fourth visible pane: it drives
 base-to-ours and base-to-theirs change classification. Center gutters provide directional controls
 that apply one reviewed change region into Result. Added/deleted, binary, or otherwise ambiguous
 files keep explicit fail-closed handling instead of guessing a merge result. All panes share syntax,
@@ -101,6 +102,21 @@ replacement, rechecks index stages, stages the literal path, and verifies the st
 `Resolve as Deleted` keeps its explicit destructive action. A repository or conflict-stage change
 never overwrites a draft; it marks the editor stale and requires reload or an explicit discard.
 Continue remains unavailable until Git reports no unresolved stages.
+
+**Amendment, 2026-10-08.** The worktree conflict-marker document is no longer treated as editable
+Result content. A marker-free worktree remains exact user-authored truth. When complete Git marker
+syntax is present, a bounded, pure line-oriented three-way merge reconstructs Result from the three
+index stages: independent Ours/Theirs edits are retained, identical overlapping edits are retained,
+and a genuinely divergent overlap starts from the neutral Base text without introducing marker
+syntax. Result dirtiness compares against that same deterministic initial value.
+
+Conflict and editable split surfaces now mount their horizontal scrollbars in a dedicated bottom
+row, independent of document height. Every visible pane receives the same maximum scrollbar extent;
+one frame-scheduled group coordinator maps horizontal progress between all scrollbar and editor
+owners without a graph of pairwise feedback links. The two conflict MergeView outer containers keep
+vertical ownership and use a vertical-only link, while only the right edge exposes the vertical
+scrollbar. Directional conflict controls use the shared SVG icon registry and the same 26-pixel
+decorated hit target as the editable Diff revert control.
 
 ### Dependency boundary
 
@@ -129,6 +145,9 @@ startup shell, application services, domain models, or persisted state.
 9. Center gutters use CodeMirror's public gutter-side API; CSS must not reorder sticky gutter DOM.
 10. Merge surfaces retain one bounded outer vertical scroll owner, including after unchanged lines
     are expanded.
+11. Raw Git conflict markers are never presented as the initial editable Result.
+12. A docked horizontal-scroll surface has one synchronization coordinator and one shared extent;
+    it does not compose cyclic pairwise links.
 
 ## Delivery sequence
 

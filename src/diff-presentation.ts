@@ -1,4 +1,5 @@
 import { presentableDiff } from "@codemirror/merge";
+import { wordDiffRanges } from "./features/files-editor/word-diff.ts";
 
 export type DiffLayout = "unified" | "split";
 
@@ -417,7 +418,9 @@ export function pairedTextChangeRanges(
   if (oldText === newText) return { old: [], new: [] };
   const old: TextRange[] = [];
   const next: TextRange[] = [];
-  for (const change of presentableDiff(oldText, newText, INLINE_DIFF_CONFIG)) {
+  const changes = wordDiffRanges(oldText, newText)
+    ?? presentableDiff(oldText, newText, INLINE_DIFF_CONFIG);
+  for (const change of changes) {
     const hasOld = change.toA > change.fromA;
     const hasNew = change.toB > change.fromB;
     const kind: InlineChangeKind = hasOld && hasNew

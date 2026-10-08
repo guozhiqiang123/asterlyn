@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   linkHorizontalScroll,
+  linkHorizontalScrollGroup,
   linkScrollElements,
+  linkVerticalScroll,
   linkVerticalScrollProportionally,
 } from "../src/presentation/linked-scroll.ts";
 
@@ -141,6 +143,45 @@ test("horizontal-only linking mirrors offsets without touching vertical position
   dispose();
   first.userScroll(10, 0);
   assert.equal(second.scrollLeft, 600);
+});
+
+test("horizontal group synchronizes every owner in one frame across unequal extents", () => {
+  const paneA = new FakeScroller(900, 100);
+  const paneB = new FakeScroller(900, 100);
+  const editorA = new FakeScroller(700, 900);
+  const editorB = new FakeScroller(300, 900);
+  const scheduler = new FakeFrameScheduler();
+  const dispose = linkHorizontalScrollGroup([paneA, paneB, editorA, editorB], scheduler);
+  scheduler.flush();
+
+  paneA.userScroll(400, 0);
+  scheduler.flush();
+  assert.deepEqual(
+    [paneB.scrollLeft, editorA.scrollLeft, editorB.scrollLeft],
+    [400, 300, 100],
+  );
+  paneB.flush();
+  editorA.flush();
+  editorB.flush();
+  assert.equal(scheduler.size, 0);
+
+  dispose();
+  paneA.userScroll(80, 0);
+  scheduler.flush();
+  assert.equal(paneB.scrollLeft, 400);
+});
+
+test("vertical-only linking preserves independent horizontal offsets", () => {
+  const first = new FakeScroller(600, 500);
+  const second = new FakeScroller(800, 700);
+  first.scrollLeft = 40;
+  second.scrollLeft = 90;
+  const dispose = linkVerticalScroll(first, second);
+
+  first.userScroll(40, 180);
+  second.flush();
+  assert.deepEqual([second.scrollLeft, second.scrollTop], [90, 180]);
+  dispose();
 });
 
 test("proportional vertical linking maps unequal document heights in both directions", () => {

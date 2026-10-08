@@ -10,6 +10,7 @@ import type {
 } from "../../models.ts";
 import type { GitOperationCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import { initialConflictResult } from "./conflict-merge.ts";
 
 export type GitOperationDialog = "setup" | "review" | null;
 
@@ -167,7 +168,7 @@ export class GitOperationController {
 
   hasUnsavedConflict(): boolean {
     const conflict = this.state.conflict;
-    return !!conflict && this.state.conflictResult !== (conflict.worktree ?? conflict.ours ?? conflict.theirs ?? "");
+    return !!conflict && this.state.conflictResult !== initialConflictResult(conflict);
   }
 
   closeDialog(discardConflict = false): boolean {
@@ -255,7 +256,7 @@ export class GitOperationController {
       const conflict = await this.gateway.readConflictContent(root, path);
       if (!this.matches(generation, request, root)) return false;
       this.state.conflict = conflict;
-      this.state.conflictResult = conflict.worktree ?? conflict.ours ?? conflict.theirs ?? "";
+      this.state.conflictResult = initialConflictResult(conflict);
       this.state.loading = null;
       this.emit({ reason: "request-complete", conflictChanged: true });
       return true;

@@ -74,8 +74,10 @@ make the changed content visible.
 
 ### Comparison behavior
 
-- Inline changes use `@codemirror/merge`'s bounded `presentableDiff`, which supports multiple ranges
-  and presentation-oriented word-boundary cleanup.
+- Inline changes use one shared bounded word-token LCS for static and live Diff surfaces. Identifiers,
+  whitespace runs, and punctuation are compared as tokens; nearby differences separated only by up
+  to three punctuation/whitespace characters coalesce into one readable range. Oversized token
+  matrices fall back to CodeMirror's bounded comparison.
 - Read-only replacement blocks use a bounded dynamic line alignment before inline comparison so an
   inserted line does not shift every later old/new pair.
 - Oversized alignment matrices fall back to stable offset pairing. The character diff retains a scan
@@ -122,3 +124,11 @@ make the changed content visible.
 - `npm run check`: passed TypeScript type-checking.
 - `npm run build`: passed; Vite transformed 458 modules and produced the production bundle.
 - `git diff --check`: passed.
+
+## Reliability follow-up — 2026-10-08
+
+Static patch rows and live MergeView chunks now call the same word-oriented inline comparison instead
+of relying on separate presentation cleanup paths. Regression coverage locks whole-identifier
+replacement, nearby punctuation coalescing, insertion/deletion ranges, Unicode, long-line fallback,
+and exact document reconstruction. The complete 847-test frontend suite, TypeScript check, production
+build, and `git diff --check` passed for this follow-up.

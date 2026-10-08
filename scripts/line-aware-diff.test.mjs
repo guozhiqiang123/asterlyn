@@ -36,8 +36,8 @@ test("line-aware diff preserves precise inline ranges inside changed lines", () 
 
   assert.equal(applyChanges(before, after, changes), after);
   assert.equal(changes.length, 1);
-  assert.equal(before.slice(changes[0].fromA, changes[0].toA), "old");
-  assert.equal(after.slice(changes[0].fromB, changes[0].toB), "new");
+  assert.equal(before.slice(changes[0].fromA, changes[0].toA), "oldValue");
+  assert.equal(after.slice(changes[0].fromB, changes[0].toB), "newValue");
 });
 
 test("line-aware diff preserves an unchanged identifier suffix after unequal replacement", () => {
@@ -47,8 +47,8 @@ test("line-aware diff preserves an unchanged identifier suffix after unequal rep
 
   assert.equal(applyChanges(before, after, changes), after);
   assert.equal(changes.length, 1);
-  assert.equal(before.slice(changes[0].fromA, changes[0].toA), "abc");
-  assert.equal(after.slice(changes[0].fromB, changes[0].toB), "textxyz");
+  assert.equal(before.slice(changes[0].fromA, changes[0].toA), "0123456789abcdef");
+  assert.equal(after.slice(changes[0].fromB, changes[0].toB), "0123456789textxyzdef");
 });
 
 test("line-aware diff pairs adjacent CSS declarations before highlighting changed values", () => {
@@ -75,8 +75,8 @@ test("line-aware diff pairs adjacent CSS declarations before highlighting change
     old: before.slice(change.fromA, change.toA),
     next: after.slice(change.fromB, change.toB),
   })), [
-    { old: "8", next: "7" },
-    { old: "8", next: "7" },
+    { old: "18px", next: "17px" },
+    { old: "18px", next: "17px" },
   ]);
 });
 

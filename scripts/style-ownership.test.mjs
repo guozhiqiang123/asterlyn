@@ -361,8 +361,24 @@ test("merged Diff restates its collapsed rows and centres the revert control on 
   assert.match(theme, /"\.cm-collapsedLines":\s*\{[^}]*color:\s*"var\(--info-text\)",[^}]*background:\s*"linear-gradient/s);
   assert.match(diff, /\.cm-merge-revert\s*\{[^}]*width:\s*32px;[^}]*flex:\s*0 0 32px;/s);
   assert.match(diff, /\.editable-diff-revert\s*\{[^}]*width:\s*26px;[^}]*height:\s*26px;[^}]*margin-top:\s*7px;[^}]*transform:\s*translateX\(-50%\);/s);
-  // The panes own separate horizontal scrollers, so the editable Diff links only that axis.
-  assert.match(editor, /linkHorizontalScroll\(\s*this\.mergeView\.a\.scrollDOM,\s*this\.mergeView\.b\.scrollDOM,\s*\)/s);
+  // All visible horizontal owners share one coordinator, avoiding pairwise feedback loops.
+  assert.match(editor, /linkHorizontalScrollGroup\(\[\s*paneA,\s*paneB,\s*this\.mergeView\.a\.scrollDOM,\s*this\.mergeView\.b\.scrollDOM,\s*\]\)/s);
+});
+
+test("conflict Diff owns three aligned docked scrollbars and decorated apply controls", async () => {
+  const [css, editor, icons] = await Promise.all([
+    readFile(new URL("../src/features/git-operations/conflict-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/conflict-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/icons.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(css, /\.conflict-three-pane\s*\{[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\) auto;/s);
+  assert.match(css, /\.conflict-scrollbars\s*\{[^}]*grid-template-columns:[^}]*minmax\(0, 1fr\)[^}]*minmax\(0, 1fr\)[^}]*minmax\(0, 1fr\)[^}]*auto;/s);
+  assert.match(css, /\.conflict-three-pane \.cm-scroller\s*\{[^}]*scrollbar-width:\s*none;/s);
+  assert.match(css, /\.conflict-apply-change\s*\{[^}]*width:\s*26px;[^}]*height:\s*26px;[^}]*margin-top:\s*7px;[^}]*background:\s*var\(--bg-elevated\);/s);
+  assert.match(editor, /const sharedWidth = Math\.max\(\.\.\.scrollers\.map\(\(scroller\) => scroller\.scrollWidth\)\)/u);
+  assert.match(editor, /linkHorizontalScrollGroup\(\[\.\.\.panes, \.\.\.scrollers\]\)/u);
+  assert.match(icons, /"double-chevron-right"/u);
+  assert.match(icons, /"double-chevron-left"/u);
 });
 
 test("dialog buttons share one surface, follow the UI font size, and define danger centrally", async () => {

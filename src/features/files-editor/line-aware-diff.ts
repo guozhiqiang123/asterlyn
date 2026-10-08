@@ -1,4 +1,5 @@
 import { Change, diff, type DiffConfig } from "@codemirror/merge";
+import { wordDiffRanges } from "./word-diff.ts";
 
 interface DiffLine {
   readonly text: string;
@@ -75,7 +76,9 @@ function refineChangedBlock(
     if (firstA && lastA && firstB && lastB) {
       const textA = blockA.slice(group.aFrom, group.aTo).map((line) => line.text).join("");
       const textB = blockB.slice(group.bFrom, group.bTo).map((line) => line.text).join("");
-      for (const change of diff(textA, textB, INLINE_DIFF_CONFIG)) {
+      const inlineChanges = wordDiffRanges(textA, textB)
+        ?? diff(textA, textB, INLINE_DIFF_CONFIG);
+      for (const change of inlineChanges) {
         changes.push(new Change(
           firstA.from + change.fromA,
           firstA.from + change.toA,

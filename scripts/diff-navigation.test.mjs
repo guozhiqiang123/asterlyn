@@ -257,5 +257,6 @@ test("merge Diff layouts preserve CodeMirror's supported outer scroll owner", as
   assert.doesNotMatch(conflictCss, /\.cm-merge-a \.cm-gutters[\s\S]*order:/u);
   assert.match(editable, /gutter: false/u);
   assert.equal(conflict.match(/gutter: false/g)?.length, 2);
-  assert.match(conflict, /linkScrollElements\(this\.leftMerge\.dom, this\.rightMerge\.dom\)/u);
+  assert.match(conflict, /linkVerticalScroll\(this\.leftMerge\.dom, this\.rightMerge\.dom\)/u);
+  assert.match(conflict, /linkHorizontalScrollGroup\(\[\.\.\.panes, \.\.\.scrollers\]\)/u);
 });
