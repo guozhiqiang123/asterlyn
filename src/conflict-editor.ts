@@ -37,6 +37,7 @@ import {
   type ConflictResolutionSide,
   type ConflictSourceRange,
 } from "./conflict-resolution-model.ts";
+import { adjacentConflictTarget } from "./conflict-navigation.ts";
 import { conflictResolutionHistoryExtension, conflictResolutionHistoryState, conflictResolutionTransaction } from "./conflict-resolution-history.ts";
 import { ConflictCollapseCoordinator, type ConflictCollapseSide } from "./conflict-collapse.ts";
 import { ConflictSplitLayout } from "./conflict-split-layout.ts";
@@ -279,27 +280,17 @@ export class ConflictEditor {
 
   navigateChange(direction: 1 | -1): boolean {
     const blocks = this.resolutionModel?.snapshots() ?? [];
-    if (blocks.length === 0 || !this.leftMerge || !this.rightMerge) return false;
-    const next = this.activeReviewBlock < 0
-      ? direction === 1 ? 0 : blocks.length - 1
-      : this.activeReviewBlock + direction;
-    if (next < 0 || next >= blocks.length) return false;
-    this.activeReviewBlock = next;
-    const block = blocks[next]!;
-    const targets = [
-      { view: this.leftMerge.a, range: block.ours },
-      { view: this.leftMerge.b, range: block.result },
-      { view: this.rightMerge.b, range: block.result },
-      { view: this.rightMerge.a, range: block.theirs },
-    ];
-    for (const { view, range } of targets) {
-      const position = Math.min(view.state.doc.length, range.from);
-      view.dispatch({
-        selection: { anchor: position },
-        effects: EditorView.scrollIntoView(position, { y: "center" }),
-      });
-    }
-    this.leftMerge.b.focus();
+    const result = this.leftMerge?.b;
+    if (blocks.length === 0 || !result) return false;
+    const target = adjacentConflictTarget(blocks, this.activeReviewBlock, direction);
+    if (!target) return false;
+    this.activeReviewBlock = target.index;
+    const position = Math.min(result.state.doc.length, target.position);
+    result.dispatch({
+      selection: { anchor: position },
+      effects: EditorView.scrollIntoView(position, { y: "center" }),
+    });
+    result.focus();
     this.syncReviewDecorations();
     return true;
   }
