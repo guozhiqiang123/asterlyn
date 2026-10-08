@@ -395,6 +395,7 @@ export class EditorSurface {
     editorCopy: EditorCopy,
     beforeTransition: () => void,
     onContentChange: (content: string) => void,
+    onReady: () => void,
   ): void {
     if (this.mountedEditorKey === key && this.mountedConflictKey === key) {
       this.conflictEditor.requestMeasure();
@@ -411,7 +412,7 @@ export class EditorSurface {
     body.classList.add("conflict-editor-surface");
     this.mountedTextTabId = null;
     this.mountedConflictKey = key;
-    this.conflictEditor.mount(body, conflict, result, preferences, presentation, copy, editorCopy, onContentChange);
+    this.conflictEditor.mount(body, conflict, result, preferences, presentation, copy, editorCopy, onContentChange, onReady);
     this.mountedEditorKey = key;
   }
 

@@ -122,7 +122,7 @@ export function summarizeDiffReviewBlocks(
     if (block.kind === "conflict") conflicts += 1;
     if (block.kind === "identical") identical += 1;
     if (block.status === "pending") pending += 1;
-    else if (block.status === "manual") manual += 1;
+    else if (block.status === "manual") { manual += 1; pending += 1; }
     else if (block.status !== "readonly") reviewed += 1;
   }
   return {

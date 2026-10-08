@@ -43,6 +43,25 @@ test("conflict actions compose Ours then Theirs in either click order", () => {
   assert.equal(theirsFirstResult, oursFirstResult);
 });
 
+test("matching Result text never substitutes for an explicit side decision", () => {
+  const model = ConflictResolutionModel.create("base", "ours", "theirs", "ours");
+  const block = model.snapshots()[0];
+
+  assert.equal(block.oursDecision, "pending");
+  assert.equal(block.theirsDecision, "pending");
+});
+
+test("accepting both sides keeps both decisions completed after Result composition", () => {
+  const model = ConflictResolutionModel.create("base", "ours", "theirs", "base");
+  const block = model.snapshots()[0];
+  let result = applyModelDecision(model, "ours", "accepted", block.ours, "base");
+  result = applyModelDecision(model, "theirs", "accepted", block.theirs, result);
+
+  assert.equal(result, "ours\ntheirs");
+  assert.equal(model.snapshots()[0].oursDecision, "accepted");
+  assert.equal(model.snapshots()[0].theirsDecision, "accepted");
+});
+
 test("equal conflict sides are inserted only once", () => {
   const result = "before\nbase\nafter\n";
   const model = ConflictResolutionModel.create(

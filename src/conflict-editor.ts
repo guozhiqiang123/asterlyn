@@ -47,7 +47,7 @@ import { mergeDiffSemanticHighlighting } from "./merge-diff-highlighting.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment.ts";
 import type { AppPreferences } from "./preferences.ts";
 import type { DiffPresentation } from "./diff-presentation.ts";
-import { projectConflictDiff } from "./shared/diff-review/diff-review-projection.ts";
+import { conflictActionGroupVisible, projectConflictDiff } from "./shared/diff-review/diff-review-projection.ts";
 import type { DiffReviewSnapshot, DiffReviewSummary } from "./shared/diff-review/diff-review-model.ts";
 import { createDiffReviewPaneHeaders } from "./shared/diff-review/diff-review-pane-header.ts";
 import { attachSplitter } from "./presentation/splitter.ts";
@@ -549,6 +549,7 @@ export class ConflictEditor {
     if (changes.length === 0) {
       this.syncConflictControls();
       this.syncReviewDecorations();
+      this.onChange(this.content());
       return;
     }
     this.applyingConflictDecision = true;
@@ -594,7 +595,7 @@ export class ConflictEditor {
           const side = group.dataset.side as ConflictResolutionSide | undefined;
           const source = side ? this.sourceRangeForControl(group, side) : null;
           const state = side && source ? this.resolutionModel?.decision(side, source) : null;
-          group.hidden = state === null;
+          group.hidden = !conflictActionGroupVisible(state);
           for (const button of group.querySelectorAll<HTMLButtonElement>("button[data-decision]")) {
             const selected = button.dataset.decision === state;
             button.classList.toggle("is-selected", selected);

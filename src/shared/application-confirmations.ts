@@ -12,18 +12,6 @@ export function discardConflictConfirmation(catalog: LocaleCatalog): Application
   };
 }
 
-export function saveConflictWithPendingConfirmation(
-  catalog: LocaleCatalog,
-  pending: number,
-): ApplicationConfirmationRequest {
-  return {
-    title: catalog.common.confirmation,
-    message: catalog.gitOperations.pendingConflictWarning(pending),
-    confirmLabel: catalog.gitOperations.continueSaveAndStage,
-    cancelLabel: catalog.gitOperations.cancel,
-  };
-}
-
 export function undoWorktreeConfirmation(
   catalog: LocaleCatalog,
   recovery: GitWorktreeRecovery,

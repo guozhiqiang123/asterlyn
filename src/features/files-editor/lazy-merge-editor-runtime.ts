@@ -31,6 +31,7 @@ interface ConflictMount {
   copy: GitOperationCopy;
   editorCopy: EditorCopy;
   onChange: (content: string) => void;
+  onReady: () => void;
 }
 
 /** Defers the CodeMirror merge runtime until an editable working Diff is opened. */
@@ -214,8 +215,9 @@ export class LazyConflictEditor {
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
     onChange: (content: string) => void,
+    onReady: () => void,
   ): void {
-    const mount = { parent, conflict, result, preferences, presentation, copy, editorCopy, onChange };
+    const mount = { parent, conflict, result, preferences, presentation, copy, editorCopy, onChange, onReady };
     this.pendingMount = mount;
     if (this.implementation) {
       this.install(this.implementation, mount);
@@ -323,6 +325,7 @@ export class LazyConflictEditor {
       mount.onChange,
     );
     editor.setResultReadOnly(this.resultReadOnly);
+    queueMicrotask(() => { if (this.pendingMount === mount) mount.onReady(); });
   }
 
   private load(): Promise<ConflictEditor> {

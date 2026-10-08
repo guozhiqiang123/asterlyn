@@ -1,5 +1,5 @@
 import type { SourceDiffRow } from "../../diff-presentation.ts";
-import type { ConflictResolutionBlockSnapshot } from "../../conflict-resolution-model.ts";
+import type { ConflictResolutionBlockSnapshot, ConflictResolutionDecision } from "../../conflict-resolution-model.ts";
 import {
   CONFLICT_DIFF_CAPABILITIES,
   EDITABLE_DIFF_CAPABILITIES,
@@ -94,6 +94,12 @@ export function projectConflictDiff(
     { id: "theirs", role: "Theirs", writable: false },
   ];
   return snapshot(panes, blocks, CONFLICT_DIFF_CAPABILITIES);
+}
+
+export function conflictActionGroupVisible(
+  state: ConflictResolutionDecision | "mixed" | null | undefined,
+): boolean {
+  return state === "pending" || state === "mixed";
 }
 
 function snapshot(

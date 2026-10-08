@@ -4,6 +4,7 @@ import test from "node:test";
 import { ConflictResolutionModel } from "../src/conflict-resolution-model.ts";
 import { splitUnifiedDiff } from "../src/diff-presentation.ts";
 import {
+  conflictActionGroupVisible,
   projectConflictDiff,
   projectStaticSplitDiff,
   projectTwoWayDiff,
@@ -65,6 +66,16 @@ test("conflict projection classifies one-sided, identical, divergent, and manual
   const manual = projectConflictDiff(model.snapshots());
   assert.equal(manual.blocks[0].status, "manual");
   assert.equal(manual.summary.manual, 1);
+  assert.equal(manual.summary.pending, 1);
+});
+
+test("completed conflict sides stay hidden when merge chunks are rebuilt", () => {
+  assert.equal(conflictActionGroupVisible("pending"), true);
+  assert.equal(conflictActionGroupVisible("mixed"), true);
+  assert.equal(conflictActionGroupVisible("accepted"), false);
+  assert.equal(conflictActionGroupVisible("ignored"), false);
+  assert.equal(conflictActionGroupVisible(null), false);
+  assert.equal(conflictActionGroupVisible(undefined), false);
 });
 
 test("conflict decisions feed shared selected and reviewed states", () => {

@@ -148,9 +148,15 @@ Editable and conflict surfaces use the same anchor-owned folding coordinator and
 CodeMirror-coordinate geometry. Frame-coalesced SVG connectors are presentation-only, clipped to
 visible content, and never intercept input. Conflict review state remains transient: bulk
 Ours/All/Theirs applies only untouched non-conflicting blocks in one undoable Result transaction,
-manual blocks and divergent conflicts are preserved, pending completion requires confirmation, and
-Cancel reuses the established dirty-draft confirmation. Save and Stage still crosses the exact
+manual blocks and divergent conflicts are preserved, and Cancel reuses the established dirty-draft
+confirmation. Save and Stage still crosses the exact
 revision-token and verified stage-zero boundary described above.
+
+**Amendment, 2026-10-08 — explicit conflict completion.** Every changed side of every conflict
+block remains pending until the user explicitly applies or ignores it, even when Result already
+matches that side. A completed side's action group stays hidden across MergeView chunk rebuilds;
+manual Result edits reset the affected side decisions. Save and Stage is disabled and fails closed
+until no pending or manually edited block remains. There is no pending-block completion override.
 
 ### Dependency boundary
 

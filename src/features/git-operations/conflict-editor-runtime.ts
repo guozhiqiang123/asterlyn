@@ -31,6 +31,7 @@ interface ConflictEditorSurfacePort {
     editorCopy: EditorCopy,
     beforeTransition: () => void,
     onContentChange: (content: string) => void,
+    onReady: () => void,
   ): void;
   setConflictReadOnly(readOnly: boolean): void;
   flushConflict(): string | null;
@@ -61,7 +62,6 @@ export interface ConflictEditorRuntimeOptions {
   resolve(deleteFile: boolean): void;
   setWhitespace(showWhitespace: boolean): void;
   confirmDiscard(): Promise<boolean>;
-  confirmPending(pending: number): Promise<boolean>;
 }
 
 /** Owns the persistent editor-region presentation for one Git conflict draft. */
@@ -133,16 +133,18 @@ export class ConflictEditorRuntime {
           controller.setConflictResult(content);
           this.options.renderEditor();
         },
+        () => this.options.renderEditor(),
       );
       surface.setConflictReadOnly(resolving);
     }
     const summary = surface.conflictReviewSummary();
+    const canSave = !resolving && state.conflict?.binary === false && conflictReviewCompletionReady(summary);
     this.query("#content-header").innerHTML = `${contentHeading(basename(document.path), document.path)}
       <div class="header-actions conflict-editor-actions">
         ${this.toolbar(summary, Boolean(conflict && !conflict.binary))}
         <button class="secondary-button" id="conflict-resolve-cancel" type="button" ${resolving ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button>
         <button class="secondary-button destructive-secondary" id="conflict-resolve-delete" type="button" ${resolving || !state.conflict ? "disabled" : ""}>${escapeHtml(copy.resolveAsDeleted)}</button>
-        <button class="primary-button" id="conflict-resolve-save" type="button" ${resolving || state.conflict?.binary !== false ? "disabled" : ""}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button>
+        <button class="primary-button" id="conflict-resolve-save" type="button" ${canSave ? "" : "disabled"}>${escapeHtml(resolving ? copy.resolving : copy.saveAndStage)}</button>
       </div>`;
     this.query("#content-header").querySelectorAll<HTMLButtonElement>("[data-diff-action]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -168,7 +170,7 @@ export class ConflictEditorRuntime {
     });
     root.querySelector<HTMLButtonElement>("#conflict-resolve-cancel")?.addEventListener("click", () => void this.requestCancel());
     root.querySelector<HTMLButtonElement>("#conflict-resolve-delete")?.addEventListener("click", () => this.options.resolve(true));
-    root.querySelector<HTMLButtonElement>("#conflict-resolve-save")?.addEventListener("click", () => void this.requestSave(summary?.pending ?? 0));
+    root.querySelector<HTMLButtonElement>("#conflict-resolve-save")?.addEventListener("click", () => void this.requestSave());
     return true;
   }
 
@@ -228,13 +230,12 @@ export class ConflictEditorRuntime {
     return true;
   }
 
-  async requestSave(pending: number): Promise<boolean> {
+  async requestSave(): Promise<boolean> {
     this.capture();
     const { controller } = this.options;
     const conflict = controller.state.conflict;
     const result = controller.state.conflictResult;
-    const currentPending = this.options.surface.conflictReviewSummary()?.pending ?? pending;
-    if (currentPending > 0 && !(await this.options.confirmPending(currentPending))) return false;
+    if (!conflictReviewCompletionReady(this.options.surface.conflictReviewSummary())) return false;
     if (controller.state.conflict !== conflict || controller.state.conflictResult !== result) return false;
     this.options.resolve(false);
     return true;
@@ -245,6 +246,10 @@ export class ConflictEditorRuntime {
     if (!element) throw new Error(`Missing conflict editor element: ${selector}`);
     return element;
   }
+}
+
+export function conflictReviewCompletionReady(summary: DiffReviewSummary | null): boolean {
+  return summary !== null && summary.pending === 0;
 }
 
 function basename(path: string): string {

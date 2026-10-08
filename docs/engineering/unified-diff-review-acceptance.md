@@ -94,9 +94,9 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   stay pending and manually edited blocks are reported and preserved.
 - A bulk application enters Result as one CodeMirror transaction, so the complete operation is one
   undo step while the transient decision model and block decorations update together.
-- `Save and Stage` remains available for manual resolutions but requires explicit confirmation while
-  pending blocks remain; the existing exact revision token, staged-blob verification, and mutation
-  path remain unchanged.
+- `Save and Stage` remains disabled until every changed side has an explicit Apply or Ignore
+  decision; manual Result edits reset the affected decisions to pending. The existing exact revision
+  token, staged-blob verification, and mutation path remain unchanged.
 - Conflict Cancel now uses the existing discard confirmation for a dirty Result, clears only the
   transient draft, and performs no Git mutation.
 
@@ -140,6 +140,9 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - New conflict views and splitter double-click reset divide the gutter-exclusive content width into
   equal thirds. Persisted 27/46/27 values migrate as the legacy default, while every other saved
   proportion remains untouched.
+- Conflict completion now follows the Android Studio interaction contract: resolved side controls
+  stay hidden after Result-driven chunk rebuilds, both sides of a divergent block must be decided,
+  and Save and Stage fails closed while any block remains pending or manually edited.
 - Host evidence: macOS 15.6.1 (24G90), Apple Silicon; Node.js 26.8.1, npm 11.19.0, Rust 1.97.1,
   and Git 2.48.1.
 - The matrix above deliberately remains at `Ready for manual acceptance`: automated projection,

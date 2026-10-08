@@ -235,9 +235,9 @@ Conflict-specific progress distinguishes:
 - manually edited blocks; and
 - pending/unreviewed blocks.
 
-`Save and Stage` remains available for manually authored resolutions. If pending blocks remain, it
-shows an explicit confirmation rather than hard-disabling completion, because a user may resolve a
-block entirely by editing Result.
+`Save and Stage` becomes available only after every changed side has an explicit Apply or Ignore
+decision. Editing Result resets the affected decisions to pending, so a manually authored result
+must still be acknowledged from both side action gutters before completion.
 
 ### Bulk conflict actions
 
@@ -386,7 +386,7 @@ Every phase is committed separately and must leave the branch buildable.
 
 1. Add previous/next conflict progress and reviewed/manual/pending states.
 2. Add bounded bulk application of non-conflicting Ours/All/Theirs blocks.
-3. Add pending-block confirmation before Save and Stage.
+3. Disable Save and Stage until every changed side has an explicit Apply or Ignore decision.
 4. Preserve draft capture, discard confirmation, stale revision handling, and verified staging.
 
 **Commit:** `feat complete conflict review workflow`
@@ -446,7 +446,8 @@ Every phase is committed separately and must leave the branch buildable.
 - Previous/next block, previous/next file, open source, fold, layout, and visible-whitespace commands
   behave consistently across eligible two-pane and three-pane surfaces.
 - Conflict Cancel preserves Git and confirms dirty Result discard.
-- Save and Stage warns about pending blocks but permits a manually authored resolution.
+- Save and Stage remains disabled while any pending or manually edited block awaits explicit side
+  decisions.
 - Resolve as Deleted remains explicit and separately confirmed.
 - Loading, stale revision, read-only resolving state, binary conflict, and unsupported file states
   never expose invalid mutation actions.

@@ -101,8 +101,8 @@ export class ConflictResolutionModel {
         fallbackText,
         oursChanged,
         theirsChanged,
-        oursDecision: initialDecision(oursChanged, oursText, fallbackText),
-        theirsDecision: initialDecision(theirsChanged, theirsText, fallbackText),
+        oursDecision: "pending",
+        theirsDecision: "pending",
         manuallyEdited: false,
       };
     }));
@@ -220,14 +220,6 @@ export class ConflictResolutionModel {
       block.result = mappedRange(mapping, block.result.from, block.result.to);
     }
   }
-}
-
-function initialDecision(
-  changed: boolean,
-  sideText: string,
-  resultText: string,
-): ConflictResolutionDecision {
-  return changed && sideText === resultText ? "accepted" : "pending";
 }
 
 function decisionForSide(

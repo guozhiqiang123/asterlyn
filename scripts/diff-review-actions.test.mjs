@@ -12,6 +12,7 @@ test("editable and conflict controls share one action-button renderer", async ()
   assert.match(editable, /createDiffReviewActionButton/u);
   assert.match(editable, /syncDiffReviewActionButton/u);
   assert.match(conflict, /createDiffReviewActionGroup/u);
+  assert.match(conflict, /group\.hidden = !conflictActionGroupVisible\(state\)/u);
   assert.match(actions, /dataset\.reviewAction/u);
   assert.match(actions, /aria-pressed/u);
 });

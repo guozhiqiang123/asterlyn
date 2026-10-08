@@ -358,7 +358,7 @@ export const ZH_CN = {
     ignoreOursChange: "忽略这处当前版本更改", ignoreTheirsChange: "忽略这处传入版本更改", previousConflict: "上一个冲突", nextConflict: "下一个冲突",
     conflictReviewSummary: (conflicts, pending, total) => `${conflicts} 个冲突 · ${pending} 个待处理 · 共 ${total} 处`, editableResult: "可编辑",
     applyNonConflicting: "应用非冲突更改：", applyAllNonConflicting: "全部",
-    bulkConflictApplied: (applied, skipped) => skipped > 0 ? `已应用 ${applied} 个非冲突块；已跳过 ${skipped} 个手工编辑块。` : `已应用 ${applied} 个非冲突块。`, pendingConflictWarning: (pending) => `仍有 ${pending} 个块处于待处理状态，结果中可能包含有意的手工解决内容。仍要保存并暂存吗？`, continueSaveAndStage: "仍要保存并暂存",
+    bulkConflictApplied: (applied, skipped) => skipped > 0 ? `已应用 ${applied} 个非冲突块；已跳过 ${skipped} 个手工编辑块。` : `已应用 ${applied} 个非冲突块。`,
     resolvedResult: "解决结果", binaryConflict: "二进制冲突无法作为文本编辑。请在外部工具中解决，或选择删除。",
     resolvedFileContent: "已解决的文件内容", resolveSafetyNote: "保存时会验证上方打开的准确暂存区阶段和工作树版本，写入结果、暂存文件并确认暂存对象。",
     resolveAsDeleted: "以删除方式解决", resolving: "正在解决…", saveAndStage: "保存并暂存",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ConflictEditorRuntime } from "../src/features/git-operations/conflict-editor-runtime.ts";
+import { ConflictEditorRuntime, conflictReviewCompletionReady } from "../src/features/git-operations/conflict-editor-runtime.ts";
 import { GitOperationController } from "../src/features/git-operations/git-operation-controller.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
@@ -68,18 +68,19 @@ test("Cancel reuses discard confirmation and clears only the transient draft", a
   assert.equal(accepted.active().kind, "welcome");
 });
 
-test("Save and Stage confirms pending blocks without weakening resolve verification", async () => {
+test("Save and Stage stays blocked until every conflict block is explicitly completed", async () => {
   const controller = new GitOperationController(gateway());
   controller.installSnapshot(snapshot());
-  const rejected = runtimeHarness(controller, snapshot(), { pending: false });
-  await rejected.runtime.open("one.txt");
+  const pending = runtimeHarness(controller, snapshot(), { reviewPending: 2 });
+  await pending.runtime.open("one.txt");
 
-  assert.equal(await rejected.runtime.requestSave(2), false);
-  assert.deepEqual(rejected.resolutions(), []);
+  assert.equal(await pending.runtime.requestSave(), false);
+  assert.deepEqual(pending.resolutions(), []);
 
-  const accepted = runtimeHarness(controller, snapshot(), { pending: true });
-  assert.equal(await accepted.runtime.requestSave(2), true);
-  assert.deepEqual(accepted.resolutions(), [false]);
+  const completed = runtimeHarness(controller, snapshot(), { reviewPending: 0 });
+  assert.equal(await completed.runtime.requestSave(), true);
+  assert.deepEqual(completed.resolutions(), [false]);
+  assert.equal(conflictReviewCompletionReady(null), false);
 });
 
 function runtimeHarness(controller, repository = snapshot(), confirmations = {}) {
@@ -91,7 +92,12 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     root: { querySelector() { return null; } },
     controller,
     editor: { closePreview() { active = { kind: "welcome" }; } },
-    surface: { flushConflict() { return null; }, conflictReviewSummary() { return null; } },
+    surface: {
+      flushConflict() { return null; },
+      conflictReviewSummary() {
+        return confirmations.reviewPending === undefined ? null : reviewSummary(confirmations.reviewPending);
+      },
+    },
     snapshot: () => repository,
     activeDocument: () => active,
     activate(document) { active = document; },
@@ -104,7 +110,6 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     resolve(deleteFile) { resolutions.push(deleteFile); },
     setWhitespace() {},
     confirmDiscard: async () => confirmations.discard ?? true,
-    confirmPending: async () => confirmations.pending ?? true,
   });
   return {
     runtime,
@@ -113,6 +118,10 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     statuses: () => statuses,
     resolutions: () => resolutions,
   };
+}
+
+function reviewSummary(pending) {
+  return { total: 2, conflicts: 2, nonConflicting: 0, identical: 0, pending, reviewed: 2 - pending, manual: 0 };
 }
 
 function gateway() {
