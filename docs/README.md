@@ -45,6 +45,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/context-action-system.md`](engineering/context-action-system.md) — whole-draft audit, context-action architecture, R5 prerequisites, surface ownership, and delivery sequence.
 - [`engineering/intraline-diff-highlighting-plan.md`](engineering/intraline-diff-highlighting-plan.md) — Android Studio-style line and inline Diff semantics across editable and read-only implementations.
 - [`engineering/conflict-resolution-actions-plan.md`](engineering/conflict-resolution-actions-plan.md) — independent Apply/Ignore conflict actions and deterministic two-sided Result composition.
+- [`engineering/conflict-marker-authority-and-tab-lifecycle-fix-plan.md`](engineering/conflict-marker-authority-and-tab-lifecycle-fix-plan.md) — authoritative worktree marker conflicts, safe Save and Stage gating, and conflict-tab lifecycle cleanup.
 - [`engineering/unified-diff-review-workflow-plan.md`](engineering/unified-diff-review-workflow-plan.md) — shared review blocks, controls, layout, folding, geometry, and workflow for two-pane Diff and three-pane conflict resolution.
 - [`engineering/unified-diff-review-acceptance.md`](engineering/unified-diff-review-acceptance.md) — phased automated and manual acceptance evidence for the unified Diff review workflow.
 - [`engineering/dialog-window-geometry-plan.md`](engineering/dialog-window-geometry-plan.md) — shared movement, resizing, persistence, and confirmation behavior for application-owned dialogs.
