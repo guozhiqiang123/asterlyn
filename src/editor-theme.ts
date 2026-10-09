@@ -156,7 +156,7 @@ const editorThemeRules =
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
     ".cm-line-number-value": {
-      cursor: "default",
+      cursor: "help",
     },
     ".cm-git-blame-line-end": {
       display: "inline-block",

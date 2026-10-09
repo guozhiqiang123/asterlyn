@@ -7,11 +7,9 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
-import { lineAwareDiff } from "./shared/diff-review/line-aware-diff.ts";
 
 type MergeSide = "a" | "b" | null;
 type MergeChunks = NonNullable<ReturnType<typeof getChunks>>["chunks"];
-const exactChangeCache = new WeakMap<Text, WeakMap<Text, readonly Change[]>>();
 const refreshSemanticHighlighting = StateEffect.define<null>();
 
 /**
@@ -61,8 +59,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   const ranges: Array<Range<Decoration>> = [];
   const doc = view.state.doc;
 
-  const documents = mergeDocuments(view, merge.side);
-  if (documents) for (const change of exactChanges(documents.a, documents.b)) {
+  for (const change of absoluteChunkChanges(merge.chunks)) {
     const oldChanged = change.toA > change.fromA;
     const newChanged = change.toB > change.fromB;
     const kind = oldChanged && newChanged
@@ -92,15 +89,13 @@ function mergeDocuments(
   return { a: getOriginalDoc(view.state), b: view.state.doc };
 }
 
-function exactChanges(a: Text, b: Text): readonly Change[] {
-  let byAfter = exactChangeCache.get(a);
-  if (!byAfter) exactChangeCache.set(a, byAfter = new WeakMap());
-  let changes = byAfter.get(b);
-  if (!changes) {
-    changes = lineAwareDiff(a.toString(), b.toString());
-    byAfter.set(b, changes);
-  }
-  return changes;
+function absoluteChunkChanges(chunks: MergeChunks): readonly Change[] {
+  return chunks.flatMap((chunk) => chunk.changes.map((change) => ({
+    fromA: chunk.fromA + change.fromA,
+    toA: chunk.fromA + change.toA,
+    fromB: chunk.fromB + change.fromB,
+    toB: chunk.fromB + change.toB,
+  })));
 }
 
 function addModifiedLines(

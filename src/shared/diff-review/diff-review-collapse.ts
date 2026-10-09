@@ -1,6 +1,7 @@
 import { ChangeSet, RangeSetBuilder, StateEffect, StateField, Text, type Extension } from "@codemirror/state";
+import type { Change } from "@codemirror/merge";
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
-import { lineAwareDiff } from "./line-aware-diff.ts";
+import { lineStructuralDiff } from "./line-aware-diff.ts";
 
 export interface DiffReviewCollapseRange {
   readonly id: number;
@@ -8,6 +9,10 @@ export interface DiffReviewCollapseRange {
   readonly to: number;
   readonly lines: number;
 }
+
+export type DiffReviewSourceChanges<Side extends string> = Readonly<
+  Partial<Record<Side, readonly Change[]>>
+>;
 
 interface ChangedLineRange { from: number; to: number }
 
@@ -24,9 +29,10 @@ export class DiffReviewCollapseCoordinator<Side extends string> {
     targets: Readonly<Record<Side, string>>,
     margin = 3,
     minimumLines = 8,
+    sourceChanges?: DiffReviewSourceChanges<Side>,
   ) {
     this.sides = Object.keys(targets) as Side[];
-    this.ranges = buildDiffReviewCollapseRanges(anchor, targets, margin, minimumLines);
+    this.ranges = buildDiffReviewCollapseRanges(anchor, targets, margin, minimumLines, sourceChanges);
   }
 
   extension(side: Side): Extension {
@@ -80,13 +86,21 @@ export function buildDiffReviewCollapseRanges<Side extends string>(
   targets: Readonly<Record<Side, string>>,
   margin = 3,
   minimumLines = 8,
+  sourceChanges?: DiffReviewSourceChanges<Side>,
 ): Readonly<Record<Side, readonly DiffReviewCollapseRange[]>> {
   const anchorDocument = text(anchor);
   const sides = Object.keys(targets) as Side[];
   const documents = Object.fromEntries(sides.map((side) => [side, text(targets[side])])) as Record<Side, Text>;
-  const mappings = Object.fromEntries(sides.map((side) => [side, mapping(anchor, targets[side])])) as Record<Side, ReturnType<typeof mapping>>;
+  const changes = Object.fromEntries(sides.map((side) => [
+    side,
+    sourceChanges?.[side] ?? lineStructuralDiff(anchor, targets[side]),
+  ])) as Record<Side, readonly Change[]>;
+  const mappings = Object.fromEntries(sides.map((side) => [
+    side,
+    mapping(anchor, targets[side], changes[side]),
+  ])) as Record<Side, ReturnType<typeof mapping>>;
   const changed = mergedChangedLines(anchorDocument, sides.flatMap((side) =>
-    lineAwareDiff(anchor, targets[side]).map((change) => ({ from: change.fromA, to: change.toA })),
+    changes[side].map((change) => ({ from: change.fromA, to: change.toA })),
   ));
   const result = {} as Record<Side, DiffReviewCollapseRange[]>;
   for (const side of sides) result[side] = [];
@@ -188,8 +202,7 @@ function mergedChangedLines(
   return merged;
 }
 
-function mapping(anchor: string, target: string) {
-  const changes = lineAwareDiff(anchor, target);
+function mapping(anchor: string, target: string, changes: readonly Change[]) {
   return ChangeSet.of(changes.map((change) => ({
     from: change.fromA,
     to: change.toA,

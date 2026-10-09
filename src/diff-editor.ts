@@ -46,13 +46,10 @@ import {
   asterlynEditorTheme,
   asterlynSyntaxHighlighting,
 } from "./editor-theme";
-import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
-import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 import { EditorLanguageLoader } from "./editor-language";
 import type { GitBlameResult } from "./models.ts";
 import {
-  blameContentContextMenu,
   gitBlamePresentation,
   lineNumberGutter,
   type DiffGitBlameSources,
@@ -151,8 +148,6 @@ export class DiffEditor {
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
     private blameCopy: GitBlameCopy,
-    private readonly contextMenu: ContextMenuPort,
-    private readonly contextOwnerId: string,
   ) {
     this.blameSources = unavailableDiffBlameSources(blameCopy.gitBlameRequiresSplit);
   }
@@ -368,6 +363,8 @@ export class DiffEditor {
     if (blocks.length > 0) {
       this.ruler = renderOverviewRuler(parent, newView.state.doc.lines, blocks, onSelect);
     }
+    void this.ensureBlame("old");
+    void this.ensureBlame("new");
   }
 
   private createView(
@@ -382,8 +379,6 @@ export class DiffEditor {
     const theme = new Compartment();
     const phrases = new Compartment();
     const blame = new Compartment();
-    const openBlameMenu = (event: MouseEvent, view: EditorView) =>
-      this.openBlameMenu(side ?? null, event, view);
     const activeBlame = side ? this.blameState[side].result : null;
     const sourceLine = rows && side
       ? (documentLine: number) => rows[documentLine - 1]?.[side].lineNumber ?? null
@@ -402,7 +397,6 @@ export class DiffEditor {
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
-      blameContentContextMenu(openBlameMenu),
       blame.of(activeBlame
         ? gitBlamePresentation(
             activeBlame,
@@ -427,7 +421,6 @@ export class DiffEditor {
     if (rows && side) {
       extensions.push(
         lineNumberGutter(
-          openBlameMenu,
           (lineNumber) => rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
           side === "old" ? "after" : "before",
         ),
@@ -437,7 +430,6 @@ export class DiffEditor {
     } else if (unifiedRows) {
       extensions.push(
         lineNumberGutter(
-          openBlameMenu,
           (lineNumber) => {
             const r = unifiedRows[lineNumber - 1];
             if (!r || r.kind === "omitted" || r.kind === "notice") return "";
@@ -499,62 +491,13 @@ export class DiffEditor {
     view.dom.dataset.languageStatus = this.languageStatus;
   }
 
-  private openBlameMenu(
-    side: "old" | "new" | null,
-    event: MouseEvent,
-    view: EditorView,
-  ): void {
-    const availability = side
-      ? this.blameSources[side]
-      : { source: null, unavailableReason: this.blameSources.unifiedReason };
-    const state = side ? this.blameState[side] : null;
-    const source = availability.source;
-    const generation = state?.generation ?? -1;
-    const active = Boolean(state?.result);
-    const loading = state?.loading ?? false;
-    const isCurrent = () => {
-      const currentAvailability = side
-        ? this.blameSources[side]
-        : { source: null, unavailableReason: this.blameSources.unifiedReason };
-      const currentState = side ? this.blameState[side] : null;
-      return this.languageBindings.some(
-        (binding) => binding.view === view && binding.side === side,
-      ) &&
-        sameBlameSource(source, currentAvailability.source) &&
-        generation === (currentState?.generation ?? -1) &&
-        active === Boolean(currentState?.result) &&
-        loading === (currentState?.loading ?? false);
-    };
-    this.contextMenu.open(
-      { x: event.clientX, y: event.clientY },
-      gitBlameContextSession(this.contextOwnerId, {
-        active,
-        loading,
-        enabled: source !== null,
-        unavailableReason: availability.unavailableReason,
-        copy: this.blameCopy,
-        isCurrent,
-        toggle: () => side ? this.toggleBlame(side) : undefined,
-        blocked: (reason) => this.blameRuntime.status(reason, "warning"),
-        restoreFocus: () => {
-          if (this.languageBindings.some((binding) => binding.view === view)) view.focus();
-        },
-      }),
-    );
-  }
-
-  private async toggleBlame(side: "old" | "new"): Promise<void> {
+  private async ensureBlame(side: "old" | "new"): Promise<void> {
     const state = this.blameState[side];
-    if (state.result || state.loading) {
-      this.clearBlame(side);
-      this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
-      return;
-    }
+    if (state.result || state.loading) return;
     const source = this.blameSources[side].source;
     if (!source) return;
     const generation = ++state.generation;
     state.loading = true;
-    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
     try {
       const result = await this.blameRuntime.load(source);
       if (
@@ -564,13 +507,10 @@ export class DiffEditor {
       state.loading = false;
       state.result = result;
       this.installBlame(side, result);
-      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-      this.blameRuntime.status(
-        result.truncated
-          ? this.blameCopy.gitBlameLimited(lines)
-          : this.blameCopy.gitBlameLoaded(lines),
-        result.truncated ? "warning" : "information",
-      );
+      if (result.truncated) {
+        const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+        this.blameRuntime.status(this.blameCopy.gitBlameLimited(lines), "warning");
+      }
     } catch (error) {
       if (generation !== state.generation) return;
       state.loading = false;
@@ -591,19 +531,6 @@ export class DiffEditor {
           ),
         ),
       });
-    }
-  }
-
-  private clearBlame(side: "old" | "new"): void {
-    this.contextMenu.close(this.contextOwnerId);
-    const state = this.blameState[side];
-    state.generation += 1;
-    state.loading = false;
-    state.result = null;
-    for (const binding of this.languageBindings) {
-      if (binding.side === side) {
-        binding.view.dispatch({ effects: binding.blame.reconfigure([]) });
-      }
     }
   }
 
@@ -658,7 +585,6 @@ export class DiffEditor {
   }
 
   private destroyViews(): void {
-    this.contextMenu.close(this.contextOwnerId);
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.splitDispose?.();

@@ -30,8 +30,8 @@ test("every CodeMirror surface installs the shared focus-ownership contract", as
   }
 });
 
-test("read-only Diff restores context-menu focus to CodeMirror content", async () => {
+test("read-only Diff does not require a Git Blame context-menu focus cycle", async () => {
   const source = await readFile(new URL("src/diff-editor.ts", root), "utf8");
-  assert.match(source, /restoreFocus:\s*\(\)\s*=>\s*\{[^}]*view\.focus\(\)/su);
-  assert.doesNotMatch(source, /view\.dom\.focus\(\)/u);
+  assert.doesNotMatch(source, /gitBlameContextSession|openBlameMenu|toggleBlame/u);
+  assert.match(source, /codeMirrorFocusOwnership/u);
 });

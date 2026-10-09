@@ -6,6 +6,8 @@ import { Text } from "@codemirror/state";
 import {
   LINE_AWARE_DIFF_CONFIG,
   lineAwareDiff,
+  lineStructuralDiff,
+  preparedLineAwareDiffConfig,
 } from "../src/shared/diff-review/line-aware-diff.ts";
 
 test("line-aware diff keeps isolated insertions separate in a large source file", () => {
@@ -137,6 +139,28 @@ test("line-aware diff remains exact with repeated lines and missing final newlin
   const after = "start\nrepeat\nnew\nrepeat\nend\n";
   const changes = lineAwareDiff(before, after);
   assert.equal(applyChanges(before, after, changes), after);
+});
+
+test("structural diff preserves exact text while keeping replacements line-bounded", () => {
+  const before = "start\nold value\nremove me\nend\n";
+  const after = "start\nnew value\ninsert one\ninsert two\nend\n";
+  const changes = lineStructuralDiff(before, after);
+
+  assert.equal(applyChanges(before, after, changes), after);
+  assert.ok(changes.every((change) => change instanceof Change));
+  assert.equal(before.slice(changes[0].fromA, changes[0].toA), "old value\nremove me");
+  assert.equal(after.slice(changes[0].fromB, changes[0].toB), "new value\ninsert one\ninsert two");
+});
+
+test("prepared visual diff is reused only for the matching initial document pair", () => {
+  const before = "before\n";
+  const after = "after\n";
+  const prepared = lineAwareDiff(before, after);
+  const config = preparedLineAwareDiffConfig(before, after, prepared);
+
+  assert.equal(config.override(before, after), prepared);
+  assert.notEqual(config.override(before, "edited\n"), prepared);
+  assert.equal(applyChanges(before, "edited\n", config.override(before, "edited\n")), "edited\n");
 });
 
 function text(value) {

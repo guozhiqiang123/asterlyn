@@ -44,18 +44,76 @@ export const LINE_AWARE_DIFF_CONFIG: DiffConfig = {
   override: lineAwareDiff,
 };
 
+export function preparedLineAwareDiffConfig(
+  initialA: string,
+  initialB: string,
+  initialChanges: readonly Change[],
+): DiffConfig {
+  return {
+    override: (a, b) => a === initialA && b === initialB
+      ? initialChanges
+      : lineAwareDiff(a, b),
+  };
+}
+
 export function lineAwareDiff(a: string, b: string): readonly Change[] {
   if (a === b) return [];
-  const linesA = diffLines(a);
-  const linesB = diffLines(b);
-  const blocks: LineChangeBlock[] = [];
-  collectChangedBlocks(linesA, 0, linesA.length, linesB, 0, linesB.length, blocks, 0);
+  const { linesA, linesB, blocks } = changedLineBlocks(a, b);
 
   const changes: Change[] = [];
   for (const block of blocks) {
     refineChangedBlock(linesA, linesB, block, changes);
   }
   return changes;
+}
+
+/**
+ * Returns stable complete-line changes without the character alignment needed only for painting.
+ *
+ * Conflict ownership, document mappings, and unchanged-range folding all operate on lines. Keeping
+ * those paths out of word/character refinement avoids repeating the most expensive phase while the
+ * browser is mounting a large conflict editor.
+ */
+export function lineStructuralDiff(a: string, b: string): readonly Change[] {
+  if (a === b) return [];
+  const { linesA, linesB, blocks } = changedLineBlocks(a, b);
+  return blocks.map((block) => {
+    const fromA = lineOffset(linesA, block.aFrom, a.length);
+    let toA = lineOffset(linesA, block.aTo, a.length);
+    const fromB = lineOffset(linesB, block.bFrom, b.length);
+    let toB = lineOffset(linesB, block.bTo, b.length);
+    if (toA > fromA && toB > fromB) {
+      const terminatorA = trailingLineTerminatorLength(a, fromA, toA);
+      const terminatorB = trailingLineTerminatorLength(b, fromB, toB);
+      if (terminatorA > 0 && terminatorA === terminatorB &&
+        a.slice(toA - terminatorA, toA) === b.slice(toB - terminatorB, toB)) {
+        toA -= terminatorA;
+        toB -= terminatorB;
+      }
+    }
+    return new Change(fromA, toA, fromB, toB);
+  });
+}
+
+function trailingLineTerminatorLength(value: string, from: number, to: number): number {
+  if (to <= from) return 0;
+  if (value[to - 1] === "\n") return to - from > 1 && value[to - 2] === "\r" ? 2 : 1;
+  return value[to - 1] === "\r" ? 1 : 0;
+}
+
+function changedLineBlocks(
+  a: string,
+  b: string,
+): {
+  readonly linesA: readonly DiffLine[];
+  readonly linesB: readonly DiffLine[];
+  readonly blocks: readonly LineChangeBlock[];
+} {
+  const linesA = diffLines(a);
+  const linesB = diffLines(b);
+  const blocks: LineChangeBlock[] = [];
+  collectChangedBlocks(linesA, 0, linesA.length, linesB, 0, linesB.length, blocks, 0);
+  return { linesA, linesB, blocks };
 }
 
 function refineChangedBlock(

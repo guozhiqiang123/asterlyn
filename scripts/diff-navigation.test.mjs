@@ -179,7 +179,8 @@ test("editable Diff uses one gutter marker system and can disable unchanged coll
   assert.match(source, /\{ gutter: false \}/);
   assert.match(source, /mergeDiffSemanticHighlighting/u);
   assert.match(highlighting, /getChunks\(update\.state\)/u);
-  assert.match(highlighting, /lineAwareDiff\(a\.toString\(\), b\.toString\(\)\)/u);
+  assert.match(highlighting, /absoluteChunkChanges\(merge\.chunks\)/u);
+  assert.doesNotMatch(highlighting, /lineAwareDiff/u);
   assert.match(highlighting, /mergeViewSiblings\(view\)/u);
   assert.match(highlighting, /cm-source-word-\$\{kind\}/u);
   assert.match(highlighting, /MergeView creates pane A before pane B/u);
@@ -229,16 +230,23 @@ test("Diff position navigation outlines the complete current change block", asyn
   assert.match(theme, /\.cm-diff-current-change-end/);
 });
 
-test("ordinary and Diff editor content expose the shared Git Blame menu", async () => {
-  const [gutterSource, textEditorSource, diffEditorSource] = await Promise.all([
+test("ordinary and Diff editors load eligible Git Blame sources automatically", async () => {
+  const [gutterSource, textEditorSource, diffEditorSource, paneControllerSource] = await Promise.all([
     readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/text-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/git-blame-pane-controller.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(gutterSource, /export function blameContentContextMenu/u);
-  assert.match(gutterSource, /closest\("\.cm-content"\)/u);
-  assert.match(textEditorSource, /blameContentContextMenu\(\(event, view\) => this\.openBlameMenu\(entry, event, view\)\)/u);
-  assert.match(diffEditorSource, /blameContentContextMenu\(openBlameMenu\)/u);
+  assert.doesNotMatch(gutterSource, /contextmenu|blameContentContextMenu/u);
+  assert.match(gutterSource, /view\.dom\.addEventListener\("mouseover", this\.mouseover/u);
+  assert.match(gutterSource, /view\.dom\.addEventListener\("mouseout", this\.mouseout/u);
+  assert.match(gutterSource, /this\.listeners\.abort\(\)/u);
+  assert.match(textEditorSource, /void this\.ensureBlame\(mountedEntry\)/u);
+  assert.match(diffEditorSource, /void this\.ensureBlame\("old"\)/u);
+  assert.match(diffEditorSource, /void this\.ensureBlame\("new"\)/u);
+  assert.match(paneControllerSource, /else void this\.ensure\(pane\)/u);
+  assert.doesNotMatch(textEditorSource, /gitBlameContextSession|toggleBlame/u);
+  assert.doesNotMatch(diffEditorSource, /gitBlameContextSession|toggleBlame/u);
 });
 
 test("split Diff centers line numbers and uses one stable change gutter per side", async () => {

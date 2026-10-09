@@ -21,7 +21,11 @@ import {
   editorChangeIndicatorCopy,
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
-import { LINE_AWARE_DIFF_CONFIG } from "./shared/diff-review/line-aware-diff.ts";
+import {
+  LINE_AWARE_DIFF_CONFIG,
+  preparedLineAwareDiffConfig,
+} from "./shared/diff-review/line-aware-diff.ts";
+import type { ConflictEditorPreparation } from "./conflict-editor-preparation.ts";
 import {
   diffLineNumberGutter,
   type ConflictGitBlameSources,
@@ -38,6 +42,7 @@ import {
   type TextChange,
 } from "./features/files-editor/text-content.ts";
 import {
+  analyzeConflictResolution,
   ConflictResolutionModel,
   type ConflictResolutionDecision,
   type ConflictResolutionSide,
@@ -65,7 +70,6 @@ import {
 } from "./shared/diff-review/diff-review-block-decoration.ts";
 import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
 import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
-import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -131,14 +135,10 @@ export class ConflictEditor {
   constructor(
     blameRuntime: GitBlameRuntime,
     editorCopy: EditorCopy,
-    contextMenu: ContextMenuPort,
-    contextOwnerId: string,
   ) {
     this.blameController = new ConflictGitBlameController(
       blameRuntime,
       editorCopy,
-      contextMenu,
-      contextOwnerId,
     );
   }
 
@@ -152,6 +152,7 @@ export class ConflictEditor {
     editorCopy: EditorCopy,
     blameSources: ConflictGitBlameSources,
     onChange: (content: string) => void,
+    prepared?: ConflictEditorPreparation,
   ): void {
     this.destroy();
     this.preferences = { ...preferences };
@@ -172,15 +173,30 @@ export class ConflictEditor {
     );
     this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     this.copy = copy;
+    const analysis = prepared?.analysis ??
+      analyzeConflictResolution(base, ours, this.exactResult.text, theirs);
+    const leftDiffConfig = prepared
+      ? preparedLineAwareDiffConfig(ours, this.exactResult.text, prepared.oursToResult)
+      : LINE_AWARE_DIFF_CONFIG;
+    const rightDiffConfig = prepared
+      ? preparedLineAwareDiffConfig(theirs, this.exactResult.text, prepared.theirsToResult)
+      : LINE_AWARE_DIFF_CONFIG;
     this.resolutionModel = ConflictResolutionModel.create(
       base,
       ours,
       theirs,
       this.exactResult.text,
       worktree,
+      analysis,
     );
     this.activeReviewBlock = -1;
-    this.collapseCoordinator = new ConflictCollapseCoordinator(base, ours, this.exactResult.text, theirs);
+    this.collapseCoordinator = new ConflictCollapseCoordinator(
+      base,
+      ours,
+      this.exactResult.text,
+      theirs,
+      analysis,
+    );
     const root = document.createElement("section");
     root.className = `conflict-three-pane conflict-layout-${presentation.layout}`;
     root.setAttribute("aria-label", copy.conflictInputs);
@@ -231,7 +247,7 @@ export class ConflictEditor {
       gutter: false,
       revertControls: "a-to-b",
       renderRevertControl: () => this.conflictControls("ours", "right", copy),
-      diffConfig: LINE_AWARE_DIFF_CONFIG,
+      diffConfig: leftDiffConfig,
     });
     this.rightMerge = new MergeView({
       parent: rightHost,
@@ -257,7 +273,7 @@ export class ConflictEditor {
       gutter: false,
       revertControls: "a-to-b",
       renderRevertControl: () => this.conflictControls("theirs", "left", copy),
-      diffConfig: LINE_AWARE_DIFF_CONFIG,
+      diffConfig: rightDiffConfig,
     });
     oursBinding.view = this.leftMerge.a;
     primaryBinding.view = this.leftMerge.b;
@@ -468,11 +484,7 @@ export class ConflictEditor {
         ? this.resultEditable.of(EditorView.editable.of(!this.resultReadOnlyValue))
         : EditorView.editable.of(editable),
       codeMirrorFocusOwnership,
-      diffLineNumberGutter(
-        gutterSide,
-        undefined,
-        (event, view) => this.blameController.openMenu(binding.paneId, event, view),
-      ),
+      diffLineNumberGutter(gutterSide),
       ...this.blameController.extensions(binding.paneId, binding.blame),
       binding.changeIndicators?.extension ?? [],
       this.collapseCoordinator?.extension(collapseSide) ?? [],

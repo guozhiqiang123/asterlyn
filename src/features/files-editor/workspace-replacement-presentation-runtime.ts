@@ -5,7 +5,6 @@ import type { EditorCopy, ReplacementCopy } from "../../localization/catalog.ts"
 import type { WorkspaceReplacementFilePreview } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
-import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import { buildProjectTree, descendantProjectDirectories, type ProjectTreeNode } from "../../presentation/project-tree.ts";
 import { attachSplitter } from "../../presentation/splitter.ts";
@@ -43,7 +42,6 @@ export interface WorkspaceReplacementPresentationOptions {
   readonly persistLayout: () => void;
   readonly describeError: (error: unknown) => string;
   readonly blameRuntime: GitBlameRuntime;
-  readonly contextMenu: ContextMenuPort;
 }
 
 export class WorkspaceReplacementPresentationRuntime {
@@ -66,8 +64,6 @@ export class WorkspaceReplacementPresentationRuntime {
     this.editor = new LazyEditableDiffEditor(
       options.editorCopy(),
       options.blameRuntime,
-      options.contextMenu,
-      "workspace.replacement.editable-diff-blame",
     );
   }
 

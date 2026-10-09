@@ -10,7 +10,6 @@ import {
 import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
-import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
 import type { ConflictGitBlameSources, DiffGitBlameSources, GitBlameAvailability, GitBlameRuntime } from "./editor-gutter.ts";
 import { LazyDiffEditor, LazyTextEditor } from "./lazy-editor-runtime.ts";
@@ -61,24 +60,19 @@ export class EditorSurface {
     root: HTMLElement,
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
-    contextMenu: ContextMenuPort,
   ) {
     this.root = root;
     this.copy = copy;
     this.diffEditor = new LazyDiffEditor(
       blameRuntime,
       copy,
-      contextMenu,
-      "editor.surface.diff-blame",
     );
     this.textEditor = new LazyTextEditor(
       blameRuntime,
       copy,
-      contextMenu,
-      "editor.surface.text-blame",
     );
-    this.editableDiffEditor = new LazyEditableDiffEditor(copy, blameRuntime, contextMenu, "editor.surface.editable-diff-blame");
-    this.conflictEditor = new LazyConflictEditor(copy, blameRuntime, contextMenu, "editor.surface.conflict-blame");
+    this.editableDiffEditor = new LazyEditableDiffEditor(copy, blameRuntime);
+    this.conflictEditor = new LazyConflictEditor(copy, blameRuntime);
   }
 
   setCopy(copy: EditorCopy): void {
@@ -614,6 +608,7 @@ export class EditorSurface {
     this.textEditor.destroy();
     this.diffEditor.destroy();
     this.detachSpecializedEditors();
+    this.conflictEditor.dispose();
     if (this.measureFrame !== null) window.cancelAnimationFrame(this.measureFrame);
     this.measureFrame = null;
     this.mountedEditorKey = null;

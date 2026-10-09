@@ -66,21 +66,18 @@ export interface GitBlameCopy {
 }
 
 type SourceLineMapper = (documentLine: number) => number | null;
-type OpenEditorContextMenu = (event: MouseEvent, view: EditorView) => void;
 
 export type DiffGutterSide = "before" | "after";
 
 type LineNumberFormatter = (lineNumber: number, state: EditorState) => string;
 
 export function lineNumberGutter(
-  openMenu: OpenEditorContextMenu,
   formatNumber?: (lineNumber: number) => string,
   side: DiffGutterSide = "before",
 ): Extension {
   return diffLineNumberGutter(
     side,
     formatNumber ? (lineNumber) => formatNumber(lineNumber) : undefined,
-    openMenu,
   );
 }
 
@@ -93,7 +90,6 @@ export function lineNumberGutter(
 export function diffLineNumberGutter(
   side: DiffGutterSide,
   formatNumber: LineNumberFormatter = (lineNumber) => lineNumber.toString(),
-  openMenu?: OpenEditorContextMenu,
 ): Extension {
   return gutter({
     class: `cm-lineNumbers cm-diff-lineNumbers cm-diff-lineNumbers-${side}`,
@@ -115,32 +111,6 @@ export function diffLineNumberGutter(
         ? spacer
         : new DiffLineNumberMarker(number, null);
     },
-    ...(openMenu ? {
-      domEventHandlers: {
-        contextmenu: (view, _line, event) => {
-          requestContextMenu(event as MouseEvent, view, openMenu);
-          return true;
-        },
-      },
-    } : {}),
-  });
-}
-
-export function blameContentContextMenu(
-  openMenu: OpenEditorContextMenu,
-): Extension {
-  return EditorView.domEventHandlers({
-    contextmenu: (event, view) => {
-      const target = event.target;
-      const element = target instanceof Element
-        ? target
-        : target instanceof Node
-          ? target.parentElement
-          : null;
-      if (!element?.closest(".cm-content")) return false;
-      requestContextMenu(event, view, openMenu);
-      return true;
-    },
   });
 }
 
@@ -156,16 +126,6 @@ export function gitBlamePresentation(
   return mode === "line-end"
     ? blameLineEndPresentation(hunks, copy, sourceLine)
     : blameLineNumberHoverPresentation(hunks, copy, sourceLine);
-}
-
-function requestContextMenu(
-  event: MouseEvent,
-  view: EditorView,
-  openMenu: OpenEditorContextMenu,
-): void {
-  event.preventDefault();
-  event.stopPropagation();
-  openMenu(event, view);
 }
 
 function blameHunkAt(hunks: readonly GitBlameHunk[], line: number): GitBlameHunk | null {
@@ -267,11 +227,14 @@ function blameLineNumberHoverPresentation(
 ): Extension {
   return ViewPlugin.fromClass(class {
     readonly view: EditorView;
+    private readonly listeners = new AbortController();
     private tooltip: HTMLDivElement | null = null;
     private target: HTMLElement | null = null;
 
     constructor(view: EditorView) {
       this.view = view;
+      view.dom.addEventListener("mouseover", this.mouseover, { signal: this.listeners.signal });
+      view.dom.addEventListener("mouseout", this.mouseout, { signal: this.listeners.signal });
     }
 
     update(update: ViewUpdate): void {
@@ -279,8 +242,26 @@ function blameLineNumberHoverPresentation(
     }
 
     destroy(): void {
+      this.listeners.abort();
       this.hide();
     }
+
+    private readonly mouseover = (event: MouseEvent): void => {
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLElement>(".cm-line-number-value[data-document-line]")
+        : null;
+      if (target && this.view.dom.contains(target)) this.show(target);
+    };
+
+    private readonly mouseout = (event: MouseEvent): void => {
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLElement>(".cm-line-number-value[data-document-line]")
+        : null;
+      if (!target) return;
+      const related = event.relatedTarget;
+      if (related instanceof Node && target.contains(related)) return;
+      this.hide();
+    };
 
     show(target: HTMLElement): void {
       const documentLine = Number(target.dataset.documentLine);
@@ -324,24 +305,6 @@ function blameLineNumberHoverPresentation(
       this.tooltip = null;
       this.target = null;
     }
-  }, {
-    eventHandlers: {
-      mouseover(event) {
-        const target = event.target instanceof Element
-          ? event.target.closest<HTMLElement>(".cm-line-number-value[data-document-line]")
-          : null;
-        if (target && this.view.dom.contains(target)) this.show(target);
-      },
-      mouseout(event) {
-        const target = event.target instanceof Element
-          ? event.target.closest<HTMLElement>(".cm-line-number-value[data-document-line]")
-          : null;
-        if (!target) return;
-        const related = event.relatedTarget;
-        if (related instanceof Node && target.contains(related)) return;
-        this.hide();
-      },
-    },
   });
 }
 

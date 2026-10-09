@@ -17,9 +17,7 @@ import {
 import { withEditorFolding } from "./editor-folding";
 import { EditorLanguageLoader, type EditorLanguageStatus } from "./editor-language";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme";
-import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
-import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 import { linkVerticalScrollProportionally } from "./presentation/linked-scroll";
 import type { AppPreferences, GitBlameDisplayMode } from "./preferences";
 import {
@@ -31,7 +29,6 @@ import {
   type TextChange,
 } from "./features/files-editor/text-content";
 import {
-  blameContentContextMenu,
   gitBlamePresentation,
   lineNumberGutter,
   type GitBlameRuntime,
@@ -104,8 +101,6 @@ export class TextEditor {
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
     private blameCopy: EditorCopy,
-    private readonly contextMenu: ContextMenuPort,
-    private readonly contextOwnerId: string,
   ) {}
 
   mount(
@@ -156,6 +151,7 @@ export class TextEditor {
         active.serializedContent = content;
       }
       active.view.requestMeasure();
+      void this.ensureBlame(active);
       return;
     }
 
@@ -210,6 +206,7 @@ export class TextEditor {
     if (mountedEntry.languageStatus === "loading") {
       this.loadLanguage(mountedEntry);
     }
+    void this.ensureBlame(mountedEntry);
   }
 
   private restoreScroll(
@@ -384,8 +381,6 @@ export class TextEditor {
       this.activeId = null;
       return null;
     }
-    this.contextMenu.close(this.contextOwnerId);
-    if (entry.blameResult || entry.blameLoading) this.clearBlame(entry);
     this.flushEntryChange(entry);
     entry.scrollLeft = entry.view.scrollDOM.scrollLeft;
     entry.scrollTop = entry.view.scrollDOM.scrollTop;
@@ -503,8 +498,7 @@ export class TextEditor {
         language.of([]),
         blame.of([]),
         changeIndicators.extension,
-        lineNumberGutter((event, view) => this.openBlameMenu(entry, event, view)),
-        blameContentContextMenu((event, view) => this.openBlameMenu(entry, event, view)),
+        lineNumberGutter(),
         foldGutter({ markerDOM: createFoldMarker }),
         history(),
         drawSelection(),
@@ -539,53 +533,12 @@ export class TextEditor {
     return entry;
   }
 
-  private openBlameMenu(
-    entry: CachedTextEditor,
-    event: MouseEvent,
-    view: EditorView,
-  ): void {
-    const source = entry.blameSource;
-    const generation = entry.blameGeneration;
-    const active = entry.blameResult !== null;
-    const loading = entry.blameLoading;
-    const isCurrent = () =>
-      this.entries.get(entry.id) === entry &&
-      entry.view === view &&
-      generation === entry.blameGeneration &&
-      active === (entry.blameResult !== null) &&
-      loading === entry.blameLoading &&
-      sameBlameSource(source, entry.blameSource);
-    this.contextMenu.open(
-      { x: event.clientX, y: event.clientY },
-      gitBlameContextSession(this.contextOwnerId, {
-        active,
-        loading,
-        enabled: source !== null,
-        unavailableReason: entry.blameUnavailableReason,
-        copy: this.blameCopy,
-        isCurrent,
-        toggle: () => this.toggleBlame(entry),
-        blocked: (reason) => this.blameRuntime.status(reason, "warning"),
-        restoreFocus: () => {
-          if (this.entries.get(entry.id) === entry && entry.view === view && view.dom.isConnected) {
-            view.focus();
-          }
-        },
-      }),
-    );
-  }
-
-  private async toggleBlame(entry: CachedTextEditor): Promise<void> {
-    if (entry.blameResult || entry.blameLoading) {
-      this.clearBlame(entry);
-      this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
-      return;
-    }
+  private async ensureBlame(entry: CachedTextEditor): Promise<void> {
+    if (entry.blameResult || entry.blameLoading) return;
     const source = entry.blameSource;
     if (!source) return;
     const generation = ++entry.blameGeneration;
     entry.blameLoading = true;
-    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
     try {
       const result = await this.blameRuntime.load(source);
       if (
@@ -596,13 +549,10 @@ export class TextEditor {
       entry.blameLoading = false;
       entry.blameResult = result;
       this.installBlame(entry, result);
-      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-      this.blameRuntime.status(
-        result.truncated
-          ? this.blameCopy.gitBlameLimited(lines)
-          : this.blameCopy.gitBlameLoaded(lines),
-        result.truncated ? "warning" : "information",
-      );
+      if (result.truncated) {
+        const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+        this.blameRuntime.status(this.blameCopy.gitBlameLimited(lines), "warning");
+      }
     } catch (error) {
       if (generation !== entry.blameGeneration || this.entries.get(entry.id) !== entry) return;
       entry.blameLoading = false;
@@ -624,7 +574,6 @@ export class TextEditor {
   }
 
   private clearBlame(entry: CachedTextEditor): void {
-    this.contextMenu.close(this.contextOwnerId);
     entry.blameGeneration += 1;
     entry.blameLoading = false;
     entry.blameResult = null;
@@ -650,9 +599,6 @@ export class TextEditor {
     source: GitBlameSource | null,
     unavailableReason: string | null,
   ): void {
-    if (!sameBlameSource(entry.blameSource, source)) {
-      this.contextMenu.close(this.contextOwnerId);
-    }
     if (!sameBlameSource(entry.blameSource, source) && (entry.blameResult || entry.blameLoading)) {
       this.clearBlame(entry);
     }

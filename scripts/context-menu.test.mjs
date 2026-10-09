@@ -14,11 +14,6 @@ import {
   placeContextMenu,
   placeContextSubmenu,
 } from "../src/shared/context-menu/context-menu-position.ts";
-import {
-  GIT_BLAME_TOGGLE_ACTION,
-  gitBlameContextSession,
-} from "../src/features/files-editor/editor-gutter-context-actions.ts";
-import { EN_US } from "../src/localization/en-US.ts";
 
 const enabled = { kind: "enabled" };
 const blocked = { kind: "blocked", reason: "Not available" };
@@ -118,64 +113,6 @@ test("root and submenu placement stays inside the viewport and flips at the righ
   );
 });
 
-test("Git Blame provider retains checked, busy, blocked, and current-target behavior", async () => {
-  let current = true;
-  let toggles = 0;
-  let blockedReason = "";
-  let restores = 0;
-  const state = {
-    active: true,
-    loading: false,
-    enabled: true,
-    unavailableReason: null,
-    copy: EN_US.editor,
-    isCurrent: () => current,
-    toggle: () => { toggles += 1; },
-    blocked: (reason) => { blockedReason = reason; },
-    restoreFocus: () => { restores += 1; },
-  };
-  const session = gitBlameContextSession("editor.test", state);
-  assert.equal(session.ownerId, "editor.test");
-  assert.deepEqual(session.model.items[0], {
-    kind: "check",
-    id: GIT_BLAME_TOGGLE_ACTION,
-    actionId: GIT_BLAME_TOGGLE_ACTION,
-    label: EN_US.editor.hideGitBlame,
-    checked: true,
-    availability: enabled,
-  });
-  await session.invoke(GIT_BLAME_TOGGLE_ACTION);
-  assert.equal(toggles, 1);
-  current = false;
-  await session.invoke(GIT_BLAME_TOGGLE_ACTION);
-  assert.equal(toggles, 1);
-  session.blocked("Wait");
-  session.restoreFocus();
-  assert.equal(blockedReason, "Wait");
-  assert.equal(restores, 1);
-
-  const busySession = gitBlameContextSession("editor.test", {
-    ...state,
-    active: false,
-    loading: true,
-  });
-  assert.deepEqual(busySession.model.items[0]?.availability, {
-    kind: "busy",
-    label: EN_US.editor.loadingGitBlame,
-  });
-  const blockedSession = gitBlameContextSession("editor.test", {
-    ...state,
-    active: false,
-    loading: false,
-    enabled: false,
-    unavailableReason: EN_US.editor.gitBlameRequiresSavedFile,
-  });
-  assert.deepEqual(blockedSession.model.items[0]?.availability, {
-    kind: "blocked",
-    reason: EN_US.editor.gitBlameRequiresSavedFile,
-  });
-});
-
 test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", async () => {
   const [gutter, host, lazyHost, app] = await Promise.all([
     readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
@@ -183,8 +120,8 @@ test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", 
     readFile(new URL("../src/shared/context-menu/lazy-context-menu-host.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app.ts", import.meta.url), "utf8"),
   ]);
-  assert.doesNotMatch(gutter, /activeMenu|document\.body|addEventListener/u);
-  assert.match(gutter, /openMenu\(event, view\)/u);
+  assert.doesNotMatch(gutter, /activeMenu|document\.body/u);
+  assert.doesNotMatch(gutter, /contextmenu|openMenu/u);
   assert.match(host, /class ContextMenuHost implements ContextMenuPort/u);
   assert.match(host, /AbortController/u);
   assert.match(host, /active\.session\.dismissed\?\.\(\)/u);

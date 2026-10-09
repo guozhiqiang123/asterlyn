@@ -187,3 +187,50 @@ Run the matrix in both dark and light themes, and in English and Chinese.
 - The app bundle uses an ad-hoc hardened-runtime signature and passes strict deep verification. It is
   installed at `/Applications/Asterlyn.app` and open on `/Users/gzq/flutter`; the previous install is
   recoverable at `/Users/gzq/.Trash/Asterlyn-before-unified-conflict-20261008-1808.app`.
+
+### Phase 10 — large-conflict responsiveness
+
+- Conflict loading now separates whole-line decision geometry from refined visual comparison.
+  Base-to-side structural changes are computed once and shared by conflict ownership, marker
+  projection, and unchanged folding instead of repeating word-level comparison on the UI thread.
+- Initial Ours-to-Result and Theirs-to-Result refined ranges run in a dedicated Worker. MergeView
+  consumes the prepared ranges and semantic highlighting reuses its chunks, so Changes context-menu
+  events remain independently dispatchable while the large file is being prepared.
+- On `project-integration_test.lockfile`, Result creation, structural analysis, its 33-block model,
+  and fold preparation dropped from roughly 3 seconds of synchronous work to 15.7 ms cold and
+  2.9–3.5 ms warm. The former 381–415 ms visual comparison moved off the UI thread.
+- The frontend suite passes 926 tests, the native Git crate passes 133 tests, and TypeScript,
+  production build, patch hygiene, production packaging, strict bundle verification, and installed
+  rendered smoke all pass.
+- The accepted macOS arm64 archive is
+  `target/release/bundle/macos/Asterlyn-conflict-load-performance-20261009-macos-arm64.zip`,
+  9,256,728 bytes, SHA-256
+  `5a57bd88828eb47f19a4f203e7bad82a6fcd464f06e928d25f7c5d56bd10263e`.
+  The packaged and installed executables are both 24,162,560 bytes with SHA-256
+  `a41a8ab47959ca6d23976e523c16e97b860b0ede0b3871289ada33a9487c3e99`.
+- `/Applications/Asterlyn.app` is signed with an ad-hoc hardened-runtime signature, relaunched on
+  `/Users/gzq/flutter`, and matches the accepted build. The prior install remains recoverable at
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-load-performance-20261009.app`.
+
+### Phase 11 — worker-safe conflict Diff values
+
+- Root cause for the blank unified editor on
+  `dev/integration_tests/flutter_gallery/android/project-video_player_android.lockfile` was the
+  Worker structured-clone boundary: Diff range fields survived, but CodeMirror `Change` prototypes
+  did not. This file's insertion/deletion alignment invokes `Change.offset()`, so MergeView threw
+  after replacing the loading surface and left an empty editor.
+- The main thread now rehydrates every worker-returned structural and visual range as a CodeMirror
+  `Change` before editor construction. Mount failures are also caught and rendered as a visible
+  conflict-unavailable state instead of an empty pane.
+- The exact reference conflict prepares in about 3 ms locally with 381 Ours-to-Result and 278
+  Theirs-to-Result visual changes. Focused conflict coverage passes 40 tests; the complete frontend
+  suite passes 928 tests, native Git passes 133 tests, and TypeScript, production build, native
+  package creation, strict signature validation, and rendered native smoke all pass.
+- The accepted signed macOS arm64 archive is
+  `target/release/bundle/macos/Asterlyn-conflict-worker-rehydration-20261009-macos-arm64-signed.zip`,
+  9,257,894 bytes, SHA-256
+  `6953c20bd2927f03240b967537107e4113ac1cd27cf7e44696c2dc0f9d2e18c2`.
+  `/Applications/Asterlyn.app` was replaced and relaunched; its executable SHA-256 is
+  `59c1eb4125d9b66003ce2f4ba13b21d55e64aaa2259f20b056f377f1e194a653`. The previous installation
+  remains recoverable at
+  `/Users/gzq/.Trash/Asterlyn-before-conflict-worker-rehydration-20261009.app`.

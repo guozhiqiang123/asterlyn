@@ -1,10 +1,7 @@
 import { Compartment, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { GitBlameResult } from "../../models.ts";
-import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
-import { gitBlameContextSession } from "./editor-gutter-context-actions.ts";
 import {
-  blameContentContextMenu,
   gitBlamePresentation,
   type GitBlameAvailability,
   type GitBlameCopy,
@@ -18,6 +15,7 @@ export interface GitBlamePaneTarget {
   readonly source: GitBlameSource | null;
   readonly unavailableReason: string | null;
   readonly load?: () => Promise<GitBlameResult>;
+  readonly autoLoad?: boolean;
 }
 
 interface PaneState {
@@ -55,26 +53,20 @@ export function sourceBlameTarget(
   };
 }
 
-/** Owns one checked Git Blame action and its request/result lifecycle for any number of panes. */
+/** Owns automatic Git Blame loading and its request/result lifecycle for any number of panes. */
 export class GitBlamePaneController {
   private readonly states = new Map<string, PaneState>();
   private readonly bindings: PaneBinding[] = [];
   private readonly runtime: GitBlameRuntime;
-  private readonly contextMenu: ContextMenuPort;
-  private readonly ownerId: string;
   private copy: GitBlameCopy;
   private displayMode: GitBlameDisplayMode = "line-number-hover";
 
   constructor(
     runtime: GitBlameRuntime,
     copy: GitBlameCopy,
-    contextMenu: ContextMenuPort,
-    ownerId: string,
   ) {
     this.runtime = runtime;
     this.copy = copy;
-    this.contextMenu = contextMenu;
-    this.ownerId = ownerId;
   }
 
   setCopy(copy: GitBlameCopy): void {
@@ -97,10 +89,12 @@ export class GitBlamePaneController {
     const current = this.states.get(pane);
     if (current?.target.identity === target.identity) {
       current.target = target;
+      if (this.hasBinding(pane)) void this.ensure(pane);
       return;
     }
-    if (current) this.clear(pane, false);
+    if (current) this.clear(pane);
     this.states.set(pane, { target, result: null, loading: false, generation: 0 });
+    if (this.hasBinding(pane)) void this.ensure(pane);
   }
 
   extensions(
@@ -108,10 +102,8 @@ export class GitBlamePaneController {
     compartment: Compartment,
     sourceLine: (documentLine: number) => number | null = (line) => line,
   ): Extension[] {
-    const open = (event: MouseEvent, view: EditorView) => this.openMenu(pane, event, view);
     const result = this.states.get(pane)?.result ?? null;
     return [
-      blameContentContextMenu(open),
       compartment.of(result
         ? gitBlamePresentation(result, this.copy, this.displayMode, sourceLine)
         : []),
@@ -125,51 +117,16 @@ export class GitBlamePaneController {
     sourceLine: (documentLine: number) => number | null = (line) => line,
   ): void {
     this.bindings.push({ pane, view, compartment, sourceLine });
-  }
-
-  openMenu(pane: string, event: MouseEvent, view: EditorView): void {
     const state = this.states.get(pane);
-    if (!state) return;
-    const identity = state.target.identity;
-    const generation = state.generation;
-    const active = state.result !== null;
-    const loading = state.loading;
-    this.contextMenu.open(
-      { x: event.clientX, y: event.clientY },
-      gitBlameContextSession(this.ownerId, {
-        active,
-        loading,
-        enabled: state.target.source !== null || state.target.load !== undefined,
-        unavailableReason: state.target.unavailableReason,
-        copy: this.copy,
-        isCurrent: () => {
-          const current = this.states.get(pane);
-          return Boolean(
-            current &&
-            current.target.identity === identity &&
-            current.generation === generation &&
-            (current.result !== null) === active &&
-            current.loading === loading &&
-            this.bindings.some((binding) => binding.pane === pane && binding.view === view),
-          );
-        },
-        toggle: () => this.toggle(pane),
-        blocked: (reason) => this.runtime.status(reason, "warning"),
-        restoreFocus: () => {
-          if (this.bindings.some((binding) => binding.pane === pane && binding.view === view)) {
-            view.focus();
-          }
-        },
-      }),
-    );
+    if (state?.result) this.install(pane, state.result);
+    else void this.ensure(pane);
   }
 
   invalidate(pane: string): void {
-    if (this.states.has(pane)) this.clear(pane, false);
+    if (this.states.has(pane)) this.clear(pane);
   }
 
   destroy(): void {
-    this.contextMenu.close(this.ownerId);
     for (const state of this.states.values()) {
       state.generation += 1;
       state.loading = false;
@@ -179,18 +136,14 @@ export class GitBlamePaneController {
     this.bindings.length = 0;
   }
 
-  private async toggle(pane: string): Promise<void> {
+  private async ensure(pane: string): Promise<void> {
     const state = this.states.get(pane);
     if (!state) return;
-    if (state.result || state.loading) {
-      this.clear(pane, true);
-      return;
-    }
+    if (state.result || state.loading || state.target.autoLoad === false) return;
     if (!state.target.source && !state.target.load) return;
     const identity = state.target.identity;
     const generation = ++state.generation;
     state.loading = true;
-    this.runtime.status(this.copy.loadingGitBlame, "information");
     try {
       const result = state.target.load
         ? await state.target.load()
@@ -200,11 +153,10 @@ export class GitBlamePaneController {
       current.loading = false;
       current.result = result;
       this.install(pane, result);
-      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-      this.runtime.status(
-        result.truncated ? this.copy.gitBlameLimited(lines) : this.copy.gitBlameLoaded(lines),
-        result.truncated ? "warning" : "information",
-      );
+      if (result.truncated) {
+        const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+        this.runtime.status(this.copy.gitBlameLimited(lines), "warning");
+      }
     } catch (error) {
       const current = this.states.get(pane);
       if (!current || current.generation !== generation) return;
@@ -213,8 +165,7 @@ export class GitBlamePaneController {
     }
   }
 
-  private clear(pane: string, report: boolean): void {
-    this.contextMenu.close(this.ownerId);
+  private clear(pane: string): void {
     const state = this.states.get(pane);
     if (!state) return;
     state.generation += 1;
@@ -225,7 +176,6 @@ export class GitBlamePaneController {
         binding.view.dispatch({ effects: binding.compartment.reconfigure([]) });
       }
     }
-    if (report) this.runtime.status(this.copy.gitBlameHidden, "information");
   }
 
   private install(pane: string, result: GitBlameResult): void {
@@ -242,5 +192,9 @@ export class GitBlamePaneController {
         ),
       });
     }
+  }
+
+  private hasBinding(pane: string): boolean {
+    return this.bindings.some((binding) => binding.pane === pane);
   }
 }

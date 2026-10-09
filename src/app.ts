@@ -524,13 +524,10 @@ export class AsterlynApp {
       root,
       initialCatalog.editor,
       blameRuntime,
-      this.contextMenuHost,
     );
     this.pushDiffEditor = new LazyDiffEditor(
       blameRuntime,
       initialCatalog.editor,
-      this.contextMenuHost,
-      "editor.push-review.diff-blame",
     );
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
@@ -808,7 +805,7 @@ export class AsterlynApp {
       preferences: () => this.settingsState.preferences, presentation: () => this.diffPresentation(),
       setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
       fileListWidth: () => this.shellState.layout.replacementListWidth, resizeFileList: (width) => this.resizeWorkbench("replacementListWidth", width), persistLayout: () => this.persistWorkbenchLayout(), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
-      blameRuntime, contextMenu: this.contextMenuHost,
+      blameRuntime,
     });
     this.replacementPresentationRuntime.setTheme(this.settingsPresentationRuntime.presentation.snapshot.theme); this.replacementPresentationRuntime.setPhrases(this.localization.catalog.editorPhrases);
     this.gitOperationRuntime = new GitOperationRuntime({

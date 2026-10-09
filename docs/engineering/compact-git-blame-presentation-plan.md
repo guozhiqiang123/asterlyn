@@ -8,8 +8,8 @@ editors and becomes especially expensive in two-pane Diff and three-pane conflic
 repository query, exact source mapping, checked context action, and stale-request protection are
 already correct; the problem is presentation density rather than Git ownership.
 
-The replacement keeps Git Blame explicit and on demand while offering two persistent display
-modes:
+The replacement makes Git Blame automatic for every eligible tracked source while offering two
+persistent display modes:
 
 1. **Line end** — show the line's author and authored time after the code on each visible line.
 2. **Line-number hover** — keep the editor unchanged until the pointer rests on a concrete line
@@ -19,12 +19,13 @@ Line-number hover is the default because it has no steady-state width cost.
 
 ## Invariants
 
-- Enabling or changing Git Blame presentation never edits source text, changes selections, scrolls
-  a pane, or starts a second repository query.
+- Opening or mounting an eligible source automatically starts at most one generation-guarded Blame
+  request. Changing presentation never edits source text, changes selections, scrolls a pane, or
+  starts a second repository query.
 - The display mode is one application preference shared by ordinary editors, read-only and editable
   two-pane Diffs, and split three-pane conflict resolution.
-- The existing right-click action remains the only show/hide control. A mode change reuses any
-  loaded result and reconfigures active views immediately.
+- Git Blame has no separate show/hide switch. The preference only chooses how an automatically
+  loaded result is presented, and a mode change reuses that result immediately.
 - Line-end annotations are CodeMirror widgets, not document content. They are created only for
   visible ranges so very large Blame results stay bounded.
 - The hover target is the actual line-number element. Spacer, omitted, and unmapped projected rows
@@ -69,6 +70,11 @@ Each owner keeps its current loaded `GitBlameResult`. `setPreferences` reconfigu
 presentation compartment when the mode changes, so no network/native work and no content rerender
 is required.
 
+Every owner also starts loading as soon as an exact, eligible source is mounted. Source identity,
+generation, and loading state deduplicate repeated mounts and reject stale completions. Dirty,
+untracked, unavailable, and unified/ambiguous sources silently omit annotations instead of exposing
+another activation step.
+
 ### 4. Interaction and accessibility
 
 - Tooltip content uses localized date formatting and the existing full-details copy.
@@ -76,7 +82,8 @@ is required.
   editor viewport.
 - Line-end widgets use subdued semantic text, an explicit help cursor, a single-line ellipsis, and
   do not alter line height.
-- Context-menu invocation from line numbers and code rows remains unchanged in both modes.
+- Line numbers and code rows no longer expose a Git Blame show/hide context action. Existing
+  unrelated context-menu behavior remains unchanged.
 
 ## Regression coverage
 
@@ -87,8 +94,8 @@ is required.
 - Line-end mode annotates visible mapped lines, handles Local changes, and omits unmapped rows.
 - Hover mode resolves the actual line-number target for before/after gutter placement and projected
   conflict rows.
-- Existing show/hide, dirty-buffer invalidation, split/unified restrictions, and stale request tests
-  continue to pass.
+- Automatic load deduplication, dirty-buffer invalidation, split/unified restrictions, and stale
+  request tests continue to pass.
 
 ## Validation
 
@@ -106,15 +113,18 @@ is required.
   line-number-hover default.
 - The fixed 260-pixel Blame gutter and commit-tone bands were removed. Line-end mode creates widgets
   only for visible mapped lines; hover mode targets the real line-number glyph and presents one
-  bounded app-styled author/date tooltip without changing pane width.
+  bounded app-styled author/date tooltip without changing pane width. Its hover listeners are bound
+  to the editor root because CodeMirror renders line-number gutters outside the content DOM.
 - Ordinary editable files, read-only Diffs, editable working Diffs, and conflict Ours/Result/Theirs
-  panes share the same mode. An active annotation is reconfigured from its cached result, while
-  edits keep the existing saved-source invalidation behavior.
-- Verified with 922 frontend script tests, TypeScript checking, the production web build, 133
+  panes share the same mode. Eligible exact sources now load automatically when their view mounts;
+  the former line-number/code-row right-click toggle and its context action were removed. A loaded
+  annotation is reconfigured from its cached result, while edits keep the saved-source invalidation
+  behavior and unavailable or ambiguous sources remain silently unannotated.
+- Verified with 921 frontend script tests, TypeScript checking, the production web build, 133
   `asterlyn-git` tests, a release macOS application build, and the rendered native smoke test. The
   verified application was installed and relaunched at `/Applications/Asterlyn.app`; the previous
   installation remains recoverable in Trash as
-  `Asterlyn-before-compact-git-blame-20261009.app`.
+  `Asterlyn-before-blame-tooltip-fix-20261009.app`.
 - Acceptance archive:
-  `target/release/bundle/macos/Asterlyn-compact-git-blame-20261009-macos-arm64.zip`, 9,179,480 bytes,
-  SHA-256 `6f6824e485c78040b66f5c2bb64e86f462e546317688b355f607bdec327ca649`.
+  `target/release/bundle/macos/Asterlyn-auto-git-blame-20261009-macos-arm64.zip`, 9,170,492 bytes,
+  SHA-256 `1918236563f0b7b867d6ba9da5483da78e857e2ef7b993d6121d9b61fed98f2a`.

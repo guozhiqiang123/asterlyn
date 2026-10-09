@@ -23,7 +23,6 @@ import {
   type DiffGutterSide,
   type GitBlameRuntime,
 } from "./features/files-editor/editor-gutter.ts";
-import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 import {
   GitBlamePaneController,
   sourceBlameTarget,
@@ -127,16 +126,12 @@ export class EditableDiffEditor {
   constructor(
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
-    contextMenu: ContextMenuPort,
-    contextOwnerId: string,
   ) {
     this.copy = copy;
     this.blameSources = unavailableEditableDiffBlameSources(copy.gitBlameRequiresSplit);
     this.blameController = new GitBlamePaneController(
       blameRuntime,
       copy,
-      contextMenu,
-      contextOwnerId,
     );
   }
 
@@ -620,12 +615,8 @@ export class EditableDiffEditor {
       EditorView.editable.of(editable),
       codeMirrorFocusOwnership,
       gutterSide
-        ? diffLineNumberGutter(
-            gutterSide,
-            undefined,
-            (event, view) => this.blameController.openMenu(blamePane, event, view),
-          )
-        : lineNumberGutter((event, view) => this.blameController.openMenu(blamePane, event, view)),
+        ? diffLineNumberGutter(gutterSide)
+        : lineNumberGutter(),
       ...this.blameController.extensions(blamePane, binding.blame),
       binding.changeIndicators?.extension ?? [],
       collapseSide ? this.reviewSurface?.extension(collapseSide) ?? [] : [],

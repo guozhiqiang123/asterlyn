@@ -1,6 +1,6 @@
 import { ChangeSet } from "@codemirror/state";
 import type { Change } from "@codemirror/merge";
-import { lineAwareDiff } from "../../shared/diff-review/line-aware-diff.ts";
+import { lineStructuralDiff } from "../../shared/diff-review/line-aware-diff.ts";
 
 export interface ConflictMarkerRange {
   readonly from: number;
@@ -39,6 +39,11 @@ interface SideProjection {
   readonly ranges: readonly ConflictMarkerRange[];
 }
 
+export interface ConflictMarkerSourceChanges {
+  readonly ours: readonly Change[];
+  readonly theirs: readonly Change[];
+}
+
 /** Returns the number of complete Git marker groups, ignoring marker-like standalone text. */
 export function gitConflictMarkerCount(content: string | null): number {
   if (content === null) return 0;
@@ -56,6 +61,7 @@ export function projectConflictMarkers(
   ours: string,
   theirs: string,
   worktree: string | null,
+  sourceChanges?: ConflictMarkerSourceChanges,
 ): ConflictMarkerProjection | null {
   if (worktree === null) return null;
   const parsed = parseMarkerDocument(worktree);
@@ -67,8 +73,8 @@ export function projectConflictMarkers(
   const theirsRanges = mapPayloadRanges(theirsProjection, theirs);
   if (!oursRanges || !theirsRanges) return null;
 
-  const oursChanges = lineAwareDiff(base, ours);
-  const theirsChanges = lineAwareDiff(base, theirs);
+  const oursChanges = sourceChanges?.ours ?? lineStructuralDiff(base, ours);
+  const theirsChanges = sourceChanges?.theirs ?? lineStructuralDiff(base, theirs);
   const baseRanges: ConflictMarkerRange[] = [];
   const fallbackTexts: string[] = [];
   for (let index = 0; index < parsed.conflicts.length; index += 1) {
@@ -195,7 +201,7 @@ function mapPayloadRanges(
   projection: SideProjection,
   document: string,
 ): readonly ConflictMarkerRange[] | null {
-  const changes = lineAwareDiff(projection.text, document);
+  const changes = lineStructuralDiff(projection.text, document);
   const mapping = ChangeSet.of(changes.map((change) => ({
     from: change.fromA,
     to: change.toA,

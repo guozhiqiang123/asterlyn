@@ -1,4 +1,5 @@
 import type { ConflictEditor } from "../../conflict-editor.ts";
+import type { ConflictEditorPreparation } from "../../conflict-editor-preparation.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { EditableDiffEditor, EditableDiffInteractions } from "../../editable-diff-editor.ts";
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
@@ -6,8 +7,10 @@ import type { GitConflictContent } from "../../models.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import type { AppPreferences } from "../../preferences.ts";
-import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
+import { decodeExactText } from "./text-content.ts";
 import type { ConflictGitBlameSources, DiffGitBlameSources, GitBlameRuntime } from "./editor-gutter.ts";
+import { ConflictPreparationRuntime } from "./conflict-preparation-runtime.ts";
+import { emptyState, loadingBlock } from "./editor-view.ts";
 
 interface EditableDiffMount {
   parent: HTMLElement;
@@ -49,19 +52,12 @@ export class LazyEditableDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private readonly blameRuntime: GitBlameRuntime;
-  private readonly contextMenu: ContextMenuPort;
-  private readonly contextOwnerId: string;
-
   constructor(
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
-    contextMenu: ContextMenuPort,
-    contextOwnerId: string,
   ) {
     this.copy = copy;
     this.blameRuntime = blameRuntime;
-    this.contextMenu = contextMenu;
-    this.contextOwnerId = contextOwnerId;
   }
 
   currentPath(): string | null {
@@ -207,8 +203,6 @@ export class LazyEditableDiffEditor {
       const editor = new EditableDiffEditor(
         this.copy,
         this.blameRuntime,
-        this.contextMenu,
-        this.contextOwnerId,
       );
       this.implementation = editor;
       return editor;
@@ -221,6 +215,7 @@ export class LazyEditableDiffEditor {
 export class LazyConflictEditor {
   private implementation: ConflictEditor | null = null;
   private loading: Promise<ConflictEditor> | null = null;
+  private mounting: Promise<void> | null = null;
   private pendingMount: ConflictMount | null = null;
   private mountGeneration = 0;
   private preferences: AppPreferences | null = null;
@@ -228,21 +223,16 @@ export class LazyConflictEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private resultReadOnly = false;
+  private ready = false;
   private editorCopy: EditorCopy;
   private readonly blameRuntime: GitBlameRuntime;
-  private readonly contextMenu: ContextMenuPort;
-  private readonly contextOwnerId: string;
-
+  private readonly preparation = new ConflictPreparationRuntime();
   constructor(
     editorCopy: EditorCopy,
     blameRuntime: GitBlameRuntime,
-    contextMenu: ContextMenuPort,
-    contextOwnerId: string,
   ) {
     this.editorCopy = editorCopy;
     this.blameRuntime = blameRuntime;
-    this.contextMenu = contextMenu;
-    this.contextOwnerId = contextOwnerId;
   }
 
   setCopy(copy: EditorCopy): void {
@@ -263,64 +253,83 @@ export class LazyConflictEditor {
   ): void {
     const mount = { parent, conflict, result, preferences, presentation, copy, editorCopy, blameSources, onChange, onReady };
     this.pendingMount = mount;
+    this.ready = false;
     this.presentation = { ...presentation };
-    if (this.implementation) {
-      this.install(this.implementation, mount);
-      return;
-    }
     const request = ++this.mountGeneration;
     parent.setAttribute("aria-busy", "true");
-    void this.load().then((editor) => {
+    parent.innerHTML = loadingBlock(copy.readingConflict);
+    const base = decodeExactText(conflict.base ?? "").text;
+    const ours = decodeExactText(conflict.ours ?? "").text;
+    const theirs = decodeExactText(conflict.theirs ?? "").text;
+    const preparedResult = decodeExactText(result).text;
+    const mounting = Promise.all([
+      this.load(),
+      this.preparation.prepare({ base, ours, result: preparedResult, theirs }),
+    ]).then(([editor, prepared]) => {
       if (request !== this.mountGeneration || !this.pendingMount) return;
       const pending = this.pendingMount;
       if (!pending.parent.isConnected) return;
       pending.parent.removeAttribute("aria-busy");
-      this.install(editor, pending);
+      this.install(editor, pending, prepared);
+    }).catch((error: unknown) => {
+      if (request !== this.mountGeneration || !this.pendingMount) return;
+      const pending = this.pendingMount;
+      if (!pending.parent.isConnected) return;
+      pending.parent.removeAttribute("aria-busy");
+      pending.parent.innerHTML = emptyState(
+        pending.copy.conflictUnavailable,
+        conflictMountError(error),
+        "changes",
+      );
+    });
+    this.mounting = mounting;
+    void mounting.finally(() => {
+      if (this.mounting === mounting) this.mounting = null;
     });
   }
 
   content(): string {
-    return this.implementation?.content() ?? this.pendingMount?.result ?? "";
+    return this.ready ? this.implementation?.content() ?? "" : this.pendingMount?.result ?? "";
   }
 
   flushChanges(): void {
-    this.implementation?.flushChanges();
+    if (this.ready) this.implementation?.flushChanges();
   }
 
   openFindReplace(): boolean {
-    if (this.implementation) return this.implementation.openFindReplace();
+    if (this.ready && this.implementation) return this.implementation.openFindReplace();
     if (!this.pendingMount) return false;
     const generation = this.mountGeneration;
-    void this.load().then((editor) => {
-      if (generation === this.mountGeneration) editor.openFindReplace();
+    void this.mounting?.then(() => {
+      if (generation === this.mountGeneration && this.ready) this.implementation?.openFindReplace();
     });
     return true;
   }
 
   navigateChange(direction: 1 | -1): boolean {
-    if (this.implementation) return this.implementation.navigateChange(direction);
+    if (this.ready && this.implementation) return this.implementation.navigateChange(direction);
     if (!this.pendingMount) return false;
     const generation = this.mountGeneration;
-    void this.load().then((editor) => {
-      if (generation === this.mountGeneration) editor.navigateChange(direction);
+    void this.mounting?.then(() => {
+      if (generation === this.mountGeneration && this.ready) this.implementation?.navigateChange(direction);
     });
     return true;
   }
 
   reviewSummary(): DiffReviewSummary | null {
-    return this.implementation?.reviewSummary() ?? null;
+    return this.ready ? this.implementation?.reviewSummary() ?? null : null;
   }
 
   unchangedExpanded(): boolean {
-    return this.implementation?.unchangedExpanded() ?? false;
+    return this.ready ? this.implementation?.unchangedExpanded() ?? false : false;
   }
 
   setUnchangedExpanded(expanded: boolean): void {
-    this.implementation?.setUnchangedExpanded(expanded);
+    if (this.ready) this.implementation?.setUnchangedExpanded(expanded);
   }
 
   requestMeasure(): void {
-    this.implementation?.requestMeasure();
+    if (this.ready) this.implementation?.requestMeasure();
   }
 
   setPreferences(preferences: AppPreferences): void {
@@ -351,12 +360,23 @@ export class LazyConflictEditor {
 
   destroy(): void {
     this.mountGeneration += 1;
+    this.ready = false;
+    this.mounting = null;
     this.pendingMount?.parent.removeAttribute("aria-busy");
     this.pendingMount = null;
     this.implementation?.destroy();
   }
 
-  private install(editor: ConflictEditor, mount: ConflictMount): void {
+  dispose(): void {
+    this.destroy();
+    this.preparation.dispose();
+  }
+
+  private install(
+    editor: ConflictEditor,
+    mount: ConflictMount,
+    prepared: ConflictEditorPreparation,
+  ): void {
     editor.setTheme(this.theme);
     editor.setPhrases(this.phrases);
     editor.mount(
@@ -369,7 +389,9 @@ export class LazyConflictEditor {
       mount.editorCopy,
       mount.blameSources,
       mount.onChange,
+      prepared,
     );
+    this.ready = true;
     editor.setResultReadOnly(this.resultReadOnly);
     queueMicrotask(() => { if (this.pendingMount === mount) mount.onReady(); });
   }
@@ -380,12 +402,14 @@ export class LazyConflictEditor {
       const editor = new ConflictEditor(
         this.blameRuntime,
         this.editorCopy,
-        this.contextMenu,
-        this.contextOwnerId,
       );
       this.implementation = editor;
       return editor;
     });
     return this.loading;
   }
+}
+
+function conflictMountError(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : String(error);
 }

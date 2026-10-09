@@ -2,10 +2,10 @@
 
 ## Context
 
-Asterlyn already exposes one on-demand Git Blame context action in ordinary editors and read-only
-side-by-side Diffs. The editable working Diff and the three-pane conflict editor use separate lazy
-MergeView runtimes. Their line-number gutters render source line identities, but they do not own a
-Blame controller, context-menu target, or exact revision source. This produces an inconsistent
+Asterlyn already supports Git Blame in ordinary editors and read-only side-by-side Diffs. The
+editable working Diff and the three-pane conflict editor use separate lazy MergeView runtimes.
+Their line-number gutters render source line identities, but they do not own a Blame controller or
+exact revision source. This produces an inconsistent
 interaction: a read-only commit Diff can show line authors while the editable form of the same
 two-pane presentation and every conflict pane cannot.
 
@@ -16,10 +16,9 @@ one commit by assumption.
 
 ## Invariants
 
-- Git Blame remains explicit and on demand. Opening, scrolling, editing, or switching a Diff never
-  starts a repository query.
-- A pane action toggles annotations for that pane only and never moves the cursor, selection, active
-  review block, or conflict decision.
+- Git Blame loads automatically when an eligible exact source is mounted. One source identity has
+  at most one active request, and loading never moves the cursor, selection, active review block, or
+  conflict decision.
 - Immutable source panes are attributed only when their exact blob can be matched to an exact
   commit. Missing provenance fails closed with a visible reason.
 - Result attribution is a projection, not invented history: a line may inherit an Ours/Theirs
@@ -36,13 +35,12 @@ one commit by assumption.
 
 ### 1. Share the pane Blame lifecycle
 
-Extract the existing Diff loading, checked-menu, gutter installation, stale completion, hide,
-copy update, and disposal behavior into a reusable pane controller for the two new editable
-surfaces. Ordinary/read-only Diff remains the behavior reference and keeps its mature owner;
-editable Diff and conflict Diff share the new controller and the existing
-`blameContentContextMenu`, `gitBlamePresentation`, `ContextMenuPort`, and `GitBlameRuntime`
-boundaries. The presentation extension now follows the compact display preference defined by the
-compact Git Blame presentation plan.
+Extract loading, presentation installation, stale completion, copy update, and disposal behavior
+into a reusable pane controller for the two new editable surfaces. Ordinary/read-only Diff remains
+the behavior reference and keeps its mature owner; editable Diff and conflict Diff share the new
+controller and the existing `gitBlamePresentation` and `GitBlameRuntime` boundaries. The
+presentation extension follows the compact display preference defined by the compact Git Blame
+presentation plan.
 
 Each pane target has a stable identity, availability reason, and loader. A target change clears its
 previous result and invalidates late completions. One controller may install the same logical Result
@@ -68,8 +66,8 @@ Pass the already established working-Diff sources into `EditableDiffEditor`:
 - After is disabled with the saved-file reason as soon as the shared text buffer becomes dirty;
   saving/remounting restores availability.
 
-Both line-number and code-row context actions use the pane controller. Editing clears any active
-After annotations immediately while leaving Before annotations intact.
+Mounting starts each eligible side automatically. Editing clears any active After annotations
+immediately while leaving Before annotations intact.
 
 ### 4. Complete three-pane conflict Blame
 
@@ -88,9 +86,8 @@ clears mounted annotations, and unified mode returns the established side-by-sid
 
 ### 5. Lifecycle and compatibility
 
-- Thread Blame runtime and window-scoped context-menu ownership through the existing lazy merge
-  editor adapters without making product/domain code depend on CodeMirror or Tauri.
-- Keep each surface's owner id distinct so closing one menu cannot mutate another surface.
+- Thread Blame runtime through the existing lazy merge editor adapters without making
+  product/domain code depend on CodeMirror or Tauri.
 - Preserve current output bounds, localized status/error messages, deterministic tinting, and hover
   details.
 - Update generated protocol validation and demo/native fixtures for the optional provenance fields.
@@ -98,17 +95,17 @@ clears mounted annotations, and unified mode returns the established side-by-sid
 ## Regression coverage
 
 - Existing read-only two-pane Blame behavior remains unchanged.
-- Editable split Diff exposes independent Before/After actions; a dirty buffer disables and clears
-  only After.
+- Editable split Diff automatically loads independent Before/After annotations; a dirty buffer
+  disables and clears only After.
 - Exact stage-blob candidate matching accepts Ours/Theirs commits and rejects a same-path commit
   whose blob differs.
 - Conflict Ours and Theirs load independently and late results cannot cross files or panes.
 - Result projection inherits unique/same-commit lines and marks inserted, ambiguous, or manually
   edited lines as Local changes.
 - Conflict Apply/Ignore and direct Result edits invalidate only Result annotations.
-- Unified two-pane and unified conflict presentations keep the action disabled with a reason.
-- Destroy/remount, tab close, file switch, and localization changes release or refresh every menu,
-  request generation, result, and gutter binding.
+- Unified two-pane and unified conflict presentations remain silently unannotated.
+- Destroy/remount, tab close, file switch, and localization changes release or refresh every
+  request generation, result, and presentation binding.
 
 ## Validation
 
@@ -122,13 +119,14 @@ clears mounted annotations, and unified mode returns the established side-by-sid
 
 ## Implementation result
 
-- Editable split Diff now exposes independent Before/After Git Blame actions. A dirty buffer
-  immediately disables and clears only After annotations.
+- Editable split Diff automatically loads independent Before/After Git Blame annotations. A dirty
+  buffer immediately disables and clears only After annotations.
 - Conflict Ours/Theirs provenance is resolved by exact stage-blob matching against a bounded set
   of Git-owned commits. Multiple matches fail closed rather than selecting a plausible commit.
 - Conflict Result annotations conservatively inherit exact source lines; inserted, edited, and
   ambiguous lines are presented as Local changes. Editing invalidates only the Result annotation.
-- Unified editable/conflict modes keep the action disabled with the existing side-by-side reason.
+- Unified editable/conflict modes remain silently unannotated because their source identity is
+  ambiguous.
 - Verified with 921 frontend script tests, 133 `asterlyn-git` tests, TypeScript checking, production
   web build, release bundle build, and the rendered native smoke test. The signed application was
   installed at `/Applications/Asterlyn.app`; the previous bundle was retained in Trash as

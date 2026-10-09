@@ -1,6 +1,6 @@
 import { ChangeSet } from "@codemirror/state";
 import type { Change } from "@codemirror/merge";
-import { lineAwareDiff } from "./shared/diff-review/line-aware-diff.ts";
+import { lineStructuralDiff } from "./shared/diff-review/line-aware-diff.ts";
 import type { TextChange } from "./features/files-editor/text-content.ts";
 import { projectConflictMarkers } from "./features/git-operations/conflict-markers.ts";
 
@@ -36,6 +36,25 @@ export interface ConflictResolutionHistoryState {
     readonly automaticallyResolved: boolean;
     readonly manuallyEdited: boolean;
   }[];
+}
+
+export interface ConflictResolutionAnalysis {
+  readonly ours: readonly Change[];
+  readonly result: readonly Change[];
+  readonly theirs: readonly Change[];
+}
+
+export function analyzeConflictResolution(
+  base: string,
+  ours: string,
+  result: string,
+  theirs: string,
+): ConflictResolutionAnalysis {
+  return {
+    ours: lineStructuralDiff(base, ours),
+    result: lineStructuralDiff(base, result),
+    theirs: lineStructuralDiff(base, theirs),
+  };
 }
 
 interface TaggedChange {
@@ -81,14 +100,18 @@ export class ConflictResolutionModel {
     theirs: string,
     result: string,
     worktree: string | null = null,
+    analysis: ConflictResolutionAnalysis = analyzeConflictResolution(base, ours, result, theirs),
   ): ConflictResolutionModel {
-    const oursChanges = lineAwareDiff(base, ours);
-    const theirsChanges = lineAwareDiff(base, theirs);
-    const resultChanges = lineAwareDiff(base, result);
+    const oursChanges = analysis.ours;
+    const theirsChanges = analysis.theirs;
+    const resultChanges = analysis.result;
     const oursMapping = changeMapping(base.length, ours, oursChanges);
     const theirsMapping = changeMapping(base.length, theirs, theirsChanges);
     const resultMapping = changeMapping(base.length, result, resultChanges);
-    const markerProjection = projectConflictMarkers(base, ours, theirs, worktree);
+    const markerProjection = projectConflictMarkers(base, ours, theirs, worktree, {
+      ours: oursChanges,
+      theirs: theirsChanges,
+    });
     const clusters = clusterChanges([
       ...oursChanges.map((change) => ({ side: "ours" as const, change })),
       ...theirsChanges.map((change) => ({ side: "theirs" as const, change })),
@@ -135,7 +158,7 @@ export class ConflictResolutionModel {
       const markerResultMapping = changeMapping(
         markerProjection.result.length,
         result,
-        lineAwareDiff(markerProjection.result, result),
+        lineStructuralDiff(markerProjection.result, result),
       );
       for (const marker of markerProjection.blocks) {
         const resultRange = mappedRange(markerResultMapping, marker.result.from, marker.result.to);
