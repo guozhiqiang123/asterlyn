@@ -51,13 +51,15 @@ test("pull-request preview packaging remains credential-free and ad-hoc", () => 
 });
 
 test("release versions are synchronized and tag-bound", () => {
-  const valid = run("scripts/verify-release-version.mjs", "v0.1.0");
+  const releaseVersion = JSON.parse(read("package.json")).version;
+  const releaseTag = `v${releaseVersion}`;
+  const valid = run("scripts/verify-release-version.mjs", releaseTag);
   assert.equal(valid.status, 0, valid.stderr);
-  assert.match(valid.stdout, /matches v0\.1\.0/);
+  assert.match(valid.stdout, new RegExp(`matches ${releaseTag.replaceAll(".", "\\.")}`));
 
   const invalid = run("scripts/verify-release-version.mjs", "v9.9.9");
   assert.notEqual(invalid.status, 0);
-  assert.match(invalid.stderr, /does not match v0\.1\.0/);
+  assert.match(invalid.stderr, new RegExp(`does not match ${releaseTag.replaceAll(".", "\\.")}`));
 });
 
 test("release artifact staging and aggregate verification reject incomplete sets", () => {
