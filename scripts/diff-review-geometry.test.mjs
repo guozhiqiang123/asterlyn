@@ -6,6 +6,7 @@ import { buildDiffReviewCollapseRanges } from "../src/shared/diff-review/diff-re
 import {
   buildDiffReviewConnectorPath,
   diffReviewOverlayFrame,
+  measureDiffReviewRange,
 } from "../src/shared/diff-review/diff-review-geometry.ts";
 
 test("two-pane and three-pane folds share one anchor-owned id set", () => {
@@ -40,6 +41,90 @@ test("connector geometry joins complete source and target block boundaries", () 
   assert.match(path, /^M 100\.00 20\.00 C 130\.00 20\.00 130\.00 30\.00 160\.00 30\.00/u);
   assert.match(path, /L 160\.00 90\.00/u);
   assert.match(path, /100\.00 60\.00 Z$/u);
+});
+
+test("empty Diff ranges anchor before MergeView alignment space", () => {
+  const view = {
+    state: {
+      doc: {
+        length: 20,
+        lineAt(position) {
+          return position < 10 ? { from: 0, to: 9 } : { from: 10, to: 20 };
+        },
+      },
+    },
+    documentTop: 100,
+    lineBlockAt(position) {
+      return position < 10
+        ? { top: 0, bottom: 20 }
+        : { top: 80, bottom: 100 };
+    },
+    coordsAtPos() {
+      throw new Error("a line-boundary anchor must not use caret geometry");
+    },
+    scrollDOM: {
+      getBoundingClientRect() {
+        return { left: 10, right: 210, top: 90, bottom: 250 };
+      },
+    },
+  };
+
+  assert.deepEqual(measureDiffReviewRange(view, { from: 10, to: 10 }, { left: 0, top: 100 }), {
+    left: 10,
+    right: 210,
+    top: 20,
+    bottom: 20,
+  });
+});
+
+test("empty Diff ranges use compact document-edge anchors", () => {
+  const view = {
+    state: {
+      doc: {
+        length: 20,
+        lineAt(position) {
+          return position < 10 ? { from: 0, to: 9 } : { from: 10, to: 20 };
+        },
+      },
+    },
+    documentTop: 100,
+    lineBlockAt(position) {
+      return position < 10
+        ? { top: 5, bottom: 25 }
+        : { top: 80, bottom: 100 };
+    },
+    coordsAtPos() {
+      throw new Error("a document-edge anchor must not use caret geometry");
+    },
+    scrollDOM: {
+      getBoundingClientRect() {
+        return { left: 10, right: 210, top: 90, bottom: 250 };
+      },
+    },
+  };
+
+  assert.equal(measureDiffReviewRange(view, { from: 0, to: 0 }, { left: 0, top: 100 }).top, 5);
+  assert.equal(measureDiffReviewRange(view, { from: 20, to: 20 }, { left: 0, top: 100 }).top, 100);
+});
+
+test("empty-side connectors taper to a compact cusp", () => {
+  const path = buildDiffReviewConnectorPath(
+    { left: 0, right: 100, top: 40, bottom: 40 },
+    { left: 160, right: 260, top: 20, bottom: 80 },
+  );
+
+  assert.match(path, /^M 100\.00 40\.00 C 130\.00 40\.00 130\.00 20\.00 160\.00 20\.00/u);
+  assert.match(path, /L 160\.00 80\.00/u);
+  assert.match(path, /100\.00 40\.00 Z$/u);
+  assert.doesNotMatch(path, /100\.00 42\.00/u);
+
+  const deletion = buildDiffReviewConnectorPath(
+    { left: 0, right: 100, top: 20, bottom: 80 },
+    { left: 160, right: 260, top: 40, bottom: 40 },
+  );
+  assert.match(deletion, /^M 100\.00 20\.00 C 130\.00 20\.00 130\.00 40\.00 160\.00 40\.00/u);
+  assert.match(deletion, /L 160\.00 40\.00/u);
+  assert.match(deletion, /100\.00 80\.00 Z$/u);
 });
 
 test("connector overlay is clipped to the visible code viewport", () => {

@@ -49,10 +49,20 @@ export function measureDiffReviewRange(
 ): DiffReviewMeasuredRect | null {
   const from = Math.min(view.state.doc.length, Math.max(0, range.from));
   const to = Math.min(view.state.doc.length, Math.max(from, range.to));
-  const start = view.coordsAtPos(from, 1);
-  const end = view.coordsAtPos(to > from ? to - 1 : from, -1);
-  if (!start || !end) return null;
   const viewport = view.scrollDOM.getBoundingClientRect();
+  if (from === to) {
+    const anchor = measureEmptyRangeAnchor(view, from);
+    if (anchor === null || anchor < viewport.top || anchor > viewport.bottom) return null;
+    return {
+      left: viewport.left - root.left,
+      right: viewport.right - root.left,
+      top: anchor - root.top,
+      bottom: anchor - root.top,
+    };
+  }
+  const start = view.coordsAtPos(from, 1);
+  const end = view.coordsAtPos(to - 1, -1);
+  if (!start || !end) return null;
   const top = Math.max(start.top, viewport.top);
   const bottom = Math.min(Math.max(end.bottom, start.bottom), viewport.bottom);
   if (bottom < viewport.top || top > viewport.bottom || bottom <= top) return null;
@@ -69,9 +79,9 @@ export function buildDiffReviewConnectorPath(
   target: DiffReviewMeasuredRect,
 ): string {
   const sourceTop = Math.min(source.top, source.bottom);
-  const sourceBottom = Math.max(sourceTop + 2, source.bottom);
+  const sourceBottom = Math.max(sourceTop, source.bottom);
   const targetTop = Math.min(target.top, target.bottom);
-  const targetBottom = Math.max(targetTop + 2, target.bottom);
+  const targetBottom = Math.max(targetTop, target.bottom);
   const startX = source.right;
   const endX = target.left;
   const middleX = startX + (endX - startX) / 2;
@@ -82,6 +92,19 @@ export function buildDiffReviewConnectorPath(
     `C ${number(middleX)} ${number(targetBottom)} ${number(middleX)} ${number(sourceBottom)} ${number(startX)} ${number(sourceBottom)}`,
     "Z",
   ].join(" ");
+}
+
+function measureEmptyRangeAnchor(view: EditorView, position: number): number | null {
+  const line = view.state.doc.lineAt(position);
+  if (position === line.from) {
+    const block = view.lineBlockAt(position > 0 ? position - 1 : position);
+    return view.documentTop + (position > 0 ? block.bottom : block.top);
+  }
+  if (position === line.to) {
+    return view.documentTop + view.lineBlockAt(position).bottom;
+  }
+  const caret = view.coordsAtPos(position, 1) ?? view.coordsAtPos(position, -1);
+  return caret ? (caret.top + caret.bottom) / 2 : null;
 }
 
 function number(value: number): string {

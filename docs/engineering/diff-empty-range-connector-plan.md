@@ -1,6 +1,6 @@
 # Diff empty-range connector plan
 
-- **Status:** Planned
+- **Status:** Implemented
 - **Date:** 2026-10-09
 
 ## Problem
@@ -46,3 +46,11 @@ the visual artifact for incorrect line correspondence.
 - No false one-line-high connector block appears inside an otherwise empty alignment region.
 - Modification and conflict connectors retain their existing full-height appearance.
 - Lines following the change remain vertically aligned in both panes.
+
+## Verification
+
+- Focused connector and shared Diff regressions: 31 passed, 0 failed.
+- Complete script suite: 911 passed, 0 failed.
+- TypeScript check and production web build: passed.
+- macOS release bundle build: passed.
+- Native rendered-shell smoke test: passed.
