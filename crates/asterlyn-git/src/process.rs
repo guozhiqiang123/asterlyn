@@ -2,7 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -61,6 +61,20 @@ pub(crate) struct BoundedOutput {
     pub(crate) output: Output,
     pub(crate) stdout_truncated: bool,
     pub(crate) stderr_truncated: bool,
+}
+
+pub(crate) fn canonical_output_path(output: &Output, context: &str) -> Result<PathBuf, GitError> {
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        return Err(GitError::Parse {
+            context: context.to_string(),
+            message: "Git returned an empty path".to_string(),
+        });
+    }
+    std::fs::canonicalize(value).map_err(|error| GitError::Io {
+        operation: format!("resolve {context}"),
+        message: error.to_string(),
+    })
 }
 
 /// Constructs Git subprocesses with one stable, non-interactive process policy.

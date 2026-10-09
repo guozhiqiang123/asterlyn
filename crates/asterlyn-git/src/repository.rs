@@ -150,8 +150,8 @@ impl GitRepository {
             ["rev-parse", "--absolute-git-dir"],
         )?;
 
-        let root = output_path(&root_output, "repository root")?;
-        let git_dir = output_path(&git_dir_output, "Git directory")?;
+        let root = crate::process::canonical_output_path(&root_output, "repository root")?;
+        let git_dir = crate::process::canonical_output_path(&git_dir_output, "Git directory")?;
         Ok(Self {
             root,
             git_dir,
@@ -5839,18 +5839,6 @@ fn sanitize_stderr(stderr: &[u8], fallback: &str) -> String {
         fallback.to_string()
     } else {
         message
-    }
-}
-
-fn output_path(output: &Output, context: &str) -> Result<PathBuf, GitError> {
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if value.is_empty() {
-        Err(GitError::Parse {
-            context: context.to_string(),
-            message: "Git returned an empty path".to_string(),
-        })
-    } else {
-        Ok(PathBuf::from(value))
     }
 }
 
