@@ -401,8 +401,9 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.match(css, /\.conflict-editor-actions > \.primary-button,[^}]*\.conflict-editor-actions > \.secondary-button\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(filesCss, /\.diff-controls button\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control/u);
-  assert.match(controls, /\.conflict-three-pane \.conflict-change-controls > button\.diff-change-control\s*\{[^}]*position:\s*relative;[^}]*margin:\s*0;[^}]*transform:\s*none;/s);
-  assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*min-width:\s*var\(--diff-change-control-width, 26px\);[^}]*max-width:\s*var\(--diff-change-control-width, 26px\);[^}]*background:\s*var\(--bg-elevated\);/s);
+  assert.match(controls, /\.conflict-unified-source \.conflict-change-controls > button\.diff-change-control\s*\{[^}]*position:\s*relative;[^}]*margin:\s*0;[^}]*transform:\s*none;/s);
+  assert.match(controls, /button\.diff-change-control[^}]*\{[^}]*min-width:\s*var\(--diff-change-control-width, 26px\);[^}]*max-width:\s*var\(--diff-change-control-width, 26px\);[^}]*background:\s*var\(--accent\);[^}]*color:\s*var\(--text-on-accent\);/s);
+  assert.match(controls, /\.conflict-unified-source \.conflict-change-controls > button\.diff-change-control/u);
   assert.match(controls, /\.diff-change-control > \.icon\s*\{[^}]*width:\s*15px;[^}]*height:\s*15px;/s);
   assert.match(editor, /createDiffReviewActionGroup\(side/u);
   assert.match(actionGutter, /group\.className = "diff-review-action-group conflict-change-controls"/u);
@@ -416,6 +417,21 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.match(editor, /this\.rightMerge\.a\.scrollDOM/u);
   assert.match(icons, /"double-chevron-right"/u);
   assert.match(icons, /"double-chevron-left"/u);
+  assert.match(icons, /"double-chevron-down"/u);
+  assert.match(icons, /"double-chevron-up"/u);
+});
+
+test("two-pane Diff splitters keep their drag target but reveal the divider only on interaction", async () => {
+  const [files, editable, review] = await Promise.all([
+    readFile(new URL("../src/features/files-editor/files-editor.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(files, /\.diff-splitter\s*\{[^}]*background:\s*transparent;/s);
+  assert.match(editable, /\.editable-diff-splitter\s*\{[^}]*width:\s*5px;/s);
+  assert.match(review, /\.diff-splitter::after,[\s\S]*?\.editable-diff-splitter::after\s*\{[^}]*background:\s*transparent;[^}]*opacity:\s*0;/u);
+  assert.match(review, /\.diff-splitter:hover::after,[\s\S]*?\.editable-diff-splitter\.dragging::after\s*\{[^}]*background:\s*var\(--accent\);[^}]*opacity:\s*1;/u);
 });
 
 test("dialog buttons share one surface, follow the UI font size, and define danger centrally", async () => {

@@ -774,7 +774,7 @@
   grid-column: 2;
   grid-row: 2;
   height: 100%;
-  background: var(--surface-inset-strong);
+  background: transparent;
 }
 
 .diff-editor-host {

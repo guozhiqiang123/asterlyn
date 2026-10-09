@@ -1,6 +1,6 @@
 # Diff action controls visual polish plan
 
-- **Status:** Planned
+- **Status:** Implemented
 - **Date:** 2026-10-09
 
 ## Objective
@@ -45,3 +45,11 @@ semantics.
   behavior remains unchanged.
 - Focused regression tests, the complete script suite, TypeScript check, production build, and
   native rendered smoke test pass before packaging the app for acceptance.
+
+## Verification
+
+- Focused style and unified-conflict regressions: 29 passed, 0 failed.
+- Complete script suite: 908 passed, 0 failed.
+- TypeScript check and production web build: passed.
+- macOS release bundle build: passed.
+- Native rendered-shell smoke test: passed.

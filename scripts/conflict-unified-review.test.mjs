@@ -122,6 +122,7 @@ test("unified source patches align with Result and completed decisions retain a 
   assert.match(styles, /\.conflict-unified-source > pre \{[\s\S]*?padding: 5px 0 6px;/u);
   assert.match(widget, /indicator\.className = `conflict-unified-decision is-\$\{this\.source\.decision\}`/u);
   assert.match(widget, /indicator\.innerHTML = icon\(accepted \? "check" : "close", 15\)/u);
+  assert.match(widget, /icon: ours \? "double-chevron-down" : "double-chevron-up"/u);
   assert.match(styles, /\.conflict-unified-decision \{[\s\S]*?border-radius: 4px;[\s\S]*?background: var\(--bg-elevated\);[\s\S]*?box-shadow:/u);
 });
 

@@ -27,6 +27,23 @@
   outline-offset: 1px;
 }
 
+.diff-splitter::after,
+.editable-diff-splitter::after {
+  background: transparent;
+  opacity: 0;
+  transition: background 100ms ease, opacity 100ms ease;
+}
+
+.diff-splitter:hover::after,
+.diff-splitter:focus-visible::after,
+.diff-splitter.dragging::after,
+.editable-diff-splitter:hover::after,
+.editable-diff-splitter:focus-visible::after,
+.editable-diff-splitter.dragging::after {
+  background: var(--accent);
+  opacity: 1;
+}
+
 .diff-review-overlay {
   position: absolute;
   z-index: 1;

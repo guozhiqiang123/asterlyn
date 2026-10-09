@@ -164,7 +164,7 @@ class UnifiedConflictSourceWidget extends WidgetType {
       {
         id: ours ? "apply-ours" : "apply-theirs",
         label: ours ? review.copy.acceptOursChange : review.copy.acceptTheirsChange,
-        icon: ours ? "down" : "up",
+        icon: ours ? "double-chevron-down" : "double-chevron-up",
         className: "conflict-apply-change",
         disabled: review.readOnly,
       },

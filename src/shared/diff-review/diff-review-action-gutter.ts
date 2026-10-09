@@ -4,6 +4,8 @@ import type { DiffReviewActionId } from "./diff-review-model.ts";
 export type DiffReviewActionIcon =
   | "double-chevron-right"
   | "double-chevron-left"
+  | "double-chevron-down"
+  | "double-chevron-up"
   | "down"
   | "up"
   | "close"
