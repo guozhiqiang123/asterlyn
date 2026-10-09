@@ -5,6 +5,7 @@ import type { EditorCopy, ReplacementCopy } from "../../localization/catalog.ts"
 import type { WorkspaceReplacementFilePreview } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
+import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import { buildProjectTree, descendantProjectDirectories, type ProjectTreeNode } from "../../presentation/project-tree.ts";
 import { attachSplitter } from "../../presentation/splitter.ts";
@@ -16,6 +17,7 @@ import type { WorkspaceReplacementController, WorkspaceReplacementFileSession, W
 import { buildWorkspaceReplacementActionDocument, replacementActionForChunk } from "./workspace-replacement-diff-session.ts";
 import { EMBEDDED_EDITABLE_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
+import type { GitBlameRuntime } from "./editor-gutter.ts";
 
 export interface WorkspaceReplacementPresentationOptions {
   readonly controller: WorkspaceReplacementController;
@@ -40,6 +42,8 @@ export interface WorkspaceReplacementPresentationOptions {
   readonly resizeFileList: (width: number) => void;
   readonly persistLayout: () => void;
   readonly describeError: (error: unknown) => string;
+  readonly blameRuntime: GitBlameRuntime;
+  readonly contextMenu: ContextMenuPort;
 }
 
 export class WorkspaceReplacementPresentationRuntime {
@@ -59,7 +63,12 @@ export class WorkspaceReplacementPresentationRuntime {
     private readonly root: HTMLElement,
     private readonly options: WorkspaceReplacementPresentationOptions,
   ) {
-    this.editor = new LazyEditableDiffEditor(options.editorCopy());
+    this.editor = new LazyEditableDiffEditor(
+      options.editorCopy(),
+      options.blameRuntime,
+      options.contextMenu,
+      "workspace.replacement.editable-diff-blame",
+    );
   }
 
   renderDialog(): void {
@@ -470,6 +479,11 @@ export class WorkspaceReplacementPresentationRuntime {
       this.options.preferences(),
       this.options.presentation(),
       { before: copy.before, after: copy.after },
+      {
+        old: { source: null, unavailableReason: this.options.editorCopy().gitBlameRequiresTrackedFile },
+        new: { source: null, unavailableReason: this.options.editorCopy().gitBlameRequiresSavedFile },
+        unifiedReason: this.options.editorCopy().gitBlameRequiresSplit,
+      },
       this.expandedUnchanged,
       (content) => {
         const previous = this.options.controller.fileSession(session.workspacePath);

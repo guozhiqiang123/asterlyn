@@ -27,6 +27,12 @@ export interface DiffGitBlameSources {
   unifiedReason: string;
 }
 
+export interface ConflictGitBlameSources {
+  ours: GitBlameAvailability;
+  theirs: GitBlameAvailability;
+  unifiedReason: string;
+}
+
 export interface GitBlameRuntime {
   load(source: GitBlameSource): Promise<GitBlameResult>;
   status(message: string, kind: "information" | "warning"): void;

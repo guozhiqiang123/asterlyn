@@ -2,8 +2,9 @@ import { editorDocumentContentKey, editorDocumentKey, type EditorDocument } from
 import type { DiffResult, ProjectFile, WorkingDiffBase } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
+import type { DiffGitBlameSources } from "./editor-gutter.ts";
 import type { EditorSurface } from "./editor-surface.ts";
-import { activeTextTab, textTab, type EditorSession, type TextTabState } from "./editor-session.ts";
+import { activeTextTab, isTextTabDirty, textTab, type EditorSession, type TextTabState } from "./editor-session.ts";
 
 type DiffDocument = Extract<EditorDocument, {
   kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
@@ -14,6 +15,16 @@ interface EditableWorkingDiffState {
   readonly workingPatch: DiffResult | null;
   readonly workingDiffBase: WorkingDiffBase | null;
   readonly workingPatchVersion: number;
+}
+
+export function editableWorkingDiffBlameSources(
+  sources: DiffGitBlameSources,
+  tab: TextTabState | null,
+  unsavedReason: string,
+): DiffGitBlameSources {
+  return tab && (isTextTabDirty(tab) || tab.saveRequest !== null)
+    ? { ...sources, new: { source: null, unavailableReason: unsavedReason } }
+    : sources;
 }
 
 export function diffProjectFile(files: readonly ProjectFile[], document: DiffDocument): ProjectFile | null {
@@ -87,6 +98,7 @@ export function mountEditableWorkingDiff(options: {
   preferences: AppPreferences;
   presentation: DiffPresentation;
   sideLabels: DiffSideLabels;
+  blameSources: DiffGitBlameSources;
   expandedUnchanged: boolean;
   beforeTransition: () => void;
   onContentChange: (tabId: string, content: string) => void;
@@ -106,6 +118,7 @@ export function mountEditableWorkingDiff(options: {
     options.preferences,
     options.presentation,
     options.sideLabels,
+    options.blameSources,
     options.expandedUnchanged,
     options.beforeTransition,
     options.onContentChange,

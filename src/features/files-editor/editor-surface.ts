@@ -12,11 +12,7 @@ import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
-import type {
-  DiffGitBlameSources,
-  GitBlameAvailability,
-  GitBlameRuntime,
-} from "./editor-gutter.ts";
+import type { ConflictGitBlameSources, DiffGitBlameSources, GitBlameAvailability, GitBlameRuntime } from "./editor-gutter.ts";
 import { LazyDiffEditor, LazyTextEditor } from "./lazy-editor-runtime.ts";
 import {
   emptyImageSide,
@@ -43,7 +39,7 @@ export class EditorSurface {
   private readonly diffEditor: LazyDiffEditor;
   private readonly textEditor: LazyTextEditor;
   private readonly editableDiffEditor: LazyEditableDiffEditor;
-  private readonly conflictEditor = new LazyConflictEditor();
+  private readonly conflictEditor: LazyConflictEditor;
   private mountedEditorKey: string | null = null;
   private mountedTextTabId: string | null = null;
   private mountedTextLoadEpoch: number | null = null;
@@ -81,7 +77,8 @@ export class EditorSurface {
       contextMenu,
       "editor.surface.text-blame",
     );
-    this.editableDiffEditor = new LazyEditableDiffEditor(copy);
+    this.editableDiffEditor = new LazyEditableDiffEditor(copy, blameRuntime, contextMenu, "editor.surface.editable-diff-blame");
+    this.conflictEditor = new LazyConflictEditor(copy, blameRuntime, contextMenu, "editor.surface.conflict-blame");
   }
 
   setCopy(copy: EditorCopy): void {
@@ -90,6 +87,7 @@ export class EditorSurface {
     this.diffEditor.setBlameCopy(copy);
     this.textEditor.setBlameCopy(copy);
     this.editableDiffEditor.setCopy(copy);
+    this.conflictEditor.setCopy(copy);
     this.localizeMountedSurface(previous);
   }
 
@@ -335,15 +333,12 @@ export class EditorSurface {
     preferences: AppPreferences,
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
+    blameSources: DiffGitBlameSources,
     expandedUnchanged: boolean,
     beforeTransition: () => void,
     onContentChange: (tabId: string, content: string) => void,
     onRevert?: (tabId: string) => void,
   ): void {
-    if (this.mountedEditorKey === key && this.mountedEditableDiffTabId === tab.id) {
-      this.editableDiffEditor.requestMeasure();
-      return;
-    }
     const isSameTab = this.mountedEditableDiffTabId === tab.id;
     const scroll = this.editableDiffEditor.currentPath() === tab.document.path ? this.editableDiffEditor.captureScroll() : null;
     if (!isSameTab) {
@@ -370,6 +365,7 @@ export class EditorSurface {
       preferences,
       presentation,
       sideLabels,
+      blameSources,
       expandedUnchanged,
       (content) => {
         if (this.mountedEditableDiffTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
@@ -392,6 +388,7 @@ export class EditorSurface {
     presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
+    blameSources: ConflictGitBlameSources,
     beforeTransition: () => void,
     onContentChange: (content: string) => void,
     onReady: () => void,
@@ -411,7 +408,7 @@ export class EditorSurface {
     body.classList.add("conflict-editor-surface");
     this.mountedTextTabId = null;
     this.mountedConflictKey = key;
-    this.conflictEditor.mount(body, conflict, result, preferences, presentation, copy, editorCopy, onContentChange, onReady);
+    this.conflictEditor.mount(body, conflict, result, preferences, presentation, copy, editorCopy, blameSources, onContentChange, onReady);
     this.mountedEditorKey = key;
   }
 

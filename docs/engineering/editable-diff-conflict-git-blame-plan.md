@@ -36,11 +36,11 @@ one commit by assumption.
 
 ### 1. Share the pane Blame lifecycle
 
-Extract the existing Diff-only loading, checked-menu, gutter installation, stale completion, hide,
-copy update, and disposal behavior into a reusable pane controller. Ordinary/read-only Diff,
-editable Diff, and conflict Diff keep their own source-resolution policy but use the same controller
-and the existing `blameContentContextMenu`, `blameGutter`, `ContextMenuPort`, and
-`GitBlameRuntime` boundaries.
+Extract the existing Diff loading, checked-menu, gutter installation, stale completion, hide,
+copy update, and disposal behavior into a reusable pane controller for the two new editable
+surfaces. Ordinary/read-only Diff remains the behavior reference and keeps its mature owner;
+editable Diff and conflict Diff share the new controller and the existing
+`blameContentContextMenu`, `blameGutter`, `ContextMenuPort`, and `GitBlameRuntime` boundaries.
 
 Each pane target has a stable identity, availability reason, and loader. A target change clears its
 previous result and invalidates late completions. One controller may install the same logical Result
@@ -117,3 +117,17 @@ clears mounted annotations, and unified mode returns the established side-by-sid
 3. Build the macOS release bundle and run the rendered native smoke test.
 4. Replace the local Asterlyn application with the verified bundle and reopen the Flutter
    repository for manual acceptance.
+
+## Implementation result
+
+- Editable split Diff now exposes independent Before/After Git Blame actions. A dirty buffer
+  immediately disables and clears only After annotations.
+- Conflict Ours/Theirs provenance is resolved by exact stage-blob matching against a bounded set
+  of Git-owned commits. Multiple matches fail closed rather than selecting a plausible commit.
+- Conflict Result annotations conservatively inherit exact source lines; inserted, edited, and
+  ambiguous lines are presented as Local changes. Editing invalidates only the Result annotation.
+- Unified editable/conflict modes keep the action disabled with the existing side-by-side reason.
+- Verified with 921 frontend script tests, 133 `asterlyn-git` tests, TypeScript checking, production
+  web build, release bundle build, and the rendered native smoke test. The signed application was
+  installed at `/Applications/Asterlyn.app`; the previous bundle was retained in Trash as
+  `Asterlyn-before-editable-diff-conflict-blame-20261009.app`.

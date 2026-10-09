@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
@@ -13,6 +12,9 @@ use crate::model::{
     GitOperationPlan, GitOperationProgress, GitOperationSnapshot,
 };
 use crate::process::{GitRunner, GitStdin};
+
+mod conflict;
+use conflict::{parse_conflicts, stage_commits};
 
 const MAX_OPERATION_TARGETS: usize = 100;
 const MAX_OPERATION_MESSAGE_BYTES: usize = 64 * 1024;
@@ -242,6 +244,7 @@ impl GitRepository {
         let base = self.read_conflict_blob(conflict.base_oid.as_deref())?;
         let ours = self.read_conflict_blob(conflict.ours_oid.as_deref())?;
         let theirs = self.read_conflict_blob(conflict.theirs_oid.as_deref())?;
+        let (ours_commit_oid, theirs_commit_oid) = stage_commits(self, conflict)?;
         let worktree_bytes = read_bounded_optional(&self.safe_worktree_path(&relative)?)?;
         let binary = [&base, &ours, &theirs, &worktree_bytes]
             .into_iter()
@@ -253,6 +256,8 @@ impl GitRepository {
             base: text_side(base.as_deref(), binary),
             ours: text_side(ours.as_deref(), binary),
             theirs: text_side(theirs.as_deref(), binary),
+            ours_commit_oid,
+            theirs_commit_oid,
             worktree: text_side(worktree_bytes.as_deref(), binary),
             binary,
             revision_token,
@@ -1112,38 +1117,6 @@ fn operation_progress(
     }
 }
 
-fn parse_conflicts(bytes: &[u8]) -> Result<Vec<GitConflictFile>, GitError> {
-    let mut conflicts: BTreeMap<String, GitConflictFile> = BTreeMap::new();
-    for record in bytes
-        .split(|byte| *byte == 0)
-        .filter(|record| !record.is_empty())
-    {
-        let Some(tab) = record.iter().position(|byte| *byte == b'\t') else {
-            return Err(parse_error("conflict index record has no path separator"));
-        };
-        let header = String::from_utf8_lossy(&record[..tab]);
-        let path = String::from_utf8_lossy(&record[tab + 1..]).into_owned();
-        let mut fields = header.split_ascii_whitespace();
-        let _mode = fields.next();
-        let oid = fields.next().unwrap_or_default();
-        let stage = fields.next().unwrap_or_default();
-        validate_oid(oid)?;
-        let conflict = conflicts.entry(path.clone()).or_insert(GitConflictFile {
-            path,
-            base_oid: None,
-            ours_oid: None,
-            theirs_oid: None,
-        });
-        match stage {
-            "1" => conflict.base_oid = Some(oid.to_string()),
-            "2" => conflict.ours_oid = Some(oid.to_string()),
-            "3" => conflict.theirs_oid = Some(oid.to_string()),
-            _ => return Err(parse_error("conflict index contains an unknown stage")),
-        }
-    }
-    Ok(conflicts.into_values().collect())
-}
-
 struct OperationPlanIdentity<'a> {
     root: &'a Path,
     kind: GitOperationKind,
@@ -1506,6 +1479,14 @@ mod tests {
                 .as_deref()
                 .is_some_and(|text| text.contains("feature"))
         );
+        assert_eq!(
+            conflict.ours_commit_oid.as_deref(),
+            Some(oid(&fixture, "main").as_str())
+        );
+        assert_eq!(
+            conflict.theirs_commit_oid.as_deref(),
+            Some(oid(&fixture, "feature").as_str())
+        );
         let active = reopened
             .resolve_conflict("shared.txt", &conflict.revision_token, Some("resolved\n"))
             .expect("resolve conflict")
@@ -1557,6 +1538,14 @@ mod tests {
         assert_eq!(conflict.base.as_deref(), Some("base\n"));
         assert_eq!(conflict.ours.as_deref(), Some("current\n"));
         assert_eq!(conflict.theirs.as_deref(), Some("stashed\n"));
+        assert_eq!(
+            conflict.ours_commit_oid.as_deref(),
+            Some(oid(&fixture, "HEAD").as_str())
+        );
+        assert_eq!(
+            conflict.theirs_commit_oid.as_deref(),
+            Some(oid(&fixture, "refs/stash").as_str()),
+        );
 
         let operation = repository
             .resolve_conflict("shared.txt", &conflict.revision_token, Some("resolved\n"))

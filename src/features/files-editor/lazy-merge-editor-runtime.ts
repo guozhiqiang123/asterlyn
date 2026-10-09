@@ -6,6 +6,8 @@ import type { GitConflictContent } from "../../models.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
 import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import type { AppPreferences } from "../../preferences.ts";
+import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
+import type { ConflictGitBlameSources, DiffGitBlameSources, GitBlameRuntime } from "./editor-gutter.ts";
 
 interface EditableDiffMount {
   parent: HTMLElement;
@@ -15,6 +17,7 @@ interface EditableDiffMount {
   preferences: AppPreferences;
   presentation: DiffPresentation;
   sideLabels: DiffSideLabels;
+  blameSources: DiffGitBlameSources;
   expandedUnchanged: boolean;
   onChange: (content: string) => void;
   interactions?: EditableDiffInteractions;
@@ -29,6 +32,7 @@ interface ConflictMount {
   presentation: DiffPresentation;
   copy: GitOperationCopy;
   editorCopy: EditorCopy;
+  blameSources: ConflictGitBlameSources;
   onChange: (content: string) => void;
   onReady: () => void;
 }
@@ -44,9 +48,20 @@ export class LazyEditableDiffEditor {
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
+  private readonly blameRuntime: GitBlameRuntime;
+  private readonly contextMenu: ContextMenuPort;
+  private readonly contextOwnerId: string;
 
-  constructor(copy: EditorCopy) {
+  constructor(
+    copy: EditorCopy,
+    blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort,
+    contextOwnerId: string,
+  ) {
     this.copy = copy;
+    this.blameRuntime = blameRuntime;
+    this.contextMenu = contextMenu;
+    this.contextOwnerId = contextOwnerId;
   }
 
   currentPath(): string | null {
@@ -65,6 +80,7 @@ export class LazyEditableDiffEditor {
     preferences: AppPreferences,
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
+    blameSources: DiffGitBlameSources,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
     interactions?: EditableDiffInteractions,
@@ -78,6 +94,7 @@ export class LazyEditableDiffEditor {
       preferences,
       presentation,
       sideLabels,
+      blameSources,
       expandedUnchanged,
       onChange,
       interactions,
@@ -171,6 +188,7 @@ export class LazyEditableDiffEditor {
       this.preferences ?? mount.preferences,
       this.presentation,
       mount.sideLabels,
+      mount.blameSources,
       mount.expandedUnchanged,
       mount.onChange,
       mount.interactions,
@@ -186,7 +204,12 @@ export class LazyEditableDiffEditor {
   private load(): Promise<EditableDiffEditor> {
     if (this.implementation) return Promise.resolve(this.implementation);
     this.loading ??= import("../../editable-diff-editor.ts").then(({ EditableDiffEditor }) => {
-      const editor = new EditableDiffEditor(this.copy);
+      const editor = new EditableDiffEditor(
+        this.copy,
+        this.blameRuntime,
+        this.contextMenu,
+        this.contextOwnerId,
+      );
       this.implementation = editor;
       return editor;
     });
@@ -205,6 +228,26 @@ export class LazyConflictEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private resultReadOnly = false;
+  private editorCopy: EditorCopy;
+  private readonly blameRuntime: GitBlameRuntime;
+  private readonly contextMenu: ContextMenuPort;
+  private readonly contextOwnerId: string;
+
+  constructor(
+    editorCopy: EditorCopy,
+    blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort,
+    contextOwnerId: string,
+  ) {
+    this.editorCopy = editorCopy;
+    this.blameRuntime = blameRuntime;
+    this.contextMenu = contextMenu;
+    this.contextOwnerId = contextOwnerId;
+  }
+
+  setCopy(copy: EditorCopy): void {
+    this.editorCopy = copy;
+  }
 
   mount(
     parent: HTMLElement,
@@ -214,10 +257,11 @@ export class LazyConflictEditor {
     presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
+    blameSources: ConflictGitBlameSources,
     onChange: (content: string) => void,
     onReady: () => void,
   ): void {
-    const mount = { parent, conflict, result, preferences, presentation, copy, editorCopy, onChange, onReady };
+    const mount = { parent, conflict, result, preferences, presentation, copy, editorCopy, blameSources, onChange, onReady };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
     if (this.implementation) {
@@ -323,6 +367,7 @@ export class LazyConflictEditor {
       this.presentation,
       mount.copy,
       mount.editorCopy,
+      mount.blameSources,
       mount.onChange,
     );
     editor.setResultReadOnly(this.resultReadOnly);
@@ -332,7 +377,12 @@ export class LazyConflictEditor {
   private load(): Promise<ConflictEditor> {
     if (this.implementation) return Promise.resolve(this.implementation);
     this.loading ??= import("../../conflict-editor.ts").then(({ ConflictEditor }) => {
-      const editor = new ConflictEditor();
+      const editor = new ConflictEditor(
+        this.blameRuntime,
+        this.editorCopy,
+        this.contextMenu,
+        this.contextOwnerId,
+      );
       this.implementation = editor;
       return editor;
     });

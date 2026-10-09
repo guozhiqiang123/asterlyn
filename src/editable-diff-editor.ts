@@ -12,12 +12,22 @@ import {
   highlightTrailingWhitespace,
   highlightWhitespace,
   keymap,
-  lineNumbers,
   type ViewUpdate,
 } from "@codemirror/view";
 import { EditorLanguageLoader } from "./editor-language.ts";
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme.ts";
-import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
+import {
+  diffLineNumberGutter,
+  lineNumberGutter,
+  type DiffGitBlameSources,
+  type DiffGutterSide,
+  type GitBlameRuntime,
+} from "./features/files-editor/editor-gutter.ts";
+import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
+import {
+  GitBlamePaneController,
+  sourceBlameTarget,
+} from "./features/files-editor/git-blame-pane-controller.ts";
 import {
   activeEditableDiffBlockDecoration,
   diffBlockFromOffsets,
@@ -60,6 +70,7 @@ interface ViewBinding {
   theme: Compartment;
   phrases: Compartment;
   whitespace: Compartment;
+  blame: Compartment;
   changeIndicators: EditorChangeIndicators | null;
   comparisonSide: "a" | "b" | null;
 }
@@ -111,9 +122,23 @@ export class EditableDiffEditor {
   private synchronizing = false;
   private revertObserver: MutationObserver | null = null;
   private reviewSurface: EditableDiffReviewSurface | null = null;
+  private blameSources: DiffGitBlameSources;
+  private readonly blameController: GitBlamePaneController;
 
-  constructor(copy: EditorCopy) {
+  constructor(
+    copy: EditorCopy,
+    blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort,
+    contextOwnerId: string,
+  ) {
     this.copy = copy;
+    this.blameSources = unavailableEditableDiffBlameSources(copy.gitBlameRequiresSplit);
+    this.blameController = new GitBlamePaneController(
+      blameRuntime,
+      copy,
+      contextMenu,
+      contextOwnerId,
+    );
   }
 
   currentPath(): string {
@@ -150,12 +175,15 @@ export class EditableDiffEditor {
     preferences: AppPreferences,
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
+    blameSources: DiffGitBlameSources,
     expandedUnchanged: boolean,
     onChange: (content: string) => void,
     interactions?: EditableDiffInteractions,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const isSamePath = this.path === path;
+    this.blameSources = blameSources;
+    this.configureBlameTargets();
     const canUpdateInPlace =
       this.parent === parent &&
       isSamePath &&
@@ -346,6 +374,7 @@ export class EditableDiffEditor {
 
   setCopy(copy: EditorCopy): void {
     this.copy = copy;
+    this.blameController.setCopy(copy);
     this.mergeView?.reconfigure({ renderRevertControl: () => this.revertButton() });
     for (const binding of this.bindings) {
       if (binding.changeIndicators) {
@@ -409,6 +438,7 @@ export class EditableDiffEditor {
     this.bindings = [];
     this.parent = null;
     this.interactions = null;
+    this.blameController.destroy();
     this.revertObserver?.disconnect();
     this.revertObserver = null;
   }
@@ -434,6 +464,8 @@ export class EditableDiffEditor {
     this.bindings = [];
     this.revertObserver?.disconnect();
     this.revertObserver = null;
+    this.blameController.destroy();
+    this.configureBlameTargets();
     parent.replaceChildren();
     if (this.presentation.layout === "unified") {
       parent.append(createDiffUnifiedLabel(this.sideLabels));
@@ -441,7 +473,7 @@ export class EditableDiffEditor {
       const state = EditorState.create({
         doc: this.exactContent.text,
         extensions: [
-          ...this.extensions(binding, true),
+          ...this.extensions(binding, true, undefined, undefined, undefined, "unified"),
           unifiedMergeView({
             original: this.baseContent,
             collapseUnchanged: this.expandedUnchanged ? undefined : { margin: 3, minSize: 8 },
@@ -455,6 +487,7 @@ export class EditableDiffEditor {
       this.unifiedView = new EditorView({ parent, state });
       binding.view = this.unifiedView;
       this.bindings.push(binding);
+      this.blameController.register("unified", binding.view, binding.blame);
       return;
     }
 
@@ -493,6 +526,8 @@ export class EditableDiffEditor {
     left.view = this.mergeView.a;
     right.view = this.mergeView.b;
     this.bindings.push(left, right);
+    this.registerBlameBinding(left);
+    this.registerBlameBinding(right);
     this.reviewSurface.mount(parent, left.view, right.view);
     this.refreshReviewOverlay();
     this.mountSplitControl(parent);
@@ -529,6 +564,7 @@ export class EditableDiffEditor {
       theme: new Compartment(),
       phrases: new Compartment(),
       whitespace: new Compartment(),
+      blame: new Compartment(),
       changeIndicators: null,
       comparisonSide: null,
     };
@@ -548,6 +584,7 @@ export class EditableDiffEditor {
       overview: boolean;
     },
     collapseSide?: "before" | "after",
+    blamePane: "before" | "after" | "unified" = editable ? "after" : "before",
   ): Extension[] {
     const preferences = this.preferences!;
     if (comparison) {
@@ -581,7 +618,14 @@ export class EditableDiffEditor {
       EditorState.readOnly.of(!editable),
       EditorView.editable.of(editable),
       codeMirrorFocusOwnership,
-      gutterSide ? diffLineNumberGutter(gutterSide) : lineNumbers(),
+      gutterSide
+        ? diffLineNumberGutter(
+            gutterSide,
+            undefined,
+            (event, view) => this.blameController.openMenu(blamePane, event, view),
+          )
+        : lineNumberGutter((event, view) => this.blameController.openMenu(blamePane, event, view)),
+      ...this.blameController.extensions(blamePane, binding.blame),
       binding.changeIndicators?.extension ?? [],
       collapseSide ? this.reviewSurface?.extension(collapseSide) ?? [] : [],
       mergeDiffSemanticHighlighting,
@@ -613,6 +657,8 @@ export class EditableDiffEditor {
       changes.push({ from, to, insert: inserted.toString() });
     });
     this.exactContent = applyExactTextChanges(this.exactContent, changes);
+    this.blameController.invalidate("after");
+    this.blameController.invalidate("unified");
     this.serializedContent = null;
     for (const binding of this.bindings) {
       if (binding.comparisonSide === "a" && binding.changeIndicators) {
@@ -632,6 +678,20 @@ export class EditableDiffEditor {
       this.changeFrame = null;
       this.flushChanges();
     });
+  }
+
+  private configureBlameTargets(): void {
+    this.blameController.setTarget("before", sourceBlameTarget(this.blameSources.old, "editable-before"));
+    this.blameController.setTarget("after", sourceBlameTarget(this.blameSources.new, "editable-after"));
+    this.blameController.setTarget("unified", sourceBlameTarget({
+      source: null,
+      unavailableReason: this.blameSources.unifiedReason,
+    }, "editable-unified"));
+  }
+
+  private registerBlameBinding(binding: ViewBinding): void {
+    const pane = binding.comparisonSide === "a" ? "before" : "after";
+    this.blameController.register(pane, binding.view, binding.blame);
   }
 
   private updateScrollbars(): void {
@@ -731,4 +791,9 @@ export class EditableDiffEditor {
       }
     });
   }
+}
+
+function unavailableEditableDiffBlameSources(reason: string): DiffGitBlameSources {
+  const unavailable = { source: null, unavailableReason: reason };
+  return { old: unavailable, new: unavailable, unifiedReason: reason };
 }

@@ -240,7 +240,7 @@ export const ZH_CN = {
     gitBlameRequiresSavedFile: "请先保存此文件，再显示 Git Blame 行来源。",
     gitBlameRequiresTrackedFile: "Git Blame 行来源仅适用于已跟踪文件。",
     gitBlameRequiresSplit: "Git Blame 行来源可在并排差异模式中使用。",
-    gitBlameFileUnavailable: "此文件在当前差异一侧不存在。",
+    gitBlameFileUnavailable: "此文件在当前差异一侧不存在。", gitBlameConflictSourceUnavailable: "Git 无法为这一侧冲突确定精确的提交来源。",
     gitBlameLoaded: (lines) => `已加载 ${lines} 行 Git Blame 来源信息。`,
     gitBlameLimited: (lines) => `Git Blame 输出已达到安全上限，当前显示 ${lines} 行来源信息。`,
     gitBlameHidden: "已隐藏 Git Blame 行来源信息。",

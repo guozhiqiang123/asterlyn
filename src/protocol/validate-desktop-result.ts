@@ -282,6 +282,13 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       const result = record(value, command);
       strings(result, command, "path", "revisionToken");
       nullableStrings(result, command, "base", "ours", "theirs", "worktree");
+      for (const field of ["oursCommitOid", "theirsCommitOid"] as const) {
+        assert(
+          !(field in result) || result[field] === null || typeof result[field] === "string",
+          command,
+          `${field} must be a string or null when present`,
+        );
+      }
       booleans(result, command, "binary");
       break;
     }

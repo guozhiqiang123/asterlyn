@@ -236,8 +236,7 @@ import { adjacentDiffItem, type DiffDirection } from "./features/files-editor/di
 import {
   activeProjectWorkspacePath,
   activeEditableTextTab,
-  diffProjectFile,
-  mountEditableWorkingDiff, showsContextHeader,
+  diffProjectFile, editableWorkingDiffBlameSources, mountEditableWorkingDiff, showsContextHeader,
   workingDiffActive,
   workingDiffExpanded,
   workingDiffTextTab,
@@ -808,6 +807,7 @@ export class AsterlynApp {
       preferences: () => this.settingsState.preferences, presentation: () => this.diffPresentation(),
       setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
       fileListWidth: () => this.shellState.layout.replacementListWidth, resizeFileList: (width) => this.resizeWorkbench("replacementListWidth", width), persistLayout: () => this.persistWorkbenchLayout(), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      blameRuntime, contextMenu: this.contextMenuHost,
     });
     this.replacementPresentationRuntime.setTheme(this.settingsPresentationRuntime.presentation.snapshot.theme); this.replacementPresentationRuntime.setPhrases(this.localization.catalog.editorPhrases);
     this.gitOperationRuntime = new GitOperationRuntime({
@@ -5937,11 +5937,12 @@ export class AsterlynApp {
         this.renderImageDiff(document, () => void this.loadSelectedDiff());
         return;
       }
-      const editable = mountEditableWorkingDiff({
+      const editableTab = workingDiffTextTab(this.editorState.session, document, this.filesState.files); const editable = mountEditableWorkingDiff({
         surface: this.editorSurface, document, state: this.changesState,
-        tab: workingDiffTextTab(this.editorState.session, document, this.filesState.files),
+        tab: editableTab,
         preferences: this.settingsState.preferences, presentation: this.diffPresentation(), expandedUnchanged: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
         sideLabels: this.diffSideLabels(document),
+        blameSources: editableWorkingDiffBlameSources(this.diffBlameSources(document), editableTab, copy.gitBlameRequiresSavedFile),
         beforeTransition: () => this.captureMountedTextEditor(),
         onContentChange: (tabId, content) => this.handleEditorContentChange(tabId, content),
         onRevert: (tabId) => void this.saveTextTab(tabId),

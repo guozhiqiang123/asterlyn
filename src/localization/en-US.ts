@@ -349,7 +349,7 @@ export const EN_US: LocaleCatalog = {
     gitBlameRequiresSavedFile: "Save this file before showing Git Blame annotations.",
     gitBlameRequiresTrackedFile: "Git Blame annotations are available only for tracked files.",
     gitBlameRequiresSplit: "Git Blame annotations are available in side-by-side Diff.",
-    gitBlameFileUnavailable: "This file does not exist on this side of the Diff.",
+    gitBlameFileUnavailable: "This file does not exist on this side of the Diff.", gitBlameConflictSourceUnavailable: "Git could not identify an exact commit for this conflict side.",
     gitBlameLoaded: (lines) => `Git Blame annotations loaded for ${lines} ${lines === 1 ? "line" : "lines"}.`,
     gitBlameLimited: (lines) => `Git Blame output reached its safety limit; ${lines} lines are annotated.`,
     gitBlameHidden: "Git Blame annotations hidden.",

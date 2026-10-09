@@ -167,6 +167,8 @@ pub struct GitConflictContent {
     pub base: Option<String>,
     pub ours: Option<String>,
     pub theirs: Option<String>,
+    pub ours_commit_oid: Option<String>,
+    pub theirs_commit_oid: Option<String>,
     pub worktree: Option<String>,
     pub binary: bool,
     pub revision_token: String,

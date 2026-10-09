@@ -362,6 +362,8 @@ export interface GitConflictContent {
   base: string | null;
   ours: string | null;
   theirs: string | null;
+  oursCommitOid?: string | null;
+  theirsCommitOid?: string | null;
   worktree: string | null;
   binary: boolean;
   revisionToken: string;

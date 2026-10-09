@@ -157,6 +157,7 @@ test("editable working Diff keeps expanded state in its mount identity and runti
     preferences: {},
     presentation: { layout: "split", showWhitespace: false },
     sideLabels: { before: "Before · HEAD", after: "After · Working Tree" },
+    blameSources: { old: {}, new: {}, unifiedReason: "split" },
     expandedUnchanged: true,
     beforeTransition() {},
     onContentChange() {},
@@ -166,7 +167,7 @@ test("editable working Diff keeps expanded state in its mount identity and runti
   assert.equal(calls.length, 1);
   assert.match(calls[0][0], /\0editable:3:7:expanded$/);
   assert.deepEqual(calls[0][5], { before: "Before · HEAD", after: "After · Working Tree" });
-  assert.equal(calls[0][6], true);
+  assert.equal(calls[0][7], true);
 });
 
 test("editable Diff uses one gutter marker system and can disable unchanged collapsing", async () => {

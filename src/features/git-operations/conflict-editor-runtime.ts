@@ -14,6 +14,21 @@ import type {
 } from "./git-operation-controller.ts";
 
 type ConflictDocument = Extract<EditorDocument, { kind: "conflict-resolution" }>;
+type ConflictBlameAvailability = {
+  source: {
+    repositoryRoot: string;
+    repositoryId: string;
+    path: string;
+    commitOid: string | null;
+    parent: boolean;
+  } | null;
+  unavailableReason: string | null;
+};
+type ConflictBlameSources = {
+  ours: ConflictBlameAvailability;
+  theirs: ConflictBlameAvailability;
+  unifiedReason: string;
+};
 
 interface ConflictEditorSessionPort {
   closePreview(): void;
@@ -29,6 +44,7 @@ interface ConflictEditorSurfacePort {
     presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
+    blameSources: ConflictBlameSources,
     beforeTransition: () => void,
     onContentChange: (content: string) => void,
     onReady: () => void,
@@ -131,6 +147,7 @@ export class ConflictEditorRuntime {
         this.options.presentation(),
         copy,
         this.options.editorCopy(),
+        conflictBlameSources(document, conflict, this.options.editorCopy()),
         () => undefined,
         (content) => {
           controller.setConflictResult(content);
@@ -270,6 +287,37 @@ export class ConflictEditorRuntime {
     if (!element) throw new Error(`Missing conflict editor element: ${selector}`);
     return element;
   }
+}
+
+function conflictBlameSources(
+  document: ConflictDocument,
+  conflict: GitConflictContent,
+  copy: EditorCopy,
+): ConflictBlameSources {
+  const source = (
+    content: string | null,
+    commitOid: string | null | undefined,
+  ): ConflictBlameAvailability => {
+    if (content === null) return { source: null, unavailableReason: copy.gitBlameFileUnavailable };
+    if (!commitOid) {
+      return { source: null, unavailableReason: copy.gitBlameConflictSourceUnavailable };
+    }
+    return {
+      source: {
+        repositoryRoot: document.repositoryRoot,
+        repositoryId: ".",
+        path: conflict.path,
+        commitOid,
+        parent: false,
+      },
+      unavailableReason: null,
+    };
+  };
+  return {
+    ours: source(conflict.ours, conflict.oursCommitOid),
+    theirs: source(conflict.theirs, conflict.theirsCommitOid),
+    unifiedReason: copy.gitBlameRequiresSplit,
+  };
 }
 
 export function conflictFileNavigation(

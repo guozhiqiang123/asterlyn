@@ -603,6 +603,25 @@ test("desktop response validation checks workspace mutation plans and outcomes",
   );
 });
 
+test("conflict content accepts exact side commit provenance", () => {
+  const conflict = {
+    path: "file.txt",
+    base: "base\n",
+    ours: "ours\n",
+    theirs: "theirs\n",
+    oursCommitOid: "a".repeat(40),
+    theirsCommitOid: "b".repeat(40),
+    worktree: "conflicted\n",
+    binary: false,
+    revisionToken: "revision",
+  };
+  assert.deepEqual(validateDesktopResult("read_conflict_content", conflict), conflict);
+  assert.throws(
+    () => validateDesktopResult("read_conflict_content", { ...conflict, oursCommitOid: 7 }),
+    /oursCommitOid must be a string or null/,
+  );
+});
+
 function repositorySnapshot() {
   return {
     root: "/repo",

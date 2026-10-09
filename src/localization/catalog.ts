@@ -432,6 +432,7 @@ export interface EditorCopy {
     gitBlameRequiresTrackedFile: string;
     gitBlameRequiresSplit: string;
   gitBlameFileUnavailable: string;
+  gitBlameConflictSourceUnavailable: string;
   gitBlameLoaded(lines: number): string;
   gitBlameLimited(lines: number): string;
   gitBlameHidden: string;

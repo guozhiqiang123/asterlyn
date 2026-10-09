@@ -22,7 +22,13 @@ import {
   type EditorChangeIndicators,
 } from "./editor-change-indicators.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./shared/diff-review/line-aware-diff.ts";
-import { diffLineNumberGutter, type DiffGutterSide } from "./features/files-editor/editor-gutter.ts";
+import {
+  diffLineNumberGutter,
+  type ConflictGitBlameSources,
+  type DiffGutterSide,
+  type GitBlameRuntime,
+} from "./features/files-editor/editor-gutter.ts";
+import { ConflictGitBlameController } from "./features/files-editor/conflict-git-blame-controller.ts";
 import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
 import {
   applyExactTextChanges,
@@ -59,6 +65,7 @@ import {
 } from "./shared/diff-review/diff-review-block-decoration.ts";
 import type { DiffReviewBlock, DiffReviewPaneId } from "./shared/diff-review/diff-review-model.ts";
 import { DiffReviewOverlay } from "./shared/diff-review/diff-review-overlay.ts";
+import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -68,6 +75,7 @@ interface ViewBinding {
   theme: Compartment;
   phrases: Compartment;
   whitespace: Compartment;
+  blame: Compartment;
   changeIndicators: EditorChangeIndicators | null;
   referenceTracksResult: boolean;
   paneId: "ours" | "result" | "theirs";
@@ -113,11 +121,26 @@ export class ConflictEditor {
   private ours = "";
   private theirs = "";
   private copy: GitOperationCopy | null = null;
+  private readonly blameController: ConflictGitBlameController;
   private readonly unifiedDecision = (
     side: ConflictResolutionSide,
     decision: Exclude<ConflictResolutionDecision, "pending">,
     source: ConflictSourceRange,
   ) => this.applyConflictDecision(side, decision, source);
+
+  constructor(
+    blameRuntime: GitBlameRuntime,
+    editorCopy: EditorCopy,
+    contextMenu: ContextMenuPort,
+    contextOwnerId: string,
+  ) {
+    this.blameController = new ConflictGitBlameController(
+      blameRuntime,
+      editorCopy,
+      contextMenu,
+      contextOwnerId,
+    );
+  }
 
   mount(
     parent: HTMLElement,
@@ -127,6 +150,7 @@ export class ConflictEditor {
     presentation: DiffPresentation,
     copy: GitOperationCopy,
     editorCopy: EditorCopy,
+    blameSources: ConflictGitBlameSources,
     onChange: (content: string) => void,
   ): void {
     this.destroy();
@@ -142,6 +166,10 @@ export class ConflictEditor {
     const worktree = conflict.worktree === null ? null : decodeExactText(conflict.worktree).text;
     this.ours = ours;
     this.theirs = theirs;
+    this.blameController.mount(
+      blameSources, conflict.path, conflict.revisionToken, ours, theirs,
+      this.exactResult.text, presentation.layout, editorCopy,
+    );
     this.copy = copy;
     this.resolutionModel = ConflictResolutionModel.create(
       base,
@@ -236,6 +264,9 @@ export class ConflictEditor {
     theirsBinding.view = this.rightMerge.a;
     theirsBinding.view.dom.classList.add("conflict-theirs-pane");
     this.bindings.push(oursBinding, primaryBinding, mirrorBinding, theirsBinding);
+    for (const binding of this.bindings) {
+      this.blameController.register(binding.paneId, binding.view, binding.blame);
+    }
     this.syncReviewDecorations();
     this.splitLayout = new ConflictSplitLayout(root, this.leftMerge, this.rightMerge, presentation, () => {
       this.reviewOverlay?.schedule();
@@ -329,6 +360,7 @@ export class ConflictEditor {
     this.splitLayout?.setPresentation(presentation);
     this.conflictRoot?.classList.toggle("conflict-layout-unified", presentation.layout === "unified");
     this.conflictRoot?.classList.toggle("conflict-layout-split", presentation.layout === "split");
+    this.blameController.setPresentation(presentation.layout);
     this.syncUnifiedReview();
     this.requestMeasure();
   }
@@ -368,6 +400,7 @@ export class ConflictEditor {
     this.flushChanges();
     this.languageActivation += 1;
     this.languageLoader.cancel();
+    this.blameController.destroy();
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.diffScrollbars = null;
@@ -433,7 +466,12 @@ export class ConflictEditor {
         ? this.resultEditable.of(EditorView.editable.of(!this.resultReadOnlyValue))
         : EditorView.editable.of(editable),
       codeMirrorFocusOwnership,
-      diffLineNumberGutter(gutterSide),
+      diffLineNumberGutter(
+        gutterSide,
+        undefined,
+        (event, view) => this.blameController.openMenu(binding.paneId, event, view),
+      ),
+      ...this.blameController.extensions(binding.paneId, binding.blame),
       binding.changeIndicators?.extension ?? [],
       this.collapseCoordinator?.extension(collapseSide) ?? [],
       mergeDiffSemanticHighlighting,
@@ -474,6 +512,7 @@ export class ConflictEditor {
       );
     }
     this.serializedResult = null; this.changePending = true;
+    this.blameController.resultChanged(update.state.doc.toString());
     for (const binding of this.bindings) {
       if (binding.referenceTracksResult && binding.changeIndicators) {
         binding.changeIndicators.setBaseline(binding.view, update.state.doc.toString());
@@ -510,6 +549,7 @@ export class ConflictEditor {
       view: null as unknown as EditorView,
       language: new Compartment(), indent: new Compartment(), tabSize: new Compartment(),
       theme: new Compartment(), phrases: new Compartment(), whitespace: new Compartment(),
+      blame: new Compartment(),
       changeIndicators: null,
       referenceTracksResult: false,
       paneId,
