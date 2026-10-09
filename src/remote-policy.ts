@@ -27,6 +27,10 @@ export function preferredRemote(
   return snapshot.remotes[0]?.name ?? null;
 }
 
+export function requiresRemoteConfiguration(snapshot: RepositorySnapshot): boolean {
+  return snapshot.remotes.length === 0;
+}
+
 export function remotePolicy(
   snapshot: RepositorySnapshot,
   selectedName: string | null,

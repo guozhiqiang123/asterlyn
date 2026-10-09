@@ -237,6 +237,24 @@ test("blocked remote actions remain interactive so their exact reason can be ann
   assert.equal(fetching.elements.get("#cancel-remote-operation").disabled, true);
 });
 
+test("no-remote Update and Push are exposed as configuration actions", () => {
+  const repository = repositorySnapshot();
+  repository.remotes = [];
+  repository.branch.upstream = null;
+  repository.branch.upstreamRemote = null;
+  repository.branch.upstreamRef = null;
+  const view = remoteToolbarRoot();
+
+  renderRemoteToolbarView(view.root, repository, createRemotePushState(), false);
+
+  for (const selector of ["#remote-update", "#remote-push"]) {
+    const button = view.elements.get(selector);
+    assert.equal(button.disabled, false);
+    assert.equal(button.getAttribute("aria-disabled"), "false");
+    assert.equal(button.classList.contains("unavailable"), false);
+  }
+});
+
 test("settings view keeps one selected section and bounded preference controls", () => {
   const navigation = renderSettingsNavigation("editor");
   const content = renderSettingsSection({

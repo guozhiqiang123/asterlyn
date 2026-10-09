@@ -25,7 +25,7 @@ test("Remote command adapter rechecks live review state and reuses controller ac
     loadMorePushPreview: () => events.push(["more"]),
   };
   const adapter = new RemoteCommandAdapter(push, { open: () => events.push(["manage"]) }, {
-    snapshot: () => ({ root: "/repo" }), busy: () => false, copy: () => EN_US.remote,
+    snapshot: () => ({ root: "/repo", remotes: [{ name: "origin" }] }), busy: () => false, copy: () => EN_US.remote,
     actionBlockedReason: () => null,
     openAction: (kind) => events.push(["open", kind]),
     cancelOperation: () => events.push(["cancel"]),
@@ -54,6 +54,39 @@ test("Remote command adapter rechecks live review state and reuses controller ac
   state.operation.cancelling = true;
   assert.equal(adapter.commandAvailability("cancel-operation").enabled, false);
   assert.deepEqual(events.at(-1), ["cancel"]);
+});
+
+test("no-remote Update and Push both open remote management", async () => {
+  const events = [];
+  const state = { operation: null };
+  const repository = { root: "/repo", remotes: [] };
+  let busy = false;
+  const adapter = new RemoteCommandAdapter(
+    { state },
+    { open: () => { events.push(["manage"]); return true; } },
+    {
+      snapshot: () => repository,
+      busy: () => busy,
+      copy: () => EN_US.remote,
+      actionBlockedReason: () => "Select a configured remote.",
+      openAction: (kind) => events.push(["open", kind]),
+      cancelOperation: () => undefined,
+      selectedProjectFileAvailable: () => false,
+      openSelectedProjectFile: () => undefined,
+    },
+  );
+
+  assert.deepEqual(adapter.commandAvailability("open-update"), { enabled: true });
+  assert.deepEqual(adapter.commandAvailability("open-push"), { enabled: true });
+  await adapter.executeCommand("open-update");
+  await adapter.executeCommand("open-push");
+  assert.deepEqual(events, [["manage"], ["manage"]]);
+
+  busy = true;
+  assert.equal(adapter.commandAvailability("open-update").enabled, false);
+  busy = false;
+  state.operation = { kind: "push", background: false, cancelling: false };
+  assert.equal(adapter.commandAvailability("open-push").enabled, false);
 });
 
 test("Remote commands register localized metadata, dialog scopes, and live callbacks", async () => {

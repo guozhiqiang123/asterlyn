@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { preferredRemote, remotePolicy } from "../src/remote-policy.ts";
+import {
+  preferredRemote,
+  remotePolicy,
+  requiresRemoteConfiguration,
+} from "../src/remote-policy.ts";
 
 function snapshot(overrides = {}) {
   const { branch: branchOverrides = {}, ...snapshotOverrides } = overrides;
@@ -46,6 +50,11 @@ test("chooses upstream, origin, then first configured remote", () => {
     "team",
   );
   assert.equal(preferredRemote(snapshot(), "mirror"), "mirror");
+});
+
+test("identifies only repositories with no configured remote", () => {
+  assert.equal(requiresRemoteConfiguration(snapshot({ remotes: [] })), true);
+  assert.equal(requiresRemoteConfiguration(snapshot()), false);
 });
 
 test("enables fetch and ahead-only push without requiring a clean worktree", () => {

@@ -13,7 +13,7 @@ import type {
   PushPreview,
   RepositorySnapshot,
 } from "../../models.ts";
-import { remotePolicy } from "../../remote-policy.ts";
+import { remotePolicy, requiresRemoteConfiguration } from "../../remote-policy.ts";
 import {
   buildCommitFileTree,
   type CommitFileTreeNode,
@@ -63,6 +63,7 @@ export function renderRemoteToolbarView(
 
   const copy = localization.catalog.remote;
   const policy = remotePolicy(snapshot, state.selectedRemote, localization);
+  const configuresMissingRemote = requiresRemoteConfiguration(snapshot);
   const operation = state.operation?.root === snapshot.root ? state.operation : null;
   select.innerHTML = snapshot.remotes.length
     ? snapshot.remotes.map((remote) => `<option value="${escapeAttribute(remote.name)}" ${remote.name === policy.selectedRemote?.name ? "selected" : ""}>${escapeHtml(remote.name)}${remote.fetchSupported ? "" : ` · ${escapeHtml(copy.unsupported)}`}</option>`).join("")
@@ -101,7 +102,8 @@ export function renderRemoteToolbarView(
       ? action.policy.detail
       : copy.unavailable(action.policy.detail);
     const title = `${exactScope} ${transientBlock ? copy.unavailable(transientBlock) : policyDetail}`;
-    const unavailable = Boolean(operation) || loading || !action.policy.enabled;
+    const unavailable = Boolean(operation) || loading ||
+      (!action.policy.enabled && !configuresMissingRemote);
     button.disabled = false;
     button.setAttribute("aria-disabled", String(unavailable));
     button.classList.toggle("unavailable", unavailable);

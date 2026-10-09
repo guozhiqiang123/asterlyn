@@ -3,6 +3,7 @@ import type { RemoteCommandAction } from "../../application/commands/remote-comm
 import type { RemoteCopy } from "../../localization/catalog.ts";
 import type { RepositorySnapshot } from "../../models.ts";
 import { buildCommitFileTree, commitFileDirectoryPaths } from "../../presentation/git-presentation.ts";
+import { requiresRemoteConfiguration } from "../../remote-policy.ts";
 import type { RemoteManagementController } from "./remote-management-controller.ts";
 import type { RemotePushController } from "./remote-push-controller.ts";
 
@@ -35,15 +36,14 @@ export class RemoteCommandAdapter {
   commandAvailability(action: RemoteCommandAction): CommandAvailability {
     const copy = this.ports.copy();
     if (action === "open-update" || action === "open-push") {
+      const snapshot = this.ports.snapshot();
+      if (snapshot && requiresRemoteConfiguration(snapshot)) {
+        return this.managementAvailability(copy);
+      }
       const reason = this.ports.actionBlockedReason(action === "open-update" ? "pull" : "push");
       return reason ? { enabled: false, reason } : { enabled: true };
     }
-    if (action === "manage") {
-      if (!this.ports.snapshot() || !this.management) return { enabled: false, reason: copy.selectionUnavailable };
-      if (this.ports.busy()) return { enabled: false, reason: copy.unavailable(copy.workbenchBusy) };
-      if (this.push.state.operation) return { enabled: false, reason: copy.unavailable(copy.operationInProgress(copy.actionNames[this.push.state.operation.kind])) };
-      return { enabled: true };
-    }
+    if (action === "manage") return this.managementAvailability(copy);
     if (action === "cancel-operation") {
       const operation = this.push.state.operation;
       return operation && !operation.background && !operation.cancelling
@@ -79,8 +79,12 @@ export class RemoteCommandAdapter {
   async executeCommand(action: RemoteCommandAction): Promise<void> {
     if (!this.commandAvailability(action).enabled) return;
     switch (action) {
-      case "open-update": return void await this.ports.openAction("pull");
-      case "open-push": return void await this.ports.openAction("push");
+      case "open-update":
+        if (this.openManagementForMissingRemote()) return;
+        return void await this.ports.openAction("pull");
+      case "open-push":
+        if (this.openManagementForMissingRemote()) return;
+        return void await this.ports.openAction("push");
       case "cancel-operation": return void await this.ports.cancelOperation();
       case "manage": return void this.management?.open();
       case "open-file-diff": return void await this.push.openSelectedPushFileDiff();
@@ -93,5 +97,32 @@ export class RemoteCommandAdapter {
         ]);
       case "load-more": return void await this.push.loadMorePushPreview();
     }
+  }
+
+  private managementAvailability(copy: RemoteCopy): CommandAvailability {
+    if (!this.ports.snapshot() || !this.management) {
+      return { enabled: false, reason: copy.selectionUnavailable };
+    }
+    if (this.ports.busy()) {
+      return { enabled: false, reason: copy.unavailable(copy.workbenchBusy) };
+    }
+    if (this.push.state.operation) {
+      return {
+        enabled: false,
+        reason: copy.unavailable(
+          copy.operationInProgress(copy.actionNames[this.push.state.operation.kind]),
+        ),
+      };
+    }
+    return { enabled: true };
+  }
+
+  private openManagementForMissingRemote(): boolean {
+    const snapshot = this.ports.snapshot();
+    return Boolean(
+      snapshot &&
+      requiresRemoteConfiguration(snapshot) &&
+      this.management?.open(),
+    );
   }
 }
