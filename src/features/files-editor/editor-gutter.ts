@@ -1,4 +1,4 @@
-import type { EditorState, Extension, Range } from "@codemirror/state";
+import type { EditorState, Extension } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -158,7 +158,7 @@ function blameLineEndPresentation(
     }
 
     update(update: ViewUpdate): void {
-      if (update.docChanged || update.viewportChanged) {
+      if (update.docChanged || update.selectionSet || update.focusChanged) {
         this.decorations = blameLineEndDecorations(update.view, hunks, copy, sourceLine);
       }
     }
@@ -173,25 +173,20 @@ function blameLineEndDecorations(
   copy: GitBlameCopy,
   sourceLine: SourceLineMapper,
 ): DecorationSet {
-  const ranges: Array<Range<Decoration>> = [];
-  const seen = new Set<number>();
-  for (const visible of view.visibleRanges) {
-    const first = view.state.doc.lineAt(visible.from).number;
-    const last = view.state.doc.lineAt(visible.to).number;
-    for (let documentLine = first; documentLine <= last; documentLine += 1) {
-      if (seen.has(documentLine)) continue;
-      seen.add(documentLine);
-      const mappedLine = sourceLine(documentLine);
-      const hunk = mappedLine === null ? null : blameHunkAt(hunks, mappedLine);
-      if (!hunk) continue;
-      const line = view.state.doc.line(documentLine);
-      ranges.push(Decoration.widget({
-        widget: new GitBlameLineEndWidget(hunk, copy),
-        side: 1,
-      }).range(line.to));
-    }
-  }
-  return Decoration.set(ranges, true);
+  if (!view.hasFocus) return Decoration.none;
+
+  const documentLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+  const mappedLine = sourceLine(documentLine);
+  const hunk = mappedLine === null ? null : blameHunkAt(hunks, mappedLine);
+  if (!hunk) return Decoration.none;
+
+  const line = view.state.doc.line(documentLine);
+  return Decoration.set([
+    Decoration.widget({
+      widget: new GitBlameLineEndWidget(hunk, copy),
+      side: 1,
+    }).range(line.to),
+  ]);
 }
 
 class GitBlameLineEndWidget extends WidgetType {

@@ -110,6 +110,14 @@ test("compact Git Blame and Diff gutters use semantic presentation layers", asyn
   ]) {
     assert.match(source, new RegExp(`"\\.${className}"`));
   }
+  assert.match(
+    source,
+    /"\.cm-git-blame-line-end": \{[\s\S]*?color: "var\(--text-faint\)"[\s\S]*?opacity: "0\.68"[\s\S]*?fontStyle: "italic"/u,
+  );
+  assert.match(
+    source,
+    /"\.cm-git-blame-line-end\.cm-git-blame-uncommitted": \{[\s\S]*?color: "var\(--text-faint\)"/u,
+  );
   assert.match(source, /var\(--editor-diff-added-bg\)/u);
   assert.match(source, /var\(--editor-diff-removed-bg\)/u);
 });

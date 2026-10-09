@@ -260,6 +260,11 @@ test("ordinary and Diff editors load eligible Git Blame sources automatically", 
   assert.match(gutterSource, /view\.dom\.addEventListener\("mouseover", this\.mouseover/u);
   assert.match(gutterSource, /view\.dom\.addEventListener\("mouseout", this\.mouseout/u);
   assert.match(gutterSource, /this\.listeners\.abort\(\)/u);
+  assert.match(gutterSource, /if \(!view\.hasFocus\) return Decoration\.none;/u);
+  assert.match(gutterSource, /view\.state\.selection\.main\.head/u);
+  assert.match(gutterSource, /update\.selectionSet/u);
+  assert.match(gutterSource, /update\.focusChanged/u);
+  assert.doesNotMatch(gutterSource, /for \(const visible of view\.visibleRanges\)/u);
   assert.match(textEditorSource, /void this\.ensureBlame\(mountedEntry\)/u);
   assert.match(diffEditorSource, /void this\.ensureBlame\("old"\)/u);
   assert.match(diffEditorSource, /void this\.ensureBlame\("new"\)/u);

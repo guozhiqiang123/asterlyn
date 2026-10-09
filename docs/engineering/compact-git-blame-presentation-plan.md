@@ -11,7 +11,8 @@ already correct; the problem is presentation density rather than Git ownership.
 The replacement makes Git Blame automatic for every eligible tracked source while offering two
 persistent display modes:
 
-1. **Line end** — show the line's author and authored time after the code on each visible line.
+1. **Line end** — show author and authored time only after the active cursor line in the focused
+   editor pane.
 2. **Line-number hover** — keep the editor unchanged until the pointer rests on a concrete line
    number, then show author and date in a lightweight tooltip.
 
@@ -26,8 +27,9 @@ Line-number hover is the default because it has no steady-state width cost.
   two-pane Diffs, and split three-pane conflict resolution.
 - Git Blame has no separate show/hide switch. The preference only chooses how an automatically
   loaded result is presented, and a mode change reuses that result immediately.
-- Line-end annotations are CodeMirror widgets, not document content. They are created only for
-  visible ranges so very large Blame results stay bounded.
+- Line-end annotations are CodeMirror widgets, not document content. At most one exists: the main
+  selection's head line in the focused editor pane. Moving the cursor or focus removes the previous
+  widget immediately, so split Diff and conflict layouts never fill every pane with annotations.
 - The hover target is the actual line-number element. Spacer, omitted, and unmapped projected rows
   do not invent authorship.
 - Full author, email, date, object id, and summary remain available in the tooltip/title details;
@@ -47,8 +49,9 @@ updates, and expose a two-option control in Editor settings with localized label
 
 Replace `blameGutter` with a presentation extension that owns only rendering:
 
-- Line-end mode uses a viewport-aware `ViewPlugin` and `Decoration.widget` ranges at line ends.
-  The compact widget shows author and authored time with truncation and full details on hover.
+- Line-end mode uses a selection- and focus-aware `ViewPlugin` with one `Decoration.widget` at the
+  active line end. The compact widget shows author and authored time with truncation and full
+  details on hover. It uses faint semantic text and italic styling so code remains visually primary.
 - Line-number-hover mode adds no gutter. Pointer movement over `.cm-lineNumbers` resolves the
   document line, maps it to the exact source line, and shows a single app-styled tooltip anchored
   beside the hovered number. Leaving the number, scrolling, reconfiguration, or destruction removes
@@ -80,8 +83,8 @@ another activation step.
 - Tooltip content uses localized date formatting and the existing full-details copy.
 - Hover presentation uses `role="tooltip"`, does not capture pointer events, and remains inside the
   editor viewport.
-- Line-end widgets use subdued semantic text, an explicit help cursor, a single-line ellipsis, and
-  do not alter line height.
+- Line-end widgets use faint italic semantic text, an explicit help cursor, a single-line ellipsis,
+  and do not alter line height.
 - Line numbers and code rows no longer expose a Git Blame show/hide context action. Existing
   unrelated context-menu behavior remains unchanged.
 
@@ -91,7 +94,8 @@ another activation step.
   round-trip and invalid updates fail closed.
 - Editor settings render and update both localized mode choices.
 - Active Blame switches modes without reloading, losing source mapping, or leaving stale tooltip DOM.
-- Line-end mode annotates visible mapped lines, handles Local changes, and omits unmapped rows.
+- Line-end mode annotates only the focused pane's active mapped line, follows selection and focus
+  changes, handles Local changes, and omits unfocused or unmapped rows.
 - Hover mode resolves the actual line-number target for before/after gutter placement and projected
   conflict rows.
 - Automatic load deduplication, dirty-buffer invalidation, split/unified restrictions, and stale
@@ -111,20 +115,22 @@ another activation step.
 - Settings now exposes localized **Line end** and **Line number hover** choices under Editor. The
   preference is validated, persisted as version nine, and older profiles migrate to the compact
   line-number-hover default.
-- The fixed 260-pixel Blame gutter and commit-tone bands were removed. Line-end mode creates widgets
-  only for visible mapped lines; hover mode targets the real line-number glyph and presents one
-  bounded app-styled author/date tooltip without changing pane width. Its hover listeners are bound
-  to the editor root because CodeMirror renders line-number gutters outside the content DOM.
+- The fixed 260-pixel Blame gutter and commit-tone bands were removed. Line-end mode creates one
+  faint italic widget only for the focused pane's active mapped line; hover mode targets the real
+  line-number glyph and presents one bounded app-styled author/date tooltip without changing pane
+  width. Its hover listeners are bound to the editor root because CodeMirror renders line-number
+  gutters outside the content DOM.
 - Ordinary editable files, read-only Diffs, editable working Diffs, and conflict Ours/Result/Theirs
   panes share the same mode. Eligible exact sources now load automatically when their view mounts;
   the former line-number/code-row right-click toggle and its context action were removed. A loaded
   annotation is reconfigured from its cached result, while edits keep the saved-source invalidation
   behavior and unavailable or ambiguous sources remain silently unannotated.
-- Verified with 921 frontend script tests, TypeScript checking, the production web build, 133
+- Verified with 930 frontend script tests, TypeScript checking, the production web build, 133
   `asterlyn-git` tests, a release macOS application build, and the rendered native smoke test. The
   verified application was installed and relaunched at `/Applications/Asterlyn.app`; the previous
   installation remains recoverable in Trash as
-  `Asterlyn-before-blame-tooltip-fix-20261009.app`.
+  `Asterlyn-before-active-line-blame-20261009.app`.
 - Acceptance archive:
-  `target/release/bundle/macos/Asterlyn-auto-git-blame-20261009-macos-arm64.zip`, 9,170,492 bytes,
-  SHA-256 `1918236563f0b7b867d6ba9da5483da78e857e2ef7b993d6121d9b61fed98f2a`.
+  `target/release/bundle/macos/Asterlyn-active-line-blame-20261009-macos-arm64-signed.zip`,
+  9,258,998 bytes, SHA-256
+  `77bad4eaaec9a86eefb6bf49238a2227791a6b2df595ce7427df60bd46b81649`.

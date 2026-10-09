@@ -166,8 +166,9 @@ const editorThemeRules =
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
       verticalAlign: "bottom",
-      color: "var(--text-muted)",
-      opacity: "0.72",
+      color: "var(--text-faint)",
+      opacity: "0.68",
+      fontStyle: "italic",
       cursor: "help",
     },
     ".cm-git-blame-tooltip": {
@@ -197,6 +198,9 @@ const editorThemeRules =
     ".cm-git-blame-uncommitted": {
       color: "var(--warning-text)",
       fontStyle: "italic",
+    },
+    ".cm-git-blame-line-end.cm-git-blame-uncommitted": {
+      color: "var(--text-faint)",
     },
     ".cm-foldGutter": { width: "19px" },
     ".cm-change-indicator-gutter, .cm-changeGutter": {

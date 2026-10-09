@@ -162,7 +162,7 @@ export const EN_US: LocaleCatalog = {
     indentDescription: "Sets the spaces inserted for one editor indentation level.",
     indentAria: "Editor indent size",
     spaces: (value) => `${value} spaces`,
-    tabWidthLabel: "Tab width", tabWidthDescription: "Controls the visual width of an existing tab character without rewriting content.", tabWidthAria: "Editor tab width", gitBlameDisplayLabel: "Git Blame display", gitBlameDisplayDescription: "Choose compact annotations at the end of visible lines or show author and date only when a line number is hovered.", gitBlameDisplayAria: "Git Blame display mode", gitBlameLineEnd: "Line end", gitBlameLineNumberHover: "Line number hover",
+    tabWidthLabel: "Tab width", tabWidthDescription: "Controls the visual width of an existing tab character without rewriting content.", tabWidthAria: "Editor tab width", gitBlameDisplayLabel: "Git Blame display", gitBlameDisplayDescription: "Show a compact annotation only at the active line in the focused editor, or show author and date when a line number is hovered.", gitBlameDisplayAria: "Git Blame display mode", gitBlameLineEnd: "Line end", gitBlameLineNumberHover: "Line number hover",
     versionControlTitle: "Version Control",
     versionControlDescription: "Defaults for current-branch Update and shared Diff views.",
     updateStrategyLabel: "Default Update method",
