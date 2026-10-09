@@ -276,6 +276,7 @@ import {
   type EditorFontLoadSource,
 } from "./features/settings/editor-fonts";
 import {
+  isGitBlameDisplayMode,
   isLocalePreference,
   isNewFileStagePreference,
   isRemoteUpdateStrategyPreference,
@@ -2112,6 +2113,19 @@ export class AsterlynApp {
       });
     });
     this.root
+      .querySelectorAll<HTMLButtonElement>("[data-setting-git-blame-display]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const mode = button.dataset.settingGitBlameDisplay;
+          if (isGitBlameDisplayMode(mode)) {
+            this.updatePreferences(
+              { gitBlameDisplayMode: mode },
+              `setting-git-blame-display-${mode}`,
+            );
+          }
+        });
+      });
+    this.root
       .querySelectorAll<HTMLButtonElement>("[data-setting-locale]")
       .forEach((button) => {
         button.addEventListener("click", () => {
@@ -2195,24 +2209,7 @@ export class AsterlynApp {
       this.renderSettingsPage();
       if (restoreFocusId) {
         queueMicrotask(() => {
-          if (restoreFocusId.startsWith("setting-locale-")) {
-            const locale = restoreFocusId.slice("setting-locale-".length);
-            this.root
-              .querySelector<HTMLButtonElement>(`[data-setting-locale="${locale}"]`)
-              ?.focus();
-          } else if (restoreFocusId.startsWith("setting-diff-")) {
-            const layout = restoreFocusId.slice("setting-diff-".length);
-            this.root
-              .querySelector<HTMLButtonElement>(`[data-setting-diff-layout="${layout}"]`)
-              ?.focus();
-          } else if (restoreFocusId.startsWith("setting-theme-")) {
-            const theme = restoreFocusId.slice("setting-theme-".length);
-            this.root
-              .querySelector<HTMLButtonElement>(`[data-setting-theme="${theme}"]`)
-              ?.focus();
-          } else {
-            this.root.querySelector<HTMLElement>(`#${restoreFocusId}`)?.focus();
-          }
+          this.root.querySelector<HTMLElement>(`#${restoreFocusId}`)?.focus();
         });
       }
     }

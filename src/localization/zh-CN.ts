@@ -79,7 +79,7 @@ export const ZH_CN = {
     letterSpacingLabel: "字距", letterSpacingDescription: "调整代码字符之间的横向间距，0 px 表示编辑器默认值。", letterSpacingAria: "编辑器字距",
     defaultPixels: (value) => `默认 · ${value} px`, indentLabel: "缩进大小", indentDescription: "设置一级编辑器缩进插入的空格数。",
     indentAria: "编辑器缩进大小", spaces: (value) => `${value} 个空格`, tabWidthLabel: "制表符宽度",
-    tabWidthDescription: "调整已有制表符的显示宽度，不重写文件内容。", tabWidthAria: "编辑器制表符宽度",
+    tabWidthDescription: "调整已有制表符的显示宽度，不重写文件内容。", tabWidthAria: "编辑器制表符宽度", gitBlameDisplayLabel: "Git Blame 显示方式", gitBlameDisplayDescription: "在可见代码行末显示作者和时间，或仅在光标指向具体行号时显示作者和日期。", gitBlameDisplayAria: "Git Blame 显示方式", gitBlameLineEnd: "代码行末", gitBlameLineNumberHover: "悬浮行号",
     versionControlTitle: "版本控制", versionControlDescription: "当前分支更新和差异视图共用的默认设置。",
     updateStrategyLabel: "默认更新方式", updateStrategyDescription: "关闭更新确认后直接使用。合并和变基仍需准确对象安全审查。",
     updateStrategyAria: "默认远程更新方式", updateStrategies: { ffOnly: "仅快进", merge: "合并传入更改", rebase: "变基当前分支" }, askBeforeRemoteUpdateLabel: "更新确认",

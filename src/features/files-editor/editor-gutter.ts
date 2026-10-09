@@ -1,12 +1,17 @@
-import type { EditorState, Extension } from "@codemirror/state";
+import type { EditorState, Extension, Range } from "@codemirror/state";
 import {
+  Decoration,
   EditorView,
   GutterMarker,
+  ViewPlugin,
+  WidgetType,
   gutter,
-  lineNumbers,
+  type DecorationSet,
+  type ViewUpdate,
 } from "@codemirror/view";
 import type { GitBlameHunk, GitBlameResult } from "../../models.ts";
 import { formatGitBlameDateTime } from "../../presentation/date-time.ts";
+import type { GitBlameDisplayMode } from "../../preferences.ts";
 
 export interface GitBlameSource {
   repositoryRoot: string;
@@ -72,22 +77,11 @@ export function lineNumberGutter(
   formatNumber?: (lineNumber: number) => string,
   side: DiffGutterSide = "before",
 ): Extension {
-  if (side === "after") {
-    return diffLineNumberGutter(
-      side,
-      formatNumber ? (lineNumber) => formatNumber(lineNumber) : undefined,
-      openMenu,
-    );
-  }
-  return lineNumbers({
-    ...(formatNumber ? { formatNumber } : {}),
-    domEventHandlers: {
-      contextmenu: (view, _line, event) => {
-        requestContextMenu(event as MouseEvent, view, openMenu);
-        return true;
-      },
-    },
-  });
+  return diffLineNumberGutter(
+    side,
+    formatNumber ? (lineNumber) => formatNumber(lineNumber) : undefined,
+    openMenu,
+  );
 }
 
 /**
@@ -104,17 +98,22 @@ export function diffLineNumberGutter(
   return gutter({
     class: `cm-lineNumbers cm-diff-lineNumbers cm-diff-lineNumbers-${side}`,
     side,
-    lineMarker: (view, line) => new DiffLineNumberMarker(
-      formatNumber(view.state.doc.lineAt(line.from).number, view.state),
-    ),
+    lineMarker: (view, line) => {
+      const documentLine = view.state.doc.lineAt(line.from).number;
+      return new DiffLineNumberMarker(
+        formatNumber(documentLine, view.state),
+        documentLine,
+      );
+    },
     initialSpacer: (view) => new DiffLineNumberMarker(
       formatNumber(maxLineNumber(view.state.doc.lines), view.state),
+      null,
     ),
     updateSpacer: (spacer, update) => {
       const number = formatNumber(maxLineNumber(update.state.doc.lines), update.state);
       return spacer instanceof DiffLineNumberMarker && spacer.number === number
         ? spacer
-        : new DiffLineNumberMarker(number);
+        : new DiffLineNumberMarker(number, null);
     },
     ...(openMenu ? {
       domEventHandlers: {
@@ -145,31 +144,18 @@ export function blameContentContextMenu(
   });
 }
 
-export function blameGutter(
+export function gitBlamePresentation(
   result: GitBlameResult,
   copy: GitBlameCopy,
-  openMenu: OpenEditorContextMenu,
+  mode: GitBlameDisplayMode,
   sourceLine: SourceLineMapper = (line) => line,
 ): Extension {
   const hunks = [...result.hunks].sort(
     (left, right) => left.finalStartLine - right.finalStartLine,
   );
-  return gutter({
-    class: "cm-git-blame-gutter",
-    lineMarker: (view, line) => {
-      const documentLine = view.state.doc.lineAt(line.from).number;
-      const mappedLine = sourceLine(documentLine);
-      if (mappedLine === null) return null;
-      const hunk = blameHunkAt(hunks, mappedLine);
-      return hunk ? new GitBlameMarker(hunk, copy) : null;
-    },
-    domEventHandlers: {
-      contextmenu: (view, _line, event) => {
-        requestContextMenu(event as MouseEvent, view, openMenu);
-        return true;
-      },
-    },
-  });
+  return mode === "line-end"
+    ? blameLineEndPresentation(hunks, copy, sourceLine)
+    : blameLineNumberHoverPresentation(hunks, copy, sourceLine);
 }
 
 function requestContextMenu(
@@ -199,58 +185,223 @@ function blameHunkAt(hunks: readonly GitBlameHunk[], line: number): GitBlameHunk
   return null;
 }
 
-class GitBlameMarker extends GutterMarker {
-  readonly elementClass: string;
+function blameLineEndPresentation(
+  hunks: readonly GitBlameHunk[],
+  copy: GitBlameCopy,
+  sourceLine: SourceLineMapper,
+): Extension {
+  return ViewPlugin.fromClass(class {
+    decorations: DecorationSet;
 
+    constructor(view: EditorView) {
+      this.decorations = blameLineEndDecorations(view, hunks, copy, sourceLine);
+    }
+
+    update(update: ViewUpdate): void {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = blameLineEndDecorations(update.view, hunks, copy, sourceLine);
+      }
+    }
+  }, {
+    decorations: (plugin) => plugin.decorations,
+  });
+}
+
+function blameLineEndDecorations(
+  view: EditorView,
+  hunks: readonly GitBlameHunk[],
+  copy: GitBlameCopy,
+  sourceLine: SourceLineMapper,
+): DecorationSet {
+  const ranges: Array<Range<Decoration>> = [];
+  const seen = new Set<number>();
+  for (const visible of view.visibleRanges) {
+    const first = view.state.doc.lineAt(visible.from).number;
+    const last = view.state.doc.lineAt(visible.to).number;
+    for (let documentLine = first; documentLine <= last; documentLine += 1) {
+      if (seen.has(documentLine)) continue;
+      seen.add(documentLine);
+      const mappedLine = sourceLine(documentLine);
+      const hunk = mappedLine === null ? null : blameHunkAt(hunks, mappedLine);
+      if (!hunk) continue;
+      const line = view.state.doc.line(documentLine);
+      ranges.push(Decoration.widget({
+        widget: new GitBlameLineEndWidget(hunk, copy),
+        side: 1,
+      }).range(line.to));
+    }
+  }
+  return Decoration.set(ranges, true);
+}
+
+class GitBlameLineEndWidget extends WidgetType {
   constructor(
     private readonly hunk: GitBlameHunk,
     private readonly copy: GitBlameCopy,
   ) {
     super();
-    this.elementClass = hunk.uncommitted
-      ? "cm-git-blame-uncommitted cm-git-blame-local"
-      : `cm-git-blame-tone-${blameTone(hunk.oid)}`;
   }
 
-  eq(other: GitBlameMarker): boolean {
+  eq(other: GitBlameLineEndWidget): boolean {
     return this.hunk === other.hunk && this.copy === other.copy;
   }
 
-  toDOM(): Node {
+  toDOM(): HTMLElement {
     const marker = document.createElement("span");
-    const date = this.hunk.uncommitted || this.hunk.authoredAt <= 0
-      ? this.copy.gitBlameLocal
-      : formatGitBlameDateTime(this.hunk.authoredAt);
-    marker.className = "cm-git-blame-marker";
-    const time = document.createElement("span");
-    time.className = "cm-git-blame-time";
-    time.textContent = date;
-    const author = document.createElement("span");
-    author.className = "cm-git-blame-author";
-    author.textContent = this.hunk.uncommitted ? "" : this.hunk.authorName;
-    marker.append(time, author);
-    marker.title = this.copy.gitBlameDetails(
-      this.hunk.authorName,
-      this.hunk.authorEmail,
-      this.hunk.authoredAt > 0 ? formatGitBlameDateTime(this.hunk.authoredAt) : this.copy.gitBlameLocal,
-      this.hunk.oid,
-      this.hunk.summary,
-    );
+    marker.className = `cm-git-blame-line-end${this.hunk.uncommitted ? " cm-git-blame-uncommitted" : ""}`;
+    marker.textContent = compactBlameText(this.hunk, this.copy);
+    marker.title = blameDetails(this.hunk, this.copy);
+    marker.setAttribute("aria-label", marker.textContent);
     return marker;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
   }
 }
 
+function blameLineNumberHoverPresentation(
+  hunks: readonly GitBlameHunk[],
+  copy: GitBlameCopy,
+  sourceLine: SourceLineMapper,
+): Extension {
+  return ViewPlugin.fromClass(class {
+    readonly view: EditorView;
+    private tooltip: HTMLDivElement | null = null;
+    private target: HTMLElement | null = null;
+
+    constructor(view: EditorView) {
+      this.view = view;
+    }
+
+    update(update: ViewUpdate): void {
+      if (update.docChanged || update.viewportChanged || update.geometryChanged) this.hide();
+    }
+
+    destroy(): void {
+      this.hide();
+    }
+
+    show(target: HTMLElement): void {
+      const documentLine = Number(target.dataset.documentLine);
+      if (!Number.isInteger(documentLine)) {
+        this.hide();
+        return;
+      }
+      const mappedLine = sourceLine(documentLine);
+      const hunk = mappedLine === null ? null : blameHunkAt(hunks, mappedLine);
+      if (!hunk) {
+        this.hide();
+        return;
+      }
+      if (this.target === target && this.tooltip) return;
+      this.hide();
+      this.target = target;
+      const tooltip = document.createElement("div");
+      tooltip.className = `cm-git-blame-tooltip${hunk.uncommitted ? " cm-git-blame-uncommitted" : ""}`;
+      tooltip.id = `cm-git-blame-tooltip-${nextBlameTooltipId++}`;
+      tooltip.setAttribute("role", "tooltip");
+      tooltip.title = blameDetails(hunk, copy);
+      const author = document.createElement("strong");
+      author.textContent = hunk.uncommitted ? copy.gitBlameLocal : hunk.authorName;
+      const time = document.createElement("span");
+      time.textContent = hunk.uncommitted || hunk.authoredAt <= 0
+        ? ""
+        : formatGitBlameDateTime(hunk.authoredAt);
+      tooltip.append(author);
+      if (time.textContent) tooltip.append(time);
+      this.view.dom.append(tooltip);
+      target.setAttribute("aria-describedby", tooltip.id);
+      this.tooltip = tooltip;
+      positionBlameTooltip(this.view, target, tooltip);
+    }
+
+    hide(): void {
+      if (this.target && this.target.getAttribute("aria-describedby") === this.tooltip?.id) {
+        this.target.removeAttribute("aria-describedby");
+      }
+      this.tooltip?.remove();
+      this.tooltip = null;
+      this.target = null;
+    }
+  }, {
+    eventHandlers: {
+      mouseover(event) {
+        const target = event.target instanceof Element
+          ? event.target.closest<HTMLElement>(".cm-line-number-value[data-document-line]")
+          : null;
+        if (target && this.view.dom.contains(target)) this.show(target);
+      },
+      mouseout(event) {
+        const target = event.target instanceof Element
+          ? event.target.closest<HTMLElement>(".cm-line-number-value[data-document-line]")
+          : null;
+        if (!target) return;
+        const related = event.relatedTarget;
+        if (related instanceof Node && target.contains(related)) return;
+        this.hide();
+      },
+    },
+  });
+}
+
+let nextBlameTooltipId = 1;
+
+function positionBlameTooltip(
+  view: EditorView,
+  target: HTMLElement,
+  tooltip: HTMLElement,
+): void {
+  const root = view.dom.getBoundingClientRect();
+  const anchor = target.getBoundingClientRect();
+  const afterContent = Boolean(target.closest(".cm-diff-lineNumbers-after"));
+  const gap = 8;
+  const width = tooltip.offsetWidth;
+  const height = tooltip.offsetHeight;
+  const preferredLeft = afterContent
+    ? anchor.left - root.left - width - gap
+    : anchor.right - root.left + gap;
+  const left = Math.max(4, Math.min(preferredLeft, root.width - width - 4));
+  const preferredTop = anchor.top - root.top + (anchor.height - height) / 2;
+  const top = Math.max(4, Math.min(preferredTop, root.height - height - 4));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function compactBlameText(hunk: GitBlameHunk, copy: GitBlameCopy): string {
+  return hunk.uncommitted || hunk.authoredAt <= 0
+    ? copy.gitBlameLocal
+    : `${hunk.authorName} · ${formatGitBlameDateTime(hunk.authoredAt)}`;
+}
+
+function blameDetails(hunk: GitBlameHunk, copy: GitBlameCopy): string {
+  return copy.gitBlameDetails(
+    hunk.authorName,
+    hunk.authorEmail,
+    hunk.authoredAt > 0 ? formatGitBlameDateTime(hunk.authoredAt) : copy.gitBlameLocal,
+    hunk.oid,
+    hunk.summary,
+  );
+}
+
 class DiffLineNumberMarker extends GutterMarker {
-  constructor(readonly number: string) {
+  constructor(
+    readonly number: string,
+    readonly documentLine: number | null,
+  ) {
     super();
   }
 
   eq(other: DiffLineNumberMarker): boolean {
-    return other.number === this.number;
+    return other.number === this.number && other.documentLine === this.documentLine;
   }
 
   toDOM(): Node {
-    return document.createTextNode(this.number);
+    const number = document.createElement("span");
+    number.className = "cm-line-number-value";
+    number.textContent = this.number;
+    if (this.documentLine !== null) number.dataset.documentLine = String(this.documentLine);
+    return number;
   }
 }
 
@@ -258,9 +409,4 @@ function maxLineNumber(lines: number): number {
   let maximum = 9;
   while (maximum < lines) maximum = maximum * 10 + 9;
   return maximum;
-}
-
-function blameTone(oid: string): number {
-  const suffix = Number.parseInt(oid.slice(-2), 16);
-  return Number.isFinite(suffix) ? suffix % 4 : 0;
 }

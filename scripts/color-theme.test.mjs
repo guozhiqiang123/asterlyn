@@ -97,14 +97,12 @@ test("CodeMirror selection keeps the active text stronger than passive matches",
   );
 });
 
-test("Git Blame and Diff gutters use semantic background layers", async () => {
+test("compact Git Blame and Diff gutters use semantic presentation layers", async () => {
   const source = await readFile(path.join(sourceRoot, "editor-theme.ts"), "utf8");
   for (const className of [
-    "cm-git-blame-tone-0",
-    "cm-git-blame-tone-1",
-    "cm-git-blame-tone-2",
-    "cm-git-blame-tone-3",
-    "cm-git-blame-local",
+    "cm-git-blame-line-end",
+    "cm-git-blame-tooltip",
+    "cm-git-blame-uncommitted",
     "cm-source-added-gutter",
     "cm-source-removed-gutter",
     "cm-source-spacer-gutter",

@@ -98,3 +98,23 @@ is required.
 3. Run `cargo test -p asterlyn-git` to preserve the exact-source backend contract.
 4. Build the release application, run the rendered native smoke test, replace the local macOS
    installation, and relaunch it for manual acceptance.
+
+## Implementation result
+
+- Settings now exposes localized **Line end** and **Line number hover** choices under Editor. The
+  preference is validated, persisted as version nine, and older profiles migrate to the compact
+  line-number-hover default.
+- The fixed 260-pixel Blame gutter and commit-tone bands were removed. Line-end mode creates widgets
+  only for visible mapped lines; hover mode targets the real line-number glyph and presents one
+  bounded app-styled author/date tooltip without changing pane width.
+- Ordinary editable files, read-only Diffs, editable working Diffs, and conflict Ours/Result/Theirs
+  panes share the same mode. An active annotation is reconfigured from its cached result, while
+  edits keep the existing saved-source invalidation behavior.
+- Verified with 922 frontend script tests, TypeScript checking, the production web build, 133
+  `asterlyn-git` tests, a release macOS application build, and the rendered native smoke test. The
+  verified application was installed and relaunched at `/Applications/Asterlyn.app`; the previous
+  installation remains recoverable in Trash as
+  `Asterlyn-before-compact-git-blame-20261009.app`.
+- Acceptance archive:
+  `target/release/bundle/macos/Asterlyn-compact-git-blame-20261009-macos-arm64.zip`, 9,179,480 bytes,
+  SHA-256 `6f6824e485c78040b66f5c2bb64e86f462e546317688b355f607bdec327ca649`.

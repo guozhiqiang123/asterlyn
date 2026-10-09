@@ -4,6 +4,7 @@ import type { EditorCopy } from "../../localization/catalog.ts";
 import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { projectConflictResultBlame } from "./conflict-blame-projection.ts";
 import type { ConflictGitBlameSources, GitBlameRuntime } from "./editor-gutter.ts";
+import type { GitBlameDisplayMode } from "../../preferences.ts";
 import { GitBlamePaneController, sourceBlameTarget } from "./git-blame-pane-controller.ts";
 
 type ConflictBlamePane = "ours" | "result" | "theirs";
@@ -63,6 +64,10 @@ export class ConflictGitBlameController {
 
   openMenu(pane: ConflictBlamePane, event: MouseEvent, view: EditorView): void {
     this.panes.openMenu(pane, event, view);
+  }
+
+  setDisplayMode(displayMode: GitBlameDisplayMode): void {
+    this.panes.setDisplayMode(displayMode);
   }
 
   setPresentation(layout: "split" | "unified"): void {

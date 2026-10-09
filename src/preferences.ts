@@ -28,6 +28,7 @@ export type LocalePreference = "system" | "en-US" | "zh-CN";
 export type ThemePreference = "system" | "dark" | "light";
 export type RemoteUpdateStrategyPreference = "ffOnly" | "merge" | "rebase";
 export type NewFileStagePreference = "ask" | "stage" | "leaveUntracked";
+export type GitBlameDisplayMode = "line-end" | "line-number-hover";
 
 export interface AppPreferences {
   locale: LocalePreference;
@@ -39,6 +40,7 @@ export interface AppPreferences {
   editorLetterSpacing: number;
   editorIndentSize: number;
   editorTabSize: number;
+  gitBlameDisplayMode: GitBlameDisplayMode;
   diffLayout: DiffLayout;
   showWhitespace: boolean;
   askBeforeRemoteUpdate: boolean;
@@ -56,6 +58,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   editorLetterSpacing: 0,
   editorIndentSize: 4,
   editorTabSize: 4,
+  gitBlameDisplayMode: "line-number-hover",
   diffLayout: "split",
   showWhitespace: false,
   askBeforeRemoteUpdate: true,
@@ -89,7 +92,8 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         value.version !== 5 &&
         value.version !== 6 &&
         value.version !== 7 &&
-        value.version !== 8) ||
+        value.version !== 8 &&
+        value.version !== 9) ||
       !isRecord(value.preferences)
     ) {
       return migrationSafeDefaults();
@@ -157,6 +161,9 @@ export function loadAppPreferences(storage: StorageReader): AppPreferences {
         EDITOR_TAB_SIZES,
         4,
       ),
+      gitBlameDisplayMode: isGitBlameDisplayMode(preferences.gitBlameDisplayMode)
+        ? preferences.gitBlameDisplayMode
+        : DEFAULT_APP_PREFERENCES.gitBlameDisplayMode,
       diffLayout:
         preferences.diffLayout === "unified" || preferences.diffLayout === "split"
           ? preferences.diffLayout
@@ -189,7 +196,7 @@ export function saveAppPreferences(
 ): void {
   storage.setItem(
     APP_PREFERENCES_KEY,
-    JSON.stringify({ version: 8, preferences }),
+    JSON.stringify({ version: 9, preferences }),
   );
 }
 
@@ -230,6 +237,9 @@ export function updateAppPreferences(
       EDITOR_TAB_SIZES,
       current.editorTabSize,
     ),
+    gitBlameDisplayMode: isGitBlameDisplayMode(candidate.gitBlameDisplayMode)
+      ? candidate.gitBlameDisplayMode
+      : current.gitBlameDisplayMode,
     diffLayout:
       candidate.diffLayout === "unified" || candidate.diffLayout === "split"
         ? candidate.diffLayout
@@ -269,6 +279,10 @@ export function isRemoteUpdateStrategyPreference(
 
 export function isNewFileStagePreference(value: unknown): value is NewFileStagePreference {
   return value === "ask" || value === "stage" || value === "leaveUntracked";
+}
+
+export function isGitBlameDisplayMode(value: unknown): value is GitBlameDisplayMode {
+  return value === "line-end" || value === "line-number-hover";
 }
 
 function migrationSafeDefaults(): AppPreferences {

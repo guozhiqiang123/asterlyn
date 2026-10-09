@@ -5,12 +5,13 @@ import type { ContextMenuPort } from "../../shared/context-menu/context-menu-mod
 import { gitBlameContextSession } from "./editor-gutter-context-actions.ts";
 import {
   blameContentContextMenu,
-  blameGutter,
+  gitBlamePresentation,
   type GitBlameAvailability,
   type GitBlameCopy,
   type GitBlameRuntime,
   type GitBlameSource,
 } from "./editor-gutter.ts";
+import type { GitBlameDisplayMode } from "../../preferences.ts";
 
 export interface GitBlamePaneTarget {
   readonly identity: string;
@@ -62,6 +63,7 @@ export class GitBlamePaneController {
   private readonly contextMenu: ContextMenuPort;
   private readonly ownerId: string;
   private copy: GitBlameCopy;
+  private displayMode: GitBlameDisplayMode = "line-number-hover";
 
   constructor(
     runtime: GitBlameRuntime,
@@ -78,6 +80,14 @@ export class GitBlamePaneController {
   setCopy(copy: GitBlameCopy): void {
     if (this.copy === copy) return;
     this.copy = copy;
+    for (const [pane, state] of this.states) {
+      if (state.result) this.install(pane, state.result);
+    }
+  }
+
+  setDisplayMode(displayMode: GitBlameDisplayMode): void {
+    if (this.displayMode === displayMode) return;
+    this.displayMode = displayMode;
     for (const [pane, state] of this.states) {
       if (state.result) this.install(pane, state.result);
     }
@@ -102,7 +112,9 @@ export class GitBlamePaneController {
     const result = this.states.get(pane)?.result ?? null;
     return [
       blameContentContextMenu(open),
-      compartment.of(result ? blameGutter(result, this.copy, open, sourceLine) : []),
+      compartment.of(result
+        ? gitBlamePresentation(result, this.copy, this.displayMode, sourceLine)
+        : []),
     ];
   }
 
@@ -221,10 +233,10 @@ export class GitBlamePaneController {
       if (binding.pane !== pane) continue;
       binding.view.dispatch({
         effects: binding.compartment.reconfigure(
-          blameGutter(
+          gitBlamePresentation(
             result,
             this.copy,
-            (event, view) => this.openMenu(pane, event, view),
+            this.displayMode,
             binding.sourceLine,
           ),
         ),

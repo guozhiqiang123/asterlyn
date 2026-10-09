@@ -124,7 +124,6 @@ export class EditableDiffEditor {
   private reviewSurface: EditableDiffReviewSurface | null = null;
   private blameSources: DiffGitBlameSources;
   private readonly blameController: GitBlamePaneController;
-
   constructor(
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
@@ -181,6 +180,7 @@ export class EditableDiffEditor {
     interactions?: EditableDiffInteractions,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
+    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     const isSamePath = this.path === path;
     this.blameSources = blameSources;
     this.configureBlameTargets();
@@ -398,6 +398,7 @@ export class EditableDiffEditor {
 
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
+    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     for (const binding of this.bindings) {
       binding.view.dispatch({ effects: [
         binding.tabSize.reconfigure(EditorState.tabSize.of(preferences.editorTabSize)),

@@ -170,6 +170,7 @@ export class ConflictEditor {
       blameSources, conflict.path, conflict.revisionToken, ours, theirs,
       this.exactResult.text, presentation.layout, editorCopy,
     );
+    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     this.copy = copy;
     this.resolutionModel = ConflictResolutionModel.create(
       base,
@@ -343,6 +344,7 @@ export class ConflictEditor {
 
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
+    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     this.conflictRoot?.style.setProperty("--conflict-source-tab-size", String(preferences.editorTabSize));
     for (const binding of this.bindings) {
       binding.view.dispatch({ effects: [

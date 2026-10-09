@@ -40,7 +40,9 @@ Extract the existing Diff loading, checked-menu, gutter installation, stale comp
 copy update, and disposal behavior into a reusable pane controller for the two new editable
 surfaces. Ordinary/read-only Diff remains the behavior reference and keeps its mature owner;
 editable Diff and conflict Diff share the new controller and the existing
-`blameContentContextMenu`, `blameGutter`, `ContextMenuPort`, and `GitBlameRuntime` boundaries.
+`blameContentContextMenu`, `gitBlamePresentation`, `ContextMenuPort`, and `GitBlameRuntime`
+boundaries. The presentation extension now follows the compact display preference defined by the
+compact Git Blame presentation plan.
 
 Each pane target has a stable identity, availability reason, and loader. A target change clears its
 previous result and invalidates late completions. One controller may install the same logical Result

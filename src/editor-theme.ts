@@ -155,51 +155,44 @@ const editorThemeRules =
       borderRight: "1px solid var(--bg-panel)",
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
-    ".cm-git-blame-gutter": {
-      minWidth: "260px",
-      color: "var(--text-muted)",
-      backgroundColor: "var(--bg-deep)",
+    ".cm-line-number-value": {
+      cursor: "default",
     },
-    ".cm-git-blame-gutter .cm-gutterElement": {
-      boxSizing: "border-box",
-      width: "100%",
-      padding: "0 8px",
-    },
-    ".cm-git-blame-marker": {
-      display: "grid",
-      gridTemplateColumns: "max-content minmax(0, 1fr)",
-      gap: "8px",
-      width: "100%",
-      maxWidth: "266px",
+    ".cm-git-blame-line-end": {
+      display: "inline-block",
+      maxWidth: "min(320px, 36vw)",
+      marginLeft: "28px",
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
+      verticalAlign: "bottom",
+      color: "var(--text-muted)",
+      opacity: "0.72",
       cursor: "help",
     },
-    ".cm-git-blame-time": {
+    ".cm-git-blame-tooltip": {
+      position: "absolute",
+      zIndex: "40",
+      display: "grid",
+      gap: "2px",
+      maxWidth: "min(360px, calc(100% - 8px))",
+      padding: "7px 9px",
+      color: "var(--text)",
+      backgroundColor: "var(--bg-panel)",
+      border: "1px solid var(--border-strong)",
+      borderRadius: "5px",
+      boxShadow: "0 8px 22px var(--shadow-elevated)",
+      pointerEvents: "none",
+      whiteSpace: "nowrap",
+    },
+    ".cm-git-blame-tooltip strong": {
       overflow: "hidden",
-      textAlign: "left",
       textOverflow: "ellipsis",
+      fontWeight: "600",
     },
-    ".cm-git-blame-author": {
-      overflow: "hidden",
-      textAlign: "right",
-      textOverflow: "ellipsis",
-    },
-    ".cm-git-blame-tone-0": {
-      backgroundColor: "color-mix(in srgb, var(--graph-1) 10%, var(--bg-deep))",
-    },
-    ".cm-git-blame-tone-1": {
-      backgroundColor: "color-mix(in srgb, var(--graph-2) 10%, var(--bg-deep))",
-    },
-    ".cm-git-blame-tone-2": {
-      backgroundColor: "color-mix(in srgb, var(--graph-3) 10%, var(--bg-deep))",
-    },
-    ".cm-git-blame-tone-3": {
-      backgroundColor: "color-mix(in srgb, var(--graph-4) 10%, var(--bg-deep))",
-    },
-    ".cm-git-blame-local": {
-      backgroundColor: "color-mix(in srgb, var(--file-modified) 18%, var(--bg-deep))",
+    ".cm-git-blame-tooltip span": {
+      color: "var(--text-muted)",
+      fontSize: "0.9em",
     },
     ".cm-git-blame-uncommitted": {
       color: "var(--warning-text)",
@@ -461,9 +454,6 @@ const editorThemeRules =
     ".cm-source-removed-gutter": { backgroundColor: "var(--editor-diff-removed-bg)" },
     ".cm-source-spacer-gutter": { backgroundColor: "var(--surface-editor-secondary)" },
     ".cm-source-omitted-gutter": { backgroundColor: "var(--info-bg)" },
-    ".cm-git-blame-gutter .cm-gutterElement.cm-activeLineGutter:not(.cm-source-added-gutter):not(.cm-source-removed-gutter):not(.cm-source-spacer-gutter):not(.cm-source-omitted-gutter)": {
-      backgroundColor: "var(--editor-active-line)",
-    },
     ".cm-source-spacer": {
       backgroundColor: "var(--surface-editor-secondary)",
       color: "transparent",

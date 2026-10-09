@@ -70,6 +70,7 @@ test("preferences update only through bounded choices and round trip by version"
     editorLetterSpacing: 0.5,
     editorIndentSize: 2,
     editorTabSize: 2,
+    gitBlameDisplayMode: "line-end",
     diffLayout: "unified",
     showWhitespace: true,
     askBeforeRemoteUpdate: false,
@@ -96,6 +97,11 @@ test("preferences update only through bounded choices and round trip by version"
   );
   assert.equal(updateAppPreferences(updated, { locale: "fr-FR" }).locale, "zh-CN");
   assert.equal(updateAppPreferences(updated, { theme: "sepia" }).theme, "light");
+  assert.equal(
+    updateAppPreferences(updated, { gitBlameDisplayMode: "wide-gutter" })
+      .gitBlameDisplayMode,
+    "line-end",
+  );
   assert.equal(
     updateAppPreferences(updated, { preferredRemoteUpdateStrategy: "reset" })
       .preferredRemoteUpdateStrategy,
@@ -188,6 +194,7 @@ test("version three untouched typography defaults migrate without replacing cust
     editorLetterSpacing: 0.5,
     editorIndentSize: 8,
     editorTabSize: 8,
+    gitBlameDisplayMode: "line-number-hover",
     diffLayout: "unified",
     showWhitespace: true,
     askBeforeRemoteUpdate: true,
@@ -196,7 +203,7 @@ test("version three untouched typography defaults migrate without replacing cust
   });
 });
 
-test("version eight persists bounded presentation, editor, Update, and staging choices", () => {
+test("version nine persists bounded presentation, editor, Update, staging, and Blame choices", () => {
   const selected = {
     ...DEFAULT_APP_PREFERENCES,
     editorFontFamily: "cascadia-code",
@@ -218,6 +225,20 @@ test("version eight persists bounded presentation, editor, Update, and staging c
   );
   assert.equal(loadAppPreferences(memoryStorage(malformed)).locale, "en-US");
   assert.equal(loadAppPreferences(memoryStorage(malformed)).theme, "dark");
+});
+
+test("version eight preferences gain the compact line-number Blame default", () => {
+  const persisted = JSON.stringify({
+    version: 8,
+    preferences: {
+      ...DEFAULT_APP_PREFERENCES,
+      gitBlameDisplayMode: undefined,
+    },
+  });
+  assert.equal(
+    loadAppPreferences(memoryStorage(persisted)).gitBlameDisplayMode,
+    "line-number-hover",
+  );
 });
 
 test("version six gains safe prompting defaults for current-branch Update", () => {

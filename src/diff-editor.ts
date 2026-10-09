@@ -53,7 +53,7 @@ import { EditorLanguageLoader } from "./editor-language";
 import type { GitBlameResult } from "./models.ts";
 import {
   blameContentContextMenu,
-  blameGutter,
+  gitBlamePresentation,
   lineNumberGutter,
   type DiffGitBlameSources,
   type GitBlameCopy,
@@ -226,6 +226,8 @@ export class DiffEditor {
   }
 
   setPreferences(preferences: AppPreferences): void {
+    const blameDisplayChanged =
+      this.editorPreferences.gitBlameDisplayMode !== preferences.gitBlameDisplayMode;
     this.editorPreferences = { ...preferences };
     for (const binding of this.languageBindings) {
       applyEditorPreferences(binding.view, preferences);
@@ -234,6 +236,12 @@ export class DiffEditor {
           EditorState.tabSize.of(preferences.editorTabSize),
         ),
       });
+    }
+    if (blameDisplayChanged) {
+      for (const side of ["old", "new"] as const) {
+        const result = this.blameState[side].result;
+        if (result) this.installBlame(side, result);
+      }
     }
   }
 
@@ -396,7 +404,12 @@ export class DiffEditor {
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
       blameContentContextMenu(openBlameMenu),
       blame.of(activeBlame
-        ? blameGutter(activeBlame, this.blameCopy, openBlameMenu, sourceLine)
+        ? gitBlamePresentation(
+            activeBlame,
+            this.blameCopy,
+            this.editorPreferences.gitBlameDisplayMode,
+            sourceLine,
+          )
         : []),
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
@@ -570,10 +583,10 @@ export class DiffEditor {
       if (binding.side !== side) continue;
       binding.view.dispatch({
         effects: binding.blame.reconfigure(
-          blameGutter(
+          gitBlamePresentation(
             result,
             this.blameCopy,
-            (event, view) => this.openBlameMenu(side, event, view),
+            this.editorPreferences.gitBlameDisplayMode,
             binding.sourceLine,
           ),
         ),

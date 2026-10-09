@@ -54,6 +54,13 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
   assert.match(general, /应用语言/);
   assert.match(general, /data-setting-locale="zh-CN" aria-pressed="true"/);
 
+  const editor = renderSettingsSection({
+    section: "editor",
+    preferences: { ...DEFAULT_APP_PREFERENCES, locale: "zh-CN" },
+  }, { id: null, kind: "idle" }, catalog.settings);
+  assert.match(editor, /Git Blame 显示方式/);
+  assert.match(editor, /悬浮行号/);
+
   const commandSurface = renderCommandSurface({
     commandSurface: { mode: "commands", query: "", selectedIndex: 0 },
     workspaceOpen: true,
