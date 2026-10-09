@@ -36,6 +36,7 @@ export interface DiffReviewBlock {
   readonly status: DiffReviewBlockStatus;
   readonly actions: readonly DiffReviewAction[];
   readonly authoritativeConflict?: boolean;
+  readonly authoritativeConflictGroup?: string;
 }
 
 export interface DiffReviewPane {
@@ -121,11 +122,13 @@ export function summarizeDiffReviewBlocks(
   let reviewed = 0;
   let explicitlyReviewed = 0;
   let manual = 0;
-  let authoritativeConflicts = 0;
+  const authoritativeConflictGroups = new Set<string>();
   for (const block of blocks) {
     if (block.kind === "conflict") {
       conflicts += 1;
-      if (block.authoritativeConflict) authoritativeConflicts += 1;
+      if (block.authoritativeConflict) {
+        authoritativeConflictGroups.add(block.authoritativeConflictGroup ?? block.id);
+      }
       if (block.status === "pending" || block.status === "manual") pendingConflicts += 1;
     }
     if (block.kind === "identical") identical += 1;
@@ -144,6 +147,6 @@ export function summarizeDiffReviewBlocks(
     reviewed,
     explicitlyReviewed,
     manual,
-    authoritativeConflicts,
+    authoritativeConflicts: authoritativeConflictGroups.size,
   };
 }

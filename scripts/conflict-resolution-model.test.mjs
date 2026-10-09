@@ -240,6 +240,46 @@ test("worktree markers split a repeated add/add insertion into exact two-sided c
   assert.equal(projectConflictDiff(model.snapshots()).summary.pendingConflicts, 0);
 });
 
+test("one marker group keeps separated two-sided edits as independent decisions", () => {
+  const fixture = separatedEditsInOneMarkerFixture();
+  const model = ConflictResolutionModel.create(
+    fixture.base,
+    fixture.ours,
+    fixture.theirs,
+    fixture.result,
+    fixture.worktree,
+  );
+  const blocks = model.snapshots();
+  const review = projectConflictDiff(blocks);
+
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(blocks.map((block) => block.markerGroup), [0, 0]);
+  assert.equal(review.summary.authoritativeConflicts, 1);
+  assert.equal(review.summary.pendingConflicts, 2);
+
+  const firstControlRange = {
+    from: blocks[0].ours.from,
+    to: blocks[0].ours.from + "alpha ours".length,
+  };
+  const afterFirst = applyModelDecision(model, "ours", "accepted", firstControlRange, fixture.result);
+  assert.match(afterFirst, /alpha ours/u);
+  assert.doesNotMatch(afterFirst, /omega ours/u);
+  assert.equal(model.snapshots()[0].oursDecision, "accepted");
+  assert.equal(model.snapshots()[1].oursDecision, "pending");
+  assert.equal(projectConflictDiff(model.snapshots()).summary.pendingConflicts, 2);
+
+  const ignored = ConflictResolutionModel.create(
+    fixture.base,
+    fixture.ours,
+    fixture.theirs,
+    fixture.result,
+    fixture.worktree,
+  );
+  ignored.applyDecision("ours", "ignored", firstControlRange, fixture.result);
+  assert.equal(ignored.snapshots()[0].oursDecision, "ignored");
+  assert.equal(ignored.snapshots()[1].oursDecision, "pending");
+});
+
 function applyDecision(fixture, side, decision, source) {
   return applyModelDecision(fixture.model, side, decision, source, fixture.result);
 }
@@ -336,4 +376,41 @@ ${closing} topic
 }
 `;
   return { base, ours, theirs, worktree, result };
+}
+
+function separatedEditsInOneMarkerFixture() {
+  const opening = "<".repeat(7);
+  const separator = "=".repeat(7);
+  const closing = ">".repeat(7);
+  const base = `head
+alpha base
+shared
+omega base
+tail
+`;
+  const ours = `head
+alpha ours
+shared
+omega ours
+tail
+`;
+  const theirs = `head
+alpha theirs
+shared
+omega theirs
+tail
+`;
+  const worktree = `head
+${opening} HEAD
+alpha ours
+shared
+omega ours
+${separator}
+alpha theirs
+shared
+omega theirs
+${closing} topic
+tail
+`;
+  return { base, ours, theirs, worktree, result: base };
 }

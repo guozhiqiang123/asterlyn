@@ -25,6 +25,7 @@ export interface ConflictResolutionBlockSnapshot {
   readonly automaticallyResolved: boolean;
   readonly manuallyEdited: boolean;
   readonly markerBacked?: boolean;
+  readonly markerGroup?: number;
 }
 
 export interface ConflictResolutionHistoryState {
@@ -78,6 +79,7 @@ interface ConflictResolutionBlock {
   theirsDecision: ConflictResolutionDecision;
   manuallyEdited: boolean;
   readonly markerBacked: boolean;
+  readonly markerGroup: number | null;
 }
 
 /**
@@ -115,14 +117,36 @@ export class ConflictResolutionModel {
     const clusters = clusterChanges([
       ...oursChanges.map((change) => ({ side: "ours" as const, change })),
       ...theirsChanges.map((change) => ({ side: "theirs" as const, change })),
-    ]).filter((cluster) => !markerProjection?.blocks.some((marker) =>
+    ]);
+    const markerOwners = clusters.map((cluster) => markerProjection?.blocks.flatMap((marker, index) =>
       cluster.some(({ side, change }) => rangesTouch(
-        { from: change.fromB, to: change.toB },
-        marker[side],
-      )),
-    ));
+          { from: change.fromB, to: change.toB },
+          marker[side],
+        ))
+        ? [index]
+        : [],
+    ) ?? []);
+    const granularMarkerGroups = new Set<number>();
+    for (let index = 0; index < (markerProjection?.blocks.length ?? 0); index += 1) {
+      const related = clusters.map((cluster, clusterIndex) => ({
+        cluster,
+        owners: markerOwners[clusterIndex]!,
+      })).filter(({ owners }) => owners.includes(index));
+      if (related.length > 0 && related.every(({ cluster, owners }) =>
+        owners.length === 1 &&
+        cluster.some(({ side }) => side === "ours") &&
+        cluster.some(({ side }) => side === "theirs")
+      )) {
+        granularMarkerGroups.add(index);
+      }
+    }
 
-    const blocks: Array<Omit<ConflictResolutionBlock, "id">> = clusters.map((cluster) => {
+    const blocks: Array<Omit<ConflictResolutionBlock, "id">> = clusters.flatMap((cluster, clusterIndex) => {
+      const owners = markerOwners[clusterIndex]!;
+      const markerGroup = owners.length === 1 && granularMarkerGroups.has(owners[0]!)
+        ? owners[0]!
+        : null;
+      if (owners.length > 0 && markerGroup === null) return [];
       const baseFrom = Math.min(...cluster.map(({ change }) => change.fromA));
       const baseTo = Math.max(...cluster.map(({ change }) => change.toA));
       const oursRange = mappedRange(oursMapping, baseFrom, baseTo);
@@ -137,7 +161,7 @@ export class ConflictResolutionModel {
       const automaticallyResolved = (!oursChanged && theirsChanged && fallbackText === theirsText) ||
         (oursChanged && !theirsChanged && fallbackText === oursText) ||
         (oursChanged && theirsChanged && sameSideContent && fallbackText === oursText);
-      return {
+      return [{
         base: { from: baseFrom, to: baseTo },
         ours: oursRange,
         theirs: theirsRange,
@@ -151,8 +175,9 @@ export class ConflictResolutionModel {
         oursDecision: "pending",
         theirsDecision: "pending",
         manuallyEdited: false,
-        markerBacked: false,
-      };
+        markerBacked: markerGroup !== null,
+        markerGroup,
+      }];
     });
     if (markerProjection) {
       const markerResultMapping = changeMapping(
@@ -160,7 +185,8 @@ export class ConflictResolutionModel {
         result,
         lineStructuralDiff(markerProjection.result, result),
       );
-      for (const marker of markerProjection.blocks) {
+      for (const [markerGroup, marker] of markerProjection.blocks.entries()) {
+        if (granularMarkerGroups.has(markerGroup)) continue;
         const resultRange = mappedRange(markerResultMapping, marker.result.from, marker.result.to);
         blocks.push({
           base: marker.base,
@@ -177,6 +203,7 @@ export class ConflictResolutionModel {
           theirsDecision: "pending",
           manuallyEdited: false,
           markerBacked: true,
+          markerGroup,
         });
       }
     }
@@ -201,6 +228,7 @@ export class ConflictResolutionModel {
       automaticallyResolved: block.automaticallyResolved,
       manuallyEdited: block.manuallyEdited,
       markerBacked: block.markerBacked,
+      markerGroup: block.markerGroup ?? undefined,
     }));
   }
 
