@@ -116,14 +116,24 @@
 }
 
 .conflict-three-pane .cm-mergeViewEditor {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 100%;
   overflow: visible;
 }
 
+/* MergeView forces auto heights to keep vertical scrolling on the outer view.
+   Stretch with flex, not a percentage chain through those auto-height boxes. */
 .conflict-three-pane .cm-mergeViewEditor > .cm-editor,
 .conflict-three-pane .cm-mergeViewEditor > .cm-editor > .cm-scroller {
-  min-height: 100%;
+  flex: 1 0 auto;
+}
+
+/* CodeMirror aligns scroller children at the top and computes gutter min-height
+   from document content. Stretch both before/after gutters over short panes. */
+.conflict-three-pane .cm-scroller > .cm-gutters {
+  align-self: stretch;
+  height: auto;
 }
 
 .conflict-three-pane .cm-scroller {

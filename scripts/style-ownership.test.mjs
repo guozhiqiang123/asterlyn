@@ -392,8 +392,6 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
   assert.doesNotMatch(scrollbarRule, /\)\s+auto;/u);
   assert.match(css, /\.conflict-scrollbar-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.conflict-right-merge > \.cm-mergeView\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/s);
-  assert.match(css, /\.conflict-three-pane \.cm-mergeViewEditor\s*\{[^}]*min-height:\s*100%;/s);
-  assert.match(css, /\.conflict-three-pane \.cm-mergeViewEditor > \.cm-editor,[^}]*\.conflict-three-pane \.cm-mergeViewEditor > \.cm-editor > \.cm-scroller\s*\{[^}]*min-height:\s*100%;/s);
   assert.match(resultMirrorRule, /flex:\s*0 0 0 !important;/u);
   assert.match(resultMirrorRule, /visibility:\s*hidden;/u);
   assert.match(resultMirrorRule, /pointer-events:\s*none;/u);
