@@ -6716,11 +6716,10 @@ export class AsterlynApp {
       ?.addEventListener("click", () => {
         void (async () => {
           this.captureMountedTextEditor();
-          if (
-            this.activeDocument().kind === "conflict-resolution" &&
-            !(await this.gitOperationRuntime.close())
-          ) return;
-          this.filesEditorRuntime.editor.closePreview();
+          const preview = this.editorState.session.preview;
+          if (preview?.kind === "conflict-resolution") {
+            if (!(await this.gitOperationRuntime.close())) return;
+          } else this.filesEditorRuntime.editor.closePreview();
           this.imageSurface = null;
           this.renderEditor();
         })();

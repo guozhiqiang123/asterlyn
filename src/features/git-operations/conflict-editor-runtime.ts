@@ -7,6 +7,7 @@ import type { DiffPresentation } from "../../diff-presentation.ts";
 import type { DiffReviewSummary } from "../../shared/diff-review/diff-review-model.ts";
 import { CONFLICT_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
+import { gitConflictMarkerCount } from "./conflict-markers.ts";
 import type {
   GitOperationChange,
   GitOperationController,
@@ -140,7 +141,8 @@ export class ConflictEditorRuntime {
       surface.setConflictReadOnly(resolving);
     }
     const summary = surface.conflictReviewSummary();
-    const canSave = !resolving && state.conflict?.binary === false && conflictReviewCompletionReady(summary);
+    const canSave = !resolving && state.conflict?.binary === false &&
+      conflictReviewCompletionReady(summary, state.conflict);
     this.query("#content-header").innerHTML = `${contentHeading(basename(document.path), document.path)}
       <div class="header-actions conflict-editor-actions">
         ${this.toolbar(summary, Boolean(conflict && !conflict.binary), document.path)}
@@ -233,7 +235,7 @@ export class ConflictEditorRuntime {
     const { controller } = this.options;
     const conflict = controller.state.conflict;
     const result = controller.state.conflictResult;
-    if (controller.hasUnsavedConflict() && !(await this.options.confirmDiscard())) return false;
+    if (this.hasUnsavedReview() && !(await this.options.confirmDiscard())) return false;
     if (controller.state.conflict !== conflict || controller.state.conflictResult !== result) return false;
     if (!controller.closeDialog(true)) return false;
     this.options.editor.closePreview();
@@ -245,7 +247,7 @@ export class ConflictEditorRuntime {
     const { controller } = this.options;
     const conflict = controller.state.conflict;
     const result = controller.state.conflictResult;
-    if (!conflictReviewCompletionReady(this.options.surface.conflictReviewSummary())) return false;
+    if (!conflictReviewCompletionReady(this.options.surface.conflictReviewSummary(), conflict)) return false;
     if (controller.state.conflict !== conflict || controller.state.conflictResult !== result) return false;
     this.options.resolve(false);
     return true;
@@ -285,8 +287,13 @@ export function conflictFileNavigation(
   };
 }
 
-export function conflictReviewCompletionReady(summary: DiffReviewSummary | null): boolean {
-  return summary !== null && summary.pendingConflicts === 0;
+export function conflictReviewCompletionReady(
+  summary: DiffReviewSummary | null,
+  conflict: GitConflictContent | null = null,
+): boolean {
+  if (summary === null || summary.pendingConflicts !== 0) return false;
+  const markerCount = gitConflictMarkerCount(conflict?.worktree ?? null);
+  return markerCount === 0 || summary.authoritativeConflicts === markerCount;
 }
 
 function basename(path: string): string {

@@ -81,6 +81,9 @@ export class GitOperationRuntime {
   }
 
   close(): Promise<boolean> {
+    if (this.controller.state.conflict && this.conflictEditor) {
+      return this.conflictEditor.requestCancel();
+    }
     return this.binding.close();
   }
 

@@ -95,6 +95,7 @@ export class GitOperationController {
   private readonly listeners = new Set<Listener>();
   private messages: GitOperationCopy;
   private conflictPaths = new Set<string>();
+  private conflictInitialResult = "";
   private generation = 0;
   private requestSequence = 0;
   private disposed = false;
@@ -138,6 +139,7 @@ export class GitOperationController {
       if (!remains && !keepConflictDraft) {
         this.state.conflict = null;
         this.state.conflictResult = "";
+        this.conflictInitialResult = "";
       }
     }
     if (!rootChanged && keepConflictDraft && !this.conflictPaths.has(this.state.conflict?.path ?? "")) {
@@ -168,7 +170,7 @@ export class GitOperationController {
 
   hasUnsavedConflict(): boolean {
     const conflict = this.state.conflict;
-    return !!conflict && this.state.conflictResult !== initialConflictResult(conflict);
+    return !!conflict && this.state.conflictResult !== this.conflictInitialResult;
   }
 
   closeDialog(discardConflict = false): boolean {
@@ -251,12 +253,14 @@ export class GitOperationController {
     const dialogChanged = this.state.dialog !== null;
     this.state.dialog = null;
     this.state.conflict = null;
+    this.conflictInitialResult = "";
     this.emit({ reason: "request-start", dialogChanged, conflictChanged: true });
     try {
       const conflict = await this.gateway.readConflictContent(root, path);
       if (!this.matches(generation, request, root)) return false;
       this.state.conflict = conflict;
-      this.state.conflictResult = initialConflictResult(conflict);
+      this.conflictInitialResult = initialConflictResult(conflict);
+      this.state.conflictResult = this.conflictInitialResult;
       this.state.loading = null;
       this.emit({ reason: "request-complete", conflictChanged: true });
       return true;
@@ -320,6 +324,7 @@ export class GitOperationController {
       if (loading === "resolve") {
         this.state.conflict = null;
         this.state.conflictResult = "";
+        this.conflictInitialResult = "";
       }
       this.emit({
         reason: "request-complete",
@@ -353,6 +358,7 @@ export class GitOperationController {
     this.state.plan = null;
     this.state.conflict = null;
     this.state.conflictResult = "";
+    this.conflictInitialResult = "";
     this.state.loading = null;
     this.state.error = null;
   }

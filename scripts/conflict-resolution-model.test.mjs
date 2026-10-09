@@ -213,6 +213,33 @@ test("independent blocks keep later Result ranges mapped after an earlier length
   assert.equal(model.hasChanges("theirs", first.theirs), false);
 });
 
+test("worktree markers split a repeated add/add insertion into exact two-sided conflicts", () => {
+  const fixture = repeatedAddAddFixture();
+  const model = ConflictResolutionModel.create(
+    fixture.base,
+    fixture.ours,
+    fixture.theirs,
+    fixture.result,
+    fixture.worktree,
+  );
+  const review = projectConflictDiff(model.snapshots());
+  const conflicts = review.blocks.filter((block) => block.kind === "conflict");
+
+  assert.equal(conflicts.length, 2);
+  assert.equal(review.summary.authoritativeConflicts, 2);
+  assert.equal(review.summary.pendingConflicts, 2);
+  assert.deepEqual(conflicts.map((block) => block.actions.map((action) => action.id)), [
+    ["apply-ours", "ignore-ours", "apply-theirs", "ignore-theirs"],
+    ["apply-ours", "ignore-ours", "apply-theirs", "ignore-theirs"],
+  ]);
+
+  for (const block of model.snapshots().filter((snapshot) => snapshot.oursChanged && snapshot.theirsChanged)) {
+    model.applyDecision("ours", "ignored", block.ours, fixture.result);
+    model.applyDecision("theirs", "ignored", block.theirs, fixture.result);
+  }
+  assert.equal(projectConflictDiff(model.snapshots()).summary.pendingConflicts, 0);
+});
+
 function applyDecision(fixture, side, decision, source) {
   return applyModelDecision(fixture.model, side, decision, source, fixture.result);
 }
@@ -235,4 +262,78 @@ function transactionChanges(transaction) {
     changes.push({ from, to, insert: inserted.toString() });
   });
   return changes;
+}
+
+function repeatedAddAddFixture() {
+  const opening = "<".repeat(7);
+  const separator = "=".repeat(7);
+  const closing = ">".repeat(7);
+  const base = "void main() {\n  existing();\n}\n";
+  const ours = `void main() {
+  existing();
+
+  testUsingContext(() {
+    sharedOne();
+    oursOne();
+  });
+
+  testUsingContext(() {
+    sharedTwo();
+    oursTwoA();
+    oursTwoB();
+  });
+}
+`;
+  const theirs = `void main() {
+  existing();
+
+  testUsingContext(() {
+    sharedOne();
+    theirsOneA();
+    theirsOneB();
+  });
+
+  testUsingContext(() {
+    sharedTwo();
+    theirsTwo();
+  });
+}
+`;
+  const worktree = `void main() {
+  existing();
+
+  testUsingContext(() {
+    sharedOne();
+${opening} HEAD
+    oursOne();
+${separator}
+    theirsOneA();
+    theirsOneB();
+${closing} topic
+  });
+
+  testUsingContext(() {
+    sharedTwo();
+${opening} HEAD
+    oursTwoA();
+    oursTwoB();
+${separator}
+    theirsTwo();
+${closing} topic
+  });
+}
+`;
+  const result = `void main() {
+  existing();
+
+  testUsingContext(() {
+    sharedOne();
+  });
+
+  testUsingContext(() {
+    sharedTwo();
+  });
+}
+`;
+  return { base, ours, theirs, worktree, result };
 }

@@ -87,6 +87,7 @@ export function projectConflictDiff(
     },
     status: conflictStatus(block),
     actions: conflictActions(block),
+    authoritativeConflict: block.markerBacked === true,
   }));
   const panes: readonly DiffReviewPane[] = [
     { id: "ours", role: "Ours", writable: false },

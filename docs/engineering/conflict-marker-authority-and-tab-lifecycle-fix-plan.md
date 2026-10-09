@@ -80,10 +80,12 @@ projection reports no conflicts.
 
 ## Validation
 
-1. Run the focused conflict merge/model, conflict editor runtime, and editor tab/view tests.
-2. Run the complete script suite.
-3. Run TypeScript checking and the production web build.
-4. Build the macOS release bundle and run the rendered native smoke test.
-5. Replace the local Asterlyn application with the verified bundle and reopen the Flutter
-   repository for manual acceptance.
-
+- Focused conflict merge/model/editor runtime coverage: 32 tests passed.
+- Complete script suite: 917 tests passed.
+- TypeScript checking and the production web build passed.
+- The Flutter `gradle_errors_test.dart` acceptance case projects its two complete marker groups as
+  exactly two pending, two-sided authoritative conflicts. The marker-clean Result retains the
+  shared test bodies once and Save remains disabled before review.
+- The macOS release bundle built successfully and the rendered native smoke test passed.
+- The verified application bundle was installed locally and the Flutter repository was reopened
+  for manual acceptance.

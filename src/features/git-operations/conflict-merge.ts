@@ -1,4 +1,8 @@
 import type { GitConflictContent } from "../../models.ts";
+import {
+  gitConflictMarkerCount,
+  projectConflictMarkers,
+} from "./conflict-markers.ts";
 
 interface LineEdit {
   readonly from: number;
@@ -23,24 +27,15 @@ export function initialConflictResult(conflict: GitConflictContent): string {
   if (conflict.worktree !== null && !hasGitConflictMarkers(conflict.worktree)) {
     return conflict.worktree;
   }
-  return threeWayMerge(conflict.base ?? "", conflict.ours ?? "", conflict.theirs ?? "");
+  const base = conflict.base ?? "";
+  const ours = conflict.ours ?? "";
+  const theirs = conflict.theirs ?? "";
+  return projectConflictMarkers(base, ours, theirs, conflict.worktree)?.result ??
+    threeWayMerge(base, ours, theirs);
 }
 
 export function hasGitConflictMarkers(content: string): boolean {
-  let opened = false;
-  let separated = false;
-  for (const line of splitLines(content)) {
-    const marker = line.replace(/(?:\r\n|\r|\n)$/u, "");
-    if (/^<{7}(?: .*)?$/u.test(marker)) {
-      opened = true;
-      separated = false;
-    } else if (opened && /^={7}$/u.test(marker)) {
-      separated = true;
-    } else if (opened && separated && /^>{7}(?: .*)?$/u.test(marker)) {
-      return true;
-    }
-  }
-  return false;
+  return gitConflictMarkerCount(content) > 0;
 }
 
 /**

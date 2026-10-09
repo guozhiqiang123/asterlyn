@@ -139,10 +139,17 @@ export class ConflictEditor {
     const ours = decodeExactText(conflict.ours ?? "").text;
     const theirs = decodeExactText(conflict.theirs ?? "").text;
     const base = decodeExactText(conflict.base ?? "").text;
+    const worktree = conflict.worktree === null ? null : decodeExactText(conflict.worktree).text;
     this.ours = ours;
     this.theirs = theirs;
     this.copy = copy;
-    this.resolutionModel = ConflictResolutionModel.create(base, ours, theirs, this.exactResult.text);
+    this.resolutionModel = ConflictResolutionModel.create(
+      base,
+      ours,
+      theirs,
+      this.exactResult.text,
+      worktree,
+    );
     this.activeReviewBlock = -1;
     this.collapseCoordinator = new ConflictCollapseCoordinator(base, ours, this.exactResult.text, theirs);
     const root = document.createElement("section");

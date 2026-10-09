@@ -2,6 +2,7 @@ import { ChangeSet } from "@codemirror/state";
 import type { Change } from "@codemirror/merge";
 import { lineAwareDiff } from "./shared/diff-review/line-aware-diff.ts";
 import type { TextChange } from "./features/files-editor/text-content.ts";
+import { projectConflictMarkers } from "./features/git-operations/conflict-markers.ts";
 
 export type ConflictResolutionSide = "ours" | "theirs";
 export type ConflictResolutionDecision = "pending" | "accepted" | "ignored";
@@ -23,6 +24,7 @@ export interface ConflictResolutionBlockSnapshot {
   readonly sameSideContent: boolean;
   readonly automaticallyResolved: boolean;
   readonly manuallyEdited: boolean;
+  readonly markerBacked?: boolean;
 }
 
 export interface ConflictResolutionHistoryState {
@@ -56,6 +58,7 @@ interface ConflictResolutionBlock {
   oursDecision: ConflictResolutionDecision;
   theirsDecision: ConflictResolutionDecision;
   manuallyEdited: boolean;
+  readonly markerBacked: boolean;
 }
 
 /**
@@ -72,19 +75,31 @@ export class ConflictResolutionModel {
     this.blocks = blocks;
   }
 
-  static create(base: string, ours: string, theirs: string, result: string): ConflictResolutionModel {
+  static create(
+    base: string,
+    ours: string,
+    theirs: string,
+    result: string,
+    worktree: string | null = null,
+  ): ConflictResolutionModel {
     const oursChanges = lineAwareDiff(base, ours);
     const theirsChanges = lineAwareDiff(base, theirs);
     const resultChanges = lineAwareDiff(base, result);
     const oursMapping = changeMapping(base.length, ours, oursChanges);
     const theirsMapping = changeMapping(base.length, theirs, theirsChanges);
     const resultMapping = changeMapping(base.length, result, resultChanges);
+    const markerProjection = projectConflictMarkers(base, ours, theirs, worktree);
     const clusters = clusterChanges([
       ...oursChanges.map((change) => ({ side: "ours" as const, change })),
       ...theirsChanges.map((change) => ({ side: "theirs" as const, change })),
-    ]);
+    ]).filter((cluster) => !markerProjection?.blocks.some((marker) =>
+      cluster.some(({ side, change }) => rangesTouch(
+        { from: change.fromB, to: change.toB },
+        marker[side],
+      )),
+    ));
 
-    return new ConflictResolutionModel(clusters.map((cluster, id) => {
+    const blocks: Array<Omit<ConflictResolutionBlock, "id">> = clusters.map((cluster) => {
       const baseFrom = Math.min(...cluster.map(({ change }) => change.fromA));
       const baseTo = Math.max(...cluster.map(({ change }) => change.toA));
       const oursRange = mappedRange(oursMapping, baseFrom, baseTo);
@@ -100,7 +115,6 @@ export class ConflictResolutionModel {
         (oursChanged && !theirsChanged && fallbackText === oursText) ||
         (oursChanged && theirsChanged && sameSideContent && fallbackText === oursText);
       return {
-        id,
         base: { from: baseFrom, to: baseTo },
         ours: oursRange,
         theirs: theirsRange,
@@ -114,8 +128,39 @@ export class ConflictResolutionModel {
         oursDecision: "pending",
         theirsDecision: "pending",
         manuallyEdited: false,
+        markerBacked: false,
       };
-    }));
+    });
+    if (markerProjection) {
+      const markerResultMapping = changeMapping(
+        markerProjection.result.length,
+        result,
+        lineAwareDiff(markerProjection.result, result),
+      );
+      for (const marker of markerProjection.blocks) {
+        const resultRange = mappedRange(markerResultMapping, marker.result.from, marker.result.to);
+        blocks.push({
+          base: marker.base,
+          ours: marker.ours,
+          theirs: marker.theirs,
+          result: resultRange,
+          oursText: ours.slice(marker.ours.from, marker.ours.to),
+          theirsText: theirs.slice(marker.theirs.from, marker.theirs.to),
+          fallbackText: result.slice(resultRange.from, resultRange.to),
+          oursChanged: true,
+          theirsChanged: true,
+          automaticallyResolved: false,
+          oursDecision: "pending",
+          theirsDecision: "pending",
+          manuallyEdited: false,
+          markerBacked: true,
+        });
+      }
+    }
+    blocks.sort((left, right) =>
+      left.result.from - right.result.from || left.base.from - right.base.from,
+    );
+    return new ConflictResolutionModel(blocks.map((block, id) => ({ id, ...block })));
   }
 
   snapshots(): readonly ConflictResolutionBlockSnapshot[] {
@@ -132,6 +177,7 @@ export class ConflictResolutionModel {
       sameSideContent: block.oursText === block.theirsText,
       automaticallyResolved: block.automaticallyResolved,
       manuallyEdited: block.manuallyEdited,
+      markerBacked: block.markerBacked,
     }));
   }
 

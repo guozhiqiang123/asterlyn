@@ -122,6 +122,33 @@ test("Cancel reuses discard confirmation and clears only the transient draft", a
   assert.equal(accepted.active().kind, "welcome");
 });
 
+test("closing a decision-only conflict review confirms discard and clears its session", async () => {
+  const rejectedController = new GitOperationController(gateway());
+  rejectedController.installSnapshot(snapshot());
+  const rejected = runtimeHarness(rejectedController, snapshot(), {
+    discard: false,
+    reviewPending: 1,
+    explicitlyReviewed: 1,
+  });
+  await rejected.runtime.open("one.txt");
+
+  assert.equal(await rejected.runtime.requestCancel(), false);
+  assert.equal(rejectedController.state.conflict?.path, "one.txt");
+
+  const acceptedController = new GitOperationController(gateway());
+  acceptedController.installSnapshot(snapshot());
+  const accepted = runtimeHarness(acceptedController, snapshot(), {
+    discard: true,
+    reviewPending: 1,
+    explicitlyReviewed: 1,
+  });
+  await accepted.runtime.open("one.txt");
+
+  assert.equal(await accepted.runtime.requestCancel(), true);
+  assert.equal(acceptedController.state.conflict, null);
+  assert.equal(accepted.active().kind, "welcome");
+});
+
 test("Save and Stage stays blocked until every conflict block is explicitly completed", async () => {
   const controller = new GitOperationController(gateway());
   controller.installSnapshot(snapshot());
@@ -141,6 +168,28 @@ test("Save and Stage stays blocked until every conflict block is explicitly comp
   assert.equal(conflictReviewCompletionReady({
     ...reviewSummary(16, 0), total: 18, conflicts: 0, nonConflicting: 16,
   }), true);
+  assert.equal(conflictReviewCompletionReady({
+    ...reviewSummary(0, 0, 2, 0), total: 2, conflicts: 0, nonConflicting: 2,
+  }, {
+    path: "marker-mismatch.txt",
+    base: "base\n",
+    ours: "ours\n",
+    theirs: "theirs\n",
+    worktree: "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n",
+    binary: false,
+    revisionToken: "marker-mismatch",
+  }), false);
+  assert.equal(conflictReviewCompletionReady({
+    ...reviewSummary(2, 0), authoritativeConflicts: 2,
+  }, {
+    path: "marker-backed.txt",
+    base: "base\n",
+    ours: "ours\n",
+    theirs: "theirs\n",
+    worktree: "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n",
+    binary: false,
+    revisionToken: "marker-backed",
+  }), false);
 });
 
 function runtimeHarness(controller, repository = snapshot(), confirmations = {}) {
@@ -163,6 +212,7 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
               confirmations.reviewPending,
               confirmations.reviewPending,
               confirmations.explicitlyReviewed,
+              confirmations.authoritativeConflicts,
             );
       },
     },
@@ -195,7 +245,12 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
   };
 }
 
-function reviewSummary(pending, pendingConflicts = pending, explicitlyReviewed = 2 - pending) {
+function reviewSummary(
+  pending,
+  pendingConflicts = pending,
+  explicitlyReviewed = 2 - pending,
+  authoritativeConflicts = 1,
+) {
   return {
     total: 2,
     conflicts: 2,
@@ -206,6 +261,7 @@ function reviewSummary(pending, pendingConflicts = pending, explicitlyReviewed =
     reviewed: 2 - pending,
     explicitlyReviewed,
     manual: 0,
+    authoritativeConflicts,
   };
 }
 

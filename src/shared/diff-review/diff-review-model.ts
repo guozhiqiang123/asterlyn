@@ -35,6 +35,7 @@ export interface DiffReviewBlock {
   readonly ranges: Readonly<Partial<Record<DiffReviewPaneId, DiffReviewRange | null>>>;
   readonly status: DiffReviewBlockStatus;
   readonly actions: readonly DiffReviewAction[];
+  readonly authoritativeConflict?: boolean;
 }
 
 export interface DiffReviewPane {
@@ -65,6 +66,7 @@ export interface DiffReviewSummary {
   readonly reviewed: number;
   readonly explicitlyReviewed: number;
   readonly manual: number;
+  readonly authoritativeConflicts?: number;
 }
 
 export interface DiffReviewSnapshot {
@@ -119,9 +121,11 @@ export function summarizeDiffReviewBlocks(
   let reviewed = 0;
   let explicitlyReviewed = 0;
   let manual = 0;
+  let authoritativeConflicts = 0;
   for (const block of blocks) {
     if (block.kind === "conflict") {
       conflicts += 1;
+      if (block.authoritativeConflict) authoritativeConflicts += 1;
       if (block.status === "pending" || block.status === "manual") pendingConflicts += 1;
     }
     if (block.kind === "identical") identical += 1;
@@ -140,5 +144,6 @@ export function summarizeDiffReviewBlocks(
     reviewed,
     explicitlyReviewed,
     manual,
+    authoritativeConflicts,
   };
 }
