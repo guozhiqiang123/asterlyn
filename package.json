@@ -10,6 +10,7 @@
     "icons:generate": "node scripts/generate-desktop-icons.mjs",
     "protocol:generate": "node scripts/generate-desktop-protocol.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
+    "test:conflict:rendered": "node scripts/test-conflict-editor-rendered.mjs",
     "test:native:rendered": "node scripts/smoke-native-app.mjs --require-rendered target/release/asterlyn",
     "test:native:rendered:build": "tauri build --no-bundle && npm run test:native:rendered",
     "tauri": "tauri"
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "22.20.2",
+    "playwright": "1.62.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   }
