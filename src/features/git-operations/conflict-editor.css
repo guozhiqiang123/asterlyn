@@ -117,7 +117,13 @@
 
 .conflict-three-pane .cm-mergeViewEditor {
   min-width: 0;
+  min-height: 100%;
   overflow: visible;
+}
+
+.conflict-three-pane .cm-mergeViewEditor > .cm-editor,
+.conflict-three-pane .cm-mergeViewEditor > .cm-editor > .cm-scroller {
+  min-height: 100%;
 }
 
 .conflict-three-pane .cm-scroller {
