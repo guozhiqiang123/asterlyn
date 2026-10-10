@@ -73,6 +73,7 @@ The documents in this directory are the current source of truth. A decision that
 ## Benchmarks
 
 - [`benchmarks/2026-10-09-windows-repository-identity.md`](benchmarks/2026-10-09-windows-repository-identity.md) — canonical Windows workspace/Git identity compatibility and strict-session regression evidence.
+- [`benchmarks/2026-10-10-pending-worktree-scan-recovery.md`](benchmarks/2026-10-10-pending-worktree-scan-recovery.md) — automatic recovery for cancelled pending untracked scans and same-activation Update acceptance.
 - [`benchmarks/2026-09-28-changes-composer-minimum.md`](benchmarks/2026-09-28-changes-composer-minimum.md) — Changes minimum-height composer protection that keeps validation copy fully visible while the text area absorbs splitter compression.
 - [`benchmarks/2026-09-28-tag-context-actions.md`](benchmarks/2026-09-28-tag-context-actions.md) — Tag-row detached checkout, reviewed Merge routing, exact single-Tag push, local/remote deletion, and state-preserving incremental refresh evidence.
 - [`benchmarks/2026-09-23-lazy-ignored-project-catalog.md`](benchmarks/2026-09-23-lazy-ignored-project-catalog.md) — fast first Files projection with collapsed ignored roots, one-level lazy expansion, session authorization, and FilesRecovery latency evidence.

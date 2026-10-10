@@ -70,6 +70,13 @@ export class WindowSession {
     root: string;
     generation: number;
     repositoryRevision: number;
+    announce: boolean;
+    completion: Promise<void>;
+  } | null = null;
+  private pendingUntrackedRecovery: ScheduledTask | null = null;
+  private untrackedRecoveryContext: {
+    root: string;
+    cause: SessionInvalidationCause;
   } | null = null;
   private trackedRefreshTimer: ScheduledTask | null = null;
   private trackedRefreshRoot: string | null = null;
@@ -104,6 +111,7 @@ export class WindowSession {
       for (const resolve of this.reconciliationWaiters) resolve();
       this.reconciliationWaiters.clear();
     }
+    this.cancelPendingUntrackedRecovery();
     this.cancelUntrackedScan();
     this.cancelScheduledTrackedRefresh();
     return this.operationGeneration;
@@ -114,6 +122,7 @@ export class WindowSession {
     this.reconciliationBarrierGeneration = null;
     for (const resolve of this.reconciliationWaiters) resolve();
     this.reconciliationWaiters.clear();
+    this.schedulePendingUntrackedRecovery(generation);
   }
 
   async whenReconciliationIdle(identity: WorkspaceSessionIdentity): Promise<boolean> {
@@ -283,27 +292,66 @@ export class WindowSession {
     }, delay);
   }
 
-  async scanUntracked(
+  scanUntracked(
     repositoryRoot: string,
     generation: number,
     announce = true,
     cause: SessionInvalidationCause = "manualRefresh",
   ): Promise<void> {
-    if (!this.matches(generation, repositoryRoot)) return;
+    if (!this.matches(generation, repositoryRoot)) return Promise.resolve();
+    this.cancelPendingUntrackedRecovery();
     this.cancelUntrackedScan();
     const scan = {
       id: `${generation}-${++this.scanSequence}`,
       root: repositoryRoot,
       generation,
       repositoryRevision: this.repository.state.revision,
+      announce,
+      completion: Promise.resolve(),
     };
+    this.untrackedRecoveryContext = { root: repositoryRoot, cause };
     this.activeScan = scan;
+    scan.completion = this.runUntrackedScan(scan, cause);
     this.emit({
       reason: "untracked-scan-start",
       root: repositoryRoot,
       generation,
-      announce,
+      announce: scan.announce,
     });
+    return scan.completion;
+  }
+
+  ensureUntrackedScan(
+    repositoryRoot: string,
+    generation: number,
+    announce = true,
+    cause: SessionInvalidationCause = "manualRefresh",
+  ): Promise<void> {
+    const active = this.activeScan;
+    if (
+      active &&
+      active.root === repositoryRoot &&
+      active.generation === generation
+    ) {
+      if (announce && !active.announce) {
+        active.announce = true;
+        this.emit({
+          reason: "untracked-scan-start",
+          root: repositoryRoot,
+          generation,
+          announce: true,
+        });
+      }
+      return active.completion;
+    }
+    return this.scanUntracked(repositoryRoot, generation, announce, cause);
+  }
+
+  private async runUntrackedScan(
+    scan: NonNullable<WindowSession["activeScan"]>,
+    cause: SessionInvalidationCause,
+  ): Promise<void> {
+    const { root: repositoryRoot, generation } = scan;
     try {
       const supplement = await this.gateway.scanUntracked(repositoryRoot, scan.id);
       if (this.activeScan !== scan || !this.matches(generation, repositoryRoot)) return;
@@ -329,7 +377,7 @@ export class WindowSession {
         generation,
         snapshot,
         invalidation: this.repository.consumeInvalidation() ?? undefined,
-        announce,
+        announce: scan.announce,
       });
     } catch (error) {
       if (this.activeScan !== scan || !this.matches(generation, repositoryRoot)) return;
@@ -341,7 +389,7 @@ export class WindowSession {
         generation,
         snapshot: this.repository.state.snapshot ?? undefined,
         invalidation: this.repository.consumeInvalidation() ?? undefined,
-        announce,
+        announce: scan.announce,
         error,
       });
     } finally {
@@ -362,6 +410,7 @@ export class WindowSession {
     if (this.disposed) return;
     this.disposed = true;
     this.operationGeneration += 1;
+    this.cancelPendingUntrackedRecovery();
     this.cancelUntrackedScan();
     this.cancelScheduledTrackedRefresh();
     this.workspace.clear();
@@ -436,6 +485,37 @@ export class WindowSession {
     }
     this.trackedRefreshRoot = null;
     this.trackedRefreshPaths.clear();
+  }
+
+  private schedulePendingUntrackedRecovery(generation: number): void {
+    this.cancelPendingUntrackedRecovery();
+    const snapshot = this.repository.state.snapshot;
+    if (
+      !snapshot ||
+      snapshot.untrackedState !== "pending" ||
+      !this.matches(generation, snapshot.root)
+    ) return;
+    const root = snapshot.root;
+    const cause = this.untrackedRecoveryContext?.root === root
+      ? this.untrackedRecoveryContext.cause
+      : "manualRefresh";
+    this.pendingUntrackedRecovery = this.scheduler.schedule(() => {
+      this.pendingUntrackedRecovery = null;
+      const current = this.repository.state.snapshot;
+      if (
+        !current ||
+        current.root !== root ||
+        current.untrackedState !== "pending" ||
+        !this.matches(generation, root)
+      ) return;
+      void this.ensureUntrackedScan(root, generation, false, cause);
+    }, 0);
+  }
+
+  private cancelPendingUntrackedRecovery(): void {
+    if (this.pendingUntrackedRecovery === null) return;
+    this.scheduler.cancel(this.pendingUntrackedRecovery);
+    this.pendingUntrackedRecovery = null;
   }
 
   private emit(change: WindowSessionChange): void {

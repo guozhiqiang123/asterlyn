@@ -6,6 +6,8 @@ import {
   remotePolicy,
   requiresRemoteConfiguration,
 } from "../src/remote-policy.ts";
+import { recoverPendingRemoteAction } from "../src/application/pending-untracked-action.ts";
+import { DEFAULT_LOCALIZATION } from "../src/localization/localization.ts";
 
 function snapshot(overrides = {}) {
   const { branch: branchOverrides = {}, ...snapshotOverrides } = overrides;
@@ -129,4 +131,58 @@ test("the selected remote governs every current-branch toolbar action", () => {
   assert.equal(mismatched.push.enabled, true);
   assert.match(mismatched.push.detail, /same-named branch on team/);
   assert.match(mismatched.push.detail, /keeps origin/);
+});
+
+test("Update completes a pending worktree scan in the same activation", async () => {
+  const repository = snapshot({ untrackedState: "pending" });
+  let scans = 0;
+  const session = {
+    generation: 7,
+    repository: { state: { snapshot: repository } },
+    async ensureUntrackedScan(root, generation, announce, cause) {
+      scans += 1;
+      assert.deepEqual([root, generation, announce, cause], [
+        "/repo", 7, true, "manualRefresh",
+      ]);
+      repository.untrackedState = "complete";
+    },
+    matches(generation, root) { return generation === 7 && root === "/repo"; },
+  };
+
+  assert.equal(
+    await recoverPendingRemoteAction(
+      "pull", session, "origin", DEFAULT_LOCALIZATION, false,
+    ),
+    true,
+  );
+  assert.equal(scans, 1);
+  assert.equal(repository.untrackedState, "complete");
+});
+
+test("non-scan blockers and Push do not start worktree discovery", async () => {
+  const repository = snapshot({
+    untrackedState: "pending",
+    branch: { upstream: null, upstreamRemote: null, upstreamRef: null },
+  });
+  let scans = 0;
+  const session = {
+    generation: 3,
+    repository: { state: { snapshot: repository } },
+    async ensureUntrackedScan() { scans += 1; },
+    matches() { return true; },
+  };
+
+  assert.equal(
+    await recoverPendingRemoteAction(
+      "pull", session, "origin", DEFAULT_LOCALIZATION, false,
+    ),
+    true,
+  );
+  assert.equal(
+    await recoverPendingRemoteAction(
+      "push", session, "origin", DEFAULT_LOCALIZATION, false,
+    ),
+    true,
+  );
+  assert.equal(scans, 0);
 });

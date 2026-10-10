@@ -17,6 +17,12 @@ Generation checks in the frontend prevent stale data from being displayed, but r
 - Untracked discovery uses system Git and a core-owned cancellation token. Cancellation terminates the child process and drains its pipes rather than merely ignoring its eventual result.
 - The desktop adapter owns active-request registration. Presentation code owns generations and merges only a supplement whose request and repository root still match.
 - Mutations invalidate and cancel prior scans, return fresh tracked truth, and start a new supplement.
+- Ending an internal reconciliation barrier must leave no orphaned `pending` snapshot. The window
+  session schedules one same-generation untracked supplement when the barrier settles; an explicit
+  caller-started supplement cancels that fallback, and repeated requests reuse the matching
+  in-flight scan instead of restarting it.
+- A user-invoked Update that is blocked only by the pending supplement waits for that shared scan
+  and re-evaluates the action in the same activation. It must not require a separate manual Refresh.
 - Successful in-application text saves debounce into a status-only tracked query rather than reopening the repository and rebuilding refs or history. The matching repository generation accepts that result, preserves the last untracked rows until a silent cancellable supplement completes, and then redraws every Git-status projection from the same snapshot.
 - The existing complete snapshot remains available for non-interactive callers and benchmarks.
 

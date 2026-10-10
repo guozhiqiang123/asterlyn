@@ -79,6 +79,92 @@ test("a new transition cancels the active scan and rejects its late result", asy
   assert.deepEqual(session.repository.state.snapshot.changes, []);
 });
 
+test("settling a transition recovers a cancelled pending untracked scan", async () => {
+  const first = deferred();
+  const cancelled = [];
+  const scans = [];
+  const events = [];
+  const session = createSession({
+    readProject(path) { return this.openProject(path); },
+    readRepositorySlices(path) { return this.readProject(path); },
+    async openProject(root) { return { root, repository: snapshot(root) }; },
+    async readTrackedChanges(root) { return { root, changes: [] }; },
+    scanUntracked(root) {
+      scans.push(root);
+      return scans.length === 1
+        ? first.promise
+        : Promise.resolve({ root, changes: [] });
+    },
+    async cancelUntrackedScan(id) { cancelled.push(id); },
+  });
+  session.subscribe((event) => events.push(event));
+  const initialGeneration = session.beginTransition();
+  session.activate(
+    { root: "/repo", repository: snapshot("/repo") },
+    "activation",
+    ["workingTree"],
+  );
+  session.repository.consumeInvalidation();
+  const obsoleteScan = session.scanUntracked("/repo", initialGeneration);
+
+  const transitionGeneration = session.beginTransition({ reconciliationBarrier: true });
+  session.completeTransition(transitionGeneration);
+  first.resolve({ root: "/repo", changes: [change("late.ts", "untracked")] });
+  await obsoleteScan;
+  await settle();
+  await settle();
+
+  assert.equal(cancelled.length, 1);
+  assert.equal(scans.length, 2);
+  assert.deepEqual(
+    events.map((event) => event.reason),
+    ["untracked-scan-start", "untracked-scan-start", "untracked-scan-complete"],
+  );
+  assert.equal(events[1].announce, false);
+  assert.equal(session.repository.state.snapshot.untrackedState, "complete");
+  assert.deepEqual(session.repository.state.snapshot.changes, []);
+});
+
+test("ensuring an active untracked scan reuses its in-flight completion", async () => {
+  const pending = deferred();
+  let scans = 0;
+  const events = [];
+  const session = createSession({
+    readProject(path) { return this.openProject(path); },
+    readRepositorySlices(path) { return this.readProject(path); },
+    async openProject(root) { return { root, repository: snapshot(root) }; },
+    async readTrackedChanges(root) { return { root, changes: [] }; },
+    scanUntracked() {
+      scans += 1;
+      return pending.promise;
+    },
+    async cancelUntrackedScan() {},
+  });
+  session.subscribe((event) => events.push(event));
+  const generation = session.beginTransition();
+  session.activate(
+    { root: "/repo", repository: snapshot("/repo") },
+    "activation",
+    ["workingTree"],
+  );
+  const first = session.scanUntracked("/repo", generation, false);
+  const ensured = session.ensureUntrackedScan("/repo", generation);
+
+  assert.equal(first, ensured);
+  assert.equal(scans, 1);
+  pending.resolve({ root: "/repo", changes: [] });
+  await ensured;
+  assert.deepEqual(
+    events.map((event) => [event.reason, event.announce]),
+    [
+      ["untracked-scan-start", false],
+      ["untracked-scan-start", true],
+      ["untracked-scan-complete", true],
+    ],
+  );
+  assert.equal(session.repository.state.snapshot.untrackedState, "complete");
+});
+
 test("project transitions activate only the latest window request", async () => {
   const first = deferred();
   const session = createSession({

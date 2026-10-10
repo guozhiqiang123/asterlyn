@@ -6,6 +6,7 @@ import {
 } from "./features/files-editor/project-file-staging.ts";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
+import { recoverPendingRemoteAction } from "./application/pending-untracked-action.ts";
 import {
   GitHistoryListView,
   HISTORY_ROW_LIMIT,
@@ -3189,6 +3190,7 @@ export class AsterlynApp {
     kind: "pull" | "push",
     anchor: HTMLElement,
   ): Promise<void> {
+    if (!await recoverPendingRemoteAction(kind, this.windowSession, this.remoteState.selectedRemote, this.localization, this.state.loading || Boolean(this.remoteState.operation))) return;
     const blocked = this.remoteActionBlockedReason(kind);
     if (blocked) {
       this.showWarning(blocked);
