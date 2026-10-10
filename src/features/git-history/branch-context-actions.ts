@@ -40,7 +40,7 @@ export interface BranchContextRuntime {
     kind: BranchMutationKind,
     branch: BranchSummary,
     suggestedName: string,
-  ): void;
+  ): void | Promise<void>;
   openWorktreeCreation(branch: BranchSummary): void;
   openWorktree(path: string): void;
   revealWorktree(branch: BranchSummary): void | Promise<void>;
@@ -177,7 +177,7 @@ export class BranchContextActions {
         this.runtime.status(action === "ref-copy-name" ? labels.copiedShort : labels.copiedFull);
         return;
       }
-      this.invokeCommand(action, target, policy);
+      await this.invokeCommand(action, target, policy);
     } catch (error) {
       this.runtime.error(error);
     }
@@ -192,7 +192,7 @@ export class BranchContextActions {
     const target = request.target;
     const commandAction = commandActionForMenuId(actionId);
     if (commandAction) {
-      this.invokeCommand(commandAction, target, policy);
+      await this.invokeCommand(commandAction, target, policy);
       return;
     }
     switch (actionId) {
@@ -227,7 +227,7 @@ export class BranchContextActions {
     action: BranchContextCommandAction,
     target: BranchContextTarget,
     policy: BranchContextPolicy,
-  ): void {
+  ): void | Promise<void> {
     switch (action) {
       case "ref-history": return this.runtime.showHistory(target);
       case "branch-switch":

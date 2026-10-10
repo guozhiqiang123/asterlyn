@@ -11,6 +11,15 @@
   activation waits asynchronously for that shared scan, promotes a reused silent scan to visible
   progress, and re-evaluates Update. A manual Changes refresh is no longer required. Other blockers
   and Push do not start this recovery path.
+- Branch Switch, remote checkout, and branch creation now treat a clean-tree check in `pending`
+  state as recoverable rather than permanently disabled. The invoked action awaits the shared scan,
+  re-resolves the exact branch from the current snapshot, and continues from the same click only
+  when the complete working tree is still clean. Failed scans, changed workspaces, and stale branch
+  targets fail closed.
+- Native untracked discovery has a 30-second process timeout, while the window session has a
+  35-second watchdog. Cancellation and watchdog expiry resolve every waiter immediately, mark the
+  supplement failed, and reject late native results instead of leaving branch or remote actions
+  suspended for minutes.
 
 ## Verification
 
@@ -29,3 +38,21 @@
 - `/Applications/Asterlyn.app` was replaced through a recoverable backup and relaunched. Its
   executable SHA-256 matches the accepted bundle:
   `2fb6765e5c8f07b9c8224e9a648a8092047650a70f27358b999c51c6d0f6e58c`.
+
+## Branch-mutation timeout follow-up
+
+- `npm run check`, `npm run build`, and `cargo test --workspace` passed.
+- `npm run test:scripts` passed 945 tests, including scan-watchdog waiter release, pending branch
+  recovery, branch target re-resolution, failed-scan rejection, and the frontend ownership budget.
+- The packaged and installed executables both rendered the application shell within the six-second
+  native-smoke bound. The arm64 app passed strict deep signature verification with an ad-hoc
+  hardened-runtime signature.
+- Accepted archive:
+  `target/release/bundle/macos/Asterlyn-branch-scan-recovery-20261010-172207-macos-arm64-signed.zip`
+  (9,266,140 bytes; SHA-256
+  `e41bbf5e4ad325269e574d5c49db178e5a2069057ba9d6a616d5e4898b0f115d`).
+- `/Applications/Asterlyn.app` was replaced and relaunched at version 0.1.3. Its installed arm64
+  executable is 24,163,024 bytes and exactly matches the packaged executable (SHA-256
+  `9fb7961fb0a60184bbffec04f5bb3a715fdcc9efa02aee01be71b75a0eda0c89`). The previous installation
+  remains recoverable at
+  `/Users/gzq/.Trash/Asterlyn.app.backup-branch-scan-recovery-20261010-172207`.

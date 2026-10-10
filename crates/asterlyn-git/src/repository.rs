@@ -7,6 +7,7 @@ use std::process::Output;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use crate::credential::{
     CredentialService, discover_platform_credential_helper, parse_remote_endpoint,
@@ -54,6 +55,7 @@ const MAX_PUSH_PREVIEW_PAGE_SIZE: usize = 200;
 const MAX_PUSH_PREVIEW_FILES: usize = 20_000;
 const MAX_PUSH_PREVIEW_FILE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PUSH_TAGS: usize = 1_000;
+const UNTRACKED_SCAN_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_STASH_ENTRIES_PER_ROOT: usize = 500;
 const STASH_CATALOG_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 
@@ -5560,7 +5562,12 @@ impl GitRepository {
     ) -> Result<Output, GitError> {
         let runner = GitRunner::new(&self.root);
         match runner
-            .cancellable_output(args, GitStdin::Inherit, cancellation)
+            .cancellable_output_with_timeout(
+                args,
+                GitStdin::Inherit,
+                cancellation,
+                UNTRACKED_SCAN_TIMEOUT,
+            )
             .map_err(|error| GitError::Io {
                 operation: operation.to_string(),
                 message: error.to_string(),

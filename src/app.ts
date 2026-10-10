@@ -6,7 +6,11 @@ import {
 } from "./features/files-editor/project-file-staging.ts";
 import { icon } from "./icons";
 import { remotePolicy } from "./remote-policy";
-import { recoverPendingRemoteAction } from "./application/pending-untracked-action.ts";
+import {
+  branchSafety,
+  prepareBranchMutation,
+  recoverPendingRemoteAction,
+} from "./application/pending-untracked-action.ts";
 import {
   GitHistoryListView,
   HISTORY_ROW_LIMIT,
@@ -489,7 +493,7 @@ export class AsterlynApp {
       busy: () => this.state.loading || this.stashRuntime.controller.state.loading,
       clean: () => {
         const snapshot = this.windowSession.repository.state.snapshot;
-        return Boolean(snapshot && this.branchSafety(snapshot).ready && dirtyTextTabs(this.editorState.session).length === 0);
+        return Boolean(snapshot && branchSafety(snapshot, this.localization).ready && dirtyTextTabs(this.editorState.session).length === 0);
       },
       confirm: (request) => this.dialogRuntime.confirm(request),
       runMutation: (request, metadataOnly, progress, completed) => this.runBranchMutation(
@@ -912,7 +916,7 @@ export class AsterlynApp {
           snapshot: () => this.windowSession.repository.state.snapshot,
           policyOptions: () => {
             const snapshot = this.windowSession.repository.state.snapshot;
-            const safety = snapshot ? this.branchSafety(snapshot) : {
+            const safety = snapshot ? branchSafety(snapshot, this.localization) : {
               ready: false,
               message: this.localization.catalog.history.branchContextMenu.cleanRequired,
             };
@@ -925,8 +929,12 @@ export class AsterlynApp {
             };
           },
           showHistory: (target) => this.showBranchContextHistory(target),
-          openMutation: (kind, branch, suggestedName) => { const repositoryRoot = this.windowSession.repository.state.snapshot?.root;
-            if (repositoryRoot) this.gitHistoryMutationRuntime.branch.open(repositoryRoot, kind, branch, suggestedName); },
+          openMutation: async (kind, branch, suggestedName) => {
+            const prepared = await prepareBranchMutation(this.windowSession, kind, branch);
+            if (prepared.kind === "blocked") { this.setStatus(branchSafety(prepared.snapshot, this.localization).message, "warning"); return; }
+            if (prepared.kind === "stale") { this.setStatus(this.localization.catalog.history.branchContextMenu.targetChanged, "warning"); return; }
+            this.gitHistoryMutationRuntime.branch.open(prepared.root, kind, prepared.branch, suggestedName);
+          },
           openWorktreeCreation: (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (snapshot) this.gitHistoryMutationRuntime.worktree.open(snapshot.root, snapshot.branches, branch); },
           openWorktree: (path) => void this.requestRepositoryTarget(path),
           revealWorktree: async (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (!snapshot) return; await bridge.revealRegisteredWorktree(snapshot.root, branch.fullName, branch.oid);
@@ -948,7 +956,7 @@ export class AsterlynApp {
           },
           policyOptions: () => {
             const snapshot = this.windowSession.repository.state.snapshot;
-            const safety = snapshot ? this.branchSafety(snapshot) : {
+            const safety = snapshot ? branchSafety(snapshot, this.localization) : {
               ready: false,
               message: this.localization.catalog.history.commitContextMenu.cleanRequired,
             };
@@ -987,7 +995,7 @@ export class AsterlynApp {
           current: (target) => this.isHistoryCommitRangeTargetCurrent(target),
           policyOptions: () => {
             const snapshot = this.windowSession.repository.state.snapshot;
-            const safety = snapshot ? this.branchSafety(snapshot) : {
+            const safety = snapshot ? branchSafety(snapshot, this.localization) : {
               ready: false,
               message: this.localization.catalog.history.rangeContextMenu.cleanRequired,
             };
@@ -8656,40 +8664,6 @@ export class AsterlynApp {
   private closeRepositoryDialog(): void {
     if (!this.windowSession.workspace.state.root && !bridge.isDemo) return;
     this.query("#repository-dialog").classList.add("hidden");
-  }
-
-  private branchSafety(snapshot: RepositorySnapshot): {
-    ready: boolean;
-    message: string;
-    blockers: string[];
-  } {
-    const blockers = snapshot.changes.map((change) => change.path);
-    if (blockers.length > 0) {
-      return {
-        ready: false,
-        message: this.localization.catalog.history.changedPathsBlock(blockers.length),
-        blockers,
-      };
-    }
-    if (snapshot.untrackedState === "pending") {
-      return {
-        ready: false,
-        message: this.localization.catalog.history.checkingUntrackedForBranch,
-        blockers: [],
-      };
-    }
-    if (snapshot.untrackedState === "failed") {
-      return {
-        ready: false,
-        message: this.localization.catalog.history.untrackedCheckFailedForBranch,
-        blockers: [],
-      };
-    }
-    return {
-      ready: true,
-      message: this.localization.catalog.history.cleanWorktreeVerified,
-      blockers: [],
-    };
   }
 
   private query<T extends Element = HTMLElement>(selector: string): T {

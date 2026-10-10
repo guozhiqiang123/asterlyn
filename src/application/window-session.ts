@@ -17,6 +17,8 @@ import type { RepositoryReadCommit, RepositoryReadLease } from "./repository-ses
 import type { RuntimeScheduler, ScheduledTask } from "./runtime-scheduler.ts";
 import { WorkspaceSession, type WorkspaceActivation, type WorkspaceSessionIdentity } from "./workspace-session.ts";
 
+const UNTRACKED_SCAN_WATCHDOG_MS = 35_000;
+
 export interface WindowSessionGateway {
   openProject(path: string): Promise<OpenedProject>;
   readProject(path: string): Promise<OpenedProject>;
@@ -69,9 +71,11 @@ export class WindowSession {
     id: string;
     root: string;
     generation: number;
-    repositoryRevision: number;
+    workingTreeRevision: number;
     announce: boolean;
     completion: Promise<void>;
+    settle: () => void;
+    watchdog: ScheduledTask | null;
   } | null = null;
   private pendingUntrackedRecovery: ScheduledTask | null = null;
   private untrackedRecoveryContext: {
@@ -301,23 +305,33 @@ export class WindowSession {
     if (!this.matches(generation, repositoryRoot)) return Promise.resolve();
     this.cancelPendingUntrackedRecovery();
     this.cancelUntrackedScan();
-    const scan = {
+    let settle = () => {};
+    const completion = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    const scan: NonNullable<WindowSession["activeScan"]> = {
       id: `${generation}-${++this.scanSequence}`,
       root: repositoryRoot,
       generation,
-      repositoryRevision: this.repository.state.revision,
+      workingTreeRevision: this.repository.state.workingTreeRevision,
       announce,
-      completion: Promise.resolve(),
+      completion,
+      settle,
+      watchdog: null,
     };
     this.untrackedRecoveryContext = { root: repositoryRoot, cause };
     this.activeScan = scan;
-    scan.completion = this.runUntrackedScan(scan, cause);
+    scan.watchdog = this.scheduler.schedule(
+      () => this.expireUntrackedScan(scan),
+      UNTRACKED_SCAN_WATCHDOG_MS,
+    );
     this.emit({
       reason: "untracked-scan-start",
       root: repositoryRoot,
       generation,
       announce: scan.announce,
     });
+    void this.runUntrackedScan(scan, cause);
     return scan.completion;
   }
 
@@ -361,7 +375,7 @@ export class WindowSession {
             identity,
             supplement,
             cause,
-            scan.repositoryRevision,
+            scan.workingTreeRevision,
           )
         : null;
       const snapshot = state?.snapshot;
@@ -393,14 +407,47 @@ export class WindowSession {
         error,
       });
     } finally {
+      if (scan.watchdog !== null) {
+        this.scheduler.cancel(scan.watchdog);
+        scan.watchdog = null;
+      }
       if (this.activeScan === scan) this.activeScan = null;
+      scan.settle();
     }
+  }
+
+  private expireUntrackedScan(
+    scan: NonNullable<WindowSession["activeScan"]>,
+  ): void {
+    if (this.activeScan !== scan || !this.matches(scan.generation, scan.root)) return;
+    scan.watchdog = null;
+    this.activeScan = null;
+    scan.settle();
+    void this.gateway.cancelUntrackedScan(scan.id).catch(() => {
+      // The session identity below still rejects a late completion.
+    });
+    const identity = this.workspace.identity();
+    if (identity) this.repository.markUntrackedFailed(identity);
+    this.emit({
+      reason: "untracked-scan-error",
+      root: scan.root,
+      generation: scan.generation,
+      snapshot: this.repository.state.snapshot ?? undefined,
+      invalidation: this.repository.consumeInvalidation() ?? undefined,
+      announce: scan.announce,
+      error: new Error("The untracked-file scan did not respond within 35 seconds."),
+    });
   }
 
   cancelUntrackedScan(): void {
     const scan = this.activeScan;
     if (!scan) return;
     this.activeScan = null;
+    if (scan.watchdog !== null) {
+      this.scheduler.cancel(scan.watchdog);
+      scan.watchdog = null;
+    }
+    scan.settle();
     void this.gateway.cancelUntrackedScan(scan.id).catch(() => {
       // Session generation and scan identity still reject a late completion.
     });
@@ -425,7 +472,7 @@ export class WindowSession {
     const root = this.trackedRefreshRoot;
     if (!root || this.repository.state.snapshot?.root !== root) return;
     const generation = this.operationGeneration;
-    const repositoryRevision = this.repository.state.revision;
+    const workingTreeRevision = this.repository.state.workingTreeRevision;
     const cause = this.trackedRefreshCause;
     const paths = Array.from(this.trackedRefreshPaths);
     this.trackedRefreshRoot = null;
@@ -443,7 +490,7 @@ export class WindowSession {
             cause,
             paths,
             ["workingTree"],
-            repositoryRevision,
+            workingTreeRevision,
           )
         : null;
       const snapshot = state?.snapshot;

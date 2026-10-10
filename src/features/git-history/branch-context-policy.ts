@@ -52,6 +52,11 @@ export function branchContextPolicy(
     : options.clean
       ? enabled()
       : blocked(options.cleanReason || options.reasons.cleanRequired);
+  const recoverableCleanMutation = options.busy
+    ? mutation
+    : options.clean || (snapshot.changes.length === 0 && snapshot.untrackedState === "pending")
+      ? enabled()
+      : blocked(options.cleanReason || options.reasons.cleanRequired);
   const checkedOutElsewhere = !target.branch.current && Boolean(
     target.branch.primaryWorktreePath || target.branch.linkedWorktreePath,
   );
@@ -64,7 +69,7 @@ export function branchContextPolicy(
   );
   const switchMutation = checkedOutElsewhere
     ? blocked(options.reasons.worktreeCheckedOut)
-    : cleanMutation;
+    : recoverableCleanMutation;
   const checkedOutMutation = checkedOutElsewhere
     ? blocked(options.reasons.worktreeCheckedOut)
     : mutation;
@@ -90,7 +95,7 @@ export function branchContextPolicy(
     switchTarget,
     remoteCheckout: writable && target.branch.kind === "remote" && trackingLocals.length === 0,
     switch: switchMutation,
-    create: cleanMutation,
+    create: recoverableCleanMutation,
     createWorktree: mutation,
     linkedWorktreeActions,
     openWorktree: mutation,

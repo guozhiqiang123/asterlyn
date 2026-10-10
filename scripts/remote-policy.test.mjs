@@ -6,7 +6,11 @@ import {
   remotePolicy,
   requiresRemoteConfiguration,
 } from "../src/remote-policy.ts";
-import { recoverPendingRemoteAction } from "../src/application/pending-untracked-action.ts";
+import {
+  prepareBranchMutation,
+  recoverPendingBranchMutation,
+  recoverPendingRemoteAction,
+} from "../src/application/pending-untracked-action.ts";
 import { DEFAULT_LOCALIZATION } from "../src/localization/localization.ts";
 
 function snapshot(overrides = {}) {
@@ -157,6 +161,61 @@ test("Update completes a pending worktree scan in the same activation", async ()
   );
   assert.equal(scans, 1);
   assert.equal(repository.untrackedState, "complete");
+});
+
+test("branch mutation completes a pending worktree scan before continuing", async () => {
+  const repository = snapshot({ untrackedState: "pending" });
+  let scans = 0;
+  const session = {
+    generation: 11,
+    repository: { state: { snapshot: repository } },
+    async ensureUntrackedScan(root, generation, announce, cause) {
+      scans += 1;
+      assert.deepEqual([root, generation, announce, cause], [
+        "/repo", 11, true, "manualRefresh",
+      ]);
+      repository.untrackedState = "complete";
+    },
+    matches(generation, root) { return generation === 11 && root === "/repo"; },
+  };
+
+  assert.equal(await recoverPendingBranchMutation(session), true);
+  assert.equal(scans, 1);
+});
+
+test("branch mutation stops when the pending worktree scan fails", async () => {
+  const repository = snapshot({ untrackedState: "pending" });
+  const session = {
+    generation: 13,
+    repository: { state: { snapshot: repository } },
+    async ensureUntrackedScan() { repository.untrackedState = "failed"; },
+    matches() { return true; },
+  };
+
+  assert.equal(await recoverPendingBranchMutation(session), false);
+});
+
+test("branch mutation preparation resumes the scan and re-resolves the selected branch", async () => {
+  const selected = {
+    repositoryId: ".", kind: "local", fullName: "refs/heads/topic", name: "topic",
+    current: false, upstream: null, tracking: null, oid: "b".repeat(40),
+    subject: "old", committedAt: 1,
+  };
+  const refreshed = { ...selected, oid: "c".repeat(40), subject: "refreshed" };
+  const repository = snapshot({ branches: [selected], untrackedState: "pending" });
+  const session = {
+    generation: 17,
+    repository: { state: { snapshot: repository } },
+    async ensureUntrackedScan() {
+      repository.branches = [refreshed];
+      repository.untrackedState = "complete";
+    },
+    matches() { return true; },
+  };
+
+  assert.deepEqual(await prepareBranchMutation(session, "switch", selected), {
+    kind: "ready", root: "/repo", branch: refreshed,
+  });
 });
 
 test("non-scan blockers and Push do not start worktree discovery", async () => {

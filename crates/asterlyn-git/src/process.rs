@@ -7,7 +7,7 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::error::GitError;
 
@@ -52,6 +52,7 @@ impl CancellationToken {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum CancellableOutput {
     Completed(Output),
     Cancelled,
@@ -220,6 +221,39 @@ impl<'a> GitRunner<'a> {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
+        self.cancellable_output_until(args, stdin, cancellation, None)
+    }
+
+    pub(crate) fn cancellable_output_with_timeout<I, S>(
+        &self,
+        args: I,
+        stdin: GitStdin,
+        cancellation: &CancellationToken,
+        timeout: Duration,
+    ) -> std::io::Result<CancellableOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.cancellable_output_until(
+            args,
+            stdin,
+            cancellation,
+            Instant::now().checked_add(timeout),
+        )
+    }
+
+    fn cancellable_output_until<I, S>(
+        &self,
+        args: I,
+        stdin: GitStdin,
+        cancellation: &CancellationToken,
+        deadline: Option<Instant>,
+    ) -> std::io::Result<CancellableOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
         if cancellation.is_cancelled() {
             return Ok(CancellableOutput::Cancelled);
         }
@@ -255,6 +289,18 @@ impl<'a> GitRunner<'a> {
                 let _ = join_output_reader(stdout_reader, "stdout");
                 let _ = join_output_reader(stderr_reader, "stderr");
                 return Ok(CancellableOutput::Cancelled);
+            }
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                let _ = terminate_child(
+                    &mut child,
+                    matches!(self.profile, GitProcessProfile::Remote),
+                );
+                let _ = join_output_reader(stdout_reader, "stdout");
+                let _ = join_output_reader(stderr_reader, "stderr");
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Git process exceeded its execution deadline",
+                ));
             }
             match child.try_wait() {
                 Ok(Some(status)) => break status,
@@ -569,6 +615,7 @@ fn join_limited_output_reader(
 mod tests {
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
+    use std::time::Duration;
 
     use super::{
         CancellableOutput, CancellationToken, GitRunner, GitStdin, read_stream_limited,
@@ -708,6 +755,20 @@ mod tests {
             .cancellable_output(["status"], GitStdin::Null, &cancellation)
             .unwrap();
         assert!(matches!(outcome, CancellableOutput::Cancelled));
+    }
+
+    #[test]
+    fn execution_deadline_terminates_a_git_process_waiting_for_input() {
+        let directory = tempfile::tempdir().unwrap();
+        let error = GitRunner::new(directory.path())
+            .cancellable_output_with_timeout(
+                ["hash-object", "--stdin"],
+                GitStdin::Piped,
+                &CancellationToken::new(),
+                Duration::from_millis(20),
+            )
+            .expect_err("the waiting Git process should time out");
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
     }
 
     fn environment_value<'a>(

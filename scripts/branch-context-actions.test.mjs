@@ -181,6 +181,26 @@ test("a branch checked out in the primary worktree cannot be switched, renamed, 
   assert.equal(ids(model).includes("git-branches.context-actions.delete"), true);
 });
 
+test("pending clean check keeps branch switching recoverable without enabling tag checkout", () => {
+  const current = local("main", true);
+  const other = local("topic");
+  const selectedTag = tag("v1.0");
+  const currentSnapshot = snapshot([current, other, selectedTag]);
+  currentSnapshot.untrackedState = "pending";
+  const pendingOptions = {
+    ...options,
+    clean: false,
+    cleanReason: "Checking for untracked files",
+  };
+
+  const branchPolicy = branchContextPolicy(target(other), currentSnapshot, pendingOptions);
+  assert.equal(branchPolicy.switch.kind, "enabled");
+  assert.equal(branchPolicy.create.kind, "enabled");
+
+  const tagPolicy = branchContextPolicy(target(selectedTag), currentSnapshot, pendingOptions);
+  assert.equal(tagPolicy.tagCheckout.kind, "blocked");
+});
+
 test("tag menu exposes detached checkout, merge, exact remote push, and local or remote deletion", async () => {
   const selectedTag = tag("release/v1");
   const currentSnapshot = snapshot([local("main", true), selectedTag]);

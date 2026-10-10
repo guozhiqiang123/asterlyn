@@ -21,6 +21,7 @@ import type { WorkspaceSessionIdentity } from "./workspace-session.ts";
 export interface RepositorySessionState {
   readonly snapshot: RepositorySnapshot | null;
   readonly revision: number;
+  readonly workingTreeRevision: number;
   readonly invalidation: SessionInvalidation | null;
 }
 
@@ -54,6 +55,7 @@ export class RepositorySession {
   private value: RepositorySessionState = {
     snapshot: null,
     revision: 0,
+    workingTreeRevision: 0,
     invalidation: null,
   };
 
@@ -120,6 +122,8 @@ export class RepositorySession {
     this.value = {
       snapshot: nextSnapshot,
       revision: this.value.revision + 1,
+      workingTreeRevision: this.value.workingTreeRevision +
+        (committedSlices.includes("workingTree") ? 1 : 0),
       invalidation: mergeSessionInvalidations(this.value.invalidation, invalidation),
     };
     return this.value;
@@ -131,9 +135,12 @@ export class RepositorySession {
     cause: SessionInvalidationCause,
     paths: Iterable<string> = [],
     slices: Iterable<SessionInvalidationSlice> = ["workingTree"],
-    expectedRevision?: number,
+    expectedWorkingTreeRevision?: number,
   ): RepositorySessionState | null {
-    if (expectedRevision !== undefined && expectedRevision !== this.value.revision) return null;
+    if (
+      expectedWorkingTreeRevision !== undefined &&
+      expectedWorkingTreeRevision !== this.value.workingTreeRevision
+    ) return null;
     const snapshot = this.value.snapshot;
     if (!snapshot || snapshot.root !== identity.root || scan.root !== identity.root) return null;
     return this.install(
@@ -166,9 +173,12 @@ export class RepositorySession {
     identity: WorkspaceSessionIdentity,
     scan: UntrackedScan,
     cause: SessionInvalidationCause,
-    expectedRevision?: number,
+    expectedWorkingTreeRevision?: number,
   ): RepositorySessionState | null {
-    if (expectedRevision !== undefined && expectedRevision !== this.value.revision) return null;
+    if (
+      expectedWorkingTreeRevision !== undefined &&
+      expectedWorkingTreeRevision !== this.value.workingTreeRevision
+    ) return null;
     const snapshot = this.value.snapshot;
     if (!snapshot || snapshot.root !== identity.root || scan.root !== identity.root) return null;
     const tracked = snapshot.changes.filter(
@@ -206,6 +216,7 @@ export class RepositorySession {
     this.value = {
       snapshot: null,
       revision: this.value.revision + 1,
+      workingTreeRevision: this.value.workingTreeRevision + 1,
       invalidation: null,
     };
   }
