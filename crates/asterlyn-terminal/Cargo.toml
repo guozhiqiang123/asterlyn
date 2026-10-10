@@ -1,6 +1,6 @@
 [package]
 name = "asterlyn-terminal"
-version = "0.1.2"
+version = "0.1.3"
 description = "Product-neutral supervised PTY sessions for Asterlyn"
 edition.workspace = true
 license.workspace = true
