@@ -1,0 +1,47 @@
+.diff-split-grid .cm-scroller::-webkit-scrollbar {
+  height: 0;
+}
+
+.workbench-splitter.vertical.diff-splitter {
+  grid-column: 2;
+  grid-row: 2;
+  z-index: 6;
+  width: 13px;
+  height: auto;
+  align-self: stretch;
+  justify-self: center;
+  background: transparent;
+}
+
+.workbench-splitter.vertical.diff-splitter::after {
+  left: 6px;
+}
+
+.diff-readonly-scrollbars {
+  display: grid;
+  height: var(--scrollbar-size);
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  grid-template-columns: minmax(0, var(--diff-before-width, 50%)) 5px minmax(0, 1fr);
+  border-top: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.diff-readonly-scrollbar-pane {
+  min-width: 0;
+  height: var(--scrollbar-size);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.diff-readonly-scrollbar-divider {
+  box-sizing: border-box;
+  height: var(--scrollbar-size);
+  border-inline: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.diff-readonly-scrollbar-content {
+  height: 1px;
+}

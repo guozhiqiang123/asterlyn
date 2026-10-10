@@ -33,7 +33,7 @@ import {
   type UnifiedDiffRow,
 } from "./diff-presentation";
 import { attachSplitter } from "./presentation/splitter";
-import { linkScrollElements } from "./presentation/linked-scroll";
+import { linkVerticalScroll } from "./presentation/linked-scroll";
 import {
   handleOmittedDiffExpansion,
   splitChangeBlocks,
@@ -74,6 +74,7 @@ import {
   type DiffOverviewBlock,
 } from "./diff-overview-ruler";
 import { removeOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
+import { ReadOnlyDiffScrollbars } from "./shared/diff-review/read-only-diff-scrollbars.ts";
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -131,6 +132,7 @@ export class DiffEditor {
   private sideLabels: DiffSideLabels = { before: "Before", after: "After" };
   private splitDispose: (() => void) | null = null;
   private scrollDispose: (() => void) | null = null;
+  private diffScrollbars: ReadOnlyDiffScrollbars | null = null;
   private changeBlocks: DiffChangeBlock[] = [];
   private activeChangeStart: number | null = null;
   private blameSources: DiffGitBlameSources;
@@ -357,7 +359,8 @@ export class DiffEditor {
     const oldView = this.createView(oldHost, split.oldDocument, split.rows, "old");
     const newView = this.createView(newHost, split.newDocument, split.rows, "new");
     this.views.push(oldView, newView);
-    this.scrollDispose = linkScrollElements(oldView.scrollDOM, newView.scrollDOM);
+    this.scrollDispose = linkVerticalScroll(oldView.scrollDOM, newView.scrollDOM);
+    this.diffScrollbars = new ReadOnlyDiffScrollbars(grid, oldView, newView);
 
     const blocks = splitOverviewBlocks(split.rows, newView);
     if (blocks.length > 0) {
@@ -585,6 +588,8 @@ export class DiffEditor {
   }
 
   private destroyViews(): void {
+    this.diffScrollbars?.destroy();
+    this.diffScrollbars = null;
     this.scrollDispose?.();
     this.scrollDispose = null;
     this.splitDispose?.();

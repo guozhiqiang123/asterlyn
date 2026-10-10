@@ -73,7 +73,7 @@
 .content-body.editable-diff-surface .cm-mergeView {
   position: relative;
   flex: 1 1 0;
-  height: 100%;
+  height: auto;
   min-width: 0;
   min-height: 0;
   overflow: auto;
@@ -88,19 +88,24 @@
   flex: 1 1 0;
 }
 
-.editable-diff-splitter {
+.workbench-splitter.editable-diff-splitter {
   position: absolute;
   z-index: 3;
   top: 0;
-  bottom: var(--scrollbar-size);
+  bottom: 0;
   left: calc(var(--diff-before-width, 42%) + 16px);
-  width: 5px;
+  width: 32px;
   transform: translateX(-50%);
 }
 
+.workbench-splitter.editable-diff-splitter::after {
+  left: 15px;
+}
+
 .content-body.editable-diff-surface .cm-mergeViewEditors {
+  position: relative;
   min-width: 0;
-  min-height: 100%;
+  min-height: calc(100% - 27px);
 }
 
 .content-body.editable-diff-surface .cm-mergeView > .diff-side-labels {
@@ -116,11 +121,17 @@
 
 .content-body.editable-diff-surface .cm-merge-revert {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   width: 32px;
   flex: 0 0 32px;
   border-inline: 1px solid var(--border);
   background: transparent;
+  pointer-events: none;
+}
+
+.content-body.editable-diff-surface .cm-merge-revert > button {
+  z-index: 4;
+  pointer-events: auto;
 }
 
 .content-body.editable-diff-surface .cm-mergeView .cm-scroller {
@@ -134,15 +145,18 @@
 }
 
 .content-body.editable-diff-surface .editable-diff-scrollbars {
-  display: flex;
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
   width: 100%;
   flex: 0 0 auto;
+  padding-right: var(--editable-diff-scrollbar-corner-width, 0px);
+  grid-template-columns: minmax(0, var(--diff-before-width, 42%)) 32px minmax(0, 1fr);
   border-top: 1px solid var(--border);
   background: var(--surface-chrome);
 }
 
 .content-body.editable-diff-surface .editable-diff-scrollbar-pane {
-  flex: 1 1 0;
   min-width: 0;
   height: var(--scrollbar-size);
   overflow-x: auto;
@@ -151,14 +165,16 @@
 
 .content-body.editable-diff-surface .editable-diff-scrollbar-spacer {
   width: 32px;
-  flex: 0 0 32px;
   border-inline: 1px solid var(--border);
   background: var(--surface-chrome);
 }
 
 .content-body.editable-diff-surface .editable-diff-scrollbar-corner {
-  flex: 0 0 0px;
+  position: absolute;
+  top: 0;
+  right: 0;
   width: 0px;
+  height: var(--scrollbar-size);
   background: var(--surface-chrome);
 }
 

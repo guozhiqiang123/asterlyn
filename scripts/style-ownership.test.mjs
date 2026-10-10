@@ -20,6 +20,7 @@ const ownedStyles = [
   ["features/files-editor/project-files.css", "main.ts"],
   ["features/files-editor/welcome.css", "main.ts"],
   ["features/files-editor/files-editor.css", "main.ts"],
+  ["features/files-editor/read-only-diff.css", "main.ts"],
   ["features/files-editor/editable-diff.css", "main.ts"],
   ["features/files-editor/change-overview.css", "main.ts"],
   ["shared/diff-review.css", "main.ts"],
@@ -73,9 +74,10 @@ test("owned styles remain below the architecture decomposition trigger", async (
 });
 
 test("scrollbar hit targets share the global 12px size token", async () => {
-  const [tokens, overlays, editableDiff, replacementTool] = await Promise.all([
+  const [tokens, overlays, readOnlyDiff, editableDiff, replacementTool] = await Promise.all([
     readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/overlays.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/read-only-diff.css", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
     readFile(
       new URL("../src/features/files-editor/workspace-replacement-tool.css", import.meta.url),
@@ -87,6 +89,10 @@ test("scrollbar hit targets share the global 12px size token", async () => {
   assert.match(
     overlays,
     /::\-webkit-scrollbar\s*\{[^}]*width:\s*var\(--scrollbar-size\);[^}]*height:\s*var\(--scrollbar-size\);/s,
+  );
+  assert.match(
+    readOnlyDiff,
+    /\.diff-readonly-scrollbar-pane\s*\{[^}]*height:\s*var\(--scrollbar-size\);/s,
   );
   for (const source of [editableDiff, replacementTool]) {
     assert.match(
@@ -320,13 +326,27 @@ test("Diff side labels share the editor grid instead of approximating its divide
   assert.match(editor, /grid\.append\(createDiffSideLabels\(this\.sideLabels, window\.document\)\)/u);
   assert.match(editable, /this\.mergeView\.dom\.prepend\(createDiffSideLabels\(this\.sideLabels, document, true\)\)/u);
   assert.match(labels, /createDiffReviewPaneHeaders\(\[[\s\S]*actionGutters: true, className: "diff-side-labels"/u);
-  assert.match(filesCss, /\.diff-split-grid\s*\{[^}]*grid-template-columns:[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\);/s);
+  assert.match(filesCss, /\.diff-split-grid\s*\{[^}]*grid-template-columns:[^}]*grid-template-rows:\s*27px minmax\(0, 1fr\) auto;/s);
   const editableCss = await readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8");
   assert.match(editableCss, /\.diff-side-labels\s*\{[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width, 5px\)/s);
   assert.match(editableCss, /\.diff-side-revision\s*\{[^}]*text-transform:\s*lowercase;/s);
   assert.doesNotMatch(replacementView, /replacement-tool-side-labels/u);
   assert.match(replacementCss, /--diff-action-gutter-width:\s*36px;/u);
   assert.match(replacementCss, /\.cm-mergeView > \.diff-side-labels\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:[^}]*var\(--diff-action-gutter-width\)/s);
+});
+
+test("read-only split Diff owns grid-aligned docked horizontal scrollbars", async () => {
+  const [editor, scrollbars, css] = await Promise.all([
+    readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shared/diff-review/read-only-diff-scrollbars.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/files-editor/read-only-diff.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /new ReadOnlyDiffScrollbars\(grid, oldView, newView\)/u);
+  assert.match(editor, /linkVerticalScroll\(oldView\.scrollDOM, newView\.scrollDOM\)/u);
+  assert.match(scrollbars, /linkHorizontalScrollGroup\(\[\s*beforePane\.pane,\s*afterPane\.pane,\s*before\.scrollDOM,\s*after\.scrollDOM,/s);
+  assert.match(css, /\.diff-readonly-scrollbars\s*\{[^}]*grid-template-columns:\s*minmax\(0, var\(--diff-before-width, 50%\)\) 5px minmax\(0, 1fr\);[^}]*border-top:\s*1px solid var\(--border\);/s);
+  assert.match(css, /\.diff-readonly-scrollbar-divider\s*\{[^}]*border-inline:\s*1px solid var\(--border\);/s);
+  assert.match(css, /\.diff-split-grid \.cm-scroller::\-webkit-scrollbar\s*\{[^}]*height:\s*0;/s);
 });
 
 test("every change overview ruler shares one scrollbar-clearance surface", async () => {
@@ -422,14 +442,18 @@ test("conflict Diff owns three aligned docked scrollbars and the shared Diff con
 });
 
 test("two-pane Diff splitters keep their drag target but reveal the divider only on interaction", async () => {
-  const [files, editable, review] = await Promise.all([
-    readFile(new URL("../src/features/files-editor/files-editor.css", import.meta.url), "utf8"),
+  const [readOnly, editable, review] = await Promise.all([
+    readFile(new URL("../src/features/files-editor/read-only-diff.css", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/editable-diff.css", import.meta.url), "utf8"),
     readFile(new URL("../src/shared/diff-review.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(files, /\.diff-splitter\s*\{[^}]*background:\s*transparent;/s);
-  assert.match(editable, /\.editable-diff-splitter\s*\{[^}]*width:\s*5px;/s);
+  assert.match(readOnly, /\.workbench-splitter\.vertical\.diff-splitter\s*\{[^}]*width:\s*13px;[^}]*align-self:\s*stretch;[^}]*background:\s*transparent;/s);
+  assert.match(readOnly, /\.workbench-splitter\.vertical\.diff-splitter::after\s*\{[^}]*left:\s*6px;/s);
+  assert.match(editable, /\.workbench-splitter\.editable-diff-splitter\s*\{[^}]*bottom:\s*0;[^}]*width:\s*32px;/s);
+  assert.match(editable, /\.workbench-splitter\.editable-diff-splitter::after\s*\{[^}]*left:\s*15px;/s);
+  assert.match(editable, /\.cm-merge-revert\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(editable, /\.cm-merge-revert > button\s*\{[^}]*pointer-events:\s*auto;/s);
   assert.match(review, /\.diff-splitter::after,[\s\S]*?\.editable-diff-splitter::after\s*\{[^}]*background:\s*transparent;[^}]*opacity:\s*0;/u);
   assert.match(review, /\.diff-splitter:hover::after,[\s\S]*?\.editable-diff-splitter\.dragging::after\s*\{[^}]*background:\s*var\(--accent\);[^}]*opacity:\s*1;/u);
 });

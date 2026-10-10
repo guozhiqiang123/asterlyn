@@ -11,6 +11,7 @@
     "protocol:generate": "node scripts/generate-desktop-protocol.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
     "test:conflict:rendered": "node scripts/test-conflict-editor-rendered.mjs",
+    "test:diff:rendered": "node scripts/test-diff-editor-rendered.mjs",
     "test:native:rendered": "node scripts/smoke-native-app.mjs --require-rendered target/release/asterlyn",
     "test:native:rendered:build": "tauri build --no-bundle && npm run test:native:rendered",
     "tauri": "tauri"

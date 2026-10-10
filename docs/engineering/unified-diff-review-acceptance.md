@@ -234,3 +234,68 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   `59c1eb4125d9b66003ce2f4ba13b21d55e64aaa2259f20b056f377f1e194a653`. The previous installation
   remains recoverable at
   `/Users/gzq/.Trash/Asterlyn-before-conflict-worker-rehydration-20261009.app`.
+
+### Phase 12 — two-pane Diff footer alignment and splitter parity
+
+- Read-only Changes and commit-history Diff views now render one grid-aligned horizontal-scrollbar
+  footer whose Before, divider, and After columns use the same split percentage and 5px divider as
+  the editor above. The native CodeMirror bars are hidden, both proxy bars preserve the source
+  editor's exact horizontal range, and the footer paints a continuous top boundary plus both divider
+  edges. The 5px logical divider has a centered 13px invisible drag target; its interaction line
+  spans the complete editor row and remains hidden until hover, focus, or drag.
+- Editable Changes Diff uses the same geometry contract for its Before bar, 32px action gutter, and
+  After bar. Its MergeView no longer extends underneath the footer, and native scrollbar-corner
+  width is included without shifting the pane boundaries.
+- The editable center action gutter is also the splitter hit target. Its full 32px width is draggable
+  except where an Apply or Ignore button receives the pointer, and a narrow divider becomes visible
+  on hover. Drag projection uses the complete MergeView width, so the visible pane ratio and footer
+  ratio remain identical.
+- A real Vite plus Playwright regression mounts the production `DiffEditor` and
+  `EditableDiffEditor` in Chromium and WebKit. It checks pane/footer boundaries, footer docking,
+  divider borders, hover affordances, exact splitter hit areas, and a real pointer drag that changes
+  the split percentage. Both engines pass, as does the existing conflict-editor rendered matrix.
+- TypeScript checking and the production frontend build pass. The complete frontend script suite
+  passes 935 tests with no failures, and the native Git crate passes 134 tests with no failures.
+  Rust formatting, patch hygiene, production packaging, strict deep signature verification, and
+  rendered smoke against both the build and installed app also pass.
+- The accepted signed macOS arm64 archive is
+  `target/release/bundle/macos/Asterlyn-diff-splitter-full-height-20261010-macos-arm64-signed.zip`,
+  9,263,712 bytes, SHA-256
+  `5f443f09f7c69047306a9d6694cca97e27a0b1be174294763b74b430bb9bb962`. The packaged and installed
+  executables are both 24,158,768 bytes with SHA-256
+  `1e2a60d54796c1e17e32118726a62eb0cb14124ea38f9c22a2cd11a760aac7ca`.
+- `/Applications/Asterlyn.app` was replaced and relaunched. The previous installation remains
+  recoverable at
+  `/Users/gzq/.Trash/Asterlyn-before-diff-splitter-20261010-155354.app`.
+
+### Phase 13 — editable splitter survives document scrolling
+
+- The earlier full-height checks only mounted two-line documents. They did not exercise the
+  editable MergeView's shared vertical scroller. Reproducing with the actual contents of
+  `scripts/test-diff-editor-rendered.mjs` as an untracked added file proves that scrolling 300px
+  also moved the splitter from viewport Y=42 to Y=-258. Its absolute `top: 0; bottom: 0` dimensions
+  belonged to the scroll viewport, so its bottom stopped 300px before the visible editor bottom.
+- The editable splitter now belongs to the positioned `.cm-mergeViewEditors` document container.
+  Its height grows with both code panes and alignment spacers, including after edits or folding,
+  and clipping to MergeView leaves a continuous line and drag target throughout the viewport.
+  This requires no new scroll listener or repeated scroll-time measurements. Disposal removes the
+  handle as well as its pointer and keyboard listeners.
+- The action gutter is painted above the splitter while its empty surface passes pointers through.
+  Rollback controls therefore remain clickable without losing the full-width gutter drag target.
+- Chromium and WebKit regressions now load the test script itself, scroll 300px, scroll to the
+  document middle and end, resize while scrolled, and drag from the bottom of the visible editor.
+  Both the upper and lower positions are checked with actual browser hit testing. Wheel scrolling
+  over the handle and a real rollback click also pass.
+- TypeScript, all 939 frontend script tests, production frontend/native builds, strict bundle
+  signature verification, and rendered smoke of the fixed snapshot and installed executable pass.
+  Packaging uses an isolated verified snapshot before installation so concurrent updates to the
+  shared bundle directory cannot substitute a different file during delivery.
+- The accepted signed archive is
+  `target/release/bundle/macos/Asterlyn-diff-scroll-anchor-20261010-macos-arm64-signed.zip`,
+  9,264,507 bytes, SHA-256
+  `e3c5e90ad373d352455c357d3ef529e1928f730565d5683ca7a12a0a46f8a555`.
+  The installed `/Applications/Asterlyn.app` executable matches the verified snapshot byte for
+  byte: 24,158,768 bytes, SHA-256
+  `2fb6765e5c8f07b9c8224e9a648a8092047650a70f27358b999c51c6d0f6e58c`.
+  The app was relaunched; the previous installation is recoverable at
+  `/Users/gzq/.Trash/Asterlyn-before-diff-scroll-anchor-20261010-1605.app`.

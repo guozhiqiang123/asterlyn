@@ -4,6 +4,7 @@ import { linkHorizontalScrollGroup } from "../../presentation/linked-scroll.ts";
 /** Owns the two docked horizontal scrollbar proxies used by an editable split Diff. */
 export class EditableDiffScrollbars {
   private readonly container: HTMLDivElement;
+  private readonly panes: readonly [HTMLDivElement, HTMLDivElement];
   private readonly contents: readonly [HTMLDivElement, HTMLDivElement];
   private readonly corner: HTMLDivElement;
   private readonly resizeObserver: ResizeObserver;
@@ -21,6 +22,7 @@ export class EditableDiffScrollbars {
     this.corner.className = "editable-diff-scrollbar-corner";
     this.container.append(paneA.pane, spacer, paneB.pane, this.corner);
     parent.append(this.container);
+    this.panes = [paneA.pane, paneB.pane];
     this.contents = [paneA.content, paneB.content];
     this.releaseScrollGroup = linkHorizontalScrollGroup([
       paneA.pane,
@@ -39,14 +41,20 @@ export class EditableDiffScrollbars {
     const a = this.merge.a.scrollDOM;
     const b = this.merge.b.scrollDOM;
     if (!a.isConnected || !b.isConnected) return;
-    const sharedWidth = Math.max(a.scrollWidth, b.scrollWidth);
-    for (const content of this.contents) content.style.width = `${sharedWidth}px`;
+    const sources = [a, b] as const;
+    const visible = sources.some((source) => source.scrollWidth > source.clientWidth);
+    this.container.style.display = visible ? "grid" : "none";
+    if (!visible) return;
+    for (const [index, source] of sources.entries()) {
+      const maximum = Math.max(0, source.scrollWidth - source.clientWidth);
+      this.contents[index]!.style.width = `${this.panes[index]!.clientWidth + maximum}px`;
+    }
     const verticalWidth = Math.max(0, this.merge.dom.offsetWidth - this.merge.dom.clientWidth);
+    this.container.style.setProperty(
+      "--editable-diff-scrollbar-corner-width",
+      `${verticalWidth}px`,
+    );
     this.corner.style.width = `${verticalWidth}px`;
-    this.corner.style.flex = `0 0 ${verticalWidth}px`;
-    this.container.style.display = a.scrollWidth > a.clientWidth || b.scrollWidth > b.clientWidth
-      ? "flex"
-      : "none";
   }
 
   destroy(): void {

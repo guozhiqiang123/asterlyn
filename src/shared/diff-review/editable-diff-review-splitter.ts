@@ -22,16 +22,19 @@ export function attachEditableDiffReviewSplitter(
   const splitter = document.createElement("div");
   splitter.className = "workbench-splitter vertical editable-diff-splitter";
   splitter.setAttribute("aria-label", options.label);
-  merge.append(splitter);
-  return attachSplitter(splitter, {
+  // MergeView scrolls its entire document. Anchor to that document's height so the
+  // splitter still covers the viewport after scrolling beyond the initial screen.
+  const editors = merge.querySelector<HTMLElement>(".cm-mergeViewEditors") ?? merge;
+  editors.append(splitter);
+  const releaseSplitter = attachSplitter(splitter, {
     orientation: "vertical",
-    getValue: () => Math.max(1, merge.clientWidth - 32) * percentage / 100,
+    getValue: () => Math.max(1, merge.clientWidth) * percentage / 100,
     getRange: () => {
-      const width = Math.max(1, merge.clientWidth - 32);
+      const width = Math.max(1, merge.clientWidth);
       return { minimum: width * 0.25, maximum: width * 0.75 };
     },
     onChange: (value) => {
-      percentage = clampEditableDiffPercentage(value / Math.max(1, merge.clientWidth - 32) * 100);
+      percentage = clampEditableDiffPercentage(value / Math.max(1, merge.clientWidth) * 100);
       apply();
       options.onChange(percentage, false);
     },
@@ -42,6 +45,10 @@ export function attachEditableDiffReviewSplitter(
       options.onChange(percentage, false);
     },
   });
+  return () => {
+    releaseSplitter();
+    splitter.remove();
+  };
 }
 
 function clampEditableDiffPercentage(value: number): number {
