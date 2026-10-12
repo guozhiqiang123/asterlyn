@@ -23,6 +23,7 @@ const ownedStyles = [
   ["features/files-editor/read-only-diff.css", "main.ts"],
   ["features/files-editor/editable-diff.css", "main.ts"],
   ["features/files-editor/change-overview.css", "main.ts"],
+  ["features/files-editor/editor-patch-popover.css", "main.ts"],
   ["shared/diff-review.css", "main.ts"],
   ["features/files-editor/workspace-search.css", "main.ts"],
   ["features/files-editor/workspace-replacement-tool.css", "main.ts"],

@@ -5,6 +5,11 @@ import {
   editorChangeHighlightLines,
   editorChangeIndicatorBlocks,
 } from "../src/editor-change-indicators.ts";
+import { Text } from "@codemirror/state";
+import {
+  editorPatchRollbackChange,
+  projectEditorPatch,
+} from "../src/features/files-editor/editor-patch-popover.ts";
 
 test("change indicators classify additions, modifications, and deletions", () => {
   assert.deepEqual(
@@ -47,6 +52,80 @@ test("revealed editor changes frame the complete line block", () => {
   ]);
 });
 
+test("editor Patch projects only the selected modified block", () => {
+  const baseline = text("one\nold value\nend\n");
+  const current = text("one\nnew value\nend\n");
+  const block = editorChangeIndicatorBlocks(
+    baseline.toString(),
+    current.toString(),
+  )[0];
+  assert.ok(block);
+
+  assert.deepEqual(projectEditorPatch(baseline, current, block), {
+    before: [{ lineNumber: 2, text: "old value" }],
+    after: [{ lineNumber: 2, text: "new value" }],
+  });
+});
+
+test("editor Patch keeps added, deleted, and HTML-like source literal", () => {
+  const addedBaseline = text("one\nend\n");
+  const addedCurrent = text("one\n<img onerror=alert(1)>\nend\n");
+  const added = editorChangeIndicatorBlocks(
+    addedBaseline.toString(),
+    addedCurrent.toString(),
+  )[0];
+  assert.ok(added);
+  assert.deepEqual(projectEditorPatch(addedBaseline, addedCurrent, added), {
+    before: [],
+    after: [{ lineNumber: 2, text: "<img onerror=alert(1)>" }],
+  });
+
+  const deletedBaseline = text("one\nremoved\nend\n");
+  const deletedCurrent = text("one\nend\n");
+  const deleted = editorChangeIndicatorBlocks(
+    deletedBaseline.toString(),
+    deletedCurrent.toString(),
+  )[0];
+  assert.ok(deleted);
+  assert.deepEqual(projectEditorPatch(deletedBaseline, deletedCurrent, deleted), {
+    before: [{ lineNumber: 2, text: "removed" }],
+    after: [],
+  });
+});
+
+test("editor Patch rollback restores only one block with exact newline semantics", () => {
+  const baseline = text("one\nold\nmiddle\nkeep\n");
+  const current = text("one\nnew\nmiddle\nchanged\n");
+  const blocks = editorChangeIndicatorBlocks(baseline.toString(), current.toString());
+  assert.equal(blocks.length, 2);
+
+  const change = editorPatchRollbackChange(baseline, current, blocks[0]);
+  assert.equal(apply(current.toString(), change), "one\nold\nmiddle\nchanged\n");
+
+  const eofBaseline = text("one\nold");
+  const eofCurrent = text("one\nnew");
+  const eofBlock = editorChangeIndicatorBlocks(
+    eofBaseline.toString(),
+    eofCurrent.toString(),
+  )[0];
+  assert.ok(eofBlock);
+  assert.equal(
+    apply(
+      eofCurrent.toString(),
+      editorPatchRollbackChange(eofBaseline, eofCurrent, eofBlock),
+    ),
+    eofBaseline.toString(),
+  );
+});
+
 function project(block) {
   return { kind: block.kind, lineFrom: block.lineFrom, lineTo: block.lineTo };
+}
+
+function text(value) {
+  return Text.of(value.split("\n"));
+}
+
+function apply(content, change) {
+  return content.slice(0, change.from) + change.insert + content.slice(change.to);
 }
