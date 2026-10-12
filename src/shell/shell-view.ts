@@ -104,6 +104,7 @@ export function renderShellView(model: ShellViewModel): string {
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="commit-file-restore-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="git-operation-dialog" role="presentation"></div>
     <div class="dialog-backdrop hidden git-operation-dialog-backdrop" id="stash-unstash-dialog" role="presentation"></div>
+    <div class="dialog-backdrop hidden app-update-dialog-backdrop" id="app-update-dialog" role="presentation"></div>
   </main>`;
 }
 

@@ -41,16 +41,45 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "appUpdateCheckResult": {
       const result = record(value, command);
       strings(result, command, "currentVersion", "releaseUrl");
-      nullableStrings(result, command, "latestVersion", "error");
-      booleans(result, command, "ok", "hasUpdate");
+      nullableStrings(result, command, "latestVersion", "assetName", "error");
+      booleans(result, command, "ok", "hasUpdate", "canInstall");
       numbers(result, command, "checkedAtEpochMs");
+      assert(
+        result.assetSizeBytes === null || (
+          typeof result.assetSizeBytes === "number" &&
+          Number.isSafeInteger(result.assetSizeBytes) && result.assetSizeBytes > 0
+        ),
+        command,
+        "assetSizeBytes must be a positive integer or null",
+      );
       assert(!result.hasUpdate || result.ok === true, command, "an available update requires a successful check");
+      assert(
+        !result.canInstall || (
+          result.ok === true && result.hasUpdate === true &&
+          typeof result.assetName === "string" && result.assetName.length > 0 &&
+          typeof result.assetSizeBytes === "number"
+        ),
+        command,
+        "an installable update requires an available package with name and size",
+      );
       assert(
         result.ok
           ? result.latestVersion !== null && result.error === null
           : result.latestVersion === null && typeof result.error === "string" && result.error.length > 0,
         command,
         "success must include a latest version and failures must include an error",
+      );
+      break;
+    }
+    case "appUpdateInstallResult": {
+      const result = record(value, command);
+      strings(result, command, "message");
+      nullableStrings(result, command, "error");
+      booleans(result, command, "ok");
+      assert(
+        result.ok ? result.error === null : typeof result.error === "string" && result.error.length > 0,
+        command,
+        "successful installation preparation cannot include an error and failure requires one",
       );
       break;
     }

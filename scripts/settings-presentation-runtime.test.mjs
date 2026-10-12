@@ -42,6 +42,7 @@ test("Settings and presentation composition owns subscriptions and disposal", ()
     nativeAppearance: { setTheme: async () => {} },
     appUpdates: {
       checkForAppUpdates: async () => { throw new Error("not used"); },
+      installAppUpdate: async () => { throw new Error("not used"); },
       openAppUpdateRelease: async () => {},
     },
     settingsChanged: () => {

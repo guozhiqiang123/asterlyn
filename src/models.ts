@@ -30,7 +30,24 @@ export interface RemoteSummary {
   pushSupported: boolean;
 }
 
-export interface AppUpdateCheckResult { ok: boolean; currentVersion: string; latestVersion: string | null; hasUpdate: boolean; releaseUrl: string; checkedAtEpochMs: number; error: string | null; }
+export interface AppUpdateCheckResult {
+  ok: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  hasUpdate: boolean;
+  releaseUrl: string;
+  checkedAtEpochMs: number;
+  assetName: string | null;
+  assetSizeBytes: number | null;
+  canInstall: boolean;
+  error: string | null;
+}
+
+export interface AppUpdateInstallResult {
+  ok: boolean;
+  message: string;
+  error: string | null;
+}
 
 export type { BranchMutationKind, BranchMutationPlan, BranchMutationRequest, GitResetMode, GitResetPlan, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest, WorktreeCreationPlan, WorktreeCreationRequest, WorktreeRemovalReview } from "./git-reviewed-models.ts";
 

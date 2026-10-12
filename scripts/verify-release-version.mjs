@@ -8,11 +8,13 @@ const releaseTag = process.argv[2] ?? "";
 const packageJson = readJson("package.json");
 const packageLock = readJson("package-lock.json");
 const tauriConfig = readJson("src-tauri/tauri.conf.json");
+const brandSource = readFileSync(path.join(repositoryRoot, "src/brand.ts"), "utf8");
 const versions = new Map([
   ["package.json", packageJson.version],
   ["package-lock.json", packageLock.version],
   ["package-lock.json root package", packageLock.packages?.[""]?.version],
   ["src-tauri/tauri.conf.json", tauriConfig.version],
+  ["src/brand.ts", brandSource.match(/version:\s*"([^"]+)"/)?.[1]],
 ]);
 
 for (const manifest of [

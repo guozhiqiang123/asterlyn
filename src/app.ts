@@ -185,6 +185,7 @@ import {
 } from "./features/settings/settings-controller";
 import { renderSettingsNavigation, renderSettingsSection } from "./features/settings/settings-view";
 import { bindAppUpdateControls } from "./features/settings/app-update-binding.ts";
+import { AppUpdatePresentationRuntime } from "./features/settings/app-update-presentation-runtime.ts";
 import { bindKeybindingSettings } from "./features/keybindings/keybinding-settings-binding.ts";
 import { renderKeybindingSettings } from "./features/keybindings/keybinding-view.ts";
 import { ShellController, type ShellState } from "./shell/shell-controller";
@@ -446,6 +447,7 @@ export class AsterlynApp {
   private readonly gitOperationRuntime: GitOperationRuntime;
   private editorTabsMarkup = "";
   private readonly settingsPresentationRuntime: SettingsPresentationRuntime;
+  private readonly appUpdatePresentationRuntime: AppUpdatePresentationRuntime;
   private readonly shellController: ShellController;
   private readonly shortcuts: KeyboardShortcutRuntime;
   private readonly releaseKeybindings: () => void;
@@ -564,6 +566,11 @@ export class AsterlynApp {
         }
       },
       settingsChanged: (change) => this.handleSettingsControllerChange(change),
+    });
+    this.appUpdatePresentationRuntime = new AppUpdatePresentationRuntime(root, this.settingsPresentationRuntime.updates, {
+      copy: () => this.localization.catalog,
+      settingsVisible: () => this.shellState.page === "settings" && Boolean(this.root.querySelector("#settings-content")),
+      renderSettings: () => this.renderSettingsPage(),
     });
     this.shellController = new ShellController(window.localStorage);
     this.shortcuts = new KeyboardShortcutRuntime(window, window.localStorage, {
@@ -1761,6 +1768,8 @@ export class AsterlynApp {
       return;
     }
 
+    this.appUpdatePresentationRuntime.checkOnStartup();
+
     const initial = await bridge.initialRepository();
     if (initial) {
       await this.openRepository(initial);
@@ -1836,6 +1845,7 @@ export class AsterlynApp {
     this.localizeShellChrome(previousCatalog);
     this.renderRemoteToolbar(this.windowSession.repository.state.snapshot);
     if (this.remoteState.dialog) this.renderRemoteDialog();
+    this.appUpdatePresentationRuntime.render();
     this.windowChromeBinding.refreshLabels();
   }
 
@@ -1989,6 +1999,7 @@ export class AsterlynApp {
     this.replacementPresentationRuntime.dispose();
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
+    this.appUpdatePresentationRuntime.dispose();
     this.settingsPresentationRuntime.dispose();
     this.releaseKeybindings();
     this.shortcuts.dispose();
@@ -2063,6 +2074,7 @@ export class AsterlynApp {
       });
     }
   }
+
   private bindSettingsEvents(): void {
     bindAppUpdateControls(this.root, this.settingsPresentationRuntime.updates, () => this.shellState.page === "settings" && this.renderSettingsPage());
     this.root

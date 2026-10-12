@@ -46,7 +46,9 @@ export function renderSettingsSection(
   copy: SettingsCopy = EN_US.settings,
   update: AppUpdateState = {
     status: "idle", currentVersion: BRAND.version, latestVersion: null,
-    releaseUrl: BRAND.releaseUrl, checkedAtEpochMs: null, error: null, openingRelease: false,
+    releaseUrl: BRAND.releaseUrl, checkedAtEpochMs: null, assetName: null,
+    assetSizeBytes: null, canInstall: false, error: null, openingRelease: false,
+    dialog: null, installMessage: null,
   },
 ): string {
   const preferences = state.preferences;
@@ -90,24 +92,64 @@ export function renderSettingsSection(
 
 function appUpdatePanel(state: AppUpdateState, copy: SettingsCopy): string {
   const checking = state.status === "checking";
+  const installing = state.status === "installing";
   const status = state.status === "available"
     ? copy.updateAvailable(state.latestVersion ?? "")
     : state.status === "current"
       ? copy.updateCurrent(state.currentVersion)
       : state.status === "error"
-        ? copy.updateFailed
-        : checking ? copy.updateChecking : copy.updateIdle;
+        ? state.dialog === "error" ? copy.updateInstallFailed : copy.updateFailed
+        : installing ? copy.updateInstalling : checking ? copy.updateChecking : copy.updateIdle;
   const detail = state.error
     ? `<span class="app-update-error" title="${escapeAttribute(state.error)}">${escapeHtml(state.error)}</span>`
     : "";
   const checked = state.checkedAtEpochMs === null
     ? ""
     : `<span class="app-update-checked">${escapeHtml(copy.updateLastChecked(state.checkedAtEpochMs))}</span>`;
-  return `<div class="app-update-panel update-${state.status}"><div class="app-update-versions"><div><span>${escapeHtml(copy.currentVersionLabel)}</span><strong>v${escapeHtml(normalizeVersion(state.currentVersion))}</strong></div><div><span>${escapeHtml(copy.latestVersionLabel)}</span><strong>${state.latestVersion ? `v${escapeHtml(normalizeVersion(state.latestVersion))}` : "—"}</strong></div></div><div class="app-update-status" role="status" aria-live="polite"><strong>${escapeHtml(status)}</strong><span>${escapeHtml(copy.updateSource)}</span>${detail}${checked}</div><div class="app-update-actions"><button class="primary-button" id="setting-check-for-updates" type="button" ${checking ? "disabled" : ""}>${escapeHtml(checking ? copy.checkingForUpdates : copy.checkForUpdates)}</button><button class="secondary-button" id="setting-open-update-release" type="button" ${state.openingRelease ? "disabled" : ""}>${escapeHtml(state.openingRelease ? copy.openingReleasePage : copy.openReleasePage)}</button></div></div>`;
+  const asset = state.assetName
+    ? `<div class="app-update-package"><span><b>${escapeHtml(copy.updateAssetLabel)}</b>${escapeHtml(state.assetName)}</span>${state.assetSizeBytes ? `<span><b>${escapeHtml(copy.updateSizeLabel)}</b>${escapeHtml(formatBytes(state.assetSizeBytes))}</span>` : ""}</div>`
+    : "";
+  const primary = state.status === "available" && state.canInstall
+    ? `<button class="primary-button" id="setting-install-update" type="button">${escapeHtml(copy.installUpdate)}</button>`
+    : `<button class="primary-button" id="setting-check-for-updates" type="button" ${checking || installing ? "disabled" : ""}>${escapeHtml(checking ? copy.checkingForUpdates : installing ? copy.installingUpdate : copy.checkForUpdates)}</button>`;
+  return `<div class="app-update-panel update-${state.status}"><div class="app-update-versions"><div><span>${escapeHtml(copy.currentVersionLabel)}</span><strong>v${escapeHtml(normalizeVersion(state.currentVersion))}</strong></div><div><span>${escapeHtml(copy.latestVersionLabel)}</span><strong>${state.latestVersion ? `v${escapeHtml(normalizeVersion(state.latestVersion))}` : "—"}</strong></div></div><div class="app-update-status" role="status" aria-live="polite"><strong>${escapeHtml(status)}</strong><span>${escapeHtml(copy.updateSource)}</span>${asset}${detail}${checked}</div><div class="app-update-actions">${primary}<button class="secondary-button" id="setting-open-update-release" type="button" ${state.openingRelease || installing ? "disabled" : ""}>${escapeHtml(state.openingRelease ? copy.openingReleasePage : copy.openReleasePage)}</button></div></div>`;
+}
+
+export function renderAppUpdateDialog(
+  state: AppUpdateState,
+  copy: SettingsCopy,
+  common: { readonly cancel: string; readonly close: string },
+): string {
+  if (!state.dialog) return "";
+  const installing = state.dialog === "installing";
+  const failed = state.dialog === "error";
+  const title = failed
+    ? copy.updateInstallFailedTitle
+    : installing ? copy.updateInstallingTitle : copy.updateDialogTitle;
+  const detail = failed
+    ? state.error ?? copy.updateInstallFailed
+    : installing ? state.installMessage ?? copy.updateInstallingDetail : copy.updateConfirmDetail;
+  const version = state.latestVersion
+    ? `<div><dt>${escapeHtml(copy.latestVersionLabel)}</dt><dd>v${escapeHtml(normalizeVersion(state.latestVersion))}</dd></div>`
+    : "";
+  const asset = state.assetName
+    ? `<div><dt>${escapeHtml(copy.updateAssetLabel)}</dt><dd>${escapeHtml(state.assetName)}${state.assetSizeBytes ? ` · ${escapeHtml(formatBytes(state.assetSizeBytes))}` : ""}</dd></div>`
+    : "";
+  const actions = installing
+    ? ""
+    : failed
+      ? `<div class="dialog-actions"><button class="secondary-button" id="app-update-open-release" type="button">${escapeHtml(copy.openReleasePage)}</button><button class="primary-button" id="app-update-close" type="button">${escapeHtml(common.close)}</button></div>`
+      : `<div class="dialog-actions"><button class="secondary-button" id="app-update-cancel" type="button">${escapeHtml(common.cancel)}</button><button class="primary-button" id="app-update-confirm" type="button">${escapeHtml(copy.installUpdate)}</button></div>`;
+  return `<section class="dialog app-update-dialog" role="dialog" aria-modal="true" aria-labelledby="app-update-dialog-title"><div class="dialog-heading"><h2 id="app-update-dialog-title">${escapeHtml(title)}</h2>${installing ? "" : `<button class="icon-button" id="app-update-dialog-close" type="button" aria-label="${escapeAttribute(common.close)}">×</button>`}</div><div class="app-update-dialog-body" aria-live="polite">${installing ? `<span class="app-update-spinner" aria-hidden="true"></span>` : ""}<div><p>${escapeHtml(detail)}</p><dl>${version}${asset}</dl>${failed ? "" : `<p class="app-update-trust-note">${escapeHtml(copy.updateUnsignedNotice)}</p>`}</div></div>${actions}</section>`;
 }
 
 function normalizeVersion(version: string): string {
   return version.replace(/^v/i, "");
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function settingsGroup(title: string, description: string, rows: string): string {

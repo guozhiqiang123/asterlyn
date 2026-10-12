@@ -458,6 +458,10 @@
   border-left-color: var(--danger-text);
 }
 
+.app-update-panel.update-installing .app-update-status {
+  border-left-color: var(--accent);
+}
+
 .app-update-status > span:not(.app-update-error) {
   color: var(--text-muted);
 }
@@ -474,6 +478,98 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.app-update-package {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+}
+
+.app-update-package span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-update-package b {
+  margin-right: 6px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.app-update-dialog {
+  width: min(580px, calc(100vw - 44px));
+}
+
+.app-update-dialog-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.app-update-dialog-body > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-update-dialog-body p {
+  margin: 4px 0 12px;
+  line-height: 1.55;
+}
+
+.app-update-dialog-body dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.app-update-dialog-body dl > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.app-update-dialog-body dt {
+  color: var(--text-muted);
+}
+
+.app-update-dialog-body dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-update-dialog-body .app-update-trust-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: var(--bg-deep);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
+.app-update-spinner {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-top: 5px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: app-update-spin 0.8s linear infinite;
+}
+
+@keyframes app-update-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-update-spinner { animation: none; }
 }
 
 @media (max-width: 720px) {

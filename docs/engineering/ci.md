@@ -30,21 +30,23 @@ mutations.
 - Preview and release publication remain separate. The preview workflow is read-only. The Release workflow is also read-only while testing and packaging; only its final tag-only publication job receives `contents: write`.
 - Commercial signing and notarization credentials are intentionally absent. The release workflow fails if a macOS package acquires a certificate-backed authority or if a Windows installer is anything other than `NotSigned`.
 
-## In-application Release discovery
+## In-application Release updates
 
-Settings exposes a manual update check against the fixed
-`https://github.com/guozhiqiang123/asterlyn/releases/latest` endpoint. The native boundary follows
-the GitHub redirect, compares its Release tag with the packaged Cargo version, and returns only
-structured version, timestamp, status, and repository-scoped Release URL data to the frontend. The
-request is bounded by connection and total timeouts, runs outside the UI thread, and accepts no
-repository or request URL from workspace content. Opening the result is separately allowlisted to
-this repository's Release pages.
+Asterlyn performs one non-blocking startup check and exposes the same state through Settings. The
+native boundary reads the fixed official GitHub latest-Release API, rejects drafts, prereleases,
+malformed versions, and repository-external URLs, compares the tag with the packaged Cargo version,
+and selects at most one package for the compiled operating system and architecture. A missing
+Release or unavailable network is a visible checked error in Settings, not evidence that the
+current build is latest. Preview workflow artifacts are not Releases and never appear as updates.
 
-This is discovery only: Asterlyn does not download, verify, install, or activate an artifact. A
-missing Release or unavailable network is a visible checked error, not evidence that the current
-build is latest. Preview workflow artifacts are not Releases and therefore never appear as an
-available update. Signed update manifests, artifact verification, rollback, and automatic
-installation remain later release-channel work under the existing trust gates.
+Installation is always user-confirmed. The renderer cannot provide a URL, path, digest, command, or
+version. Immediately before downloading, the native boundary reloads the Release and revalidates
+the selected package. It requires a safe filename, a bounded non-zero size, the official Release
+download prefix, and GitHub's SHA-256 asset digest; the complete local file must match both the byte
+count and digest before a platform installer is started. The macOS and AppImage flows stage a
+replacement and retain a rollback copy during the exact swap; Windows uses the published NSIS
+installer and Debian uses an operating-system-authorized package installation. The complete threat
+model, restart behavior, and limitations are recorded in [`in-app-update-plan.md`](in-app-update-plan.md).
 
 ## Evidence policy
 
@@ -66,7 +68,7 @@ Every target performs a bounded native-process smoke test and publishes a target
 
 The only write authority is the tag-only `publish` job's ephemeral GitHub token. No Apple certificate, Apple account, Windows certificate, updater private key, or persistent checkout credential enters the workflow. A later move to Developer ID/notarization or Windows Authenticode is a policy change, not a secret-injection shortcut: update this document, the workflow assertions, user-facing release notes, and clean-machine acceptance evidence together.
 
-This policy accepts installation friction in exchange for zero certificate cost. It does not represent ad-hoc signing as Apple trust, and support instructions must use the operating system's visible approval UI rather than removing quarantine attributes. Automatic installation remains out of scope; the application only discovers the latest GitHub Release and opens its page.
+This policy accepts installation friction in exchange for zero certificate cost. It does not represent ad-hoc signing as Apple trust, and support instructions must use the operating system's visible approval UI rather than removing quarantine attributes. In-app installation preserves those warnings and requires explicit confirmation; the GitHub asset digest detects download corruption or substitution outside matching Release metadata but is not an independent authority if the repository itself is compromised.
 
 ## Accepted packaging evidence — 2026-09-08
 

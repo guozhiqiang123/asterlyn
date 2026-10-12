@@ -6,6 +6,10 @@ export function bindAppUpdateControls(
   render: () => void,
 ): void {
   bindAsyncAction(root, "#setting-check-for-updates", () => controller.check(), render);
+  root.querySelector<HTMLButtonElement>("#setting-install-update")?.addEventListener("click", () => {
+    controller.requestInstall();
+    render();
+  });
   bindAsyncAction(root, "#setting-open-update-release", () => controller.openRelease(), render);
 }
 

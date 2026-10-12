@@ -66,6 +66,7 @@ import type {
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
   AppUpdateCheckResult,
+  AppUpdateInstallResult,
   WorktreeCreationPlan,
   WorktreeCreationRequest,
 } from "../models";
@@ -79,6 +80,7 @@ export type DirectoryChoice =
 
 export interface AppUpdateBridge {
   checkForAppUpdates(): Promise<AppUpdateCheckResult>;
+  installAppUpdate(): Promise<AppUpdateInstallResult>;
   openAppUpdateRelease(releaseUrl: string): Promise<void>;
 }
 

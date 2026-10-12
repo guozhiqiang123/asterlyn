@@ -200,9 +200,14 @@ export interface SettingsCopy {
   updatesTitle: string; updatesDescription: string; updateSource: string;
   currentVersionLabel: string; latestVersionLabel: string;
   updateIdle: string; updateChecking: string; updateFailed: string;
+  updateInstalling: string; updateInstallFailed: string;
   updateCurrent(version: string): string; updateAvailable(version: string): string;
   checkForUpdates: string; checkingForUpdates: string;
+  installUpdate: string; installingUpdate: string;
   openReleasePage: string; openingReleasePage: string;
+  updateAssetLabel: string; updateSizeLabel: string;
+  updateDialogTitle: string; updateInstallingTitle: string; updateInstallFailedTitle: string;
+  updateConfirmDetail: string; updateInstallingDetail: string; updateUnsignedNotice: string;
   updateLastChecked(epochMs: number): string;
 }
 

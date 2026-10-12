@@ -183,6 +183,14 @@ Each Markdown text tab additionally owns one `source | split | preview` presenta
 
 E2 navigation adds a separate transient command-surface state rather than overloading editor tabs or optional Git state. Quick-open and recent-file activation dispatch exact project-file identities through the existing text-tab flow. Workspace search owns one cancellable request at a time and accepts results only when the request identity and project generation remain current. Result locations are applied after the target tab's matching load epoch succeeds, so late search or file-read responses cannot move a newer editor selection.
 
+Application updates remain outside repository and workspace capabilities. One feature-owned
+controller coordinates startup discovery, Settings presentation, confirmation, and stale-result
+suppression through a narrow desktop bridge. The native host owns the fixed Release endpoint,
+platform/architecture selection, bounded download, digest verification, temporary files,
+installer launch, process exit, replacement, and restart; renderer state cannot contribute a URL,
+path, command, version, or digest. The detailed trust and rollback boundary is recorded in
+[`In-app update delivery plan`](../engineering/in-app-update-plan.md).
+
 ## Failure policy
 
 - A failed Git command returns its operation, exit status, and sanitized stderr.

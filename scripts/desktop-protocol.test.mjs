@@ -21,12 +21,28 @@ test("app update responses require coherent GitHub Release state", () => {
     hasUpdate: true,
     releaseUrl: "https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.2.0",
     checkedAtEpochMs: 1_700_000_000_000,
+    assetName: "Asterlyn_0.2.0_aarch64.dmg",
+    assetSizeBytes: 9_000_000,
+    canInstall: true,
     error: null,
   });
   assert.equal(result.hasUpdate, true);
   assert.throws(
-    () => validateDesktopResult("check_for_app_updates", { ...result, ok: false, hasUpdate: false }),
+    () => validateDesktopResult("check_for_app_updates", {
+      ...result, ok: false, hasUpdate: false, canInstall: false,
+    }),
     /success must include a latest version and failures must include an error/,
+  );
+  assert.throws(
+    () => validateDesktopResult("check_for_app_updates", { ...result, assetName: null }),
+    /installable update requires an available package/,
+  );
+  assert.deepEqual(validateDesktopResult("install_app_update", {
+    ok: true, message: "Installer ready", error: null,
+  }), { ok: true, message: "Installer ready", error: null });
+  assert.throws(
+    () => validateDesktopResult("install_app_update", { ok: false, message: "Failed", error: null }),
+    /failure requires one/,
   );
 });
 

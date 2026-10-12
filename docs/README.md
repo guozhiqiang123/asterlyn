@@ -60,6 +60,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
+- [`engineering/in-app-update-plan.md`](engineering/in-app-update-plan.md) — startup/manual update discovery, verified native package installation, restart behavior, and updater trust boundaries.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
 
 ## Design and references
@@ -74,6 +75,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-10-12-in-app-update.md`](benchmarks/2026-10-12-in-app-update.md) — shared startup/Settings update state, verified native package installation, resource bounds, and cross-platform acceptance evidence.
 - [`benchmarks/2026-10-12-editor-patch-popover.md`](benchmarks/2026-10-12-editor-patch-popover.md) — exact per-block editor Patch comparison, previous/next navigation, reversible rollback, and Chromium/WebKit evidence.
 - [`benchmarks/2026-10-12-remote-push-error-diagnostics.md`](benchmarks/2026-10-12-remote-push-error-diagnostics.md) — structured Push rejection parsing, actionable tag-collision recovery, security boundaries, and regression evidence.
 - [`benchmarks/2026-10-09-windows-repository-identity.md`](benchmarks/2026-10-09-windows-repository-identity.md) — canonical Windows workspace/Git identity compatibility and strict-session regression evidence.
