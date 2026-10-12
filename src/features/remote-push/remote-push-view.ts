@@ -6,6 +6,7 @@ import { READ_ONLY_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-revie
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
 import { renderSelectControl } from "../../shared/select-control.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "../../localization/localization.ts";
+import type { OperationErrorPresentation } from "../../localization/error-message.ts";
 import type {
   ChangeKind,
   CommitFileChange,
@@ -502,13 +503,26 @@ function imagePreviewCard(image: ImagePreview, label: string, localization: Loca
 }
 
 function renderRemoteError(
-  message: string,
+  message: string | OperationErrorPresentation,
   localization: Localization,
   className = "remote-dialog-error",
 ): string {
-  const detail = localization.catalog.errors.translate(message);
-  const summary = localization.catalog.remote.unexpectedError;
-  return `<div class="${className}" role="alert"><strong>${escapeHtml(summary)}</strong>${detail === summary ? "" : `<span>${escapeHtml(detail)}</span>`}</div>`;
+  const presentation = typeof message === "string"
+    ? {
+        summary: localization.catalog.remote.unexpectedError,
+        detail: localization.catalog.errors.translate(message),
+      }
+    : message;
+  const detail = presentation.detail && presentation.detail !== presentation.summary
+    ? `<span class="remote-dialog-error-detail">${escapeHtml(presentation.detail)}</span>`
+    : "";
+  const guidance = presentation.guidance
+    ? `<span class="remote-dialog-error-guidance">${escapeHtml(presentation.guidance)}</span>`
+    : "";
+  const recovery = presentation.recovery
+    ? `<div class="remote-dialog-error-actions"><button class="secondary-button" type="button" data-remote-error-action="${escapeAttribute(presentation.recovery.kind)}">${escapeHtml(presentation.recovery.label)}</button></div>`
+    : "";
+  return `<div class="${className}" role="alert"><strong>${escapeHtml(presentation.summary)}</strong>${detail}${guidance}${recovery}</div>`;
 }
 
 function emptyImageSide(label: string, message: string): string {

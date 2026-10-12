@@ -50,6 +50,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/compact-git-blame-presentation-plan.md`](engineering/compact-git-blame-presentation-plan.md) — configurable line-end or line-number-hover Git Blame presentation without a dedicated wide gutter.
 - [`engineering/conflict-editor-large-file-performance-plan.md`](engineering/conflict-editor-large-file-performance-plan.md) — single-pass structural conflict analysis that keeps large three-pane conflicts and Changes context menus responsive.
 - [`engineering/conflict-editor-fill-height-fix-plan.md`](engineering/conflict-editor-fill-height-fix-plan.md) — full-height short-file editor/gutter layout and real Chromium/WebKit regression evidence.
+- [`engineering/remote-push-error-diagnostics-plan.md`](engineering/remote-push-error-diagnostics-plan.md) — structured Git Push rejection causes, safe actionable guidance, and tag-collision regression gates.
 - [`engineering/unified-diff-review-workflow-plan.md`](engineering/unified-diff-review-workflow-plan.md) — shared review blocks, controls, layout, folding, geometry, and workflow for two-pane Diff and three-pane conflict resolution.
 - [`engineering/unified-diff-review-acceptance.md`](engineering/unified-diff-review-acceptance.md) — phased automated and manual acceptance evidence for the unified Diff review workflow.
 - [`engineering/dialog-window-geometry-plan.md`](engineering/dialog-window-geometry-plan.md) — shared movement, resizing, persistence, and confirmation behavior for application-owned dialogs.
@@ -72,6 +73,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-10-12-remote-push-error-diagnostics.md`](benchmarks/2026-10-12-remote-push-error-diagnostics.md) — structured Push rejection parsing, actionable tag-collision recovery, security boundaries, and regression evidence.
 - [`benchmarks/2026-10-09-windows-repository-identity.md`](benchmarks/2026-10-09-windows-repository-identity.md) — canonical Windows workspace/Git identity compatibility and strict-session regression evidence.
 - [`benchmarks/2026-10-10-pending-worktree-scan-recovery.md`](benchmarks/2026-10-10-pending-worktree-scan-recovery.md) — automatic recovery for cancelled pending untracked scans and same-activation Update acceptance.
 - [`benchmarks/2026-09-28-changes-composer-minimum.md`](benchmarks/2026-09-28-changes-composer-minimum.md) — Changes minimum-height composer protection that keeps validation copy fully visible while the text area absorbs splitter compression.

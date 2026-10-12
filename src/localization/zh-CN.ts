@@ -2,6 +2,7 @@ import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } f
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { ZH_CN_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 import { ZH_CN_STASH_COPY } from "./stash-copy.ts";
+import { ZH_CN_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts";
 
 export const ZH_CN = {
   locale: "zh-CN",
@@ -650,7 +651,8 @@ export const ZH_CN = {
     remoteFailedFallback: "远程操作失败，且没有子进程输出。请检查 Git 配置后重试。",
     authenticationFailed: "身份验证不可用。请配置非交互式 Git 凭据助手或 SSH 代理后重试。",
     networkFailed: "无法连接远程仓库。请检查网络和远程仓库配置。",
-    remoteRejected: "远程仓库拒绝了更新。请获取并检查分支状态后重试。",
+    remoteRejected: "远程仓库拒绝更新一个或多个引用。重试前请检查目标引用和远端策略。",
+    remotePush: ZH_CN_REMOTE_PUSH_ERRORS,
     fileConflictPreserved: "此文件在 Asterlyn 外部发生变化。本地缓冲区仍保持打开，且未被覆盖。",
     unexpectedOperation: "发生意外的操作错误。",
     watchUnavailable: (detail) => detail ? `原生文件监听不可用：${detail}` : "原生文件监听不可用；窗口聚焦刷新和手动刷新仍然有效。",

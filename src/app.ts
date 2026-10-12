@@ -3398,6 +3398,11 @@ export class AsterlynApp {
     this.root.querySelector<HTMLInputElement>("#push-tags-enabled")?.addEventListener("change", (event) => {
       this.remoteRuntime.push.setPushTagsEnabled((event.currentTarget as HTMLInputElement).checked);
     });
+    this.root
+      .querySelector<HTMLButtonElement>('[data-remote-error-action="excludePushTags"]')
+      ?.addEventListener("click", () => {
+        this.remoteRuntime.push.setPushTagsEnabled(false);
+      });
     this.root.querySelector<HTMLSelectElement>("#push-tag-mode")?.addEventListener("change", (event) => {
       this.remoteRuntime.push.setPushTagMode(
         (event.currentTarget as HTMLSelectElement).value as Exclude<PushTagMode, "none">,

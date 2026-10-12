@@ -8,6 +8,7 @@ import type {
   PushTagMode,
   RepositorySnapshot,
 } from "../../models.ts";
+import type { OperationErrorPresentation } from "../../localization/error-message.ts";
 import type {
   AppPreferences,
   RemoteUpdateStrategyPreference,
@@ -89,7 +90,7 @@ export interface RemotePushState {
   selectedRemote: string | null;
   operation: RemoteOperationState | null;
   dialog: "update" | "push" | null;
-  dialogError: string | null;
+  dialogError: OperationErrorPresentation | null;
   updateStrategy: RemoteUpdateStrategy;
   rememberUpdateStrategy: boolean;
   pushPreview: PushPreview | null;

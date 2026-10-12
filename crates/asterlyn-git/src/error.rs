@@ -9,6 +9,35 @@ pub enum RemoteFailureKind {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteRefKind {
+    Branch,
+    Tag,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteRefFailureReason {
+    AlreadyExists,
+    NonFastForward,
+    StaleLease,
+    PermissionDenied,
+    HookRejected,
+    AtomicPushFailed,
+    Rejected,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteRefFailure {
+    pub ref_kind: RemoteRefKind,
+    pub ref_name: String,
+    pub reason: RemoteRefFailureReason,
+    pub primary: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum GitError {
@@ -42,6 +71,8 @@ pub enum GitError {
         operation: String,
         remote: String,
         reason: RemoteFailureKind,
+        #[serde(default, rename = "refFailures", skip_serializing_if = "Vec::is_empty")]
+        ref_failures: Vec<RemoteRefFailure>,
     },
     RemoteCancelled {
         operation: String,
@@ -100,6 +131,7 @@ impl Display for GitError {
                 operation,
                 remote,
                 reason,
+                ..
             } => write!(
                 formatter,
                 "Remote Git operation '{operation}' failed for '{remote}': {reason:?}"

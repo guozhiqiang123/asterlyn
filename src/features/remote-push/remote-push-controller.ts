@@ -14,7 +14,11 @@ import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
-import { localizedOperationError } from "../../localization/error-message.ts";
+import {
+  localizedOperationError,
+  localizedRemoteOperationError,
+  type OperationErrorPresentation,
+} from "../../localization/error-message.ts";
 import {
   PUSH_COMMIT_DETAILS_CACHE_LIMIT,
   PUSH_PREVIEW_PAGE_SIZE,
@@ -31,6 +35,12 @@ import {
   type RemoteUpdateStrategy,
   type RemotePushState,
 } from "./remote-push-state.ts";
+import {
+  readPushTagMode,
+  readPushTagsEnabled,
+  storePushTagMode,
+  storePushTagsEnabled,
+} from "./push-preferences.ts";
 
 export type {
   PushDiffState,
@@ -46,8 +56,7 @@ export {
   PUSH_COMMIT_DETAILS_CACHE_LIMIT,
   PUSH_PREVIEW_PAGE_SIZE,
 } from "./remote-push-contract.ts";
-export const PUSH_TAGS_ENABLED_KEY = "asterlyn.push-tags-enabled";
-export const PUSH_TAG_MODE_KEY = "asterlyn.push-tag-mode";
+export { PUSH_TAG_MODE_KEY, PUSH_TAGS_ENABLED_KEY } from "./push-preferences.ts";
 export type {
   RemoteOperationResult,
   RemotePushChange,
@@ -86,11 +95,11 @@ export class RemotePushController {
     this.commitDetailsCache = new RecentValueCache(
       options.detailCacheLimit ?? PUSH_COMMIT_DETAILS_CACHE_LIMIT,
     );
-    const initialTagsEnabled = this.readSavedPushTagsEnabled();
+    const initialTagsEnabled = readPushTagsEnabled(this.storage);
     if (initialTagsEnabled !== null) {
       this.state.pushTagsEnabled = initialTagsEnabled;
     }
-    const initialTagMode = this.readSavedPushTagMode();
+    const initialTagMode = readPushTagMode(this.storage);
     if (initialTagMode !== null) {
       this.state.pushTagMode = initialTagMode;
     }
@@ -214,7 +223,7 @@ export class RemotePushController {
   }
 
   setDialogError(message: string | null): void {
-    this.state.dialogError = message;
+    this.state.dialogError = message ? this.dialogError(message) : null;
     this.emit({ reason: "dialog-error", dialogChanged: true, error: message ?? undefined });
   }
 
@@ -241,18 +250,14 @@ export class RemotePushController {
   setPushTagsEnabled(enabled: boolean): void {
     if (this.state.pushTagsEnabled === enabled || this.state.operation) return;
     this.state.pushTagsEnabled = enabled;
-    try {
-      this.storage?.setItem(PUSH_TAGS_ENABLED_KEY, String(enabled));
-    } catch {}
+    storePushTagsEnabled(this.storage, enabled);
     this.reloadPushPreview(true);
   }
 
   setPushTagMode(mode: Exclude<PushTagMode, "none">): void {
     if (this.state.pushTagMode === mode || this.state.operation) return;
     this.state.pushTagMode = mode;
-    try {
-      this.storage?.setItem(PUSH_TAG_MODE_KEY, mode);
-    } catch {}
+    storePushTagMode(this.storage, mode);
     this.reloadPushPreview(true);
   }
 
@@ -332,7 +337,7 @@ export class RemotePushController {
     if (!oid) return;
     const commit = preview.commits.find((candidate) => candidate.oid === oid);
     if (!commit) return;
-    const cacheKey = detailsCacheKey(snapshot.root, commit.repositoryId, oid);
+    const cacheKey = `${snapshot.root}\u0000${commit.repositoryId}\u0000${oid}`;
     const cached = this.commitDetailsCache.get(cacheKey);
     if (cached) {
       this.state.pushCommitDetails = cached;
@@ -403,8 +408,12 @@ export class RemotePushController {
     } catch (error) {
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreviewLoadingMore = false;
-      this.state.dialogError = this.errorMessage(error);
-      this.emit({ reason: "preview-error", dialogChanged: true, error: this.state.dialogError });
+      this.state.dialogError = this.dialogError(error);
+      this.emit({
+        reason: "preview-error",
+        dialogChanged: true,
+        error: this.dialogErrorAnnouncement(this.state.dialogError),
+      });
     }
   }
 
@@ -572,8 +581,12 @@ export class RemotePushController {
       if (!this.operationRequestMatches(generation, snapshot.root, operationId)) {
         return { status: "stale" };
       }
-      this.state.dialogError = this.errorMessage(error);
-      this.emit({ reason: "dialog-error", dialogChanged: true, error: this.state.dialogError });
+      this.state.dialogError = this.dialogError(error);
+      this.emit({
+        reason: "dialog-error",
+        dialogChanged: true,
+        error: this.dialogErrorAnnouncement(this.state.dialogError),
+      });
       return { status: "failure", error };
     } finally {
       if (this.operationRequestMatches(generation, snapshot.root, operationId)) {
@@ -665,8 +678,12 @@ export class RemotePushController {
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreviewLoading = false;
       this.state.pushPreviewRefreshing = false;
-      this.state.dialogError = this.errorMessage(error);
-      this.emit({ reason: "preview-error", dialogChanged: true, error: this.state.dialogError });
+      this.state.dialogError = this.dialogError(error);
+      this.emit({
+        reason: "preview-error",
+        dialogChanged: true,
+        error: this.dialogErrorAnnouncement(this.state.dialogError),
+      });
     }
   }
 
@@ -680,20 +697,6 @@ export class RemotePushController {
       return isValidGitBranchName(trimmed) ? trimmed : null;
     }
     return this.state.destinationBranch ?? (this.snapshot?.branch.head ?? null);
-  }
-
-  private readSavedPushTagsEnabled(): boolean | null {
-    try {
-      const value = this.storage?.getItem(PUSH_TAGS_ENABLED_KEY);
-      return value === "true" ? true : value === "false" ? false : null;
-    } catch { return null; }
-  }
-
-  private readSavedPushTagMode(): Exclude<PushTagMode, "none"> | null {
-    try {
-      const value = this.storage?.getItem(PUSH_TAG_MODE_KEY);
-      return value === "currentBranch" || value === "all" ? value : null;
-    } catch { return null; }
   }
 
   private async loadPushDiffContent(
@@ -740,8 +743,8 @@ export class RemotePushController {
     this.state.pushPreviewRefreshing = false;
     this.state.pushPreviewLoadingMore = false;
     this.clearPushSelection();
-    this.state.pushTagsEnabled = this.readSavedPushTagsEnabled() ?? this.state.pushTagsEnabled;
-    this.state.pushTagMode = this.readSavedPushTagMode() ?? this.state.pushTagMode;
+    this.state.pushTagsEnabled = readPushTagsEnabled(this.storage) ?? this.state.pushTagsEnabled;
+    this.state.pushTagMode = readPushTagMode(this.storage) ?? this.state.pushTagMode;
     this.state.destinationBranch = null;
     this.state.pushCustomBranch = false;
     this.state.pushCustomBranchInput = "";
@@ -776,12 +779,20 @@ export class RemotePushController {
     return localizedOperationError(error, this.errorMessages);
   }
 
+  private dialogError(error: unknown): OperationErrorPresentation {
+    return localizedRemoteOperationError(
+      error,
+      this.errorMessages,
+      this.messages.unexpectedError,
+    );
+  }
+
+  private dialogErrorAnnouncement(error: OperationErrorPresentation): string {
+    return error.detail ?? error.summary;
+  }
+
   private emit(change: RemotePushChange): void {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
   }
-}
-
-function detailsCacheKey(repositoryRoot: string, repositoryId: string, oid: string): string {
-  return `${repositoryRoot}\u0000${repositoryId}\u0000${oid}`;
 }

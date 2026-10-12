@@ -18,6 +18,7 @@ import { EN_US } from "../src/localization/en-US.ts";
 import { loadLocale } from "../src/localization/locale-loader.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
 import { createLocalization } from "../src/localization/localization.ts";
+import { localizedRemoteOperationError } from "../src/localization/error-message.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
@@ -26,6 +27,30 @@ test("locale catalogs retain the same typed runtime shape", () => {
   assert.deepEqual(catalogShape(ZH_CN), catalogShape(EN_US));
   assert.equal(EN_US.changes.commitButton, "Commit");
   assert.equal(ZH_CN.changes.commitButton, "提交");
+});
+
+test("structured branch rejection guidance is localized without raw Git output", () => {
+  const error = {
+    kind: "remoteFailed",
+    operation: "push",
+    remote: "origin",
+    reason: "rejected",
+    refFailures: [{
+      refKind: "branch",
+      refName: "main",
+      reason: "nonFastForward",
+      primary: true,
+      raw: "secret server output must be ignored",
+    }],
+  };
+
+  const english = localizedRemoteOperationError(error, EN_US.errors, EN_US.remote.unexpectedError);
+  const chinese = localizedRemoteOperationError(error, ZH_CN.errors, ZH_CN.remote.unexpectedError);
+
+  assert.match(english.summary, /newer commits/);
+  assert.match(english.detail ?? "", /origin\/main/);
+  assert.match(chinese.guidance ?? "", /合并或变基/);
+  assert.doesNotMatch(JSON.stringify([english, chinese]), /secret server output/);
 });
 
 test("Simplified Chinese catalog is lazy-loadable and renders shell and settings", async () => {

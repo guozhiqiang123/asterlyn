@@ -295,8 +295,62 @@ test("structured remote failures retain their localized actionable reason in the
   const result = await controller.runOperation("push");
 
   assert.deepEqual(result, { status: "failure", error: remoteError });
-  assert.equal(controller.state.dialogError, ZH_CN.errors.authenticationFailed);
-  assert.notEqual(controller.state.dialogError, ZH_CN.remote.unexpectedError);
+  assert.equal(controller.state.dialogError?.summary, ZH_CN.remote.unexpectedError);
+  assert.equal(controller.state.dialogError?.detail, ZH_CN.errors.authenticationFailed);
+  assert.notEqual(controller.state.dialogError?.detail, ZH_CN.remote.unexpectedError);
+});
+
+test("tag collisions identify the failed tag and can exclude tags without retrying Push", async () => {
+  const remoteError = {
+    kind: "remoteFailed",
+    operation: "push",
+    remote: "origin",
+    reason: "rejected",
+    refFailures: [
+      { refKind: "branch", refName: "main", reason: "atomicPushFailed", primary: false },
+      { refKind: "tag", refName: "release-1", reason: "alreadyExists", primary: true },
+    ],
+  };
+  let pushCalls = 0;
+  const controller = new RemotePushController(createGateway({
+    previewResponses: [
+      Promise.resolve(preview("origin", "without-tags")),
+      Promise.resolve(preview("origin", "with-tags", "all")),
+      Promise.resolve(preview("origin", "recovered")),
+    ],
+    async pushCurrent() {
+      pushCalls += 1;
+      throw remoteError;
+    },
+  }), {
+    messages: ZH_CN.remote,
+    errorMessages: ZH_CN.errors,
+  });
+  controller.installSnapshot(snapshot());
+  controller.openDialog("push");
+  await settle();
+  controller.setPushTagsEnabled(true);
+  await settle();
+
+  const result = await controller.runOperation("push");
+
+  assert.deepEqual(result, { status: "failure", error: remoteError });
+  assert.equal(pushCalls, 1);
+  assert.equal(controller.state.dialogError?.summary, "无法推送标签");
+  assert.match(controller.state.dialogError?.detail ?? "", /origin.*release-1/);
+  assert.match(controller.state.dialogError?.guidance ?? "", /原子推送/);
+  assert.deepEqual(controller.state.dialogError?.recovery, {
+    kind: "excludePushTags",
+    label: "排除标签并重新审查",
+  });
+
+  controller.setPushTagsEnabled(false);
+  await settle();
+  assert.equal(controller.state.pushTagsEnabled, false);
+  assert.equal(controller.state.dialogError, null);
+  assert.equal(controller.state.pushPreview?.previewToken, "recovered");
+  assert.equal(pushCalls, 1);
+  controller.dispose();
 });
 
 function createGateway(overrides = {}) {

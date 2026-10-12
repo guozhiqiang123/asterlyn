@@ -2,6 +2,7 @@ import type { EffectiveLocale } from "../presentation/presentation-environment.t
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts"; import type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
+import type { ErrorCopy } from "./error-copy.ts"; export type { ErrorCopy } from "./error-copy.ts";
 export type { BranchMutationCopy } from "./branch-mutation-copy.ts"; export type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 export interface CommonCopy {
   ready: string;
@@ -864,23 +865,6 @@ export interface RemoteCopy {
     sendCommits(count: number, remote: string): string;
     noPendingCommits: string;
   };
-}
-
-export interface ErrorCopy {
-  remoteCancelledUnknown: string;
-  remoteCancelledChanged: string;
-  remoteCancelled: string;
-  remoteFailedFallback: string;
-  authenticationFailed: string;
-  networkFailed: string;
-  remoteRejected: string;
-  fileConflictPreserved: string;
-  unexpectedOperation: string;
-  watchUnavailable(detail?: string): string;
-  watchStartFailed(detail: string): string;
-  watchSuspended(): string;
-  externalReconcileFailed(detail: string): string;
-  translate(message: string): string;
 }
 
 export interface HistoryCopy {

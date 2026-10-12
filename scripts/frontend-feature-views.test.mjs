@@ -406,6 +406,30 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.doesNotMatch(outgoingPush, /data-push-dialog-resize/);
 });
 
+test("push error presentation renders actionable escaped tag-collision guidance", () => {
+  const state = createRemotePushState();
+  state.dialog = "push";
+  state.pushPreview = pushPreview();
+  state.pushTagsEnabled = true;
+  state.dialogError = {
+    summary: "A tag could not be pushed",
+    detail: "origin already contains <release-1>",
+    guidance: "Exclude tags or create a new version tag.",
+    recovery: {
+      kind: "excludePushTags",
+      label: "Exclude tags and review again",
+    },
+  };
+
+  const html = renderRemoteDialogContent(viewModel(state));
+
+  assert.match(html, /A tag could not be pushed/);
+  assert.match(html, /origin already contains &lt;release-1&gt;/);
+  assert.doesNotMatch(html, /origin already contains <release-1>/);
+  assert.match(html, /data-remote-error-action="excludePushTags"/);
+  assert.match(html, /Exclude tags and review again/);
+});
+
 test("push review compacts unary file directories around branching points", () => {
   const state = createRemotePushState();
   state.dialog = "push";

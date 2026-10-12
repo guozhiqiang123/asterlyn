@@ -32,6 +32,7 @@ use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, pars
 use crate::process::{
     CancellableOutput, CancellationToken, GitRunner, GitStdin, join_stream, read_stream_bounded,
 };
+use crate::remote_failure::parse_remote_ref_failures;
 
 mod commit_details;
 mod stash_creation;
@@ -5550,6 +5551,7 @@ impl GitRepository {
                 operation: operation.to_string(),
                 remote: remote.to_string(),
                 reason: classify_remote_failure(&output.stdout, &output.stderr),
+                ref_failures: parse_remote_ref_failures(&output.stdout, &output.stderr),
             })
         }
     }

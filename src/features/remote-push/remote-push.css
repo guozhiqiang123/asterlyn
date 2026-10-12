@@ -139,6 +139,22 @@
   margin-top: 3px;
 }
 
+.remote-dialog-error-guidance {
+  color: var(--text-soft);
+}
+
+.remote-dialog-error-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.remote-dialog-error-actions .secondary-button {
+  min-height: 26px;
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
 .remote-dialog-warning {
   padding: 7px 10px;
   border: 1px solid var(--warning-border);

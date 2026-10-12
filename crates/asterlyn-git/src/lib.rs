@@ -4,10 +4,13 @@ mod model;
 mod operation;
 mod parser;
 mod process;
+mod remote_failure;
 mod repository;
 mod text_diff;
 
-pub use error::{GitError, RemoteFailureKind};
+pub use error::{
+    GitError, RemoteFailureKind, RemoteRefFailure, RemoteRefFailureReason, RemoteRefKind,
+};
 pub use model::{
     BinaryDiffResult, BranchKind, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
     BranchMutationSourceKind, BranchState, BranchSummary, ChangeKind, CommitComparisonDetails,

@@ -1,6 +1,7 @@
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_EN_US } from "./keybinding-en-US.ts";
 import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { EN_US_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts"; import { EN_US_STASH_COPY } from "./stash-copy.ts";
+import { EN_US_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts";
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
   common: {
@@ -786,7 +787,8 @@ export const EN_US: LocaleCatalog = {
     remoteFailedFallback: "The remote operation failed without exposing child-process output. Check Git configuration and retry.",
     authenticationFailed: "Authentication was unavailable. Configure a non-interactive Git credential helper or SSH agent, then retry.",
     networkFailed: "The remote could not be reached. Check the network and remote configuration.",
-    remoteRejected: "The remote rejected the update. Fetch and review the branch state before retrying.",
+    remoteRejected: "The remote rejected one or more refs. Review the destination policy before retrying.",
+    remotePush: EN_US_REMOTE_PUSH_ERRORS,
     fileConflictPreserved: "This file changed outside Asterlyn. Your local buffer is still open and was not overwritten.",
     unexpectedOperation: "An unexpected operation error occurred.",
     watchUnavailable: (detail) => detail ?? "Native file watching is unavailable; focus and manual refresh remain active.",
