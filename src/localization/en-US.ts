@@ -319,7 +319,7 @@ export const EN_US: LocaleCatalog = {
     closePreview: (label) => `Close ${label} preview`, welcome: "Welcome", markdownMode: "Markdown editor mode",
     source: "Source", sourceTitle: "Edit Markdown source", split: "Split", splitTitle: "Edit source with live preview",
     renderedPreview: "Preview", previewTitle: "Rendered preview (read-only)", diffToolbar: "Diff navigation and presentation",
-    diffNavigation: "Diff navigation", previousChange: "Previous change in file", nextChange: "Next change in file", revertDiffChange: "Revert this change in the current buffer",
+    diffNavigation: "Diff navigation", previousChange: "Previous change in file", nextChange: "Next change in file", revertDiffChange: "Revert this change in the current buffer", patchPreview: "Change Patch",
     changeIndicatorAdded: "Added lines", changeIndicatorModified: "Modified lines", changeIndicatorDeleted: "Deleted lines",
     navigateChangeIndicator: (kind, line) => `Go to ${kind} change at line ${line}`,
     previousFile: "Previous changed file", previousTab: "Previous editor tab", nextFile: "Next changed file", nextTab: "Next editor tab", openSource: "Open file and reveal in Project",

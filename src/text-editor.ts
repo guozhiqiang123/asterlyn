@@ -454,6 +454,7 @@ export class TextEditor {
     const changeIndicators = createEditorChangeIndicators(
       baselineContent,
       editorChangeIndicatorCopy(this.blameCopy),
+      { patchPopover: true },
     );
     const entry: CachedTextEditor = {
       id,

@@ -17,6 +17,7 @@ import "./features/files-editor/read-only-diff.css";
 import "./features/files-editor/editable-diff.css";
 import "./shared/diff-review.css";
 import "./features/files-editor/change-overview.css";
+import "./features/files-editor/editor-patch-popover.css";
 import "./features/files-editor/workspace-search.css";
 import "./features/files-editor/workspace-replacement-tool.css";
 import "./features/git-history/git-history.css";

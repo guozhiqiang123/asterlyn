@@ -5,12 +5,19 @@ import {
   EditorView,
   GutterMarker,
   gutter,
+  showTooltip,
+  tooltips,
   ViewPlugin,
+  type Tooltip,
   type ViewUpdate,
 } from "@codemirror/view";
 import type { EditorCopy } from "./localization/catalog.ts";
 import { LINE_AWARE_DIFF_CONFIG } from "./shared/diff-review/line-aware-diff.ts";
 import { attachOverviewRuler, removeOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
+import {
+  createEditorPatchPopover,
+  editorPatchRollbackChange,
+} from "./features/files-editor/editor-patch-popover.ts";
 
 export type EditorChangeIndicatorKind = "added" | "modified" | "deleted";
 
@@ -19,6 +26,13 @@ export interface EditorChangeIndicatorCopy {
   added: string;
   modified: string;
   deleted: string;
+  patchPreview: string;
+  previousChange: string;
+  nextChange: string;
+  revertDiffChange: string;
+  close: string;
+  before: string;
+  after: string;
   navigate(kind: EditorChangeIndicatorKind, line: number): string;
 }
 
@@ -28,6 +42,10 @@ export interface EditorChangeIndicatorBlock {
   readonly to: number;
   readonly lineFrom: number;
   readonly lineTo: number;
+  readonly baselineFrom: number;
+  readonly baselineTo: number;
+  readonly baselineLineFrom: number;
+  readonly baselineLineTo: number;
 }
 
 export interface EditorChangeIndicators {
@@ -47,6 +65,7 @@ export interface EditorChangeIndicatorOptions {
   readonly gutterSide?: "before" | "after";
   readonly overview?: boolean;
   readonly overviewFooterScrollbar?: boolean;
+  readonly patchPopover?: boolean;
   /** Which side of the comparison is represented by the editor document. */
   readonly documentSide?: "a" | "b";
 }
@@ -57,6 +76,13 @@ export function editorChangeIndicatorCopy(copy: EditorCopy): EditorChangeIndicat
     added: copy.changeIndicatorAdded,
     modified: copy.changeIndicatorModified,
     deleted: copy.changeIndicatorDeleted,
+    patchPreview: copy.patchPreview,
+    previousChange: copy.previousChange,
+    nextChange: copy.nextChange,
+    revertDiffChange: copy.revertDiffChange,
+    close: copy.close,
+    before: copy.before,
+    after: copy.after,
     navigate: copy.navigateChangeIndicator,
   };
 }
@@ -78,6 +104,7 @@ export function createEditorChangeIndicators(
 ): EditorChangeIndicators {
   const updateIndicator = StateEffect.define<IndicatorUpdate>();
   const revealIndicator = StateEffect.define<EditorChangeIndicatorBlock | null>();
+  const showPatch = StateEffect.define<EditorChangeIndicatorBlock | null>();
   const baseline = text(initialBaseline);
   const documentSide = options.documentSide ?? "b";
   const field = StateField.define<IndicatorState>({
@@ -114,6 +141,62 @@ export function createEditorChangeIndicators(
       return next;
     },
   });
+  const activePatch = StateField.define<EditorChangeIndicatorBlock | null>({
+    create: () => null,
+    update: (value, transaction) => {
+      const requested = transaction.effects.find((effect) => effect.is(showPatch));
+      if (requested) return requested.value;
+      const baselineChanged = transaction.effects.some((effect) =>
+        effect.is(updateIndicator) && effect.value.kind === "baseline"
+      );
+      return transaction.docChanged || baselineChanged ? null : value;
+    },
+  });
+  const patchTooltip = showTooltip.compute(
+    [field, activePatch, EditorState.readOnly],
+    (state): Tooltip | null => {
+      const requested = state.field(activePatch);
+      if (!requested) return null;
+      const indicator = state.field(field);
+      const blocks = blocksFromChunks(
+        indicator.chunks,
+        indicator.baseline,
+        state.doc,
+        documentSide,
+      );
+      const index = blocks.findIndex((block) => sameBlock(block, requested));
+      if (index < 0) return null;
+      const block = blocks[index]!;
+      return {
+        pos: block.from,
+        end: Math.min(state.doc.length, Math.max(block.from, block.to)),
+        arrow: true,
+        create: (view) => createEditorPatchPopover(view, {
+          block,
+          index,
+          total: blocks.length,
+          baseline: indicator.baseline,
+          current: state.doc,
+          copy: indicator.copy,
+          readOnly: state.facet(EditorState.readOnly),
+          previous: () => activatePatchBlock(
+            view,
+            blocks[index - 1] ?? null,
+            showPatch,
+            revealIndicator,
+          ),
+          next: () => activatePatchBlock(
+            view,
+            blocks[index + 1] ?? null,
+            showPatch,
+            revealIndicator,
+          ),
+          rollback: () => rollbackPatchBlock(view, field, activePatch, showPatch),
+          close: () => closePatchPopover(view, showPatch, revealIndicator),
+        }),
+      };
+    },
+  );
   const revealedChange = StateField.define({
     create: () => Decoration.none,
     update: (decorations, transaction) => {
@@ -144,6 +227,10 @@ export function createEditorChangeIndicators(
   });
   const extension = [
     field,
+    activePatch,
+    options.patchPopover === true
+      ? [tooltips({ tooltipSpace: editorPatchTooltipSpace }), patchTooltip]
+      : [],
     revealedChange,
     options.gutter === false ? [] : gutter({
       class: "cm-change-indicator-gutter",
@@ -154,7 +241,19 @@ export function createEditorChangeIndicators(
           indicatorBlocks(view.state, field, documentSide),
           view.state.doc.lineAt(line.from).number,
         );
-        return block ? new ChangeGutterMarker(block.kind, view.state.field(field).copy) : null;
+        return block ? new ChangeGutterMarker(
+          block,
+          view.state.field(field).copy,
+          options.patchPopover === true
+            ? (targetView, targetBlock) => togglePatchPopover(
+                targetView,
+                targetBlock,
+                activePatch,
+                showPatch,
+                revealIndicator,
+              )
+            : null,
+        ) : null;
       },
       lineMarkerChange: indicatorChanged(updateIndicator),
     }),
@@ -195,7 +294,12 @@ export function createEditorChangeIndicators(
       private render(): void {
         const state = this.view.state.field(field);
         this.ruler.setAttribute("aria-label", state.copy.overview);
-        const blocks = blocksFromChunks(state.chunks, this.view.state.doc, documentSide);
+        const blocks = blocksFromChunks(
+          state.chunks,
+          state.baseline,
+          this.view.state.doc,
+          documentSide,
+        );
         const totalLines = Math.max(1, this.view.state.doc.lines);
         this.ruler.replaceChildren(...blocks.map((block) => {
           const marker = document.createElement("button");
@@ -264,6 +368,7 @@ export function editorChangeIndicatorBlocks(
   const after = text(current);
   return blocksFromChunks(
     Chunk.build(before, after, LINE_AWARE_DIFF_CONFIG),
+    documentSide === "a" ? after : before,
     documentSide === "a" ? before : after,
     documentSide,
   );
@@ -295,11 +400,18 @@ function indicatorBlocks(
   field: StateField<IndicatorState>,
   documentSide: "a" | "b",
 ): readonly EditorChangeIndicatorBlock[] {
-  return blocksFromChunks(state.field(field).chunks, state.doc, documentSide);
+  const indicator = state.field(field);
+  return blocksFromChunks(
+    indicator.chunks,
+    indicator.baseline,
+    state.doc,
+    documentSide,
+  );
 }
 
 function blocksFromChunks(
   chunks: readonly Chunk[],
+  baseline: Text,
   current: Text,
   documentSide: "a" | "b" = "b",
 ): readonly EditorChangeIndicatorBlock[] {
@@ -312,10 +424,36 @@ function blocksFromChunks(
         ? "added"
         : "modified";
     const from = Math.min(documentSide === "a" ? chunk.fromA : chunk.fromB, current.length);
-    const to = Math.min(documentSide === "a" ? chunk.endA : chunk.endB, current.length);
+    const to = documentSide === "a" ? chunk.toA : chunk.toB;
+    const visibleTo = Math.min(
+      documentSide === "a" ? chunk.endA : chunk.endB,
+      current.length,
+    );
+    const baselineFrom = Math.min(
+      documentSide === "a" ? chunk.fromB : chunk.fromA,
+      baseline.length,
+    );
+    const baselineTo = Math.min(
+      documentSide === "a" ? chunk.toB : chunk.toA,
+      baseline.length + 1,
+    );
     const lineFrom = current.lineAt(from).number;
-    const lineTo = current.lineAt(Math.max(from, to)).number;
-    blocks.push({ kind, from, to, lineFrom, lineTo });
+    const lineTo = current.lineAt(Math.max(from, visibleTo)).number;
+    const baselineLineFrom = baseline.lineAt(baselineFrom).number;
+    const baselineLineTo = baseline.lineAt(
+      Math.min(baseline.length, Math.max(baselineFrom, baselineTo)),
+    ).number;
+    blocks.push({
+      kind,
+      from,
+      to,
+      lineFrom,
+      lineTo,
+      baselineFrom,
+      baselineTo,
+      baselineLineFrom,
+      baselineLineTo,
+    });
   }
   return blocks;
 }
@@ -341,28 +479,133 @@ class ChangeGutterSpacer extends GutterMarker {
 
 class ChangeGutterMarker extends GutterMarker {
   readonly elementClass: string;
-  private readonly kind: EditorChangeIndicatorKind;
+  private readonly block: EditorChangeIndicatorBlock;
   private readonly copy: EditorChangeIndicatorCopy;
+  private readonly activate: ((view: EditorView, block: EditorChangeIndicatorBlock) => void) | null;
 
   constructor(
-    kind: EditorChangeIndicatorKind,
+    block: EditorChangeIndicatorBlock,
     copy: EditorChangeIndicatorCopy,
+    activate: ((view: EditorView, block: EditorChangeIndicatorBlock) => void) | null,
   ) {
     super();
-    this.kind = kind;
+    this.block = block;
     this.copy = copy;
-    this.elementClass = `cm-change-gutter-element cm-change-${kind}`;
+    this.activate = activate;
+    this.elementClass = `cm-change-gutter-element cm-change-${block.kind}`;
   }
 
   eq(other: ChangeGutterMarker): boolean {
-    return other.kind === this.kind && other.copy === this.copy;
+    return sameBlock(other.block, this.block) && other.copy === this.copy &&
+      Boolean(other.activate) === Boolean(this.activate);
   }
 
-  toDOM(): Node {
-    const marker = document.createElement("span");
+  toDOM(view: EditorView): Node {
+    const marker = document.createElement(this.activate ? "button" : "span");
     marker.className = "cm-change-gutter-marker";
-    marker.title = this.copy[this.kind];
-    marker.textContent = this.kind === "deleted" ? "−" : "";
+    marker.title = this.activate
+      ? this.copy.navigate(this.block.kind, this.block.lineFrom)
+      : this.copy[this.block.kind];
+    marker.textContent = this.block.kind === "deleted" ? "−" : "";
+    if (marker instanceof HTMLButtonElement && this.activate) {
+      marker.type = "button";
+      marker.setAttribute("aria-label", marker.title);
+      marker.setAttribute("aria-haspopup", "dialog");
+      marker.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.activate?.(view, this.block);
+      });
+    }
     return marker;
   }
+}
+
+function togglePatchPopover(
+  view: EditorView,
+  block: EditorChangeIndicatorBlock,
+  activePatch: StateField<EditorChangeIndicatorBlock | null>,
+  showPatch: StateEffectType<EditorChangeIndicatorBlock | null>,
+  revealIndicator: StateEffectType<EditorChangeIndicatorBlock | null>,
+): void {
+  const active = view.state.field(activePatch);
+  if (active && sameBlock(active, block)) {
+    closePatchPopover(view, showPatch, revealIndicator);
+    return;
+  }
+  view.dispatch({
+    selection: { anchor: block.from },
+    effects: [
+      showPatch.of(block),
+      revealIndicator.of(block),
+    ],
+  });
+}
+
+function activatePatchBlock(
+  view: EditorView,
+  block: EditorChangeIndicatorBlock | null,
+  showPatch: StateEffectType<EditorChangeIndicatorBlock | null>,
+  revealIndicator: StateEffectType<EditorChangeIndicatorBlock | null>,
+): void {
+  if (!block) return;
+  view.dispatch({
+    selection: { anchor: block.from },
+    effects: [
+      showPatch.of(block),
+      revealIndicator.of(block),
+      EditorView.scrollIntoView(block.from, { y: "center" }),
+    ],
+  });
+}
+
+function closePatchPopover(
+  view: EditorView,
+  showPatch: StateEffectType<EditorChangeIndicatorBlock | null>,
+  revealIndicator: StateEffectType<EditorChangeIndicatorBlock | null>,
+): void {
+  view.dispatch({ effects: [showPatch.of(null), revealIndicator.of(null)] });
+}
+
+function rollbackPatchBlock(
+  view: EditorView,
+  field: StateField<IndicatorState>,
+  activePatch: StateField<EditorChangeIndicatorBlock | null>,
+  showPatch: StateEffectType<EditorChangeIndicatorBlock | null>,
+): void {
+  if (view.state.readOnly) return;
+  const block = view.state.field(activePatch);
+  if (!block) return;
+  const indicator = view.state.field(field);
+  const change = editorPatchRollbackChange(
+    indicator.baseline,
+    view.state.doc,
+    block,
+    view.state.lineBreak,
+  );
+  view.dispatch({
+    changes: change,
+    effects: showPatch.of(null),
+    userEvent: "revert",
+  });
+  view.focus();
+}
+
+function sameBlock(
+  left: EditorChangeIndicatorBlock,
+  right: EditorChangeIndicatorBlock,
+): boolean {
+  return left.from === right.from && left.to === right.to &&
+    left.baselineFrom === right.baselineFrom && left.baselineTo === right.baselineTo;
+}
+
+function editorPatchTooltipSpace(view: EditorView) {
+  const bounds = view.scrollDOM.getBoundingClientRect();
+  const inset = 8;
+  return {
+    top: bounds.top + inset,
+    left: bounds.left + inset,
+    bottom: bounds.bottom - inset,
+    right: bounds.right - inset,
+  };
 }
