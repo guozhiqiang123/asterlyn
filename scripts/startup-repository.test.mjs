@@ -67,6 +67,7 @@ test("storage failure still reaches the stable first-launch Welcome state", asyn
 });
 
 test("recent repositories are deduplicated, bounded, and ordered by successful use", () => {
+  assert.equal(RECENT_REPOSITORY_LIMIT, 20);
   const storage = memoryStorage();
   for (let index = 0; index < RECENT_REPOSITORY_LIMIT + 3; index += 1) {
     touchRecentRepository(storage, `/repo-${index}`);

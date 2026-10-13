@@ -1,6 +1,6 @@
 export const RECENT_REPOSITORY_KEY = "asterlyn.recentRepository";
 export const RECENT_REPOSITORIES_KEY = "asterlyn.recentRepositories.v1";
-export const RECENT_REPOSITORY_LIMIT = 8;
+export const RECENT_REPOSITORY_LIMIT = 20;
 
 interface RecentRepositoryStorage {
   getItem(key: string): string | null;
