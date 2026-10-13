@@ -345,7 +345,7 @@ import {
   type NavigationMode,
 } from "./features/files-editor/navigation";
 import { evaluateSearchNavigation } from "./features/files-editor/search-navigation";
-import { projectFileMatchOptions, retainedWorkspaceSearchQuery, type WorkspaceSearchControls } from "./features/files-editor/workspace-search";
+import { projectFileMatchOptions, retainedCommandSurfaceQuery, type WorkspaceSearchControls } from "./features/files-editor/workspace-search";
 import { bindWorkspaceSearchDetailControls, bindWorkspaceSearchOptionControls } from "./features/files-editor/workspace-search-binding";
 import { bindCommandSurfaceLineBreak, focusCommandSurfaceQuery, renderCommandSurfacePreservingFocus, syncCommandSurfaceQueryHeight } from "./features/files-editor/command-surface-input";
 import { hasCurrentWorkspaceSearch, WorkspaceSearchDebouncer } from "./features/files-editor/workspace-search-debouncer";
@@ -2505,7 +2505,7 @@ export class AsterlynApp {
       this.commandSurfaceReturnFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     }
-    const retainedQuery = retainedWorkspaceSearchQuery(
+    const retainedQuery = retainedCommandSurfaceQuery(
       mode, this.filesEditorRuntime.commands.state.mode, this.filesEditorRuntime.commands.state.query,
       this.filesEditorRuntime.search.state.search.request?.query,
     );

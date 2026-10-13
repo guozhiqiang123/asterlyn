@@ -9,7 +9,7 @@ import {
   beginWorkspaceSearch,
   createWorkspaceSearchControls,
   createWorkspaceSearchState,
-  retainedWorkspaceSearchQuery,
+  retainedCommandSurfaceQuery,
   workspaceSearchOptions,
 } from "../src/features/files-editor/workspace-search.ts";
 
@@ -58,7 +58,7 @@ test("workspace search ignores a changed project and current results", async () 
   assert.equal(runs, 1);
 });
 
-test("current loading work is not restarted and Text keeps a pending query", () => {
+test("current loading work is not restarted and command tabs share the active query", () => {
   const controls = createWorkspaceSearchControls();
   const { state } = beginWorkspaceSearch(
     createWorkspaceSearchState(), 1, "/repo", "request-1", "first",
@@ -67,7 +67,11 @@ test("current loading work is not restarted and Text keeps a pending query", () 
   assert.equal(hasCurrentWorkspaceSearch(state, "/repo", 1, true), true);
   assert.equal(hasCurrentWorkspaceSearch(state, "/repo", 2, true), false);
   assert.equal(hasCurrentWorkspaceSearch(state, "/repo", 1, false), false);
-  assert.equal(retainedWorkspaceSearchQuery("workspace", "workspace", "pending", "old"), "pending");
-  assert.equal(retainedWorkspaceSearchQuery("workspace", "files", "files query", "old"), "old");
-  assert.equal(retainedWorkspaceSearchQuery("files", "workspace", "pending", "old"), "");
+  assert.equal(retainedCommandSurfaceQuery("workspace", "workspace", "pending", "old"), "pending");
+  assert.equal(retainedCommandSurfaceQuery("workspace", "files", "files query", "old"), "files query");
+  assert.equal(retainedCommandSurfaceQuery("files", "workspace", "pending", "old"), "pending");
+  assert.equal(retainedCommandSurfaceQuery("recent", "files", "shared", "old"), "shared");
+  assert.equal(retainedCommandSurfaceQuery("commands", "recent", "shared", "old"), "shared");
+  assert.equal(retainedCommandSurfaceQuery("workspace", null, "", "old"), "old");
+  assert.equal(retainedCommandSurfaceQuery("files", null, "stale", "old"), "");
 });

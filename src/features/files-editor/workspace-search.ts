@@ -27,14 +27,14 @@ export function createWorkspaceSearchControls(): WorkspaceSearchControls {
   };
 }
 
-export function retainedWorkspaceSearchQuery(
+export function retainedCommandSurfaceQuery(
   mode: NavigationMode,
   previousMode: NavigationMode | null,
   currentQuery: string,
   requestQuery: string | undefined,
 ): string {
-  if (mode !== "workspace") return "";
-  return previousMode === "workspace" ? currentQuery : requestQuery ?? "";
+  if (previousMode !== null) return currentQuery;
+  return mode === "workspace" ? requestQuery ?? "" : "";
 }
 
 export function queryHasLineBreak(query: string): boolean {
