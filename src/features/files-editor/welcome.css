@@ -1,7 +1,9 @@
 /* Welcome project launcher presentation. */
 .editor-welcome {
   display: flex;
-  min-height: 100%;
+  overflow: hidden;
+  height: 100%;
+  min-height: 0;
   align-items: center;
   justify-content: center;
   padding: clamp(28px, 7vh, 72px) clamp(24px, 7vw, 96px);
@@ -9,7 +11,10 @@
 
 .welcome-project-panel {
   display: grid;
+  min-height: 0;
+  max-height: 100%;
   width: min(620px, 100%);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -101,6 +106,9 @@
 
 .welcome-recent-projects {
   display: grid;
+  overflow: hidden;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 7px;
 }
 
@@ -113,5 +121,9 @@
 
 .welcome-project-list {
   display: grid;
+  overflow-y: auto;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+  padding-right: 4px;
   gap: 5px;
 }

@@ -275,6 +275,29 @@ test("command-surface Find action keeps breathing room from hints and dialog edg
   assert.match(search, /\.command-surface-find-button\s*\{[^}]*height:\s*28px;[^}]*padding:\s*0 12px;/s);
 });
 
+test("Welcome keeps project actions fixed while only the recent-project list scrolls", async () => {
+  const welcome = await readFile(
+    new URL("../src/features/files-editor/welcome.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    welcome,
+    /\.editor-welcome\s*\{[^}]*overflow:\s*hidden;[^}]*height:\s*100%;[^}]*min-height:\s*0;/s,
+  );
+  assert.match(
+    welcome,
+    /\.welcome-project-panel\s*\{[^}]*max-height:\s*100%;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s,
+  );
+  assert.match(
+    welcome,
+    /\.welcome-recent-projects\s*\{[^}]*overflow:\s*hidden;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s,
+  );
+  assert.match(
+    welcome,
+    /\.welcome-project-list\s*\{[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior-y:\s*contain;/s,
+  );
+});
+
 test("replacement preview keeps matched text in the surrounding line flow", async () => {
   const search = await readFile(new URL("../src/features/files-editor/workspace-search.css", import.meta.url), "utf8");
   assert.match(search, /\.replacement-comparison code\s*\{[^}]*display:\s*block;/s);
