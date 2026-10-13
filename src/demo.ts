@@ -10,7 +10,7 @@ import type {
   UntrackedScan,
 } from "./models";
 export { demoCreateBranch, demoExecuteBranchMutation, demoPrepareBranchMutation, demoSwitchBranch } from "./demo-branch-mutation.ts";
-export { demoExecuteGitReset, demoExecuteRemoteMutation, demoPrepareGitReset, demoPrepareRemoteMutation } from "./demo-reviewed-mutations.ts";
+export { demoExecuteGitReset, demoExecuteHeadCommitMutation, demoExecuteRemoteMutation, demoPrepareGitReset, demoPrepareHeadCommitMutation, demoPrepareRemoteMutation } from "./demo-reviewed-mutations.ts";
 export { demoExecuteTagMutation } from "./demo-tag-mutation.ts";
 
 export const demoSnapshot: RepositorySnapshot = {

@@ -5,12 +5,12 @@ use asterlyn_git::{
     BranchMutationPlan, BranchMutationRequest, CommitComparisonDetails, CommitComparisonDiffResult,
     CommitDetails, CommitDiffResult, CommitFileChange, DiffResult, FileChange, GitBlameResult,
     GitConflictContent, GitError, GitOperationAction, GitOperationKind, GitOperationPlan,
-    GitOperationSnapshot, GitRepository, GitResetMode, GitResetPlan, HistoryPage, HistoryQuery,
-    ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode, RemoteAuthenticationStatus,
-    RemoteMutationPlan, RemoteMutationRequest, RepositoryReadPlan, RepositorySliceSnapshot,
-    RepositorySnapshot, StashCatalog, StashMutationKind, StashMutationRequest, TagMutationKind,
-    TagMutationRequest, TrackedChangeScan, UntrackedScan, WorktreeCreationPlan,
-    WorktreeCreationRequest,
+    GitOperationSnapshot, GitRepository, GitResetMode, GitResetPlan, HeadCommitMutationKind,
+    HistoryPage, HistoryQuery, ProjectFile, ProjectFileList, PushMode, PushPreview, PushTagMode,
+    RemoteAuthenticationStatus, RemoteMutationPlan, RemoteMutationRequest, RepositoryReadPlan,
+    RepositorySliceSnapshot, RepositorySnapshot, StashCatalog, StashMutationKind,
+    StashMutationRequest, TagMutationKind, TagMutationRequest, TrackedChangeScan, UntrackedScan,
+    WorktreeCreationPlan, WorktreeCreationRequest,
 };
 use asterlyn_terminal::TerminalSessions;
 use asterlyn_workspace::{
@@ -42,8 +42,8 @@ use application::{
     PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
     WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
     WorkspaceReplacementDiff, WorkspaceReplacementPreview, WorkspaceReplacementRegistry,
-    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
-    WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
+    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
     finalize_replacement, finalize_workspace_mutation_recovery, inspect_workspace_entry_inventory,
@@ -51,12 +51,12 @@ use application::{
     load_workspace_mutation_recoveries, prepare_authorized_replacement,
     prepare_workspace_mutation_plan, read_session_text_file, reauthorize_session_file_for_read,
     resolve_workspace_entry, rollback_replacement, rollback_workspace_mutation_recovery,
-    save_session_text_file, search_authorized_workspace,
+    save_session_text_file, search_authorized_workspace_with_index,
 };
 #[cfg(test)]
 use application::{
     GitMutationRegistry, PROJECT_FILE_LIMIT, RemoteOperationRegistry, read_authorized_text_file,
-    save_authorized_text_file,
+    save_authorized_text_file, search_authorized_workspace,
 };
 pub use application::{WORKSPACE_REPLACEMENT_LIMITS, WORKSPACE_SEARCH_LIMITS};
 use commands::*;
@@ -213,6 +213,7 @@ pub fn run() {
         .manage(PendingRepositoryWindows::default())
         .manage(writes)
         .manage(WorkspaceSearchRegistry::default())
+        .manage(WorkspaceSearchIndexRegistry::default())
         .manage(WorkspaceReplacementRegistry::default())
         .manage(workspace_mutations)
         .manage(commit_file_restores)
@@ -337,6 +338,8 @@ pub fn run() {
             execute_remote_mutation,
             prepare_git_reset,
             execute_git_reset,
+            prepare_head_commit_mutation,
+            execute_head_commit_mutation,
             fetch_remote,
             read_remote_authentication,
             store_remote_https_credential,
@@ -401,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn project_navigation_catalog_exceeds_the_search_scan_budget() {
+    fn project_navigation_catalog_fits_the_complete_search_candidate_budget() {
         let directory = tempfile::tempdir().expect("temporary repository");
         git(directory.path(), &["init", "-b", "main"]);
         for module in 0..51 {
@@ -422,8 +425,8 @@ mod tests {
             .expect("navigation catalog");
         assert_eq!(catalog.files.len(), 5_001);
         assert!(!catalog.truncated);
-        assert_eq!(WORKSPACE_SEARCH_LIMITS.max_candidates, 5_000);
-        assert!(catalog.files.len() > WORKSPACE_SEARCH_LIMITS.max_candidates);
+        assert_eq!(WORKSPACE_SEARCH_LIMITS.max_candidates, PROJECT_FILE_LIMIT);
+        assert!(catalog.files.len() <= WORKSPACE_SEARCH_LIMITS.max_candidates);
     }
 
     #[test]
@@ -576,6 +579,75 @@ mod tests {
         )
         .expect("revoked search remains valid");
         assert!(revoked.matches.is_empty());
+    }
+
+    #[test]
+    fn workspace_search_persists_a_source_free_index_and_revalidates_changes() {
+        let directory = tempfile::tempdir().expect("temporary repository");
+        let cache = tempfile::tempdir().expect("search cache");
+        git(directory.path(), &["init", "-b", "main"]);
+        fs::write(directory.path().join("hit.kt"), "class SearchNeedle\n").expect("hit file");
+        fs::write(directory.path().join("miss.kt"), "class Unrelated\n").expect("miss file");
+        git(directory.path(), &["add", "."]);
+        let indexes = WorkspaceSearchIndexRegistry::default();
+
+        let cold = indexes
+            .with_index(cache.path(), directory.path(), |index| {
+                search_authorized_workspace_with_index(
+                    directory.path(),
+                    "indexed-cold",
+                    "SearchNeedle",
+                    &SearchOptions::default(),
+                    &SearchCancellationToken::new(),
+                    index,
+                )
+            })
+            .expect("cold indexed search");
+        assert_eq!(cold.matches.len(), 1);
+        assert_eq!(cold.index_pruned_candidates, 0);
+
+        let warm = indexes
+            .with_index(cache.path(), directory.path(), |index| {
+                search_authorized_workspace_with_index(
+                    directory.path(),
+                    "indexed-warm",
+                    "SearchNeedle",
+                    &SearchOptions::default(),
+                    &SearchCancellationToken::new(),
+                    index,
+                )
+            })
+            .expect("warm indexed search");
+        assert_eq!(warm.matches.len(), 1);
+        assert_eq!(warm.index_pruned_candidates, 1);
+        assert_eq!(warm.files_searched, 1);
+
+        let cache_file = fs::read_dir(cache.path())
+            .expect("cache directory")
+            .next()
+            .expect("cache file")
+            .expect("cache entry")
+            .path();
+        let stored = fs::read_to_string(cache_file).expect("stored index");
+        assert!(!stored.contains("SearchNeedle"));
+        assert!(!stored.contains("Unrelated"));
+
+        fs::write(directory.path().join("miss.kt"), "class AlsoSearchNeedle\n")
+            .expect("changed miss file");
+        let refreshed = indexes
+            .with_index(cache.path(), directory.path(), |index| {
+                search_authorized_workspace_with_index(
+                    directory.path(),
+                    "indexed-refreshed",
+                    "SearchNeedle",
+                    &SearchOptions::default(),
+                    &SearchCancellationToken::new(),
+                    index,
+                )
+            })
+            .expect("refreshed indexed search");
+        assert_eq!(refreshed.matches.len(), 2);
+        assert_eq!(refreshed.index_pruned_candidates, 0);
     }
 
     #[test]

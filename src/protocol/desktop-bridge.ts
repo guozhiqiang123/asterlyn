@@ -25,6 +25,7 @@ import type {
   GitOperationSnapshot,
   GitResetMode,
   GitResetPlan,
+  HeadCommitMutationKind,
   HistoryPage,
   HistoryQuery,
   ImageDiffPreview,
@@ -397,6 +398,16 @@ export interface GitOperationBridge {
     repositoryRoot: string,
     plan: GitResetPlan,
     mode: GitResetMode,
+  ): Promise<RepositoryMutationOutcome>;
+  prepareHeadCommitMutation(
+    repositoryRoot: string,
+    selectedHeadOid: string,
+    kind: HeadCommitMutationKind,
+  ): Promise<GitResetPlan>;
+  executeHeadCommitMutation(
+    repositoryRoot: string,
+    plan: GitResetPlan,
+    kind: HeadCommitMutationKind,
   ): Promise<RepositoryMutationOutcome>;
   readRemoteAuthentication(
     repositoryRoot: string,

@@ -72,6 +72,19 @@ test("historical file reads remain wired through the native command boundary", a
   }
 });
 
+test("latest commit mutation review remains wired through the native command boundary", async () => {
+  const [commands, runtime, adapter] = await Promise.all([
+    readFile(new URL("../src-tauri/src/commands/git_operations.rs", import.meta.url), "utf8"),
+    readFile(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8"),
+    readFile(new URL("../src/adapters/tauri/tauri-git-operation-bridge.ts", import.meta.url), "utf8"),
+  ]);
+  for (const command of ["prepare_head_commit_mutation", "execute_head_commit_mutation"]) {
+    assert.match(commands, new RegExp(`fn ${command}`, "u"));
+    assert.match(runtime, new RegExp(`${command},`, "u"));
+    assert.match(adapter, new RegExp(`"${command}"`, "u"));
+  }
+});
+
 test("historical file restore payloads validate reviewed and recovery identities", () => {
   const restore = {
     planId: "restore-1", workspacePath: "src/app.ts", action: "overwrite",

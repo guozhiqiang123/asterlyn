@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { GitResetController } from "../src/features/git-history/git-reset-controller.ts";
+import { renderGitResetDialog } from "../src/features/git-history/git-reset-view.ts";
+import { EN_GIT_RESET_COPY } from "../src/localization/git-reviewed-copy.ts";
 
 const target = { repositoryRoot: "/repo", oid: "a".repeat(40), shortOid: "aaaaaaaa", subject: "older" };
 const plan = { repositoryRoot: "/repo", startHeadRef: "refs/heads/main", startHeadOid: "b".repeat(40), targetOid: target.oid, previewToken: "lease" };
@@ -9,8 +11,8 @@ const plan = { repositoryRoot: "/repo", startHeadRef: "refs/heads/main", startHe
 test("reset review defaults to Mixed and executes the exact prepared plan", async () => {
   const calls = [];
   const controller = new GitResetController({
-    async prepare(root, oid) { calls.push(["prepare", root, oid]); return plan; },
-    async execute(value, mode) { calls.push(["execute", value, mode]); return true; },
+    async prepare(root, oid, intent) { calls.push(["prepare", root, oid, intent]); return plan; },
+    async execute(value, mode, intent) { calls.push(["execute", value, mode, intent]); return true; },
     errorMessage(error) { return String(error); },
   });
   controller.open(target);
@@ -19,7 +21,33 @@ test("reset review defaults to Mixed and executes the exact prepared plan", asyn
   controller.selectMode("hard");
   await controller.execute();
   assert.equal(controller.state.dialog, null);
-  assert.deepEqual(calls, [["prepare", "/repo", target.oid], ["execute", plan, "hard"]]);
+  assert.deepEqual(calls, [["prepare", "/repo", target.oid, "reset"], ["execute", plan, "hard", "reset"]]);
+});
+
+test("latest commit actions lock their reset semantics and route the reviewed intent", async () => {
+  const calls = [];
+  const controller = new GitResetController({
+    async prepare(root, oid, intent) { calls.push(["prepare", root, oid, intent]); return plan; },
+    async execute(value, mode, intent) { calls.push(["execute", value, mode, intent]); return true; },
+    errorMessage: String,
+  });
+  controller.open(target, "undoCommit");
+  await Promise.resolve();
+  controller.selectMode("hard");
+  assert.equal(controller.state.dialog.mode, "mixed");
+  await controller.execute();
+  assert.deepEqual(calls, [
+    ["prepare", "/repo", target.oid, "undoCommit"],
+    ["execute", plan, "mixed", "undoCommit"],
+  ]);
+
+  controller.open(target, "dropCommit");
+  await Promise.resolve();
+  assert.equal(controller.state.dialog.mode, "hard");
+  const dropReview = renderGitResetDialog(controller.state, EN_GIT_RESET_COPY);
+  assert.match(dropReview, /Drop Commit/);
+  assert.match(dropReview, /danger-button/);
+  assert.doesNotMatch(dropReview, /name="git-reset-mode"/);
 });
 
 test("a later reset target rejects an obsolete prepare completion", async () => {

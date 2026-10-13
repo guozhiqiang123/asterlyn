@@ -722,11 +722,11 @@ History 提交记录右键菜单服务于“识别这个提交、把它安全地
 | Compare with Local | 后续候选 | “Local”可能指当前 `HEAD`、索引或工作区；将来拆成明确的 commit-to-commit“与当前分支比较…” |
 | Reset Current Branch to Here… | 条件采用 | 仅对当前本地分支中非 `HEAD` 的已验证祖先提交显示；先审查精确引用租约，再由用户明确选择 Soft、Mixed、Hard 或 Keep |
 | Revert Commit | 首版必要 | 新增一个反向提交，保留原历史；必须进入精确计划、确认和冲突恢复流程 |
-| Undo Commit… | 不采用 | 含义可能是 Revert、soft reset、mixed reset 或 hard reset；使用明确的 Revert，不提供模糊撤销 |
+| Undo Commit… | 仅未推送 HEAD | 仅对当前分支最新、单父且尚未推送的提交提供；固定为 mixed reset，把该提交改动保留为当前工作区未暂存更改，不模拟 Changelist 或 Track context |
 | Edit Commit Message… | 首版不提供 | 非 `HEAD` 提交需要重写后续历史；即使是 `HEAD` 也应属于独立 Amend 工作流 |
 | Fixup… | 首版不提供 | 属于交互式历史改写，需要 sequence-editor 和最终目标审查 |
 | Squash Into… | 不照搬 | 现有 bounded Squash 继续位于 reviewed Git Operations；不把“一条提交压入另一条”的不同语义塞入行菜单 |
-| Drop Commit | 首版不提供 | 属于交互式 Rebase，可能改变整段后续历史 |
+| Drop Commit… | 仅未推送 HEAD | 仅对当前分支最新、单父且尚未推送的提交提供；经独立破坏性确认后固定 hard reset 到唯一父提交，不对较旧提交执行交互式 Rebase |
 | Interactively Rebase From Here… | 首版不提供 | 当前明确没有受监督的 sequence-editor 协议、重排模型和恢复证据 |
 | Push All up to Here… | 不采用 | Push 应发布已审查的当前本地分支引用；不从任意历史行临时构造远程更新目标 |
 | New Branch… | 首版必要 | 从所选精确提交创建并切换到新的普通本地分支，不继承不相关上游 |

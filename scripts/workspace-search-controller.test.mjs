@@ -109,6 +109,7 @@ function report(requestId) {
     coverageReasons: [],
     catalogCandidates: 1,
     eligibleCandidates: 1,
+    indexPrunedCandidates: 0,
     filesSearched: 1,
     bytesRead: 1,
     skippedCount: 0,

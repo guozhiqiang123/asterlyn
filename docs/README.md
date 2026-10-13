@@ -50,7 +50,9 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/compact-git-blame-presentation-plan.md`](engineering/compact-git-blame-presentation-plan.md) — configurable line-end or line-number-hover Git Blame presentation without a dedicated wide gutter.
 - [`engineering/conflict-editor-large-file-performance-plan.md`](engineering/conflict-editor-large-file-performance-plan.md) — single-pass structural conflict analysis that keeps large three-pane conflicts and Changes context menus responsive.
 - [`engineering/conflict-editor-fill-height-fix-plan.md`](engineering/conflict-editor-fill-height-fix-plan.md) — full-height short-file editor/gutter layout and real Chromium/WebKit regression evidence.
+- [`engineering/hybrid-workspace-content-index-plan.md`](engineering/hybrid-workspace-content-index-plan.md) — verification-first trigram acceleration with complete cold fallback, strict cache bounds, and stale-index recovery.
 - [`engineering/remote-push-error-diagnostics-plan.md`](engineering/remote-push-error-diagnostics-plan.md) — structured Git Push rejection causes, safe actionable guidance, and tag-collision regression gates.
+- [`engineering/remote-tag-refresh-and-push-feedback-plan.md`](engineering/remote-tag-refresh-and-push-feedback-plan.md) — complete remote Tag synchronization plus prominent single-Tag and commit Push success feedback.
 - [`engineering/editor-patch-popover-plan.md`](engineering/editor-patch-popover-plan.md) — clickable editor gutter Patches, bounded previous/next navigation, and reversible per-block rollback.
 - [`engineering/unified-diff-review-workflow-plan.md`](engineering/unified-diff-review-workflow-plan.md) — shared review blocks, controls, layout, folding, geometry, and workflow for two-pane Diff and three-pane conflict resolution.
 - [`engineering/unified-diff-review-acceptance.md`](engineering/unified-diff-review-acceptance.md) — phased automated and manual acceptance evidence for the unified Diff review workflow.
@@ -61,6 +63,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
 - [`engineering/in-app-update-plan.md`](engineering/in-app-update-plan.md) — startup/manual update discovery, verified native package installation, restart behavior, and updater trust boundaries.
+- [`engineering/unpushed-head-commit-actions-plan.md`](engineering/unpushed-head-commit-actions-plan.md) — reviewed Undo/Drop actions for an unpublished latest commit, with exact native revalidation and no changelist-context emulation.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
 
 ## Design and references
@@ -75,6 +78,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-10-13-hybrid-workspace-content-index.md`](benchmarks/2026-10-13-hybrid-workspace-content-index.md) — complete authorized-catalog cold search, source-free trigram acceleration, stale-entry recovery, and Flutter latency/memory evidence.
+- [`benchmarks/2026-10-13-workspace-search-extension-coverage.md`](benchmarks/2026-10-13-workspace-search-extension-coverage.md) — post-filter candidate limits and extension-balanced coverage that keep Kotlin and other uncommon source formats searchable in large repositories.
 - [`benchmarks/2026-10-12-in-app-update.md`](benchmarks/2026-10-12-in-app-update.md) — shared startup/Settings update state, verified native package installation, resource bounds, and cross-platform acceptance evidence.
 - [`benchmarks/2026-10-12-editor-patch-popover.md`](benchmarks/2026-10-12-editor-patch-popover.md) — exact per-block editor Patch comparison, previous/next navigation, reversible rollback, and Chromium/WebKit evidence.
 - [`benchmarks/2026-10-12-remote-push-error-diagnostics.md`](benchmarks/2026-10-12-remote-push-error-diagnostics.md) — structured Push rejection parsing, actionable tag-collision recovery, security boundaries, and regression evidence.

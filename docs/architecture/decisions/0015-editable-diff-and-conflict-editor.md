@@ -45,6 +45,16 @@ original appears as merge decorations. A per-chunk revert control edits only the
 does not invoke `git checkout`, mutate the index, or save automatically. Standard editor undo can
 undo that buffer edit before save.
 
+**Amendment, 2026-10-13 — working-Diff cache coherence.** A Changes Diff must not replace the
+authoritative Git patch with an older clean editor-session snapshot. Before a clean background tab
+becomes the editable current side, the editor session refreshes it from the worktree. Dirty or
+saving tabs remain untouched and retain their normal unsaved-buffer semantics. The integration
+then checks the persisted backing text against every old/new line represented by the Git patch. If
+the two sources still disagree because of a watcher/read race, the editable surface fails closed
+and the Changes view renders the authoritative read-only patch instead. This check is bounded to
+the patch hunks so truncated or deliberately bounded reads do not invent mismatches outside the
+evidence Git supplied.
+
 ### Shared gutter and scrolling contract
 
 Split working Diffs, read-only historical Diffs, and both halves of the three-pane conflict editor
@@ -228,6 +238,8 @@ startup shell, application services, domain models, or persisted state.
     must not expose bulk Ours/All/Theirs actions that bypass deliberate block-by-block review.
 17. Conflict split/unified switching reuses the same Result editor state; unified source cards are
     non-serializable presentation and must never enter Result bytes or Git mutation input.
+18. An editable Changes Diff may use a clean persisted editor buffer only when its represented
+    hunk lines agree with the authoritative Git patch; otherwise the patch projection wins.
 
 ## Delivery sequence
 

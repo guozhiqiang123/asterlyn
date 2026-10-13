@@ -455,6 +455,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
         command,
         "catalogCandidates",
         "eligibleCandidates",
+        "indexPrunedCandidates",
         "filesSearched",
         "bytesRead",
         "skippedCount",

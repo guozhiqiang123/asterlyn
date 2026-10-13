@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { TagMutationController } from "../src/features/git-history/tag-mutation-controller.ts";
+import { tagMutationCompletionIsProminent } from "../src/features/git-history/tag-mutation-feedback.ts";
 import { renderTagMutationDialog } from "../src/features/git-history/tag-mutation-view.ts";
 import { EN_US_TAG_MUTATION_COPY } from "../src/localization/tag-mutation-copy.ts";
 
@@ -82,4 +83,12 @@ test("failed tag mutations keep the review open with the localized error", async
   await controller.submit();
   assert.equal(controller.state.error, "remote moved");
   assert.equal(controller.state.busy, false);
+});
+
+test("only exact Tag Push completion receives prominent feedback", () => {
+  assert.equal(tagMutationCompletionIsProminent("push"), true);
+  assert.equal(tagMutationCompletionIsProminent("create"), false);
+  assert.equal(tagMutationCompletionIsProminent("checkout"), false);
+  assert.equal(tagMutationCompletionIsProminent("deleteLocal"), false);
+  assert.equal(tagMutationCompletionIsProminent("deleteRemote"), false);
 });

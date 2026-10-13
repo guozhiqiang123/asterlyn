@@ -35,6 +35,7 @@ use crate::process::{
 use crate::remote_failure::parse_remote_ref_failures;
 
 mod commit_details;
+mod head_commit_mutation;
 mod stash_creation;
 mod worktree;
 
@@ -4122,9 +4123,10 @@ impl GitRepository {
             &remote.name,
             vec![
                 OsString::from("fetch"),
+                OsString::from("--atomic"),
                 OsString::from("--no-prune"),
                 OsString::from("--no-prune-tags"),
-                OsString::from("--no-tags"),
+                OsString::from("--tags"),
                 OsString::from("--no-recurse-submodules"),
                 OsString::from("--"),
                 OsString::from(&remote.name),
@@ -4246,9 +4248,10 @@ impl GitRepository {
             &upstream.remote,
             vec![
                 OsString::from("fetch"),
+                OsString::from("--atomic"),
                 OsString::from("--no-prune"),
                 OsString::from("--no-prune-tags"),
-                OsString::from("--no-tags"),
+                OsString::from("--tags"),
                 OsString::from("--no-recurse-submodules"),
                 OsString::from("--"),
                 OsString::from(&upstream.remote),

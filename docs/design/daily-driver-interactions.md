@@ -414,6 +414,13 @@ and Keep; Hard alone changes the final action to the danger treatment and states
 will be lost. Execution revalidates the same symbolic branch, starting `HEAD`, and exact ancestor,
 uses one explicit reset mode, verifies the resulting branch target, and never pushes or retries.
 
+For the exact latest commit, History additionally offers Undo Commit and Drop Commit only when the
+row is marked unpublished and has one parent. Undo has fixed mixed-reset semantics and returns the
+commit's changes to the current worktree unstaged; Drop has fixed hard-reset semantics behind a
+danger confirmation. The native review rechecks cleanliness, symbolic `HEAD`, the sole parent, and
+the last-fetched upstream or remote-tracking containment before execution. Asterlyn has no local
+Changelist model, so JetBrains `Track context` and `Set active` options are intentionally omitted.
+
 ### R4 reviewed and recoverable Git operations
 
 The operation workflow now extends the compact Git workspace without turning History rows or

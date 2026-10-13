@@ -18,6 +18,6 @@ export function remoteOperationCompletionFeedback(
     message: unchangedUpdate
       ? copy.alreadyUpToDate
       : copy.operationCompleted(copy.actionNames[kind]),
-    prominent: unchangedUpdate,
+    prominent: kind === "push" || unchangedUpdate,
   };
 }

@@ -21,6 +21,7 @@ const target = (value = commit()) => ({
 });
 const options = {
   busy: false, clean: true, cleanReason: "clean", localBranch: true,
+  headOid: null, historyCommits: [],
   reasons: EN_US.history.commitContextMenu,
 };
 const ids = (model) => model.items
@@ -82,6 +83,52 @@ test("Reset to Here appears only for a non-HEAD commit reachable from the curren
   }).reset, null);
 });
 
+test("only an unpublished single-parent HEAD exposes Undo Commit and Drop Commit", () => {
+  const head = { ...commit(), outgoing: true };
+  const selected = target(head);
+  const policy = historyCommitContextPolicy(selected, {
+    ...options, headOid: head.oid, historyCommits: [head],
+  });
+  const model = historyCommitContextMenuModel(selected, policy, EN_US.history);
+  assert.ok(ids(model).includes("git-history.commit-context-actions.undo-commit"));
+  assert.ok(ids(model).includes("git-history.commit-context-actions.drop-commit"));
+  const drop = model.items.find((item) => item.id === "git-history.commit-context-actions.drop-commit");
+  assert.equal(drop.tone, "danger");
+
+  assert.equal(historyCommitContextPolicy(target({ ...head, outgoing: false }), {
+    ...options, headOid: head.oid, historyCommits: [head],
+  }).headMutation, null);
+  assert.equal(historyCommitContextPolicy(target({ ...head, oid: "c".repeat(40) }), {
+    ...options, headOid: head.oid, historyCommits: [head],
+  }).headMutation, null);
+  assert.equal(historyCommitContextPolicy(target({ ...head, parents: [] }), {
+    ...options, headOid: head.oid, historyCommits: [head],
+  }).headMutation, null);
+});
+
+test("Undo Commit and Drop Commit route the exact selected HEAD and action kind", async () => {
+  const head = { ...commit(), outgoing: true };
+  const selected = target(head);
+  const events = [];
+  let session;
+  const provider = new HistoryCommitContextActions(
+    { open(_anchor, value) { session = value; }, close() {} },
+    { async writeText() { return { status: "copied" }; } },
+    {
+      current: () => true, select: () => true,
+      policyOptions: () => ({ ...options, headOid: head.oid, historyCommits: [head] }),
+      openGitOperation() {}, openBranchFromCommit() {}, openReset() {},
+      openHeadCommitMutation: (kind, value) => events.push([kind, value.oid]),
+      tagRemotes: () => [], openTagMutation() {}, blocked() {}, status() {}, error() {},
+    },
+    () => EN_US.history,
+  );
+  provider.open({ target: selected, anchor: { x: 1, y: 2 }, trigger: {}, restoreFocus() {} });
+  await session.invoke("git-history.commit-context-actions.undo-commit");
+  await session.invoke("git-history.commit-context-actions.drop-commit");
+  assert.deepEqual(events, [["undoCommit", head.oid], ["dropCommit", head.oid]]);
+});
+
 test("provider selects without executing and routes exact IDs into existing review flows", async () => {
   const selected = target();
   const events = [];
@@ -98,6 +145,7 @@ test("provider selects without executing and routes exact IDs into existing revi
       openTagMutation: (kind, value, tagName, remote) =>
         events.push(["tag", kind, value.oid, tagName, remote]),
       openReset: (value) => events.push(["reset", value.oid]),
+      openHeadCommitMutation: (kind, value) => events.push(["head", kind, value.oid]),
       blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]),
       error: (error) => events.push(["error", error]),
@@ -126,7 +174,7 @@ test("provider routes each tagged commit submenu action to its exact tag and rem
     { async writeText() { return { status: "copied" }; } },
     {
       current: () => true, select: () => true, policyOptions: () => ({ ...options }),
-      openGitOperation() {}, openBranchFromCommit() {}, openReset() {},
+      openGitOperation() {}, openBranchFromCommit() {}, openReset() {}, openHeadCommitMutation() {},
       tagRemotes: () => ["origin"],
       openTagMutation: (kind, _value, tagName, remote) => events.push([kind, tagName, remote]),
       blocked() {}, status() {}, error() {},
@@ -148,7 +196,7 @@ test("commit copy command revalidates selection and reuses clipboard feedback", 
     { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
     {
       current: () => current, select: () => true, policyOptions: () => ({ ...options }),
-      openGitOperation() {}, openBranchFromCommit() {}, openReset() {}, tagRemotes: () => [],
+      openGitOperation() {}, openBranchFromCommit() {}, openReset() {}, openHeadCommitMutation() {}, tagRemotes: () => [],
       openTagMutation() {}, blocked: (reason) => events.push(["blocked", reason]),
       status: (message) => events.push(["status", message]), error: () => undefined,
     },
@@ -174,6 +222,7 @@ test("commit mutation commands reuse current policy and existing review entry po
       openBranchFromCommit: (value) => events.push(["branch", value.oid]),
       tagRemotes: () => [], openTagMutation: (kind, value) => events.push([kind, value.oid]),
       openReset: (value) => events.push(["reset", value.oid]),
+      openHeadCommitMutation: (kind, value) => events.push(["head", kind, value.oid]),
       blocked: (reason) => events.push(["blocked", reason]), status() {}, error() {},
     }, () => EN_US.history,
   );

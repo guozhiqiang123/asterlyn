@@ -1,4 +1,6 @@
-import type { GitResetMode, GitResetPlan } from "../../models.ts";
+import type { GitResetMode, GitResetPlan, HeadCommitMutationKind } from "../../models.ts";
+
+export type GitResetIntent = "reset" | HeadCommitMutationKind;
 
 export interface GitResetTarget {
   readonly repositoryRoot: string;
@@ -9,6 +11,7 @@ export interface GitResetTarget {
 
 export interface GitResetDialog {
   readonly target: GitResetTarget;
+  readonly intent: GitResetIntent;
   plan: GitResetPlan | null;
   mode: GitResetMode;
   busy: boolean;
@@ -16,8 +19,8 @@ export interface GitResetDialog {
 }
 
 export interface GitResetGateway {
-  prepare(repositoryRoot: string, targetOid: string): Promise<GitResetPlan>;
-  execute(plan: GitResetPlan, mode: GitResetMode): Promise<boolean>;
+  prepare(repositoryRoot: string, targetOid: string, intent: GitResetIntent): Promise<GitResetPlan>;
+  execute(plan: GitResetPlan, mode: GitResetMode, intent: GitResetIntent): Promise<boolean>;
   errorMessage(error: unknown): string;
 }
 
@@ -33,10 +36,11 @@ export class GitResetController {
   get state(): { readonly dialog: GitResetDialog | null } { return { dialog: this.dialog }; }
   subscribe(listener: Listener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
 
-  open(target: GitResetTarget): void {
-    const dialog: GitResetDialog = { target: { ...target }, plan: null, mode: "mixed", busy: true, error: null };
+  open(target: GitResetTarget, intent: GitResetIntent = "reset"): void {
+    const mode = intent === "dropCommit" ? "hard" : "mixed";
+    const dialog: GitResetDialog = { target: { ...target }, intent, plan: null, mode, busy: true, error: null };
     this.dialog = dialog; this.emit();
-    void this.gateway.prepare(target.repositoryRoot, target.oid).then((plan) => {
+    void this.gateway.prepare(target.repositoryRoot, target.oid, intent).then((plan) => {
       if (this.dialog === dialog) { dialog.plan = plan; dialog.busy = false; this.emit(); }
     }).catch((error) => {
       if (this.dialog === dialog) { dialog.error = this.gateway.errorMessage(error); dialog.busy = false; this.emit(); }
@@ -44,7 +48,7 @@ export class GitResetController {
   }
 
   selectMode(mode: GitResetMode): void {
-    if (!this.dialog || this.dialog.busy) return;
+    if (!this.dialog || this.dialog.busy || this.dialog.intent !== "reset") return;
     this.dialog.mode = mode; this.emit();
   }
 
@@ -53,7 +57,7 @@ export class GitResetController {
     if (!dialog?.plan || dialog.busy) return;
     dialog.busy = true; dialog.error = null; this.emit();
     try {
-      if (await this.gateway.execute(dialog.plan, dialog.mode)) this.dialog = null;
+      if (await this.gateway.execute(dialog.plan, dialog.mode, dialog.intent)) this.dialog = null;
       else dialog.error = "reset-failed";
     } catch (error) {
       if (this.dialog === dialog) dialog.error = this.gateway.errorMessage(error);

@@ -19,6 +19,7 @@ export interface RemoteMutationPlan {
 }
 
 export type GitResetMode = "soft" | "mixed" | "hard" | "keep";
+export type HeadCommitMutationKind = "undoCommit" | "dropCommit";
 
 export interface GitResetPlan {
   repositoryRoot: string;

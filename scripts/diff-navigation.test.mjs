@@ -12,6 +12,7 @@ import {
 import { editorDocumentKey } from "../src/editor-document.ts";
 import {
   mountEditableWorkingDiff,
+  workingDiffBackingContentMatchesPatch,
   workingDiffSourceFile,
 } from "../src/features/files-editor/working-diff-integration.ts";
 import { readFile } from "node:fs/promises";
@@ -187,6 +188,85 @@ test("editable working Diff keeps expanded state in its mount identity and runti
   assert.match(calls[0][0], /\0editable:3:7:expanded$/);
   assert.deepEqual(calls[0][5], { before: "Before · HEAD", after: "After · Working Tree" });
   assert.equal(calls[0][7], true);
+});
+
+test("editable Changes Diff validates its backing file against the authoritative Git patch", () => {
+  const before = [
+    ...Array.from({ length: 31 }, (_, index) => `stable-${index + 1}`),
+    "adsCoreVersion=2.3.0",
+    ...Array.from({ length: 10 }, (_, index) => `source-${index + 1}`),
+    "adsBomVersion=2.3.0",
+  ].join("\n") + "\n";
+  const after = before
+    .replace("adsCoreVersion=2.3.0", "adsCoreVersion=2.3.1")
+    .replace("adsBomVersion=2.3.0", "adsBomVersion=2.3.1");
+  const patch = {
+    path: "gradle.properties",
+    staged: false,
+    binary: false,
+    truncated: false,
+    patch: [
+      "diff --git a/gradle.properties b/gradle.properties",
+      "--- a/gradle.properties",
+      "+++ b/gradle.properties",
+      "@@ -29,7 +29,7 @@",
+      " stable-29",
+      " stable-30",
+      " stable-31",
+      "-adsCoreVersion=2.3.0",
+      "+adsCoreVersion=2.3.1",
+      " source-1",
+      " source-2",
+      " source-3",
+      "@@ -40,4 +40,4 @@",
+      " source-8",
+      " source-9",
+      " source-10",
+      "-adsBomVersion=2.3.0",
+      "+adsBomVersion=2.3.1",
+    ].join("\n"),
+  };
+  const base = { content: before };
+
+  assert.equal(workingDiffBackingContentMatchesPatch(patch, base, { persistedContent: after }), true);
+  assert.equal(workingDiffBackingContentMatchesPatch(patch, base, { persistedContent: before }), false);
+  assert.equal(workingDiffBackingContentMatchesPatch(patch, base, {
+    persistedContent: after.replace("source-5", "stale-source"),
+  }), true, "lines outside bounded Git hunks do not invent a mismatch");
+});
+
+test("stale editable backing content falls back to the authoritative Git patch", () => {
+  const calls = [];
+  const mounted = mountEditableWorkingDiff({
+    surface: { mountEditableDiff(...args) { calls.push(args); } },
+    document: {
+      kind: "working-diff",
+      repositoryRoot: "/repo",
+      selection: { path: "gradle.properties", staged: false },
+    },
+    state: {
+      workingPatch: {
+        path: "gradle.properties", staged: false, binary: false, truncated: false,
+        patch: "@@ -1 +1 @@\n-old\n+new\n",
+      },
+      workingDiffBase: { content: "old\n" },
+      workingPatchVersion: 1,
+    },
+    tab: {
+      id: "file-tab", loadEpoch: 1, status: "ready", content: "old\n",
+      persistedContent: "old\n", document: { path: "gradle.properties" },
+    },
+    preferences: {},
+    presentation: { layout: "split", showWhitespace: false },
+    sideLabels: { before: "Before", after: "After" },
+    blameSources: { old: {}, new: {}, unifiedReason: "split" },
+    expandedUnchanged: false,
+    beforeTransition() {},
+    onContentChange() {},
+  });
+
+  assert.equal(mounted, false);
+  assert.equal(calls.length, 0);
 });
 
 test("editable Diff uses one gutter marker system and can disable unchanged collapsing", async () => {

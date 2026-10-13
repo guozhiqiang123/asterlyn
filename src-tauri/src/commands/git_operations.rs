@@ -517,6 +517,55 @@ pub(crate) async fn execute_git_reset(
 }
 
 #[tauri::command]
+pub(crate) async fn prepare_head_commit_mutation(
+    repository_root: String,
+    selected_head_oid: String,
+    kind: HeadCommitMutationKind,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<GitResetPlan, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "prepare latest commit action",
+            move |repository| repository.prepare_head_commit_mutation(&selected_head_oid, kind),
+        )
+        .await
+}
+
+#[tauri::command]
+pub(crate) async fn execute_head_commit_mutation(
+    repository_root: String,
+    plan: GitResetPlan,
+    kind: HeadCommitMutationKind,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_local(
+            repository_root,
+            "execute latest commit action",
+            move |repository| {
+                repository.execute_head_commit_mutation(&plan, kind)?;
+                repository
+                    .tracked_snapshot(COMMIT_LIMIT)
+                    .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
+            },
+        )
+        .await
+}
+
+#[tauri::command]
 pub(crate) async fn fetch_remote(
     repository_root: String,
     remote: String,

@@ -49,7 +49,7 @@ export interface AppUpdateInstallResult {
   error: string | null;
 }
 
-export type { BranchMutationKind, BranchMutationPlan, BranchMutationRequest, GitResetMode, GitResetPlan, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest, WorktreeCreationPlan, WorktreeCreationRequest, WorktreeRemovalReview } from "./git-reviewed-models.ts";
+export type { BranchMutationKind, BranchMutationPlan, BranchMutationRequest, GitResetMode, GitResetPlan, HeadCommitMutationKind, RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, TagMutationKind, TagMutationRequest, WorktreeCreationPlan, WorktreeCreationRequest, WorktreeRemovalReview } from "./git-reviewed-models.ts";
 
 export type RemoteTransport = "https" | "ssh" | "local" | "other";
 
@@ -613,6 +613,7 @@ export interface WorkspaceTextSearchReport {
   matches: WorkspaceTextSearchMatch[];
   catalogCandidates: number;
   eligibleCandidates: number;
+  indexPrunedCandidates: number;
   filesSearched: number;
   bytesRead: number;
   skippedCount: number;

@@ -92,6 +92,8 @@ export interface DesktopCommandMap {
   execute_remote_mutation: { args: { repositoryRoot: string; plan: Model.RemoteMutationPlan; }; result: Model.RepositoryMutationOutcome };
   prepare_git_reset: { args: { repositoryRoot: string; targetOid: string; }; result: Model.GitResetPlan };
   execute_git_reset: { args: { repositoryRoot: string; plan: Model.GitResetPlan; mode: Model.GitResetMode; }; result: Model.RepositoryMutationOutcome };
+  prepare_head_commit_mutation: { args: { repositoryRoot: string; selectedHeadOid: string; kind: Model.HeadCommitMutationKind; }; result: Model.GitResetPlan };
+  execute_head_commit_mutation: { args: { repositoryRoot: string; plan: Model.GitResetPlan; kind: Model.HeadCommitMutationKind; }; result: Model.RepositoryMutationOutcome };
   read_remote_authentication: { args: { repositoryRoot: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
   store_remote_https_credential: { args: { repositoryRoot: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
   configure_remote_ssh: { args: { repositoryRoot: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
@@ -201,6 +203,8 @@ export const DESKTOP_RESULT_VALIDATORS: {
   execute_remote_mutation: "repositoryMutationOutcome",
   prepare_git_reset: "gitResetPlan",
   execute_git_reset: "repositoryMutationOutcome",
+  prepare_head_commit_mutation: "gitResetPlan",
+  execute_head_commit_mutation: "repositoryMutationOutcome",
   read_remote_authentication: "remoteAuthenticationStatus",
   store_remote_https_credential: "remoteAuthenticationStatus",
   configure_remote_ssh: "remoteAuthenticationStatus",

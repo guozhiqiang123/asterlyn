@@ -8,6 +8,7 @@ mod workspace_document;
 mod workspace_mutation;
 mod workspace_replacement;
 mod workspace_search;
+mod workspace_search_index;
 mod workspace_session;
 mod workspace_watch;
 
@@ -42,7 +43,12 @@ pub(crate) use workspace_replacement::{
     rollback_replacement,
 };
 pub use workspace_search::WORKSPACE_SEARCH_LIMITS;
-pub(crate) use workspace_search::{WorkspaceTextSearchReport, search_authorized_workspace};
+#[cfg(test)]
+pub(crate) use workspace_search::search_authorized_workspace;
+pub(crate) use workspace_search::{
+    WorkspaceTextSearchReport, search_authorized_workspace_with_index,
+};
+pub(crate) use workspace_search_index::WorkspaceSearchIndexRegistry;
 pub(crate) use workspace_session::{
     ActiveWorkspaces, GitMutationRegistry, PendingRepositoryWindowReservation,
     PendingRepositoryWindows, WorkspaceWatchRoots, WorkspaceWriteRegistry,

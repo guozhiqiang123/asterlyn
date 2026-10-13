@@ -1,6 +1,6 @@
 import type { TextClipboardPort } from "../../application/text-clipboard.ts";
 import type { HistoryCopy } from "../../localization/catalog.ts";
-import type { TagMutationKind } from "../../models.ts";
+import type { HeadCommitMutationKind, TagMutationKind } from "../../models.ts";
 import type {
   ContextMenuAvailability,
   ContextMenuItem,
@@ -40,6 +40,7 @@ export interface HistoryCommitContextRuntime {
     remote?: string | null,
   ): void;
   openReset(target: HistoryCommitContextTarget): void;
+  openHeadCommitMutation(kind: HeadCommitMutationKind, target: HistoryCommitContextTarget): void;
   blocked(reason: string): void;
   status(message: string): void;
   error(error: unknown): void;
@@ -156,6 +157,12 @@ export class HistoryCommitContextActions {
       case `${OWNER_ID}.reset`:
         this.runtime.openReset(target);
         return;
+      case `${OWNER_ID}.undo-commit`:
+        this.runtime.openHeadCommitMutation("undoCommit", target);
+        return;
+      case `${OWNER_ID}.drop-commit`:
+        this.runtime.openHeadCommitMutation("dropCommit", target);
+        return;
       case `${OWNER_ID}.create-branch`:
         this.runtime.openBranchFromCommit(target);
         return;
@@ -198,6 +205,10 @@ export function historyCommitContextMenuModel(
       { kind: "separator" },
       command("cherry-pick", labels.cherryPick, policy.cherryPick),
       command("revert", labels.revertCommit, policy.revert),
+      ...(policy.headMutation ? [
+        command("undo-commit", labels.undoCommit, policy.headMutation),
+        dangerCommand("drop-commit", labels.dropCommit, policy.headMutation),
+      ] : []),
       ...(policy.reset ? [command("reset", labels.resetToHere, policy.reset)] : []),
       { kind: "separator" },
       command("create-branch", labels.newBranchFromCommit, policy.create),

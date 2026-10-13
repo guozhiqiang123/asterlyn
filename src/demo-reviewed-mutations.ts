@@ -1,6 +1,7 @@
 import type {
   GitResetMode,
   GitResetPlan,
+  HeadCommitMutationKind,
   RemoteMutationPlan,
   RemoteMutationRequest,
   RepositorySnapshot,
@@ -136,6 +137,46 @@ export function demoExecuteGitReset(
   const refreshed = demoPrepareGitReset(snapshot, plan.targetOid);
   if (JSON.stringify(refreshed) !== JSON.stringify(plan)) {
     throw new Error("The reviewed reset plan is stale; prepare it again.");
+  }
+  const next = structuredClone(snapshot);
+  next.branch.oid = plan.targetOid;
+  const current = next.branches.find((branch) => branch.repositoryId === "." && branch.current);
+  if (current) current.oid = plan.targetOid;
+  return next;
+}
+
+export function demoPrepareHeadCommitMutation(
+  snapshot: RepositorySnapshot,
+  selectedHeadOid: string,
+  kind: HeadCommitMutationKind,
+): GitResetPlan {
+  if (!snapshot.branch.head || !snapshot.branch.oid || snapshot.branch.detached || snapshot.branch.unborn) {
+    throw new Error("A checked-out local branch with an existing HEAD is required.");
+  }
+  if (snapshot.operation) throw new Error("Finish the active Git operation first.");
+  if (snapshot.changes.length) throw new Error("Commit, stash, or remove working-tree changes first.");
+  if (selectedHeadOid !== snapshot.branch.oid) throw new Error("The selected commit is no longer HEAD.");
+  const commit = snapshot.commits.find((value) => value.repositoryId === "." && value.oid === selectedHeadOid);
+  if (!commit?.outgoing) throw new Error("The latest commit is already published.");
+  if (commit.parents.length !== 1) throw new Error("The latest commit must have exactly one parent.");
+  const startHeadRef = `refs/heads/${snapshot.branch.head}`;
+  return {
+    repositoryRoot: snapshot.root,
+    startHeadRef,
+    startHeadOid: selectedHeadOid,
+    targetOid: commit.parents[0]!,
+    previewToken: JSON.stringify([kind, startHeadRef, selectedHeadOid, commit.parents[0]]),
+  };
+}
+
+export function demoExecuteHeadCommitMutation(
+  snapshot: RepositorySnapshot,
+  plan: GitResetPlan,
+  kind: HeadCommitMutationKind,
+): RepositorySnapshot {
+  const refreshed = demoPrepareHeadCommitMutation(snapshot, plan.startHeadOid, kind);
+  if (JSON.stringify(refreshed) !== JSON.stringify(plan)) {
+    throw new Error("The reviewed latest commit plan is stale; prepare it again.");
   }
   const next = structuredClone(snapshot);
   next.branch.oid = plan.targetOid;

@@ -92,7 +92,7 @@ test("History context commands resolve current range, file, and focused folder t
         ...feedback, current: () => true, select: () => true,
         policyOptions: () => ({ busy: false, clean: true, cleanReason: "", localBranch: true, headOid: second.oid, historyCommits: [first, second] }),
         openGitOperation: (kind, oid) => events.push(["commit-operation", kind, oid]),
-        openBranchFromCommit() {}, tagRemotes: () => [], openTagMutation() {}, openReset() {},
+        openBranchFromCommit() {}, tagRemotes: () => [], openTagMutation() {}, openReset() {}, openHeadCommitMutation() {},
       },
       range: {
         ...feedback, current: () => true,

@@ -239,7 +239,7 @@ export const EN_US: LocaleCatalog = {
     noSubsetMatches: "No matches in the searched subset", noMatches: "No matches", zeroWidthMatch: "Zero-width match",
     coverageMatches: (count) => `${count} matches`, coverageFiles: (searched, catalog) => `${searched}/${catalog} files`,
     coverageEligible: (searched, eligible, catalog) => `${searched}/${eligible} eligible · ${catalog} catalog`,
-    coverageComplete: "complete", coveragePartial: (reasons) => `partial: ${reasons}`,
+    coverageIndexed: (count) => `${count} index-pruned`, coverageComplete: "complete", coveragePartial: (reasons) => `partial: ${reasons}`,
     coverageReasons: { catalogTruncated: "catalog limit", candidateLimit: "candidate limit", byteLimit: "byte limit", matchLimit: "match limit" },
     coverageSkipped: (count) => `${count} skipped`,
     commands: {
@@ -510,7 +510,7 @@ export const EN_US: LocaleCatalog = {
     branchMutation: EN_US_BRANCH_MUTATION_COPY, worktreeCreation: EN_US_WORKTREE_CREATION_COPY, tagMutation: EN_US_TAG_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `Commit actions for ${subject}`,
-      copyCommitId: "Copy Commit ID", cherryPick: "Cherry-pick…", revertCommit: "Revert Commit…", resetToHere: EN_GIT_RESET_COPY.menuItem,
+      copyCommitId: "Copy Commit ID", cherryPick: "Cherry-pick…", revertCommit: "Revert Commit…", undoCommit: "Undo Commit…", dropCommit: "Drop Commit…", resetToHere: EN_GIT_RESET_COPY.menuItem,
       newBranchFromCommit: "New Branch from This Commit…", newTag: "New Tag…", tagMenu: (name) => `Tag ${name}`, deleteLocalTag: "Delete Local Tag…", deleteRemoteTag: (remote) => `Delete from ${remote}…`, copiedCommitId: "Full commit ID copied",
       clipboardUnavailable: "The system clipboard is unavailable",
       busy: "Another repository operation is still in progress",

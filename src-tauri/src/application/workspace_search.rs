@@ -1,17 +1,17 @@
 use std::path::Path;
 
 use asterlyn_workspace::{
-    SearchCancellationToken, SearchCandidate, SearchCoverageReason, SearchLimits, SearchOptions,
-    SearchSkipReason, Workspace, WorkspaceError,
+    SearchCancellationToken, SearchCandidate, SearchContentIndex, SearchCoverageReason,
+    SearchLimits, SearchOptions, SearchSkipReason, Workspace, WorkspaceError,
 };
 
 use super::workspace_catalog::{load_authorized_project_catalog, load_project_catalog};
 
-const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 5_000;
+const WORKSPACE_SEARCH_CANDIDATE_LIMIT: usize = 100_000;
 
 pub const WORKSPACE_SEARCH_LIMITS: SearchLimits = SearchLimits {
     max_candidates: WORKSPACE_SEARCH_CANDIDATE_LIMIT,
-    max_total_bytes: 64 * 1024 * 1024,
+    max_total_bytes: 512 * 1024 * 1024,
     max_matches: 500,
     max_preview_utf16: 320,
     max_reported_skips: 100,
@@ -30,6 +30,7 @@ pub(crate) struct WorkspaceTextSearchReport {
     pub(crate) matches: Vec<WorkspaceTextSearchMatch>,
     pub(crate) catalog_candidates: usize,
     pub(crate) eligible_candidates: usize,
+    pub(crate) index_pruned_candidates: usize,
     pub(crate) files_searched: usize,
     pub(crate) bytes_read: usize,
     pub(crate) skipped_count: usize,
@@ -66,12 +67,42 @@ pub(crate) struct WorkspaceTextSearchSkippedFile {
     pub(crate) reason: SearchSkipReason,
 }
 
+#[cfg(test)]
 pub(crate) fn search_authorized_workspace(
     root: &Path,
     request_id: &str,
     query: &str,
     options: &SearchOptions,
     cancellation: &SearchCancellationToken,
+) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
+    search_authorized_workspace_internal(root, request_id, query, options, cancellation, None)
+}
+
+pub(crate) fn search_authorized_workspace_with_index(
+    root: &Path,
+    request_id: &str,
+    query: &str,
+    options: &SearchOptions,
+    cancellation: &SearchCancellationToken,
+    content_index: &mut SearchContentIndex,
+) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
+    search_authorized_workspace_internal(
+        root,
+        request_id,
+        query,
+        options,
+        cancellation,
+        Some(content_index),
+    )
+}
+
+fn search_authorized_workspace_internal(
+    root: &Path,
+    request_id: &str,
+    query: &str,
+    options: &SearchOptions,
+    cancellation: &SearchCancellationToken,
+    content_index: Option<&mut SearchContentIndex>,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
     let catalog = if options.exclude_ignored {
         load_authorized_project_catalog(root)?
@@ -90,15 +121,36 @@ pub(crate) fn search_authorized_workspace(
             workspace_path: file.workspace_path.clone(),
         })
         .collect();
-    let report = Workspace::open(root)?.search_text(
-        request_id,
-        &candidates,
-        catalog.truncated,
-        query,
-        options,
-        cancellation,
-        WORKSPACE_SEARCH_LIMITS,
-    )?;
+    let workspace = Workspace::open(root)?;
+    let report = if let Some(content_index) = content_index {
+        let report = workspace.search_text_with_index(
+            request_id,
+            &candidates,
+            catalog.truncated,
+            query,
+            options,
+            cancellation,
+            WORKSPACE_SEARCH_LIMITS,
+            content_index,
+        )?;
+        content_index.retain_paths(
+            catalog
+                .files
+                .iter()
+                .map(|file| file.workspace_path.as_str()),
+        );
+        report
+    } else {
+        workspace.search_text(
+            request_id,
+            &candidates,
+            catalog.truncated,
+            query,
+            options,
+            cancellation,
+            WORKSPACE_SEARCH_LIMITS,
+        )?
+    };
 
     let matches = report
         .matches
@@ -156,6 +208,7 @@ pub(crate) fn search_authorized_workspace(
         matches,
         catalog_candidates: report.catalog_candidates,
         eligible_candidates: report.eligible_candidates,
+        index_pruned_candidates: report.index_pruned_candidates,
         files_searched: report.files_searched,
         bytes_read: report.bytes_read,
         skipped_count: report.skipped_count,

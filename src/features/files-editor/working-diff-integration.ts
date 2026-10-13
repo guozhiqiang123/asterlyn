@@ -2,9 +2,11 @@ import { editorDocumentContentKey, editorDocumentKey, type EditorDocument } from
 import type { DiffResult, FileChange, ProjectFile, WorkingDiffBase } from "../../models.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
+import { splitUnifiedDiff } from "../../diff-presentation.ts";
 import type { DiffGitBlameSources } from "./editor-gutter.ts";
 import type { EditorSurface } from "./editor-surface.ts";
 import { activeTextTab, isTextTabDirty, textTab, type EditorSession, type TextTabState } from "./editor-session.ts";
+import { decodeExactText } from "./text-content.ts";
 
 type DiffDocument = Extract<EditorDocument, {
   kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
@@ -123,6 +125,11 @@ export function mountEditableWorkingDiff(options: {
   if (!state.workingPatch || !state.workingDiffBase || tab?.status !== "ready" || state.workingPatch.binary) {
     return false;
   }
+  if (!workingDiffBackingContentMatchesPatch(
+    state.workingPatch,
+    state.workingDiffBase,
+    tab,
+  )) return false;
   surface.mountEditableDiff(
     editorDocumentContentKey(
       document,
@@ -140,4 +147,46 @@ export function mountEditableWorkingDiff(options: {
     options.onRevert,
   );
   return true;
+}
+
+/**
+ * Guards the editable Changes Diff against a stale clean backing tab.
+ *
+ * The Git patch is authoritative for what is currently on disk, while `tab.content` may include
+ * valid unsaved edits. Compare the patch against `persistedContent`, not the live buffer: this
+ * preserves unsaved work while refusing to replace a correct Git patch with an obsolete cached
+ * document. The caller falls back to the read-only Git patch when this returns false.
+ */
+export function workingDiffBackingContentMatchesPatch(
+  patch: DiffResult,
+  base: WorkingDiffBase,
+  tab: Pick<TextTabState, "persistedContent">,
+): boolean {
+  if (patch.binary || patch.patch.length === 0) return true;
+  const rows = splitUnifiedDiff(patch.patch).rows;
+  const changed = rows.filter((row) =>
+    row.kind === "added" || row.kind === "removed" || row.kind === "modified"
+  );
+  // A bounded notice or an unfamiliar patch has no line evidence to validate. Keep the existing
+  // behavior in that case instead of turning a parser limitation into a false mismatch.
+  if (changed.length === 0) return true;
+  const beforeLines = normalizedLines(base.content);
+  const afterLines = normalizedLines(tab.persistedContent);
+  return rows.every((row) => {
+    if (row.kind === "omitted" || row.kind === "notice") return true;
+    return sideMatches(beforeLines, row.old.lineNumber, row.old.text) &&
+      sideMatches(afterLines, row.new.lineNumber, row.new.text);
+  });
+}
+
+function normalizedLines(content: string): readonly string[] {
+  return decodeExactText(content).text.split("\n");
+}
+
+function sideMatches(
+  document: readonly string[],
+  lineNumber: number | null,
+  expected: string,
+): boolean {
+  return lineNumber === null || document[lineNumber - 1] === expected;
 }

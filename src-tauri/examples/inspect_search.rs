@@ -6,8 +6,8 @@ use std::time::Instant;
 use asterlyn_git::GitRepository;
 use asterlyn_lib::WORKSPACE_SEARCH_LIMITS;
 use asterlyn_workspace::{
-    SearchCancellationToken, SearchCandidate, SearchMode, SearchOptions, Workspace,
-    WorkspaceSearchReport,
+    SearchCancellationToken, SearchCandidate, SearchContentIndex, SearchMode, SearchOptions,
+    Workspace, WorkspaceSearchReport,
 };
 
 fn main() -> ExitCode {
@@ -64,14 +64,13 @@ fn run() -> Result<(), String> {
     let mut search_micros = Vec::with_capacity(iterations);
     let mut total_micros = Vec::with_capacity(iterations);
     let mut last_report = None;
+    let mut content_index = SearchContentIndex::empty();
 
     for iteration in 0..iterations {
         let total_started = Instant::now();
         let catalog_started = Instant::now();
         let catalog = GitRepository::open(&path)
-            .and_then(|repository| {
-                repository.authorized_project_files(WORKSPACE_SEARCH_LIMITS.max_candidates)
-            })
+            .and_then(|repository| repository.authorized_project_files(100_000))
             .map_err(|error| error.to_string())?;
         catalog_micros.push(catalog_started.elapsed().as_micros());
 
@@ -85,7 +84,7 @@ fn run() -> Result<(), String> {
         let search_started = Instant::now();
         let report = Workspace::open(&path)
             .map_err(|error| error.to_string())?
-            .search_text(
+            .search_text_with_index(
                 &format!("inspect-search-{iteration}"),
                 &candidates,
                 catalog.truncated,
@@ -93,6 +92,7 @@ fn run() -> Result<(), String> {
                 &options,
                 &SearchCancellationToken::new(),
                 WORKSPACE_SEARCH_LIMITS,
+                &mut content_index,
             )
             .map_err(|error| error.to_string())?;
         search_micros.push(search_started.elapsed().as_micros());
@@ -105,6 +105,13 @@ fn run() -> Result<(), String> {
     total_micros.sort_unstable();
     let report = last_report.expect("at least one iteration is required");
     print_report(&report, iterations);
+    println!("index_entries={}", content_index.len());
+    println!(
+        "index_json_bytes={}",
+        serde_json::to_vec(&content_index)
+            .map_err(|error| error.to_string())?
+            .len()
+    );
     print_timings("catalog", &catalog_micros);
     print_timings("search", &search_micros);
     print_timings("total", &total_micros);
@@ -121,6 +128,7 @@ fn print_report(report: &WorkspaceSearchReport, iterations: usize) {
     println!("iterations={iterations}");
     println!("catalog_candidates={}", report.catalog_candidates);
     println!("eligible_candidates={}", report.eligible_candidates);
+    println!("index_pruned_candidates={}", report.index_pruned_candidates);
     println!("files_searched={}", report.files_searched);
     println!("bytes_read={}", report.bytes_read);
     println!("matches={}", report.matches.len());

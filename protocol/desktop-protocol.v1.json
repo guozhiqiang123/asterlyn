@@ -88,6 +88,8 @@
     { "name": "execute_remote_mutation", "args": { "repositoryRoot": "string", "plan": "RemoteMutationPlan" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "prepare_git_reset", "args": { "repositoryRoot": "string", "targetOid": "string" }, "result": "GitResetPlan", "validator": "gitResetPlan" },
     { "name": "execute_git_reset", "args": { "repositoryRoot": "string", "plan": "GitResetPlan", "mode": "GitResetMode" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
+    { "name": "prepare_head_commit_mutation", "args": { "repositoryRoot": "string", "selectedHeadOid": "string", "kind": "HeadCommitMutationKind" }, "result": "GitResetPlan", "validator": "gitResetPlan" },
+    { "name": "execute_head_commit_mutation", "args": { "repositoryRoot": "string", "plan": "GitResetPlan", "kind": "HeadCommitMutationKind" }, "result": "RepositoryMutationOutcome", "validator": "repositoryMutationOutcome" },
     { "name": "read_remote_authentication", "args": { "repositoryRoot": "string", "remote": "string" }, "result": "RemoteAuthenticationStatus", "validator": "remoteAuthenticationStatus" },
     { "name": "store_remote_https_credential", "args": { "repositoryRoot": "string", "remote": "string", "username": "string", "token": "string" }, "result": "RemoteAuthenticationStatus", "validator": "remoteAuthenticationStatus" },
     { "name": "configure_remote_ssh", "args": { "repositoryRoot": "string", "remote": "string", "sshUrl": "string" }, "result": "RemoteAuthenticationStatus", "validator": "remoteAuthenticationStatus" },

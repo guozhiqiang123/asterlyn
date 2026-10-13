@@ -193,10 +193,15 @@ export function formatWorkspaceSearchCoverage(
       : report.bytesRead < 1024 * 1024
         ? `${Math.max(1, Math.round(report.bytesRead / 1024))} KiB`
         : `${(report.bytesRead / (1024 * 1024)).toFixed(1)} MiB`;
+  const indexPruned = report.indexPrunedCandidates ?? 0;
+  const covered = report.filesSearched + indexPruned;
   const catalog = report.eligibleCandidates === report.catalogCandidates
-    ? `${report.filesSearched}/${report.catalogCandidates} files`
-    : `${report.filesSearched}/${report.eligibleCandidates} eligible · ${report.catalogCandidates} catalog`;
-  const base = `${report.matches.length} matches · ${catalog} · ${size}`;
+    ? `${covered}/${report.catalogCandidates} files`
+    : `${covered}/${report.eligibleCandidates} eligible · ${report.catalogCandidates} catalog`;
+  const indexed = indexPruned > 0
+    ? ` · ${indexPruned} index-pruned`
+    : "";
+  const base = `${report.matches.length} matches · ${catalog}${indexed} · ${size}`;
   if (report.coverageReasons.length === 0) return `${base} · complete`;
   const labels: Record<(typeof report.coverageReasons)[number], string> = {
     catalogTruncated: "catalog limit",

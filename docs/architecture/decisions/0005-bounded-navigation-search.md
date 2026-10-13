@@ -54,6 +54,28 @@ A query is non-empty and at most 4,096 UTF-8 bytes. Literal escape sequences can
 
 Search tasks have a request ID and cancellation token. Opening a newer workspace search, changing any search option, or changing repository cancels the previous task. The frontend additionally accepts a response only when request ID, repository generation, canonical root, query, mode, New line, Match case, Whole words, ignored-file filter, ordered include/exclude arrays, and context count still match. No background index, watcher, cache, or startup scan is introduced.
 
+**Amendment, 2026-10-13 (hybrid index).** The earlier no-index choice and 5,000-candidate search
+ceiling are superseded for workspace
+text search by the accepted
+[hybrid content-index plan](../../engineering/hybrid-workspace-content-index-plan.md). The
+authorized catalog and current file bytes remain authoritative. A private, versioned, fixed-size
+trigram signature may only eliminate definite literal non-matches after current metadata identity
+validation; every reported match is still verified by the existing reader and matcher. Missing,
+stale, saturated, invalid, short-query, non-ASCII, and regex cases fall back to the complete scan.
+The index stores no source text and cannot authorize navigation or mutation. Search now admits the
+complete authorized catalog up to its existing 100,000-entry limit, retains the two-MiB per-file and
+500-match bounds, and uses a 512-MiB aggregate cold-read safety ceiling. Typed unsupported-file
+skips remain visible partial coverage rather than disappearing from the denominator.
+
+**Earlier amendment, 2026-10-13 (superseded candidate ceiling).** Candidate limits applied after Include/Exclude matching, so a narrow
+file-type or path search can reach matching files anywhere in the authorized catalog. When an
+unfiltered or broad result still exceeds the 5,000-file bound, selection covers smaller extension
+groups before uniformly sampling a dominant group. This keeps uncommon source formats such as
+Kotlin represented in large mixed-language repositories instead of letting lexicographically early
+paths or one dominant extension consume the entire budget. That ordering remains a defensive
+fallback for a future catalog larger than 100,000 entries, but the accepted hybrid-index amendment
+above removes the 5,000-file application ceiling.
+
 **Amendment, 2026-09-21.** The in-field `New line` control is an editing action, not a mode toggle: it inserts one line break into the query at the caret, and the query field is a textarea that grows with its own text. Multi-line search is therefore derived from the query — a workspace text request carries `new_line` exactly when the query contains a real line break — so a request can never carry line breaks with the mode off, and the escape-sequence, dot-all, and read-only replacement rules above keep applying unchanged. The same four in-field controls are presented by every command-surface query tab. `Match case`, `Whole words`, and `Regex` additionally select the Files and Recent quick-open path matcher: case-sensitive matching uses the exact workspace path, whole words require Unicode word boundaries around a contiguous occurrence, and Regex matches the query as a Unicode expression against the workspace path (an invalid expression matches nothing). With all three off, quick open keeps its case-insensitive fuzzy ranking.
 
 **Amendment, 2026-09-23.** Result rows in all four modes show the characters that matched the current query. Files and Recent highlight the same path occurrence or ordered fuzzy subsequence used by their quick-open matcher, split across the displayed directory and basename when needed. Commands highlight their label or detail; when a match depends on a hidden alias or command ID, that matching field is also shown in the row. Workspace Text keeps its exact preview-relative match range and zero-width marker. Ordinary matches emphasize the glyphs without a filled background; the zero-width marker remains a narrow colored caret. Highlighting is escaped presentation over existing results: it does not change ranking, search requests, selection, or navigation, and an empty query adds no marks.
@@ -90,10 +112,10 @@ A completely applied transaction remains recoverable across restart until the us
 
 ## Consequences and rollback
 
-Quick navigation stays instant after the existing catalog load, while workspace search consumes resources only when requested and remains bounded. Search results can be incomplete, but the UI reports eligible/scanned/skipped counts and truncation explicitly. A repository with many unsupported or very large files remains usable. The E2.2b default-path median remains within 1.75% of the E2.1 fixture baseline, so an index remains unjustified.
+Quick navigation stays instant after the existing catalog load, while workspace search consumes resources only when requested and remains bounded. Search results can be incomplete, but the UI reports eligible/read/index-pruned/skipped counts and truncation explicitly. A repository with many unsupported or very large files remains usable. The 2026-10-13 Flutter benchmark justified the source-free hybrid index for repeated searches without adding startup indexing.
 
-The navigation surface can be removed without changing repository or file formats. The workspace search API remains read-only and can later be replaced by a measured index behind the same result contract. Replacement recovery has an explicitly versioned private manifest and exact byte blobs outside the repository; removing the E2.3 UI must first resolve or preserve any listed recovery rather than silently deleting it. On the accepted 169-candidate fixture, complete replacement planning had a 22.446-millisecond median for 35 files/91 matches and 12.416 milliseconds when filtered to five `src/**` files, so no index is justified by this slice.
+The navigation surface can be removed without changing repository formats. The private search cache is disposable and rebuilding it preserves the same result contract. Replacement recovery has an explicitly versioned private manifest and exact byte blobs outside the repository; removing the E2.3 UI must first resolve or preserve any listed recovery rather than silently deleting it. On the accepted 169-candidate fixture, complete replacement planning had a 22.446-millisecond median for 35 files/91 matches and 12.416 milliseconds when filtered to five `src/**` files.
 
 ## Deferred work
 
-Persistent indexing, ignored-file replacement, cross-line replacement, multi-root result grouping controls, durable recovery for individually applied interactive chunks, symbol search, and cross-session search-result persistence remain later slices.
+Ignored-file replacement, cross-line replacement, multi-root result grouping controls, durable recovery for individually applied interactive chunks, symbol search, and cross-session search-result persistence remain later slices.

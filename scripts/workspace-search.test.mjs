@@ -24,6 +24,7 @@ function report(requestId) {
     matches: [],
     catalogCandidates: 1,
     eligibleCandidates: 1,
+    indexPrunedCandidates: 0,
     filesSearched: 1,
     bytesRead: 3,
     skippedCount: 0,
@@ -61,6 +62,16 @@ test("coverage copy distinguishes complete results from every partial reason", (
   assert.equal(
     formatWorkspaceSearchCoverage(report("complete")),
     "0 matches · 1/1 files · 3 B · complete",
+  );
+  assert.equal(
+    formatWorkspaceSearchCoverage({
+      ...report("indexed"),
+      catalogCandidates: 10,
+      eligibleCandidates: 10,
+      indexPrunedCandidates: 8,
+      filesSearched: 2,
+    }),
+    "0 matches · 10/10 files · 8 index-pruned · 3 B · complete",
   );
   assert.equal(
     formatWorkspaceSearchCoverage({

@@ -45,6 +45,46 @@ test("ensuring an editable Diff buffer preserves the active preview", async () =
   assert.equal(events[0].documentChanged, false);
 });
 
+test("ensuring an editable Diff refreshes an existing clean backing tab from disk", async () => {
+  let disk = snapshot("a.ts", "before\n");
+  let reads = 0;
+  const controller = new EditorSessionController(gateway({
+    async readTextFile() { reads += 1; return disk; },
+  }));
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("a.ts"), "source");
+  controller.activatePreview({
+    kind: "working-diff",
+    repositoryRoot: "/repo",
+    selection: { path: "a.ts", staged: false },
+  });
+  disk = { ...snapshot("a.ts", "after\n"), revision: "2" };
+
+  const result = await controller.ensureText("/repo", file("a.ts"), "source");
+
+  assert.equal(result.status, "ready");
+  assert.equal(reads, 2);
+  assert.equal(controller.activeDocument().kind, "working-diff");
+  assert.equal(controller.state.session.textTabs[0].content, "after\n");
+});
+
+test("ensuring an editable Diff never reloads a dirty backing tab", async () => {
+  let disk = snapshot("a.ts", "before\n");
+  let reads = 0;
+  const controller = new EditorSessionController(gateway({
+    async readTextFile() { reads += 1; return disk; },
+  }));
+  controller.installWorkspace("/repo");
+  await controller.openText("/repo", file("a.ts"), "source");
+  const tab = controller.state.session.textTabs[0];
+  controller.markEdited(tab.id, "unsaved\n");
+  disk = { ...snapshot("a.ts", "external\n"), revision: "2" };
+
+  assert.equal((await controller.ensureText("/repo", file("a.ts"), "source")).status, "stale");
+  assert.equal(reads, 1);
+  assert.equal(controller.tab(tab.id).content, "unsaved\n");
+});
+
 test("closing preview cleans up clean ephemeral backing tabs without leaving stale single-pane tabs", async () => {
   const controller = new EditorSessionController(gateway());
   controller.installWorkspace("/repo");

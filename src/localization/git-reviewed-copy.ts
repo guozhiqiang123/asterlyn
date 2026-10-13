@@ -43,6 +43,17 @@ export interface GitResetCopy {
   reset: string;
   cancel: string;
   failed: string;
+  headCommit: Record<"undoCommit" | "dropCommit", {
+    title: string;
+    description(branch: string, oid: string, subject: string): string;
+    detail: string;
+    warning: string | null;
+    preparing: string;
+    working: string;
+    action: string;
+    completed: string;
+    failed: string;
+  }>;
 }
 
 export const EN_REMOTE_MANAGEMENT_COPY: RemoteManagementCopy = {
@@ -90,6 +101,26 @@ export const EN_GIT_RESET_COPY: GitResetCopy = {
   currentBranchOnly: "Reset is available only for a non-HEAD commit in the current branch.",
   preparing: "Preparing exact reset review…", working: "Resetting…", reset: "Reset",
   cancel: "Cancel", failed: "The reviewed reset could not complete.",
+  headCommit: {
+    undoCommit: {
+      title: "Undo Commit",
+      description: (branch, oid, subject) => `Undo ${oid} “${subject}” on ${branch}?`,
+      detail: "The branch moves to this commit's parent. Its file changes remain in the worktree and are not staged.",
+      warning: null,
+      preparing: "Verifying that the latest commit is still unpublished…",
+      working: "Undoing commit…", action: "Undo Commit", completed: "Commit undone",
+      failed: "The latest commit could not be undone.",
+    },
+    dropCommit: {
+      title: "Drop Commit",
+      description: (branch, oid, subject) => `Drop ${oid} “${subject}” from ${branch}?`,
+      detail: "The branch and files move to this commit's parent.",
+      warning: "The commit's file changes will be discarded. Recovery requires Git reflog knowledge.",
+      preparing: "Verifying that the latest commit is still unpublished…",
+      working: "Dropping commit…", action: "Drop Commit", completed: "Commit dropped",
+      failed: "The latest commit could not be dropped.",
+    },
+  },
 };
 
 export const ZH_GIT_RESET_COPY: GitResetCopy = {
@@ -104,4 +135,24 @@ export const ZH_GIT_RESET_COPY: GitResetCopy = {
   currentBranchOnly: "只能把当前分支重置到其中一个非 HEAD 历史提交。",
   preparing: "正在准备精确的重置审查…", working: "正在重置…", reset: "重置",
   cancel: "取消", failed: "无法完成已审查的重置。",
+  headCommit: {
+    undoCommit: {
+      title: "撤销提交",
+      description: (branch, oid, subject) => `确定撤销 ${branch} 上的 ${oid}“${subject}”吗？`,
+      detail: "分支会移动到该提交的父提交；文件改动保留在当前工作区且不会暂存。",
+      warning: null,
+      preparing: "正在确认最新提交仍未推送…",
+      working: "正在撤销提交…", action: "撤销提交", completed: "已撤销提交",
+      failed: "无法撤销最新提交。",
+    },
+    dropCommit: {
+      title: "丢弃提交",
+      description: (branch, oid, subject) => `确定从 ${branch} 丢弃 ${oid}“${subject}”吗？`,
+      detail: "分支和文件都会移动到该提交的父提交。",
+      warning: "该提交包含的文件改动会被丢弃；恢复时需要使用 Git reflog。",
+      preparing: "正在确认最新提交仍未推送…",
+      working: "正在丢弃提交…", action: "丢弃提交", completed: "已丢弃提交",
+      failed: "无法丢弃最新提交。",
+    },
+  },
 };

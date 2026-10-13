@@ -143,6 +143,7 @@ export const ZH_CN = {
     noSubsetMatches: "已搜索范围内没有匹配项", noMatches: "没有匹配项", zeroWidthMatch: "零宽匹配",
     coverageMatches: (count) => `${count} 处匹配`, coverageFiles: (searched, catalog) => `已搜索 ${searched}/${catalog} 个文件`,
     coverageEligible: (searched, eligible, catalog) => `已搜索 ${searched}/${eligible} 个符合条件的文件 · 目录共 ${catalog} 个`,
+    coverageIndexed: (count) => `索引排除 ${count} 个文件`,
     coverageComplete: "完整", coveragePartial: (reasons) => `部分结果：${reasons}`,
     coverageReasons: { catalogTruncated: "目录上限", candidateLimit: "候选上限", byteLimit: "字节上限", matchLimit: "匹配上限" },
     coverageSkipped: (count) => `跳过 ${count} 个`,
@@ -399,7 +400,7 @@ export const ZH_CN = {
     branchMutation: ZH_CN_BRANCH_MUTATION_COPY, worktreeCreation: ZH_CN_WORKTREE_CREATION_COPY, tagMutation: ZH_CN_TAG_MUTATION_COPY,
     commitContextMenu: {
       ariaLabel: (subject) => `${subject} 的提交操作`, copyCommitId: "复制提交 ID",
-      cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…", resetToHere: ZH_GIT_RESET_COPY.menuItem,
+      cherryPick: "Cherry-pick…", revertCommit: "Revert 提交…", undoCommit: "撤销提交…", dropCommit: "丢弃提交…", resetToHere: ZH_GIT_RESET_COPY.menuItem,
       newBranchFromCommit: "从此提交新建分支…", newTag: "新建标签…", tagMenu: (name) => `标签 ${name}`,
       deleteLocalTag: "删除本地标签…", deleteRemoteTag: (remote) => `从 ${remote} 删除…`, copiedCommitId: "已复制完整提交 ID",
       clipboardUnavailable: "系统剪贴板不可用", busy: "另一个仓库操作仍在进行中",

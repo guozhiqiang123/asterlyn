@@ -8,6 +8,7 @@ import type {
   GitOperationPlan,
   GitOperationSnapshot,
   GitResetPlan,
+  HeadCommitMutationKind,
   RemoteAuthenticationStatus,
   RemoteMutationPlan,
   RepositoryMutationOutcome,
@@ -100,6 +101,18 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       plan,
       mode,
+    }),
+  prepareHeadCommitMutation: (repositoryRoot, selectedHeadOid, kind: HeadCommitMutationKind) =>
+    invokeDesktopCommand<GitResetPlan>("prepare_head_commit_mutation", {
+      repositoryRoot,
+      selectedHeadOid,
+      kind,
+    }),
+  executeHeadCommitMutation: (repositoryRoot, plan, kind: HeadCommitMutationKind) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("execute_head_commit_mutation", {
+      repositoryRoot,
+      plan,
+      kind,
     }),
   readRemoteAuthentication: (repositoryRoot, remote) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {

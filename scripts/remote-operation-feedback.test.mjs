@@ -43,6 +43,21 @@ test("a changed Update and Fetch retain ordinary completion feedback", () => {
   );
 });
 
+test("an interactive Push receives prominent completion feedback", () => {
+  assert.deepEqual(
+    remoteOperationCompletionFeedback(
+      "push",
+      repository("a"),
+      { snapshot: repository("a"), invalidatedSlices: [] },
+      EN_US.remote,
+    ),
+    {
+      message: EN_US.remote.operationCompleted(EN_US.remote.actionNames.push),
+      prominent: true,
+    },
+  );
+});
+
 function repository(oid) {
   return { branch: { oid } };
 }

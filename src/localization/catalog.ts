@@ -263,6 +263,7 @@ export interface NavigationCopy {
   coverageMatches(count: number): string;
   coverageFiles(searched: number, catalog: number): string;
   coverageEligible(searched: number, eligible: number, catalog: number): string;
+  coverageIndexed(count: number): string;
   coverageComplete: string;
   coveragePartial(reasons: string): string;
   coverageReasons: Record<"catalogTruncated" | "candidateLimit" | "byteLimit" | "matchLimit", string>;
@@ -1073,6 +1074,8 @@ export interface HistoryCommitContextMenuCopy {
   copyCommitId: string;
   cherryPick: string;
   revertCommit: string;
+  undoCommit: string;
+  dropCommit: string;
   resetToHere: string;
   newBranchFromCommit: string;
   newTag: string; tagMenu(name: string): string; deleteLocalTag: string; deleteRemoteTag(remote: string): string;

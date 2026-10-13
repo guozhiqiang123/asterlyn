@@ -139,6 +139,29 @@ pub enum GitResetMode {
     Keep,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum HeadCommitMutationKind {
+    UndoCommit,
+    DropCommit,
+}
+
+impl HeadCommitMutationKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::UndoCommit => "undoCommit",
+            Self::DropCommit => "dropCommit",
+        }
+    }
+
+    pub fn reset_mode(self) -> GitResetMode {
+        match self {
+            Self::UndoCommit => GitResetMode::Mixed,
+            Self::DropCommit => GitResetMode::Hard,
+        }
+    }
+}
+
 impl GitResetMode {
     pub fn argument(self) -> &'static str {
         match self {

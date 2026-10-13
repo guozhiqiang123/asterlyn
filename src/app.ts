@@ -70,6 +70,7 @@ import { commitFileContextPolicy } from "./features/git-history/commit-file-cont
 import { GitHistoryContextRuntime } from "./features/git-history/git-history-context-runtime.ts";
 import { GitHistoryMutationRuntime } from "./features/git-history/git-history-mutation-runtime.ts";
 import { GitHistoryPresentationRuntime } from "./features/git-history/git-history-presentation-runtime.ts";
+import { tagMutationCompletionIsProminent } from "./features/git-history/tag-mutation-feedback.ts";
 import { StashRuntime } from "./features/git-stash/stash-runtime.ts";
 import {
   isRemoteUpdateStrategyAvailable,
@@ -360,7 +361,7 @@ import type {
   CommitSummary,
   FileChange,
   GitOperationAction,
-  GitOperationKind, GitResetMode, GitResetPlan,
+  GitOperationKind, GitResetMode, GitResetPlan, HeadCommitMutationKind,
   HistoryPath,
   HistoryQuery,
   HistoryRef,
@@ -703,13 +704,13 @@ export class AsterlynApp {
       tag: { gateway: {
         execute: async (request) => { const copy = this.localization.catalog.history.tagMutation; const checkout = request.kind === "checkout";
           const succeeded = await this.runBranchMutation(copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
-            (root) => bridge.executeTagMutation(root, request, `tag-mutation-${++this.branchMutationSequence}`), checkout ? this.localization.catalog.common.actions.changeBranches : null, !checkout);
+            (root) => bridge.executeTagMutation(root, request, `tag-mutation-${++this.branchMutationSequence}`), checkout ? this.localization.catalog.common.actions.changeBranches : null, !checkout, tagMutationCompletionIsProminent(request.kind));
           if (succeeded) this.historyReadRuntime.details.applyTagMutation(request); return succeeded; },
         errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.tagMutation },
       reset: { gateway: {
-        prepare: (...args) => bridge.prepareGitReset(...args),
-        execute: (plan, mode) => this.executeReviewedGitReset(plan, mode),
+        prepare: (root, oid, intent) => intent === "reset" ? bridge.prepareGitReset(root, oid) : bridge.prepareHeadCommitMutation(root, oid, intent),
+        execute: (plan, mode, intent) => intent === "reset" ? this.executeReviewedGitReset(plan, mode) : this.executeReviewedHeadCommitMutation(plan, intent),
         errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.reset },
       fileRestore: {
@@ -996,6 +997,7 @@ export class AsterlynApp {
           },
           openReset: (target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot,
             oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }),
+          openHeadCommitMutation: (kind, target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot, oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }, kind),
         },
         range: {
           ...contextFeedback,
@@ -8409,6 +8411,11 @@ export class AsterlynApp {
     return this.runBranchMutation(copy.working, copy.reset, (root) => bridge.executeGitReset(root, plan, mode));
   }
 
+  private async executeReviewedHeadCommitMutation(plan: GitResetPlan, kind: HeadCommitMutationKind): Promise<boolean> {
+    const copy = this.localization.catalog.history.reset.headCommit[kind];
+    return this.runBranchMutation(copy.working, copy.completed, (root) => bridge.executeHeadCommitMutation(root, plan, kind));
+  }
+
   private async fetchConfiguredRemote(root: string, remote: string): Promise<boolean> {
     const copy = this.localization.catalog.remote;
     return this.runBranchMutation(copy.operationInProgress(copy.actionNames.fetch), copy.operationCompleted(copy.actionNames.fetch), () => bridge.fetchRemote(root, remote, `remote-management-${++this.branchMutationSequence}`));
@@ -8418,7 +8425,7 @@ export class AsterlynApp {
     loadingMessage: string,
     successMessage: string,
     mutation: (repositoryRoot: string) => Promise<RepositoryMutationOutcome>,
-    saveAction: string | null = this.localization.catalog.common.actions.changeBranches, incremental = false,
+    saveAction: string | null = this.localization.catalog.common.actions.changeBranches, incremental = false, prominentSuccess = false,
   ): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) return false;
@@ -8455,7 +8462,7 @@ export class AsterlynApp {
       if (generation === this.windowSession.generation) {
         this.setLoading(false, this.localization.catalog.common.ready);
         if (!incremental) this.bottomToolRuntime.render();
-        if (succeeded) this.setStatus(successMessage, "success");
+        if (succeeded) prominentSuccess ? this.showInformation(successMessage) : this.setStatus(successMessage, "success");
       }
     }
     if (pendingRoot && generation === this.windowSession.generation) {

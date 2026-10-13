@@ -12,6 +12,7 @@ mod file_restore;
 mod mutation_execution;
 mod replacement;
 mod search;
+mod search_index;
 pub use durable_file::{FileSnapshot, FileVersion};
 pub use entry_mutation::{
     WorkspaceCollisionPolicy, WorkspaceEntryIdentity, WorkspaceEntryInventory,
@@ -39,6 +40,7 @@ pub use search::{
     SearchOptions, SearchSkipReason, SearchSkippedFile, WorkspaceSearchMatch,
     WorkspaceSearchReport,
 };
+pub use search_index::{SEARCH_INDEX_SCHEMA_VERSION, SearchContentIndex};
 
 pub const DEFAULT_TEXT_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";

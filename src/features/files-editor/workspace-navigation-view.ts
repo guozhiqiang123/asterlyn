@@ -298,10 +298,15 @@ export function formatLocalizedWorkspaceSearchCoverage(report: WorkspaceTextSear
     : report.bytesRead < 1024 * 1024
       ? `${Math.max(1, Math.round(report.bytesRead / 1024))} KiB`
       : `${(report.bytesRead / (1024 * 1024)).toFixed(1)} MiB`;
+  const indexPruned = report.indexPrunedCandidates ?? 0;
+  const covered = report.filesSearched + indexPruned;
   const catalog = report.eligibleCandidates === report.catalogCandidates
-    ? copy.coverageFiles(report.filesSearched, report.catalogCandidates)
-    : copy.coverageEligible(report.filesSearched, report.eligibleCandidates, report.catalogCandidates);
-  const base = `${copy.coverageMatches(report.matches.length)} · ${catalog} · ${size}`;
+    ? copy.coverageFiles(covered, report.catalogCandidates)
+    : copy.coverageEligible(covered, report.eligibleCandidates, report.catalogCandidates);
+  const indexed = indexPruned > 0
+    ? ` · ${copy.coverageIndexed(indexPruned)}`
+    : "";
+  const base = `${copy.coverageMatches(report.matches.length)} · ${catalog}${indexed} · ${size}`;
   if (report.coverageReasons.length === 0) return `${base} · ${copy.coverageComplete}`;
   const reasons = report.coverageReasons.map((reason) =>
     reason === "skippedFiles" ? copy.coverageSkipped(report.skippedCount) : copy.coverageReasons[reason]

@@ -2,6 +2,7 @@ import { invokeDesktopCommand as invoke, isTauriRuntime, openDialog } from
   "../tauri/desktop-command-adapter";
 import { tauriDesktopBridge } from "../tauri/tauri-desktop-bridge";
 import { compileDemoGlobs } from "./demo-glob";
+import { demoHeadCommitMutationBridge } from "./demo-head-commit-mutation-bridge.ts";
 import {
   demoDecodeSearchEscapes,
   demoDocumentSearchPreview,
@@ -72,7 +73,6 @@ import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-brid
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
 import { createDemoWorktreeBridge } from "./demo-worktree-bridge.ts";
-
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
 const demoWorktreeBridge = createDemoWorktreeBridge(() => browserSnapshot, (next) => { browserSnapshot = next; });
@@ -147,7 +147,7 @@ interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
 }
 
 const demoBridge: DesktopBridge = {
-  ...demoAppUpdateBridge,
+  ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   isDemo: !isTauri,
   native: false,
@@ -2151,8 +2151,7 @@ function demoSearchReport(
   matches: WorkspaceTextSearchReport["matches"],
   catalogCandidates: number,
   eligibleCandidates: number,
-  filesSearched: number,
-  bytesRead: number,
+  filesSearched: number, bytesRead: number,
   coverageReasons: WorkspaceTextSearchReport["coverageReasons"],
 ): WorkspaceTextSearchReport {
   return {
@@ -2160,6 +2159,7 @@ function demoSearchReport(
     matches,
     catalogCandidates,
     eligibleCandidates,
+    indexPrunedCandidates: 0,
     filesSearched,
     bytesRead,
     skippedCount: 0,

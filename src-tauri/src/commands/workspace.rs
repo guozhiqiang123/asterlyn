@@ -1,6 +1,6 @@
 use super::super::*;
 use crate::adapters::recovery_paths::{
-    replacement_recovery_root, workspace_mutation_recovery_root,
+    replacement_recovery_root, workspace_mutation_recovery_root, workspace_search_cache_root,
 };
 use crate::adapters::system_file_manager::{
     RevealWorkspaceEntryResult, reveal_workspace_entry as reveal_in_system_file_manager,
@@ -247,6 +247,7 @@ pub(crate) async fn acknowledge_workspace_mutation_recovery(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn search_workspace_text(
     repository_root: String,
     request_id: String,
@@ -255,6 +256,8 @@ pub(crate) async fn search_workspace_text(
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
     searches: State<'_, WorkspaceSearchRegistry>,
+    search_indices: State<'_, WorkspaceSearchIndexRegistry>,
+    app: tauri::AppHandle,
 ) -> Result<WorkspaceTextSearchReport, WorkspaceError> {
     let window_label = window.label().to_string();
     let root = active_workspaces.resolve(&window_label, &repository_root)?;
@@ -263,14 +266,19 @@ pub(crate) async fn search_workspace_text(
     let task_request_id = request_id.clone();
     let task_cancellation = cancellation.clone();
     let task_options = options.unwrap_or_default();
+    let cache_root = workspace_search_cache_root(&app)?;
+    let search_indices = search_indices.inner().clone();
     let result = run_workspace_blocking("search workspace text", move || {
-        search_authorized_workspace(
-            &task_root,
-            &task_request_id,
-            &query,
-            &task_options,
-            &task_cancellation,
-        )
+        search_indices.with_index(&cache_root, &task_root, |content_index| {
+            search_authorized_workspace_with_index(
+                &task_root,
+                &task_request_id,
+                &query,
+                &task_options,
+                &task_cancellation,
+                content_index,
+            )
+        })
     })
     .await;
     searches.finish(&window_label, &repository_root, &request_id, &cancellation)?;

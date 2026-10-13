@@ -8,3 +8,6 @@
 .git-reset-option small { display: grid; gap: 3px; color: var(--text-muted); }
 .git-reset-option em { color: var(--danger-text); font-style: normal; }
 .git-reset-error { color: var(--danger-text); }
+.git-reset-head-detail { display: grid; gap: 8px; margin: 14px 0; color: var(--text-muted); }
+.git-reset-head-detail p { margin: 0; }
+.git-reset-head-detail em { color: var(--danger-text); font-style: normal; }

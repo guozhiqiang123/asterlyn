@@ -36,3 +36,15 @@ pub(crate) fn workspace_mutation_recovery_root(
             message: error.to_string(),
         })
 }
+
+pub(crate) fn workspace_search_cache_root(
+    app: &tauri::AppHandle,
+) -> Result<PathBuf, WorkspaceError> {
+    app.path()
+        .app_cache_dir()
+        .map(|path| path.join("workspace-search-index-v1"))
+        .map_err(|error| WorkspaceError::Io {
+            operation: "resolve workspace-search cache location".to_string(),
+            message: error.to_string(),
+        })
+}

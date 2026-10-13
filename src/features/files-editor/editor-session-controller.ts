@@ -271,7 +271,11 @@ export class EditorSessionController {
     file: ProjectFile,
     markdownMode: MarkdownEditorMode,
   ): Promise<OpenTextResult> {
-    return this.loadText(repositoryRoot, file, markdownMode, false, false);
+    // A Changes Diff may reuse a clean background tab that was loaded before Git noticed the
+    // worktree mutation. Refresh clean tabs from disk before they become the editable "after"
+    // side. beginTextReload deliberately rejects dirty or saving tabs, so unsaved buffers keep
+    // their ownership and are never overwritten by this synchronization read.
+    return this.loadText(repositoryRoot, file, markdownMode, true, false);
   }
 
   private async loadText(

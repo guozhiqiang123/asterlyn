@@ -70,6 +70,7 @@ function report(requestId) {
     matches: [],
     catalogCandidates: 0,
     eligibleCandidates: 0,
+    indexPrunedCandidates: 0,
     filesSearched: 0,
     bytesRead: 0,
     skippedCount: 0,

@@ -16,11 +16,6 @@
       "owner": "durable workspace mutation execution and recovery",
       "maximumLines": 2360,
       "disposition": "newly reviewed recovery boundary; extract manifest persistence before adding another mutation kind"
-    },
-    "crates/asterlyn-workspace/src/search.rs": {
-      "owner": "bounded workspace search and replacement planning",
-      "maximumLines": 1856,
-      "disposition": "cohesive bounded search capability; extract replacement planning before adding another query mode"
     }
   }
 }
