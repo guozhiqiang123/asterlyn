@@ -1,5 +1,11 @@
 import type { TasksController } from "./tasks-controller.ts";
 import type { TasksState, TasksWorkspaceIdentity } from "./tasks-model.ts";
+import {
+  buildTaskTree,
+  TASK_TREE_ROOT_KEY,
+  taskTreeBranchKeys,
+  taskTreeDefaultExpandedKeys,
+} from "./tasks-tree.ts";
 import { renderTasksView, TASKS_RENDER_BATCH_SIZE, type TasksCopy } from "./tasks-view.ts";
 
 export interface TasksRuntimeOptions {
@@ -19,6 +25,8 @@ export class TasksRuntime {
   private readonly controller: TasksController;
   private readonly options: TasksRuntimeOptions;
   private visibleLimit = TASKS_RENDER_BATCH_SIZE;
+  private expandedTreeNodes = new Set<string>([TASK_TREE_ROOT_KEY]);
+  private treeExpansionTouched = false;
 
   constructor(
     root: HTMLElement,
@@ -29,9 +37,12 @@ export class TasksRuntime {
     this.controller = controller;
     this.options = options;
     this.release = controller.subscribe((change) => {
-      if (change.reason === "workspace" || change.reason === "providers" || change.reason === "query") {
-        this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
+      if (change.reason === "workspace") {
+        this.expandedTreeNodes = new Set([TASK_TREE_ROOT_KEY]);
+        this.treeExpansionTouched = false;
       }
+      if (change.reason === "providers") this.reconcileExpandedTree(change.state);
+      if (change.reason === "workspace" || change.reason === "providers" || change.reason === "query") this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
       this.render();
     });
   }
@@ -52,7 +63,7 @@ export class TasksRuntime {
     if (!host) return;
     const focus = captureTasksFocus(host);
     const copy = this.options.copy?.();
-    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit);
+    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.expandedTreeNodes);
     syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
@@ -87,6 +98,8 @@ export class TasksRuntime {
       if (action === "refresh") void this.refresh();
       else if (action === "cancel") void this.cancel();
       else if (action === "show-more") this.showMore();
+      const treeToggle = target.closest<HTMLElement>("[data-task-tree-toggle]")?.dataset.taskTreeToggle;
+      if (treeToggle) this.toggleTreeNode(treeToggle);
       const row = target.closest<HTMLElement>("[data-task-key]");
       if (row) {
         const taskKey = row.dataset.taskKey ?? "";
@@ -96,8 +109,28 @@ export class TasksRuntime {
         else if (taskAction === "reveal-output") this.revealOutput(taskKey);
       }
     }, { signal });
+    host.addEventListener("focusin", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const taskKey = target.closest<HTMLElement>("[data-task-key]")?.dataset.taskKey;
+      if (taskKey) this.controller.selectKey(taskKey);
+    }, { signal });
     host.addEventListener("keydown", (event) => {
       const keyboard = event as KeyboardEvent;
+      const target = event.target;
+      if (target instanceof Element) {
+        const treeRow = target.closest<HTMLElement>("[data-task-tree-row]");
+        if (treeRow && this.handleTreeNavigation(host, treeRow, keyboard)) return;
+        if (target.matches("[role=tree]") && ["ArrowDown", "ArrowUp", "Home", "End"].includes(keyboard.key)) {
+          const rows = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-row]"));
+          const first = keyboard.key === "ArrowUp" || keyboard.key === "End" ? rows.at(-1) : rows[0];
+          if (first) {
+            keyboard.preventDefault();
+            this.focusTreeRow(first);
+            return;
+          }
+        }
+      }
       if (keyboard.key === "ArrowDown") {
         if (this.controller.state.selectedIndex + 1 >= this.visibleLimit && this.visibleLimit < this.controller.state.visibleEntries.length) {
           this.visibleLimit += TASKS_RENDER_BATCH_SIZE;
@@ -138,6 +171,67 @@ export class TasksRuntime {
     this.render();
   }
 
+  private toggleTreeNode(key: string): void {
+    if (this.controller.state.query.trim()) return;
+    this.treeExpansionTouched = true;
+    if (this.expandedTreeNodes.has(key)) this.expandedTreeNodes.delete(key);
+    else this.expandedTreeNodes.add(key);
+    this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
+    this.render();
+  }
+
+  private reconcileExpandedTree(state: TasksState): void {
+    const tree = buildTaskTree(state.entries, state.identity?.root ?? "", this.options.copy?.().title ?? "Tasks");
+    const available = taskTreeBranchKeys(tree);
+    this.expandedTreeNodes = this.treeExpansionTouched
+      ? new Set([...this.expandedTreeNodes].filter((key) => available.has(key)))
+      : taskTreeDefaultExpandedKeys(tree);
+    this.expandedTreeNodes.add(TASK_TREE_ROOT_KEY);
+  }
+
+  private handleTreeNavigation(host: HTMLElement, row: HTMLElement, event: KeyboardEvent): boolean {
+    const rows = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-row]"));
+    const index = rows.indexOf(row);
+    if (index < 0) return false;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+      const next = event.key === "Home" ? 0
+        : event.key === "End" ? rows.length - 1
+          : Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)));
+      event.preventDefault();
+      this.focusTreeRow(rows[next] ?? row);
+      return true;
+    }
+    const branchKey = row.dataset.taskTreeKey;
+    const branch = row.hasAttribute("aria-expanded") && branchKey;
+    if (event.key === "ArrowRight" && branch) {
+      event.preventDefault();
+      if (row.getAttribute("aria-expanded") === "false") this.toggleTreeNode(branchKey);
+      else this.focusTreeRow(rows[index + 1] ?? row);
+      return true;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      if (branch && row.getAttribute("aria-expanded") === "true" && !this.controller.state.query.trim()) {
+        this.toggleTreeNode(branchKey);
+      } else {
+        const parentKey = row.dataset.taskTreeParent;
+        const parent = parentKey ? rows.find((candidate) => candidate.dataset.taskTreeKey === parentKey) : undefined;
+        if (parent) this.focusTreeRow(parent);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  private focusTreeRow(row: HTMLElement): void {
+    const control = row.querySelector<HTMLElement>("[data-task-tree-toggle], [data-task-action=run]");
+    const target = control?.matches(":disabled") ? row : control ?? row;
+    target.focus({ preventScroll: true });
+    const taskKey = row.dataset.taskKey;
+    if (taskKey) this.controller.selectKey(taskKey);
+    row.scrollIntoView({ block: "nearest" });
+  }
+
   private revealOutput(taskKey: string): void {
     const identity = this.controller.state.identity;
     if (identity) this.options.revealOutput?.(taskKey, identity);
@@ -159,6 +253,7 @@ export type TasksFocusSnapshot =
   | { readonly kind: "query"; readonly start: number | null; readonly end: number | null }
   | { readonly kind: "list" }
   | { readonly kind: "task"; readonly key: string; readonly action: string }
+  | { readonly kind: "tree-node"; readonly key: string }
   | null;
 
 export function captureTasksFocus(host: HTMLElement): TasksFocusSnapshot {
@@ -168,9 +263,11 @@ export function captureTasksFocus(host: HTMLElement): TasksFocusSnapshot {
     const input = active as HTMLInputElement;
     return { kind: "query", start: input.selectionStart, end: input.selectionEnd };
   }
-  if (active.matches("[role=option], [role=listbox]")) return { kind: "list" };
+  if (active.matches("[role=tree], [role=listbox]")) return { kind: "list" };
   const row = active.closest<HTMLElement>("[data-task-key]");
   if (row) return { kind: "task", key: row.dataset.taskKey ?? "", action: active.dataset.taskAction ?? "run" };
+  const treeNode = active.closest<HTMLElement>("[data-task-tree-key]");
+  if (treeNode) return { kind: "tree-node", key: treeNode.dataset.taskTreeKey ?? "" };
   return null;
 }
 
@@ -189,8 +286,14 @@ export function restoreTasksFocus(host: HTMLElement, snapshot: TasksFocusSnapsho
     (row?.querySelector<HTMLElement>(`[data-task-action="${snapshot.action}"]`) ?? row?.querySelector<HTMLElement>("[data-task-action]"))?.focus({ preventScroll: true });
     return;
   }
-  const selected = host.querySelector<HTMLElement>('[role="option"][aria-selected="true"]') ??
-    host.querySelector<HTMLElement>("[role=listbox]");
+  if (snapshot.kind === "tree-node") {
+    const nodes = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-key]"));
+    const node = nodes.find((candidate) => candidate.dataset.taskTreeKey === snapshot.key);
+    (node?.querySelector<HTMLElement>("[data-task-tree-toggle], [data-task-action=run]") ?? node)?.focus({ preventScroll: true });
+    return;
+  }
+  const selected = host.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]') ??
+    host.querySelector<HTMLElement>("[role=tree]");
   selected?.focus({ preventScroll: true });
   if (selected && "scrollIntoView" in selected) selected.scrollIntoView({ block: "nearest" });
 }

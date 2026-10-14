@@ -56,3 +56,38 @@ test("Tasks runtime focus helpers preserve query selection range across rerender
     globalThis.HTMLInputElement = previous.HTMLInputElement;
   }
 });
+
+test("Tasks runtime focus helpers preserve an expanded tree branch across rerender", () => {
+  const previous = { HTMLElement: globalThis.HTMLElement, HTMLInputElement: globalThis.HTMLInputElement };
+  class FakeElement {
+    constructor(key = null) { this.key = key; this.ownerDocument = { activeElement: null }; this.focused = false; }
+    contains(value) { return value === this.ownerDocument.activeElement; }
+    matches() { return false; }
+    closest(selector) {
+      if (selector === "[data-task-key]") return null;
+      return selector === "[data-task-tree-key]" && this.key ? this : null;
+    }
+    querySelector() { return null; }
+    focus() { this.focused = true; }
+    get dataset() { return this.key ? { taskTreeKey: this.key } : {}; }
+  }
+  globalThis.HTMLElement = FakeElement;
+  globalThis.HTMLInputElement = class extends FakeElement {};
+  try {
+    const oldBranch = new FakeElement("module-app");
+    const oldHost = new FakeElement();
+    oldHost.ownerDocument.activeElement = oldBranch;
+    const snapshot = captureTasksFocus(oldHost);
+    const button = new FakeElement();
+    const newBranch = new FakeElement("module-app");
+    newBranch.querySelector = () => button;
+    const newHost = new FakeElement();
+    newHost.querySelectorAll = () => [newBranch];
+    restoreTasksFocus(newHost, snapshot);
+    assert.deepEqual(snapshot, { kind: "tree-node", key: "module-app" });
+    assert.equal(button.focused, true);
+  } finally {
+    globalThis.HTMLElement = previous.HTMLElement;
+    globalThis.HTMLInputElement = previous.HTMLInputElement;
+  }
+});

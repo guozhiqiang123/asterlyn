@@ -1,5 +1,14 @@
-import type { AndroidTaskQuickActionKind, TaskProviderUnavailableReason, TaskRunState } from "../../application/tasks/task-types.ts";
+import type { AndroidTaskQuickActionKind, TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
+import { icon } from "../../icons.ts";
 import type { TasksState } from "./tasks-model.ts";
+import {
+  buildTaskTree,
+  taskTreeDefaultExpandedKeys,
+  taskTreeRows,
+  type TaskTreeBranch,
+  type TaskTreeRow,
+  type TaskTreeTask,
+} from "./tasks-tree.ts";
 
 export interface TasksCopy {
   readonly title: string;
@@ -15,6 +24,8 @@ export interface TasksCopy {
   readonly providerLoading: (provider: string) => string;
   readonly showing: (count: number, total: number) => string;
   readonly showMore: string;
+  readonly expand: (label: string) => string;
+  readonly collapse: (label: string) => string;
   readonly busy: string;
   readonly noResults: string;
   readonly queryPlaceholder: string;
@@ -45,8 +56,10 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   retryDiscovery: "Retry discovery",
   discovered: (count: number) => `${count} task${count === 1 ? "" : "s"} discovered`,
   providerLoading: (provider: string) => `Discovering tasks from ${provider}…`,
-  showing: (count: number, total: number) => `Showing ${count} of ${total} matching tasks`,
-  showMore: "Show more",
+  showing: (count: number, total: number) => `Showing ${count} of ${total} expanded tasks`,
+  showMore: "Load more tasks",
+  expand: (label: string) => `Expand ${label}`,
+  collapse: (label: string) => `Collapse ${label}`,
   busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
@@ -67,19 +80,47 @@ export function renderTasksView(
   state: TasksState,
   copy: TasksCopy = DEFAULT_TASKS_COPY,
   visibleLimit = TASKS_RENDER_BATCH_SIZE,
+  expandedTreeNodes?: ReadonlySet<string>,
 ): string {
   const status = renderStatus(state, copy);
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
-  const renderedEntries = state.visibleEntries.slice(0, Math.max(1, visibleLimit));
-  const groups = groupEntries(renderedEntries);
   const quickActions = renderAndroidQuickActions(state, copy);
-  const list = renderedEntries.length > 0
-    ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, state.status === "loading", entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
+  const tree = buildTaskTree(state.visibleEntries, state.identity?.root ?? "", copy.title);
+  const expanded = expandedTreeNodes ?? taskTreeDefaultExpandedKeys(tree);
+  const forceExpanded = state.query.trim().length > 0;
+  const projection = taskTreeRows(tree, expanded, visibleLimit, forceExpanded);
+  const list = state.visibleEntries.length > 0
+    ? `<div class="tasks-list tasks-tree" role="tree" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${projection.rows.map((row) => renderTaskTreeRow(row, expanded, forceExpanded, state, copy)).join("")}</div>`
     : "";
-  const more = renderedEntries.length < state.visibleEntries.length
-    ? `<footer class="tasks-list-more" role="status"><span>${escapeHtml(copy.showing(renderedEntries.length, state.visibleEntries.length))}</span><button type="button" data-tasks-action="show-more">${escapeHtml(copy.showMore)}</button></footer>`
+  const more = projection.truncated
+    ? `<footer class="tasks-list-more" role="status"><span>${escapeHtml(copy.showing(projection.renderedTasks, projection.visibleTasks))}</span><button type="button" data-tasks-action="show-more">${escapeHtml(copy.showMore)}</button></footer>`
     : "";
   return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${quickActions}${query}${status}${list}${more}</section>`;
+}
+
+function renderTaskTreeRow(
+  row: TaskTreeRow,
+  expandedTreeNodes: ReadonlySet<string>,
+  forceExpanded: boolean,
+  state: TasksState,
+  copy: TasksCopy,
+): string {
+  if (row.node.type === "task") return taskRow(row as TaskTreeRow & { readonly node: TaskTreeTask }, state, copy);
+  return taskBranchRow(row as TaskTreeRow & { readonly node: TaskTreeBranch }, expandedTreeNodes, forceExpanded, copy);
+}
+
+function taskBranchRow(
+  row: TaskTreeRow & { readonly node: TaskTreeBranch },
+  expandedTreeNodes: ReadonlySet<string>,
+  forceExpanded: boolean,
+  copy: TasksCopy,
+): string {
+  const { node } = row;
+  const expanded = forceExpanded || expandedTreeNodes.has(node.key);
+  const glyph = node.kind === "tasks" ? "list" : "folder";
+  const detail = node.detail ? `<small>${escapeHtml(node.detail)}</small>` : "";
+  const parent = node.parentKey ? ` data-task-tree-parent="${escapeAttribute(node.parentKey)}"` : "";
+  return `<div class="tasks-tree-row tasks-tree-branch ${node.kind}" role="treeitem" tabindex="-1" data-task-tree-row data-task-tree-key="${escapeAttribute(node.key)}"${parent} style="--tree-depth:${row.depth}" aria-expanded="${expanded}" aria-selected="false" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}"><button type="button" data-task-tree-toggle="${escapeAttribute(node.key)}" aria-label="${escapeAttribute(expanded ? copy.collapse(node.label) : copy.expand(node.label))}" ${forceExpanded ? "disabled" : ""}><span class="tasks-tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 11)}</span>${icon(glyph, 14)}<span class="tasks-tree-label"><strong>${escapeHtml(node.label)}</strong>${detail}</span></button></div>`;
 }
 
 function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {
@@ -134,17 +175,14 @@ function renderError(state: TasksState, copy: TasksCopy): string {
 }
 
 function taskRow(
-  key: string,
-  providerLabel: string,
-  label: string,
-  description: string | undefined,
-  runnable: boolean,
-  disabledReason: string | undefined,
-  runState: TaskRunState | undefined,
-  discoveryLoading: boolean,
-  selected: boolean,
+  row: TaskTreeRow & { readonly node: TaskTreeTask },
+  state: TasksState,
   copy: TasksCopy,
 ): string {
+  const { entry, label } = row.node;
+  const { runnable, disabledReason, runState, description } = entry.task;
+  const discoveryLoading = state.status === "loading";
+  const selected = entry.key === state.visibleEntries[state.selectedIndex]?.key;
   const active = runState === "queued" || runState === "running";
   const terminal = runState === "succeeded" || runState === "failed" || runState === "cancelled" || runState === "crashed";
   const title = disabledReason ?? (runnable ? copy.run : copy.notRunnable);
@@ -154,13 +192,8 @@ function taskRow(
   const actions = terminal
     ? `<span class="tasks-row-actions"><button type="button" data-task-action="retry" title="${escapeAttribute(copy.retry)}" ${discoveryLoading ? "disabled" : ""}>${escapeHtml(copy.retry)}</button><button type="button" data-task-action="reveal-output" title="${escapeAttribute(copy.revealOutput)}">${escapeHtml(copy.revealOutput)}</button></span>`
     : "";
-  return `<div role="option" class="tasks-row" data-task-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(title)}" ${runnable && !active && !discoveryLoading ? "" : "disabled"}><strong>${escapeHtml(label)}</strong><small class="tasks-provider">${escapeHtml(providerLabel)}</small>${description ? `<small>${escapeHtml(description)}</small>` : ""}${status}</button>${actions}</div>`;
-}
-
-function groupEntries(state: TasksState["visibleEntries"]): readonly [string, TasksState["visibleEntries"]][] {
-  const groups = new Map<string, TasksState["visibleEntries"]>();
-  for (const entry of state) groups.set(entry.task.group, [...(groups.get(entry.task.group) ?? []), entry]);
-  return [...groups.entries()];
+  const tooltip = [entry.task.id, description, title].filter(Boolean).join(" · ");
+  return `<div role="treeitem" tabindex="-1" class="tasks-row" data-task-tree-row data-task-tree-key="${escapeAttribute(row.node.key)}" data-task-tree-parent="${escapeAttribute(row.node.parentKey)}" data-task-key="${escapeAttribute(entry.key)}" style="--tree-depth:${row.depth}" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(tooltip)}" ${runnable && !active && !discoveryLoading ? "" : "disabled"}><span class="tasks-tree-leaf-spacer"></span>${icon("file", 13)}<span class="tasks-row-copy"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(entry.task.id)}</small>${status}</span></button>${actions}</div>`;
 }
 
 function message(text: string): string { return `<p class="tasks-message" role="status">${escapeHtml(text)}</p>`; }

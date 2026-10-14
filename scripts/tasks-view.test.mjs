@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildTaskTree, taskTreeBranchKeys } from "../src/features/tasks/tasks-tree.ts";
 import { renderTasksView } from "../src/features/tasks/tasks-view.ts";
 
 const copy = {
   title: "Tasks", refresh: "Refresh", empty: "Empty", unavailable: "Unavailable", loading: "Loading", cancelDiscovery: "Cancel discovery", retryDiscovery: "Retry discovery", discovered: (count) => `${count} discovered`, providerLoading: (provider) => `Discovering ${provider}`, showing: (count, total) => `Showing ${count} of ${total}`, showMore: "Show more",
+  expand: (label) => `Expand ${label}`, collapse: (label) => `Collapse ${label}`,
   unavailableReasons: {
     "discovery-not-supported": "Not supported",
     "evidence-incomplete": "Incomplete evidence",
@@ -12,6 +14,10 @@ const copy = {
   },
   error: "Error", noResults: "No results", queryPlaceholder: "Filter", run: "Run", retry: "Retry", revealOutput: "Reveal", notRunnable: "Disabled", androidQuickActions: "Quick actions", quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" }, quickActionModule: "Module", quickActionVariant: "Variant", status: { failed: "Failed" },
 };
+
+function expanded(entries, root = "/project") {
+  return taskTreeBranchKeys(buildTaskTree(entries, root, copy.title));
+}
 
 test("Tasks view renders accessible grouped declarative rows and escapes content", () => {
   const html = renderTasksView({
@@ -23,11 +29,14 @@ test("Tasks view renders accessible grouped declarative rows and escapes content
       id: "1", label: "build <debug>", group: "Build & Test", description: "Run \"debug\"", runnable: true,
     } }],
     query: "", selectedIndex: 0, error: null, unavailableReason: null,
-  }, copy);
+  }, copy, 250, expanded([{ key: "p:1", providerId: "p", providerLabel: "P", task: {
+    id: "1", label: "build <debug>", group: "Build & Test", description: "Run \"debug\"", runnable: true,
+  } }]));
   assert.match(html, /role="region"/);
-  assert.match(html, /role="listbox"/);
-  assert.match(html, /role="option"/);
-  assert.match(html, /build &lt;debug&gt;/);
+  assert.match(html, /role="tree"/);
+  assert.match(html, /role="treeitem"/);
+  assert.match(html, /aria-expanded="true"/);
+  assert.match(html, /data-task-key="p:1"/);
   assert.match(html, /Run &quot;debug&quot;/);
   assert.match(html, /aria-selected="true"/);
 });
@@ -40,7 +49,7 @@ test("Tasks view renders all non-ready states without task rows", () => {
       unavailableReason: status === "unavailable" ? "evidence-incomplete" : null,
     }, copy);
     assert.match(html, status === "error" ? /role="alert"/ : /role="status"/);
-    assert.doesNotMatch(html, /role="option"/);
+    assert.doesNotMatch(html, /class="tasks-row"/);
   }
 });
 
@@ -76,17 +85,17 @@ test("failed discovery renders the error detail and retry action", () => {
 
 test("ready discovery reports the task count while retaining the filter and list", () => {
   const entry = { key: "p:one", providerId: "p", providerLabel: "P", task: { id: "one", label: "one", group: "Build", runnable: true } };
-  const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [entry.task] } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy);
+  const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [entry.task] } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy, 250, expanded([entry]));
   assert.match(html, /1 discovered/);
   assert.match(html, /data-tasks-query/);
-  assert.match(html, /role="option"/);
+  assert.match(html, /data-task-key="p:one"/);
   assert.doesNotMatch(html, /class="tasks-header"/);
 });
 
 test("large task sets render in bounded batches while retaining the full match count", () => {
   const entries = Array.from({ length: 600 }, (_, index) => ({ key: `p:${index}`, providerId: "p", providerLabel: "P", task: { id: `${index}`, label: `task${index}`, group: "Build", runnable: true } }));
-  const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [], entries, visibleEntries: entries, query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy);
-  assert.equal((html.match(/role="option"/gu) ?? []).length, 250);
+  const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [], entries, visibleEntries: entries, query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy, 250, expanded(entries));
+  assert.equal((html.match(/class="tasks-row"/gu) ?? []).length, 250);
   assert.match(html, /Showing 250 of 600/);
   assert.match(html, /data-tasks-action="show-more"/);
 });
@@ -99,7 +108,7 @@ test("terminal tasks expose localized status, retry, and output actions", () => 
   const html = renderTasksView({
     identity: { root: "/project", generation: 1 }, status: "ready", providers: [],
     entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null,
-  }, terminalCopy);
+  }, terminalCopy, 250, expanded([entry]));
   assert.match(html, /role="status">Failed/);
   assert.match(html, /data-task-action="retry"/);
   assert.match(html, /data-task-action="reveal-output"/);

@@ -98,9 +98,74 @@
 .tasks-list {
   min-height: 0;
   overflow: auto;
-  padding: 6px 0 10px;
+  padding: 4px 0 10px;
   outline: none;
 }
+
+.tasks-tree-row {
+  --tasks-tree-indent: calc(8px + var(--tree-depth, 0) * 16px);
+  min-width: 0;
+}
+
+.tasks-tree-branch > button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  box-sizing: border-box;
+  grid-template-columns: 14px 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px 3px var(--tasks-tree-indent);
+  border: 0;
+  color: var(--text-soft);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tasks-tree-branch > button:hover,
+.tasks-tree-branch > button:focus-visible {
+  color: var(--text);
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tasks-tree-branch > button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.tasks-tree-branch.workspace > button { min-height: 32px; }
+.tasks-tree-branch.workspace .tasks-tree-label strong { font-size: 12px; font-weight: 650; }
+.tasks-tree-branch.group .tasks-tree-label strong { font-weight: 500; }
+
+.tasks-tree-chevron {
+  display: inline-grid;
+  place-items: center;
+  transition: transform 100ms ease;
+}
+
+.tasks-tree-chevron.expanded { transform: rotate(90deg); }
+
+.tasks-tree-label {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tasks-tree-label strong,
+.tasks-tree-label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tasks-tree-label strong { font-size: 11px; font-weight: 580; }
+.tasks-tree-label small { color: var(--text-faint); font-size: 9px; }
 
 .tasks-list-more {
   display: flex;
@@ -239,22 +304,14 @@
   margin-top: 16px;
 }
 
-.tasks-group h3 {
-  margin: 8px 10px 4px;
-  color: var(--text-faint);
-  font-size: 10px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
 .tasks-row {
   display: grid;
   width: 100%;
-  min-height: 38px;
+  min-height: 32px;
   box-sizing: border-box;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px;
-  padding: 0 8px 0 10px;
+  padding: 0 8px 0 var(--tasks-tree-indent);
   border: 0;
   border-left: 2px solid transparent;
   color: var(--text-soft);
@@ -277,8 +334,10 @@
 .tasks-row-primary {
   display: grid;
   min-width: 0;
-  gap: 2px;
-  padding: 6px 2px;
+  grid-template-columns: 14px 15px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px;
   border: 0;
   color: inherit;
   background: transparent;
@@ -291,8 +350,16 @@
   opacity: 0.55;
 }
 
-.tasks-row-primary strong,
-.tasks-row-primary small {
+.tasks-tree-leaf-spacer { width: 12px; }
+
+.tasks-row-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.tasks-row-copy strong,
+.tasks-row-copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

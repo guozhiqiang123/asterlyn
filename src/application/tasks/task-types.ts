@@ -26,6 +26,7 @@ export interface TaskDescriptor {
   readonly id: string;
   readonly label: string;
   readonly group: string;
+  readonly projectPath?: string;
   readonly description?: string;
   readonly runnable: boolean;
   readonly disabledReason?: string;

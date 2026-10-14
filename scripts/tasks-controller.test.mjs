@@ -113,6 +113,19 @@ test("controller preserves only bounded known task run states", () => {
   assert.equal(controller.state.entries[1].task.runState, undefined);
 });
 
+test("controller preserves valid Gradle project paths and filters by module", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: ready([
+    task(":app:assembleDebug", ":app:assembleDebug", "Build tasks", { projectPath: ":app" }),
+    task(":bad:assembleDebug", ":bad:assembleDebug", "Build tasks", { projectPath: "../bad" }),
+  ]) }]);
+  assert.equal(controller.state.entries[0].task.projectPath, ":app");
+  assert.equal(controller.state.entries[1].task.projectPath, undefined);
+  controller.setQuery(":app");
+  assert.deepEqual(controller.state.visibleEntries.map((entry) => entry.task.id), [":app:assembleDebug"]);
+});
+
 test("controller retains a FilesRecovery-scale provider catalog for full-text filtering", () => {
   const controller = new TasksController();
   controller.activate(identity);

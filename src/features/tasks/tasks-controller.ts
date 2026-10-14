@@ -199,16 +199,23 @@ function normalizeTask(candidate: TaskDescriptor): TaskDescriptor | null {
   const label = boundedString(candidate.label);
   const group = boundedString(candidate.group);
   if (!id || !label || !group || typeof candidate.runnable !== "boolean") return null;
+  const projectPath = boundedProjectPath(candidate.projectPath);
   return {
     id,
     label,
     group,
+    ...(projectPath ? { projectPath } : {}),
     runnable: candidate.runnable,
     description: boundedString(candidate.description),
     disabledReason: boundedString(candidate.disabledReason),
     runState: isTaskRunState(candidate.runState) ? candidate.runState : undefined,
     androidQuickAction: normalizeAndroidQuickAction(candidate.androidQuickAction, id),
   };
+}
+
+function boundedProjectPath(value: unknown): string | undefined {
+  const path = boundedString(value);
+  return path && /^:(?:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*)?$/u.test(path) ? path : undefined;
 }
 
 function normalizeAndroidQuickAction(value: TaskDescriptor["androidQuickAction"], taskId: string): TaskDescriptor["androidQuickAction"] {
@@ -263,7 +270,7 @@ function firstUnavailableReason(providers: readonly TaskProviderProjection[]): s
 function filterEntries(entries: readonly TasksEntry[], query: string): TasksEntry[] {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return [...entries];
-  return entries.filter((entry) => [entry.task.label, entry.task.group, entry.task.description ?? "", entry.providerLabel]
+  return entries.filter((entry) => [entry.task.id, entry.task.label, entry.task.group, entry.task.projectPath ?? "", entry.task.description ?? "", entry.providerLabel]
     .some((value) => value.toLocaleLowerCase().includes(needle)));
 }
 
