@@ -135,16 +135,59 @@ Commit boundary: general Gradle task execution.
 
 ### PS6 — Android build/install/uninstall shortcuts
 
-1. Derive Android quick actions only from current discovered task identities, such as available
-   `assemble*`, `bundle*`, `install*`, and `uninstall*` tasks.
-2. Present module/variant choices when task names are ambiguous; never guess a hidden default.
-3. Run install/uninstall through the same reviewed task service and output lifecycle.
-4. Add bounded artifact discovery and Reveal actions after successful APK/AAB builds.
-5. Defer direct ADB device selection and raw APK/AAB installation until a separate typed device and
-   package-install capability is approved.
+#### PS6.1 — derive exact quick actions
+
+1. Derive Android quick actions only from the current ready, runnable discovery snapshot and only
+   for exact `assemble*`, `bundle*`, `install*`, and `uninstall*` task identities.
+2. Preserve the discovered Gradle task ID as the execution identity. A quick action is presentation
+   metadata, not an alias, command string, or second execution API.
+3. Bound the projection to 512 actions and 32 candidates per same-kind/same-variant selection,
+   deduplicate exact identities, and keep deterministic ordering.
+
+#### PS6.2 — explicit module and variant choices
+
+1. Render a host-owned Android shortcuts section ahead of the complete task list.
+2. Show module, variant, and action kind for every candidate. When two modules expose the same
+   action and variant, present every candidate and never select a hidden default.
+3. Route mouse and keyboard activation through the existing task key and the PS5 reviewed execution
+   lifecycle, including trust, confirmation, busy handling, cancellation, output, retry, and recent
+   metadata.
+
+#### PS6.3 — bounded build-artifact discovery
+
+1. Only successful `assemble*` and `bundle*` plans may declare artifact search hints. Hints are
+   workspace-relative directories ending in `build/outputs/apk` or `build/outputs/bundle`; plugins
+   receive no filesystem bridge and cannot return discovered files themselves.
+2. The native host resolves the active window/workspace identity again, rejects absolute paths,
+   drive prefixes, empty, current, parent, NUL, and symlink path components, and treats missing
+   output directories as an empty result.
+3. Accept at most 8 hints of at most 4,096 bytes. Scan at most depth 8 and 512 directories, return
+   at most 64 `.apk`/`.aab` regular files, skip symlinks and files over 1 GiB, and cap accepted file
+   sizes at 2 GiB in total. Crossing a traversal/result/total-size bound sets `truncated`.
+4. Validate the versioned native response again in the renderer, require the exact current
+   root/generation and completed task identity, and discard stale asynchronous results after a
+   workspace switch, retry, replacement run, or dismissal.
+
+#### PS6.4 — reveal, lifecycle, and deferred authority
+
+1. Show non-persistent artifact name, type, byte size, truncation state, and a Reveal action in the
+   successful task output dialog. Reuse the existing workspace Reveal capability so the native host
+   revalidates the current active root and path at the moment of use.
+2. Artifact discovery runs after terminal success without extending plugin filesystem authority and
+   without blocking task-provider state completion. Discovery failure is reported as bounded host
+   diagnostics and never changes a successful Gradle task into a failed task.
+3. Keep artifact paths out of recent-task profile storage and clear retained artifact state on
+   workspace change or replacement execution.
+4. Defer direct ADB device selection and raw APK/AAB installation until a separate typed device and
+   package-install capability is approved. Gradle `install*`/`uninstall*` remains the only install
+   authority in this stage.
 
 Exit gate: available Gradle install/uninstall tasks are one-click discoverable but still explicit,
-cancellable, and traceable to the exact wrapper/task identity.
+cancellable, and traceable to the exact wrapper/task identity. Multi-module ambiguity fixtures must
+prove no implicit selection; artifact tests must cover invalid hints, missing directories, symlinks,
+stable ordering, response validation, all bounds, stale workspace/run rejection, and safe Reveal.
+Focused and complete frontend/native suites, production type checking/build, performance and retained
+memory measurements, accessibility/focus checks, and a packaged desktop smoke test are required.
 
 Commit boundary: Android-focused task affordances.
 
