@@ -297,3 +297,44 @@ Each implemented phase records:
   not compiled or exercised on this macOS-only host; Windows CI/native acceptance remains required.
 - Known limitation at this boundary: execution infrastructure is intentionally not wired into the
   Tasks tool until PS4 supplies a current, activation-qualified Gradle discovery snapshot.
+
+### PS4 — accepted locally on 2026-10-14
+
+- Added bounded Android/Gradle discovery that selects only the platform-matching repository wrapper
+  (`gradlew` or `gradlew.bat`) and returns a typed request with fixed `tasks --all`, plain-console,
+  no-daemon, and no-scan arguments. Missing, mismatched, truncated, or unbounded wrapper evidence
+  fails closed; there is still no global Gradle fallback or shell command construction.
+- Extended provider contributions with a declarative refresh plan. The plugin can describe a
+  request and consume a bounded result, but only the host can prepare the review, read/change
+  workspace trust, obtain confirmation, start/cancel the task, and deliver terminal output.
+  Provider disposal, evidence replacement, project replacement, and duplicate refreshes cancel or
+  discard old work by exact workspace generation and contribution identity.
+- Refresh Gradle Tasks is available from both the Tasks tool and command palette. The command title
+  and execution review follow the active English/Chinese locale. Review focus is trapped and
+  restored to the current Tasks surface; rerenders cannot replace the dialog with a stale task
+  list, and the dialog never falls back to owning the application root before the shell exists.
+- The parser accepts standard bounded Gradle task sections, CRLF, ANSI output, root and multi-module
+  task paths, descriptions, and deterministic duplicates. It retains each task's project path,
+  sorts deterministically, and reports explicit errors for failure, malformed/no-task output,
+  overlong lines, more than 512 tasks, output over 2 MiB, or renderer/native truncation. PS4 task
+  rows remain non-runnable until PS5 binds execution to the current discovery identity.
+- PS4-focused plugin, discovery, task-controller, lifecycle, and view tests: 44 passed. The complete
+  deterministic frontend suite: 1,039 passed. Frontend type checking, production build, and
+  source-diff checks passed.
+- On a 14,491-byte maximum-task fixture, 200 warmed parser runs measured 0.358 ms p50, 0.525 ms p95,
+  and 0.841 ms maximum on this host; forced-GC retained-heap delta was -5,696 bytes, so no retained
+  growth was observed in that isolated run. There is no new timer, watcher, or automatic Gradle
+  process while idle: discovery begins only after explicit Refresh and confirmation.
+- The main production chunk is 464.00 kB uncompressed, still below the 500 kB gate. The lazy bundled
+  plugin chunk is 6.38 kB and remains behind Android evidence; the task-related lazy chunk remains
+  22.36 kB. Plain unmatched projects do not load or invoke Gradle discovery.
+- The final macOS arm64 application rendered its shell within the six-second native smoke gate and
+  passed strict deep signature verification with an ad-hoc hardened-runtime signature. The verified
+  archive is `target/release/bundle/macos/Asterlyn-0.1.8-local-20261014-ps4-final.app.zip`, 9,652,618
+  bytes, SHA-256 `44239cad44592463d5e0eeb9e704efd7810b4239d39fc49af02e9e87908d1558`;
+  extraction preserved its valid signature and arm64 executable.
+- Known limitations: discovery parsing is fixture-backed rather than a compatibility promise for
+  every Gradle version or third-party formatter; unsupported output remains an explicit error.
+  Windows wrapper selection is covered, but Windows process behavior still needs native CI/manual
+  acceptance. PS5 owns runnable task identities, busy handling, retry, live output, and post-task
+  workspace reconciliation.

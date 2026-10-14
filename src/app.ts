@@ -625,7 +625,7 @@ export class AsterlynApp {
       if (this.filesEditorRuntime.commands.state.mode === "commands") this.renderCommandSurface(true);
       if (this.shellState.page === "settings" && this.settingsState.section === "keybindings") this.renderSettingsPage();
     });
-    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, reportError: (error) => this.showError(error) });
+    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),

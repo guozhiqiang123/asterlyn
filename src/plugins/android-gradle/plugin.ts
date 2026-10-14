@@ -3,20 +3,23 @@ import type {
   PluginActivationContext,
   PluginMatchContext,
   PluginWorkspaceCatalogEvidence,
+  PluginTaskExecutionResult,
+  PluginTaskRefreshPlan,
 } from "../../application/plugins/index.ts";
 import {
   ANDROID_GRADLE_DETECTOR_LIMITS,
   detectAndroidGradleEvidence,
   type AndroidGradleEvidenceSnapshot,
 } from "./detector.ts";
+import { buildGradleWrapperRequest, parseGradleTasksOutput, type GradleTaskDiscoveryResult } from "./discovery.ts";
 
 export const ANDROID_GRADLE_PLUGIN_ID = "dev.asterlyn.android-gradle";
 
 /**
  * First-party Android/Gradle integration descriptor.
  *
- * Activation starts no process. Until the host owns a narrow Gradle discovery and
- * execution policy, the provider exposes only an explicit unavailable status.
+ * Activation starts no process. Explicit refresh returns a typed discovery plan;
+ * only the host can review, authorize, execute, cancel, and return its bounded result.
  */
 export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
   id: ANDROID_GRADLE_PLUGIN_ID,
@@ -25,17 +28,47 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
   activate: (context: PluginActivationContext) => {
     const detection = detectAndroidGradlePluginEvidence(context);
     if (!detection?.android) return;
+    let snapshot: GradleTaskDiscoveryResult = {
+      status: "unavailable",
+      tasks: [],
+      unavailableReason: detection.catalogTruncated ? "evidence-incomplete" : "discovery-not-supported",
+    };
     context.contribute({
       kind: "provider",
       id: "gradle-tasks",
       label: "Gradle",
-      snapshot: () => ({
-        status: "unavailable",
-        tasks: [],
-        unavailableReason: detection.catalogTruncated
-          ? "evidence-incomplete"
-          : "discovery-not-supported",
-      }),
+      snapshot: () => snapshot,
+      refresh: () => {
+        const prepared = buildGradleWrapperRequest(detection);
+        if (!prepared.supported) {
+          snapshot = { status: "unavailable", tasks: [], unavailableReason: prepared.reason === "wrapper-missing" ? "discovery-not-supported" : "evidence-incomplete" };
+          return null;
+        }
+        const plan: PluginTaskRefreshPlan = {
+          request: prepared.request,
+          apply: (result: PluginTaskExecutionResult) => {
+            if (result.status !== "succeeded") {
+              snapshot = { status: "error", tasks: [], error: result.error ?? (result.status === "cancelled" ? "Gradle task discovery was cancelled." : `Gradle task discovery ${result.status}.`) };
+              return;
+            }
+            if (result.truncated) {
+              snapshot = { status: "error", tasks: [], error: "Gradle task discovery output was truncated." };
+              return;
+            }
+            const bytes: number[] = [];
+            for (const output of result.outputs) {
+              if (output.stream !== "stdout") continue;
+              try { const binary = atob(output.dataBase64); for (let index = 0; index < binary.length; index += 1) bytes.push(binary.charCodeAt(index)); } catch { snapshot = { status: "error", tasks: [], error: "Gradle task discovery output was invalid." }; return; }
+            }
+            snapshot = parseGradleTasksOutput(new Uint8Array(bytes));
+          },
+        };
+        snapshot = { status: "loading", tasks: [] };
+        return plan;
+      },
+    });
+    context.contribute({
+      kind: "command", id: "refresh-gradle-tasks", providerId: "gradle-tasks", title: () => "Gradle", detail: () => "Gradle", execute: () => undefined,
     });
   },
 });

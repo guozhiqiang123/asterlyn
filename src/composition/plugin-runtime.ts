@@ -7,6 +7,7 @@ import {
 } from "../application/plugins/index.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
+import type { PluginTaskExecutionResult, PluginTaskRefreshPlan } from "../application/plugins/plugin-types.ts";
 import { PluginContributionRuntime } from "./plugin-contribution-runtime.ts";
 
 export interface PluginCompositionRuntimeOptions {
@@ -17,6 +18,12 @@ export interface PluginCompositionRuntimeOptions {
   ) => void;
   readonly reportDiagnostic: (diagnostic: PluginDiagnostic) => void;
   readonly reportError: (error: unknown) => void;
+  readonly executeTaskRefresh: (
+    identity: PluginWorkspaceIdentity,
+    plan: PluginTaskRefreshPlan,
+    signal: AbortSignal,
+  ) => Promise<PluginTaskExecutionResult>;
+  readonly providerRefreshTitle?: (providerLabel: string) => string;
   readonly loadPlugins?: () => Promise<readonly BundledPlugin[]>;
 }
 
@@ -62,9 +69,6 @@ export class PluginCompositionRuntime {
     return this.contributions.refreshProviders(identity);
   }
 
-  runTask(taskKey: string, identity: PluginWorkspaceIdentity): Promise<void> {
-    return this.contributions.runTask(taskKey, identity);
-  }
 
   dispose(): void {
     if (this.disposed) return;

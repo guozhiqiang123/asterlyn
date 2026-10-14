@@ -23,6 +23,7 @@ export class TaskExecutionController {
   private readonly listeners = new Set<Listener>();
   private unsubscribe: (() => void) | null = null;
   private cancelRequestedRunId: string | null = null;
+  private prepareRequest = 0;
   private disposed = false;
 
   private readonly bridge: TaskExecutionBridge;
@@ -33,6 +34,7 @@ export class TaskExecutionController {
   activateWorkspace(identity: TaskWorkspaceIdentity): void {
     if (sameIdentity(this.value.identity, identity)) return;
     const previousRunId = this.value.runId;
+    this.prepareRequest += 1;
     if (previousRunId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(previousRunId, true);
     this.unsubscribe?.();
     this.unsubscribe = null;
@@ -41,6 +43,7 @@ export class TaskExecutionController {
   }
 
   clear(): void {
+    this.prepareRequest += 1;
     const runId = this.value.runId;
     if (runId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
     this.unsubscribe?.();
@@ -51,8 +54,10 @@ export class TaskExecutionController {
 
   async prepare(identity: TaskWorkspaceIdentity, request: TaskExecutionRequest): Promise<TaskExecutionReview> {
     this.requireCurrent(identity);
+    const prepareRequest = ++this.prepareRequest;
     const review = await this.bridge.prepareTaskExecution(identity.root, request);
     this.requireCurrent(identity);
+    if (prepareRequest !== this.prepareRequest) throw new Error("Task review request is stale.");
     if (review.workspaceRoot !== identity.root) throw new Error("Task review belongs to another workspace.");
     this.value = { ...emptyState(identity), status: "review", identity, review };
     this.emit();
@@ -128,6 +133,7 @@ export class TaskExecutionController {
     const runId = this.value.runId;
     if (runId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
     this.disposed = true;
+    this.prepareRequest += 1;
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.listeners.clear();

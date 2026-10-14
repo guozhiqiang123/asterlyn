@@ -10,7 +10,7 @@ import {
 
 const identity = { root: "/workspace/android", generation: 3 };
 
-test("the bundled Android plugin activates from bounded catalog evidence with an inert provider", async () => {
+test("the bundled Android plugin activates from bounded catalog evidence with a host-reviewed refresh", async () => {
   const runtime = new PluginRuntime();
   const evidence = {
     kind: "workspace-catalog",
@@ -25,13 +25,21 @@ test("the bundled Android plugin activates from bounded catalog evidence with an
   const report = await runtime.activate(identity, evidence, BUNDLED_PLUGINS);
   assert.deepEqual(report.activated, [ANDROID_GRADLE_PLUGIN_ID]);
   const contributions = runtime.contributions.list();
-  assert.equal(contributions.length, 1);
-  assert.equal(contributions[0].qualifiedId, `${ANDROID_GRADLE_PLUGIN_ID}.gradle-tasks`);
-  assert.deepEqual(contributions[0].snapshot(), {
+  const provider = contributions.find((contribution) => contribution.qualifiedId === `${ANDROID_GRADLE_PLUGIN_ID}.gradle-tasks`);
+  assert.ok(provider);
+  assert.deepEqual(provider.snapshot(), {
     status: "unavailable",
     tasks: [],
     unavailableReason: "discovery-not-supported",
   });
+  const plan = provider.refresh();
+  assert.equal(plan.request.executablePath, "gradlew");
+  plan.apply({ status: "succeeded", outputs: [{ stream: "stdout", dataBase64: Buffer.from("Tasks runnable from root project 'root'\nBuild tasks\n-----------\nassembleDebug - Assemble debug\n").toString("base64") }], truncated: false, error: null });
+  assert.equal(provider.snapshot().status, "ready");
+  provider.refresh().apply({ status: "cancelled", outputs: [], truncated: false, error: null });
+  assert.match(provider.snapshot().error, /cancelled/u);
+  provider.refresh().apply({ status: "succeeded", outputs: [], truncated: true, error: null });
+  assert.match(provider.snapshot().error, /truncated/u);
   assert.deepEqual(detectAndroidGradlePluginEvidence({ identity, evidence }), {
     kind: "android-gradle-evidence",
     workspaceRoot: "/workspace/android",

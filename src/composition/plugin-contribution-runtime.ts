@@ -6,7 +6,8 @@ import {
 import type {
   Disposable,
   PluginContributionRegistry,
-  PluginProviderContribution,
+  PluginTaskExecutionResult,
+  PluginTaskRefreshPlan,
   PluginWorkspaceIdentity,
   RegisteredPluginContribution,
 } from "../application/plugins/index.ts";
@@ -23,6 +24,12 @@ export interface PluginContributionRuntimeOptions {
     providers: readonly TaskProviderProjection[],
   ) => void;
   readonly reportError: (error: unknown) => void;
+  readonly executeTaskRefresh: (
+    identity: PluginWorkspaceIdentity,
+    plan: PluginTaskRefreshPlan,
+    signal: AbortSignal,
+  ) => Promise<PluginTaskExecutionResult>;
+  readonly providerRefreshTitle?: (providerLabel: string) => string;
 }
 
 /** Maps restricted plugin data into window-owned command and Tasks capabilities. */
@@ -34,6 +41,8 @@ export class PluginContributionRuntime {
   private readonly providers = new Map<string, { contribution: RegisteredProvider; release: () => void }>();
   private readonly releaseRegistry: () => void;
   private disposed = false;
+  private refreshInFlight: Promise<void> | null = null;
+  private refreshAbort: AbortController | null = null;
 
   constructor(
     registry: PluginContributionRegistry,
@@ -46,39 +55,48 @@ export class PluginContributionRuntime {
 
   activateWorkspace(identity: PluginWorkspaceIdentity): void {
     if (this.disposed) return;
+    this.abortRefresh();
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
+    this.refreshInFlight = null;
     this.options.replaceProviders(this.identity, []);
   }
 
-  async refreshProviders(identity: PluginWorkspaceIdentity): Promise<void> {
+  async refreshProviders(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
     if (!this.matches(identity)) return;
-    const operations = [...this.providers.values()]
-      .map(({ contribution }) => contribution.refresh)
-      .filter((refresh): refresh is NonNullable<PluginProviderContribution["refresh"]> => Boolean(refresh))
-      .map(async (refresh) => {
-        try { await refresh(); } catch (error) { this.options.reportError(error); }
-      });
-    await Promise.all(operations);
-    this.publishProviders();
+    if (this.refreshInFlight) return this.refreshInFlight;
+    const operation = this.refreshProvidersSerialized(identity, providerQualifiedId);
+    this.refreshInFlight = operation;
+    void operation.finally(() => { if (this.refreshInFlight === operation) this.refreshInFlight = null; });
+    return this.refreshInFlight;
   }
-
-  async runTask(taskKey: string, identity: PluginWorkspaceIdentity): Promise<void> {
-    if (!this.matches(identity)) return;
+  private async refreshProvidersSerialized(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
     for (const { contribution } of this.providers.values()) {
-      if (!contribution.run) continue;
-      const snapshot = snapshotSafely(contribution, this.options.reportError);
-      const task = snapshot.tasks.find((candidate) =>
-        `${contribution.qualifiedId}:${candidate.id}` === taskKey,
-      );
-      if (!task?.runnable) continue;
-      await contribution.run(task.id);
-      return;
+      if (providerQualifiedId && contribution.qualifiedId !== providerQualifiedId) continue;
+      if (!contribution.refresh) continue;
+      try {
+        const plan = await contribution.refresh();
+        if (!this.matches(identity)) return;
+        if (!plan) continue;
+        if (!validRefreshPlan(plan, contribution)) throw new Error(`Invalid task refresh plan from ${contribution.qualifiedId}`);
+        this.publishProviders();
+        const abort = new AbortController();
+        this.refreshAbort = abort;
+        let result: PluginTaskExecutionResult;
+        try {
+          result = await this.options.executeTaskRefresh(identity, plan, abort.signal);
+        } finally {
+          if (this.refreshAbort === abort) this.refreshAbort = null;
+        }
+        if (this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) plan.apply(result);
+      } catch (error) { this.options.reportError(error); }
     }
+    this.publishProviders();
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.abortRefresh();
     this.identity = null;
     this.releaseRegistry();
     for (const entry of this.commands.values()) entry.release();
@@ -104,7 +122,18 @@ export class PluginContributionRuntime {
     for (const contribution of next) {
       if (this.commands.has(contribution.qualifiedId)) continue;
       try {
-        const release = this.options.registerCommand(commandDescriptor(contribution));
+        const release = this.options.registerCommand(commandDescriptor(
+          contribution,
+          () => {
+            const identity = this.identity;
+            return identity
+              ? this.refreshProviders(identity, contribution.providerId
+                ? `${contribution.pluginId}.${contribution.providerId}`
+                : undefined)
+              : Promise.resolve();
+          },
+          this.options.providerRefreshTitle,
+        ));
         this.commands.set(contribution.qualifiedId, { contribution, release });
       } catch (error) {
         this.options.reportError(error);
@@ -116,6 +145,7 @@ export class PluginContributionRuntime {
     for (const [id, current] of this.providers) {
       const replacement = next.find((contribution) => contribution.qualifiedId === id);
       if (replacement === current.contribution) continue;
+      this.abortRefresh();
       current.release();
       this.providers.delete(id);
     }
@@ -157,14 +187,26 @@ export class PluginContributionRuntime {
   private matches(identity: PluginWorkspaceIdentity): boolean {
     return this.identity?.root === identity.root && this.identity.generation === identity.generation;
   }
+
+  private abortRefresh(): void {
+    this.refreshAbort?.abort();
+    this.refreshAbort = null;
+  }
 }
 
-function commandDescriptor(contribution: RegisteredCommand): CommandDescriptor {
+function commandDescriptor(
+  contribution: RegisteredCommand,
+  refresh: () => Promise<void>,
+  providerRefreshTitle?: (providerLabel: string) => string,
+): CommandDescriptor {
   return {
     id: commandId(contribution.qualifiedId),
     category: "workspace",
     userBindingScopes: TOOL_FOCUS_SCOPES,
-    title: () => safeText(contribution.title, contribution.qualifiedId),
+    title: () => {
+      const title = safeText(contribution.title, contribution.qualifiedId);
+      return contribution.providerId && providerRefreshTitle ? providerRefreshTitle(title) : title;
+    },
     detail: () => safeText(contribution.detail, contribution.pluginId),
     ...(contribution.keywords
       ? { keywords: () => safeText(contribution.keywords!, contribution.pluginId) }
@@ -173,7 +215,7 @@ function commandDescriptor(contribution: RegisteredCommand): CommandDescriptor {
       try { return contribution.availability?.() ?? { enabled: true }; }
       catch { return { enabled: false, reason: contribution.pluginId }; }
     },
-    execute: () => contribution.execute(),
+    execute: () => contribution.providerId ? refresh() : contribution.execute(),
   };
 }
 
@@ -203,4 +245,13 @@ function isCommand(contribution: RegisteredPluginContribution): contribution is 
 
 function isProvider(contribution: RegisteredPluginContribution): contribution is RegisteredProvider {
   return contribution.kind === "provider";
+}
+
+function validRefreshPlan(plan: PluginTaskRefreshPlan, contribution: RegisteredProvider): boolean {
+  const request = plan && typeof plan === "object" ? plan.request : null;
+  return Boolean(plan && typeof plan.apply === "function" && request &&
+    request.pluginId === contribution.pluginId && request.providerId === contribution.id &&
+    typeof request.taskId === "string" && typeof request.label === "string" &&
+    typeof request.executablePath === "string" && Array.isArray(request.args) &&
+    request.args.every((arg) => typeof arg === "string"));
 }

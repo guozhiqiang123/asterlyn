@@ -380,14 +380,14 @@ function validateContribution(contribution: PluginContribution): void {
       (typeof contribution.title !== "function" || typeof contribution.detail !== "function" ||
         typeof contribution.execute !== "function" ||
         (contribution.keywords !== undefined && typeof contribution.keywords !== "function") ||
-        (contribution.availability !== undefined && typeof contribution.availability !== "function"))) {
+        (contribution.availability !== undefined && typeof contribution.availability !== "function") ||
+        (contribution.providerId !== undefined && (!IDENTIFIER.test(contribution.providerId) || contribution.providerId.trim().length === 0)))) {
       throw new Error(`Invalid command contribution: ${contribution.id}`);
     }
     if (contribution.kind === "provider" &&
       (!contribution.label.trim() || typeof contribution.snapshot !== "function" ||
         (contribution.subscribe !== undefined && typeof contribution.subscribe !== "function") ||
-        (contribution.refresh !== undefined && typeof contribution.refresh !== "function") ||
-        (contribution.run !== undefined && typeof contribution.run !== "function"))) {
+        (contribution.refresh !== undefined && typeof contribution.refresh !== "function"))) {
       throw new Error(`Invalid provider contribution: ${contribution.id}`);
     }
   } catch (error) {

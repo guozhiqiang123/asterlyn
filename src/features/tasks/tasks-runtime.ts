@@ -7,6 +7,7 @@ export interface TasksRuntimeOptions {
   readonly runTask?: (taskKey: string, identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly refresh?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly error?: (error: unknown) => void;
+  readonly shouldRender?: () => boolean;
 }
 
 export class TasksRuntime {
@@ -25,7 +26,9 @@ export class TasksRuntime {
     this.root = root;
     this.controller = controller;
     this.options = options;
-    this.release = controller.subscribe(() => this.render());
+    this.release = controller.subscribe(() => {
+      if (this.options.shouldRender?.() !== false) this.render();
+    });
   }
 
   activate(identity: TasksWorkspaceIdentity): void {

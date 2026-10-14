@@ -114,6 +114,28 @@ test("start response from a superseded activation is cancelled and unsubscribed"
   assert.equal(released, 1);
 });
 
+test("a late prepare response cannot replace a newer review in the same workspace", async () => {
+  const pending = [];
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    prepareTaskExecution: async () => new Promise((resolve) => pending.push(resolve)),
+    startTaskExecution: async () => { throw new Error("not used"); },
+    cancelTaskExecution: async () => {},
+    subscribeTaskSession: async () => () => {},
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  const first = controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "first", label: "first", executablePath: "gradlew", args: [] });
+  const second = controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "second", label: "second", executablePath: "gradlew", args: [] });
+  pending[1]({ ...review, reviewId: "review-2", taskId: "second", label: "second" });
+  await second;
+  pending[0]({ ...review, taskId: "first", label: "first" });
+  await assert.rejects(first, /stale/u);
+  assert.equal(controller.state.review.taskId, "second");
+});
+
 test("clear and dispose clean up active native runs and subscriptions", async () => {
   let cancelled = 0;
   let released = 0;
@@ -168,7 +190,9 @@ test("task review runtime owns escape, focus trap, and focus restoration", async
     "utf8",
   );
   assert.match(source, /event\.key === "Escape"/u);
-  assert.match(source, /trapFocus\(this\.host, event\)/u);
+  assert.match(source, /if \(host\) trapFocus\(host, event\)/u);
   assert.match(source, /this\.focusReturn = document\.activeElement/u);
-  assert.match(source, /target\.isConnected && target\.focus\(\)/u);
+  assert.match(source, /target\?\.isConnected/u);
+  assert.match(source, /querySelector<HTMLElement>\("#tasks-tool-host"\)/u);
+  assert.doesNotMatch(source, /\?\? root/u);
 });

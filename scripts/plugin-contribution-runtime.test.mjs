@@ -60,6 +60,130 @@ test("provider snapshot failures are isolated as error projections", async () =>
   await runtime.dispose();
 });
 
+test("provider refresh exposes only a typed execution plan and deduplicates concurrent requests", async () => {
+  const runtime = new PluginRuntime();
+  const plans = [];
+  let executions = 0;
+  let snapshot = { status: "unavailable", tasks: [], unavailableReason: "discovery-not-supported" };
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, next) => { snapshot = next[0]?.snapshot ?? snapshot; },
+    reportError: (error) => { throw error; },
+    executeTaskRefresh: async (_identity, plan) => {
+      executions += 1;
+      plans.push(plan);
+      return { status: "succeeded", outputs: [], truncated: false, error: null };
+    },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle", snapshot: () => snapshot,
+    refresh: () => ({ request: { pluginId: "android", providerId: "tasks", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] }, apply: (result) => { if (result.status === "succeeded") snapshot = { status: "ready", tasks: [] }; } }),
+  }))]);
+  await Promise.all([adapter.refreshProviders(identity), adapter.refreshProviders(identity)]);
+  assert.equal(executions, 1);
+  assert.equal(plans[0].request.executablePath, "gradlew");
+  assert.equal(snapshot.status, "ready");
+  adapter.dispose();
+});
+
+test("provider deactivation aborts an in-flight host refresh and drops the stale result", async () => {
+  const runtime = new PluginRuntime();
+  const snapshots = [];
+  let aborted = 0;
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, providers) => snapshots.push(providers),
+    reportError: (error) => { throw error; },
+    executeTaskRefresh: async (_identity, _plan, signal) => new Promise((resolve) => {
+      signal.addEventListener("abort", () => {
+        aborted += 1;
+        resolve({ status: "cancelled", outputs: [], truncated: false, error: null });
+      }, { once: true });
+    }),
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "loading", tasks: [] }),
+    refresh: () => ({
+      request: { pluginId: "android", providerId: "tasks", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] },
+      apply: () => { throw new Error("stale plan was applied"); },
+    }),
+  }))]);
+  const refresh = adapter.refreshProviders(identity);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await runtime.deactivate();
+  await refresh;
+  assert.equal(aborted, 1);
+  assert.deepEqual(snapshots.at(-1), []);
+  adapter.dispose();
+});
+
+test("a provider can publish an unsupported refresh without starting execution", async () => {
+  const runtime = new PluginRuntime();
+  let latest = null;
+  let executions = 0;
+  let snapshot = { status: "loading", tasks: [] };
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, providers) => { latest = providers[0]?.snapshot ?? null; },
+    reportError: (error) => { throw error; },
+    executeTaskRefresh: async () => { executions += 1; throw new Error("must not execute"); },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle", snapshot: () => snapshot,
+    refresh: () => {
+      snapshot = { status: "unavailable", tasks: [], unavailableReason: "discovery-not-supported" };
+      return null;
+    },
+  }))]);
+  await adapter.refreshProviders(identity);
+  assert.equal(executions, 0);
+  assert.equal(latest.status, "unavailable");
+  adapter.dispose();
+  await runtime.dispose();
+});
+
+test("a provider refresh command is localized by the host and targets its declared provider", async () => {
+  const runtime = new PluginRuntime();
+  const commands = new Map();
+  let executions = 0;
+  let snapshot = { status: "unavailable", tasks: [], unavailableReason: "discovery-not-supported" };
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: (descriptor) => { commands.set(descriptor.id, descriptor); return () => commands.delete(descriptor.id); },
+    replaceProviders: () => undefined,
+    reportError: (error) => { throw error; },
+    providerRefreshTitle: (provider) => `Refresh tasks: ${provider}`,
+    executeTaskRefresh: async () => {
+      executions += 1;
+      return { status: "succeeded", outputs: [], truncated: false, error: null };
+    },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => {
+    context.contribute({
+      kind: "provider", id: "tasks", label: "Gradle", snapshot: () => snapshot,
+      refresh: () => ({
+        request: { pluginId: "android", providerId: "tasks", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] },
+        apply: () => { snapshot = { status: "ready", tasks: [] }; },
+      }),
+    });
+    context.contribute({
+      kind: "command", id: "refresh", providerId: "tasks", title: () => "Gradle",
+      detail: () => "Gradle", execute: () => { throw new Error("host must own refresh execution"); },
+    });
+  })]);
+  const command = commands.get("android.refresh");
+  assert.equal(command.title(), "Refresh tasks: Gradle");
+  await command.execute("palette");
+  assert.equal(executions, 1);
+  assert.equal(snapshot.status, "ready");
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 function plugin(id, activate) {
   return { id, version: "1.0.0", matches: () => true, activate };
 }

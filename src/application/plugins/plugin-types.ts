@@ -1,4 +1,5 @@
 import type { TaskProviderSnapshot } from "../tasks/index.ts";
+import type { TaskExecutionRequest } from "../../models.ts";
 
 export interface PluginWorkspaceIdentity {
   readonly root: string;
@@ -40,6 +41,7 @@ export interface PluginCommandContribution {
   readonly detail: () => string;
   readonly keywords?: () => string;
   readonly availability?: () => { readonly enabled: boolean; readonly reason?: string };
+  readonly providerId?: string;
   readonly execute: () => void | Promise<void>;
 }
 
@@ -49,8 +51,19 @@ export interface PluginProviderContribution {
   readonly label: string;
   readonly snapshot: () => TaskProviderSnapshot;
   readonly subscribe?: (listener: () => void) => Disposable;
-  readonly refresh?: () => void | Promise<void>;
-  readonly run?: (taskId: string) => void | Promise<void>;
+  readonly refresh?: () => PluginTaskRefreshPlan | null | Promise<PluginTaskRefreshPlan | null>;
+}
+
+export interface PluginTaskExecutionResult {
+  readonly status: "succeeded" | "failed" | "cancelled" | "crashed";
+  readonly outputs: readonly { readonly stream: "stdout" | "stderr"; readonly dataBase64: string }[];
+  readonly truncated: boolean;
+  readonly error: string | null;
+}
+
+export interface PluginTaskRefreshPlan {
+  readonly request: TaskExecutionRequest;
+  readonly apply: (result: PluginTaskExecutionResult) => void;
 }
 
 export type PluginContribution = PluginCommandContribution | PluginProviderContribution;
