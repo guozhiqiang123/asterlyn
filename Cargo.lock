@@ -49,7 +49,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "asterlyn"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "asterlyn-desktop",
  "asterlyn-git",
@@ -70,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "asterlyn-desktop"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "asterlyn-workspace",
  "tempfile",
@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "asterlyn-git"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "libc",
  "serde",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "asterlyn-terminal"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "portable-pty",
  "tempfile",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "asterlyn-workspace"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "glob",
  "libc",
