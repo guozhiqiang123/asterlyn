@@ -1645,8 +1645,18 @@ impl GitRepository {
             args.push(OsString::from(original));
         }
 
-        let (output, output_truncated) =
-            self.run_read_owned_bounded("read complete local diff", args, DIFF_LIMIT_BYTES + 1)?;
+        let bounded = GitRunner::new(&self.root)
+            .bounded_read_output_with_timeout(args, DIFF_LIMIT_BYTES + 1, Duration::from_secs(20))
+            .map_err(|error| GitError::Io {
+                operation: "read complete local diff".to_string(),
+                message: error.to_string(),
+            })?;
+        let output_truncated = bounded.stdout_truncated;
+        let output = if output_truncated {
+            bounded.output
+        } else {
+            ensure_success("read complete local diff", bounded.output)?
+        };
         let mut patch = output.stdout;
         let mut binary = patch.windows(15).any(|window| window == b"Binary files ");
         if patch.is_empty() {

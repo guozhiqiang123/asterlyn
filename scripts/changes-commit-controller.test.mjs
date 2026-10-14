@@ -72,7 +72,7 @@ test("latest change selection owns working Diff completion", async () => {
 
 test("an unavailable editable base preserves the read-only patch fallback", async () => {
   const controller = new ChangesCommitController(gateway({
-    async readWorkingDiffBase() { throw new Error("not editable"); },
+    readWorkingDiffBase() { throw new Error("not editable"); },
   }));
   controller.installSnapshot(snapshot([change("a.txt")]));
 
@@ -81,6 +81,80 @@ test("an unavailable editable base preserves the read-only patch fallback", asyn
   assert.equal(controller.state.workingPatch?.path, "a.txt");
   assert.equal(controller.state.workingDiffBase, null);
   assert.equal(controller.state.workingPatchError, null);
+});
+
+test("the visible patch settles before a delayed editable base", async () => {
+  const base = deferred();
+  const controller = new ChangesCommitController(gateway({
+    readWorkingDiffBase() { return base.promise; },
+  }));
+  controller.installSnapshot(snapshot([change("a.txt")]));
+
+  const loading = controller.loadSelectedDiff(false);
+  await nextTask();
+
+  assert.equal(controller.state.workingPatch?.path, "a.txt");
+  assert.equal(controller.state.workingPatchLoading, false);
+  assert.equal(controller.state.workingDiffBase, null);
+
+  base.resolve(workingBase("a.txt"));
+  await loading;
+  assert.equal(controller.state.workingDiffBase?.content, "base:a.txt\n");
+});
+
+test("a non-settling patch reaches the retry state after its deadline", async () => {
+  const controller = new ChangesCommitController(
+    gateway({ readLocalDiff: () => new Promise(() => undefined) }),
+    "tree",
+    timeoutMessages(),
+    5,
+  );
+  controller.installSnapshot(snapshot([change("a.txt")]));
+
+  await controller.loadSelectedDiff(false);
+
+  assert.equal(controller.state.workingPatch, null);
+  assert.equal(controller.state.workingPatchLoading, false);
+  assert.equal(controller.state.workingPatchError, "Patch timed out");
+});
+
+test("a late patch completion cannot replace the retry state after its deadline", async () => {
+  const patch = deferred();
+  const controller = new ChangesCommitController(
+    gateway({ readLocalDiff: () => patch.promise }),
+    "tree",
+    timeoutMessages(),
+    5,
+  );
+  controller.installSnapshot(snapshot([change("a.txt")]));
+
+  await controller.loadSelectedDiff(false);
+  patch.resolve(diff("a.txt", "late"));
+  await nextTask();
+
+  assert.equal(controller.state.workingPatch, null);
+  assert.equal(controller.state.workingPatchLoading, false);
+  assert.equal(controller.state.workingPatchError, "Patch timed out");
+});
+
+test("a non-settling editable base cannot keep a ready patch loading", async () => {
+  const controller = new ChangesCommitController(
+    gateway({ readWorkingDiffBase: () => new Promise(() => undefined) }),
+    "tree",
+    timeoutMessages(),
+    5,
+  );
+  controller.installSnapshot(snapshot([change("a.txt")]));
+
+  const loading = controller.loadSelectedDiff(false);
+  await nextTask();
+  assert.equal(controller.state.workingPatch?.path, "a.txt");
+  assert.equal(controller.state.workingPatchLoading, false);
+
+  await loading;
+  assert.equal(controller.state.workingPatch?.path, "a.txt");
+  assert.equal(controller.state.workingPatchError, null);
+  assert.equal(controller.state.workingDiffBase, null);
 });
 
 test("same-file reconciliation keeps the visible Diff until its refreshed patch arrives", async () => {
@@ -235,15 +309,7 @@ function gateway(overrides = {}) {
       return diffResponses[diffIndex++] ?? Promise.resolve(diff(selected.path));
     },
     async readWorkingDiffBase(_root, selected) {
-      return {
-        path: selected.path,
-        originalPath: selected.originalPath,
-        headOid: "a".repeat(40),
-        blobOid: "b".repeat(40),
-        content: `base:${selected.path}\n`,
-        utf8Bom: false,
-        byteLength: selected.path.length + 6,
-      };
+      return workingBase(selected.path, selected.originalPath);
     },
     async readLocalImageDiff(_root, selected) {
       return { path: selected.path, before: null, after: null };
@@ -299,6 +365,30 @@ function change(path, indexStatus = "unmodified", worktreeStatus = "modified") {
 
 function diff(path, patch = `diff --git a/${path} b/${path}`) {
   return { path, patch, binary: false, truncated: false };
+}
+
+function workingBase(path, originalPath = null) {
+  return {
+    path,
+    originalPath,
+    headOid: "a".repeat(40),
+    blobOid: "b".repeat(40),
+    content: `base:${path}\n`,
+    utf8Bom: false,
+    byteLength: path.length + 6,
+  };
+}
+
+function timeoutMessages() {
+  return {
+    patchTruncated: "Patch truncated",
+    patchTimedOut: "Patch timed out",
+    unexpectedError: "Unexpected error",
+  };
+}
+
+function nextTask() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function deferred() {

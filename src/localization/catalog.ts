@@ -610,6 +610,7 @@ export interface ChangesCopy {
   commitRefreshing: string;
   commitCreated: string; changesStashed: string;
   patchTruncated: string;
+  patchTimedOut: string;
   unexpectedError: string;
   fileSavedRefreshFailed: string;
 }

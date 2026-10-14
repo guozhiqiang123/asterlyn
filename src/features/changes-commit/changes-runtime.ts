@@ -12,7 +12,7 @@ import { ChangesRestoreReviewDialogBinding } from "./changes-restore-review-dial
 export interface ChangesRuntimeOptions {
   readonly gateway: ChangesCommitGateway;
   readonly initialFileView: ChangeFileView;
-  readonly messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">;
+  readonly messages: Pick<ChangesCopy, "patchTruncated" | "patchTimedOut" | "unexpectedError">;
   readonly root: HTMLElement;
   copy(): ChangesCopy & Pick<CommonCopy, "cancel">;
   changed(change: ChangesCommitChange): void;

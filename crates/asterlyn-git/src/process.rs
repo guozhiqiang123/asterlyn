@@ -344,6 +344,55 @@ impl<'a> GitRunner<'a> {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
+        self.bounded_output_until(args, stdin, stdout_limit, stderr_limit, None)
+    }
+
+    pub(crate) fn bounded_output_with_timeout<I, S>(
+        &self,
+        args: I,
+        stdin: GitStdin,
+        stdout_limit: usize,
+        stderr_limit: usize,
+        timeout: Duration,
+    ) -> std::io::Result<BoundedOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.bounded_output_until(
+            args,
+            stdin,
+            stdout_limit,
+            stderr_limit,
+            Instant::now().checked_add(timeout),
+        )
+    }
+
+    pub(crate) fn bounded_read_output_with_timeout<I, S>(
+        &self,
+        args: I,
+        stdout_limit: usize,
+        timeout: Duration,
+    ) -> std::io::Result<BoundedOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.bounded_output_with_timeout(args, GitStdin::Inherit, stdout_limit, 64 * 1024, timeout)
+    }
+
+    fn bounded_output_until<I, S>(
+        &self,
+        args: I,
+        stdin: GitStdin,
+        stdout_limit: usize,
+        stderr_limit: usize,
+        deadline: Option<Instant>,
+    ) -> std::io::Result<BoundedOutput>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
         let mut child = self.spawn(args, stdin)?;
         let stdout = child
             .stdout
@@ -368,6 +417,18 @@ impl<'a> GitRunner<'a> {
                         &mut child,
                         matches!(self.profile, GitProcessProfile::Remote),
                     )?;
+                }
+                Ok(None) if deadline.is_some_and(|deadline| Instant::now() >= deadline) => {
+                    let _ = terminate_child(
+                        &mut child,
+                        matches!(self.profile, GitProcessProfile::Remote),
+                    );
+                    let _ = join_limited_output_reader(stdout_reader, "stdout");
+                    let _ = join_limited_output_reader(stderr_reader, "stderr");
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "Git process exceeded its execution deadline",
+                    ));
                 }
                 Ok(None) => thread::sleep(CANCELLATION_POLL_INTERVAL),
                 Err(error) => {
@@ -768,6 +829,22 @@ mod tests {
                 Duration::from_millis(20),
             )
             .expect_err("the waiting Git process should time out");
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn bounded_output_deadline_terminates_a_git_process_waiting_for_input() {
+        let directory = tempfile::tempdir().unwrap();
+        let error = match GitRunner::new(directory.path()).bounded_output_with_timeout(
+            ["hash-object", "--stdin"],
+            GitStdin::Piped,
+            1024,
+            1024,
+            Duration::from_millis(20),
+        ) {
+            Ok(_) => panic!("the bounded Git process should time out"),
+            Err(error) => error,
+        };
         assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
     }
 

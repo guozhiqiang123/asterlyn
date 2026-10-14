@@ -344,7 +344,7 @@ export const ZH_CN = {
     filesSavedReview: "文件已保存；继续前请检查刷新后的选择", creatingCommit: "正在创建提交…", stashingChanges: "正在储藏所选更改…",
     commitConcurrent: "提交已完成，但 Git 同时发生变化；再次提交前请检查刷新的历史记录", commitRefreshing: "提交已创建，正在刷新仓库状态…",
     commitCreated: "提交已创建", changesStashed: "已储藏所选更改",
-    patchTruncated: "补丁已在 4 MiB 处截断", unexpectedError: "出现意外的更改操作错误",
+    patchTruncated: "补丁已在 4 MiB 处截断", patchTimedOut: "补丁加载时间过长，请重试。", unexpectedError: "出现意外的更改操作错误",
     fileSavedRefreshFailed: "文件已保存，但 Git 状态刷新失败",
   },
   gitOperations: {

@@ -105,6 +105,8 @@ export type ChangesMutationResult<T> =
 
 type Listener = (change: ChangesCommitChange) => void;
 
+const DEFAULT_DIFF_REQUEST_TIMEOUT_MS = 15_000;
+
 export class ChangesCommitController {
   readonly state: ChangesCommitState;
 
@@ -115,19 +117,22 @@ export class ChangesCommitController {
   private diffSequence = 0;
   private mutationSequence = 0;
   private disposed = false;
-  private messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">;
+  private messages: Pick<ChangesCopy, "patchTruncated" | "patchTimedOut" | "unexpectedError">;
+  private readonly diffRequestTimeoutMs: number;
 
   constructor(
     gateway: ChangesCommitGateway,
     initialFileView: ChangeFileView = "tree",
-    messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError"> = EN_US.changes,
+    messages: Pick<ChangesCopy, "patchTruncated" | "patchTimedOut" | "unexpectedError"> = EN_US.changes,
+    diffRequestTimeoutMs = DEFAULT_DIFF_REQUEST_TIMEOUT_MS,
   ) {
     this.gateway = gateway;
     this.state = createChangesCommitState(initialFileView);
     this.messages = messages;
+    this.diffRequestTimeoutMs = Math.max(1, diffRequestTimeoutMs);
   }
 
-  setMessages(messages: Pick<ChangesCopy, "patchTruncated" | "unexpectedError">): void {
+  setMessages(messages: Pick<ChangesCopy, "patchTruncated" | "patchTimedOut" | "unexpectedError">): void {
     this.messages = messages;
   }
 
@@ -363,13 +368,22 @@ export class ChangesCommitController {
     this.state.workingPatchLoading = true;
     this.state.workingPatchError = null;
     this.emit({ reason: "diff-start", diffChanged: !hasExistingDiff });
+    const baseline = image
+      ? null
+      : settle(withDeadline(
+          Promise.resolve().then(() => this.gateway.readWorkingDiffBase(snapshot.root, selected)),
+          this.diffRequestTimeoutMs,
+          this.messages.patchTimedOut,
+        ));
     try {
-      const result = image
-        ? await this.gateway.readLocalImageDiff(snapshot.root, selected)
-        : await Promise.allSettled([
-            this.gateway.readLocalDiff(snapshot.root, selected, expandedUnchanged),
-            this.gateway.readWorkingDiffBase(snapshot.root, selected),
-          ]);
+      const request: Promise<DiffResult | ImageDiffPreview> = image
+        ? this.gateway.readLocalImageDiff(snapshot.root, selected)
+        : this.gateway.readLocalDiff(snapshot.root, selected, expandedUnchanged);
+      const result = await withDeadline(
+        request,
+        this.diffRequestTimeoutMs,
+        this.messages.patchTimedOut,
+      );
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       let changed = !hasExistingDiff;
       if (image) {
@@ -377,18 +391,13 @@ export class ChangesCommitController {
         changed = changed || !imageDiffsEqual(this.state.workingImageDiff, nextImage);
         this.state.workingImageDiff = nextImage;
       } else {
-        const [patch, base] = result as [PromiseSettledResult<DiffResult>, PromiseSettledResult<WorkingDiffBase>];
-        if (patch.status === "rejected") throw patch.reason;
-        const nextPatch = patch.value;
-        const nextBase = base.status === "fulfilled" ? base.value : null;
-        changed = changed || !diffResultsEqual(this.state.workingPatch, nextPatch) ||
-          !workingDiffBasesEqual(this.state.workingDiffBase, nextBase);
+        const nextPatch = result as DiffResult;
+        changed = changed || !diffResultsEqual(this.state.workingPatch, nextPatch);
         this.state.workingPatch = nextPatch;
-        this.state.workingDiffBase = nextBase;
       }
       this.state.workingPatchLoading = false;
       if (changed) {
-        this.state.workingPatchVersion = sequence;
+        this.state.workingPatchVersion += 1;
       }
       this.emit({
         reason: "diff-complete",
@@ -397,6 +406,17 @@ export class ChangesCommitController {
           ? this.messages.patchTruncated
           : undefined,
       });
+      if (!baseline) return;
+      const base = await baseline;
+      if (
+        base.status !== "fulfilled" ||
+        !this.diffRequestMatches(sequence, generation, snapshot.root, path)
+      ) return;
+      const baseChanged = !workingDiffBasesEqual(this.state.workingDiffBase, base.value);
+      this.state.workingDiffBase = base.value;
+      if (!baseChanged) return;
+      this.state.workingPatchVersion += 1;
+      this.emit({ reason: "diff-complete", diffChanged: true });
     } catch (error) {
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       this.state.workingPatchLoading = false;
@@ -596,6 +616,38 @@ function toErrorMessage(error: unknown, fallback: string): string {
     return String((error as { message: unknown }).message);
   }
   return fallback;
+}
+
+function settle<T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> {
+  return promise.then(
+    (value) => ({ status: "fulfilled", value }),
+    (reason) => ({ status: "rejected", reason }),
+  );
+}
+
+function withDeadline<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let complete = false;
+    const timer = globalThis.setTimeout(() => {
+      if (complete) return;
+      complete = true;
+      reject(new Error(message));
+    }, timeoutMs);
+    void promise.then(
+      (value) => {
+        if (complete) return;
+        complete = true;
+        globalThis.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        if (complete) return;
+        complete = true;
+        globalThis.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 function diffResultsEqual(a: DiffResult | null, b: DiffResult | null): boolean {

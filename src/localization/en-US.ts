@@ -451,7 +451,7 @@ export const EN_US: LocaleCatalog = {
     creatingCommit: "Creating commit…", stashingChanges: "Stashing selected changes…", commitConcurrent: "Commit finished, but Git changed concurrently; inspect refreshed history before committing again",
     commitRefreshing: "Commit created; refreshing repository status…", commitCreated: "Commit created",
     changesStashed: "Selected changes stashed",
-    patchTruncated: "Patch truncated at 4 MiB", unexpectedError: "Unexpected Changes operation error",
+    patchTruncated: "Patch truncated at 4 MiB", patchTimedOut: "Patch loading took too long. Try again.", unexpectedError: "Unexpected Changes operation error",
     fileSavedRefreshFailed: "File saved; Git status refresh failed",
   },
   gitOperations: {
