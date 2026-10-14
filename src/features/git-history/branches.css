@@ -142,6 +142,16 @@
   color: var(--text-faint);
 }
 
+.branch-row-meta .branch-divergence.behind {
+  color: var(--info-text);
+  font-weight: 700;
+}
+
+.branch-row-meta .branch-divergence.ahead {
+  color: var(--success-text);
+  font-weight: 700;
+}
+
 .branch-row .branch-worktree-badge {
   padding: 1px 5px;
   border: 1px solid color-mix(in srgb, var(--info-text) 55%, transparent);

@@ -36,6 +36,7 @@ use crate::remote_failure::parse_remote_ref_failures;
 
 mod commit_details;
 mod head_commit_mutation;
+mod remote_branch_sync;
 mod stash_creation;
 mod worktree;
 
@@ -109,6 +110,7 @@ struct PushExecutionOptions<'a> {
     mode: PushMode,
     tag_mode: PushTagMode,
     destination_branch: Option<&'a str>,
+    source_branch: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -4383,6 +4385,7 @@ impl GitRepository {
                 mode,
                 tag_mode,
                 destination_branch,
+                source_branch: None,
             },
         )
     }
@@ -4414,6 +4417,25 @@ impl GitRepository {
         page_size: usize,
         destination_branch: Option<&str>,
     ) -> Result<PushPreview, GitError> {
+        self.push_preview_with_source(
+            remote,
+            tag_mode,
+            offset,
+            page_size,
+            destination_branch,
+            None,
+        )
+    }
+
+    fn push_preview_with_source(
+        &self,
+        remote: &str,
+        tag_mode: PushTagMode,
+        offset: usize,
+        page_size: usize,
+        destination_branch: Option<&str>,
+        source_branch: Option<&str>,
+    ) -> Result<PushPreview, GitError> {
         self.ensure_no_repository_operation("push")?;
         if page_size == 0 || page_size > MAX_PUSH_PREVIEW_PAGE_SIZE {
             return Err(GitError::InvalidInput {
@@ -4428,7 +4450,7 @@ impl GitRepository {
             });
         }
 
-        let target = self.push_target_context(remote, destination_branch)?;
+        let target = self.push_target_context(remote, destination_branch, source_branch)?;
         let tags = self.push_tags(&target, tag_mode)?;
         let (files, files_truncated) = self.push_preview_files(&target)?;
         let ordinary_allowed = match target.comparison_base_oid.as_ref() {
@@ -4502,9 +4524,28 @@ impl GitRepository {
         path: &str,
         destination_branch: Option<&str>,
     ) -> Result<Option<CommitDetails>, GitError> {
+        self.push_file_commit_with_source(
+            remote,
+            tag_mode,
+            expected_preview_token,
+            path,
+            destination_branch,
+            None,
+        )
+    }
+
+    fn push_file_commit_with_source(
+        &self,
+        remote: &str,
+        tag_mode: PushTagMode,
+        expected_preview_token: &str,
+        path: &str,
+        destination_branch: Option<&str>,
+        source_branch: Option<&str>,
+    ) -> Result<Option<CommitDetails>, GitError> {
         validate_relative_path(path)?;
         self.ensure_no_repository_operation("read pushed file commit")?;
-        let target = self.push_target_context(remote, destination_branch)?;
+        let target = self.push_target_context(remote, destination_branch, source_branch)?;
         let tags = self.push_tags(&target, tag_mode)?;
         if expected_preview_token != push_preview_token_with_tags(&target, tag_mode, &tags) {
             return Err(GitError::UnsafeOperation {
@@ -4548,6 +4589,7 @@ impl GitRepository {
                 mode: PushMode::Ordinary,
                 tag_mode: PushTagMode::None,
                 destination_branch: None,
+                source_branch: None,
             },
         )
     }
@@ -4567,9 +4609,10 @@ impl GitRepository {
             mode,
             tag_mode,
             destination_branch,
+            source_branch,
         } = options;
         self.ensure_no_repository_operation("push")?;
-        let target = self.push_target_context(remote, destination_branch)?;
+        let target = self.push_target_context(remote, destination_branch, source_branch)?;
         let tags = self.push_tags(&target, tag_mode)?;
         if expected_preview_token.is_some_and(|expected| {
             expected != push_preview_token_with_tags(&target, tag_mode, &tags)
@@ -4636,7 +4679,7 @@ impl GitRepository {
             ))),
         }
         self.ensure_no_repository_operation("push")?;
-        let before_push = self.push_target_context(remote, destination_branch)?;
+        let before_push = self.push_target_context(remote, destination_branch, source_branch)?;
         let before_tags = self.push_tags(&before_push, tag_mode)?;
         if before_push != target || before_tags != tags {
             return Err(GitError::UnsafeOperation {
@@ -4680,61 +4723,6 @@ impl GitRepository {
             }
         }
         Ok(())
-    }
-
-    fn push_target_context(
-        &self,
-        remote: &str,
-        destination_branch: Option<&str>,
-    ) -> Result<PushTargetContext, GitError> {
-        let context = self.current_branch_context("push")?;
-        let configured_remote = self.validated_remote(remote, true)?;
-        let branch = context
-            .full_ref
-            .strip_prefix("refs/heads/")
-            .expect("current branch refs are validated")
-            .to_string();
-        let target_branch = match destination_branch.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(custom) => self.validate_branch_name(custom)?,
-            None => &branch,
-        };
-        let is_same_as_local = target_branch == branch;
-        let set_upstream_after_push = is_same_as_local && context.upstream.is_none();
-        let (destination_ref, comparison_base_oid, publish) = match context.upstream.as_ref() {
-            Some(upstream) if is_same_as_local && upstream.remote == configured_remote.name => {
-                self.validated_upstream(upstream, true)?;
-                let base =
-                    self.resolve_commit(&upstream.tracking_ref, "read push comparison base")?;
-                (upstream.merge_ref.clone(), Some(base), false)
-            }
-            _ => {
-                // Choosing another remote or explicit destination is an explicit review action.
-                let tracking_ref =
-                    format!("refs/remotes/{}/{}", configured_remote.name, target_branch);
-                let base =
-                    if self.reference_exists(&tracking_ref)? {
-                        Some(self.resolve_commit(
-                            &tracking_ref,
-                            "read destination branch comparison base",
-                        )?)
-                    } else {
-                        None
-                    };
-                let publish = base.is_none();
-                (format!("refs/heads/{}", target_branch), base, publish)
-            }
-        };
-
-        Ok(PushTargetContext {
-            remote: configured_remote.name,
-            branch,
-            source_ref: context.full_ref,
-            destination_ref,
-            head_oid: context.oid,
-            comparison_base_oid,
-            publish,
-            set_upstream_after_push,
-        })
     }
 
     fn push_preview_files(

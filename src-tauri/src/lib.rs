@@ -355,6 +355,7 @@ pub fn run() {
             read_push_preview,
             read_push_file_commit,
             pull_current,
+            update_local_branch,
             push_current,
             cancel_remote_operation,
             read_git_operation,

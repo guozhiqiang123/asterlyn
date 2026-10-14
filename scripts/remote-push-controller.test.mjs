@@ -108,6 +108,41 @@ test("latest remote preview owns completion after a remote switch", async () => 
   assert.equal(controller.state.pushPreview?.previewToken, "team-token");
 });
 
+test("non-current branch Push binds preview and execution to the exact source ref", async () => {
+  const calls = [];
+  const gateway = createGateway({
+    async readPushPreview(...args) {
+      calls.push(["preview", ...args]);
+      return preview("origin", "topic-token");
+    },
+    async pushCurrent(...args) {
+      calls.push(["push", ...args]);
+      return snapshot();
+    },
+  });
+  const controller = new RemotePushController(gateway);
+  const repository = snapshot();
+  repository.branches = [{
+    repositoryId: ".", kind: "local", fullName: "refs/heads/topic", name: "topic",
+    oid: "c".repeat(40), current: false, upstream: "origin/topic", tracking: "[ahead 1]",
+    upstreamRemote: "origin", upstreamRef: "refs/heads/topic", ahead: 1, behind: 0,
+    committedAt: 1, subject: "Topic", primaryWorktreePath: null, linkedWorktreePath: null,
+  }];
+  controller.installSnapshot(repository);
+
+  assert.equal(controller.openBranchPush("refs/heads/topic", "origin"), true);
+  await settle();
+  assert.equal(controller.state.sourceBranch, "refs/heads/topic");
+  assert.equal(calls[0].at(-1), "refs/heads/topic");
+  const result = await controller.runOperation("push");
+  assert.equal(result.status, "success");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].at(-1), "refs/heads/topic");
+  controller.closeDialog();
+  assert.equal(controller.state.sourceBranch, null);
+  controller.dispose();
+});
+
 test("tag refresh preserves reviewed content and replaces it atomically", async () => {
   const refresh = deferred();
   const gateway = createGateway({

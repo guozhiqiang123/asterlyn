@@ -57,6 +57,7 @@ export interface RemotePushGateway {
     offset: number,
     pageSize: number,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<PushPreview>;
   readCommitDetails(
     repositoryRoot: string,
@@ -70,6 +71,7 @@ export interface RemotePushGateway {
     previewToken: string,
     path: string,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<CommitDetails | null>;
   readCommitDiff(
     repositoryRoot: string,
@@ -100,6 +102,7 @@ export interface RemotePushGateway {
     previewToken: string,
     operationId: string,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
 }

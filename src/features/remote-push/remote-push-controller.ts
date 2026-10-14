@@ -41,6 +41,7 @@ import {
   storePushTagMode,
   storePushTagsEnabled,
 } from "./push-preferences.ts";
+import { branchPushRemote, clearRemotePushSelectionState, effectivePushDestination, resetRemotePushDialogState } from "./remote-push-dialog-state.ts";
 
 export type {
   PushDiffState,
@@ -211,6 +212,21 @@ export class RemotePushController {
     const sequence = this.dialogSequence;
     this.emit({ reason: "dialog-open", dialogChanged: true, diffChanged: true });
     if (dialog === "push") void this.loadPushPreview(sequence);
+    return true;
+  }
+
+  openBranchPush(sourceBranch: string, remoteName: string): boolean {
+    const remote = branchPushRemote(this.snapshot, this.state, sourceBranch, remoteName);
+    if (!remote) return false;
+    this.invalidateDialogRequests();
+    this.resetDialog();
+    this.state.selectedRemote = remote;
+    this.state.sourceBranch = sourceBranch;
+    this.state.dialog = "push";
+    this.state.pushPreviewLoading = true;
+    const sequence = this.dialogSequence;
+    this.emit({ reason: "dialog-open", toolbarChanged: true, dialogChanged: true, diffChanged: true });
+    void this.loadPushPreview(sequence);
     return true;
   }
 
@@ -393,6 +409,7 @@ export class RemotePushController {
         preview.commits.length,
         this.previewPageSize,
         this.effectiveDestinationBranch(),
+        this.state.sourceBranch,
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       if (page.previewToken !== preview.previewToken) {
@@ -452,6 +469,7 @@ export class RemotePushController {
             preview.previewToken,
             path,
             this.effectiveDestinationBranch(),
+            this.state.sourceBranch,
           );
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
       if (!details) throw new Error(this.messages.noOutgoingCommitForFile(path));
@@ -539,8 +557,13 @@ export class RemotePushController {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.operation) return { status: "unavailable" };
     const policy = remotePolicy(snapshot, this.state.selectedRemote);
-    if (!policy[kind].enabled) return { status: "unavailable" };
     const remote = policy.selectedRemote;
+    const branchPush = kind === "push" && this.state.sourceBranch !== null;
+    if (branchPush) {
+      if (snapshot.operation || !remote?.pushSupported) return { status: "unavailable" };
+    } else if (!policy[kind].enabled) {
+      return { status: "unavailable" };
+    }
     if (kind !== "pull" && !remote) return { status: "unavailable" };
     const preview = kind === "push" ? this.state.pushPreview : null;
     if (kind === "push" && (!preview || (this.state.pushCustomBranch && !isValidGitBranchName(this.state.pushCustomBranchInput.trim())))) {
@@ -572,6 +595,7 @@ export class RemotePushController {
               preview!.previewToken,
               operationId,
               this.effectiveDestinationBranch(),
+              this.state.sourceBranch,
             );
       if (!this.operationRequestMatches(generation, snapshot.root, operationId)) {
         return { status: "stale" };
@@ -659,6 +683,7 @@ export class RemotePushController {
         0,
         this.previewPageSize,
         this.effectiveDestinationBranch(),
+        this.state.sourceBranch,
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreview = preview;
@@ -692,11 +717,7 @@ export class RemotePushController {
   }
 
   private effectiveDestinationBranch(): string | null {
-    if (this.state.pushCustomBranch) {
-      const trimmed = this.state.pushCustomBranchInput.trim();
-      return isValidGitBranchName(trimmed) ? trimmed : null;
-    }
-    return this.state.destinationBranch ?? (this.snapshot?.branch.head ?? null);
+    return effectivePushDestination(this.state, this.snapshot);
   }
 
   private async loadPushDiffContent(
@@ -725,32 +746,12 @@ export class RemotePushController {
   private clearPushSelection(): void {
     this.detailsSequence += 1;
     this.diffSequence += 1;
-    this.state.pushSelectedCommit = null;
-    this.state.pushCommitDetails = null;
-    this.state.pushCommitDetailsLoading = false;
-    this.state.pushCommitDetailsError = null;
-    this.state.pushSelectedFile = null;
-    this.state.pushDiff = null;
-    this.state.pushCollapsedFileDirectories.clear();
+    clearRemotePushSelectionState(this.state);
   }
 
   private resetDialog(): void {
-    this.state.dialog = null;
-    this.state.dialogError = null;
-    this.state.rememberUpdateStrategy = false;
-    this.state.pushPreview = null;
-    this.state.pushPreviewLoading = false;
-    this.state.pushPreviewRefreshing = false;
-    this.state.pushPreviewLoadingMore = false;
     this.clearPushSelection();
-    this.state.pushTagsEnabled = readPushTagsEnabled(this.storage) ?? this.state.pushTagsEnabled;
-    this.state.pushTagMode = readPushTagMode(this.storage) ?? this.state.pushTagMode;
-    this.state.destinationBranch = null;
-    this.state.pushCustomBranch = false;
-    this.state.pushCustomBranchInput = "";
-    this.state.pushMode = "ordinary";
-    this.state.pushModeMenuOpen = false;
-    this.state.pushFileActionLoading = false;
+    resetRemotePushDialogState(this.state, this.storage);
   }
 
   private invalidateDialogRequests(): void {

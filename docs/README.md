@@ -65,6 +65,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
 - [`engineering/in-app-update-plan.md`](engineering/in-app-update-plan.md) — startup/manual update discovery, verified native package installation, restart behavior, and updater trust boundaries.
 - [`engineering/unpushed-head-commit-actions-plan.md`](engineering/unpushed-head-commit-actions-plan.md) — reviewed Undo/Drop actions for an unpublished latest commit, with exact native revalidation and no changelist-context emulation.
+- [`engineering/non-current-branch-sync-plan.md`](engineering/non-current-branch-sync-plan.md) — per-local-branch upstream divergence plus reviewed Update and Push without checking out the target branch.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
 
 ## Design and references

@@ -674,6 +674,10 @@ pub struct BranchSummary {
     pub kind: BranchKind,
     pub upstream: Option<String>,
     pub tracking: Option<String>,
+    pub upstream_remote: Option<String>,
+    pub upstream_ref: Option<String>,
+    pub ahead: u32,
+    pub behind: u32,
     pub committed_at: i64,
     pub subject: String,
     #[serde(default)]

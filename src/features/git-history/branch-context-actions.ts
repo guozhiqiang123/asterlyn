@@ -45,7 +45,11 @@ export interface BranchContextRuntime {
   openWorktree(path: string): void;
   revealWorktree(branch: BranchSummary): void | Promise<void>;
   openGitOperation(kind: "merge" | "rebase", fullName: string): void;
-  openRemoteAction(kind: "pull" | "push", returnFocus: HTMLElement): void | Promise<void>;
+  openRemoteAction(
+    kind: "pull" | "push",
+    target: BranchContextTarget,
+    returnFocus: HTMLElement,
+  ): void | Promise<void>;
   tagRemotes(target: BranchContextTarget): readonly string[];
   selectedTagRemote(target: BranchContextTarget): string | null;
   tagRemoteUnavailable(): string;
@@ -196,8 +200,8 @@ export class BranchContextActions {
       return;
     }
     switch (actionId) {
-      case `${OWNER_ID}.update`: return this.runtime.openRemoteAction("pull", request.trigger);
-      case `${OWNER_ID}.push`: return this.runtime.openRemoteAction("push", request.trigger);
+      case `${OWNER_ID}.update`: return this.runtime.openRemoteAction("pull", target, request.trigger);
+      case `${OWNER_ID}.push`: return this.runtime.openRemoteAction("push", target, request.trigger);
       case `${OWNER_ID}.create-worktree`:
         return this.runtime.openWorktreeCreation(target.branch);
       case `${OWNER_ID}.open-worktree`:
@@ -342,7 +346,7 @@ export function branchContextMenuModel(
         command("rebase", labels.rebaseCurrentOnto, policy.integrate),
       );
     }
-    if (target.branch.kind === "local" && target.branch.current) {
+    if (target.branch.kind === "local") {
       items.push(
         { kind: "separator" },
         command("update", labels.update, policy.update),

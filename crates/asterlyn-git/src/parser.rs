@@ -5,7 +5,7 @@ use crate::model::{
     BranchKind, BranchState, BranchSummary, ChangeKind, CommitSummary, FileChange, GitBlameHunk,
 };
 
-pub(crate) const BRANCH_REFERENCE_FORMAT_ARG: &str = "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(upstream:track)%00%(committerdate:unix)%00%(subject)%00%(symref)";
+pub(crate) const BRANCH_REFERENCE_FORMAT_ARG: &str = "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(committerdate:unix)%00%(subject)%00%(symref)";
 
 pub(crate) fn parse_status(input: &[u8]) -> Result<(BranchState, Vec<FileChange>), GitError> {
     let records: Vec<&[u8]> = input.split(|byte| *byte == 0).collect();
@@ -218,10 +218,10 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
 
     for line in text.lines().filter(|line| !line.is_empty()) {
         let fields: Vec<&str> = line.split('\0').collect();
-        if fields.len() != 9 {
+        if fields.len() != 11 {
             return Err(GitError::Parse {
                 context: "for-each-ref record".to_string(),
-                message: format!("expected 9 fields, received {}", fields.len()),
+                message: format!("expected 11 fields, received {}", fields.len()),
             });
         }
         let kind = if fields[0].starts_with("refs/heads/") {
@@ -231,9 +231,11 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
         } else {
             BranchKind::Tag
         };
-        if kind == BranchKind::Remote && !fields[8].is_empty() {
+        if kind == BranchKind::Remote && !fields[10].is_empty() {
             continue;
         }
+
+        let (ahead, behind) = parse_upstream_tracking(fields[5]);
 
         branches.push(BranchSummary {
             repository_id: ".".to_string(),
@@ -244,8 +246,12 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
             kind,
             upstream: non_empty(fields[4]),
             tracking: non_empty(fields[5]),
-            committed_at: fields[6].parse().unwrap_or(0),
-            subject: fields[7].to_string(),
+            upstream_remote: non_empty(fields[6]),
+            upstream_ref: non_empty(fields[7]),
+            ahead,
+            behind,
+            committed_at: fields[8].parse().unwrap_or(0),
+            subject: fields[9].to_string(),
             primary_worktree_path: None,
             linked_worktree_path: None,
         });
@@ -259,6 +265,19 @@ pub(crate) fn parse_branches(input: &[u8]) -> Result<Vec<BranchSummary>, GitErro
             .then(left.name.cmp(&right.name))
     });
     Ok(branches)
+}
+
+fn parse_upstream_tracking(value: &str) -> (u32, u32) {
+    let mut ahead = 0;
+    let mut behind = 0;
+    for part in value.trim_matches(['[', ']']).split(',').map(str::trim) {
+        if let Some(value) = part.strip_prefix("ahead ") {
+            ahead = value.parse().unwrap_or(0);
+        } else if let Some(value) = part.strip_prefix("behind ") {
+            behind = value.parse().unwrap_or(0);
+        }
+    }
+    (ahead, behind)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -459,13 +478,27 @@ u UU N... 100644 100644 100644 100644 aaaaaaa bbbbbbb ccccccc src/conflict.rs\0"
 
     #[test]
     fn branch_parser_omits_symbolic_remote_aliases() {
-        let input = b"refs/remotes/origin/HEAD\x00origin\x00aaaa\x00\x00\x00\x001\x00Default\x00refs/remotes/origin/main\n\
-refs/remotes/origin/main\x00origin/main\x00aaaa\x00\x00\x00\x001\x00Main\x00\n";
+        let input = b"refs/remotes/origin/HEAD\x00origin\x00aaaa\x00\x00\x00\x00\x00\x001\x00Default\x00refs/remotes/origin/main\n\
+refs/remotes/origin/main\x00origin/main\x00aaaa\x00\x00\x00\x00\x00\x001\x00Main\x00\n";
 
         let branches = parse_branches(input).expect("branch references should parse");
         assert_eq!(branches.len(), 1);
         assert_eq!(branches[0].full_name, "refs/remotes/origin/main");
         assert_eq!(branches[0].name, "origin/main");
+    }
+
+    #[test]
+    fn branch_parser_structures_each_local_upstream_and_divergence() {
+        let input = b"refs/heads/topic\x00topic\x00aaaa\x00\x00origin/topic\x00[ahead 2, behind 3]\x00origin\x00refs/heads/topic\x0042\x00Topic\x00\n";
+
+        let branches = parse_branches(input).expect("local branch reference should parse");
+        assert_eq!(branches.len(), 1);
+        let branch = &branches[0];
+        assert_eq!(branch.upstream.as_deref(), Some("origin/topic"));
+        assert_eq!(branch.upstream_remote.as_deref(), Some("origin"));
+        assert_eq!(branch.upstream_ref.as_deref(), Some("refs/heads/topic"));
+        assert_eq!(branch.ahead, 2);
+        assert_eq!(branch.behind, 3);
     }
 
     #[test]

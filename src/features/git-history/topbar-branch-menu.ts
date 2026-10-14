@@ -122,8 +122,15 @@ function appendBranches(
   for (const [index, branch] of branches.entries()) {
     const id = `${OWNER_ID}.${group}.${index}`;
     commands.set(id, branch);
-    items.push(command(id, `${branch.current ? "✓ " : ""}${branch.name}`));
+    items.push(command(id, `${branch.current ? "✓ " : ""}${branch.name}${divergenceSuffix(branch)}`));
   }
+}
+
+function divergenceSuffix(branch: BranchSummary): string {
+  const parts = [];
+  if ((branch.behind ?? 0) > 0) parts.push(`↓${branch.behind}`);
+  if ((branch.ahead ?? 0) > 0) parts.push(`↑${branch.ahead}`);
+  return parts.length > 0 ? `  ${parts.join(" ")}` : "";
 }
 
 function command(id: string, label: string): ContextMenuItem {

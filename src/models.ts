@@ -306,6 +306,10 @@ export interface BranchSummary {
   kind: BranchKind;
   upstream: string | null;
   tracking: string | null;
+  upstreamRemote?: string | null;
+  upstreamRef?: string | null;
+  ahead?: number;
+  behind?: number;
   committedAt: number;
   subject: string;
   primaryWorktreePath: string | null;

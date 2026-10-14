@@ -244,6 +244,7 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.remote;
   const preview = state.pushPreview;
+  const sourceBranch = pushSourceBranch(snapshot, state, preview) ?? copy.currentBranchFallback;
   const operation = state.operation?.kind === "push" ? state.operation : null;
   const authentication = model.authentication;
   const authenticationDialogOpen = Boolean(authentication?.dialog);
@@ -272,7 +273,7 @@ function renderPushDialog(model: RemotePushDialogViewModel): string {
   const tagsLabel = preview?.tags.length ? copy.tags(preview.tags.length) : copy.noMatchingTags;
   const confirmation = pushConfirmationAvailability({ operationActive: Boolean(operation) || authenticationChecking, previewLoading: state.pushPreviewLoading, previewRefreshing: state.pushPreviewRefreshing, actionable, modeAllowed });
   return `<section class="dialog remote-action-dialog push-dialog" role="dialog" aria-modal="${state.pushDiff || authenticationDialogOpen ? "false" : "true"}" aria-labelledby="remote-dialog-title" aria-describedby="remote-dialog-description" ${state.pushDiff || authenticationDialogOpen ? 'aria-hidden="true" inert' : ""}>
-    <div class="dialog-heading"><div><h2 id="remote-dialog-title">${escapeHtml(copy.pushCommitsTo(snapshot.branch.head ?? copy.currentBranchFallback))}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelPushConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
+    <div class="dialog-heading"><div><h2 id="remote-dialog-title">${escapeHtml(copy.pushCommitsTo(sourceBranch))}</h2></div><button class="icon-button" id="remote-dialog-close" type="button" aria-label="${escapeAttribute(copy.cancelPushConfirmation)}" title="${escapeAttribute(localization.catalog.common.cancel)}" ${operation ? "disabled" : ""}>${icon("close", 18)}</button></div>
     <p id="remote-dialog-description" class="visually-hidden">${escapeHtml(copy.pushReviewDescription)}</p>${error}${renderPushRoute(model, preview)}${body}${modeBlocker ? `<div class="remote-dialog-warning" role="status">${escapeHtml(localization.catalog.errors.translate(modeBlocker))}</div>` : ""}
     <p class="remote-dialog-note">${escapeHtml(forceSelected ? copy.forcePushNote : copy.ordinaryPushNote)} ${escapeHtml(copy.tagsAndRetryNote)}</p>
     <div class="push-dialog-footer"><div class="push-tags-control"><label><input id="push-tags-enabled" type="checkbox" ${state.pushTagsEnabled ? "checked" : ""} ${operation ? "disabled" : ""}/><span>${escapeHtml(copy.pushTags)}</span></label>${renderSelectControl(`<select id="push-tag-mode" aria-label="${escapeAttribute(copy.tagScope)}" ${!state.pushTagsEnabled || operation ? "disabled" : ""}><option value="all" ${state.pushTagMode === "all" ? "selected" : ""}>${escapeHtml(copy.all)}</option><option value="currentBranch" ${state.pushTagMode === "currentBranch" ? "selected" : ""}>${escapeHtml(copy.currentBranch)}</option></select>`)}<span class="push-tag-count" aria-live="polite">${state.pushPreviewRefreshing ? `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(copy.refreshingReview)}` : state.pushTagsEnabled && preview ? escapeHtml(tagsLabel) : ""}</span></div>
@@ -285,7 +286,7 @@ function renderPushRoute(model: RemotePushDialogViewModel, preview: PushPreview 
   const { snapshot, state } = model;
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.remote;
-  const branch = snapshot.branch.head ?? "current branch";
+  const branch = pushSourceBranch(snapshot, state, preview) ?? copy.currentBranchFallback;
   const selectedRemote = preview?.remote ?? state.selectedRemote ?? "";
   const destination = preview?.destinationRef ?? `refs/heads/${state.destinationBranch ?? branch}`;
   const destinationBranch = destination.replace(/^refs\/heads\//, "");
@@ -329,6 +330,18 @@ function renderPushRoute(model: RemotePushDialogViewModel, preview: PushPreview 
   const branchControl = renderSelectControl(`<select id="push-branch-select" aria-label="${escapeAttribute(copy.remoteBranch)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${branchOptions}</select>`);
 
   return `<div class="push-route-row" aria-label="${escapeAttribute(copy.pushRouteAria(branch, `${selectedRemote}/${destinationBranch}`))}"><button class="push-route-endpoint push-route-scope ${state.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${state.pushSelectedCommit === null}" title="${escapeAttribute(copy.showAllOutgoingFiles)}"><span class="push-route-kind">${escapeHtml(copy.localBranch)}</span><span class="push-route-name">${icon("branch", 14)}<strong>${escapeHtml(branch)}</strong></span><small>${escapeHtml(copy.outgoingCommitCount(outgoingCount))} · ${escapeHtml(copy.showAllFiles)}</small></button><span class="push-route-arrow" aria-hidden="true"><small>${escapeHtml(copy.push)}</small><strong>→</strong></span><div class="push-route-endpoint push-remote-target"><span class="push-route-kind">${escapeHtml(copy.remoteBranch)}</span><span class="push-route-name push-route-destination">${icon("upload", 14)}${renderSelectControl(`<select id="push-remote-select" aria-label="${escapeAttribute(copy.pushRemote)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${options}</select>`)}<span class="push-route-separator">/</span>${branchControl}${showNewBadge ? `<span class="push-branch-badge new">${escapeHtml(copy.newBadge)}</span>` : ""}</span><small>${escapeHtml(copy.selectedDestination)}</small></div></div>`;
+}
+
+function pushSourceBranch(
+  snapshot: RepositorySnapshot,
+  state: RemotePushState,
+  preview: PushPreview | null,
+): string | null {
+  if (preview?.branch) return preview.branch;
+  if (state.sourceBranch?.startsWith("refs/heads/")) {
+    return state.sourceBranch.slice("refs/heads/".length);
+  }
+  return snapshot.branch.head;
 }
 
 function renderPushPreviewBody(model: RemotePushDialogViewModel, preview: PushPreview): string {

@@ -88,6 +88,7 @@ export function resolveRemoteUpdateActivation(
 
 export interface RemotePushState {
   selectedRemote: string | null;
+  sourceBranch: string | null;
   operation: RemoteOperationState | null;
   dialog: "update" | "push" | null;
   dialogError: OperationErrorPresentation | null;
@@ -118,6 +119,7 @@ export interface RemotePushState {
 export function createRemotePushState(): RemotePushState {
   return {
     selectedRemote: null,
+    sourceBranch: null,
     operation: null,
     dialog: null,
     dialogError: null,

@@ -70,6 +70,7 @@ import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-brid
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
 import { createDemoWorktreeBridge } from "./demo-worktree-bridge.ts";
+import { createDemoRemoteOperationBridge } from "./demo-remote-operation-bridge.ts";
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
 const demoWorktreeBridge = createDemoWorktreeBridge(() => browserSnapshot, (next) => { browserSnapshot = next; });
@@ -147,6 +148,7 @@ const demoBridge: DesktopBridge = {
   ...demoSystemFileClipboardBridge,
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
+  ...createDemoRemoteOperationBridge(cancelledDemoRemoteOperations, demoDelay, completeDemoMutation),
   isDemo: !isTauri,
   native: false,
 
@@ -1590,6 +1592,7 @@ const demoBridge: DesktopBridge = {
     offset: number,
     pageSize: number,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<PushPreview> {
     if (!isTauri) {
       await demoDelay(120);
@@ -1602,6 +1605,7 @@ const demoBridge: DesktopBridge = {
       offset,
       pageSize,
       destinationBranch: destinationBranch ?? null,
+      sourceBranch: sourceBranch ?? null,
     });
   },
 
@@ -1612,6 +1616,7 @@ const demoBridge: DesktopBridge = {
     previewToken: string,
     path: string,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<CommitDetails | null> {
     if (!isTauri) {
       await demoDelay(100);
@@ -1631,6 +1636,7 @@ const demoBridge: DesktopBridge = {
       previewToken,
       path,
       destinationBranch: destinationBranch ?? null,
+      sourceBranch: sourceBranch ?? null,
     });
   },
 
@@ -1660,6 +1666,7 @@ const demoBridge: DesktopBridge = {
     previewToken: string,
     operationId: string,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(520);
@@ -1683,20 +1690,7 @@ const demoBridge: DesktopBridge = {
       previewToken,
       operationId,
       destinationBranch: destinationBranch ?? null,
-    });
-  },
-
-  async cancelRemoteOperation(
-    repositoryRoot: string,
-    operationId: string,
-  ): Promise<void> {
-    if (!isTauri) {
-      cancelledDemoRemoteOperations.add(remoteOperationKey(repositoryRoot, operationId));
-      return;
-    }
-    return invoke<void>("cancel_remote_operation", {
-      repositoryRoot,
-      operationId,
+      sourceBranch: sourceBranch ?? null,
     });
   },
 

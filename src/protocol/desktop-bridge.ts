@@ -338,6 +338,7 @@ export interface GitReadBridge {
     offset: number,
     pageSize: number,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<PushPreview>;
   readPushFileCommit(
     repositoryRoot: string,
@@ -346,6 +347,7 @@ export interface GitReadBridge {
     previewToken: string,
     path: string,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<CommitDetails | null>;
 }
 
@@ -444,6 +446,12 @@ export interface GitOperationBridge {
     operationId: string,
   ): Promise<RepositoryMutationOutcome>;
   pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositoryMutationOutcome>;
+  updateLocalBranch(
+    repositoryRoot: string,
+    sourceBranch: string,
+    expectedOid: string,
+    operationId: string,
+  ): Promise<RepositoryMutationOutcome>;
   pushCurrent(
     repositoryRoot: string,
     remote: string,
@@ -452,6 +460,7 @@ export interface GitOperationBridge {
     previewToken: string,
     operationId: string,
     destinationBranch?: string | null,
+    sourceBranch?: string | null,
   ): Promise<RepositoryMutationOutcome>;
   cancelRemoteOperation(repositoryRoot: string, operationId: string): Promise<void>;
   readGitOperation(repositoryRoot: string): Promise<GitOperationSnapshot | null>;

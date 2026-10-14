@@ -406,6 +406,30 @@ test("remote view renders explicit update and reviewed push boundaries", () => {
   assert.doesNotMatch(outgoingPush, /data-push-dialog-resize/);
 });
 
+test("non-current Push keeps the selected source branch throughout the review", () => {
+  const state = createRemotePushState();
+  state.dialog = "push";
+  state.selectedRemote = "origin";
+  state.sourceBranch = "refs/heads/topic";
+  state.pushPreviewLoading = true;
+
+  const loading = renderRemoteDialogContent(viewModel(state));
+  assert.match(loading, /Push Commits to topic/);
+  assert.match(loading, /<strong>topic<\/strong>/);
+  assert.match(loading, /Push route from local branch topic to remote branch origin\/topic/);
+
+  state.pushPreviewLoading = false;
+  state.pushPreview = pushPreview({
+    branch: "topic",
+    sourceRef: "refs/heads/topic",
+    destinationRef: "refs/heads/topic",
+  });
+  const reviewed = renderRemoteDialogContent(viewModel(state));
+  assert.match(reviewed, /Push Commits to topic/);
+  assert.match(reviewed, /<strong>topic<\/strong>/);
+  assert.match(reviewed, /Push route from local branch topic to remote branch origin\/topic/);
+});
+
 test("push error presentation renders actionable escaped tag-collision guidance", () => {
   const state = createRemotePushState();
   state.dialog = "push";
@@ -512,7 +536,8 @@ test("branch navigation keeps repository hierarchy and selection in feature-owne
   });
   snapshot.branches.push({
     ...snapshot.branches[0], fullName: "refs/heads/available", name: "available", current: false,
-    upstream: null, tracking: null, primaryWorktreePath: null, linkedWorktreePath: null,
+    upstream: "origin/available", tracking: "[ahead 2, behind 3]",
+    ahead: 2, behind: 3, primaryWorktreePath: null, linkedWorktreePath: null,
   });
   const html = renderBranchNavigation({
     snapshot,
@@ -532,6 +557,8 @@ test("branch navigation keeps repository hierarchy and selection in feature-owne
   assert.match(html, /branch-primary-worktree-badge[^>]*>PRIMARY</);
   assert.match(html, /branch-worktree-badge[^>]*>WORKTREE</);
   assert.match(html, /branch-available-badge[^>]*>AVAILABLE</);
+  assert.match(html, /branch-divergence behind[^>]*>↓3</);
+  assert.match(html, /branch-divergence ahead[^>]*>↑2</);
   assert.ok(html.includes("/workspace/repo"));
   assert.ok(html.includes("/worktrees/topic"));
 

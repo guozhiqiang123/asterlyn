@@ -1066,6 +1066,8 @@ export interface BranchContextMenuCopy {
   clipboardUnavailable: string;
   busy: string;
   cleanRequired: string; localBranchRequired: string; worktreeCheckedOut: string;
+  updating(name: string): string;
+  updated(name: string): string;
   targetChanged: string;
 }
 

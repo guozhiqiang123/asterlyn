@@ -7,7 +7,9 @@ import {
   BranchContextActions,
 } from "../src/features/git-history/branch-context-actions.ts";
 import { branchContextPolicy } from "../src/features/git-history/branch-context-policy.ts";
+import { BranchRemoteActionRuntime } from "../src/features/git-history/branch-remote-action-runtime.ts";
 import { EN_US } from "../src/localization/en-US.ts";
+import { createLocalization } from "../src/localization/localization.ts";
 import { contextMenuModelErrors } from "../src/shared/context-menu/context-menu-model.ts";
 
 const oid = (value) => value.repeat(40);
@@ -64,6 +66,8 @@ test("branch menu matrix keeps writes scoped to one top-level ref", () => {
     } else if (branch === other) {
       assert.equal(menuIds.includes("git-branches.context-actions.switch"), true);
       assert.equal(menuIds.includes("git-branches.context-actions.merge"), true);
+      assert.equal(menuIds.includes("git-branches.context-actions.update"), true);
+      assert.equal(menuIds.includes("git-branches.context-actions.push"), true);
       assert.equal(menuIds.includes("git-branches.context-actions.delete"), true);
     } else {
       assert.equal(menuIds.includes("git-branches.context-actions.checkout-remote"), true);
@@ -73,6 +77,84 @@ test("branch menu matrix keeps writes scoped to one top-level ref", () => {
     }
   }
 });
+
+test("non-current branch Update advances the exact ref without activating the branch", async () => {
+  const branch = {
+    ...local("topic"), upstream: "origin/topic", upstreamRemote: "origin",
+    upstreamRef: "refs/heads/topic", ahead: 0, behind: 2,
+    primaryWorktreePath: null, linkedWorktreePath: null,
+  };
+  const currentSnapshot = snapshot([local("main", true), branch]);
+  currentSnapshot.remotes = [
+    { name: "origin", url: "file:///origin", fetchSupported: true, pushSupported: true },
+  ];
+  const selected = target(branch);
+  const calls = [];
+  const runtime = branchRemoteRuntime(currentSnapshot, selected, calls);
+
+  assert.equal(runtime.blockedReason("pull", selected), null);
+  await runtime.activate("pull", selected, {});
+  assert.deepEqual(calls.filter(([kind]) => kind === "update")[0].slice(0, 4), [
+    "update", "/repo", "refs/heads/topic", branch.oid,
+  ]);
+  assert.equal(calls.some(([kind]) => kind === "activateCurrent"), false);
+  assert.equal(calls.some(([kind]) => kind === "accepted"), true);
+});
+
+test("non-current branch Push opens review for the exact source ref", async () => {
+  const branch = {
+    ...local("topic"), upstream: "origin/topic", upstreamRemote: "origin",
+    upstreamRef: "refs/heads/topic", ahead: 1, behind: 0,
+    primaryWorktreePath: null, linkedWorktreePath: null,
+  };
+  const currentSnapshot = snapshot([local("main", true), branch]);
+  currentSnapshot.remotes = [
+    { name: "origin", url: "file:///origin", fetchSupported: true, pushSupported: true },
+  ];
+  const selected = target(branch);
+  const calls = [];
+  const runtime = branchRemoteRuntime(currentSnapshot, selected, calls);
+
+  assert.equal(runtime.blockedReason("push", selected), null);
+  await runtime.activate("push", selected, {});
+  assert.deepEqual(calls, [
+    ["openPush", "refs/heads/topic", "origin"],
+    ["focusPush"],
+  ]);
+});
+
+function branchRemoteRuntime(currentSnapshot, selected, calls) {
+  let generation = 4;
+  return new BranchRemoteActionRuntime({
+    snapshot: () => currentSnapshot,
+    targetCurrent: (candidate) => candidate === selected,
+    localization: () => createLocalization(EN_US),
+    selectedRemote: () => "origin",
+    remoteOperation: () => null,
+    workbenchBusy: () => false,
+    activateCurrent: async () => calls.push(["activateCurrent"]),
+    openBranchPush: (source, remoteName) => {
+      calls.push(["openPush", source, remoteName]);
+      return true;
+    },
+    focusPushDialog: () => calls.push(["focusPush"]),
+    updateLocalBranch: async (...args) => {
+      calls.push(["update", ...args]);
+      return { snapshot: currentSnapshot, invalidatedSlices: ["refs"] };
+    },
+    beginTransition: () => generation,
+    matches: (candidate, root) => candidate === generation && root === currentSnapshot.root,
+    completeTransition: (candidate) => calls.push(["complete", candidate]),
+    currentGeneration: () => generation,
+    acceptRemoteOutcome: () => calls.push(["accepted"]),
+    clearError: () => {},
+    setLoading: (loading) => calls.push(["loading", loading]),
+    setStatus: () => {},
+    showWarning: (message) => calls.push(["warning", message]),
+    showError: (error) => calls.push(["error", error]),
+    describeError: String,
+  });
+}
 
 test("remote tracking relationship switches the exact local branch and logical rows stay read-only", () => {
   const upstream = remote();

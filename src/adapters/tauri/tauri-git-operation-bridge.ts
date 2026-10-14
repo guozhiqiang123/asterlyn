@@ -143,7 +143,23 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       operationId,
     }),
-  pushCurrent: (repositoryRoot, remote, mode, tagMode, previewToken, operationId, destinationBranch) =>
+  updateLocalBranch: (repositoryRoot, sourceBranch, expectedOid, operationId) =>
+    invokeDesktopCommand<RepositoryMutationOutcome>("update_local_branch", {
+      repositoryRoot,
+      sourceBranch,
+      expectedOid,
+      operationId,
+    }),
+  pushCurrent: (
+    repositoryRoot,
+    remote,
+    mode,
+    tagMode,
+    previewToken,
+    operationId,
+    destinationBranch,
+    sourceBranch,
+  ) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("push_current", {
       repositoryRoot,
       remote,
@@ -152,6 +168,7 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       previewToken,
       operationId,
       destinationBranch: destinationBranch ?? null,
+      sourceBranch: sourceBranch ?? null,
     }),
   cancelRemoteOperation: (repositoryRoot, operationId) =>
     invokeDesktopCommand<void>("cancel_remote_operation", { repositoryRoot, operationId }),

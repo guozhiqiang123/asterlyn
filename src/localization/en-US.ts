@@ -505,7 +505,7 @@ export const EN_US: LocaleCatalog = {
       clipboardUnavailable: "The system clipboard is unavailable",
       busy: "Another repository operation is still in progress",
       cleanRequired: "Commit or remove all working-tree changes before switching branches", localBranchRequired: "Check out an existing local branch before merging this tag", worktreeCheckedOut: "This branch is checked out in a linked worktree",
-      targetChanged: "The branch changed; open its menu again",
+      updating: (name) => `Updating ${name}…`, updated: (name) => `Updated ${name}`, targetChanged: "The branch changed; open its menu again",
     },
     branchMutation: EN_US_BRANCH_MUTATION_COPY, worktreeCreation: EN_US_WORKTREE_CREATION_COPY, tagMutation: EN_US_TAG_MUTATION_COPY,
     commitContextMenu: {

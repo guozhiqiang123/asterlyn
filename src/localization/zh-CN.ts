@@ -395,6 +395,7 @@ export const ZH_CN = {
       fullReference: "完整引用", deleteLocal: "删除本地分支…", removeWorktree: "删除工作树…", copiedShort: "已复制分支名称", checkoutTag: "检出标签…", mergeTagInto: (tag, branch) => `将“${tag}”合并到“${branch ?? "当前分支"}”…`, pushTagTo: (remote) => `推送到 ${remote}…`, deleteLocalTag: "删除本地标签…", deleteRemoteTag: (remote) => `从 ${remote} 删除…`,
       copiedFull: "已复制完整分支引用", clipboardUnavailable: "系统剪贴板不可用",
       busy: "另一个仓库操作仍在进行中", cleanRequired: "切换分支前请提交或移除所有工作区更改", localBranchRequired: "合并此标签前请先检出现有本地分支", worktreeCheckedOut: "此分支已在关联工作树中检出",
+      updating: (name) => `正在更新 ${name}…`, updated: (name) => `已更新 ${name}`,
       targetChanged: "分支已发生变化，请重新打开菜单",
     },
     branchMutation: ZH_CN_BRANCH_MUTATION_COPY, worktreeCreation: ZH_CN_WORKTREE_CREATION_COPY, tagMutation: ZH_CN_TAG_MUTATION_COPY,

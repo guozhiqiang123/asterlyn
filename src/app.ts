@@ -51,6 +51,7 @@ import {
   branchContextTargetIsCurrent,
   type BranchContextTarget,
 } from "./features/git-history/branch-context-binding.ts";
+import { BranchRemoteActionRuntime } from "./features/git-history/branch-remote-action-runtime.ts";
 import {
   historyCommitContextTargetIsCurrent,
   type HistoryCommitContextTarget,
@@ -436,6 +437,7 @@ export class AsterlynApp {
   private readonly gitHistoryPresentationRuntime: GitHistoryPresentationRuntime;
   private readonly gitHistoryMutationRuntime: GitHistoryMutationRuntime;
   private readonly gitHistoryContextRuntime: GitHistoryContextRuntime;
+  private readonly branchRemoteRuntime: BranchRemoteActionRuntime;
   private readonly remoteRuntime: RemoteRuntime;
   private readonly changesRuntime: ChangesRuntime;
   private readonly changesContextRuntime: ChangesContextSurfaceRuntime;
@@ -751,6 +753,17 @@ export class AsterlynApp {
       },
     });
     this.gitHistoryPresentationRuntime = new GitHistoryPresentationRuntime(window.localStorage);
+    this.branchRemoteRuntime = new BranchRemoteActionRuntime({
+      snapshot: () => this.windowSession.repository.state.snapshot, targetCurrent: (target) => this.isBranchContextTargetCurrent(target), localization: () => this.localization,
+      selectedRemote: () => this.remoteState.selectedRemote, remoteOperation: () => this.remoteState.operation, workbenchBusy: () => this.state.loading,
+      activateCurrent: (kind, anchor) => this.activateRemoteAction(kind, anchor), openBranchPush: (branch, remote) => this.remoteRuntime.push.openBranchPush(branch, remote),
+      focusPushDialog: (anchor) => { this.remoteDialogReturnFocus = anchor; queueMicrotask(() => this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.focus()); },
+      updateLocalBranch: (...args) => bridge.updateLocalBranch(...args), beginTransition: () => this.windowSession.beginTransition({ reconciliationBarrier: true }),
+      matches: (generation, repositoryRoot) => this.windowSession.matches(generation, repositoryRoot), completeTransition: (generation) => this.windowSession.completeTransition(generation),
+      currentGeneration: () => this.windowSession.generation, acceptRemoteOutcome: (outcome) => { this.repositoryIntegration.acceptRemoteOutcome(outcome); },
+      clearError: () => this.clearError(), setLoading: (loading, message) => this.setLoading(loading, message), setStatus: (message, kind) => this.setStatus(message, kind),
+      showWarning: (message) => this.showWarning(message), showError: (error) => this.showError(error), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
+    });
     this.remoteRuntime = createRemoteRuntime(root, bridge,
       { remote: initialCatalog.remote, errors: initialCatalog.errors },
       {
@@ -764,7 +777,7 @@ export class AsterlynApp {
         pushChanged: (change) => this.handleRemoteControllerChange(change),
         authenticationChanged: () => { if (this.root.querySelector("#remote-action-dialog")) this.renderRemoteDialog(); },
       }, () => this.localization.catalog.remote.management, window.localStorage, {
-        snapshot: () => this.windowSession.repository.state.snapshot, busy: () => this.state.loading, copy: () => this.localization.catalog.remote, actionBlockedReason: (kind) => this.remoteActionBlockedReason(kind),
+        snapshot: () => this.windowSession.repository.state.snapshot, busy: () => this.state.loading, copy: () => this.localization.catalog.remote, actionBlockedReason: (kind) => this.branchRemoteRuntime.blockedReason(kind),
         openAction: (kind) => this.activateRemoteAction(kind, this.root.querySelector<HTMLElement>(kind === "pull" ? "#remote-update" : "#remote-push") ?? this.root), cancelOperation: () => this.cancelActiveRemoteOperation(),
         selectedProjectFileAvailable: () => this.pushSelectedProjectFile() !== null, openSelectedProjectFile: () => this.openSelectedPushFile(),
       },
@@ -923,7 +936,7 @@ export class AsterlynApp {
           current: (target) => this.isBranchContextTargetCurrent(target),
           highlight: (target, highlighted) => this.markBranchContextTarget(target.key, highlighted),
           snapshot: () => this.windowSession.repository.state.snapshot,
-          policyOptions: () => {
+          policyOptions: (target) => {
             const snapshot = this.windowSession.repository.state.snapshot;
             const safety = snapshot ? branchSafety(snapshot, this.localization) : {
               ready: false,
@@ -933,8 +946,8 @@ export class AsterlynApp {
               busy: this.state.loading || Boolean(snapshot?.operation),
               clean: safety.ready,
               cleanReason: safety.message,
-              updateBlocked: this.remoteActionBlockedReason("pull"),
-              pushBlocked: this.remoteActionBlockedReason("push"),
+              updateBlocked: this.branchRemoteRuntime.blockedReason("pull", target),
+              pushBlocked: this.branchRemoteRuntime.blockedReason("push", target),
             };
           },
           showHistory: (target) => this.showBranchContextHistory(target),
@@ -949,7 +962,8 @@ export class AsterlynApp {
           revealWorktree: async (branch) => { const snapshot = this.windowSession.repository.state.snapshot; if (!snapshot) return; await bridge.revealRegisteredWorktree(snapshot.root, branch.fullName, branch.oid);
             this.setStatus(this.localization.catalog.history.branchContextMenu.revealedWorktree, "success"); },
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
-          openRemoteAction: (kind, returnFocus) => this.activateRemoteAction(kind, returnFocus as HTMLButtonElement),
+          openRemoteAction: (kind, target, returnFocus) =>
+            this.branchRemoteRuntime.activate(kind, target, returnFocus as HTMLButtonElement),
           tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
           selectedTagRemote: () => this.windowSession.repository.state.snapshot?.remotes.find((remote) => remote.name === this.remoteState.selectedRemote && remote.pushSupported)?.name ?? null, tagRemoteUnavailable: () => this.localization.catalog.remote.policy.selectConfigured,
           openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
@@ -3211,7 +3225,7 @@ export class AsterlynApp {
     anchor: HTMLElement,
   ): Promise<void> {
     if (!await recoverPendingRemoteAction(kind, this.windowSession, this.remoteState.selectedRemote, this.localization, this.state.loading || Boolean(this.remoteState.operation))) return;
-    const blocked = this.remoteActionBlockedReason(kind);
+    const blocked = this.branchRemoteRuntime.blockedReason(kind);
     if (blocked) {
       this.showWarning(blocked);
       return;
@@ -3233,33 +3247,11 @@ export class AsterlynApp {
     } else if (this.openRemoteDialog("push", anchor)) {
       return;
     }
-    const reason = this.remoteActionBlockedReason(kind) ??
+    const reason = this.branchRemoteRuntime.blockedReason(kind) ??
       this.localization.catalog.remote.actionStateChanged(
         this.localization.catalog.remote.actionNames[kind],
       );
     this.showWarning(reason);
-  }
-
-  private remoteActionBlockedReason(kind: "pull" | "push"): string | null {
-    const copy = this.localization.catalog.remote;
-    const snapshot = this.windowSession.repository.state.snapshot;
-    if (!snapshot) {
-      return { pull: copy.updateUnavailable, push: copy.pushUnavailable }[kind];
-    }
-    if (this.remoteState.operation) {
-      return copy.unavailable(
-        copy.operationInProgress(copy.actionNames[this.remoteState.operation.kind]),
-      );
-    }
-    if (this.state.loading) {
-      return copy.unavailable(copy.workbenchBusy);
-    }
-    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
-    if (!policy[kind].enabled) return copy.unavailable(policy[kind].detail);
-    if (kind !== "pull" && !policy.selectedRemote) {
-      return copy.unavailable(policy[kind].detail);
-    }
-    return null;
   }
 
   private openRemoteDialog(
@@ -3722,7 +3714,12 @@ export class AsterlynApp {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.state.loading || this.remoteState.operation) return false;
     const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
-    if (!policy[kind].enabled || (kind !== "pull" && !policy.selectedRemote)) return false;
+    const branchPush = kind === "push" && this.remoteState.sourceBranch !== null;
+    if (
+      (!branchPush && !policy[kind].enabled) ||
+      (kind !== "pull" && !policy.selectedRemote) ||
+      (branchPush && (Boolean(snapshot.operation) || !policy.selectedRemote?.pushSupported))
+    ) return false;
     if (kind === "pull" && !(await this.saveDirtyTabsBefore(this.localization.catalog.common.actions.pullChanges))) {
       return false;
     }

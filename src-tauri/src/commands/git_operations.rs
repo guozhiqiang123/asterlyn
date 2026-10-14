@@ -667,18 +667,30 @@ pub(crate) async fn read_push_preview(
     offset: usize,
     page_size: usize,
     destination_branch: Option<String>,
+    source_branch: Option<String>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<PushPreview, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read push preview", move || {
-        GitRepository::open(root)?.push_preview_with_destination(
-            &remote,
-            tag_mode,
-            offset,
-            page_size,
-            destination_branch.as_deref(),
-        )
+        let repository = GitRepository::open(root)?;
+        match source_branch.as_deref() {
+            Some(source_branch) => repository.push_preview_for_branch(
+                source_branch,
+                &remote,
+                tag_mode,
+                offset,
+                page_size,
+                destination_branch.as_deref(),
+            ),
+            None => repository.push_preview_with_destination(
+                &remote,
+                tag_mode,
+                offset,
+                page_size,
+                destination_branch.as_deref(),
+            ),
+        }
     })
     .await
 }
@@ -692,18 +704,30 @@ pub(crate) async fn read_push_file_commit(
     preview_token: String,
     path: String,
     destination_branch: Option<String>,
+    source_branch: Option<String>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<Option<CommitDetails>, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read pushed file commit", move || {
-        GitRepository::open(root)?.push_file_commit_with_destination(
-            &remote,
-            tag_mode,
-            &preview_token,
-            &path,
-            destination_branch.as_deref(),
-        )
+        let repository = GitRepository::open(root)?;
+        match source_branch.as_deref() {
+            Some(source_branch) => repository.push_branch_file_commit(
+                source_branch,
+                &remote,
+                tag_mode,
+                &preview_token,
+                &path,
+                destination_branch.as_deref(),
+            ),
+            None => repository.push_file_commit_with_destination(
+                &remote,
+                tag_mode,
+                &preview_token,
+                &path,
+                destination_branch.as_deref(),
+            ),
+        }
     })
     .await
 }
@@ -733,6 +757,39 @@ pub(crate) async fn pull_current(
 }
 
 #[tauri::command]
+pub(crate) async fn update_local_branch(
+    repository_root: String,
+    source_branch: String,
+    expected_oid: String,
+    operation_id: String,
+    git_operations: State<'_, GitOperationCoordinator>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<RepositoryMutationOutcome, GitError> {
+    let repository_root = active_workspaces
+        .require_git(window.label(), &repository_root)?
+        .to_string_lossy()
+        .into_owned();
+    git_operations
+        .run_remote(
+            repository_root,
+            operation_id,
+            "update local branch",
+            COMMIT_LIMIT,
+            move |repository, cancellation| {
+                repository.update_branch_ff_only(&source_branch, &expected_oid, cancellation)
+            },
+        )
+        .await
+        .map(|snapshot| {
+            mutation_outcome(
+                snapshot,
+                &[RepositoryStateSlice::Refs, RepositoryStateSlice::History],
+            )
+        })
+}
+
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn push_current(
     repository_root: String,
@@ -742,6 +799,7 @@ pub(crate) async fn push_current(
     preview_token: String,
     operation_id: String,
     destination_branch: Option<String>,
+    source_branch: Option<String>,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
@@ -756,15 +814,24 @@ pub(crate) async fn push_current(
             operation_id,
             "push",
             COMMIT_LIMIT,
-            move |repository, cancellation| {
-                repository.push_current_with_destination(
+            move |repository, cancellation| match source_branch.as_deref() {
+                Some(source_branch) => repository.push_branch_with_destination(
+                    source_branch,
                     &remote,
                     mode,
                     tag_mode,
                     &preview_token,
                     cancellation,
                     destination_branch.as_deref(),
-                )
+                ),
+                None => repository.push_current_with_destination(
+                    &remote,
+                    mode,
+                    tag_mode,
+                    &preview_token,
+                    cancellation,
+                    destination_branch.as_deref(),
+                ),
             },
         )
         .await

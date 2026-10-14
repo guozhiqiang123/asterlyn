@@ -146,6 +146,7 @@ function branchRow(
       ].filter(Boolean);
   const title = [
     `${branch.name} — ${branch.subject}`,
+    branch.tracking ?? "",
     exclusive ? historyCopy.activateAgainForAllRefs : "",
     ...checkoutTitle,
   ].filter(Boolean).join(" — ");
@@ -158,6 +159,12 @@ function branchRow(
         ? (root?.displayName ?? branch.repositoryId)
         : "",
   ].filter(Boolean).map((value) => `<span>${escapeHtml(value)}</span>`);
+  if ((branch.behind ?? 0) > 0) {
+    meta.push(`<span class="branch-divergence behind" aria-label="behind ${branch.behind}">↓${branch.behind}</span>`);
+  }
+  if ((branch.ahead ?? 0) > 0) {
+    meta.push(`<span class="branch-divergence ahead" aria-label="ahead ${branch.ahead}">↑${branch.ahead}</span>`);
+  }
   if (branch.primaryWorktreePath) {
     meta.push(`<span class="branch-primary-worktree-badge">${escapeHtml(historyCopy.primaryWorktreeBadge)}</span>`);
   }
