@@ -37,6 +37,7 @@ use crate::remote_failure::parse_remote_ref_failures;
 mod commit_details;
 mod head_commit_mutation;
 mod remote_branch_sync;
+pub use remote_branch_sync::BranchPushTarget;
 mod stash_creation;
 mod worktree;
 

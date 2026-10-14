@@ -9,6 +9,12 @@ use super::{
     validate_object_id,
 };
 
+#[derive(Debug, Clone, Copy)]
+pub struct BranchPushTarget<'a> {
+    pub source_branch: &'a str,
+    pub destination_branch: Option<&'a str>,
+}
+
 impl GitRepository {
     pub(super) fn push_target_context(
         &self,
@@ -195,13 +201,12 @@ impl GitRepository {
 
     pub fn push_branch_with_destination(
         &self,
-        source_branch: &str,
+        target: BranchPushTarget<'_>,
         remote: &str,
         mode: PushMode,
         tag_mode: PushTagMode,
         expected_preview_token: &str,
         cancellation: &CancellationToken,
-        destination_branch: Option<&str>,
     ) -> Result<(), GitError> {
         self.push_current_with_options_internal(
             remote,
@@ -211,8 +216,8 @@ impl GitRepository {
             PushExecutionOptions {
                 mode,
                 tag_mode,
-                destination_branch,
-                source_branch: Some(source_branch),
+                destination_branch: target.destination_branch,
+                source_branch: Some(target.source_branch),
             },
         )
     }
@@ -529,13 +534,15 @@ mod tests {
         assert_eq!(preview.head_oid, topic);
         repository
             .push_branch_with_destination(
-                "refs/heads/topic",
+                BranchPushTarget {
+                    source_branch: "refs/heads/topic",
+                    destination_branch: None,
+                },
                 "origin",
                 PushMode::Ordinary,
                 PushTagMode::None,
                 &preview.preview_token,
                 &CancellationToken::new(),
-                None,
             )
             .unwrap();
         assert_eq!(

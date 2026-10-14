@@ -816,13 +816,15 @@ pub(crate) async fn push_current(
             COMMIT_LIMIT,
             move |repository, cancellation| match source_branch.as_deref() {
                 Some(source_branch) => repository.push_branch_with_destination(
-                    source_branch,
+                    BranchPushTarget {
+                        source_branch,
+                        destination_branch: destination_branch.as_deref(),
+                    },
                     &remote,
                     mode,
                     tag_mode,
                     &preview_token,
                     cancellation,
-                    destination_branch.as_deref(),
                 ),
                 None => repository.push_current_with_destination(
                     &remote,
