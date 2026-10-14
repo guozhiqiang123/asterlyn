@@ -175,7 +175,10 @@ fn build_project_window(
     #[cfg(not(target_os = "macos"))]
     let builder = builder.decorations(false);
 
-    builder.build()
+    let window = builder.visible(true).focused(true).build()?;
+    window.show()?;
+    window.set_focus()?;
+    Ok(window)
 }
 
 async fn run_blocking<T, F>(operation: &str, task: F) -> Result<T, GitError>
