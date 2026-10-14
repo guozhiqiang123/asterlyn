@@ -1,7 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { captureTasksFocus, restoreTasksFocus } from "../src/features/tasks/tasks-runtime.ts";
+import { captureTasksFocus, restoreTasksFocus, syncTasksHeaderRefresh } from "../src/features/tasks/tasks-runtime.ts";
+
+test("Tasks runtime keeps the shared title-bar refresh action in sync", () => {
+  const attributes = new Map();
+  const button = {
+    disabled: false,
+    title: "",
+    setAttribute(name, value) { attributes.set(name, value); },
+  };
+  const root = { querySelector: (selector) => selector === "#tasks-header-refresh" ? button : null };
+  const state = { status: "loading" };
+  syncTasksHeaderRefresh(root, state, { refresh: "Refresh tasks" });
+  assert.equal(button.disabled, true);
+  assert.equal(button.title, "Refresh tasks");
+  assert.equal(attributes.get("aria-label"), "Refresh tasks");
+
+  syncTasksHeaderRefresh(root, { status: "ready" });
+  assert.equal(button.disabled, false);
+});
 
 test("Tasks runtime focus helpers preserve query selection range across rerender", () => {
   const previous = {

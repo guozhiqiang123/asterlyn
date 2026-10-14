@@ -65,7 +65,7 @@ export function renderTasksView(state: TasksState, copy: TasksCopy = DEFAULT_TAS
   const list = state.visibleEntries.length > 0
     ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, state.status === "loading", entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
     : "";
-  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}"><header class="tasks-header"><h2>${escapeHtml(copy.title)}</h2><button type="button" data-tasks-action="refresh" aria-label="${escapeAttribute(copy.refresh)}" title="${escapeAttribute(copy.refresh)}" ${state.status === "loading" ? "disabled" : ""}>↻</button></header>${quickActions}${query}${status}${list}</section>`;
+  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${quickActions}${query}${status}${list}</section>`;
 }
 
 function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {

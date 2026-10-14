@@ -63,6 +63,8 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.match(html, /id="task-execution-host"/);
   assert.match(html, /id="find-tool-host"/);
   assert.match(html, /id="terminal-header-actions"/);
+  assert.match(html, /class="compact-icon-button tasks-header-refresh hidden" id="tasks-header-refresh"/);
+  assert.ok(html.indexOf('id="tasks-header-refresh"') < html.indexOf('id="hide-bottom-tool"'));
   assert.match(html, /class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool"/);
   assert.match(html, /id="changes-restore-review-dialog"/);
   for (const host of [

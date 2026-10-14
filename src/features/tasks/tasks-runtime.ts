@@ -1,5 +1,5 @@
 import type { TasksController } from "./tasks-controller.ts";
-import type { TasksWorkspaceIdentity } from "./tasks-model.ts";
+import type { TasksState, TasksWorkspaceIdentity } from "./tasks-model.ts";
 import { renderTasksView, type TasksCopy } from "./tasks-view.ts";
 
 export interface TasksRuntimeOptions {
@@ -45,7 +45,9 @@ export class TasksRuntime {
     const host = this.host();
     if (!host) return;
     const focus = captureTasksFocus(host);
-    host.innerHTML = renderTasksView(this.controller.state, this.options.copy?.());
+    const copy = this.options.copy?.();
+    host.innerHTML = renderTasksView(this.controller.state, copy);
+    syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
   }
@@ -66,6 +68,8 @@ export class TasksRuntime {
     const controller = new AbortController();
     this.abortController = controller;
     const signal = controller.signal;
+    this.root.querySelector<HTMLButtonElement>("#tasks-header-refresh")
+      ?.addEventListener("click", () => { void this.refresh(); }, { signal });
     host.addEventListener("input", (event) => {
       const target = event.target;
       if (target instanceof HTMLInputElement && target.matches("[data-tasks-query]")) this.controller.setQuery(target.value);
@@ -120,6 +124,15 @@ export class TasksRuntime {
   }
 
   private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-tool-host"); }
+}
+
+export function syncTasksHeaderRefresh(root: ParentNode, state: TasksState, copy?: TasksCopy): void {
+  const headerRefresh = root.querySelector<HTMLButtonElement>("#tasks-header-refresh");
+  if (!headerRefresh) return;
+  headerRefresh.disabled = state.status === "loading";
+  if (!copy) return;
+  headerRefresh.setAttribute("aria-label", copy.refresh);
+  headerRefresh.title = copy.refresh;
 }
 
 export type TasksFocusSnapshot =

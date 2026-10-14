@@ -132,8 +132,9 @@ test("bottom tool close stays right-aligned when feature actions are hidden", as
   assert.match(source, /\.bottom-tool-hide\s*\{[^}]*margin-left:\s*auto;/s);
   assert.match(
     source,
-    /\.terminal-header-actions:not\(\.hidden\)\s*\+\s*\.git-operation-open\.hidden\s*\+\s*\.bottom-tool-hide\s*\{[^}]*margin-left:\s*0;/s,
+    /\.terminal-header-actions:not\(\.hidden\)\s*\+\s*\.git-operation-open\.hidden\s*\+\s*\.tasks-header-refresh\.hidden\s*\+\s*\.bottom-tool-hide\s*\{[^}]*margin-left:\s*0;/s,
   );
+  assert.match(source, /\.tasks-header-refresh:not\(\.hidden\)\s*\+\s*\.bottom-tool-hide\s*\{[^}]*margin-left:\s*0;/s);
 });
 
 test("keyboard shortcut keycaps use one UI font metric independent of editor preferences", async () => {

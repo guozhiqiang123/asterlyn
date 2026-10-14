@@ -9,46 +9,12 @@
 .tasks-tool {
   display: grid;
   overflow: hidden;
-  grid-template-rows: 30px auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   background: var(--bg-panel);
 }
 
 .tasks-tool-with-quick-actions {
-  grid-template-rows: 30px auto auto minmax(0, 1fr);
-}
-
-.tasks-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-chrome);
-}
-
-.tasks-header h2 {
-  margin: 0;
-  color: var(--text);
-  font-size: 11px;
-}
-
-.tasks-header button {
-  display: inline-grid;
-  width: 24px;
-  height: 24px;
-  margin-left: auto;
-  place-items: center;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.tasks-header button:hover,
-.tasks-header button:focus-visible {
-  background: var(--bg-elevated);
-  color: var(--text);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .tasks-query-label {

@@ -62,7 +62,7 @@ test("loading discovery renders provider progress and a cancel action", () => {
   assert.match(html, /data-tasks-action="cancel"/);
   assert.match(html, /tasks-spinner/);
   assert.match(html, /aria-busy="true"/);
-  assert.match(html, /data-tasks-action="refresh"[^>]*disabled/u);
+  assert.doesNotMatch(html, /class="tasks-header"/);
 });
 
 test("failed discovery renders the error detail and retry action", () => {
@@ -80,6 +80,7 @@ test("ready discovery reports the task count while retaining the filter and list
   assert.match(html, /1 discovered/);
   assert.match(html, /data-tasks-query/);
   assert.match(html, /role="option"/);
+  assert.doesNotMatch(html, /class="tasks-header"/);
 });
 
 test("terminal tasks expose localized status, retry, and output actions", () => {

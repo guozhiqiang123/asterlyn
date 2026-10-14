@@ -36,6 +36,10 @@ export class BottomToolRuntime {
     hide.setAttribute("aria-label", presentation.hideLabel);
     hide.title = presentation.hideLabel;
     this.query("#git-operation-open").classList.toggle("hidden", !presentation.showGit);
+    const tasksRefresh = this.query<HTMLButtonElement>("#tasks-header-refresh");
+    tasksRefresh.classList.toggle("hidden", !presentation.showTasks);
+    tasksRefresh.setAttribute("aria-label", this.options.tasksCopy().refresh);
+    tasksRefresh.title = this.options.tasksCopy().refresh;
     this.query("#terminal-header-actions").classList.toggle("hidden", !presentation.showTerminal);
     this.query("#git-tool-grid").classList.toggle("hidden", !presentation.showGit);
     this.query("#stash-tool-grid").classList.toggle("hidden", !presentation.showStash);

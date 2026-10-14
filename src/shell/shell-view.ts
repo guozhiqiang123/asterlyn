@@ -13,13 +13,14 @@ export interface ShellViewModel {
   gitAvailable: boolean;
   demo: boolean;
   windowControlsAvailable: boolean;
-  localization?: Pick<LocaleCatalog, "shell" | "common" | "history">;
+  localization?: Pick<LocaleCatalog, "shell" | "common" | "history" | "tasks">;
 }
 
 export function renderShellView(model: ShellViewModel): string {
   const copy = model.localization?.shell ?? EN_US.shell;
   const common = model.localization?.common ?? EN_US.common;
   const branchCopy = model.localization?.history.topbarBranchMenu ?? EN_US.history.topbarBranchMenu;
+  const tasksCopy = model.localization?.tasks ?? EN_US.tasks;
   return `<main class="app-shell ${windowChromeClass(model.shell.windowChromeMode)}">
     <header class="topbar" data-tauri-drag-region>
       <div class="repository-switcher-anchor" id="repository-switcher-anchor">
@@ -64,7 +65,7 @@ export function renderShellView(model: ShellViewModel): string {
         </div>
         <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="${escapeHtml(copy.resizeGit)}" ${model.workspaceOpen ? "" : "hidden"}></div>
         <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}" ${model.workspaceOpen ? "" : "hidden"}>
-          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
+          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="compact-icon-button tasks-header-refresh hidden" id="tasks-header-refresh" type="button" aria-label="${escapeHtml(tasksCopy.refresh)}" title="${escapeHtml(tasksCopy.refresh)}">${icon("refresh", 15)}</button><button class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div>
           <div class="git-tool-grid" id="git-tool-grid">
             <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body" tabindex="-1"></div></section>
             <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="${escapeHtml(copy.resizeBranchTree)}"></div>
