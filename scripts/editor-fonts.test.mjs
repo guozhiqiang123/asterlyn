@@ -51,6 +51,8 @@ test("desktop packaging contains only JetBrains Mono and limits optional downloa
   assert.deepEqual(tauri.bundle.resources, {
     "../node_modules/@fontsource-variable/jetbrains-mono/LICENSE":
       "licenses/jetbrains-mono-OFL.txt",
+    "../third-party/licenses/clipboard-rs-0.3.5-MIT.txt":
+      "licenses/clipboard-rs-0.3.5-MIT.txt",
     "../third-party/licenses/codemirror-merge-6.12.2-MIT.txt":
       "licenses/codemirror-merge-6.12.2-MIT.txt",
     "../third-party/licenses/trash-5.2.9-MIT.txt":

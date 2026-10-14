@@ -63,6 +63,8 @@ import type {
   WorkspaceMutationRecoverySummary,
   WorkspaceEntryInspection,
   WorkspaceEntryKind,
+  SystemFileClipboardEntry,
+  SystemFileClipboardImportResult,
   WorkspaceRevealResult,
   WorkspaceTextSearchOptions,
   WorkspaceTextSearchReport,
@@ -117,6 +119,17 @@ export interface WorkspaceBridge {
     repositoryRoot: string,
     workspacePath: string,
   ): Promise<WorkspaceEntryInspection>;
+  copyWorkspaceEntryToSystemClipboard(
+    repositoryRoot: string,
+    workspacePath: string,
+    kind: WorkspaceEntryKind,
+  ): Promise<SystemFileClipboardEntry>;
+  readSystemFileClipboardEntry(): Promise<SystemFileClipboardEntry | null>;
+  importSystemFileClipboardEntry(
+    repositoryRoot: string,
+    clipboardToken: string,
+    destination: string,
+  ): Promise<SystemFileClipboardImportResult>;
   planWorkspaceMutation(
     repositoryRoot: string,
     planId: string,

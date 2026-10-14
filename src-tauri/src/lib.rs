@@ -16,7 +16,8 @@ use asterlyn_terminal::TerminalSessions;
 use asterlyn_workspace::{
     BinaryFileSnapshot, ReplacementApplyResult, ReplacementRecoverySummary, SaveTextFileResult,
     SearchOptions, TextFileSnapshot, Workspace, WorkspaceCollisionPolicy, WorkspaceError,
-    WorkspaceMutationOperation, WorkspaceMutationOutcome, WorkspaceMutationRecoverySummary,
+    WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationOutcome,
+    WorkspaceMutationRecoverySummary,
 };
 #[cfg(test)]
 use asterlyn_workspace::{SearchCancellationToken, SearchMode};
@@ -35,6 +36,9 @@ use adapters::image_preview::inspect_image;
 use adapters::image_preview::{
     IMAGE_PREVIEW_LIMIT_BYTES, ImageDiffPreview, ImagePreview, encode_image_diff,
     encode_image_preview,
+};
+use adapters::system_file_clipboard::{
+    SystemFileClipboardEntry, read_system_file_clipboard, write_system_file_clipboard,
 };
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
@@ -277,6 +281,9 @@ pub fn run() {
             reveal_workspace_entry,
             reveal_registered_worktree,
             inspect_workspace_entry,
+            copy_workspace_entry_to_system_clipboard,
+            read_system_file_clipboard_entry,
+            import_system_file_clipboard_entry,
             plan_workspace_mutation,
             execute_workspace_mutation,
             cancel_workspace_mutation,

@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 
 mod durable_file;
 mod entry_mutation;
+mod external_import;
 mod file_identity;
 mod file_restore;
 mod mutation_execution;
@@ -19,6 +20,7 @@ pub use entry_mutation::{
     WorkspaceEntryInventoryItem, WorkspaceEntryKind, WorkspaceMutationBlocker,
     WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationPlan,
 };
+pub use external_import::WorkspaceExternalImportResult;
 pub use file_restore::{
     FileRestoreAction, FileRestoreApplyResult, FileRestoreFileState, FileRestorePreview,
     FileRestoreRecoveryStatus, FileRestoreRecoverySummary, PreparedFileRestore,

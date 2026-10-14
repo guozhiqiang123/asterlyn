@@ -9,7 +9,8 @@ use std::sync::{
 use crate::{
     Workspace, WorkspaceEntryInventory, WorkspaceEntryKind, WorkspaceError,
     WorkspaceMutationLimits, WorkspaceMutationOperation, WorkspaceMutationPlan,
-    file_identity::opened_file_matches_path, sync_directory, validate_relative_path,
+    entry_mutation::relocated_inventory_matches, file_identity::opened_file_matches_path,
+    sync_directory, validate_relative_path,
 };
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -1527,24 +1528,28 @@ fn completed_move_outcome(
     result
 }
 
-fn copy_file_noclobber(source: &Path, destination: &Path, mode: u32) -> Result<(), WorkspaceError> {
-    let parent = destination
+pub(crate) fn copy_file_noclobber(
+    src: &Path,
+    dest: &Path,
+    mode: u32,
+) -> Result<(), WorkspaceError> {
+    let parent = dest
         .parent()
         .ok_or_else(|| WorkspaceError::InvalidMutation {
             message: "copied file has no destination parent".into(),
         })?;
     let source_metadata =
-        fs::symlink_metadata(source).map_err(|error| execution_io("inspect copied file", error))?;
+        fs::symlink_metadata(src).map_err(|error| execution_io("inspect copied file", error))?;
     if source_metadata.file_type().is_symlink() || !source_metadata.is_file() {
         return Err(WorkspaceError::OutsideWorkspace {
             message: "copied files cannot be symbolic links or reparse points".into(),
         });
     }
-    let mut input = open_copy_source_without_links(source)?;
+    let mut input = open_copy_source_without_links(src)?;
     let opened_metadata = input
         .metadata()
         .map_err(|error| execution_io("inspect opened copied file", error))?;
-    if !opened_file_matches_path(source, &source_metadata, &input, &opened_metadata)
+    if !opened_file_matches_path(src, &source_metadata, &input, &opened_metadata)
         .map_err(|error| execution_io("verify opened copied file identity", error))?
     {
         return Err(WorkspaceError::Conflict {
@@ -1571,7 +1576,7 @@ fn copy_file_noclobber(source: &Path, destination: &Path, mode: u32) -> Result<(
         .and_then(|_| temporary.as_file().sync_all())
         .map_err(|error| execution_io("sync copied file", error))?;
     temporary
-        .persist_noclobber(destination)
+        .persist_noclobber(dest)
         .map_err(|error| execution_io("install copied file without replacement", error.error))?;
     Ok(())
 }
@@ -1602,7 +1607,7 @@ fn open_copy_source_without_links(path: &Path) -> Result<File, WorkspaceError> {
     File::open(path).map_err(|error| execution_io("open copied file", error))
 }
 
-fn sync_tree_directories(root: &Path) -> Result<(), WorkspaceError> {
+pub(crate) fn sync_tree_directories(root: &Path) -> Result<(), WorkspaceError> {
     let mut directories = vec![root.to_path_buf()];
     let mut index = 0;
     while index < directories.len() {
@@ -1634,7 +1639,7 @@ fn remove_entry(path: &Path, kind: WorkspaceEntryKind) -> Result<(), std::io::Er
     }
 }
 
-fn set_mode(path: &Path, mode: u32) -> Result<(), WorkspaceError> {
+pub(crate) fn set_mode(path: &Path, mode: u32) -> Result<(), WorkspaceError> {
     let permissions = fs::metadata(path)
         .map_err(|error| execution_io("read copied entry permissions", error))?
         .permissions();
@@ -1709,37 +1714,6 @@ fn sync_parent(path: &Path) -> Result<(), WorkspaceError> {
             message: "workspace mutation entry has no parent".into(),
         })
         .and_then(sync_directory)
-}
-
-fn relocated_inventory_matches(
-    expected: &WorkspaceEntryInventory,
-    actual: &WorkspaceEntryInventory,
-) -> bool {
-    if expected.fingerprint != actual.fingerprint
-        || expected.source.kind != actual.source.kind
-        || expected.source.mode != actual.source.mode
-        || expected.source.byte_length != actual.source.byte_length
-        || expected.total_bytes != actual.total_bytes
-        || expected.entries.len() != actual.entries.len()
-        || expected.truncated != actual.truncated
-    {
-        return false;
-    }
-    let expected_root = Path::new(&expected.source.workspace_path);
-    let actual_root = Path::new(&actual.source.workspace_path);
-    expected
-        .entries
-        .iter()
-        .zip(&actual.entries)
-        .all(|(left, right)| {
-            let left_suffix = Path::new(&left.workspace_path).strip_prefix(expected_root);
-            let right_suffix = Path::new(&right.workspace_path).strip_prefix(actual_root);
-            left_suffix.ok() == right_suffix.ok()
-                && left.kind == right.kind
-                && left.revision == right.revision
-                && left.mode == right.mode
-                && left.byte_length == right.byte_length
-        })
 }
 
 fn validate_recovery_id(recovery_id: &str) -> Result<(), WorkspaceError> {

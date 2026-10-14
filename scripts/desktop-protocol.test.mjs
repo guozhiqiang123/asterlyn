@@ -615,6 +615,22 @@ test("desktop response validation checks workspace mutation plans and outcomes",
     error: null,
   };
   assert.deepEqual(validateDesktopResult("execute_workspace_mutation", outcome), outcome);
+  const clipboardEntry = { token: "b".repeat(64), name: "photo.jpg", kind: "file" };
+  assert.deepEqual(
+    validateDesktopResult("copy_workspace_entry_to_system_clipboard", clipboardEntry),
+    clipboardEntry,
+  );
+  assert.equal(validateDesktopResult("read_system_file_clipboard_entry", null), null);
+  const imported = {
+    status: "completed", destination: "images/photo.jpg", outcome: {
+      ...outcome,
+      planId: "system-file-import-bbbbbbbbbbbbbbbb",
+      affectedPaths: ["images/photo.jpg"],
+      pathRemaps: [],
+      invalidatedSlices: ["workspaceCatalog", "workingTree"],
+    },
+  };
+  assert.deepEqual(validateDesktopResult("import_system_file_clipboard_entry", imported), imported);
 
   assert.throws(
     () => validateDesktopResult("plan_workspace_mutation", {
@@ -629,6 +645,21 @@ test("desktop response validation checks workspace mutation plans and outcomes",
       invalidatedSlices: ["history"],
     }),
     /unsupported workspace slice/,
+  );
+  assert.throws(
+    () => validateDesktopResult("read_system_file_clipboard_entry", {
+      ...clipboardEntry,
+      token: "short",
+    }),
+    /system file clipboard entry/u,
+  );
+  assert.throws(
+    () => validateDesktopResult("import_system_file_clipboard_entry", {
+      status: "completed",
+      destination: "images/photo.jpg",
+      outcome: { ...outcome, invalidatedSlices: ["history"] },
+    }),
+    /unsupported workspace slice/u,
   );
 });
 

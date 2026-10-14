@@ -23,6 +23,42 @@ export function assertWorkspaceEntryInspection(
   assert(Boolean(result.fingerprint), command, "fingerprint must not be empty");
 }
 
+export function assertSystemFileClipboardEntry(
+  value: unknown,
+  command: DesktopCommandName,
+): void {
+  assert(isSystemFileClipboardEntry(value), command, "expected a system file clipboard entry");
+}
+
+export function assertNullableSystemFileClipboardEntry(
+  value: unknown,
+  command: DesktopCommandName,
+): void {
+  assert(
+    value === null || isSystemFileClipboardEntry(value),
+    command,
+    "expected a system file clipboard entry or null",
+  );
+}
+
+export function assertSystemFileClipboardImportResult(
+  value: unknown,
+  command: DesktopCommandName,
+): void {
+  const result = record(value, command);
+  strings(result, command, "status", "destination");
+  assert(Boolean(result.destination), command, "destination must not be empty");
+  if (result.status === "completed") {
+    assertWorkspaceMutationOutcome(result.outcome, command);
+    return;
+  }
+  assert(
+    result.status === "destinationExists",
+    command,
+    "system file clipboard import status must be supported",
+  );
+}
+
 export function assertWorkspaceMutationPreview(value: unknown, command: DesktopCommandName): void {
   const result = record(value, command);
   strings(result, command, "planId", "collisionPolicy");
@@ -141,6 +177,13 @@ function isWorkspaceEntryIdentity(value: unknown): value is TransportRecord {
     typeof value.revision === "string" &&
     typeof value.mode === "number" && Number.isSafeInteger(value.mode) && value.mode >= 0 &&
     typeof value.byteLength === "number" && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0;
+}
+
+function isSystemFileClipboardEntry(value: unknown): value is TransportRecord {
+  return isRecord(value) &&
+    typeof value.token === "string" && value.token.length === 64 &&
+    typeof value.name === "string" && value.name.length > 0 &&
+    (value.kind === "file" || value.kind === "directory");
 }
 
 function assertWorkspaceMutationBlocker(value: unknown, command: DesktopCommandName): void {

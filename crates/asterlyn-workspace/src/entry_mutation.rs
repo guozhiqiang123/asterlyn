@@ -196,6 +196,40 @@ impl Workspace {
         self.inspect_entry_with_revision(workspace_path, limits, FileRevisionPolicy::Content)
     }
 
+    /// Inventories one clipboard-selected entry outside the authorized workspace without
+    /// following a symbolic-link/reparse-point source. Inventory paths are rooted at the entry's
+    /// UTF-8 file name so the result can be relocated safely into the workspace.
+    pub fn inspect_external_entry(
+        &self,
+        source: &Path,
+        limits: WorkspaceMutationLimits,
+    ) -> Result<WorkspaceEntryInventory, WorkspaceError> {
+        validate_limits(limits)?;
+        if !source.is_absolute() {
+            return Err(WorkspaceError::InvalidMutation {
+                message: "external workspace imports require an absolute source path".into(),
+            });
+        }
+        let source_name = source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| WorkspaceError::UnsupportedFile {
+                message: "external workspace imports require a UTF-8 file name".into(),
+            })?;
+        let metadata = fs::symlink_metadata(source).map_err(inventory_io)?;
+        if metadata.file_type().is_symlink() {
+            return Err(WorkspaceError::OutsideWorkspace {
+                message: "external workspace import sources cannot be symbolic links".into(),
+            });
+        }
+        let kind = entry_kind(&metadata)?;
+        let relative = Path::new(source_name);
+        let mut builder = InventoryBuilder::new(relative, limits, FileRevisionPolicy::Content);
+        builder.collect(relative, source, &metadata, 0)?;
+        builder.finish(source_name, kind, &metadata)
+    }
+
     pub(crate) fn inspect_trash_entry(
         &self,
         workspace_path: &str,
@@ -411,7 +445,7 @@ impl Workspace {
         Ok(current)
     }
 
-    fn resolve_destination(&self, destination: &str) -> Result<PathBuf, WorkspaceError> {
+    pub(crate) fn resolve_destination(&self, destination: &str) -> Result<PathBuf, WorkspaceError> {
         let relative = validate_relative_path(destination)?;
         let parent = relative
             .parent()
@@ -613,7 +647,9 @@ impl InventoryBuilder {
     }
 }
 
-fn inventory_blockers(inventory: &WorkspaceEntryInventory) -> Vec<WorkspaceMutationBlocker> {
+pub(crate) fn inventory_blockers(
+    inventory: &WorkspaceEntryInventory,
+) -> Vec<WorkspaceMutationBlocker> {
     let mut blockers = Vec::new();
     if inventory.truncated {
         blockers.push(WorkspaceMutationBlocker::InventoryTruncated);
@@ -634,6 +670,37 @@ fn inventory_blockers(inventory: &WorkspaceEntryInventory) -> Vec<WorkspaceMutat
         });
     }
     blockers
+}
+
+pub(crate) fn relocated_inventory_matches(
+    expected: &WorkspaceEntryInventory,
+    actual: &WorkspaceEntryInventory,
+) -> bool {
+    if expected.fingerprint != actual.fingerprint
+        || expected.source.kind != actual.source.kind
+        || expected.source.mode != actual.source.mode
+        || expected.source.byte_length != actual.source.byte_length
+        || expected.total_bytes != actual.total_bytes
+        || expected.entries.len() != actual.entries.len()
+        || expected.truncated != actual.truncated
+    {
+        return false;
+    }
+    let expected_root = Path::new(&expected.source.workspace_path);
+    let actual_root = Path::new(&actual.source.workspace_path);
+    expected
+        .entries
+        .iter()
+        .zip(&actual.entries)
+        .all(|(left, right)| {
+            let left_suffix = Path::new(&left.workspace_path).strip_prefix(expected_root);
+            let right_suffix = Path::new(&right.workspace_path).strip_prefix(actual_root);
+            left_suffix.ok() == right_suffix.ok()
+                && left.kind == right.kind
+                && left.revision == right.revision
+                && left.mode == right.mode
+                && left.byte_length == right.byte_length
+        })
 }
 
 fn validate_limits(limits: WorkspaceMutationLimits) -> Result<(), WorkspaceError> {

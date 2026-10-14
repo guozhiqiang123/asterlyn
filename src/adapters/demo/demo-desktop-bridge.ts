@@ -1,5 +1,4 @@
-import { invokeDesktopCommand as invoke, isTauriRuntime, openDialog } from
-  "../tauri/desktop-command-adapter";
+import { invokeDesktopCommand as invoke, isTauriRuntime, openDialog } from "../tauri/desktop-command-adapter";
 import { tauriDesktopBridge } from "../tauri/tauri-desktop-bridge";
 import { compileDemoGlobs } from "./demo-glob";
 import { demoHeadCommitMutationBridge } from "./demo-head-commit-mutation-bridge.ts";
@@ -12,6 +11,7 @@ import {
 import { demoWorkingDiffBase } from "./demo-working-diff.ts";
 import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
 import { demoWorkspaceReplacementDiff } from "./demo-workspace-replacement-diff.ts";
+import { demoSystemFileClipboardBridge } from "./demo-system-file-clipboard-bridge.ts";
 import { demoCreateStash, demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
@@ -65,10 +65,7 @@ import type {
   WorkspaceRevealResult,
   WorkspaceEntryInspection,
 } from "../../models";
-import {
-  parseWindowChromeMode,
-  type WindowChromeMode,
-} from "../../protocol/window-chrome.ts";
+import { parseWindowChromeMode, type WindowChromeMode } from "../../protocol/window-chrome.ts";
 import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-bridge";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
@@ -147,6 +144,7 @@ interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
 }
 
 const demoBridge: DesktopBridge = {
+  ...demoSystemFileClipboardBridge,
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   isDemo: !isTauri,

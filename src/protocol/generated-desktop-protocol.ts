@@ -36,6 +36,9 @@ export interface DesktopCommandMap {
   reveal_workspace_entry: { args: { repositoryRoot: string; workspacePath: string; kind: Model.WorkspaceEntryKind; }; result: Model.WorkspaceRevealResult };
   reveal_registered_worktree: { args: { repositoryRoot: string; sourceFullName: string; sourceOid: string; }; result: Model.WorkspaceRevealResult };
   inspect_workspace_entry: { args: { repositoryRoot: string; workspacePath: string; }; result: Model.WorkspaceEntryInspection };
+  copy_workspace_entry_to_system_clipboard: { args: { repositoryRoot: string; workspacePath: string; kind: Model.WorkspaceEntryKind; }; result: Model.SystemFileClipboardEntry };
+  read_system_file_clipboard_entry: { args: Record<string, never>; result: Model.SystemFileClipboardEntry | null };
+  import_system_file_clipboard_entry: { args: { repositoryRoot: string; clipboardToken: string; destination: string; }; result: Model.SystemFileClipboardImportResult };
   plan_workspace_mutation: { args: { repositoryRoot: string; planId: string; operation: Model.WorkspaceMutationOperation; collisionPolicy: Model.WorkspaceCollisionPolicy; }; result: Model.WorkspaceMutationPreview };
   execute_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: Model.WorkspaceMutationOutcome };
   cancel_workspace_mutation: { args: { repositoryRoot: string; planId: string; }; result: void };
@@ -147,6 +150,9 @@ export const DESKTOP_RESULT_VALIDATORS: {
   reveal_workspace_entry: "workspaceRevealResult",
   reveal_registered_worktree: "workspaceRevealResult",
   inspect_workspace_entry: "workspaceEntryInspection",
+  copy_workspace_entry_to_system_clipboard: "systemFileClipboardEntry",
+  read_system_file_clipboard_entry: "nullableSystemFileClipboardEntry",
+  import_system_file_clipboard_entry: "systemFileClipboardImportResult",
   plan_workspace_mutation: "workspaceMutationPreview",
   execute_workspace_mutation: "workspaceMutationOutcome",
   cancel_workspace_mutation: "void",

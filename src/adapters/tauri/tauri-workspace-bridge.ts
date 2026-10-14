@@ -11,6 +11,8 @@ import type {
   WorkspaceMutationPreview,
   WorkspaceMutationRecoverySummary,
   WorkspaceEntryInspection,
+  SystemFileClipboardEntry,
+  SystemFileClipboardImportResult,
   WorkspaceRevealResult,
   WorkspaceTextSearchReport,
 } from "../../models.ts";
@@ -41,6 +43,20 @@ export const tauriWorkspaceBridge: WorkspaceBridge = {
     invokeDesktopCommand<WorkspaceEntryInspection>("inspect_workspace_entry", {
       repositoryRoot,
       workspacePath,
+    }),
+  copyWorkspaceEntryToSystemClipboard: (repositoryRoot, workspacePath, kind) =>
+    invokeDesktopCommand<SystemFileClipboardEntry>("copy_workspace_entry_to_system_clipboard", {
+      repositoryRoot,
+      workspacePath,
+      kind,
+    }),
+  readSystemFileClipboardEntry: () =>
+    invokeDesktopCommand<SystemFileClipboardEntry | null>("read_system_file_clipboard_entry", {}),
+  importSystemFileClipboardEntry: (repositoryRoot, clipboardToken, destination) =>
+    invokeDesktopCommand<SystemFileClipboardImportResult>("import_system_file_clipboard_entry", {
+      repositoryRoot,
+      clipboardToken,
+      destination,
     }),
   planWorkspaceMutation: (repositoryRoot, planId, operation, collisionPolicy) =>
     invokeDesktopCommand<WorkspaceMutationPreview>("plan_workspace_mutation", {

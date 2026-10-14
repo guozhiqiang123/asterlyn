@@ -8,6 +8,9 @@ import { assertCommitFileComparison } from "./validate-commit-file-comparison.ts
 import { assertCommitFileRestorePreview, assertFileRestoreApplyResult, assertFileRestoreRecoveryList } from "./validate-file-restore.ts";
 import {
   assertWorkspaceEntryInspection,
+  assertNullableSystemFileClipboardEntry,
+  assertSystemFileClipboardEntry,
+  assertSystemFileClipboardImportResult,
   assertWorkspaceMutationOutcome,
   assertWorkspaceMutationPreview,
   assertWorkspaceMutationRecoveryList,
@@ -113,6 +116,15 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       );
       break;
     }
+    case "systemFileClipboardEntry":
+      assertSystemFileClipboardEntry(value, command);
+      break;
+    case "nullableSystemFileClipboardEntry":
+      assertNullableSystemFileClipboardEntry(value, command);
+      break;
+    case "systemFileClipboardImportResult":
+      assertSystemFileClipboardImportResult(value, command);
+      break;
     case "terminalStarted": {
       const result = record(value, command);
       numbers(result, command, "protocolVersion");

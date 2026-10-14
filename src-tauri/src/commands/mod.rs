@@ -48,12 +48,13 @@ pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write
 pub(crate) use workspace::{
     acknowledge_workspace_mutation_recovery, apply_workspace_replacement,
     cancel_workspace_mutation, cancel_workspace_replacement, cancel_workspace_text_search,
-    execute_workspace_mutation, finalize_workspace_mutation, finalize_workspace_replacement,
-    inspect_workspace_entry, list_ignored_project_directory, list_project_files,
-    list_workspace_mutation_recoveries, list_workspace_replacement_recoveries,
-    plan_workspace_mutation, preview_workspace_replacement, read_text_file,
-    read_workspace_replacement_diff, reveal_registered_worktree, reveal_workspace_entry,
-    rollback_workspace_mutation, rollback_workspace_replacement, save_text_file,
-    search_workspace_text,
+    copy_workspace_entry_to_system_clipboard, execute_workspace_mutation,
+    finalize_workspace_mutation, finalize_workspace_replacement,
+    import_system_file_clipboard_entry, inspect_workspace_entry, list_ignored_project_directory,
+    list_project_files, list_workspace_mutation_recoveries, list_workspace_replacement_recoveries,
+    plan_workspace_mutation, preview_workspace_replacement, read_system_file_clipboard_entry,
+    read_text_file, read_workspace_replacement_diff, reveal_registered_worktree,
+    reveal_workspace_entry, rollback_workspace_mutation, rollback_workspace_replacement,
+    save_text_file, search_workspace_text,
 };
 pub(crate) use workspace_watch::{start_workspace_watch, stop_workspace_watch};

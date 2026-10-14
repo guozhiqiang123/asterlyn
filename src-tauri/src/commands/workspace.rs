@@ -8,6 +8,18 @@ use crate::adapters::system_file_manager::{
 use crate::adapters::system_trash::move_all_to_system_trash;
 use asterlyn_workspace::WorkspaceEntryKind;
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+pub(crate) enum SystemFileClipboardImportResult {
+    Completed {
+        destination: String,
+        outcome: WorkspaceMutationOutcome,
+    },
+    DestinationExists {
+        destination: String,
+    },
+}
+
 #[tauri::command]
 pub(crate) async fn list_project_files(
     repository_root: String,
@@ -90,6 +102,86 @@ pub(crate) async fn inspect_workspace_entry(
     let root = active_workspaces.resolve(window.label(), &repository_root)?;
     run_workspace_blocking("inspect workspace entry", move || {
         inspect_workspace_entry_inventory(&root, &workspace_path)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) fn copy_workspace_entry_to_system_clipboard(
+    repository_root: String,
+    workspace_path: String,
+    kind: WorkspaceEntryKind,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<SystemFileClipboardEntry, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let source = resolve_workspace_entry(&root, &workspace_path, kind)?;
+    write_system_file_clipboard(&source, kind)
+}
+
+#[tauri::command]
+pub(crate) fn read_system_file_clipboard_entry()
+-> Result<Option<SystemFileClipboardEntry>, WorkspaceError> {
+    read_system_file_clipboard().map(|entry| entry.map(|resolved| resolved.summary))
+}
+
+#[tauri::command]
+pub(crate) async fn import_system_file_clipboard_entry(
+    repository_root: String,
+    clipboard_token: String,
+    destination: String,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+    writes: State<'_, WorkspaceWriteRegistry>,
+) -> Result<SystemFileClipboardImportResult, WorkspaceError> {
+    let root = active_workspaces.resolve(window.label(), &repository_root)?;
+    let clipboard =
+        read_system_file_clipboard()?.ok_or_else(|| WorkspaceError::InvalidMutation {
+            message: "the system clipboard does not contain a file or folder".into(),
+        })?;
+    if clipboard.summary.token != clipboard_token {
+        return Err(WorkspaceError::Conflict {
+            current_revision: "system-file-clipboard-changed".into(),
+        });
+    }
+    let write_lock = writes.lock_for(root.to_string_lossy().into_owned())?;
+    run_workspace_blocking("import system file clipboard entry", move || {
+        let _guard = write_lock.lock().map_err(|_| WorkspaceError::Io {
+            operation: "serialize external workspace import".into(),
+            message: "workspace-write lock was poisoned".into(),
+        })?;
+        let workspace = Workspace::open(&root)?;
+        match workspace.import_external_entry(
+            &clipboard.path,
+            &destination,
+            WorkspaceMutationLimits::default_transfer(),
+        )? {
+            asterlyn_workspace::WorkspaceExternalImportResult::DestinationExists {
+                destination,
+            } => Ok(SystemFileClipboardImportResult::DestinationExists { destination }),
+            asterlyn_workspace::WorkspaceExternalImportResult::Completed {
+                destination,
+                affected_paths,
+                ..
+            } => Ok(SystemFileClipboardImportResult::Completed {
+                outcome: WorkspaceMutationOutcome {
+                    plan_id: format!(
+                        "system-file-import-{}",
+                        clipboard_token.get(..16).unwrap_or("invalid-token")
+                    ),
+                    status: asterlyn_workspace::WorkspaceMutationStatus::Completed,
+                    affected_paths,
+                    path_remaps: Vec::new(),
+                    invalidated_slices: vec![
+                        asterlyn_workspace::WorkspaceMutationInvalidation::WorkspaceCatalog,
+                        asterlyn_workspace::WorkspaceMutationInvalidation::WorkingTree,
+                    ],
+                    recovery_id: None,
+                    error: None,
+                },
+                destination,
+            }),
+        }
     })
     .await
 }

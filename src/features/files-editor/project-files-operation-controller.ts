@@ -1,4 +1,6 @@
 import type {
+  SystemFileClipboardEntry,
+  SystemFileClipboardImportResult,
   WorkspaceEntryInspection,
   WorkspaceMutationRecoveryAction,
   WorkspaceMutationRecoverySummary,
@@ -9,17 +11,35 @@ import type {
   WorkspaceMutationExecutionResult,
   WorkspaceMutationIdentity,
   WorkspaceMutationPlanResult,
+  WorkspaceMutationReconciliationResult,
 } from "../../application/workspace-mutation-coordinator.ts";
 import type { EditorPathMutationRequest } from "../../editor-path-mutation.ts";
 import type { NewFileStagePreference } from "../../preferences.ts";
 import { isProjectWorkspaceRootPath } from "../../presentation/project-tree.ts";
 import type { ProjectFilesContextTarget } from "./project-files-binding.ts";
 import {
+  baseName,
+  completedOutcome,
+  destinationDirectory,
+  executionFailure,
+  isAtOrBelow,
+  joinPath,
+  parentPath,
+  planFailure,
+  recoveryPaths,
+  targetFromEdit,
+  validateWorkspaceEntryName,
+} from "./project-files-operation-helpers.ts";
+import type { ProjectFilesOperationMessages } from "./project-files-operation-types.ts";
+import {
   WorkspaceFileClipboard,
   workspaceFileClipboardMatchesPreview,
   type WorkspaceFileClipboardEntry,
   type WorkspaceFileClipboardMode,
 } from "./workspace-file-clipboard.ts";
+
+export { destinationDirectory, validateWorkspaceEntryName } from "./project-files-operation-helpers.ts";
+export type { ProjectFilesOperationMessages } from "./project-files-operation-types.ts";
 
 export interface ProjectFilesInlineEdit {
   readonly kind: "create" | "rename";
@@ -63,37 +83,19 @@ export interface ProjectFilesOperationState {
   readonly recoveryError: string | null;
 }
 
-export interface ProjectFilesOperationMessages {
-  readonly invalidName: string;
-  readonly unsafeSource: string;
-  readonly sourceChanged: string;
-  readonly destinationExists: string;
-  readonly operationFailed: string;
-  readonly copied: string;
-  readonly cut: string;
-  readonly created: string;
-  readonly stagedCreated: string;
-  readonly leftCreatedUntracked: string;
-  readonly stageCreatedFailed: string;
-  readonly renamed: string;
-  readonly pasted: string;
-  readonly recoveryTitle: string;
-  readonly recoveryDetail: string;
-  readonly recoveryClose: string;
-  readonly recoveryRollback: string;
-  readonly recoveryFinalize: string;
-  readonly recoveryAcknowledge: string;
-  readonly recoveryWorking: string;
-  readonly recoveryResolved: string;
-  readonly recoveryFailed: string;
-  readonly recoveryDirty: string;
-  recoveryCount(count: number): string;
-  recoveryPhase(phase: string): string;
-  recoveryState(state: "missing" | "matchesReviewed" | "changedOrUnknown"): string;
-}
-
 export interface ProjectFilesOperationGateway {
   inspectWorkspaceEntry(root: string, path: string): Promise<WorkspaceEntryInspection>;
+  copyWorkspaceEntryToSystemClipboard?(
+    root: string,
+    path: string,
+    kind: "file" | "directory",
+  ): Promise<SystemFileClipboardEntry>;
+  readSystemFileClipboardEntry?(): Promise<SystemFileClipboardEntry | null>;
+  importSystemFileClipboardEntry?(
+    root: string,
+    clipboardToken: string,
+    destination: string,
+  ): Promise<SystemFileClipboardImportResult>;
 }
 
 export interface ProjectFilesMutationPort {
@@ -139,6 +141,10 @@ export interface ProjectFilesOperationRuntime {
     recovery: WorkspaceMutationRecoverySummary,
     action: WorkspaceMutationRecoveryAction,
   ): Promise<void>;
+  reconcileImportedMutation(
+    identity: WorkspaceMutationIdentity,
+    outcome: WorkspaceMutationOutcome,
+  ): Promise<WorkspaceMutationReconciliationResult>;
   status(message: string): void;
   error(error: unknown): void;
 }
@@ -337,6 +343,13 @@ export class ProjectFilesOperationController {
       if (!this.runtime.isTargetCurrent(target) || inspection.source.kind !== target.kind ||
         inspection.source.workspacePath !== target.workspacePath) return;
       const location = this.runtime.repositoryLocation(target.workspacePath);
+      const systemEntry = this.gateway.copyWorkspaceEntryToSystemClipboard
+        ? await this.gateway.copyWorkspaceEntryToSystemClipboard(
+            target.workspaceRoot,
+            target.workspacePath,
+            target.kind,
+          )
+        : null;
       if (!location || !this.clipboard.capture(
         mode,
         target.workspaceRoot,
@@ -344,6 +357,7 @@ export class ProjectFilesOperationController {
         location.repositoryId,
         location.path,
         inspection,
+        systemEntry?.token ?? null,
       )) {
         this.runtime.error(new Error(this.messages().unsafeSource));
         return;
@@ -361,17 +375,42 @@ export class ProjectFilesOperationController {
 
   async paste(target: ProjectFilesContextTarget, requestedName?: string): Promise<void> {
     const identity = this.runtime.currentIdentity();
-    const source = identity && this.clipboard.current(identity.root, identity.generation);
+    const internalSource = identity && this.clipboard.current(identity.root, identity.generation);
     const dialog = this.value.dialog;
     const pasteDialogActive = dialog?.kind === "paste-name" && !dialog.busy;
     if (
       !identity ||
-      !source ||
       !this.runtime.isTargetCurrent(target) ||
       this.value.busyPath !== null ||
       this.value.inlineEdit !== null ||
       (this.value.dialog !== null && !pasteDialogActive)
     ) return;
+    let systemSource: SystemFileClipboardEntry | null | undefined;
+    if (this.gateway.readSystemFileClipboardEntry) {
+      try {
+        systemSource = await this.gateway.readSystemFileClipboardEntry();
+      } catch (error) {
+        if (!internalSource) {
+          this.runtime.error(error);
+          return;
+        }
+      }
+    }
+    if (!this.runtime.isTargetCurrent(target) || !this.sameIdentity(identity)) return;
+    const source = internalSource && (
+      systemSource === undefined ||
+      (internalSource.systemClipboardToken === null && systemSource === null) ||
+      internalSource.systemClipboardToken === systemSource?.token
+    ) ? internalSource : null;
+    if (!source) {
+      if (systemSource && this.gateway.importSystemFileClipboardEntry) {
+        await this.pasteExternal(identity, target, systemSource, requestedName);
+      } else {
+        this.closeDialogWithoutCancel();
+        this.runtime.error(new Error(this.messages().clipboardEmpty));
+      }
+      return;
+    }
     const name = requestedName === undefined ? baseName(source.workspacePath) : validateWorkspaceEntryName(requestedName);
     if (!name) {
       this.openPasteName(target, requestedName ?? baseName(source.workspacePath), this.messages().invalidName);
@@ -433,6 +472,58 @@ export class ProjectFilesOperationController {
       if (current) this.clipboard.advanceGeneration(source, current.root, current.generation);
     }
     this.runtime.completed("paste", target, destination, outcome);
+    this.runtime.status(this.messages().pasted);
+  }
+
+  private async pasteExternal(
+    identity: WorkspaceMutationIdentity,
+    target: ProjectFilesContextTarget,
+    source: SystemFileClipboardEntry,
+    requestedName?: string,
+  ): Promise<void> {
+    const name = requestedName === undefined
+      ? validateWorkspaceEntryName(source.name)
+      : validateWorkspaceEntryName(requestedName);
+    if (!name) {
+      this.openPasteName(target, requestedName ?? source.name, this.messages().invalidName);
+      return;
+    }
+    const destination = joinPath(destinationDirectory(target), name);
+    this.value = { ...this.value, busyPath: target.workspacePath };
+    if (this.value.dialog?.kind === "paste-name") this.value.dialog.busy = true;
+    this.emit();
+    let result: SystemFileClipboardImportResult;
+    try {
+      result = await this.gateway.importSystemFileClipboardEntry!(
+        identity.root,
+        source.token,
+        destination,
+      );
+    } catch (error) {
+      this.value = { ...this.value, busyPath: null, dialog: null };
+      this.emit();
+      this.runtime.error(error);
+      return;
+    }
+    if (!this.sameIdentity(identity)) {
+      this.value = { ...this.value, busyPath: null, dialog: null };
+      this.emit();
+      return;
+    }
+    if (result.status === "destinationExists") {
+      this.value = { ...this.value, busyPath: null };
+      this.openPasteName(target, name, this.messages().destinationExists);
+      return;
+    }
+    const reconciliation = await this.runtime.reconcileImportedMutation(identity, result.outcome);
+    this.value = { ...this.value, busyPath: null, dialog: null };
+    this.emit();
+    if (reconciliation.status === "failure") {
+      this.runtime.error(reconciliation.error);
+      return;
+    }
+    if (reconciliation.status === "stale") return;
+    this.runtime.completed("paste", target, result.destination, result.outcome);
     this.runtime.status(this.messages().pasted);
   }
 
@@ -706,76 +797,4 @@ export class ProjectFilesOperationController {
     if (this.disposed) return;
     for (const listener of this.listeners) listener();
   }
-}
-
-export function validateWorkspaceEntryName(value: string): string | null {
-  if (!value || value === "." || value === ".." || value.includes("/") || value.includes("\\") || value.includes("\0")) {
-    return null;
-  }
-  return value;
-}
-
-export function destinationDirectory(target: ProjectFilesContextTarget): string {
-  return target.kind === "directory" ? target.workspacePath : parentPath(target.workspacePath);
-}
-
-function parentPath(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  const offset = normalized.lastIndexOf("/");
-  return offset < 0 ? "" : normalized.slice(0, offset);
-}
-
-function baseName(path: string): string {
-  return path.replaceAll("\\", "/").split("/").at(-1) ?? path;
-}
-
-function joinPath(parent: string, name: string): string {
-  return parent ? `${parent}/${name}` : name;
-}
-
-function completedOutcome(result: WorkspaceMutationExecutionResult): WorkspaceMutationOutcome | null {
-  return result.status === "completed" &&
-      (result.outcome.status === "completed" || result.outcome.status === "noOp")
-    ? result.outcome
-    : null;
-}
-
-function planFailure(result: WorkspaceMutationPlanResult, messages: ProjectFilesOperationMessages): string {
-  if (result.status === "blocked" && result.reason === "destinationExists") return messages.destinationExists;
-  if (result.status === "failure" && result.error instanceof Error) return result.error.message;
-  return messages.operationFailed;
-}
-
-function executionFailure(
-  result: WorkspaceMutationExecutionResult,
-  messages: ProjectFilesOperationMessages,
-): string {
-  if ("outcome" in result && result.outcome.error) return result.outcome.error;
-  if (result.status === "failure" && result.error instanceof Error) return result.error.message;
-  return messages.operationFailed;
-}
-
-function recoveryPaths(recovery: WorkspaceMutationRecoverySummary): string[] {
-  const paths = recovery.sourceStates.map((state) => state.path);
-  if (recovery.destination) paths.push(recovery.destination);
-  return Array.from(new Set(paths));
-}
-
-function targetFromEdit(
-  identity: WorkspaceMutationIdentity,
-  edit: ProjectFilesInlineEdit,
-): ProjectFilesContextTarget {
-  return {
-    workspaceRoot: identity.root,
-    workspaceGeneration: identity.generation,
-    workspacePath: edit.sourcePath ?? edit.anchorPath,
-    kind: edit.sourceKind ?? "file",
-    file: null,
-    status: "unmodified",
-    readOnly: false,
-  };
-}
-
-function isAtOrBelow(path: string, ancestor: string): boolean {
-  return path === ancestor || path.startsWith(`${ancestor}/`);
 }

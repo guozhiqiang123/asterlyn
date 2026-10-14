@@ -181,7 +181,7 @@ export const ZH_CN = {
       copiedAbsolutePath: "已复制绝对路径", clipboardUnavailable: "无法复制到剪贴板",
       revealedSelection: "已在系统文件管理器中显示", openedContainingFolder: "已打开所在文件夹",
       readOnly: "此条目为只读", mutationBusy: "另一项文件操作正在进行", multipleSelected: "不能同时对多个项目执行此操作",
-      clipboardEmpty: "请先复制或剪切文件或文件夹", operationsUnavailable: "文件修改功能尚不可用",
+      clipboardEmpty: "剪贴板中没有可粘贴的文件或文件夹", operationsUnavailable: "文件修改功能尚不可用",
       rootUnavailable: "项目根目录不能在此移动、重命名或删除",
       gitUnavailable: "Git History 需要 Git 项目", noHistory: "此条目没有已跟踪的 Git 历史",
       ambiguousHistory: "此文件夹跨越多个 Git 根",

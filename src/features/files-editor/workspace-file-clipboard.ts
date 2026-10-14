@@ -13,12 +13,13 @@ export interface WorkspaceFileClipboardEntry {
   readonly kind: WorkspaceEntryKind;
   readonly repositoryId: string;
   readonly repositoryPath: string;
+  readonly systemClipboardToken: string | null;
   readonly inspection: WorkspaceEntryInspection;
 }
 
 type Listener = (entry: WorkspaceFileClipboardEntry | null) => void;
 
-/** Window-local clipboard for safe workspace transfers. It never writes the operating-system clipboard. */
+/** Reviewed workspace identity paired with the native file clipboard token. */
 export class WorkspaceFileClipboard {
   private value: WorkspaceFileClipboardEntry | null = null;
   private readonly listeners = new Set<Listener>();
@@ -39,6 +40,7 @@ export class WorkspaceFileClipboard {
     repositoryId: string,
     repositoryPath: string,
     inspection: WorkspaceEntryInspection,
+    systemClipboardToken: string | null = null,
   ): WorkspaceFileClipboardEntry | null {
     if (!safeInspection(inspection)) return null;
     const next: WorkspaceFileClipboardEntry = {
@@ -49,6 +51,7 @@ export class WorkspaceFileClipboard {
       kind: inspection.source.kind,
       repositoryId,
       repositoryPath,
+      systemClipboardToken,
       inspection: structuredClone(inspection),
     };
     this.value = next;

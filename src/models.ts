@@ -675,6 +675,16 @@ export interface WorkspaceEntryInspection {
   fingerprint: string;
 }
 
+export interface SystemFileClipboardEntry {
+  token: string;
+  name: string;
+  kind: WorkspaceEntryKind;
+}
+
+export type SystemFileClipboardImportResult =
+  | { status: "completed"; destination: string; outcome: WorkspaceMutationOutcome }
+  | { status: "destinationExists"; destination: string };
+
 export interface WorkspaceRevealResult {
   selected: boolean;
 }

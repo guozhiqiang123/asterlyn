@@ -82,6 +82,7 @@ export function projectFilesOperationMessages(
     sourceChanged: labels.sourceChanged,
     destinationExists: labels.destinationExists,
     operationFailed: labels.operationFailed,
+    clipboardEmpty: labels.clipboardEmpty,
     copied: labels.copiedEntry,
     cut: labels.cutEntry,
     created: labels.createdFile,
@@ -118,8 +119,12 @@ export interface ProjectFilesRecoveryRuntimeOptions {
 
 export function createProjectFilesRecoveryRuntime(
   options: ProjectFilesRecoveryRuntimeOptions,
-): Pick<ProjectFilesOperationControllerRuntime, "recoveryBlocked" | "reconcileRecovery"> {
+): Pick<
+  ProjectFilesOperationControllerRuntime,
+  "recoveryBlocked" | "reconcileRecovery" | "reconcileImportedMutation"
+> {
   return {
+    reconcileImportedMutation: options.reconcileMutation,
     recoveryBlocked: (paths, action) => {
       if (action === "acknowledge") return false;
       options.captureEditor();

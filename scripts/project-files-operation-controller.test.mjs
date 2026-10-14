@@ -12,6 +12,7 @@ const messages = {
   destinationExists: "destination exists", operationFailed: "failed", copied: "copied", cut: "cut",
   created: "created", stagedCreated: "staged", leftCreatedUntracked: "left untracked",
   stageCreatedFailed: "stage failed", renamed: "renamed", pasted: "pasted", trashed: "trashed",
+  clipboardEmpty: "clipboard empty",
 };
 
 function target(overrides = {}) {
@@ -47,10 +48,10 @@ function outcome(planId, operation) {
   };
 }
 
-function fixture({ stagePreference = "ask", canStage = true, stageFails = false } = {}) {
+function fixture({ stagePreference = "ask", canStage = true, stageFails = false, gateway = {} } = {}) {
   const records = {
     plans: [], executions: [], completed: [], status: [], errors: [], remembered: [], staged: [],
-    cancels: 0,
+    reconciliations: [], cancels: 0,
   };
   let nextPlan = null;
   const mutations = {
@@ -84,11 +85,15 @@ function fixture({ stagePreference = "ask", canStage = true, stageFails = false 
       if (stageFails) throw new Error("git add failed");
     },
     completed: (...args) => records.completed.push(args),
+    reconcileImportedMutation: async (identity, importedOutcome) => {
+      records.reconciliations.push({ identity, outcome: importedOutcome });
+      return { status: "accepted" };
+    },
     status: (message) => records.status.push(message),
     error: (error) => records.errors.push(error instanceof Error ? error.message : String(error)),
   };
   const controller = new ProjectFilesOperationController(
-    { inspectWorkspaceEntry: async (_root, path) => inspection(path) },
+    { inspectWorkspaceEntry: async (_root, path) => inspection(path), ...gateway },
     mutations,
     runtime,
     () => messages,
@@ -206,6 +211,59 @@ test("copy/paste binds the plan to the captured recursive fingerprint", async ()
   });
   assert.deepEqual(records.executions, ["plan-1"]);
   assert.equal(records.status.at(-1), "pasted");
+});
+
+test("copy publishes a real system file entry and a matching token keeps internal paste semantics", async () => {
+  const systemEntry = { token: "a".repeat(64), name: "app.ts", kind: "file" };
+  const copies = [];
+  const copied = fixture({
+    gateway: {
+      copyWorkspaceEntryToSystemClipboard: async (...args) => {
+        copies.push(args);
+        return systemEntry;
+      },
+      readSystemFileClipboardEntry: async () => systemEntry,
+    },
+  });
+
+  await copied.controller.capture("copy", target());
+  await copied.controller.paste(target({ workspacePath: "dest", kind: "directory", file: null }));
+
+  assert.deepEqual(copies, [["/workspace", "src/app.ts", "file"]]);
+  assert.equal(copied.controller.clipboard.entry.systemClipboardToken, systemEntry.token);
+  assert.deepEqual(copied.records.plans[0].operation, {
+    kind: "copy", source: "src/app.ts", destination: "dest/app.ts",
+  });
+});
+
+test("a newer external system clipboard entry supersedes stale internal copy state", async () => {
+  const internalEntry = { token: "a".repeat(64), name: "app.ts", kind: "file" };
+  const externalEntry = { token: "b".repeat(64), name: "photo.png", kind: "file" };
+  const imports = [];
+  const importedOutcome = {
+    planId: "system-file-import-bbbbbbbbbbbbbbbb", status: "completed",
+    affectedPaths: ["dest/photo.png"], pathRemaps: [],
+    invalidatedSlices: ["workspaceCatalog", "workingTree"], recoveryId: null, error: null,
+  };
+  const imported = fixture({
+    gateway: {
+      copyWorkspaceEntryToSystemClipboard: async () => internalEntry,
+      readSystemFileClipboardEntry: async () => externalEntry,
+      importSystemFileClipboardEntry: async (...args) => {
+        imports.push(args);
+        return { status: "completed", destination: "dest/photo.png", outcome: importedOutcome };
+      },
+    },
+  });
+
+  await imported.controller.capture("copy", target());
+  await imported.controller.paste(target({ workspacePath: "dest", kind: "directory", file: null }));
+
+  assert.deepEqual(imports, [["/workspace", externalEntry.token, "dest/photo.png"]]);
+  assert.deepEqual(imported.records.plans, []);
+  assert.equal(imported.records.reconciliations.length, 1);
+  assert.equal(imported.records.completed.at(-1)[2], "dest/photo.png");
+  assert.equal(imported.records.status.at(-1), "pasted");
 });
 
 test("destination collision requests a new name and changed source cancels safely", async () => {

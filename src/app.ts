@@ -1288,10 +1288,7 @@ export class AsterlynApp {
     });
     this.projectFilesOperationRuntime = new ProjectFilesOperationRuntime({
       root,
-      gateway: {
-        inspectWorkspaceEntry: (repositoryRoot, workspacePath) =>
-          bridge.inspectWorkspaceEntry(repositoryRoot, workspacePath),
-      },
+      gateway: bridge,
       mutations: this.workspaceMutations,
       runtime: {
         currentIdentity: () => {
@@ -1363,10 +1360,12 @@ export class AsterlynApp {
             files: this.filesState.files,
             mutationBusy: this.projectFilesOperationRuntime.controller.busy,
             mutationAvailable: !bridge.isDemo,
-            clipboardAvailable: Boolean(this.projectFilesOperationRuntime.controller.clipboard.current(
-              target.workspaceRoot,
-              target.workspaceGeneration,
-            )),
+            clipboardAvailable: !bridge.isDemo || Boolean(
+              this.projectFilesOperationRuntime.controller.clipboard.current(
+                target.workspaceRoot,
+                target.workspaceGeneration,
+              ),
+            ),
             reasons: {
               readOnly: labels.readOnly,
               mutationBusy: labels.mutationBusy,

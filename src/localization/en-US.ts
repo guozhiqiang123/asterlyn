@@ -282,7 +282,7 @@ export const EN_US: LocaleCatalog = {
       copiedAbsolutePath: "Absolute path copied", clipboardUnavailable: "Could not copy to the clipboard",
       revealedSelection: "Shown in the system file manager", openedContainingFolder: "Opened the containing folder",
       readOnly: "This entry is read-only", mutationBusy: "Another file operation is in progress", multipleSelected: "Cannot perform this action on multiple items",
-      clipboardEmpty: "Copy or cut a file or folder first", operationsUnavailable: "File changes are not available yet",
+      clipboardEmpty: "The clipboard does not contain a file or folder that can be pasted", operationsUnavailable: "File changes are not available yet",
       rootUnavailable: "The project root cannot be moved, renamed, or deleted here",
       gitUnavailable: "Git History requires a Git project", noHistory: "This entry has no tracked Git history",
       ambiguousHistory: "This folder spans more than one Git root",
