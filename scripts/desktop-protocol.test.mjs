@@ -143,6 +143,7 @@ test("desktop response validation accepts representative valid payloads", () => 
     { windowLabel: "project-1", focusedExisting: true },
   );
   assert.equal(validateDesktopResult("window_chrome_mode", "macos-native"), "macos-native");
+  assert.equal(validateDesktopResult("is_last_project_window", true), true);
   assert.deepEqual(
     validateDesktopResult("read_repository_slices", {
       root: "/repo",

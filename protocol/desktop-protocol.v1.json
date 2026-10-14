@@ -5,6 +5,7 @@
     { "name": "install_app_update", "args": {}, "result": "AppUpdateInstallResult", "validator": "appUpdateInstallResult" },
     { "name": "open_app_update_release", "args": { "releaseUrl": "string" }, "result": "void", "validator": "void" },
     { "name": "window_chrome_mode", "args": {}, "result": "WindowChromeMode", "validator": "windowChromeMode" },
+    { "name": "is_last_project_window", "args": {}, "result": "boolean", "validator": "boolean" },
     { "name": "initial_repository", "args": {}, "result": "nullable:string", "validator": "nullableString" },
     { "name": "existing_project_directories", "args": { "paths": "array:string" }, "result": "array:string", "validator": "stringArray" },
     { "name": "open_project", "args": { "path": "string" }, "result": "OpenedProject", "validator": "openedProject" },

@@ -121,6 +121,8 @@ Manual acceptance then exposed a shell permission regression that blocked both t
 
 The platform-chrome follow-up replaces the one-style-fits-all undecorated window with one shared native-window factory. macOS now retains its operating-system title-bar decorations, left-side traffic lights, and overlay integration while hiding Asterlyn's duplicate custom controls; Windows and Linux retain the existing compact right-side custom controls. Both the initial and additional project windows use this policy. Linux release-window maximize and close paths passed, while drag/minimize automation and installed macOS visual interaction remain explicit manual-acceptance items. This changes shell presentation only and leaves the dirty-buffer gate and per-window workspace ownership intact.
 
+The final-window close follow-up routes both operating-system and custom close controls through one asynchronous gate. Closing any non-final project window retains the existing dirty-buffer protection without an application-exit warning. Closing the final project window first asks the user to confirm exiting Asterlyn; cancellation performs no save or close side effect, while approval continues through the same conflict and unsaved-file checks before destroying that exact window. Duplicate close requests are coalesced while the gate is active.
+
 When native macOS chrome hides Asterlyn's custom right-side window controls, the trailing action
 group retains an eight-pixel window-edge inset. The Settings target therefore remains optically
 centered inside its hover surface instead of inheriting the missing controls' flush-right edge.

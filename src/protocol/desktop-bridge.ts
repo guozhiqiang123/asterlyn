@@ -90,6 +90,7 @@ export interface AppUpdateBridge {
 export interface DesktopShellBridge {
   readonly isDemo: boolean;
   windowChromeMode(): Promise<WindowChromeMode>;
+  isLastProjectWindow(): Promise<boolean>;
   initialRepository(): Promise<string | null>;
   existingProjectDirectories(paths: string[]): Promise<string[]>;
   chooseRepositoryDirectory(defaultPath: string | null): Promise<DirectoryChoice>;

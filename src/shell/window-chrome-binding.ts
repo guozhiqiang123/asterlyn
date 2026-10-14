@@ -1,11 +1,10 @@
 import { icon } from "../icons";
 import { windowControls } from "../window-controls";
 import type { ShellCopy } from "../localization/catalog.ts";
+import { interceptNativeCloseRequest } from "../application/window-close-gate.ts";
 
 export interface WindowChromeActions {
-  readonly captureEditor: () => void;
-  readonly dirtyTextTabs: () => number;
-  readonly confirmClose: () => Promise<boolean>;
+  readonly approveClose: () => Promise<boolean>;
   readonly reportError: (error: unknown) => void;
   readonly labels: () => Pick<ShellCopy, "restoreWindow" | "maximizeWindow" | "restore" | "maximize">;
 }
@@ -15,6 +14,7 @@ export class WindowChromeBinding {
   private releaseResize: (() => void) | null = null;
   private releaseCloseRequest: (() => void) | null = null;
   private generation = 0;
+  private closing = false;
 
   constructor(
     private readonly root: HTMLElement,
@@ -66,10 +66,7 @@ export class WindowChromeBinding {
       else this.releaseResize = releaseResize;
 
       const releaseClose = await windowControls.onCloseRequested((event) => {
-        this.actions.captureEditor();
-        if (this.actions.dirtyTextTabs() === 0) return;
-        event.preventDefault();
-        void this.requestClose();
+        interceptNativeCloseRequest(event, () => void this.requestClose());
       });
       if (generation !== this.generation) releaseClose();
       else this.releaseCloseRequest = releaseClose;
@@ -79,8 +76,16 @@ export class WindowChromeBinding {
   }
 
   private async requestClose(): Promise<void> {
-    if (!(await this.actions.confirmClose())) return;
-    await this.run(() => windowControls.close());
+    if (this.closing) return;
+    this.closing = true;
+    try {
+      if (!(await this.actions.approveClose())) return;
+      await windowControls.close();
+    } catch (error) {
+      this.actions.reportError(error);
+    } finally {
+      this.closing = false;
+    }
   }
 
   private async run(action: () => Promise<void>): Promise<void> {

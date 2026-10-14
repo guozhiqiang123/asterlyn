@@ -41,8 +41,9 @@ pub(crate) use image::{
     read_local_image_diff,
 };
 pub(crate) use shell::{
-    existing_project_directories, focus_existing_project_window, initial_repository, open_project,
-    open_repository_window, read_project_snapshot, read_repository_slices, window_chrome_mode,
+    existing_project_directories, focus_existing_project_window, initial_repository,
+    is_last_project_window, open_project, open_repository_window, read_project_snapshot,
+    read_repository_slices, window_chrome_mode,
 };
 pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write_terminal};
 pub(crate) use workspace::{

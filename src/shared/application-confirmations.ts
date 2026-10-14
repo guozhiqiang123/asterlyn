@@ -57,3 +57,14 @@ export function saveFilesBeforeActionConfirmation(
     cancelLabel: catalog.common.cancel,
   };
 }
+
+export function closeLastProjectWindowConfirmation(
+  catalog: LocaleCatalog,
+): ApplicationConfirmationRequest {
+  return {
+    title: catalog.shell.closeLastProjectWindowTitle,
+    message: catalog.shell.closeLastProjectWindowMessage,
+    confirmLabel: catalog.common.close,
+    cancelLabel: catalog.common.cancel,
+  };
+}

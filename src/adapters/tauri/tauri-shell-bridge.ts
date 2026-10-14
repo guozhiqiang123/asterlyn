@@ -12,6 +12,7 @@ export const tauriShellBridge: DesktopShellBridge = {
   async windowChromeMode() {
     return parseWindowChromeMode(await invokeDesktopCommand<unknown>("window_chrome_mode"));
   },
+  isLastProjectWindow: () => invokeDesktopCommand<boolean>("is_last_project_window"),
   initialRepository: () => invokeDesktopCommand<string | null>("initial_repository"),
   existingProjectDirectories: (paths) =>
     invokeDesktopCommand<string[]>("existing_project_directories", { paths }),

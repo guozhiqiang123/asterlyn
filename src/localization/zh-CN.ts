@@ -27,7 +27,7 @@ export const ZH_CN = {
     updateBranch: "更新当前分支", pushBranch: "推送当前分支", cancelRemote: "取消远程操作",
     refreshProject: "刷新项目", openSettings: "打开设置", settings: "设置",
     windowControls: "窗口控制", minimizeWindow: "最小化窗口", minimize: "最小化", maximizeWindow: "最大化窗口", maximize: "最大化",
-    restoreWindow: "还原窗口", restore: "还原", closeWindow: "关闭窗口", toolWindows: "工具窗口",
+    restoreWindow: "还原窗口", restore: "还原", closeWindow: "关闭窗口", closeLastProjectWindowTitle: "关闭 Asterlyn？", closeLastProjectWindowMessage: "这是最后一个项目窗口。关闭后将退出 Asterlyn。", toolWindows: "工具窗口",
     version: (name, version) => `${name} 版本 ${version}`, files: "文件", branches: "分支", changes: "更改", stash: "贮藏", terminal: "终端",
     toolReorder: (label) => `${label} — 拖动可排序`, openFolderFirst: "请先打开项目文件夹 — 拖动可排序",
     gitUnavailableReorder: "此文件夹无法使用 Git — 拖动可排序", genericTool: "工具窗口", leftToolWindow: "左侧工具窗口",

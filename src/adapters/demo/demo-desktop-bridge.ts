@@ -155,6 +155,8 @@ const demoBridge: DesktopBridge = {
     return parseWindowChromeMode(await invoke<unknown>("window_chrome_mode"));
   },
 
+  isLastProjectWindow: () => isTauri ? invoke<boolean>("is_last_project_window") : Promise.resolve(true),
+
   async initialRepository(): Promise<string | null> {
     if (!isTauri) return null;
     return invoke<string | null>("initial_repository");

@@ -86,7 +86,7 @@ import { createRemoteRuntime } from "./features/remote-push/create-remote-runtim
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import { bindPushPreviewSplitter } from "./features/remote-push/push-preview-splitter.ts";
 import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts";
-import { discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, switchConflictBlockedNotice, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
+import { closeLastProjectWindowConfirmation, discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, switchConflictBlockedNotice, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
 import {
   pushReviewFiles,
   pushDiffSideLabels,
@@ -199,6 +199,7 @@ import { refreshWorkbenchShortcutPresentation, shortcutFocusScope } from "./shel
 import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
 import { hideWorkspaceToolWindows } from "./shell/workspace-availability.ts";
 import { WindowSession } from "./application/window-session";
+import { approveProjectWindowClose } from "./application/window-close-gate.ts";
 import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts";
 import { historyPathApplyShortcut } from "./composition/history-shortcut-presentation.ts";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
@@ -1567,9 +1568,7 @@ export class AsterlynApp {
       disposeFeatures: () => this.dispose(),
     });
     this.windowChromeBinding = new WindowChromeBinding(root, {
-      captureEditor: () => this.captureMountedTextEditor(),
-      dirtyTextTabs: () => dirtyTextTabs(this.editorState.session).length + Number(this.gitOperationRuntime.controller.hasUnsavedConflict()),
-      confirmClose: () => this.saveDirtyTabsBefore(this.localization.catalog.common.actions.closeApp),
+      approveClose: () => approveProjectWindowClose({ isLastProjectWindow: () => bridge.isLastProjectWindow(), confirmLastProjectWindow: () => this.dialogRuntime.confirm(closeLastProjectWindowConfirmation(this.localization.catalog)), confirmUnsavedChanges: () => this.saveDirtyTabsBefore(this.localization.catalog.common.actions.closeApp) }),
       reportError: (error) => this.showError(error),
       labels: () => this.localShellCopy(),
     });

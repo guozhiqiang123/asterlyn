@@ -53,7 +53,7 @@ export const EN_US: LocaleCatalog = {
     maximize: "Maximize",
     restoreWindow: "Restore window",
     restore: "Restore",
-    closeWindow: "Close window",
+    closeWindow: "Close window", closeLastProjectWindowTitle: "Close Asterlyn?", closeLastProjectWindowMessage: "This is the last project window. Closing it will exit Asterlyn.",
     toolWindows: "Tool windows",
     version: (name, version) => `${name} version ${version}`,
     files: "Files",

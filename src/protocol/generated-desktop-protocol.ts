@@ -9,6 +9,7 @@ export interface DesktopCommandMap {
   install_app_update: { args: Record<string, never>; result: Model.AppUpdateInstallResult };
   open_app_update_release: { args: { releaseUrl: string; }; result: void };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
+  is_last_project_window: { args: Record<string, never>; result: boolean };
   initial_repository: { args: Record<string, never>; result: string | null };
   existing_project_directories: { args: { paths: Array<string>; }; result: Array<string> };
   open_project: { args: { path: string; }; result: Model.OpenedProject };
@@ -123,6 +124,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   install_app_update: "appUpdateInstallResult",
   open_app_update_release: "void",
   window_chrome_mode: "windowChromeMode",
+  is_last_project_window: "boolean",
   initial_repository: "nullableString",
   existing_project_directories: "stringArray",
   open_project: "openedProject",

@@ -23,6 +23,11 @@ pub(crate) fn window_chrome_mode() -> &'static str {
 }
 
 #[tauri::command]
+pub(crate) fn is_last_project_window(app: tauri::AppHandle) -> bool {
+    app.webview_windows().len() <= 1
+}
+
+#[tauri::command]
 pub(crate) async fn existing_project_directories(
     paths: Vec<String>,
 ) -> Result<Vec<String>, WorkspaceError> {

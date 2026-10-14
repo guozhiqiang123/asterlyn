@@ -50,7 +50,7 @@ export interface ShellCopy {
   maximize: string;
   restoreWindow: string;
   restore: string;
-  closeWindow: string;
+  closeWindow: string; closeLastProjectWindowTitle: string; closeLastProjectWindowMessage: string;
   toolWindows: string;
   version(name: string, version: string): string;
   files: string;

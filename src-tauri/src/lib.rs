@@ -260,6 +260,7 @@ pub fn run() {
             open_app_update_release,
             initial_repository,
             window_chrome_mode,
+            is_last_project_window,
             existing_project_directories,
             focus_existing_project_window,
             open_project,
