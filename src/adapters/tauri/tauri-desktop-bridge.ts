@@ -6,6 +6,7 @@ import { tauriShellBridge } from "./tauri-shell-bridge.ts";
 import { tauriTerminalBridge } from "./tauri-terminal-bridge.ts";
 import { tauriWorkspaceBridge } from "./tauri-workspace-bridge.ts";
 import { tauriTaskExecutionBridge } from "./tauri-task-execution-bridge.ts";
+import { tauriTaskArtifactBridge } from "./tauri-task-artifact-bridge.ts";
 
 export const tauriDesktopBridge: DesktopBridge = {
   ...tauriAppUpdateBridge,
@@ -15,4 +16,5 @@ export const tauriDesktopBridge: DesktopBridge = {
   ...tauriGitOperationBridge,
   ...tauriTerminalBridge,
   ...tauriTaskExecutionBridge,
+  ...tauriTaskArtifactBridge,
 };

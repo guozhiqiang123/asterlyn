@@ -3,6 +3,7 @@ import type { PluginWorkspaceIdentity } from "../application/plugins/index.ts";
 import type { TasksCopy } from "../localization/catalog.ts";
 import type { ProjectFile } from "../models.ts";
 import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
+import { parseTaskArtifactDiscovery, type TaskArtifactBridge } from "../protocol/task-artifacts.ts";
 import { TaskExecutionController } from "../application/tasks/task-execution-controller.ts";
 import { TaskExecutionRuntime } from "../features/tasks/task-execution-runtime.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
@@ -20,6 +21,7 @@ export interface PluginTasksRuntimeOptions {
   readonly platform?: () => "posix" | "windows";
   readonly locale?: () => "en-US" | "zh-CN";
   readonly executionBridge: TaskExecutionBridge;
+  readonly artifactBridge: TaskArtifactBridge;
   readonly recentTaskStorage?: RecentTaskStorage;
   readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
 }
@@ -37,10 +39,13 @@ export class PluginTasksRuntime {
   private readonly reportError: (error: unknown) => void;
   private readonly execution: TaskExecutionRuntime;
   private readonly recentTasks: RecentTaskStore | null;
+  private readonly artifactBridge: TaskArtifactBridge;
   private readonly reconcileAfterTask: ((identity: PluginWorkspaceIdentity) => void | Promise<void>) | undefined;
+  private identity: PluginWorkspaceIdentity | null = null;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
+    this.artifactBridge = options.artifactBridge;
     this.reconcileAfterTask = options.reconcileAfterTask;
     const controller = new TasksController();
     const executionController = new TaskExecutionController(options.executionBridge);
@@ -50,6 +55,11 @@ export class PluginTasksRuntime {
       () => options.locale?.() === "zh-CN" ? ZH_CN_TASK_EXECUTION_COPY : EN_US_TASK_EXECUTION_COPY,
       {
         retry: (identity, taskKey) => { void this.plugins.runTask(taskKey, identity).catch(options.reportError); },
+        revealArtifact: async (identity, artifact) => {
+          if (!this.matches(identity)) return;
+          await this.artifactBridge.revealTaskArtifact(identity.root, artifact.workspacePath);
+        },
+        reportError: options.reportError,
         visibilityChanged: () => this.render(),
       },
     );
@@ -75,6 +85,7 @@ export class PluginTasksRuntime {
   }
 
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
+    this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
     this.tasks.activate(identity);
     this.execution.activate(identity);
     await this.plugins.activateWorkspace(identity);
@@ -102,6 +113,7 @@ export class PluginTasksRuntime {
   }
 
   dispose(): void {
+    this.identity = null;
     this.plugins.dispose();
     this.execution.dispose();
     this.tasks.dispose();
@@ -130,9 +142,29 @@ export class PluginTasksRuntime {
       timestamp: Date.now(),
     });
     if (result.status === "succeeded") {
+      if (plan.artifactSearch) this.scheduleArtifactDiscovery(identity, plan);
       void Promise.resolve().then(() => this.reconcileAfterTask?.(identity)).catch(this.reportError);
     }
     return result;
+  }
+
+  private scheduleArtifactDiscovery(identity: PluginWorkspaceIdentity, plan: PluginTaskRunPlan): void {
+    const search = plan.artifactSearch;
+    if (!search || !this.matches(identity)) return;
+    const taskKey = `${plan.request.pluginId}.${plan.request.providerId}:${plan.request.taskId}`;
+    const target = this.execution.beginArtifactDiscovery(identity, taskKey);
+    if (!target) return;
+    void this.artifactBridge.discoverTaskArtifacts(identity.root, [...search.hints]).then((value) => {
+      if (!this.matches(identity) || !this.execution.isArtifactTargetCurrent(target)) return;
+      this.execution.completeArtifactDiscovery(target, parseTaskArtifactDiscovery(value));
+    }).catch((error) => {
+      if (!this.matches(identity) || !this.execution.failArtifactDiscovery(target)) return;
+      this.reportError(error);
+    });
+  }
+
+  private matches(identity: PluginWorkspaceIdentity): boolean {
+    return this.identity?.root === identity.root && this.identity.generation === identity.generation;
   }
 
   private async executeTask(

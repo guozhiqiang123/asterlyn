@@ -20,6 +20,10 @@ export const EN_US_TASKS_COPY: TasksCopy = Object.freeze({
   retry: "Retry task",
   revealOutput: "Reveal output",
   notRunnable: "This task is not runnable.",
+  androidQuickActions: "Android quick actions",
+  quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" },
+  quickActionModule: "Module",
+  quickActionVariant: "Variant",
   status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
@@ -43,5 +47,9 @@ export const ZH_CN_TASKS_COPY: TasksCopy = Object.freeze({
   retry: "重试任务",
   revealOutput: "查看输出",
   notRunnable: "此任务不可运行。",
+  androidQuickActions: "Android 快捷操作",
+  quickActionKinds: { assemble: "组装", bundle: "打包", install: "安装", uninstall: "卸载" },
+  quickActionModule: "模块",
+  quickActionVariant: "变体",
   status: { idle: "空闲", queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", crashed: "崩溃" },
 });

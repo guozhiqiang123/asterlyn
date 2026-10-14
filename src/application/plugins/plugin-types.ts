@@ -68,8 +68,14 @@ export interface PluginTaskRefreshPlan {
   readonly apply: (result: PluginTaskExecutionResult) => void;
 }
 
+export interface PluginTaskArtifactSearch {
+  readonly hints: readonly string[];
+}
+
 /** Execution plans are deliberately the only value a provider may return to the host. */
-export interface PluginTaskRunPlan extends PluginTaskRefreshPlan {}
+export interface PluginTaskRunPlan extends PluginTaskRefreshPlan {
+  readonly artifactSearch?: PluginTaskArtifactSearch;
+}
 
 export type PluginContribution = PluginCommandContribution | PluginProviderContribution;
 

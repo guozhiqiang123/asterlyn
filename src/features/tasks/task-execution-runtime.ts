@@ -5,12 +5,39 @@ import type {
 } from "../../application/tasks/task-execution-controller.ts";
 import type { TaskExecutionRequest } from "../../models.ts";
 import type { PluginTaskExecutionResult } from "../../application/plugins/plugin-types.ts";
+import type { TaskArtifact, TaskArtifactDiscovery } from "../../models.ts";
 import { EN_US_TASK_EXECUTION_COPY, type TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
-import { renderTaskExecutionReview } from "./task-execution-view.ts";
+import { renderTaskExecutionReview, type TaskArtifactViewState } from "./task-execution-view.ts";
 
 export interface TaskExecutionRuntimeOptions {
   readonly retry?: (identity: TaskWorkspaceIdentity, taskKey: string) => void;
+  readonly revealArtifact?: (identity: TaskWorkspaceIdentity, artifact: TaskArtifact) => void | Promise<void>;
+  readonly reportError?: (error: unknown) => void;
   readonly visibilityChanged?: () => void;
+}
+
+export interface TaskArtifactAttachmentTarget {
+  readonly root: string;
+  readonly generation: number;
+  readonly taskKey: string;
+  readonly presentationVersion: number;
+}
+
+export interface TaskArtifactAttachmentState {
+  readonly identity: TaskWorkspaceIdentity | null;
+  readonly taskKey: string | null;
+  readonly presentationVersion: number;
+  readonly visible: boolean;
+  readonly succeeded: boolean;
+}
+
+export function taskArtifactAttachmentMatches(
+  target: TaskArtifactAttachmentTarget,
+  state: TaskArtifactAttachmentState,
+): boolean {
+  return state.visible && state.succeeded && state.presentationVersion === target.presentationVersion &&
+    state.identity?.root === target.root && state.identity.generation === target.generation &&
+    state.taskKey === target.taskKey;
 }
 
 export class TaskExecutionRuntime {
@@ -24,6 +51,8 @@ export class TaskExecutionRuntime {
   private focusReturn: HTMLElement | null = null;
   private visible = false;
   private terminalState: TaskExecutionState | null = null;
+  private artifactState: TaskArtifactViewState | null = null;
+  private presentationVersion = 0;
   private finished: ((result: PluginTaskExecutionResult) => void) | null = null;
 
   constructor(
@@ -50,6 +79,7 @@ export class TaskExecutionRuntime {
       else if (action === "deny") void controller.setWorkspaceTrust(this.identity, "denied").catch((error) => this.fail(error));
       else if (action === "close") this.dismiss();
       else if (action === "retry") this.retry();
+      else if (action === "reveal-artifact") this.revealArtifact(target.dataset.taskArtifactIndex);
     }, { signal: this.listeners.signal });
     root.addEventListener("keydown", (event) => {
       if (!this.identity || !this.visible) return;
@@ -75,6 +105,7 @@ export class TaskExecutionRuntime {
     this.identity = identity;
     this.visible = false;
     this.terminalState = null;
+    this.invalidateArtifacts();
     this.controller.activateWorkspace(identity);
     this.render();
   }
@@ -88,6 +119,7 @@ export class TaskExecutionRuntime {
     this.identity = identity;
     this.finished = finished;
     this.terminalState = null;
+    this.invalidateArtifacts();
     this.open();
     try {
       await this.controller.prepare(identity, request);
@@ -119,7 +151,7 @@ export class TaskExecutionRuntime {
     const focusedAction = host.contains(document.activeElement)
       ? (document.activeElement as HTMLElement).dataset.taskExecutionAction ?? null
       : null;
-    host.innerHTML = renderTaskExecutionReview(state, this.copy());
+    host.innerHTML = renderTaskExecutionReview(state, this.copy(), this.artifactState);
     queueMicrotask(() => {
       const preferred = focusedAction
         ? host.querySelector<HTMLElement>(`[data-task-execution-action="${focusedAction}"]`)
@@ -140,6 +172,33 @@ export class TaskExecutionRuntime {
     await this.controller.cancel(identity);
   }
 
+  beginArtifactDiscovery(identity: TaskWorkspaceIdentity, taskKey: string): TaskArtifactAttachmentTarget | null {
+    if (!this.visible || !sameIdentity(this.identity, identity) || this.terminalState?.status !== "succeeded" ||
+      !this.terminalState.review || executionTaskKey(this.terminalState.review) !== taskKey) return null;
+    const target = { root: identity.root, generation: identity.generation, taskKey, presentationVersion: this.presentationVersion };
+    this.artifactState = { status: "loading" };
+    this.render();
+    return target;
+  }
+
+  completeArtifactDiscovery(target: TaskArtifactAttachmentTarget, discovery: TaskArtifactDiscovery): boolean {
+    if (!this.matchesArtifactTarget(target) || discovery.workspaceRoot !== target.root) return false;
+    this.artifactState = { status: "ready", discovery };
+    this.render();
+    return true;
+  }
+
+  failArtifactDiscovery(target: TaskArtifactAttachmentTarget): boolean {
+    if (!this.matchesArtifactTarget(target)) return false;
+    this.artifactState = { status: "unavailable" };
+    this.render();
+    return true;
+  }
+
+  isArtifactTargetCurrent(target: TaskArtifactAttachmentTarget): boolean {
+    return this.matchesArtifactTarget(target);
+  }
+
   restoreFocus(fallback?: HTMLElement | null): void {
     const target = this.focusReturn;
     this.focusReturn = null;
@@ -157,6 +216,7 @@ export class TaskExecutionRuntime {
     }
     this.visible = false;
     this.terminalState = null;
+    this.invalidateArtifacts();
     this.listeners.abort();
     this.unsubscribe();
     this.controller.dispose();
@@ -176,6 +236,7 @@ export class TaskExecutionRuntime {
     const identity = this.identity;
     if (!identity || !isTerminal(this.displayState())) return;
     this.visible = false;
+    this.invalidateArtifacts();
     this.controller.dismiss(identity);
     this.options.visibilityChanged?.();
     const fallback = this.root.querySelector<HTMLElement>("[data-tasks-action=refresh]");
@@ -189,6 +250,17 @@ export class TaskExecutionRuntime {
     const taskKey = executionTaskKey(review);
     this.dismiss();
     queueMicrotask(() => this.options.retry?.(identity, taskKey));
+  }
+
+  private revealArtifact(indexValue: string | undefined): void {
+    const identity = this.identity;
+    if (!indexValue || !/^\d+$/u.test(indexValue)) return;
+    const index = Number(indexValue);
+    const artifact = this.artifactState?.status === "ready" && Number.isSafeInteger(index)
+      ? this.artifactState.discovery.artifacts[index]
+      : undefined;
+    if (!identity || !artifact || !this.visible || this.terminalState?.status !== "succeeded") return;
+    void Promise.resolve(this.options.revealArtifact?.(identity, artifact)).catch((error) => this.options.reportError?.(error));
   }
 
   private fail(error: unknown): void {
@@ -227,6 +299,21 @@ export class TaskExecutionRuntime {
 
   private displayState(): TaskExecutionState | null {
     return this.controller.state.review ? this.controller.state : this.terminalState;
+  }
+
+  private matchesArtifactTarget(target: TaskArtifactAttachmentTarget): boolean {
+    return taskArtifactAttachmentMatches(target, {
+      identity: this.identity,
+      taskKey: this.terminalState?.review ? executionTaskKey(this.terminalState.review) : null,
+      presentationVersion: this.presentationVersion,
+      visible: this.visible,
+      succeeded: this.terminalState?.status === "succeeded",
+    });
+  }
+
+  private invalidateArtifacts(): void {
+    this.presentationVersion += 1;
+    this.artifactState = null;
   }
 
   private host(): HTMLElement | null {

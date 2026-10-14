@@ -370,7 +370,8 @@ pub fn run() {
             set_workspace_trust,
             prepare_task_execution,
             start_task_execution,
-            cancel_task_execution
+            cancel_task_execution,
+            discover_task_artifacts
         ])
         .build(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");

@@ -13,6 +13,7 @@ import {
 } from "./detector.ts";
 import { buildGradleWrapperRequest, parseGradleTasksOutput, type GradleTaskDiscoveryResult } from "./discovery.ts";
 import { applyGradleTaskResult, buildGradleTaskRunPlan, runnableGradleSnapshot, setGradleTaskRunState } from "./execution.ts";
+import { deriveGradleQuickActions, gradleTaskArtifactHints } from "./quick-actions.ts";
 
 export const ANDROID_GRADLE_PLUGIN_ID = "dev.asterlyn.android-gradle";
 
@@ -73,7 +74,7 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
               if (output.stream !== "stdout") continue;
               try { const binary = atob(output.dataBase64); for (let index = 0; index < binary.length; index += 1) bytes.push(binary.charCodeAt(index)); } catch { snapshot = { status: "error", tasks: [], error: "Gradle task discovery output was invalid." }; return; }
             }
-            snapshot = runnableGradleSnapshot(parseGradleTasksOutput(new Uint8Array(bytes)));
+            snapshot = withGradleQuickActions(runnableGradleSnapshot(parseGradleTasksOutput(new Uint8Array(bytes))));
           },
         };
         snapshot = { status: "loading", tasks: [] };
@@ -83,8 +84,10 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
         const plan = buildGradleTaskRunPlan(detection, snapshot, taskId);
         if (!plan) return null;
         snapshot = setGradleTaskRunState(snapshot, taskId, "queued");
+        const artifactHints = gradleTaskArtifactHints(taskId);
         return {
           request: plan,
+          ...(artifactHints.length > 0 ? { artifactSearch: { hints: artifactHints } } : {}),
           apply: (result: PluginTaskExecutionResult) => {
             snapshot = applyGradleTaskResult(snapshot, taskId, result);
           },
@@ -96,6 +99,18 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
     });
   },
 });
+
+function withGradleQuickActions(snapshot: GradleTaskDiscoveryResult): GradleTaskDiscoveryResult {
+  if (snapshot.status !== "ready") return snapshot;
+  const quickActions = new Map(deriveGradleQuickActions(snapshot).actions.map((action) => [action.taskId, action]));
+  return {
+    ...snapshot,
+    tasks: snapshot.tasks.map((task) => {
+      const quick = quickActions.get(task.id);
+      return quick ? { ...task, androidQuickAction: { kind: quick.kind, module: quick.module, variant: quick.variant } } : task;
+    }),
+  };
+}
 
 export function detectAndroidGradlePluginEvidence(
   context: PluginMatchContext,

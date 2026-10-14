@@ -9,6 +9,14 @@ export type TaskRunState =
   | "cancelled"
   | "crashed";
 
+export type AndroidTaskQuickActionKind = "assemble" | "bundle" | "install" | "uninstall";
+
+export interface AndroidTaskQuickActionMetadata {
+  readonly kind: AndroidTaskQuickActionKind;
+  readonly module: string;
+  readonly variant: string;
+}
+
 export type TaskProviderUnavailableReason =
   | "discovery-not-supported"
   | "evidence-incomplete"
@@ -22,6 +30,7 @@ export interface TaskDescriptor {
   readonly runnable: boolean;
   readonly disabledReason?: string;
   readonly runState?: TaskRunState;
+  readonly androidQuickAction?: AndroidTaskQuickActionMetadata;
 }
 
 /** A bounded, declarative projection. It grants no process or filesystem authority. */

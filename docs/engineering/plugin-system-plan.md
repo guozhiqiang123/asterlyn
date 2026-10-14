@@ -427,3 +427,55 @@ Each implemented phase records:
   Gradle-shaped end-to-end fixture proves the exact wrapper/task contract but is not a full Android
   SDK build. PS6 owns Android assemble/bundle/install/uninstall shortcuts, ambiguous module/variant
   selection, bounded APK/AAB discovery, and Reveal artifact actions.
+
+### PS6 — accepted locally on 2026-10-14
+
+- The bundled Android provider now annotates only exact ready/runnable `assemble*`, `bundle*`,
+  `install*`, and `uninstall*` identities. The host independently validates that action kind,
+  module, and variant reconstruct the same exact task ID before rendering a shortcut. The complete
+  task list remains available; shortcuts are capped at 512 overall and 32 candidates per
+  kind/variant ambiguity group, and every module candidate is shown instead of selecting a default.
+- Shortcut activation reuses the PS5 task key and reviewed wrapper execution without a second
+  command path. Install/uninstall therefore retains workspace trust, explicit confirmation,
+  one-task busy handling, cancellation, bounded output, retry, and recent-metadata behavior.
+- Successful assemble/bundle plans may declare only their conventional workspace-relative
+  `build/outputs/apk` or `build/outputs/bundle` directory. The host validates at most 8 hints of
+  4,096 bytes; the native command reauthorizes the active window/workspace, rejects absolute,
+  parent/current, empty, drive-prefixed, NUL, and symlink components, skips links, and treats a
+  missing output directory as empty.
+- Native artifact traversal is capped at depth 8, 512 directories, 64 regular `.apk`/`.aab` files,
+  1 GiB per file, and 2 GiB accepted size in total. The renderer revalidates protocol version,
+  root, normalized unique paths, kinds, sizes, totals, and limits, then attaches a result only to
+  the exact visible successful task presentation generation. Workspace changes, retries,
+  replacement runs, and dismissal invalidate delayed results.
+- The successful output dialog exposes localized artifact type, size, bounded/truncated state, and
+  keyboard-focusable Reveal actions. Reveal reuses the existing host-owned workspace capability,
+  which reauthorizes the current root and file path at invocation. Artifact paths are not persisted,
+  and discovery failure is diagnostic UI state rather than a rewrite of Gradle success.
+- PS6-focused frontend tests: 49 passed. The complete deterministic frontend suite passed 1,069
+  tests. Four focused native artifact tests passed, covering invalid hints, sorting/deduplication,
+  symlink skipping, and the result limit. The complete Rust workspace passed 324 tests with 2
+  existing operating-system watcher tests ignored; formatting, production type checking, and
+  workspace/all-target strict Clippy passed.
+- The production build passed with `src/app.ts` at 8,780 lines. The main chunk is 470.66 kB
+  uncompressed, below the 500 kB gate; the lazy bundled-plugin chunk is 9.40 kB and the lazy
+  task-copy chunk is 23.22 kB. A non-matching project still starts no plugin process or timer.
+- On a 512-action maximum snapshot, 1,000 warmed derivations measured 0.2538 ms p50, 0.3647 ms p95,
+  and 3.7493 ms maximum on this host. A maximum 64-artifact response measured 0.0476 ms p50,
+  0.0713 ms p95, and 0.3065 ms maximum over 1,000 parses. Rendering the 512-action host view 200
+  times measured 0.7704 ms p50, 1.6939 ms p95, and 11.3064 ms maximum. After warm-up, 5,000
+  derivation/parse replacements retained 8,704 additional heap bytes under forced GC. These are
+  local observations, not cross-platform guarantees.
+- On macOS 15.6.1 arm64 with Node.js 26.8.1, npm 11.19.0, Rust 1.97.1, and Git 2.48.1, the packaged
+  app rendered its shell within six seconds, is ad-hoc signed with hardened runtime, and passed
+  strict deep verification before and after archive extraction. The acceptance archive is
+  `target/release/bundle/macos/Asterlyn-0.1.8-local-20261014-ps6-final.app.zip`, 9,693,748 bytes,
+  SHA-256 `a774f7bb0027ba00a2d59d2bfcaf1189ace17f6ccb826e5c229b9e557550859a`.
+- `/Applications/Asterlyn.app` was replaced from the verified build and relaunched after an exact
+  executable hash match (`58e4ffb97cf98cc1c7ae98fa5fc8a3004f2d184dc7653025b73d13c35720502b`).
+  The previous installation is recoverable at
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261014-ps6-preinstall/Asterlyn.app`.
+- Known limitations: direct ADB device selection and raw APK/AAB installation remain deliberately
+  unavailable; Reveal may include an older regular artifact already present in the exact bounded
+  output directory. Native Windows acceptance still requires Windows CI/manual verification, and
+  the Gradle-shaped fixtures are not a full Android SDK build.

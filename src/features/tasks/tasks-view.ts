@@ -1,4 +1,4 @@
-import type { TaskProviderUnavailableReason, TaskRunState } from "../../application/tasks/task-types.ts";
+import type { AndroidTaskQuickActionKind, TaskProviderUnavailableReason, TaskRunState } from "../../application/tasks/task-types.ts";
 import type { TasksState } from "./tasks-model.ts";
 
 export interface TasksCopy {
@@ -16,6 +16,10 @@ export interface TasksCopy {
   readonly retry: string;
   readonly revealOutput: string;
   readonly notRunnable: string;
+  readonly androidQuickActions: string;
+  readonly quickActionKinds: Readonly<Record<AndroidTaskQuickActionKind, string>>;
+  readonly quickActionModule: string;
+  readonly quickActionVariant: string;
   readonly status: Readonly<Record<string, string>>;
 }
 
@@ -38,6 +42,10 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   retry: "Retry task",
   revealOutput: "Reveal output",
   notRunnable: "This task is not runnable.",
+  androidQuickActions: "Android quick actions",
+  quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" },
+  quickActionModule: "Module",
+  quickActionVariant: "Variant",
   status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
@@ -45,10 +53,26 @@ export function renderTasksView(state: TasksState, copy: TasksCopy = DEFAULT_TAS
   const status = renderStatus(state, copy);
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
   const groups = groupEntries(state.visibleEntries);
+  const quickActions = renderAndroidQuickActions(state, copy);
   const list = state.status === "ready" && state.visibleEntries.length > 0
     ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
     : "";
-  return `<section class="tasks-tool" role="region" aria-label="${escapeAttribute(copy.title)}"><header class="tasks-header"><h2>${escapeHtml(copy.title)}</h2><button type="button" data-tasks-action="refresh" aria-label="${escapeAttribute(copy.refresh)}" title="${escapeAttribute(copy.refresh)}">↻</button></header>${query}${status}${list}</section>`;
+  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" role="region" aria-label="${escapeAttribute(copy.title)}"><header class="tasks-header"><h2>${escapeHtml(copy.title)}</h2><button type="button" data-tasks-action="refresh" aria-label="${escapeAttribute(copy.refresh)}" title="${escapeAttribute(copy.refresh)}">↻</button></header>${quickActions}${query}${status}${list}</section>`;
+}
+
+function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {
+  const actions = state.entries.flatMap((entry) => {
+    const action = entry.task.androidQuickAction;
+    return action && entry.task.runnable ? [{ entry, action }] : [];
+  }).slice(0, 512);
+  if (actions.length === 0) return "";
+  return `<section class="tasks-quick-actions" aria-labelledby="tasks-quick-actions-title"><h3 id="tasks-quick-actions-title">${escapeHtml(copy.androidQuickActions)}</h3><div class="tasks-quick-action-list" role="list">${actions.map(({ entry, action }) => {
+    const kind = copy.quickActionKinds[action.kind];
+    const label = `${kind} ${action.variant}`;
+    const accessible = `${label}, ${copy.quickActionModule}: ${action.module}, ${copy.quickActionVariant}: ${action.variant}`;
+    const active = entry.task.runState === "queued" || entry.task.runState === "running";
+    return `<div class="tasks-quick-action" role="listitem" data-task-key="${escapeAttribute(entry.key)}"><button type="button" data-task-action="run" aria-label="${escapeAttribute(accessible)}" title="${escapeAttribute(entry.task.id)}" ${active ? "disabled" : ""}><strong>${escapeHtml(label)}</strong><small>${escapeHtml(copy.quickActionModule)}: ${escapeHtml(action.module)}</small><small>${escapeHtml(copy.quickActionVariant)}: ${escapeHtml(action.variant)}</small></button></div>`;
+  }).join("")}</div></section>`;
 }
 
 function renderStatus(state: TasksState, copy: TasksCopy): string {

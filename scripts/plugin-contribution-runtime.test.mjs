@@ -244,6 +244,32 @@ test("task plans cannot substitute another task identity", async () => {
   await runtime.dispose();
 });
 
+test("task plans reject unsafe artifact discovery hints before execution", async () => {
+  const runtime = new PluginRuntime();
+  let executed = 0;
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportError: () => undefined,
+    executeTaskRefresh: async () => { throw new Error("not used"); },
+    executeTaskRun: async () => { executed += 1; return { status: "succeeded", outputs: [], truncated: false, error: null }; },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "ready", tasks: [{ id: ":app:assembleDebug", label: "assembleDebug", group: "Build", runnable: true }] }),
+    run: () => ({
+      request: { pluginId: "android", providerId: "tasks", taskId: ":app:assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [":app:assembleDebug"] },
+      artifactSearch: { hints: ["../build/outputs/apk"] },
+      apply: () => undefined,
+    }),
+  }))]);
+  await assert.rejects(adapter.runTask("android.tasks::app:assembleDebug", identity), /Invalid task execution plan/);
+  assert.equal(executed, 0);
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 test("workspace replacement aborts an active task and drops its stale terminal result", async () => {
   const runtime = new PluginRuntime();
   let applied = 0;

@@ -1,5 +1,6 @@
 import type {
   TaskDescriptor,
+  AndroidTaskQuickActionKind,
   TaskProviderUnavailableReason,
   TaskRunState,
 } from "../../application/tasks/task-types.ts";
@@ -208,7 +209,21 @@ function normalizeTask(candidate: TaskDescriptor): TaskDescriptor | null {
     description: boundedString(candidate.description),
     disabledReason: boundedString(candidate.disabledReason),
     runState: isTaskRunState(candidate.runState) ? candidate.runState : undefined,
+    androidQuickAction: normalizeAndroidQuickAction(candidate.androidQuickAction, id),
   };
+}
+
+function normalizeAndroidQuickAction(value: TaskDescriptor["androidQuickAction"], taskId: string): TaskDescriptor["androidQuickAction"] {
+  if (!value || typeof value !== "object") return undefined;
+  const kind = value.kind;
+  const module = boundedString(value.module);
+  const variant = boundedString(value.variant);
+  if (!isAndroidQuickActionKind(kind) || !module || !variant ||
+    !/^:(?:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*)?$/u.test(module) ||
+    !/^[A-Z][A-Za-z0-9_.-]*$/u.test(variant)) return undefined;
+  const expectedTaskId = module === ":" ? `:${kind}${variant}` : `${module}:${kind}${variant}`;
+  if (taskId !== expectedTaskId) return undefined;
+  return { kind, module, variant };
 }
 
 function boundedString(value: unknown): string | undefined {
@@ -224,6 +239,10 @@ function isUnavailableReason(value: unknown): value is TaskProviderUnavailableRe
 function isTaskRunState(value: unknown): value is TaskRunState {
   return value === "idle" || value === "queued" || value === "running" ||
     value === "succeeded" || value === "failed" || value === "cancelled" || value === "crashed";
+}
+
+function isAndroidQuickActionKind(value: unknown): value is AndroidTaskQuickActionKind {
+  return value === "assemble" || value === "bundle" || value === "install" || value === "uninstall";
 }
 
 function aggregateStatus(providers: readonly TaskProviderProjection[]): TasksStatus {

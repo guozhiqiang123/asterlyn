@@ -4,6 +4,7 @@ pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
 mod search_session;
 mod task;
+mod task_artifacts;
 pub(crate) mod trust;
 mod workspace_catalog;
 mod workspace_document;
@@ -23,6 +24,7 @@ pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
 pub(crate) use task::TaskManager;
+pub(crate) use task_artifacts::{TaskArtifactDiscovery, scan_task_artifacts};
 #[cfg(test)]
 pub(crate) use workspace_catalog::PROJECT_FILE_LIMIT;
 pub(crate) use workspace_catalog::{

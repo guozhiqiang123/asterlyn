@@ -34,8 +34,11 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
   });
   const plan = provider.refresh();
   assert.equal(plan.request.executablePath, "gradlew");
-  plan.apply({ status: "succeeded", outputs: [{ stream: "stdout", dataBase64: Buffer.from("Tasks runnable from root project 'root'\nBuild tasks\n-----------\nassembleDebug - Assemble debug\n").toString("base64") }], truncated: false, error: null });
+  plan.apply({ status: "succeeded", outputs: [{ stream: "stdout", dataBase64: Buffer.from("Tasks runnable from root project 'root'\nBuild tasks\n-----------\nassembleDebug - Assemble debug\ninstallDebug - Install debug\n").toString("base64") }], truncated: false, error: null });
   assert.equal(provider.snapshot().status, "ready");
+  assert.deepEqual(provider.snapshot().tasks.find((task) => task.id === ":assembleDebug").androidQuickAction, { kind: "assemble", module: ":", variant: "Debug" });
+  assert.deepEqual(provider.run(":assembleDebug").artifactSearch, { hints: ["build/outputs/apk"] });
+  assert.equal(provider.run(":installDebug").artifactSearch, undefined);
   provider.refresh().apply({ status: "cancelled", outputs: [], truncated: false, error: null });
   assert.match(provider.snapshot().error, /cancelled/u);
   provider.refresh().apply({ status: "succeeded", outputs: [], truncated: true, error: null });

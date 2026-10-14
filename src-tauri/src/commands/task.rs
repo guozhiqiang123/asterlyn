@@ -1,9 +1,24 @@
 use crate::application::trust;
-use crate::application::{ActiveWorkspaces, TaskManager};
+use crate::application::{
+    ActiveWorkspaces, TaskArtifactDiscovery, TaskManager, scan_task_artifacts,
+};
 use asterlyn_task::{PreparedTask, TaskRequest, TaskSessionEvent, TaskStarted};
 use tauri::{Emitter, Manager, State};
 
 const EVENT: &str = "task-session-event";
+
+#[tauri::command]
+pub(crate) fn discover_task_artifacts(
+    repository_root: String,
+    hints: Vec<String>,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<TaskArtifactDiscovery, String> {
+    let root = active_workspaces
+        .resolve(window.label(), &repository_root)
+        .map_err(|error| error.to_string())?;
+    scan_task_artifacts(&root, &hints)
+}
 #[tauri::command]
 pub(crate) fn prepare_task_execution(
     workspace_root: String,

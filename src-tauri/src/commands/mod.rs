@@ -47,7 +47,9 @@ pub(crate) use shell::{
     is_last_project_window, open_project, open_repository_window, read_project_snapshot,
     read_repository_slices, window_chrome_mode,
 };
-pub(crate) use task::{cancel_task_execution, prepare_task_execution, start_task_execution};
+pub(crate) use task::{
+    cancel_task_execution, discover_task_artifacts, prepare_task_execution, start_task_execution,
+};
 pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write_terminal};
 pub(crate) use trust::{read_workspace_trust, set_workspace_trust};
 pub(crate) use workspace::{

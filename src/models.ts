@@ -538,6 +538,21 @@ export interface TaskExecutionStarted {
   workspaceRoot: string;
 }
 
+export type TaskArtifactKind = "apk" | "aab";
+
+export interface TaskArtifact {
+  workspacePath: string;
+  kind: TaskArtifactKind;
+  byteLength: number;
+}
+
+export interface TaskArtifactDiscovery {
+  protocolVersion: 1;
+  workspaceRoot: string;
+  artifacts: TaskArtifact[];
+  truncated: boolean;
+}
+
 export type TaskSessionEvent =
   | { protocolVersion: 1; kind: "output"; runId: string; workspaceRoot: string; sequence: number; stream: "stdout" | "stderr"; dataBase64: string }
   | { protocolVersion: 1; kind: "truncated"; runId: string; workspaceRoot: string; sequence: number; stream: "stdout" | "stderr"; omittedBytes: number }

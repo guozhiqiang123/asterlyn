@@ -14,6 +14,7 @@ import type {
 } from "../application/plugins/index.ts";
 import type { TaskProviderSnapshot } from "../application/tasks/index.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
+import { validTaskArtifactHints } from "../protocol/task-artifacts.ts";
 
 type RegisteredCommand = Extract<RegisteredPluginContribution, { readonly kind: "command" }>;
 type RegisteredProvider = Extract<RegisteredPluginContribution, { readonly kind: "provider" }>;
@@ -310,7 +311,11 @@ function validRefreshPlan(plan: PluginTaskRefreshPlan, contribution: RegisteredP
 }
 
 function validTaskPlan(plan: PluginTaskRunPlan, contribution: RegisteredProvider, taskId: string): boolean {
-  return validRefreshPlan(plan, contribution) && plan.request.taskId === taskId;
+  return validRefreshPlan(plan, contribution) && plan.request.taskId === taskId &&
+    (plan.artifactSearch === undefined || (
+      typeof plan.artifactSearch === "object" && plan.artifactSearch !== null &&
+      validTaskArtifactHints(plan.artifactSearch.hints)
+    ));
 }
 
 export class PluginTaskBusyError extends Error {

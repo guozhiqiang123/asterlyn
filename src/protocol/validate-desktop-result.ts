@@ -6,6 +6,7 @@ import { DESKTOP_RESULT_VALIDATORS } from "./generated-desktop-protocol.ts";
 import { assertCommitFilePreview } from "./validate-commit-file-preview.ts";
 import { assertCommitFileComparison } from "./validate-commit-file-comparison.ts";
 import { assertCommitFileRestorePreview, assertFileRestoreApplyResult, assertFileRestoreRecoveryList } from "./validate-file-restore.ts";
+import { parseTaskArtifactDiscovery } from "./task-artifacts.ts";
 import {
   assertWorkspaceEntryInspection,
   assertNullableSystemFileClipboardEntry,
@@ -157,6 +158,9 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       assert(result.protocolVersion === 1, command, "expected task execution protocol version 1");
       break;
     }
+    case "taskArtifactDiscovery":
+      parseTaskArtifactDiscovery(value);
+      break;
     case "openedProject": {
       const result = record(value, command);
       strings(result, command, "root");

@@ -28,3 +28,14 @@ export {
   type GradleTaskExecutionDescriptor,
   type GradleTaskRunState,
 } from "./execution.ts";
+export {
+  ANDROID_GRADLE_QUICK_ACTION_LIMITS,
+  deriveGradleQuickActions,
+  gradleTaskArtifactHints,
+  resolveGradleQuickAction,
+  type AndroidGradleQuickAction,
+  type AndroidGradleQuickActionKind,
+  type AndroidGradleQuickActionResolution,
+  type AndroidGradleQuickActions,
+  type AndroidGradleQuickActionSelection,
+} from "./quick-actions.ts";
