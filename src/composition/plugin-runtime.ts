@@ -78,6 +78,10 @@ export class PluginCompositionRuntime {
     return this.contributions.runTask(taskKey, identity);
   }
 
+  cancelTask(identity: PluginWorkspaceIdentity): void {
+    this.contributions.cancelTask(identity);
+  }
+
 
   dispose(): void {
     if (this.disposed) return;

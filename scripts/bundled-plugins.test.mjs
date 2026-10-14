@@ -41,8 +41,10 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
   assert.equal(provider.run(":installDebug").artifactSearch, undefined);
   provider.refresh().apply({ status: "cancelled", outputs: [], truncated: false, error: null });
   assert.match(provider.snapshot().error, /cancelled/u);
+  assert.deepEqual(provider.snapshot().tasks.map((task) => task.id), [":assembleDebug", ":installDebug"]);
   provider.refresh().apply({ status: "succeeded", outputs: [], truncated: true, error: null });
   assert.match(provider.snapshot().error, /truncated/u);
+  assert.deepEqual(provider.snapshot().tasks.map((task) => task.id), [":assembleDebug", ":installDebug"]);
   assert.deepEqual(detectAndroidGradlePluginEvidence({ identity, evidence }), {
     kind: "android-gradle-evidence",
     workspaceRoot: "/workspace/android",

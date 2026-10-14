@@ -7,8 +7,8 @@ export interface TasksRuntimeOptions {
   readonly runTask?: (taskKey: string, identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly revealOutput?: (taskKey: string, identity: TasksWorkspaceIdentity) => void;
   readonly refresh?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
+  readonly cancel?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly error?: (error: unknown) => void;
-  readonly shouldRender?: () => boolean;
 }
 
 export class TasksRuntime {
@@ -27,9 +27,7 @@ export class TasksRuntime {
     this.root = root;
     this.controller = controller;
     this.options = options;
-    this.release = controller.subscribe(() => {
-      if (this.options.shouldRender?.() !== false) this.render();
-    });
+    this.release = controller.subscribe(() => this.render());
   }
 
   activate(identity: TasksWorkspaceIdentity): void {
@@ -77,6 +75,7 @@ export class TasksRuntime {
       if (!(target instanceof Element)) return;
       const action = target.closest<HTMLElement>("[data-tasks-action]")?.dataset.tasksAction;
       if (action === "refresh") void this.refresh();
+      else if (action === "cancel") void this.cancel();
       const row = target.closest<HTMLElement>("[data-task-key]");
       if (row) {
         const taskKey = row.dataset.taskKey ?? "";
@@ -92,7 +91,7 @@ export class TasksRuntime {
       else if (keyboard.key === "ArrowUp" && this.controller.moveSelection(-1)) keyboard.preventDefault();
       else if (keyboard.key === "Enter") {
         const task = this.controller.selectedTask();
-        if (task?.task.runnable) { keyboard.preventDefault(); void this.run(task.key); }
+        if (task?.task.runnable && this.controller.state.status !== "loading") { keyboard.preventDefault(); void this.run(task.key); }
       }
     }, { signal });
   }
@@ -107,6 +106,12 @@ export class TasksRuntime {
     const identity = this.controller.state.identity;
     if (!identity || !this.options.refresh) return;
     try { await this.options.refresh(identity); } catch (error) { this.options.error?.(error); }
+  }
+
+  private async cancel(): Promise<void> {
+    const identity = this.controller.state.identity;
+    if (!identity || !this.options.cancel) return;
+    try { await this.options.cancel(identity); } catch (error) { this.options.error?.(error); }
   }
 
   private revealOutput(taskKey: string): void {

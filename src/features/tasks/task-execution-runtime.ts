@@ -14,6 +14,7 @@ export interface TaskExecutionRuntimeOptions {
   readonly revealArtifact?: (identity: TaskWorkspaceIdentity, artifact: TaskArtifact) => void | Promise<void>;
   readonly reportError?: (error: unknown) => void;
   readonly visibilityChanged?: () => void;
+  readonly backgroundAfterStart?: (request: TaskExecutionRequest) => boolean;
 }
 
 export interface TaskArtifactAttachmentTarget {
@@ -35,7 +36,7 @@ export function taskArtifactAttachmentMatches(
   target: TaskArtifactAttachmentTarget,
   state: TaskArtifactAttachmentState,
 ): boolean {
-  return state.visible && state.succeeded && state.presentationVersion === target.presentationVersion &&
+  return state.succeeded && state.presentationVersion === target.presentationVersion &&
     state.identity?.root === target.root && state.identity.generation === target.generation &&
     state.taskKey === target.taskKey;
 }
@@ -54,6 +55,7 @@ export class TaskExecutionRuntime {
   private artifactState: TaskArtifactViewState | null = null;
   private presentationVersion = 0;
   private finished: ((result: PluginTaskExecutionResult) => void) | null = null;
+  private backgroundOnStart = false;
 
   constructor(
     root: HTMLElement,
@@ -67,6 +69,7 @@ export class TaskExecutionRuntime {
     this.options = options;
     this.unsubscribe = controller.subscribe((state) => {
       this.observeTerminal(state);
+      this.backgroundStartedExecution(state);
       this.render();
     });
     root.addEventListener("click", (event) => {
@@ -94,7 +97,7 @@ export class TaskExecutionRuntime {
     }, { signal: this.listeners.signal });
   }
 
-  get active(): boolean { return this.visible || this.finished !== null; }
+  get active(): boolean { return this.visible; }
 
   activate(identity: TaskWorkspaceIdentity): void {
     if (this.finished) {
@@ -104,6 +107,7 @@ export class TaskExecutionRuntime {
     }
     this.identity = identity;
     this.visible = false;
+    this.backgroundOnStart = false;
     this.terminalState = null;
     this.invalidateArtifacts();
     this.controller.activateWorkspace(identity);
@@ -118,6 +122,7 @@ export class TaskExecutionRuntime {
     if (this.finished) throw new Error("A task execution review is already active.");
     this.identity = identity;
     this.finished = finished;
+    this.backgroundOnStart = this.options.backgroundAfterStart?.(request) === true;
     this.terminalState = null;
     this.invalidateArtifacts();
     this.open();
@@ -126,6 +131,7 @@ export class TaskExecutionRuntime {
     } catch (error) {
       if (this.finished === finished) this.finished = null;
       this.visible = false;
+      this.backgroundOnStart = false;
       this.options.visibilityChanged?.();
       throw error;
     }
@@ -165,6 +171,7 @@ export class TaskExecutionRuntime {
       const finished = this.finished;
       this.finished = null;
       this.visible = false;
+      this.backgroundOnStart = false;
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was cancelled." });
       this.options.visibilityChanged?.();
       return;
@@ -173,7 +180,7 @@ export class TaskExecutionRuntime {
   }
 
   beginArtifactDiscovery(identity: TaskWorkspaceIdentity, taskKey: string): TaskArtifactAttachmentTarget | null {
-    if (!this.visible || !sameIdentity(this.identity, identity) || this.terminalState?.status !== "succeeded" ||
+    if (!sameIdentity(this.identity, identity) || this.terminalState?.status !== "succeeded" ||
       !this.terminalState.review || executionTaskKey(this.terminalState.review) !== taskKey) return null;
     const target = { root: identity.root, generation: identity.generation, taskKey, presentationVersion: this.presentationVersion };
     this.artifactState = { status: "loading" };
@@ -215,6 +222,7 @@ export class TaskExecutionRuntime {
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was disposed." });
     }
     this.visible = false;
+    this.backgroundOnStart = false;
     this.terminalState = null;
     this.invalidateArtifacts();
     this.listeners.abort();
@@ -236,6 +244,7 @@ export class TaskExecutionRuntime {
     const identity = this.identity;
     if (!identity || !isTerminal(this.displayState())) return;
     this.visible = false;
+    this.backgroundOnStart = false;
     this.invalidateArtifacts();
     this.controller.dismiss(identity);
     this.options.visibilityChanged?.();
@@ -279,6 +288,7 @@ export class TaskExecutionRuntime {
       const finished = this.finished;
       this.finished = null;
       this.visible = false;
+      this.backgroundOnStart = false;
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was cancelled." });
       this.options.visibilityChanged?.();
       const fallback = this.root.querySelector<HTMLElement>("[data-tasks-action=refresh]");
@@ -286,6 +296,7 @@ export class TaskExecutionRuntime {
       return;
     }
     if (!isTerminal(state)) return;
+    this.backgroundOnStart = false;
     this.terminalState = state;
     const finished = this.finished;
     this.finished = null;
@@ -299,6 +310,14 @@ export class TaskExecutionRuntime {
 
   private displayState(): TaskExecutionState | null {
     return this.controller.state.review ? this.controller.state : this.terminalState;
+  }
+
+  private backgroundStartedExecution(state: TaskExecutionState): void {
+    if (!this.visible || !this.backgroundOnStart || state.status !== "starting") return;
+    this.visible = false;
+    this.options.visibilityChanged?.();
+    const fallback = this.root.querySelector<HTMLElement>('[data-tasks-action="cancel"], [data-tasks-action="refresh"]');
+    this.restoreFocus(fallback);
   }
 
   private matchesArtifactTarget(target: TaskArtifactAttachmentTarget): boolean {
@@ -317,9 +336,9 @@ export class TaskExecutionRuntime {
   }
 
   private host(): HTMLElement | null {
-    return this.root.matches("#tasks-tool-host")
+    return this.root.matches("#task-execution-host")
       ? this.root
-      : this.root.querySelector<HTMLElement>("#tasks-tool-host");
+      : this.root.querySelector<HTMLElement>("#task-execution-host");
   }
 }
 

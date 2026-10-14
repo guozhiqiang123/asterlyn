@@ -61,6 +61,7 @@ export class PluginTasksRuntime {
         },
         reportError: options.reportError,
         visibilityChanged: () => this.render(),
+        backgroundAfterStart: () => true,
       },
     );
     this.plugins = new PluginCompositionRuntime({
@@ -75,10 +76,10 @@ export class PluginTasksRuntime {
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
       refresh: (identity) => this.plugins.refreshProviders(identity),
+      cancel: (identity) => this.plugins.cancelTask(identity),
       runTask: (taskKey, identity) => this.plugins.runTask(taskKey, identity),
       revealOutput: (taskKey, identity) => { this.execution.reveal(taskKey, identity); },
       error: (error) => options.reportError(error instanceof PluginTaskBusyError ? new Error(options.copy().busy) : error),
-      shouldRender: () => !this.execution.active,
     });
     this.platform = options.platform ?? browserPathPlatform;
     this.reportError = options.reportError;
@@ -108,8 +109,8 @@ export class PluginTasksRuntime {
   }
 
   render(): void {
-    if (this.execution.active) this.execution.render();
-    else this.tasks.render();
+    this.tasks.render();
+    this.execution.render();
   }
 
   dispose(): void {

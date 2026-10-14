@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parseTaskExecutionReview, parseTaskSessionEvent } from "../src/protocol/task-execution.ts";
 import { TaskExecutionController } from "../src/application/tasks/task-execution-controller.ts";
+import { TaskExecutionRuntime } from "../src/features/tasks/task-execution-runtime.ts";
 import { renderTaskExecutionReview } from "../src/features/tasks/task-execution-view.ts";
 import { EN_US_TASK_EXECUTION_COPY } from "../src/localization/task-execution-copy.ts";
 
@@ -83,6 +84,63 @@ test("task execution reports starting and cancelling immediately and only expose
   await cancellation;
   listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-feedback", workspaceRoot: "/repo", sequence: 1, status: "cancelled", message: null, exitCode: null });
   assert.equal(controller.state.status, "cancelled");
+});
+
+test("confirmed execution moves to the Tasks panel while retaining terminal output for reveal", async () => {
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  class FakeElement {
+    isConnected = true;
+    focus() {}
+  }
+  const host = {
+    innerHTML: "",
+    contains: () => false,
+    querySelector(selector) {
+      if (selector === ".task-execution-review" && this.innerHTML.includes("task-execution-review")) return {};
+      return null;
+    },
+    replaceChildren() { this.innerHTML = ""; },
+  };
+  const root = {
+    addEventListener: () => undefined,
+    matches: () => false,
+    querySelector: (selector) => selector === "#task-execution-host" ? host : null,
+  };
+  globalThis.HTMLElement = FakeElement;
+  globalThis.document = { activeElement: null };
+  try {
+    const listeners = [];
+    const bridge = {
+      native: false,
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+      setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+      prepareTaskExecution: async () => review,
+      startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-background", reviewId: "review-1", workspaceRoot: "/repo" }),
+      cancelTaskExecution: async () => {},
+      subscribeTaskSession: async (listener) => { listeners.push(listener); return () => {}; },
+    };
+    const controller = new TaskExecutionController(bridge);
+    let finish;
+    const completion = new Promise((resolve) => { finish = resolve; });
+    const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
+      backgroundAfterStart: () => true,
+    });
+    runtime.activate(identity);
+    await runtime.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [] }, finish);
+    assert.match(host.innerHTML, /task-execution-review/u);
+    await controller.confirm(identity);
+    assert.equal(runtime.active, false);
+    assert.equal(host.innerHTML, "");
+    listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-background", workspaceRoot: "/repo", sequence: 1, status: "running", message: null, exitCode: null });
+    listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-background", workspaceRoot: "/repo", sequence: 2, status: "succeeded", message: null, exitCode: 0 });
+    assert.equal((await completion).status, "succeeded");
+    assert.equal(runtime.reveal("android.gradle:assembleDebug", identity), true);
+    assert.match(host.innerHTML, /Succeeded/u);
+    runtime.dispose();
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.HTMLElement = previous.HTMLElement;
+  }
 });
 
 test("cancelling while start is pending dismisses the review and cleans up the eventual native run", async () => {
@@ -296,6 +354,7 @@ test("task review runtime owns escape, focus trap, and focus restoration", async
   assert.match(source, /if \(host\) trapFocus\(host, event\)/u);
   assert.match(source, /this\.focusReturn = document\.activeElement/u);
   assert.match(source, /target\?\.isConnected/u);
-  assert.match(source, /querySelector<HTMLElement>\("#tasks-tool-host"\)/u);
+  assert.match(source, /querySelector<HTMLElement>\("#task-execution-host"\)/u);
+  assert.match(source, /backgroundStartedExecution\(state\)/u);
   assert.doesNotMatch(source, /\?\? root/u);
 });

@@ -53,6 +53,7 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
       label: "Gradle",
       snapshot: () => snapshot,
       refresh: () => {
+        const retainedTasks = snapshot.tasks;
         const prepared = buildGradleWrapperRequest(detection);
         if (!prepared.supported) {
           snapshot = { status: "unavailable", tasks: [], unavailableReason: prepared.reason === "wrapper-missing" ? "discovery-not-supported" : "evidence-incomplete" };
@@ -62,22 +63,25 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
           request: prepared.request,
           apply: (result: PluginTaskExecutionResult) => {
             if (result.status !== "succeeded") {
-              snapshot = { status: "error", tasks: [], error: result.error ?? (result.status === "cancelled" ? "Gradle task discovery was cancelled." : `Gradle task discovery ${result.status}.`) };
+              snapshot = { status: "error", tasks: retainedTasks, error: result.error ?? (result.status === "cancelled" ? "Gradle task discovery was cancelled." : `Gradle task discovery ${result.status}.`) };
               return;
             }
             if (result.truncated) {
-              snapshot = { status: "error", tasks: [], error: "Gradle task discovery output was truncated." };
+              snapshot = { status: "error", tasks: retainedTasks, error: "Gradle task discovery output was truncated." };
               return;
             }
             const bytes: number[] = [];
             for (const output of result.outputs) {
               if (output.stream !== "stdout") continue;
-              try { const binary = atob(output.dataBase64); for (let index = 0; index < binary.length; index += 1) bytes.push(binary.charCodeAt(index)); } catch { snapshot = { status: "error", tasks: [], error: "Gradle task discovery output was invalid." }; return; }
+              try { const binary = atob(output.dataBase64); for (let index = 0; index < binary.length; index += 1) bytes.push(binary.charCodeAt(index)); } catch { snapshot = { status: "error", tasks: retainedTasks, error: "Gradle task discovery output was invalid." }; return; }
             }
-            snapshot = withGradleQuickActions(runnableGradleSnapshot(parseGradleTasksOutput(new Uint8Array(bytes))));
+            const parsed = parseGradleTasksOutput(new Uint8Array(bytes));
+            snapshot = parsed.status === "ready"
+              ? withGradleQuickActions(runnableGradleSnapshot(parsed))
+              : { ...parsed, tasks: retainedTasks };
           },
         };
-        snapshot = { status: "loading", tasks: [] };
+        snapshot = { status: "loading", tasks: retainedTasks };
         return plan;
       },
       run: (taskId: string) => {

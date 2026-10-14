@@ -43,14 +43,14 @@ test("artifact hints allow only bounded Gradle output directories", () => {
   assert.equal(validTaskArtifactHints(Array.from({ length: 9 }, () => "app/build/outputs/apk")), false);
 });
 
-test("artifact attachment rejects stale workspace, task, retry generation, and dismissal", () => {
+test("artifact attachment survives background execution and rejects stale workspace, task, and dismissal generation", () => {
   const target = { root: "/repo", generation: 3, taskKey: "android.gradle::app:assembleDebug", presentationVersion: 7 };
   const current = { identity: { root: "/repo", generation: 3 }, taskKey: target.taskKey, presentationVersion: 7, visible: true, succeeded: true };
   assert.equal(taskArtifactAttachmentMatches(target, current), true);
   assert.equal(taskArtifactAttachmentMatches(target, { ...current, identity: { root: "/other", generation: 3 } }), false);
   assert.equal(taskArtifactAttachmentMatches(target, { ...current, taskKey: "android.gradle::app:assembleRelease" }), false);
   assert.equal(taskArtifactAttachmentMatches(target, { ...current, presentationVersion: 8 }), false);
-  assert.equal(taskArtifactAttachmentMatches(target, { ...current, visible: false }), false);
+  assert.equal(taskArtifactAttachmentMatches(target, { ...current, visible: false }), true);
 });
 
 test("successful task UI renders escaped bounded artifacts and Reveal actions", () => {

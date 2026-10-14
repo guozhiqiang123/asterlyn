@@ -54,14 +54,12 @@ export class TasksController {
     if (!workspaceIdentityEqual(this.value.identity, identity)) return false;
     const previousKey = this.selectedTask()?.key ?? null;
     const normalized = normalizeProviders(providers);
-    const entries = normalized.flatMap((provider) => provider.snapshot.status === "ready"
-      ? provider.snapshot.tasks.map((task) => ({
+    const entries = normalized.flatMap((provider) => provider.snapshot.tasks.map((task) => ({
         key: taskEntryKey(provider.id, task.id),
         providerId: provider.id,
         providerLabel: provider.label,
         task: { ...task },
-      }))
-      : []);
+      })));
     const visibleEntries = filterEntries(entries, this.value.query);
     const selectedIndex = preserveSelection(visibleEntries, previousKey, this.value.selectedIndex);
     this.value = {

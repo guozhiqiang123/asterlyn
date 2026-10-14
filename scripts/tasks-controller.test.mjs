@@ -62,6 +62,18 @@ test("provider statuses expose loading, unavailable, error, and empty states", (
   assert.equal(controller.state.error, "failed");
 });
 
+test("loading and failed refreshes retain the last discovered task projection", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  const retained = task("assemble", "assembleDebug");
+  controller.acceptProviders(identity, [{ id: "p", label: "Gradle", snapshot: { status: "loading", tasks: [retained] } }]);
+  assert.equal(controller.state.status, "loading");
+  assert.deepEqual(controller.state.entries.map((entry) => entry.task.id), ["assemble"]);
+  controller.acceptProviders(identity, [{ id: "p", label: "Gradle", snapshot: { status: "error", tasks: [retained], error: "refresh failed" } }]);
+  assert.equal(controller.state.status, "error");
+  assert.deepEqual(controller.state.visibleEntries.map((entry) => entry.task.id), ["assemble"]);
+});
+
 test("controller clones provider projections and caps queries", () => {
   const controller = new TasksController();
   controller.activate(identity);

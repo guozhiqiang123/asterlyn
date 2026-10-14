@@ -104,6 +104,11 @@ export class PluginContributionRuntime {
     return operation;
   }
 
+  cancelTask(identity: PluginWorkspaceIdentity): void {
+    if (!this.matches(identity)) return;
+    this.refreshAbort?.abort();
+  }
+
   private async runTaskSerialized(identity: PluginWorkspaceIdentity, contribution: RegisteredProvider, taskId: string): Promise<void> {
     if (!this.options.executeTaskRun) throw new Error("Task execution is unavailable");
     const plan = await contribution.run?.(taskId);

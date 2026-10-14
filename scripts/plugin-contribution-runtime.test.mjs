@@ -120,6 +120,40 @@ test("provider deactivation aborts an in-flight host refresh and drops the stale
   adapter.dispose();
 });
 
+test("the Tasks surface can explicitly cancel the current workspace refresh", async () => {
+  const runtime = new PluginRuntime();
+  let aborted = 0;
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportError: (error) => { throw error; },
+    executeTaskRefresh: async (_identity, _plan, signal) => new Promise((resolve) => {
+      signal.addEventListener("abort", () => {
+        aborted += 1;
+        resolve({ status: "cancelled", outputs: [], truncated: false, error: null });
+      }, { once: true });
+    }),
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "loading", tasks: [] }),
+    refresh: () => ({
+      request: { pluginId: "android", providerId: "tasks", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] },
+      apply: () => undefined,
+    }),
+  }))]);
+  const refresh = adapter.refreshProviders(identity);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  adapter.cancelTask({ root: "/other", generation: identity.generation });
+  assert.equal(aborted, 0);
+  adapter.cancelTask(identity);
+  await refresh;
+  assert.equal(aborted, 1);
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 test("a provider can publish an unsupported refresh without starting execution", async () => {
   const runtime = new PluginRuntime();
   let latest = null;

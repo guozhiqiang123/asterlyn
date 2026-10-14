@@ -8,7 +8,11 @@ export interface TasksCopy {
   readonly unavailable: string;
   readonly unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>;
   readonly loading: string;
+  readonly cancelDiscovery: string;
   readonly error: string;
+  readonly retryDiscovery: string;
+  readonly discovered: (count: number) => string;
+  readonly providerLoading: (provider: string) => string;
   readonly busy: string;
   readonly noResults: string;
   readonly queryPlaceholder: string;
@@ -34,7 +38,11 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
     "workspace-untrusted": "Trust this workspace before discovering tasks.",
   },
   loading: "Loading tasks…",
+  cancelDiscovery: "Cancel discovery",
   error: "Task discovery failed.",
+  retryDiscovery: "Retry discovery",
+  discovered: (count: number) => `${count} task${count === 1 ? "" : "s"} discovered`,
+  providerLoading: (provider: string) => `Discovering tasks from ${provider}…`,
   busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
@@ -54,10 +62,10 @@ export function renderTasksView(state: TasksState, copy: TasksCopy = DEFAULT_TAS
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
   const groups = groupEntries(state.visibleEntries);
   const quickActions = renderAndroidQuickActions(state, copy);
-  const list = state.status === "ready" && state.visibleEntries.length > 0
-    ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
+  const list = state.visibleEntries.length > 0
+    ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, state.status === "loading", entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
     : "";
-  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" role="region" aria-label="${escapeAttribute(copy.title)}"><header class="tasks-header"><h2>${escapeHtml(copy.title)}</h2><button type="button" data-tasks-action="refresh" aria-label="${escapeAttribute(copy.refresh)}" title="${escapeAttribute(copy.refresh)}">↻</button></header>${quickActions}${query}${status}${list}</section>`;
+  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}"><header class="tasks-header"><h2>${escapeHtml(copy.title)}</h2><button type="button" data-tasks-action="refresh" aria-label="${escapeAttribute(copy.refresh)}" title="${escapeAttribute(copy.refresh)}" ${state.status === "loading" ? "disabled" : ""}>↻</button></header>${quickActions}${query}${status}${list}</section>`;
 }
 
 function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {
@@ -70,7 +78,7 @@ function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {
     const kind = copy.quickActionKinds[action.kind];
     const label = `${kind} ${action.variant}`;
     const accessible = `${label}, ${copy.quickActionModule}: ${action.module}, ${copy.quickActionVariant}: ${action.variant}`;
-    const active = entry.task.runState === "queued" || entry.task.runState === "running";
+    const active = state.status === "loading" || entry.task.runState === "queued" || entry.task.runState === "running";
     return `<div class="tasks-quick-action" role="listitem" data-task-key="${escapeAttribute(entry.key)}"><button type="button" data-task-action="run" aria-label="${escapeAttribute(accessible)}" title="${escapeAttribute(entry.task.id)}" ${active ? "disabled" : ""}><strong>${escapeHtml(label)}</strong><small>${escapeHtml(copy.quickActionModule)}: ${escapeHtml(action.module)}</small><small>${escapeHtml(copy.quickActionVariant)}: ${escapeHtml(action.variant)}</small></button></div>`;
   }).join("")}</div></section>`;
 }
@@ -83,10 +91,26 @@ function renderStatus(state: TasksState, copy: TasksCopy): string {
       ? copy.unavailableReasons[reason]
       : copy.unavailable);
   }
-  if (state.status === "loading") return message(copy.loading);
-  if (state.status === "error") return message(state.error ? `${copy.error} ${state.error}` : copy.error);
+  if (state.status === "loading") return renderLoading(state, copy);
+  if (state.status === "error") return renderError(state, copy);
+  if (state.status === "ready") return `<p class="tasks-discovery-count" role="status">${escapeHtml(copy.discovered(state.entries.length))}</p>${state.visibleEntries.length === 0 ? message(copy.noResults) : ""}`;
   if (state.visibleEntries.length === 0) return message(copy.noResults);
   return "";
+}
+
+function renderLoading(state: TasksState, copy: TasksCopy): string {
+  const providers = state.providers
+    .filter((provider) => provider.snapshot.status === "loading")
+    .map((provider) => provider.label);
+  const detail = providers.length > 0
+    ? providers.map((provider) => `<small>${escapeHtml(copy.providerLoading(provider))}</small>`).join("")
+    : `<small>${escapeHtml(copy.loading)}</small>`;
+  return `<div class="tasks-discovery-state tasks-discovery-loading" data-tasks-discovery-state="loading" role="status" aria-live="polite"><span class="tasks-spinner" aria-hidden="true"></span><span class="tasks-discovery-copy"><strong>${escapeHtml(copy.loading)}</strong>${detail}</span><button type="button" data-tasks-action="cancel">${escapeHtml(copy.cancelDiscovery)}</button></div>`;
+}
+
+function renderError(state: TasksState, copy: TasksCopy): string {
+  const detail = state.error ? `<small>${escapeHtml(state.error)}</small>` : "";
+  return `<div class="tasks-discovery-state tasks-discovery-error" data-tasks-discovery-state="error" role="alert"><span class="tasks-discovery-copy"><strong>${escapeHtml(copy.error)}</strong>${detail}</span><button type="button" data-tasks-action="refresh">${escapeHtml(copy.retryDiscovery)}</button></div>`;
 }
 
 function taskRow(
@@ -97,6 +121,7 @@ function taskRow(
   runnable: boolean,
   disabledReason: string | undefined,
   runState: TaskRunState | undefined,
+  discoveryLoading: boolean,
   selected: boolean,
   copy: TasksCopy,
 ): string {
@@ -107,9 +132,9 @@ function taskRow(
     ? `<small class="tasks-run-status" role="status">${escapeHtml(copy.status[runState] ?? runState)}</small>`
     : "";
   const actions = terminal
-    ? `<span class="tasks-row-actions"><button type="button" data-task-action="retry" title="${escapeAttribute(copy.retry)}">${escapeHtml(copy.retry)}</button><button type="button" data-task-action="reveal-output" title="${escapeAttribute(copy.revealOutput)}">${escapeHtml(copy.revealOutput)}</button></span>`
+    ? `<span class="tasks-row-actions"><button type="button" data-task-action="retry" title="${escapeAttribute(copy.retry)}" ${discoveryLoading ? "disabled" : ""}>${escapeHtml(copy.retry)}</button><button type="button" data-task-action="reveal-output" title="${escapeAttribute(copy.revealOutput)}">${escapeHtml(copy.revealOutput)}</button></span>`
     : "";
-  return `<div role="option" class="tasks-row" data-task-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(title)}" ${runnable && !active ? "" : "disabled"}><strong>${escapeHtml(label)}</strong><small class="tasks-provider">${escapeHtml(providerLabel)}</small>${description ? `<small>${escapeHtml(description)}</small>` : ""}${status}</button>${actions}</div>`;
+  return `<div role="option" class="tasks-row" data-task-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(title)}" ${runnable && !active && !discoveryLoading ? "" : "disabled"}><strong>${escapeHtml(label)}</strong><small class="tasks-provider">${escapeHtml(providerLabel)}</small>${description ? `<small>${escapeHtml(description)}</small>` : ""}${status}</button>${actions}</div>`;
 }
 
 function groupEntries(state: TasksState["visibleEntries"]): readonly [string, TasksState["visibleEntries"]][] {
