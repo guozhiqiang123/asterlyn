@@ -11,7 +11,12 @@ import {
   detectAndroidGradleEvidence,
   type AndroidGradleEvidenceSnapshot,
 } from "./detector.ts";
-import { buildGradleWrapperRequest, parseGradleTasksOutput, type GradleTaskDiscoveryResult } from "./discovery.ts";
+import {
+  ANDROID_GRADLE_DISCOVERY_LIMITS,
+  buildGradleWrapperRequest,
+  parseGradleTasksOutput,
+  type GradleTaskDiscoveryResult,
+} from "./discovery.ts";
 import { applyGradleTaskResult, buildGradleTaskRunPlan, runnableGradleSnapshot, setGradleTaskRunState } from "./execution.ts";
 import { deriveGradleQuickActions, gradleTaskArtifactHints } from "./quick-actions.ts";
 
@@ -70,12 +75,27 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
               snapshot = { status: "error", tasks: retainedTasks, error: "Gradle task discovery output was truncated." };
               return;
             }
-            const bytes: number[] = [];
+            const chunks: Uint8Array[] = [];
+            let byteLength = 0;
             for (const output of result.outputs) {
               if (output.stream !== "stdout") continue;
-              try { const binary = atob(output.dataBase64); for (let index = 0; index < binary.length; index += 1) bytes.push(binary.charCodeAt(index)); } catch { snapshot = { status: "error", tasks: retainedTasks, error: "Gradle task discovery output was invalid." }; return; }
+              try {
+                const binary = atob(output.dataBase64);
+                byteLength += binary.length;
+                if (byteLength > ANDROID_GRADLE_DISCOVERY_LIMITS.maxOutputBytes) {
+                  snapshot = { status: "error", tasks: retainedTasks, error: "Gradle task discovery output exceeded the discovery limit." };
+                  return;
+                }
+                chunks.push(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+              } catch {
+                snapshot = { status: "error", tasks: retainedTasks, error: "Gradle task discovery output was invalid." };
+                return;
+              }
             }
-            const parsed = parseGradleTasksOutput(new Uint8Array(bytes));
+            const bytes = new Uint8Array(byteLength);
+            let offset = 0;
+            for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+            const parsed = parseGradleTasksOutput(bytes);
             snapshot = parsed.status === "ready"
               ? withGradleQuickActions(runnableGradleSnapshot(parsed))
               : { ...parsed, tasks: retainedTasks };

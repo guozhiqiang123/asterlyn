@@ -5,7 +5,7 @@ import type { AndroidGradleEvidenceSnapshot } from "./detector.ts";
 export const ANDROID_GRADLE_DISCOVERY_LIMITS = Object.freeze({
   maxOutputBytes: 2 * 1024 * 1024,
   maxLineLength: 16 * 1024,
-  maxTasks: 512,
+  maxTasks: 32_768,
 });
 
 export const ANDROID_GRADLE_EXECUTION_FLAGS = Object.freeze([

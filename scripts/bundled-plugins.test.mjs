@@ -80,3 +80,36 @@ test("the bundled Android plugin stays inactive for plain and malformed catalogs
   }, BUNDLED_PLUGINS);
   assert.deepEqual(malformed.skipped, [ANDROID_GRADLE_PLUGIN_ID]);
 });
+
+test("the bundled Android plugin accepts a multi-chunk 16000-task catalog", async () => {
+  const runtime = new PluginRuntime();
+  await runtime.activate(identity, {
+    kind: "workspace-catalog",
+    platform: "posix",
+    truncated: false,
+    files: [
+      { workspacePath: "settings.gradle.kts" },
+      { workspacePath: "gradlew" },
+      { workspacePath: "app/src/main/AndroidManifest.xml" },
+    ],
+  }, BUNDLED_PLUGINS);
+  const provider = runtime.contributions.list()
+    .find((contribution) => contribution.qualifiedId === `${ANDROID_GRADLE_PLUGIN_ID}.gradle-tasks`);
+  assert.ok(provider);
+  const body = [
+    "Tasks runnable from root project 'large'",
+    "Build tasks",
+    "-----------",
+    ...Array.from({ length: 16_000 }, (_, index) => `task${String(index).padStart(5, "0")} - Generated task ${index} with enough descriptive output for a realistic catalog`),
+    "",
+  ].join("\n");
+  const bytes = Buffer.from(body);
+  const outputs = [];
+  for (let offset = 0; offset < bytes.length; offset += 16 * 1024) {
+    outputs.push({ stream: "stdout", dataBase64: bytes.subarray(offset, offset + 16 * 1024).toString("base64") });
+  }
+  provider.refresh().apply({ status: "succeeded", outputs, truncated: false, error: null });
+  assert.equal(provider.snapshot().status, "ready");
+  assert.equal(provider.snapshot().tasks.length, 16_000);
+  assert.equal(provider.snapshot().tasks.at(-1).id, ":task15999");
+});

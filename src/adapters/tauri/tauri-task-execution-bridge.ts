@@ -16,8 +16,11 @@ export const tauriTaskExecutionBridge: TaskExecutionBridge = {
   prepareTaskExecution: async (workspaceRoot, request: TaskExecutionRequest): Promise<TaskExecutionReview> => parseTaskExecutionReview(await invokeDesktopCommand("prepare_task_execution", { workspaceRoot, request })),
   startTaskExecution: async (workspaceRoot, reviewId): Promise<TaskExecutionStarted> => parseTaskExecutionStarted(await invokeDesktopCommand("start_task_execution", { workspaceRoot, reviewId })),
   cancelTaskExecution: (runId) => invokeDesktopCommand("cancel_task_execution", { runId }),
-  async subscribeTaskSession(listener: (event: TaskSessionEvent) => void): Promise<() => void> {
+  async subscribeTaskSession(listener: (event: TaskSessionEvent) => void, onError?: (error: unknown) => void): Promise<() => void> {
     const { listen } = await import("@tauri-apps/api/event");
-    return listen<unknown>(TASK_SESSION_EVENT, (event) => listener(parseTaskSessionEvent(event.payload)));
+    return listen<unknown>(TASK_SESSION_EVENT, (event) => {
+      try { listener(parseTaskSessionEvent(event.payload)); }
+      catch (error) { onError?.(error); }
+    });
   },
 };

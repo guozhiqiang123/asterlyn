@@ -36,3 +36,23 @@ test("renders every module candidate with exact task keys and accessible labels"
   assert.match(html, /Module: :demo/u);
   assert.match(html, /aria-label="Install Debug, Module: :app, Variant: Debug"/u);
 });
+
+test("keeps every Android quick-action kind visible in large catalogs", () => {
+  const entries = [
+    ...Array.from({ length: 200 }, (_, index) => {
+      const id = `:app:assembleFlavor${index}`;
+      return { key: `gradle:${id}`, providerId: "gradle", providerLabel: "Gradle", task: task(id, { kind: "assemble", module: ":app", variant: `Flavor${index}` }) };
+    }),
+    ...["bundle", "install", "uninstall"].map((kind) => {
+      const id = `:app:${kind}Debug`;
+      return { key: `gradle:${id}`, providerId: "gradle", providerLabel: "Gradle", task: task(id, { kind, module: ":app", variant: "Debug" }) };
+    }),
+  ];
+  const html = renderTasksView({ identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null,
+    providers: [], entries, visibleEntries: [],
+  });
+  assert.equal((html.match(/<div class="tasks-quick-action"/gu) ?? []).length, 35);
+  assert.match(html, />Bundle Debug</u);
+  assert.match(html, />Install Debug</u);
+  assert.match(html, />Uninstall Debug</u);
+});

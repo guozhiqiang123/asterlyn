@@ -5,6 +5,7 @@ export type AndroidGradleQuickActionKind = AndroidTaskQuickActionKind;
 
 export const ANDROID_GRADLE_QUICK_ACTION_LIMITS = Object.freeze({
   maxActions: 512,
+  maxActionsPerKind: 128,
   maxCandidatesPerSelection: 32,
 });
 
@@ -47,13 +48,16 @@ export function deriveGradleQuickActions(snapshot: TaskProviderSnapshot): Androi
   if (snapshot.status !== "ready") return { status: "ready", actions: [], selections: [] };
 
   const actions = new Map<string, AndroidGradleQuickAction>();
+  const kindCounts = new Map<AndroidGradleQuickActionKind, number>();
   for (const task of snapshot.tasks) {
     if (!task.runnable || !task.id || task.id.includes("\0")) continue;
     const parsed = parseTaskId(task.id);
     if (!parsed || !QUICK_ACTION_KINDS.includes(parsed.kind)) continue;
     const id = `${parsed.kind}:${task.id}`;
-    if (actions.has(id) || actions.size >= ANDROID_GRADLE_QUICK_ACTION_LIMITS.maxActions) continue;
+    if (actions.has(id) || actions.size >= ANDROID_GRADLE_QUICK_ACTION_LIMITS.maxActions ||
+      (kindCounts.get(parsed.kind) ?? 0) >= ANDROID_GRADLE_QUICK_ACTION_LIMITS.maxActionsPerKind) continue;
     actions.set(id, { id, taskId: task.id, module: parsed.module, variant: parsed.variant, kind: parsed.kind, label: `${parsed.kind} ${parsed.variant}` });
+    kindCounts.set(parsed.kind, (kindCounts.get(parsed.kind) ?? 0) + 1);
   }
 
   const groupCounts = new Map<string, number>();

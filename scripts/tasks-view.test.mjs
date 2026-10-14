@@ -4,7 +4,7 @@ import test from "node:test";
 import { renderTasksView } from "../src/features/tasks/tasks-view.ts";
 
 const copy = {
-  title: "Tasks", refresh: "Refresh", empty: "Empty", unavailable: "Unavailable", loading: "Loading", cancelDiscovery: "Cancel discovery", retryDiscovery: "Retry discovery", discovered: (count) => `${count} discovered`, providerLoading: (provider) => `Discovering ${provider}`,
+  title: "Tasks", refresh: "Refresh", empty: "Empty", unavailable: "Unavailable", loading: "Loading", cancelDiscovery: "Cancel discovery", retryDiscovery: "Retry discovery", discovered: (count) => `${count} discovered`, providerLoading: (provider) => `Discovering ${provider}`, showing: (count, total) => `Showing ${count} of ${total}`, showMore: "Show more",
   unavailableReasons: {
     "discovery-not-supported": "Not supported",
     "evidence-incomplete": "Incomplete evidence",
@@ -81,6 +81,14 @@ test("ready discovery reports the task count while retaining the filter and list
   assert.match(html, /data-tasks-query/);
   assert.match(html, /role="option"/);
   assert.doesNotMatch(html, /class="tasks-header"/);
+});
+
+test("large task sets render in bounded batches while retaining the full match count", () => {
+  const entries = Array.from({ length: 600 }, (_, index) => ({ key: `p:${index}`, providerId: "p", providerLabel: "P", task: { id: `${index}`, label: `task${index}`, group: "Build", runnable: true } }));
+  const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [], entries, visibleEntries: entries, query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy);
+  assert.equal((html.match(/role="option"/gu) ?? []).length, 250);
+  assert.match(html, /Showing 250 of 600/);
+  assert.match(html, /data-tasks-action="show-more"/);
 });
 
 test("terminal tasks expose localized status, retry, and output actions", () => {

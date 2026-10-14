@@ -1,6 +1,6 @@
 import type { TasksController } from "./tasks-controller.ts";
 import type { TasksState, TasksWorkspaceIdentity } from "./tasks-model.ts";
-import { renderTasksView, type TasksCopy } from "./tasks-view.ts";
+import { renderTasksView, TASKS_RENDER_BATCH_SIZE, type TasksCopy } from "./tasks-view.ts";
 
 export interface TasksRuntimeOptions {
   readonly copy?: () => TasksCopy;
@@ -18,6 +18,7 @@ export class TasksRuntime {
   private readonly root: HTMLElement;
   private readonly controller: TasksController;
   private readonly options: TasksRuntimeOptions;
+  private visibleLimit = TASKS_RENDER_BATCH_SIZE;
 
   constructor(
     root: HTMLElement,
@@ -27,7 +28,12 @@ export class TasksRuntime {
     this.root = root;
     this.controller = controller;
     this.options = options;
-    this.release = controller.subscribe(() => this.render());
+    this.release = controller.subscribe((change) => {
+      if (change.reason === "workspace" || change.reason === "providers" || change.reason === "query") {
+        this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
+      }
+      this.render();
+    });
   }
 
   activate(identity: TasksWorkspaceIdentity): void {
@@ -46,7 +52,7 @@ export class TasksRuntime {
     if (!host) return;
     const focus = captureTasksFocus(host);
     const copy = this.options.copy?.();
-    host.innerHTML = renderTasksView(this.controller.state, copy);
+    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit);
     syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
@@ -80,6 +86,7 @@ export class TasksRuntime {
       const action = target.closest<HTMLElement>("[data-tasks-action]")?.dataset.tasksAction;
       if (action === "refresh") void this.refresh();
       else if (action === "cancel") void this.cancel();
+      else if (action === "show-more") this.showMore();
       const row = target.closest<HTMLElement>("[data-task-key]");
       if (row) {
         const taskKey = row.dataset.taskKey ?? "";
@@ -91,7 +98,12 @@ export class TasksRuntime {
     }, { signal });
     host.addEventListener("keydown", (event) => {
       const keyboard = event as KeyboardEvent;
-      if (keyboard.key === "ArrowDown" && this.controller.moveSelection(1)) keyboard.preventDefault();
+      if (keyboard.key === "ArrowDown") {
+        if (this.controller.state.selectedIndex + 1 >= this.visibleLimit && this.visibleLimit < this.controller.state.visibleEntries.length) {
+          this.visibleLimit += TASKS_RENDER_BATCH_SIZE;
+        }
+        if (this.controller.moveSelection(1)) keyboard.preventDefault();
+      }
       else if (keyboard.key === "ArrowUp" && this.controller.moveSelection(-1)) keyboard.preventDefault();
       else if (keyboard.key === "Enter") {
         const task = this.controller.selectedTask();
@@ -116,6 +128,14 @@ export class TasksRuntime {
     const identity = this.controller.state.identity;
     if (!identity || !this.options.cancel) return;
     try { await this.options.cancel(identity); } catch (error) { this.options.error?.(error); }
+  }
+
+  private showMore(): void {
+    this.visibleLimit = Math.min(
+      this.visibleLimit + TASKS_RENDER_BATCH_SIZE,
+      this.controller.state.visibleEntries.length,
+    );
+    this.render();
   }
 
   private revealOutput(taskKey: string): void {

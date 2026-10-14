@@ -15,6 +15,7 @@ export interface TaskExecutionRuntimeOptions {
   readonly reportError?: (error: unknown) => void;
   readonly visibilityChanged?: () => void;
   readonly backgroundAfterStart?: (request: TaskExecutionRequest) => boolean;
+  readonly executionTimeoutMs?: (request: TaskExecutionRequest) => number | null;
 }
 
 export interface TaskArtifactAttachmentTarget {
@@ -56,6 +57,8 @@ export class TaskExecutionRuntime {
   private presentationVersion = 0;
   private finished: ((result: PluginTaskExecutionResult) => void) | null = null;
   private backgroundOnStart = false;
+  private executionTimeoutMs: number | null = null;
+  private executionTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   constructor(
     root: HTMLElement,
@@ -108,6 +111,8 @@ export class TaskExecutionRuntime {
     this.identity = identity;
     this.visible = false;
     this.backgroundOnStart = false;
+    this.clearExecutionTimer();
+    this.executionTimeoutMs = null;
     this.terminalState = null;
     this.invalidateArtifacts();
     this.controller.activateWorkspace(identity);
@@ -123,6 +128,7 @@ export class TaskExecutionRuntime {
     this.identity = identity;
     this.finished = finished;
     this.backgroundOnStart = this.options.backgroundAfterStart?.(request) === true;
+    this.executionTimeoutMs = this.options.executionTimeoutMs?.(request) ?? null;
     this.terminalState = null;
     this.invalidateArtifacts();
     this.open();
@@ -132,6 +138,7 @@ export class TaskExecutionRuntime {
       if (this.finished === finished) this.finished = null;
       this.visible = false;
       this.backgroundOnStart = false;
+      this.clearExecutionTimer();
       this.options.visibilityChanged?.();
       throw error;
     }
@@ -172,11 +179,13 @@ export class TaskExecutionRuntime {
       this.finished = null;
       this.visible = false;
       this.backgroundOnStart = false;
+      this.clearExecutionTimer();
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was cancelled." });
       this.options.visibilityChanged?.();
       return;
     }
     await this.controller.cancel(identity);
+    this.controller.completeCancellation(identity);
   }
 
   beginArtifactDiscovery(identity: TaskWorkspaceIdentity, taskKey: string): TaskArtifactAttachmentTarget | null {
@@ -223,6 +232,7 @@ export class TaskExecutionRuntime {
     }
     this.visible = false;
     this.backgroundOnStart = false;
+    this.clearExecutionTimer();
     this.terminalState = null;
     this.invalidateArtifacts();
     this.listeners.abort();
@@ -245,6 +255,7 @@ export class TaskExecutionRuntime {
     if (!identity || !isTerminal(this.displayState())) return;
     this.visible = false;
     this.backgroundOnStart = false;
+    this.clearExecutionTimer();
     this.invalidateArtifacts();
     this.controller.dismiss(identity);
     this.options.visibilityChanged?.();
@@ -289,6 +300,7 @@ export class TaskExecutionRuntime {
       this.finished = null;
       this.visible = false;
       this.backgroundOnStart = false;
+      this.clearExecutionTimer();
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was cancelled." });
       this.options.visibilityChanged?.();
       const fallback = this.root.querySelector<HTMLElement>("[data-tasks-action=refresh]");
@@ -296,6 +308,7 @@ export class TaskExecutionRuntime {
       return;
     }
     if (!isTerminal(state)) return;
+    this.clearExecutionTimer();
     this.backgroundOnStart = false;
     this.terminalState = state;
     const finished = this.finished;
@@ -314,10 +327,29 @@ export class TaskExecutionRuntime {
 
   private backgroundStartedExecution(state: TaskExecutionState): void {
     if (!this.visible || !this.backgroundOnStart || state.status !== "starting") return;
+    this.startExecutionTimer();
     this.visible = false;
     this.options.visibilityChanged?.();
     const fallback = this.root.querySelector<HTMLElement>('[data-tasks-action="cancel"], [data-tasks-action="refresh"]');
     this.restoreFocus(fallback);
+  }
+
+  private startExecutionTimer(): void {
+    this.clearExecutionTimer();
+    const timeout = this.executionTimeoutMs;
+    if (!timeout || timeout <= 0) return;
+    this.executionTimer = globalThis.setTimeout(() => {
+      this.executionTimer = null;
+      const identity = this.identity;
+      if (!identity || !this.finished) return;
+      try { this.controller.fail(identity, new Error(this.copy().timedOut)); }
+      catch { /* a stale timeout cannot replace the current workspace */ }
+    }, timeout);
+  }
+
+  private clearExecutionTimer(): void {
+    if (this.executionTimer !== null) globalThis.clearTimeout(this.executionTimer);
+    this.executionTimer = null;
   }
 
   private matchesArtifactTarget(target: TaskArtifactAttachmentTarget): boolean {

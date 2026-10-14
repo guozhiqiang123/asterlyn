@@ -16,7 +16,7 @@ export interface TaskExecutionState {
   readonly lastSequence: number;
 }
 type Listener = (state: TaskExecutionState) => void;
-const MAX_OUTPUT_BYTES = 1_048_576;
+const MAX_OUTPUT_BYTES = 2 * 1_048_576;
 
 export class TaskExecutionController {
   private value: TaskExecutionState = emptyState();
@@ -91,6 +91,7 @@ export class TaskExecutionController {
     if (this.value.status !== "review" || !review) throw new Error("A task review is required before confirmation.");
     if (review.workspaceRoot !== identity.root || review.trust !== "trusted") throw new Error("A trusted current workspace is required before task execution.");
     const pending: TaskSessionEvent[] = [];
+    let pendingStreamError: unknown = null;
     let startedRunId: string | null = null;
     this.value = { ...this.value, status: "starting", error: null };
     this.emit();
@@ -98,6 +99,9 @@ export class TaskExecutionController {
     this.unsubscribe = await this.bridge.subscribeTaskSession((event) => {
       if (startedRunId) this.acceptEvent(identity, event);
       else pending.push(event);
+    }, (error) => {
+      if (startedRunId) this.fail(identity, streamError(error));
+      else pendingStreamError ??= error;
     });
     let started;
     try {
@@ -115,6 +119,10 @@ export class TaskExecutionController {
     this.cancelRequestedRunId = null;
     this.emit();
     startedRunId = started.runId;
+    if (pendingStreamError) {
+      this.fail(identity, streamError(pendingStreamError));
+      return started.runId;
+    }
     for (const event of pending) this.acceptEvent(identity, event);
     return started.runId;
   }
@@ -145,8 +153,21 @@ export class TaskExecutionController {
     }
   }
 
+  completeCancellation(identity: TaskWorkspaceIdentity): boolean {
+    this.requireCurrent(identity);
+    if (this.value.status !== "cancelling") return false;
+    this.cancelRequestedRunId = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.value = { ...this.value, status: "cancelled", error: null };
+    this.emit();
+    return true;
+  }
+
   fail(identity: TaskWorkspaceIdentity, error: unknown): void {
     this.requireCurrent(identity);
+    if (["succeeded", "failed", "cancelled", "crashed"].includes(this.value.status)) return;
+    const runId = this.value.runId;
     this.cancelRequestedRunId = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
@@ -156,6 +177,7 @@ export class TaskExecutionController {
       error: error instanceof Error ? error.message : String(error),
     };
     this.emit();
+    if (runId) void this.cancelRunOnce(runId, true);
   }
 
   dismiss(identity: TaskWorkspaceIdentity): void {
@@ -225,4 +247,11 @@ export class TaskExecutionController {
 
 function emptyState(identity: TaskWorkspaceIdentity | null = null): TaskExecutionState { return { status: "idle", identity, review: null, runId: null, outputs: [], outputBytes: 0, outputTruncated: false, error: null, lastSequence: 0 }; }
 function sameIdentity(left: TaskWorkspaceIdentity | null, right: TaskWorkspaceIdentity | null): boolean { return left?.root === right?.root && left?.generation === right?.generation; }
-function estimateBase64Bytes(value: string): number { return Math.floor(value.length * 3 / 4); }
+function estimateBase64Bytes(value: string): number {
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return Math.floor(value.length * 3 / 4) - padding;
+}
+function streamError(error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`Task session event could not be decoded: ${detail}`);
+}

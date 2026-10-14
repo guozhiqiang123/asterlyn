@@ -112,3 +112,13 @@ test("controller preserves only bounded known task run states", () => {
   assert.equal(controller.state.entries[0].task.runState, "running");
   assert.equal(controller.state.entries[1].task.runState, undefined);
 });
+
+test("controller retains a FilesRecovery-scale provider catalog for full-text filtering", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  const tasks = Array.from({ length: 16_000 }, (_, index) => task(`:module:task${index}`, `task${index}`));
+  controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: ready(tasks) }]);
+  assert.equal(controller.state.entries.length, tasks.length);
+  controller.setQuery("task15999");
+  assert.deepEqual(controller.state.visibleEntries.map((entry) => entry.task.id), [":module:task15999"]);
+});

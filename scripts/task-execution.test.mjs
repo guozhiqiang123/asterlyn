@@ -43,6 +43,55 @@ test("task execution requires a reviewed trusted workspace and rejects stale eve
   assert.equal(controller.state.status, "idle");
 });
 
+test("FilesRecovery-scale task output remains complete through terminal delivery", async () => {
+  const listeners = [];
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-large", reviewId: "review-1", workspaceRoot: "/repo" }),
+    cancelTaskExecution: async () => {},
+    subscribeTaskSession: async (listener) => { listeners.push(listener); return () => {}; },
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] });
+  await controller.confirm(identity);
+  listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-large", workspaceRoot: "/repo", sequence: 1, status: "running", message: null, exitCode: null });
+  const chunk = Buffer.alloc(16 * 1024, 97).toString("base64");
+  for (let index = 0; index < 84; index += 1) {
+    listeners[0]({ protocolVersion: 1, kind: "output", runId: "run-large", workspaceRoot: "/repo", sequence: index + 2, stream: "stdout", dataBase64: chunk });
+  }
+  listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-large", workspaceRoot: "/repo", sequence: 86, status: "succeeded", message: null, exitCode: 0 });
+  assert.equal(controller.state.outputBytes, 84 * 16 * 1024);
+  assert.equal(controller.state.outputTruncated, false);
+  assert.equal(controller.state.status, "succeeded");
+});
+
+test("task event decoding failures crash and cancel the active run", async () => {
+  let streamError;
+  let cancelled = 0;
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-invalid", reviewId: "review-1", workspaceRoot: "/repo" }),
+    cancelTaskExecution: async () => { cancelled += 1; },
+    subscribeTaskSession: async (_listener, onError) => { streamError = onError; return () => {}; },
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] });
+  await controller.confirm(identity);
+  streamError(new Error("invalid event"));
+  await Promise.resolve();
+  assert.equal(controller.state.status, "crashed");
+  assert.match(controller.state.error, /could not be decoded.*invalid event/u);
+  assert.equal(cancelled, 1);
+});
+
 test("task execution reports starting and cancelling immediately and only exposes valid active actions", async () => {
   const listeners = [];
   let finishStart;
@@ -137,6 +186,107 @@ test("confirmed execution moves to the Tasks panel while retaining terminal outp
     assert.equal(runtime.reveal("android.gradle:assembleDebug", identity), true);
     assert.match(host.innerHTML, /Succeeded/u);
     runtime.dispose();
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.HTMLElement = previous.HTMLElement;
+  }
+});
+
+test("background discovery watchdog resolves instead of leaving the provider loading forever", async () => {
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  class FakeElement { isConnected = true; focus() {} }
+  const host = {
+    innerHTML: "",
+    contains: () => false,
+    querySelector(selector) { return selector === ".task-execution-review" && this.innerHTML.includes("task-execution-review") ? {} : null; },
+    replaceChildren() { this.innerHTML = ""; },
+  };
+  const root = {
+    addEventListener: () => undefined,
+    matches: () => false,
+    querySelector: (selector) => selector === "#task-execution-host" ? host : null,
+  };
+  globalThis.HTMLElement = FakeElement;
+  globalThis.document = { activeElement: null };
+  try {
+    let cancelled = 0;
+    const bridge = {
+      native: false,
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+      setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+      prepareTaskExecution: async () => review,
+      startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-timeout", reviewId: "review-1", workspaceRoot: "/repo" }),
+      cancelTaskExecution: async () => { cancelled += 1; },
+      subscribeTaskSession: async () => () => {},
+    };
+    const controller = new TaskExecutionController(bridge);
+    let finish;
+    const completion = new Promise((resolve) => { finish = resolve; });
+    const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
+      backgroundAfterStart: () => true,
+      executionTimeoutMs: () => 5,
+    });
+    runtime.activate(identity);
+    await runtime.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] }, finish);
+    await controller.confirm(identity);
+    const result = await completion;
+    assert.equal(result.status, "crashed");
+    assert.match(result.error, /timed out/u);
+    assert.equal(cancelled, 1);
+    runtime.dispose();
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.HTMLElement = previous.HTMLElement;
+  }
+});
+
+test("accepted cancellation releases background discovery without waiting for a terminal event", async () => {
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  class FakeElement { isConnected = true; focus() {} }
+  const host = {
+    innerHTML: "",
+    contains: () => false,
+    querySelector(selector) { return selector === ".task-execution-review" && this.innerHTML.includes("task-execution-review") ? {} : null; },
+    replaceChildren() { this.innerHTML = ""; },
+  };
+  const root = {
+    addEventListener: () => undefined,
+    matches: () => false,
+    querySelector: (selector) => selector === "#task-execution-host" ? host : null,
+  };
+  globalThis.HTMLElement = FakeElement;
+  globalThis.document = { activeElement: null };
+  try {
+    let cancelled = 0;
+    const bridge = {
+      native: false,
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+      setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+      prepareTaskExecution: async () => review,
+      startTaskExecution: async () => ({ protocolVersion: 1, runId: `run-cancel-${cancelled}`, reviewId: "review-1", workspaceRoot: "/repo" }),
+      cancelTaskExecution: async () => { cancelled += 1; },
+      subscribeTaskSession: async () => () => {},
+    };
+    const controller = new TaskExecutionController(bridge);
+    const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
+      backgroundAfterStart: () => true,
+      executionTimeoutMs: () => 120_000,
+    });
+    runtime.activate(identity);
+    let finishFirst;
+    const first = new Promise((resolve) => { finishFirst = resolve; });
+    await runtime.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] }, finishFirst);
+    await controller.confirm(identity);
+    await runtime.cancel(identity);
+    assert.equal((await first).status, "cancelled");
+    assert.equal(controller.state.status, "cancelled");
+    assert.equal(cancelled, 1);
+
+    let finishSecond;
+    await runtime.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] }, (result) => { finishSecond = result; });
+    assert.equal(controller.state.status, "review");
+    runtime.dispose();
+    assert.equal(finishSecond.status, "cancelled");
   } finally {
     globalThis.document = previous.document;
     globalThis.HTMLElement = previous.HTMLElement;

@@ -47,6 +47,18 @@ test("deduplicates, sorts deterministically, and bounds ambiguous candidates", (
   assert.deepEqual(result.actions.slice(0, 3).map((action) => action.taskId), [":m000:assembleDebug", ":m001:assembleDebug", ":m002:assembleDebug"]);
 });
 
+test("reserves bounded capacity for every quick-action kind", () => {
+  const tasks = [
+    ...Array.from({ length: 600 }, (_, index) => task(`:m${String(index).padStart(3, "0")}:assembleVariant${index}`)),
+    task(":app:bundleDebug"),
+    task(":app:installDebug"),
+    task(":app:uninstallDebug"),
+  ];
+  const result = deriveGradleQuickActions(ready(tasks));
+  assert.equal(result.actions.filter((action) => action.kind === "assemble").length, 128);
+  assert.deepEqual(result.actions.filter((action) => action.kind !== "assemble").map((action) => action.kind), ["bundle", "install", "uninstall"]);
+});
+
 test("build actions derive only their exact conventional bounded output directory", () => {
   assert.deepEqual(gradleTaskArtifactHints(":assembleDebug"), ["build/outputs/apk"]);
   assert.deepEqual(gradleTaskArtifactHints(":app:bundleRelease"), ["app/build/outputs/bundle"]);

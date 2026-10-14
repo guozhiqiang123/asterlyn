@@ -131,8 +131,9 @@ export class PluginContributionRuntime {
     for (const { contribution } of this.providers.values()) {
       if (providerQualifiedId && contribution.qualifiedId !== providerQualifiedId) continue;
       if (!contribution.refresh) continue;
+      let plan: PluginTaskRefreshPlan | null = null;
       try {
-        const plan = await contribution.refresh();
+        plan = await contribution.refresh() ?? null;
         if (!this.matches(identity)) return;
         if (!plan) continue;
         if (!validRefreshPlan(plan, contribution)) throw new Error(`Invalid task refresh plan from ${contribution.qualifiedId}`);
@@ -146,7 +147,19 @@ export class PluginContributionRuntime {
           if (this.refreshAbort === abort) this.refreshAbort = null;
         }
         if (this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) plan.apply(result);
-      } catch (error) { this.options.reportError(error); }
+      } catch (error) {
+        this.options.reportError(error);
+        if (plan && this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) {
+          try {
+            plan.apply({
+              status: "crashed",
+              outputs: [],
+              truncated: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          } catch (applyError) { this.options.reportError(applyError); }
+        }
+      }
     }
     this.publishProviders();
   }

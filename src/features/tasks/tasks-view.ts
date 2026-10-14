@@ -13,6 +13,8 @@ export interface TasksCopy {
   readonly retryDiscovery: string;
   readonly discovered: (count: number) => string;
   readonly providerLoading: (provider: string) => string;
+  readonly showing: (count: number, total: number) => string;
+  readonly showMore: string;
   readonly busy: string;
   readonly noResults: string;
   readonly queryPlaceholder: string;
@@ -43,6 +45,8 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   retryDiscovery: "Retry discovery",
   discovered: (count: number) => `${count} task${count === 1 ? "" : "s"} discovered`,
   providerLoading: (provider: string) => `Discovering tasks from ${provider}…`,
+  showing: (count: number, total: number) => `Showing ${count} of ${total} matching tasks`,
+  showMore: "Show more",
   busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
@@ -57,22 +61,38 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
-export function renderTasksView(state: TasksState, copy: TasksCopy = DEFAULT_TASKS_COPY): string {
+export const TASKS_RENDER_BATCH_SIZE = 250;
+
+export function renderTasksView(
+  state: TasksState,
+  copy: TasksCopy = DEFAULT_TASKS_COPY,
+  visibleLimit = TASKS_RENDER_BATCH_SIZE,
+): string {
   const status = renderStatus(state, copy);
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
-  const groups = groupEntries(state.visibleEntries);
+  const renderedEntries = state.visibleEntries.slice(0, Math.max(1, visibleLimit));
+  const groups = groupEntries(renderedEntries);
   const quickActions = renderAndroidQuickActions(state, copy);
-  const list = state.visibleEntries.length > 0
+  const list = renderedEntries.length > 0
     ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, state.status === "loading", entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
     : "";
-  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${quickActions}${query}${status}${list}</section>`;
+  const more = renderedEntries.length < state.visibleEntries.length
+    ? `<footer class="tasks-list-more" role="status"><span>${escapeHtml(copy.showing(renderedEntries.length, state.visibleEntries.length))}</span><button type="button" data-tasks-action="show-more">${escapeHtml(copy.showMore)}</button></footer>`
+    : "";
+  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${quickActions}${query}${status}${list}${more}</section>`;
 }
 
 function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {
-  const actions = state.entries.flatMap((entry) => {
+  const byKind = new Map<AndroidTaskQuickActionKind, { entry: TasksState["entries"][number]; action: NonNullable<TasksState["entries"][number]["task"]["androidQuickAction"]> }[]>();
+  for (const entry of state.entries) {
     const action = entry.task.androidQuickAction;
-    return action && entry.task.runnable ? [{ entry, action }] : [];
-  }).slice(0, 512);
+    if (!action || !entry.task.runnable) continue;
+    const entries = byKind.get(action.kind) ?? [];
+    if (entries.length < 32) entries.push({ entry, action });
+    byKind.set(action.kind, entries);
+  }
+  const actions = (["assemble", "bundle", "install", "uninstall"] as const)
+    .flatMap((kind) => byKind.get(kind) ?? []);
   if (actions.length === 0) return "";
   return `<section class="tasks-quick-actions" aria-labelledby="tasks-quick-actions-title"><h3 id="tasks-quick-actions-title">${escapeHtml(copy.androidQuickActions)}</h3><div class="tasks-quick-action-list" role="list">${actions.map(({ entry, action }) => {
     const kind = copy.quickActionKinds[action.kind];

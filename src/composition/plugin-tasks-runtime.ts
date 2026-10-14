@@ -62,6 +62,7 @@ export class PluginTasksRuntime {
         reportError: options.reportError,
         visibilityChanged: () => this.render(),
         backgroundAfterStart: () => true,
+        executionTimeoutMs: (request) => request.pluginId === "dev.asterlyn.android-gradle" && request.providerId === "gradle-tasks" && request.taskId === "discover" ? 120_000 : null,
       },
     );
     this.plugins = new PluginCompositionRuntime({
@@ -182,7 +183,12 @@ export class PluginTasksRuntime {
         resolve(result);
       };
       const abort = () => {
-        void this.execution.cancel(identity).catch((error) => complete({
+        void this.execution.cancel(identity).then(() => complete({
+          status: "cancelled",
+          outputs: [],
+          truncated: false,
+          error: "Task refresh was cancelled.",
+        })).catch((error) => complete({
           status: "crashed",
           outputs: [],
           truncated: false,

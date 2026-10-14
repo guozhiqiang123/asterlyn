@@ -87,6 +87,35 @@ test("provider refresh exposes only a typed execution plan and deduplicates conc
   adapter.dispose();
 });
 
+test("provider execution failures leave loading state through the plan error boundary", async () => {
+  const runtime = new PluginRuntime();
+  const errors = [];
+  let snapshot = { status: "unavailable", tasks: [], unavailableReason: "discovery-not-supported" };
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportError: (error) => errors.push(error),
+    executeTaskRefresh: async () => { throw new Error("event stream failed"); },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle", snapshot: () => snapshot,
+    refresh: () => {
+      snapshot = { status: "loading", tasks: [] };
+      return {
+        request: { pluginId: "android", providerId: "tasks", taskId: "discover", label: "Gradle", executablePath: "gradlew", args: [] },
+        apply: (result) => { snapshot = { status: result.status === "succeeded" ? "ready" : "error", tasks: [], error: result.error }; },
+      };
+    },
+  }))]);
+  await adapter.refreshProviders(identity);
+  assert.equal(snapshot.status, "error");
+  assert.match(snapshot.error, /event stream failed/u);
+  assert.equal(errors.length, 1);
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 test("provider deactivation aborts an in-flight host refresh and drops the stale result", async () => {
   const runtime = new PluginRuntime();
   const snapshots = [];

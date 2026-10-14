@@ -54,3 +54,11 @@ test("preserves arbitrary bytes through bounded discovery decoding and marks eve
   assert.equal(result.tasks[0].runnable, false);
   assert.equal(result.tasks[0].disabledReason, "Task execution is not enabled yet.");
 });
+
+test("accepts a FilesRecovery-scale Gradle task catalog within the output budget", () => {
+  const taskCount = 16_000;
+  const output = `Tasks runnable from root project 'large'\nOther tasks\n-----------\n${Array.from({ length: taskCount }, (_, index) => `:module:task${index} - Generated task ${index}`).join("\n")}`;
+  const result = parseGradleTasksOutput(output);
+  assert.equal(result.status, "ready");
+  assert.equal(result.tasks.length, taskCount);
+});

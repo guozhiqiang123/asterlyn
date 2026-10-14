@@ -145,7 +145,7 @@ function emptyState(identity: TasksWorkspaceIdentity | null = null): TasksState 
 }
 
 const MAX_PROVIDER_FIELD_LENGTH = 256;
-const MAX_TASKS_PER_PROVIDER = 512;
+const MAX_TASKS_PER_PROVIDER = 32_768;
 
 function normalizeProviders(providers: readonly TaskProviderProjection[]): TaskProviderProjection[] {
   const seen = new Set<string>();

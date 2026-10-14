@@ -19,7 +19,10 @@ export interface TaskExecutionBridge {
   prepareTaskExecution(workspaceRoot: string, request: TaskExecutionRequest): Promise<TaskExecutionReview>;
   startTaskExecution(workspaceRoot: string, reviewId: string): Promise<TaskExecutionStarted>;
   cancelTaskExecution(runId: string): Promise<void>;
-  subscribeTaskSession(listener: (event: TaskSessionEvent) => void): Promise<() => void>;
+  subscribeTaskSession(
+    listener: (event: TaskSessionEvent) => void,
+    onError?: (error: unknown) => void,
+  ): Promise<() => void>;
 }
 
 export function parseWorkspaceTrust(value: unknown): WorkspaceTrustResult {

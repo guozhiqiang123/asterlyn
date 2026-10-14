@@ -126,7 +126,7 @@ export interface TerminalCopy {
   closed: string; outputTruncated(bytes: number): string;
 }
 
-export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; cancelDiscovery: string; error: string; retryDiscovery: string; discovered(count: number): string; providerLoading(provider: string): string; busy: string; noResults: string; queryPlaceholder: string; run: string; retry: string; revealOutput: string; notRunnable: string; androidQuickActions: string; quickActionKinds: Readonly<Record<"assemble" | "bundle" | "install" | "uninstall", string>>; quickActionModule: string; quickActionVariant: string; status: Readonly<Record<string, string>>; }
+export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; cancelDiscovery: string; error: string; retryDiscovery: string; discovered(count: number): string; providerLoading(provider: string): string; showing(count: number, total: number): string; showMore: string; busy: string; noResults: string; queryPlaceholder: string; run: string; retry: string; revealOutput: string; notRunnable: string; androidQuickActions: string; quickActionKinds: Readonly<Record<"assemble" | "bundle" | "install" | "uninstall", string>>; quickActionModule: string; quickActionVariant: string; status: Readonly<Record<string, string>>; }
 
 export interface SettingsCopy {
   planned: string; available: string;
