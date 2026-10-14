@@ -75,6 +75,7 @@ import type {
 } from "../models";
 import type { WindowChromeMode } from "./window-chrome.ts";
 import type { TerminalBridge } from "./terminal.ts";
+import type { TaskExecutionBridge } from "./task-execution.ts";
 
 export type DirectoryChoice =
   | { kind: "selected"; path: string }
@@ -487,4 +488,4 @@ export interface GitOperationBridge {
   ): Promise<GitOperationMutationOutcome>;
 }
 
-export type DesktopBridge = AppUpdateBridge & DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge;
+export type DesktopBridge = AppUpdateBridge & DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge & TaskExecutionBridge;

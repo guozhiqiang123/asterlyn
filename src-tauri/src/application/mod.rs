@@ -3,6 +3,8 @@ mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
 mod search_session;
+mod task;
+pub(crate) mod trust;
 mod workspace_catalog;
 mod workspace_document;
 mod workspace_mutation;
@@ -20,6 +22,7 @@ pub(crate) use commit_file_restore::{
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
+pub(crate) use task::TaskManager;
 #[cfg(test)]
 pub(crate) use workspace_catalog::PROJECT_FILE_LIMIT;
 pub(crate) use workspace_catalog::{

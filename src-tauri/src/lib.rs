@@ -43,7 +43,7 @@ use adapters::system_file_clipboard::{
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
-    PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry,
+    PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry, TaskManager,
     WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
     WorkspaceReplacementDiff, WorkspaceReplacementPreview, WorkspaceReplacementRegistry,
     WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
@@ -209,7 +209,7 @@ pub fn run() {
     let writes = WorkspaceWriteRegistry::default();
     let workspace_mutations = WorkspaceMutationCoordinator::new(writes.clone());
     let commit_file_restores = CommitFileRestoreRegistry::new(writes.clone());
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
         .manage(GitOperationCoordinator::new(writes.clone()))
@@ -223,6 +223,7 @@ pub fn run() {
         .manage(commit_file_restores)
         .manage(WorkspaceWatchService::default())
         .manage(TerminalSessions::default())
+        .manage(TaskManager::default())
         .setup(|app| {
             build_project_window(app.handle(), "main", "Asterlyn")?;
             Ok(())
@@ -230,6 +231,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::Destroyed) {
                 window.state::<ScanRegistry>().remove_window(window.label());
+                window.state::<TaskManager>().cancel_owner(window.label());
                 window.state::<ActiveWorkspaces>().remove(window.label());
                 window
                     .state::<WorkspaceWatchService>()
@@ -363,10 +365,20 @@ pub fn run() {
             execute_git_operation,
             run_git_operation_action,
             read_conflict_content,
-            resolve_conflict
+            resolve_conflict,
+            read_workspace_trust,
+            set_workspace_trust,
+            prepare_task_execution,
+            start_task_execution,
+            cancel_task_execution
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");
+    app.run(|app, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            app.state::<TaskManager>().cancel_all();
+        }
+    });
 }
 
 #[cfg(test)]

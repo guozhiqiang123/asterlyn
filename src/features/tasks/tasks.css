@@ -76,6 +76,63 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.task-execution-review {
+  position: fixed;
+  z-index: 120;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 20px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 16px 48px var(--shadow-dialog), 0 0 0 100vmax var(--surface-scrim);
+}
+
+.task-execution-review h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.task-execution-review dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0 0 16px;
+}
+
+.task-execution-review dt {
+  color: var(--text-muted);
+}
+
+.task-execution-review dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-execution-output {
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.task-execution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .tasks-group h3 {
   margin: 8px 10px 4px;
   color: var(--text-faint);

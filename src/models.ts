@@ -499,6 +499,50 @@ export type TerminalEvent =
   | { protocolVersion: 1; kind: "exited"; sessionId: string; exitCode: number; signal: string | null }
   | { protocolVersion: 1; kind: "error"; sessionId: string; message: string };
 
+export type WorkspaceTrustState = "unknown" | "trusted" | "denied";
+
+export interface TaskExecutionRequest {
+  pluginId: string;
+  providerId: string;
+  taskId: string;
+  label: string;
+  executablePath: string;
+  args: string[];
+}
+
+export interface WorkspaceTrustResult {
+  protocolVersion: 1;
+  workspaceRoot: string;
+  state: WorkspaceTrustState;
+}
+
+export interface TaskExecutionReview {
+  protocolVersion: 1;
+  reviewId: string;
+  workspaceRoot: string;
+  pluginId: string;
+  providerId: string;
+  taskId: string;
+  label: string;
+  executablePath: string;
+  canonicalExecutablePath: string;
+  args: string[];
+  cwd: string;
+  trust: WorkspaceTrustState;
+}
+
+export interface TaskExecutionStarted {
+  protocolVersion: 1;
+  runId: string;
+  reviewId: string;
+  workspaceRoot: string;
+}
+
+export type TaskSessionEvent =
+  | { protocolVersion: 1; kind: "output"; runId: string; workspaceRoot: string; sequence: number; stream: "stdout" | "stderr"; dataBase64: string }
+  | { protocolVersion: 1; kind: "truncated"; runId: string; workspaceRoot: string; sequence: number; stream: "stdout" | "stderr"; omittedBytes: number }
+  | { protocolVersion: 1; kind: "status"; runId: string; workspaceRoot: string; sequence: number; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "crashed"; message: string | null; exitCode: number | null };
+
 export interface ImagePreview {
   path: string;
   mediaType: string;

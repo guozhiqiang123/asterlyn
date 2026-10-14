@@ -21,6 +21,11 @@
       "owner": "English localization data",
       "maximumLines": 830,
       "burnDownPhase": "reviewed localization data"
+    },
+    "src/models.ts": {
+      "owner": "versioned renderer/native wire models",
+      "maximumLines": 900,
+      "burnDownPhase": "reviewed shared protocol types; split capability payloads when the next protocol family lands"
     }
   }
 }

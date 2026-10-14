@@ -71,6 +71,7 @@ import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
 import { createDemoWorktreeBridge } from "./demo-worktree-bridge.ts";
 import { createDemoRemoteOperationBridge } from "./demo-remote-operation-bridge.ts";
+import { demoTaskExecutionBridge } from "./demo-task-execution-bridge.ts";
 const isTauri = isTauriRuntime;
 let browserSnapshot = structuredClone(demoSnapshot);
 const demoWorktreeBridge = createDemoWorktreeBridge(() => browserSnapshot, (next) => { browserSnapshot = next; });
@@ -146,6 +147,7 @@ interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
 
 const demoBridge: DesktopBridge = {
   ...demoSystemFileClipboardBridge,
+  ...demoTaskExecutionBridge,
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   ...createDemoRemoteOperationBridge(cancelledDemoRemoteOperations, demoDelay, completeDemoMutation),

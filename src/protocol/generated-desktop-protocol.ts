@@ -22,6 +22,11 @@ export interface DesktopCommandMap {
   write_terminal: { args: { sessionId: string; dataBase64: string; }; result: void };
   resize_terminal: { args: { sessionId: string; cols: number; rows: number; }; result: void };
   close_terminal: { args: { sessionId: string; }; result: boolean };
+  read_workspace_trust: { args: { workspaceRoot: string; }; result: Model.WorkspaceTrustResult };
+  set_workspace_trust: { args: { workspaceRoot: string; state: Model.WorkspaceTrustState; }; result: Model.WorkspaceTrustResult };
+  prepare_task_execution: { args: { workspaceRoot: string; request: Model.TaskExecutionRequest; }; result: Model.TaskExecutionReview };
+  start_task_execution: { args: { workspaceRoot: string; reviewId: string; }; result: Model.TaskExecutionStarted };
+  cancel_task_execution: { args: { runId: string; }; result: void };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
   open_repository_window: { args: { path: string; }; result: Model.ProjectWindowOpenResult };
   read_history_page: { args: { repositoryRoot: string; query: Model.HistoryQuery; offset: number; limit: number; }; result: Model.HistoryPage };
@@ -138,6 +143,11 @@ export const DESKTOP_RESULT_VALIDATORS: {
   write_terminal: "void",
   resize_terminal: "void",
   close_terminal: "boolean",
+  read_workspace_trust: "workspaceTrustResult",
+  set_workspace_trust: "workspaceTrustResult",
+  prepare_task_execution: "taskExecutionReview",
+  start_task_execution: "taskExecutionStarted",
+  cancel_task_execution: "void",
   read_tracked_changes: "trackedChangeScan",
   open_repository_window: "projectWindowOpenResult",
   read_history_page: "historyPage",

@@ -1,0 +1,59 @@
+use crate::application::{ActiveWorkspaces, TaskManager, trust};
+use asterlyn_task::TrustState;
+use tauri::{Manager, State};
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceTrustResult {
+    protocol_version: u8,
+    workspace_root: String,
+    state: TrustState,
+}
+
+const TRUST_FILE: &str = "task-trust-v1.json";
+fn path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_local_data_dir()
+        .map(|dir| dir.join(TRUST_FILE))
+        .map_err(|e| format!("resolve local task trust store: {e}"))
+}
+
+#[tauri::command]
+pub(crate) fn read_workspace_trust(
+    workspace_root: String,
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    active: State<'_, ActiveWorkspaces>,
+) -> Result<WorkspaceTrustResult, String> {
+    let root = active
+        .resolve(window.label(), &workspace_root)
+        .map_err(|e| e.to_string())?;
+    Ok(WorkspaceTrustResult {
+        protocol_version: 1,
+        workspace_root: root.to_string_lossy().into_owned(),
+        state: trust::read(&path(&app)?, &root)?,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn set_workspace_trust(
+    workspace_root: String,
+    state: TrustState,
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    active: State<'_, ActiveWorkspaces>,
+    tasks: State<'_, TaskManager>,
+) -> Result<WorkspaceTrustResult, String> {
+    let root = active
+        .resolve(window.label(), &workspace_root)
+        .map_err(|e| e.to_string())?;
+    let result = trust::set(&path(&app)?, &root, state)?;
+    if result != TrustState::Trusted {
+        tasks.cancel_workspace(&root);
+    }
+    Ok(WorkspaceTrustResult {
+        protocol_version: 1,
+        workspace_root: root.to_string_lossy().into_owned(),
+        state: result,
+    })
+}

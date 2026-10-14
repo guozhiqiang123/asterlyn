@@ -257,3 +257,43 @@ Each implemented phase records:
 - Rust, native packaging, task-process, cancellation, output, and workspace-trust acceptance are
   not applicable because PS2 still cannot execute repository-controlled code. PS3 owns those
   security and process-supervision gates; PS4 owns Gradle discovery and runnable task snapshots.
+
+### PS3 — accepted locally on 2026-10-14
+
+- Added a product-neutral task domain crate plus host-owned trust store, review tokens, task
+  manager, Tauri commands/events, demo and native adapters, execution controller, and accessible
+  review/output UI. No Gradle command is runnable yet; PS4 remains the first discovery consumer.
+- Starts use direct executable/argument arrays with a fixed canonical working directory and an
+  allowlisted environment. Authorization binds the canonical root, activation generation,
+  executable identity, review owner, and invoking window; path/symlink escape, executable
+  replacement, stale review, and untrusted workspaces fail closed.
+- Output from stdout and stderr receives one serialized sequence, uses bounded base64 chunks, and
+  terminates with explicit outcomes. Native capture is capped at 2 MiB per stream and renderer
+  retention at 1 MiB. Review issuance is capped at 256 per ten minutes, the trust store at 256
+  roots/128 KiB, executable hashing streams files up to 64 MiB, and supervision polls every 50 ms.
+- Cancellation covers explicit user cancellation, workspace replacement, window destruction,
+  trust revocation, and app exit. Unix terminates the process group with a child fallback; Windows
+  uses the explicit system `taskkill.exe` path plus direct-child fallback.
+- Focused frontend/protocol and native security/process tests: 30 passed. Complete deterministic
+  frontend suite: 1,030 passed. Complete Rust workspace suite: 318 passed and 2 pre-existing native
+  watcher tests ignored. Frontend type checking, production build, Rust formatting, strict Clippy,
+  and source-diff checks passed.
+- The main production chunk remains 455.88 kB uncompressed. The lazy task-related chunk is 22.36
+  kB and the lazy Android plugin chunk is 3.00 kB; neither is part of an unmatched project's
+  activation path.
+- The macOS arm64 application was built at
+  `target/release/bundle/macos/Asterlyn.app`, ad-hoc signed with hardened runtime, and passed strict
+  deep signature verification plus a six-second native liveness smoke. The verified archive is
+  `target/release/bundle/macos/Asterlyn-0.1.8-local-20261014-ps3.app.zip`, 9,635,655 bytes, SHA-256
+  `ce03b8d967d76e2f31de657fb78750c92519b115ac1bc1f762557485ad05db3f`; extracting the archive
+  preserved its valid signature and arm64 executable.
+- The rendered native-window probe is inconclusive in the current desktop session: both this build
+  and the previously installed 0.1.8 application remained alive but System Events reported
+  `WINDOW_MISSING`. This matched baseline means it is not attributed to PS3, but installed-window
+  interaction remains an explicit manual acceptance item.
+- No comparable resident-memory or idle-CPU series was captured, so resource impact is bounded by
+  the limits above rather than claimed as measured improvement. Cancellation completed within the
+  two-second focused-test gate. Windows process-tree behavior is compile-time implemented but was
+  not compiled or exercised on this macOS-only host; Windows CI/native acceptance remains required.
+- Known limitation at this boundary: execution infrastructure is intentionally not wired into the
+  Tasks tool until PS4 supplies a current, activation-qualified Gradle discovery snapshot.

@@ -133,6 +133,30 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       assert(Boolean(result.sessionId), command, "terminal session ID must not be empty");
       break;
     }
+    case "workspaceTrustResult": {
+      const result = record(value, command);
+      numbers(result, command, "protocolVersion");
+      strings(result, command, "workspaceRoot");
+      assert(result.protocolVersion === 1, command, "expected workspace trust protocol version 1");
+      assert(result.state === "unknown" || result.state === "trusted" || result.state === "denied", command, "invalid workspace trust state");
+      break;
+    }
+    case "taskExecutionReview": {
+      const result = record(value, command);
+      numbers(result, command, "protocolVersion");
+      strings(result, command, "reviewId", "workspaceRoot", "pluginId", "providerId", "taskId", "label", "executablePath", "canonicalExecutablePath", "cwd");
+      assert(result.protocolVersion === 1, command, "expected task review protocol version 1");
+      assertStringArray(result.args, command, "args");
+      assert(result.trust === "unknown" || result.trust === "trusted" || result.trust === "denied", command, "invalid task review trust state");
+      break;
+    }
+    case "taskExecutionStarted": {
+      const result = record(value, command);
+      numbers(result, command, "protocolVersion");
+      strings(result, command, "runId", "reviewId", "workspaceRoot");
+      assert(result.protocolVersion === 1, command, "expected task execution protocol version 1");
+      break;
+    }
     case "openedProject": {
       const result = record(value, command);
       strings(result, command, "root");

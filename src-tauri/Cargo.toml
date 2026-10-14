@@ -18,7 +18,9 @@ asterlyn-desktop = { path = "../crates/asterlyn-desktop" }
 asterlyn-git = { path = "../crates/asterlyn-git" }
 asterlyn-terminal = { path = "../crates/asterlyn-terminal" }
 asterlyn-workspace = { path = "../crates/asterlyn-workspace" }
+asterlyn-task = { path = "../crates/asterlyn-task" }
 base64.workspace = true
+libc.workspace = true
 clipboard-rs = { version = "=0.3.5", default-features = false }
 notify.workspace = true
 serde.workspace = true
@@ -31,3 +33,6 @@ url = "=2.5.8"
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
