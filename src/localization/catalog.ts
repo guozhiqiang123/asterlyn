@@ -1,4 +1,5 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
+import type { TaskProviderUnavailableReason } from "../application/tasks/task-types.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts"; import type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
@@ -54,7 +55,7 @@ export interface ShellCopy {
   toolWindows: string;
   version(name: string, version: string): string;
   files: string;
-  branches: string; changes: string; stash: string;
+  branches: string; changes: string; stash: string; tasks: string;
   terminal: string;
   toolReorder(label: string): string;
   openFolderFirst: string;
@@ -79,7 +80,7 @@ export interface ShellCopy {
   gitOperations: string;
   recoverChanges: string;
   hideGit: string; hideStash: string;
-  hideTerminal: string;
+  hideTerminal: string; hideTasks: string;
   commitLog: string;
   gitDetails: string;
   resizeBranchTree: string;
@@ -124,6 +125,8 @@ export interface TerminalCopy {
   close: string;
   closed: string; outputTruncated(bytes: number): string;
 }
+
+export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; error: string; noResults: string; queryPlaceholder: string; run: string; notRunnable: string; }
 
 export interface SettingsCopy {
   planned: string; available: string;
@@ -215,7 +218,7 @@ export type NavigationCommandId =
   | "open-repository" | "go-file" | "recent-files" | "find-workspace"
   | "find-current" | "save-current" | "refresh"
   | "open-settings" | "close-settings"
-  | "toggle-files" | "toggle-search" | "toggle-changes" | "toggle-git" | "toggle-stash" | "toggle-terminal"
+  | "toggle-files" | "toggle-search" | "toggle-changes" | "toggle-git" | "toggle-stash" | "toggle-tasks" | "toggle-terminal"
   | "hide-left-tool" | "hide-bottom-tool";
 
 export interface NavigationCopy {
@@ -1188,7 +1191,7 @@ export interface LocaleCatalog {
   readonly common: CommonCopy;
   readonly temporal: TemporalCopy;
   readonly shell: ShellCopy;
-  readonly stash: StashCopy; readonly terminal: TerminalCopy;
+  readonly stash: StashCopy; readonly terminal: TerminalCopy; readonly tasks: TasksCopy;
   readonly settings: SettingsCopy;
   readonly navigation: NavigationCopy;
   readonly projectFiles: ProjectFilesCopy;

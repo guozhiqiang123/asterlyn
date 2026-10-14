@@ -1,3 +1,5 @@
+import type { TaskProviderSnapshot } from "../tasks/index.ts";
+
 export interface PluginWorkspaceIdentity {
   readonly root: string;
   readonly generation: number;
@@ -15,6 +17,7 @@ export interface PluginWorkspaceCatalogEvidence extends PluginEvidenceSnapshot {
   readonly kind: "workspace-catalog";
   readonly platform: "posix" | "windows";
   readonly files: readonly PluginWorkspaceCatalogFile[];
+  readonly truncated: boolean;
 }
 
 export type PluginDiagnosticKind = "activation-failed" | "invalid-contribution" | "duplicate-contribution";
@@ -33,15 +36,21 @@ export interface Disposable {
 export interface PluginCommandContribution {
   readonly kind: "command";
   readonly id: string;
-  readonly title: string;
-  readonly execute?: () => void | Promise<void>;
+  readonly title: () => string;
+  readonly detail: () => string;
+  readonly keywords?: () => string;
+  readonly availability?: () => { readonly enabled: boolean; readonly reason?: string };
+  readonly execute: () => void | Promise<void>;
 }
 
 export interface PluginProviderContribution {
   readonly kind: "provider";
   readonly id: string;
   readonly label: string;
-  readonly value?: unknown;
+  readonly snapshot: () => TaskProviderSnapshot;
+  readonly subscribe?: (listener: () => void) => Disposable;
+  readonly refresh?: () => void | Promise<void>;
+  readonly run?: (taskId: string) => void | Promise<void>;
 }
 
 export type PluginContribution = PluginCommandContribution | PluginProviderContribution;

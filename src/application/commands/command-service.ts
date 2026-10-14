@@ -13,6 +13,7 @@ export type CommandFocusScope =
   | "changes"
   | "search"
   | "stash"
+  | "tasks"
   | "editor"
   | "diff"
   | "history"
@@ -31,6 +32,7 @@ export const WORKBENCH_FOCUS_SCOPES: readonly CommandFocusScope[] = [
   "changes",
   "search",
   "stash",
+  "tasks",
   "editor",
   "diff",
   "history",

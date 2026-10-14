@@ -1,0 +1,136 @@
+/* Host-owned Tasks presentation; the shell decides when this host is visible. */
+#tasks-tool-host,
+.tasks-tool {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.tasks-tool {
+  display: grid;
+  overflow: hidden;
+  grid-template-rows: 30px auto minmax(0, 1fr);
+  background: var(--bg-panel);
+}
+
+.tasks-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.tasks-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.tasks-header button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tasks-header button:hover,
+.tasks-header button:focus-visible {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.tasks-query-label {
+  display: block;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tasks-query-label input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface-inset);
+  font: inherit;
+}
+
+.tasks-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 0 10px;
+  outline: none;
+}
+
+.tasks-list:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tasks-group h3 {
+  margin: 8px 10px 4px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.tasks-row {
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 6px 12px;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tasks-row:hover,
+.tasks-row[aria-selected="true"] {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.tasks-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tasks-row:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.tasks-row strong,
+.tasks-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tasks-row strong { font-size: 12px; font-weight: 550; }
+.tasks-row small { color: var(--text-muted); font-size: 10px; }
+.tasks-row .tasks-provider { color: var(--text-faint); }
+
+.tasks-message {
+  margin: 22px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}

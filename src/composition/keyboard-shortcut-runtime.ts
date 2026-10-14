@@ -1,6 +1,7 @@
 import {
   CommandRegistry,
   CommandService,
+  type CommandDescriptor,
   type CommandFocusScope,
 } from "../application/commands/command-service.ts";
 import { WORKBENCH_COMMANDS } from "../application/commands/workbench-command-ids.ts";
@@ -86,6 +87,12 @@ export class KeyboardShortcutRuntime {
 
   execute(commandId: string): void {
     void this.commands.execute(commandId, "palette");
+  }
+
+  /** Narrow dynamic-registration port used by reviewed bundled plugin contributions. */
+  registerPluginCommand(descriptor: CommandDescriptor): () => void {
+    if (this.disposed) return () => undefined;
+    return this.registry.register(descriptor);
   }
 
   handleTerminalKeyEvent = (event: KeyboardEvent): boolean =>

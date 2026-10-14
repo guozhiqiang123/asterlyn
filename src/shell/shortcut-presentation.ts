@@ -97,6 +97,7 @@ export function refreshWorkbenchShortcutPresentation(
     branches: copy.branches,
     changes: copy.changes,
     stash: copy.stash,
+    tasks: copy.tasks,
     terminal: copy.terminal,
   };
   const commands: Record<ActivityTool, string> = {
@@ -105,6 +106,7 @@ export function refreshWorkbenchShortcutPresentation(
     branches: WORKBENCH_COMMANDS.toggleGit,
     changes: WORKBENCH_COMMANDS.toggleChanges,
     stash: WORKBENCH_COMMANDS.toggleStash,
+    tasks: WORKBENCH_COMMANDS.toggleTasks,
     terminal: WORKBENCH_COMMANDS.toggleTerminal,
   };
   for (const tool of activityOrder) {
@@ -186,6 +188,7 @@ export function shortcutFocusScope(
   }
   if (target.closest("#bottom-tool")) {
     if (bottomTool === "stash") return "stash";
+    if (bottomTool === "tasks") return "tasks";
     if (bottomTool === "find" || bottomTool === "replace") return "search";
   }
   return "workbench";

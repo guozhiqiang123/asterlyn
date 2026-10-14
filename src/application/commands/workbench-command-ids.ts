@@ -18,6 +18,7 @@ export const WORKBENCH_COMMANDS = {
   toggleChanges: commandId("workbench.tool.changes.toggle"),
   toggleGit: commandId("workbench.tool.branches.toggle"),
   toggleStash: commandId("workbench.tool.stash.toggle"),
+  toggleTasks: commandId("workbench.tool.tasks.toggle"),
   toggleTerminal: commandId("workbench.tool.terminal.toggle"),
   hideLeftTool: commandId("workbench.tool.left.hide"),
   hideBottomTool: commandId("workbench.tool.bottom.hide"),

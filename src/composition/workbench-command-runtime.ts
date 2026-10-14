@@ -208,6 +208,14 @@ export function registerWorkbenchCommands(
       TOOL_FOCUS_SCOPES,
     ),
     navigation(
+      WORKBENCH_COMMANDS.toggleTasks,
+      "toggle-tasks",
+      "view",
+      workspace,
+      () => options.toggleTool("tasks"),
+      TOOL_FOCUS_SCOPES,
+    ),
+    navigation(
       WORKBENCH_COMMANDS.toggleTerminal,
       "toggle-terminal",
       "view",

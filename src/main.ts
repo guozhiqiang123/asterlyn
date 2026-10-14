@@ -20,6 +20,7 @@ import "./features/files-editor/change-overview.css";
 import "./features/files-editor/editor-patch-popover.css";
 import "./features/files-editor/workspace-search.css";
 import "./features/files-editor/workspace-replacement-tool.css";
+import "./features/tasks/tasks.css";
 import "./features/git-history/git-history.css";
 import "./features/git-history/history.css";
 import "./features/git-history/branches.css";

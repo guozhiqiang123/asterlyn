@@ -42,6 +42,7 @@ export function qualifyContributionId(pluginId: string, contributionId: string):
 
 export class PluginContributionRegistry {
   private readonly contributions = new Map<string, RegisteredPluginContribution>();
+  private readonly listeners = new Set<() => void>();
 
   register(plugin: BundledPlugin, contribution: PluginContribution): Disposable {
     validatePlugin(plugin);
@@ -51,12 +52,13 @@ export class PluginContributionRegistry {
       throw new PluginContributionError("duplicate-contribution", `Duplicate contribution ID: ${qualifiedId}`);
     }
     this.contributions.set(qualifiedId, { ...contribution, pluginId: plugin.id, pluginVersion: plugin.version, qualifiedId });
+    this.emit();
     let registered = true;
     return {
       dispose: () => {
         if (!registered) return;
         registered = false;
-        this.contributions.delete(qualifiedId);
+        if (this.contributions.delete(qualifiedId)) this.emit();
       },
     };
   }
@@ -69,8 +71,15 @@ export class PluginContributionRegistry {
     return Array.from(this.contributions.values());
   }
 
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
   clear(): void {
+    if (this.contributions.size === 0) return;
     this.contributions.clear();
+    this.emit();
   }
 
   installBatch(entries: readonly StagedContribution[]): void {
@@ -84,10 +93,17 @@ export class PluginContributionRegistry {
     for (const entry of entries) {
       const value = { ...entry.contribution, pluginId: entry.plugin.id, pluginVersion: entry.plugin.version, qualifiedId: entry.qualifiedId };
       this.contributions.set(entry.qualifiedId, value);
-      const handle: Disposable = { dispose: () => { this.contributions.delete(entry.qualifiedId); } };
+      const handle: Disposable = { dispose: () => {
+        if (this.contributions.delete(entry.qualifiedId)) this.emit();
+      } };
       entry.handle = handle;
       entry.owner.addCommittedRegistration(handle);
     }
+    if (entries.length > 0) this.emit();
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) listener();
   }
 }
 
@@ -199,6 +215,18 @@ export class PluginRuntime {
       await new CompositeActivation(scopes).dispose();
     }
     return { identity, activated, skipped, diagnostics };
+  }
+
+  async deactivate(): Promise<void> {
+    if (this.disposed) return;
+    this.sequence += 1;
+    const operation = this.transition.then(async () => {
+      const active = this.active;
+      this.active = null;
+      await active?.dispose();
+    });
+    this.transition = operation.then(() => undefined, () => undefined);
+    await operation;
   }
 
   async dispose(): Promise<void> {
@@ -348,8 +376,20 @@ function validatePlugin(plugin: BundledPlugin): void {
 function validateContribution(contribution: PluginContribution): void {
   try {
     validateContributionId(contribution.id);
-    if (contribution.kind === "command" && !contribution.title.trim()) throw new Error(`Invalid command contribution: ${contribution.id}`);
-    if (contribution.kind === "provider" && !contribution.label.trim()) throw new Error(`Invalid provider contribution: ${contribution.id}`);
+    if (contribution.kind === "command" &&
+      (typeof contribution.title !== "function" || typeof contribution.detail !== "function" ||
+        typeof contribution.execute !== "function" ||
+        (contribution.keywords !== undefined && typeof contribution.keywords !== "function") ||
+        (contribution.availability !== undefined && typeof contribution.availability !== "function"))) {
+      throw new Error(`Invalid command contribution: ${contribution.id}`);
+    }
+    if (contribution.kind === "provider" &&
+      (!contribution.label.trim() || typeof contribution.snapshot !== "function" ||
+        (contribution.subscribe !== undefined && typeof contribution.subscribe !== "function") ||
+        (contribution.refresh !== undefined && typeof contribution.refresh !== "function") ||
+        (contribution.run !== undefined && typeof contribution.run !== "function"))) {
+      throw new Error(`Invalid provider contribution: ${contribution.id}`);
+    }
   } catch (error) {
     if (error instanceof PluginContributionError) throw error;
     throw new PluginContributionError("invalid-contribution", error instanceof Error ? error.message : String(error));

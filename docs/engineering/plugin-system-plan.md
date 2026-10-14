@@ -218,6 +218,7 @@ Each implemented phase records:
 
 ### PS1 — accepted locally on 2026-10-14
 
+- Commit: `bfe37b9` (`feat: add bundled plugin kernel`).
 - Added a window-scoped bundled plugin runtime with validated identifiers and versions, immutable
   cloned evidence, plugin-qualified contribution IDs, atomic contribution publication, serialized
   workspace transitions, failure isolation, diagnostics, and reverse-order disposal.
@@ -231,5 +232,28 @@ Each implemented phase records:
 - Rust, native packaging, accessibility, memory, cancellation, and task-output measurements were
   not applicable: PS1 changes no Rust code, UI, process execution, or installed application
   behavior. These gates become active in the phases that introduce those capabilities.
-- Known limitation: the Android plugin is intentionally detection-only until PS2 supplies the
-  host-owned Tasks surface and contribution adapters.
+- Known limitation at this boundary: the Android plugin was intentionally detection-only; PS2 now
+  supplies the host-owned Tasks surface and contribution adapters.
+
+### PS2 — accepted locally on 2026-10-14
+
+- Added a host-owned Tasks activity and bottom tool with localized empty, unavailable, loading,
+  error, grouped-results, filtering, keyboard-selection, refresh, and explicit Run presentation.
+- Added window-owned contribution adapters that project reviewed plugin commands into the existing
+  command registry and task-provider snapshots into the Tasks controller. Workspace replacement
+  clears old projections before new evidence is activated, and disposal unregisters both kinds.
+- Connected plugin activation to the bounded project catalog and kept bundled plugin loading behind
+  a dynamic import. Plain projects incur no Android detector request or activation work.
+- The Android/Gradle plugin now exposes a non-executing Gradle provider placeholder when bounded
+  Android evidence matches. It starts no process, reads no file contents, and exposes no runnable
+  task in this phase; truncated evidence is reported explicitly.
+- PS2-focused and adjacent deterministic tests: 76 passed. Complete deterministic script suite:
+  1,022 passed. Frontend type check and production build: passed.
+- The main production chunk is 455.88 kB uncompressed, below the 500 kB gate. The lazy bundled
+  Android plugin chunk is 3.00 kB uncompressed.
+- Architecture gates passed: `app.ts` remains below its non-growing reviewed ceiling, Tasks owns
+  its controller/view/runtime and stable DOM host, and the new stylesheet has one declared entry
+  point.
+- Rust, native packaging, task-process, cancellation, output, and workspace-trust acceptance are
+  not applicable because PS2 still cannot execute repository-controlled code. PS3 owns those
+  security and process-supervision gates; PS4 owns Gradle discovery and runnable task snapshots.

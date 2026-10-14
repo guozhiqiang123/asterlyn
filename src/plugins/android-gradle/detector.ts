@@ -1,6 +1,7 @@
 /** The detector is deliberately bounded: it is fed a catalog, never a filesystem. */
 export const ANDROID_GRADLE_DETECTOR_LIMITS = Object.freeze({
-  maxPaths: 4096,
+  // Matches the host-owned project catalog ceiling; the detector never expands it.
+  maxPaths: 100_000,
   maxPathLength: 4096,
 });
 
@@ -12,6 +13,7 @@ export interface AndroidGradleDetectionInput {
   /** Workspace-relative path records from the host-owned catalog. */
   readonly files: readonly { readonly workspacePath: string }[];
   readonly platform?: AndroidGradleDetectorPlatform;
+  readonly catalogTruncated?: boolean;
 }
 
 export interface AndroidGradleEvidenceSnapshot {
@@ -20,6 +22,7 @@ export interface AndroidGradleEvidenceSnapshot {
   readonly generation: number;
   readonly platform: AndroidGradleDetectorPlatform;
   readonly bounded: boolean;
+  readonly catalogTruncated: boolean;
   readonly gradle: boolean;
   readonly android: boolean;
   readonly wrapper: "gradlew" | "gradlew.bat" | null;
@@ -43,7 +46,7 @@ export function detectAndroidGradleEvidence(
   const platform = input.platform ?? "posix";
   // Check the caller-provided catalog size before any mapping or normalization work.
   if (input.files.length > ANDROID_GRADLE_DETECTOR_LIMITS.maxPaths) {
-    return emptySnapshot(input.workspaceRoot, input.generation, platform, false);
+    return emptySnapshot(input.workspaceRoot, input.generation, platform, false, input.catalogTruncated === true);
   }
   const paths = input.files
     .map((file) => normalizeWorkspacePath(file.workspacePath, platform))
@@ -65,6 +68,7 @@ export function detectAndroidGradleEvidence(
     generation: input.generation,
     platform,
     bounded: true,
+    catalogTruncated: input.catalogTruncated === true,
     gradle,
     android,
     wrapper,
@@ -77,6 +81,7 @@ function emptySnapshot(
   generation: number,
   platform: AndroidGradleDetectorPlatform,
   bounded: boolean,
+  catalogTruncated: boolean,
 ): AndroidGradleEvidenceSnapshot {
   return Object.freeze({
     kind: "android-gradle-evidence",
@@ -84,6 +89,7 @@ function emptySnapshot(
     generation,
     platform,
     bounded,
+    catalogTruncated,
     gradle: false,
     android: false,
     wrapper: null,

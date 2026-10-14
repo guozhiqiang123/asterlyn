@@ -201,7 +201,7 @@ import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/w
 import { hideWorkspaceToolWindows } from "./shell/workspace-availability.ts";
 import { WindowSession } from "./application/window-session";
 import { approveProjectWindowClose } from "./application/window-close-gate.ts";
-import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts";
+import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts"; import { PluginTasksRuntime } from "./composition/plugin-tasks-runtime.ts";
 import { historyPathApplyShortcut } from "./composition/history-shortcut-presentation.ts";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
 import { renderRepositoryProjectionSlices } from "./application/repository-projection-renderer.ts";
@@ -420,7 +420,7 @@ export class AsterlynApp {
   private commandSurfaceResultsFrame: number | null = null;
   private readonly workspaceSearchDebouncer = new WorkspaceSearchDebouncer();
   private readonly findResultsRuntime: FindResultsRuntime; private readonly replacementPresentationRuntime: WorkspaceReplacementPresentationRuntime;
-  private readonly bottomToolRuntime: BottomToolRuntime;
+  private readonly bottomToolRuntime: BottomToolRuntime; private readonly pluginTasksRuntime: PluginTasksRuntime;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private recentRepositoryValidationGeneration = 0;
@@ -625,6 +625,7 @@ export class AsterlynApp {
       if (this.filesEditorRuntime.commands.state.mode === "commands") this.renderCommandSurface(true);
       if (this.shellState.page === "settings" && this.settingsState.section === "keybindings") this.renderSettingsPage();
     });
+    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),
@@ -653,7 +654,7 @@ export class AsterlynApp {
     this.bottomToolRuntime = new BottomToolRuntime(root, {
       tool: () => this.shellState.layout.bottomTool,
       shellCopy: () => this.localShellCopy(),
-      navigationCopy: () => this.localization.catalog.navigation, replacementCopy: () => this.localization.catalog.replacement,
+      navigationCopy: () => this.localization.catalog.navigation, replacementCopy: () => this.localization.catalog.replacement, tasksCopy: () => this.localization.catalog.tasks,
       workspaceRoot: () => this.windowSession.workspace.state.root,
       gitAvailable: () => this.windowSession.repository.state.snapshot !== null,
       activateTerminal: (workspaceRoot) => this.terminalPanel.activate(workspaceRoot),
@@ -666,7 +667,7 @@ export class AsterlynApp {
         this.renderGitDetailPane(snapshot);
       },
       renderStash: () => this.stashRuntime.render(),
-      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(),
+      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(), renderTasks: () => this.pluginTasksRuntime.render(),
     });
     this.historyReadRuntime = new GitHistoryReadRuntime(
       {
@@ -1667,6 +1668,8 @@ export class AsterlynApp {
     if (change.catalogChanged && this.activeDocument().kind === "working-diff") {
       void this.loadSelectedDiff();
     }
+    const root = this.windowSession.workspace.state.root;
+    if (change.catalogChanged && change.reason !== "refresh-complete" && root) void this.pluginTasksRuntime.updateWorkspaceEvidence({ root, generation: this.windowSession.generation }, this.filesState);
     if (change.catalogChanged) this.contextMenuHost.revalidate();
     if (change.error) this.showError(change.error);
   }
@@ -1954,7 +1957,7 @@ export class AsterlynApp {
     for (const tool of this.shellState.activityOrder) {
       const button = this.root.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       if (!button) continue;
-      const toolLabel = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
+      const toolLabel = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, tasks: copy.tasks, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", toolLabel);
       text(`[data-tool="${tool}"] span`, toolLabel);
     }
@@ -2015,7 +2018,7 @@ export class AsterlynApp {
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.appUpdatePresentationRuntime.dispose();
-    this.settingsPresentationRuntime.dispose();
+    this.settingsPresentationRuntime.dispose(); this.pluginTasksRuntime.dispose();
     this.releaseKeybindings();
     this.shortcuts.dispose();
     this.shellController.dispose();
@@ -2413,6 +2416,7 @@ export class AsterlynApp {
       this.historyReadRuntime.historicalFileComparison.clear();
       this.clearComparisonDiffInspection();
       this.filesEditorRuntime.files.installWorkspace(opened.root, snapshot?.changes ?? []);
+      await this.pluginTasksRuntime.activateWorkspace({ root: opened.root, generation }); if (!this.windowSession.matches(generation, opened.root)) return false;
       if (snapshot) {
         this.installSnapshotHistory(snapshot, true);
         this.loadHistoryPreferences(snapshot);
@@ -2485,6 +2489,8 @@ export class AsterlynApp {
       const next = this.repositoryIntegration.acceptManualRefresh(opened.root, opened.repository, generation, snapshot);
       this.workspaceWatch.recordAuthoritativeRefresh();
       if (!next) return;
+      await this.pluginTasksRuntime.activateWorkspace({ root: opened.root, generation }); if (!this.windowSession.matches(generation, opened.root)) return;
+      await this.pluginTasksRuntime.updateWorkspaceEvidence({ root: opened.root, generation }, this.filesState);
       pendingRoot = next.root;
     } catch (error) {
       if (generation !== this.windowSession.generation) return;
@@ -3850,7 +3856,7 @@ export class AsterlynApp {
   private toggleTool(tool: ActivityTool): void {
     if (
       !this.windowSession.workspace.state.root ||
-      (tool !== "files" && tool !== "search" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
+      (tool !== "files" && tool !== "search" && tool !== "tasks" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
     ) return;
     if (tool === "search") {
       const current = this.shellState.layout.bottomTool;
@@ -3866,13 +3872,13 @@ export class AsterlynApp {
       return;
     }
     this.shellController.reduceLayout(
-      tool === "branches" || tool === "stash" || tool === "terminal"
+      tool === "branches" || tool === "stash" || tool === "tasks" || tool === "terminal"
         ? { type: "toggle-bottom-tool", tool }
         : { type: "toggle-left-tool", tool },
     );
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
-    if ((tool === "branches" || tool === "stash" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
+    if ((tool === "branches" || tool === "stash" || tool === "tasks" || tool === "terminal") && this.shellState.layout.bottomTool === tool) {
       this.bottomToolRuntime.render();
       if (tool === "branches") this.loadVisibleCommitDetails();
       if (tool === "stash") {
@@ -3898,11 +3904,11 @@ export class AsterlynApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       const tool = button.dataset.tool as ActivityTool;
       const enabled = Boolean(this.windowSession.workspace.state.root &&
-        (tool === "files" || tool === "search" || tool === "terminal" || this.windowSession.repository.state.snapshot));
+        (tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal" || this.windowSession.repository.state.snapshot));
       const requestedActive =
         tool === "search"
           ? this.shellState.layout.bottomTool === "find" || this.shellState.layout.bottomTool === "replace"
-          : tool === "branches" || tool === "stash" || tool === "terminal"
+          : tool === "branches" || tool === "stash" || tool === "tasks" || tool === "terminal"
             ? this.shellState.layout.bottomTool === tool
             : this.shellState.layout.leftTool === tool;
       const active = enabled && requestedActive;
@@ -3911,13 +3917,13 @@ export class AsterlynApp {
       button.disabled = !enabled;
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
-      const label = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal }[tool];
+      const label = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, tasks: copy.tasks, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", label);
       const labelNode = button.querySelector("span");
       if (labelNode) labelNode.textContent = label;
       button.title = enabled
         ? copy.toolReorder(label || copy.genericTool)
-        : tool === "files" || tool === "search" || tool === "terminal"
+        : tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal"
           ? copy.openFolderFirst
           : copy.gitUnavailableReorder;
     });
@@ -4235,7 +4241,7 @@ export class AsterlynApp {
     if (
       repositoryGeneration === this.windowSession.generation &&
       this.windowSession.workspace.state.root === repositoryRoot
-    ) this.workspaceWatch.activate();
+    ) { await this.pluginTasksRuntime.updateWorkspaceEvidence({ root: repositoryRoot, generation: repositoryGeneration }, this.filesState); this.workspaceWatch.activate(); }
   }
 
   private projectTree(): ProjectTreeNode[] {

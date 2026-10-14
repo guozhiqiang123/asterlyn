@@ -30,7 +30,7 @@ test("Git operation commands reuse guarded launcher and recovery routes", async 
   assert.deepEqual(calls, ["operation", "recovery"]);
   assert.deepEqual(registry.get(GIT_OPERATION_COMMANDS.open).userBindingScopes, [
     "workbench", "input", "files", "changes", "search", "stash",
-    "editor", "diff", "history", "history-input",
+    "tasks", "editor", "diff", "history", "history-input",
   ]);
 
   release();

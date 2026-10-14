@@ -1,4 +1,4 @@
-import type { NavigationCopy, ReplacementCopy, ShellCopy } from "../localization/catalog.ts";
+import type { NavigationCopy, ReplacementCopy, ShellCopy, TasksCopy } from "../localization/catalog.ts";
 import type { BottomTool } from "./layout-state.ts";
 
 export interface BottomToolPresentation {
@@ -10,6 +10,7 @@ export interface BottomToolPresentation {
   readonly showTerminal: boolean;
   readonly showFind: boolean;
   readonly showReplace: boolean;
+  readonly showTasks: boolean;
 }
 
 export function bottomToolPresentation(
@@ -17,6 +18,7 @@ export function bottomToolPresentation(
   shell: ShellCopy,
   navigation: NavigationCopy,
   replacement: ReplacementCopy,
+  tasks: TasksCopy,
 ): BottomToolPresentation {
   if (tool === "terminal") {
     return presentation(shell.terminal, shell.hideTerminal, shell.terminal, "terminal");
@@ -35,6 +37,9 @@ export function bottomToolPresentation(
   if (tool === "replace") {
     return presentation(replacement.replaceWindow, replacement.hideReplaceWindow, replacement.replaceWindow, "replace");
   }
+  if (tool === "tasks") {
+    return presentation(tasks.title, shell.hideTasks, tasks.ariaLabel, "tasks");
+  }
   return presentation("Git", shell.hideGit, shell.branchesAndLog, "git");
 }
 
@@ -42,7 +47,7 @@ function presentation(
   title: string,
   hideLabel: string,
   ariaLabel: string,
-  visible: "git" | "stash" | "terminal" | "find" | "replace",
+  visible: "git" | "stash" | "tasks" | "terminal" | "find" | "replace",
 ): BottomToolPresentation {
   return {
     title,
@@ -53,5 +58,6 @@ function presentation(
     showTerminal: visible === "terminal",
     showFind: visible === "find",
     showReplace: visible === "replace",
+    showTasks: visible === "tasks",
   };
 }

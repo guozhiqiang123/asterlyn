@@ -1,0 +1,91 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { TasksController } from "../src/features/tasks/tasks-controller.ts";
+
+const identity = { root: "/project", generation: 3 };
+const ready = (tasks) => ({ status: "ready", tasks });
+const task = (id, label, group = "Build", extra = {}) => ({ id, label, group, runnable: true, ...extra });
+
+test("controller binds providers to the active workspace identity and aggregates groups", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  assert.equal(controller.acceptProviders(identity, [
+    { id: "android", label: "Android", snapshot: ready([task("assemble", "assembleDebug")]) },
+    { id: "quality", label: "Quality", snapshot: ready([task("check", "check", "Verify")]) },
+  ]), true);
+  assert.equal(controller.state.status, "ready");
+  assert.deepEqual(controller.state.entries.map((entry) => entry.key), ["android:assemble", "quality:check"]);
+  assert.equal(controller.selectedTask().task.label, "assembleDebug");
+});
+
+test("stale workspace and generation results are rejected", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: ready([task("one", "one")]) }]);
+  const next = { root: "/project", generation: 4 };
+  controller.activate(next);
+  assert.equal(controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: ready([task("old", "old")]) }]), false);
+  assert.deepEqual(controller.state.entries, []);
+});
+
+test("selection is stable across provider updates and query filters", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  const providers = [{ id: "p", label: "P", snapshot: ready([
+    task("a", "assemble"), task("b", "bundle"), task("c", "check", "Verify"),
+  ]) }];
+  controller.acceptProviders(identity, providers);
+  controller.selectKey("p:b");
+  controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: ready([
+    task("a", "assemble"), task("b", "bundle"), task("c", "check", "Verify"),
+  ]) }]);
+  assert.equal(controller.selectedTask().key, "p:b");
+  controller.setQuery("verify");
+  assert.equal(controller.selectedTask().key, "p:c");
+  assert.equal(controller.moveSelection(1), false);
+  controller.setQuery("");
+  assert.equal(controller.select(99), false);
+});
+
+test("provider statuses expose loading, unavailable, error, and empty states", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  assert.equal(controller.state.status, "empty");
+  controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: { status: "loading", tasks: [] } }]);
+  assert.equal(controller.state.status, "loading");
+  controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: { status: "unavailable", tasks: [], unavailableReason: "workspace-untrusted" } }]);
+  assert.equal(controller.state.status, "unavailable");
+  assert.equal(controller.state.unavailableReason, "workspace-untrusted");
+  controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: { status: "error", tasks: [], error: "failed" } }]);
+  assert.equal(controller.state.status, "error");
+  assert.equal(controller.state.error, "failed");
+});
+
+test("controller clones provider projections and caps queries", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  const tasks = [task("one", "one")];
+  const provider = { id: "p", label: "P", snapshot: ready(tasks) };
+  controller.acceptProviders(identity, [provider]);
+  tasks[0].label = "mutated";
+  provider.label = "mutated provider";
+  assert.equal(controller.state.entries[0].task.label, "one");
+  controller.setQuery("x".repeat(300));
+  assert.equal(controller.state.query.length, 256);
+});
+
+test("malformed and duplicate provider projections are isolated", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  assert.doesNotThrow(() => controller.acceptProviders(identity, [
+    { id: "bad", label: "Bad", snapshot: { status: "ready", tasks: null } },
+    { id: "bad", label: "Duplicate", snapshot: ready([task("ignored", "ignored")]) },
+    { id: "good", label: "Good", snapshot: ready([task("ok", "ok")]) },
+    { id: "invalid-task", label: "Invalid", snapshot: ready([{ id: "x", label: "x", group: "x" }]) },
+  ]));
+  assert.equal(controller.state.status, "ready");
+  assert.deepEqual(controller.state.providers.map((provider) => provider.id), ["bad", "good", "invalid-task"]);
+  assert.deepEqual(controller.state.entries.map((entry) => entry.key), ["good:ok"]);
+  assert.equal(controller.state.providers[0].snapshot.status, "error");
+});

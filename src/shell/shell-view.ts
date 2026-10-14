@@ -78,6 +78,7 @@ export function renderShellView(model: ShellViewModel): string {
             <section class="stash-pane stash-detail-pane"><div id="stash-detail-body"></div></section>
           </div>
           <div class="terminal-tool-host hidden" id="terminal-tool-host" role="region" aria-label="${escapeHtml(copy.terminal)}"></div>
+          <div class="tasks-tool-host hidden" id="tasks-tool-host" role="region" aria-label="${escapeHtml(copy.tasks)}"></div>
           <div class="find-tool-host hidden" id="find-tool-host" role="region"></div>
           <div class="replacement-tool-host hidden" id="replacement-tool-host" role="region"></div>
         </section>
@@ -109,19 +110,19 @@ export function renderShellView(model: ShellViewModel): string {
 }
 
 function activityButton(tool: ActivityTool, model: ShellViewModel, copy: ShellCopy): string {
-  const labels = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, terminal: copy.terminal } as const;
-  const icons = { files: "folder", search: "search", branches: "branch", changes: "changes", stash: "stash", terminal: "terminal" } as const;
+  const labels = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, tasks: copy.tasks, terminal: copy.terminal } as const;
+  const icons = { files: "folder", search: "search", branches: "branch", changes: "changes", stash: "stash", tasks: "list", terminal: "terminal" } as const;
   const requestedActive = tool === "search"
     ? model.shell.layout.bottomTool === "find" || model.shell.layout.bottomTool === "replace"
-    : tool === "branches" || tool === "stash" || tool === "terminal"
+    : tool === "branches" || tool === "stash" || tool === "tasks" || tool === "terminal"
       ? model.shell.layout.bottomTool === tool
       : model.shell.layout.leftTool === tool;
-  const enabled = model.workspaceOpen && (tool === "files" || tool === "search" || tool === "terminal" || model.gitAvailable);
+  const enabled = model.workspaceOpen && (tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal" || model.gitAvailable);
   const active = enabled && requestedActive;
   const label = labels[tool];
   const title = enabled
     ? copy.toolReorder(label)
-    : tool === "files" || tool === "search" || tool === "terminal"
+    : tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal"
       ? copy.openFolderFirst
       : copy.gitUnavailableReorder;
   return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown" ${enabled ? "" : "disabled"}>${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;

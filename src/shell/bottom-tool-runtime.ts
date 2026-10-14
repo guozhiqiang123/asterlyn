@@ -1,4 +1,4 @@
-import type { NavigationCopy, ReplacementCopy, ShellCopy } from "../localization/catalog.ts";
+import type { NavigationCopy, ReplacementCopy, ShellCopy, TasksCopy } from "../localization/catalog.ts";
 import type { BottomTool } from "./layout-state.ts";
 import { bottomToolPresentation } from "./bottom-tool-presentation.ts";
 
@@ -7,6 +7,7 @@ export interface BottomToolRuntimeOptions {
   readonly shellCopy: () => ShellCopy;
   readonly navigationCopy: () => NavigationCopy;
   readonly replacementCopy: () => ReplacementCopy;
+  readonly tasksCopy: () => TasksCopy;
   readonly workspaceRoot: () => string | null;
   readonly gitAvailable: () => boolean;
   readonly activateTerminal: (workspaceRoot: string) => void;
@@ -15,6 +16,7 @@ export interface BottomToolRuntimeOptions {
   readonly renderStash: () => void;
   readonly renderFind: () => void;
   readonly renderReplace: () => void;
+  readonly renderTasks: () => void;
 }
 
 export class BottomToolRuntime {
@@ -27,7 +29,7 @@ export class BottomToolRuntime {
     const tool = this.options.tool();
     if (!tool) return;
     const navigation = this.options.navigationCopy();
-    const presentation = bottomToolPresentation(tool, this.options.shellCopy(), navigation, this.options.replacementCopy());
+    const presentation = bottomToolPresentation(tool, this.options.shellCopy(), navigation, this.options.replacementCopy(), this.options.tasksCopy());
     const title = this.query("#bottom-tool-title");
     const hide = this.query<HTMLButtonElement>("#hide-bottom-tool");
     title.textContent = presentation.title;
@@ -42,6 +44,7 @@ export class BottomToolRuntime {
     find.classList.toggle("hidden", !presentation.showFind);
     find.setAttribute("aria-label", navigation.findResultsAria);
     this.query("#replacement-tool-host").classList.toggle("hidden", !presentation.showReplace);
+    this.query("#tasks-tool-host").classList.toggle("hidden", !presentation.showTasks);
     this.query("#bottom-tool").setAttribute("aria-label", presentation.ariaLabel);
     if (presentation.showTerminal) {
       const workspaceRoot = this.options.workspaceRoot();
@@ -49,7 +52,9 @@ export class BottomToolRuntime {
       return;
     }
     this.options.hideTerminal();
-    if (presentation.showFind) {
+    if (presentation.showTasks) {
+      this.options.renderTasks();
+    } else if (presentation.showFind) {
       this.options.renderFind();
     } else if (presentation.showReplace) {
       this.options.renderReplace();
@@ -88,4 +93,5 @@ const SCROLL_HOSTS = [
   "#git-detail-body",
   ".find-results-list",
   ".replacement-tool-file-list",
+  "#tasks-tool-host",
 ] as const;

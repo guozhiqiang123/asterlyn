@@ -1,7 +1,7 @@
 import { CONFLICT_EQUAL_PERCENTAGE } from "../shared/diff-review/conflict-diff-review-layout.ts";
 
 export type LeftTool = "files" | "changes" | null;
-export type BottomTool = "branches" | "stash" | "terminal" | "find" | "replace" | null;
+export type BottomTool = "branches" | "stash" | "tasks" | "terminal" | "find" | "replace" | null;
 
 export interface WorkbenchLayout {
   version: 1;
@@ -313,7 +313,7 @@ function isLeftTool(value: unknown): value is LeftTool {
 }
 
 function isBottomTool(value: unknown): value is BottomTool {
-  return value === null || value === "branches" || value === "stash" || value === "terminal" || value === "find" || value === "replace";
+  return value === null || value === "branches" || value === "stash" || value === "tasks" || value === "terminal" || value === "find" || value === "replace";
 }
 
 function finiteOr(value: number, fallback: number): number {

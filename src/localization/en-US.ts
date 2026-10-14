@@ -1,7 +1,7 @@
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_EN_US } from "./keybinding-en-US.ts";
 import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { EN_US_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts"; import { EN_US_STASH_COPY } from "./stash-copy.ts";
-import { EN_US_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts";
+import { EN_US_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts"; import { EN_US_TASKS_COPY } from "./tasks-copy.ts";
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
   common: {
@@ -58,7 +58,7 @@ export const EN_US: LocaleCatalog = {
     version: (name, version) => `${name} version ${version}`,
     files: "Files",
     branches: "Branches",
-    changes: "Changes", stash: "Stash", terminal: "Terminal",
+    changes: "Changes", stash: "Stash", tasks: "Tasks", terminal: "Terminal",
     toolReorder: (label) => `${label} — drag to reorder`,
     openFolderFirst: "Open a project folder first — drag to reorder",
     gitUnavailableReorder: "Git is unavailable for this folder — drag to reorder",
@@ -82,7 +82,7 @@ export const EN_US: LocaleCatalog = {
     gitOperations: "Git operations…",
     recoverChanges: "Recover local changes",
     hideGit: "Hide Git tool window", hideStash: "Hide Stash tool window",
-    hideTerminal: "Hide Terminal tool window",
+    hideTerminal: "Hide Terminal tool window", hideTasks: "Hide Tasks tool window",
     commitLog: "Commit log",
     gitDetails: "Git details",
     resizeBranchTree: "Resize branch tree",
@@ -126,7 +126,7 @@ export const EN_US: LocaleCatalog = {
     cleared: "Terminal scrollback cleared",
     close: "Close the current terminal session",
     closed: "Terminal session closed", outputTruncated: (bytes) => `\r\n[Asterlyn omitted ${bytes} terminal output bytes while the display was busy.]\r\n`,
-  },
+  }, tasks: EN_US_TASKS_COPY,
   settings: {
     planned: "Planned",
     available: "Available",
@@ -253,7 +253,7 @@ export const EN_US: LocaleCatalog = {
       "toggle-files": { label: "Toggle Files", detail: "Show or hide the Files tool window", aliases: "project tree" }, "toggle-search": { label: "Toggle Search Results", detail: "Show or hide the Find or Replace tool window", aliases: "find results replace" },
       "toggle-changes": { label: "Toggle Changes", detail: "Show or hide the Changes tool window", aliases: "git status" },
       "toggle-git": { label: "Toggle Git", detail: "Show or hide Branches and Log", aliases: "history branches" }, "toggle-stash": { label: "Toggle Stash", detail: "Show or hide the Stash tool window", aliases: "git shelf saved changes" },
-      "toggle-terminal": { label: "Toggle Terminal", detail: "Show or hide the current project terminal", aliases: "shell console command line" }, "hide-left-tool": { label: "Hide Left Tool Window", detail: "Close the active Files or Changes tool window", aliases: "sidebar panel" }, "hide-bottom-tool": { label: "Hide Bottom Tool Window", detail: "Close the active Git, Stash, Terminal, Find, or Replace tool window", aliases: "panel drawer" },
+      "toggle-terminal": { label: "Toggle Terminal", detail: "Show or hide the current project terminal", aliases: "shell console command line" }, "toggle-tasks": { label: "Toggle Tasks", detail: "Show or hide project tasks", aliases: "gradle build run" }, "hide-left-tool": { label: "Hide Left Tool Window", detail: "Close the active Files or Changes tool window", aliases: "sidebar panel" }, "hide-bottom-tool": { label: "Hide Bottom Tool Window", detail: "Close the active Git, Stash, Tasks, Terminal, Find, or Replace tool window", aliases: "panel drawer" },
     },
   },
   projectFiles: {

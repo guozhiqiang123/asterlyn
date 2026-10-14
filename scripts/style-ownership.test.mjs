@@ -16,6 +16,7 @@ const ownedStyles = [
   ["shared/responsive.css", "main.ts"],
   ["shell/shell.css", "main.ts"],
   ["features/settings/settings.css", "main.ts"],
+  ["features/tasks/tasks.css", "main.ts"],
   ["features/changes-commit/changes-commit.css", "main.ts"],
   ["features/files-editor/project-files.css", "main.ts"],
   ["features/files-editor/welcome.css", "main.ts"],

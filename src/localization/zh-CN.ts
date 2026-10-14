@@ -2,7 +2,7 @@ import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } f
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { ZH_CN_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 import { ZH_CN_STASH_COPY } from "./stash-copy.ts";
-import { ZH_CN_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts";
+import { ZH_CN_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts"; import { ZH_CN_TASKS_COPY } from "./tasks-copy.ts";
 
 export const ZH_CN = {
   locale: "zh-CN",
@@ -28,14 +28,14 @@ export const ZH_CN = {
     refreshProject: "刷新项目", openSettings: "打开设置", settings: "设置",
     windowControls: "窗口控制", minimizeWindow: "最小化窗口", minimize: "最小化", maximizeWindow: "最大化窗口", maximize: "最大化",
     restoreWindow: "还原窗口", restore: "还原", closeWindow: "关闭窗口", closeLastProjectWindowTitle: "关闭 Asterlyn？", closeLastProjectWindowMessage: "这是最后一个项目窗口。关闭后将退出 Asterlyn。", toolWindows: "工具窗口",
-    version: (name, version) => `${name} 版本 ${version}`, files: "文件", branches: "分支", changes: "更改", stash: "贮藏", terminal: "终端",
+    version: (name, version) => `${name} 版本 ${version}`, files: "文件", branches: "分支", changes: "更改", stash: "贮藏", tasks: "任务", terminal: "终端",
     toolReorder: (label) => `${label} — 拖动可排序`, openFolderFirst: "请先打开项目文件夹 — 拖动可排序",
     gitUnavailableReorder: "此文件夹无法使用 Git — 拖动可排序", genericTool: "工具窗口", leftToolWindow: "左侧工具窗口",
     hideFiles: "隐藏文件工具窗口", hideChanges: "隐藏更改工具窗口", waitingForProject: "正在等待项目", resizeLeft: "调整左侧工具窗口大小", editor: "编辑器",
     welcome: "欢迎", showOpenFiles: "显示已打开文件", openFiles: "已打开文件", editorName: (name) => `${name} 编辑器`, openNewProject: "打开新项目",
     openFolder: "打开项目文件夹", openFolderDetail: "可浏览普通文件夹；当所选文件夹为仓库根目录时，还可使用 Git 工具。",
     resizeGit: "调整 Git 工具窗口大小", branchesAndLog: "分支与日志", prepareGitOperation: "准备合并、拣选、变基或压缩操作",
-    gitOperations: "Git 操作…", recoverChanges: "恢复本地更改", hideGit: "隐藏 Git 工具窗口", hideStash: "隐藏贮藏工具窗口", hideTerminal: "隐藏终端工具窗口",
+    gitOperations: "Git 操作…", recoverChanges: "恢复本地更改", hideGit: "隐藏 Git 工具窗口", hideStash: "隐藏贮藏工具窗口", hideTasks: "隐藏任务工具窗口", hideTerminal: "隐藏终端工具窗口",
     commitLog: "提交日志",
     gitDetails: "Git 详情", resizeBranchTree: "调整分支树大小", resizeGitDetails: "调整 Git 详情大小",
     returnToWorkbench: "返回工作台", backToWorkbench: "返回工作台", settingsGroups: "设置分组",
@@ -63,7 +63,7 @@ export const ZH_CN = {
     cleared: "已清空终端回滚记录",
     close: "关闭当前终端会话",
     closed: "终端会话已关闭", outputTruncated: (bytes) => `\r\n[Asterlyn 在显示繁忙时省略了 ${bytes} 字节终端输出。]\r\n`,
-  },
+  }, tasks: ZH_CN_TASKS_COPY,
   settings: {
     planned: "计划中", available: "可用",
     sections: { general: "常规", appearance: "外观", editor: "编辑器", keybindings: "快捷键", "version-control": "版本控制", code: "代码", updates: "更新" },
@@ -158,7 +158,7 @@ export const ZH_CN = {
       "toggle-files": { label: "切换文件窗口", detail: "显示或隐藏文件工具窗口", aliases: "toggle files project tree 项目树" }, "toggle-search": { label: "切换搜索结果窗口", detail: "显示或隐藏查找或替换工具窗口", aliases: "find search results replace 查找 搜索 替换" },
       "toggle-changes": { label: "切换更改窗口", detail: "显示或隐藏更改工具窗口", aliases: "toggle changes git status 状态" },
       "toggle-git": { label: "切换 Git 窗口", detail: "显示或隐藏分支与日志", aliases: "toggle git history branches 历史分支" }, "toggle-stash": { label: "切换贮藏窗口", detail: "显示或隐藏贮藏工具窗口", aliases: "git stash shelf saved changes 贮藏" },
-      "toggle-terminal": { label: "切换终端窗口", detail: "显示或隐藏当前项目终端", aliases: "terminal shell console 命令行" }, "hide-left-tool": { label: "隐藏左侧工具窗口", detail: "关闭当前文件或更改工具窗口", aliases: "sidebar panel 侧栏 面板" }, "hide-bottom-tool": { label: "隐藏底部工具窗口", detail: "关闭当前 Git、贮藏、终端、查找或替换工具窗口", aliases: "panel drawer 底部 面板" },
+      "toggle-terminal": { label: "切换终端窗口", detail: "显示或隐藏当前项目终端", aliases: "terminal shell console 命令行" }, "toggle-tasks": { label: "切换任务窗口", detail: "显示或隐藏项目任务", aliases: "gradle build run 构建运行" }, "hide-left-tool": { label: "隐藏左侧工具窗口", detail: "关闭当前文件或更改工具窗口", aliases: "sidebar panel 侧栏 面板" }, "hide-bottom-tool": { label: "隐藏底部工具窗口", detail: "关闭当前 Git、贮藏、任务、终端、查找或替换工具窗口", aliases: "panel drawer 底部 面板" },
     },
   },
   projectFiles: {

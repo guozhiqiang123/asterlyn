@@ -120,6 +120,7 @@ platform-resolution and conflict gates. Never infer a shortcut from an action na
 | Show/hide Changes | presentation | `workbench.tool.changes.toggle` | **Default:** Command+0 on macOS; **Custom** elsewhere |
 | Show/hide Branches and Log | presentation | `workbench.tool.branches.toggle` | **Default:** Command+9 on macOS; **Custom** elsewhere |
 | Show/hide Stash | presentation | `workbench.tool.stash.toggle` | **Custom** |
+| Show/hide Tasks | presentation | `workbench.tool.tasks.toggle` | **Custom**; intentionally unassigned until the Tasks surface has stable task-provider semantics |
 | Show/hide Terminal | presentation | `workbench.tool.terminal.toggle` | **Default:** Option+F12 on macOS; **Custom** elsewhere |
 | Hide the active left tool | presentation | `workbench.tool.left.hide` | **Custom** |
 | Hide the active bottom tool | presentation | `workbench.tool.bottom.hide` | **Custom** |

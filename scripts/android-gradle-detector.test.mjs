@@ -32,6 +32,20 @@ test("detects Android Gradle evidence and returns stable sorted paths", () => {
     "settings.gradle.kts",
   ]);
   assert.equal(result.generation, 7);
+  assert.equal(result.catalogTruncated, false);
+});
+
+test("preserves catalog truncation without inventing missing evidence", () => {
+  const result = detectAndroidGradleEvidence({
+    workspaceRoot: "/workspace/project",
+    generation: 7,
+    platform: "posix",
+    catalogTruncated: true,
+    files: [{ workspacePath: "settings.gradle" }],
+  });
+  assert.equal(result.gradle, true);
+  assert.equal(result.android, false);
+  assert.equal(result.catalogTruncated, true);
 });
 
 test("distinguishes ordinary Gradle from Android", () => {

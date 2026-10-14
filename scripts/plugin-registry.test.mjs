@@ -3,7 +3,12 @@ import test from "node:test";
 import { PluginRuntime, qualifyContributionId, validatePluginId, validatePluginVersion, validateWorkspaceIdentity } from "../src/application/plugins/plugin-registry.ts";
 
 const identity = { root: "/repo", generation: 1 };
-const provider = (id, label = id) => ({ kind: "provider", id, label });
+const provider = (id, label = id) => ({
+  kind: "provider",
+  id,
+  label,
+  snapshot: () => ({ status: "ready", tasks: [] }),
+});
 
 test("validates strict plugin, version, and contribution IDs", () => {
   validatePluginId("dev.asterlyn.android-gradle");
@@ -167,6 +172,16 @@ test("diagnostic observers cannot break activation isolation", async () => {
   ]);
   assert.deepEqual(report.activated, ["healthy-observer"]);
   assert.equal(runtime.contributions.get("healthy-observer.tasks")?.pluginId, "healthy-observer");
+});
+
+test("registry subscribers observe commit and deactivation", async () => {
+  const runtime = new PluginRuntime();
+  const sizes = [];
+  const release = runtime.contributions.subscribe(() => sizes.push(runtime.contributions.list().length));
+  await runtime.activate(identity, {}, [plugin("observed", (ctx) => { ctx.contribute(provider("tasks")); })]);
+  await runtime.deactivate();
+  release();
+  assert.deepEqual(sizes, [1, 0]);
 });
 
 test("no-match activation leaves the registry empty", async () => {
