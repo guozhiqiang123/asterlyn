@@ -42,6 +42,76 @@ test("task execution requires a reviewed trusted workspace and rejects stale eve
   assert.equal(controller.state.status, "idle");
 });
 
+test("task execution reports starting and cancelling immediately and only exposes valid active actions", async () => {
+  const listeners = [];
+  let finishStart;
+  let finishCancel;
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => new Promise((resolve) => { finishStart = resolve; }),
+    cancelTaskExecution: async () => new Promise((resolve) => { finishCancel = resolve; }),
+    subscribeTaskSession: async (listener) => { listeners.push(listener); return () => {}; },
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [] });
+
+  const confirmation = controller.confirm(identity);
+  assert.equal(controller.state.status, "starting");
+  let html = renderTaskExecutionReview(controller.state, EN_US_TASK_EXECUTION_COPY);
+  assert.match(html, /Starting…/u);
+  assert.match(html, /data-task-execution-action="confirm" disabled/u);
+
+  await Promise.resolve();
+  finishStart({ protocolVersion: 1, runId: "run-feedback", reviewId: "review-1", workspaceRoot: "/repo" });
+  await confirmation;
+  assert.equal(controller.state.status, "queued");
+  html = renderTaskExecutionReview(controller.state, EN_US_TASK_EXECUTION_COPY);
+  assert.doesNotMatch(html, /data-task-execution-action="confirm"/u);
+  assert.doesNotMatch(html, /data-task-execution-action="deny"/u);
+  assert.match(html, /data-task-execution-action="cancel"/u);
+
+  const cancellation = controller.cancel(identity);
+  assert.equal(controller.state.status, "cancelling");
+  html = renderTaskExecutionReview(controller.state, EN_US_TASK_EXECUTION_COPY);
+  assert.match(html, /Cancelling…/u);
+  assert.match(html, /data-task-execution-action="cancel" disabled/u);
+  finishCancel();
+  await cancellation;
+  listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-feedback", workspaceRoot: "/repo", sequence: 1, status: "cancelled", message: null, exitCode: null });
+  assert.equal(controller.state.status, "cancelled");
+});
+
+test("cancelling while start is pending dismisses the review and cleans up the eventual native run", async () => {
+  let finishStart;
+  let cancelledRun = null;
+  let released = 0;
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => new Promise((resolve) => { finishStart = resolve; }),
+    cancelTaskExecution: async (runId) => { cancelledRun = runId; },
+    subscribeTaskSession: async () => () => { released += 1; },
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [] });
+
+  const confirmation = controller.confirm(identity);
+  assert.equal(controller.state.status, "starting");
+  await controller.cancel(identity);
+  assert.equal(controller.state.status, "idle");
+  finishStart({ protocolVersion: 1, runId: "run-late", reviewId: "review-1", workspaceRoot: "/repo" });
+  await assert.rejects(confirmation, /stale/u);
+  assert.equal(cancelledRun, "run-late");
+  assert.equal(released, 1);
+});
+
 test("trust actions preserve review, review cancel dismisses, and terminal events release subscription", async () => {
   const listeners = [];
   let released = 0;

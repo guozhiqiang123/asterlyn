@@ -1,7 +1,7 @@
 import type { TaskExecutionRequest, TaskExecutionReview, TaskSessionEvent } from "../../models.ts";
 import type { TaskExecutionBridge } from "../../protocol/task-execution.ts";
 
-export type TaskExecutionStatus = "idle" | "review" | "queued" | "running" | "succeeded" | "failed" | "cancelled" | "crashed";
+export type TaskExecutionStatus = "idle" | "review" | "starting" | "queued" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled" | "crashed";
 export interface TaskWorkspaceIdentity { readonly root: string; readonly generation: number; }
 export interface TaskExecutionOutput { readonly stream: "stdout" | "stderr"; readonly dataBase64: string; }
 export interface TaskExecutionState {
@@ -35,7 +35,7 @@ export class TaskExecutionController {
     if (sameIdentity(this.value.identity, identity)) return;
     const previousRunId = this.value.runId;
     this.prepareRequest += 1;
-    if (previousRunId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(previousRunId, true);
+    if (previousRunId && ["queued", "running", "cancelling"].includes(this.value.status)) void this.cancelRunOnce(previousRunId, true);
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.value = { ...emptyState(), identity };
@@ -45,7 +45,7 @@ export class TaskExecutionController {
   clear(): void {
     this.prepareRequest += 1;
     const runId = this.value.runId;
-    if (runId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
+    if (runId && ["queued", "running", "cancelling"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.value = emptyState();
@@ -92,6 +92,8 @@ export class TaskExecutionController {
     if (review.workspaceRoot !== identity.root || review.trust !== "trusted") throw new Error("A trusted current workspace is required before task execution.");
     const pending: TaskSessionEvent[] = [];
     let startedRunId: string | null = null;
+    this.value = { ...this.value, status: "starting", error: null };
+    this.emit();
     this.unsubscribe?.();
     this.unsubscribe = await this.bridge.subscribeTaskSession((event) => {
       if (startedRunId) this.acceptEvent(identity, event);
@@ -104,7 +106,7 @@ export class TaskExecutionController {
       this.unsubscribe?.(); this.unsubscribe = null;
       throw error;
     }
-    if (!sameIdentity(this.value.identity, identity) || started.workspaceRoot !== identity.root || started.reviewId !== review.reviewId) {
+    if (this.disposed || !sameIdentity(this.value.identity, identity) || this.value.status !== "starting" || this.value.review?.reviewId !== review.reviewId || started.workspaceRoot !== identity.root || started.reviewId !== review.reviewId) {
       this.unsubscribe?.(); this.unsubscribe = null;
       await this.cancelRunOnce(started.runId, true);
       throw new Error("Task execution start is stale.");
@@ -119,18 +121,33 @@ export class TaskExecutionController {
 
   async cancel(identity: TaskWorkspaceIdentity): Promise<void> {
     if (!sameIdentity(this.value.identity, identity)) return;
-    if (this.value.status === "review") {
+    if (this.value.status === "review" || this.value.status === "starting") {
+      this.unsubscribe?.();
+      this.unsubscribe = null;
       this.value = { ...emptyState(identity), identity };
       this.emit();
       return;
     }
     const runId = this.value.runId;
     if (!runId || ["succeeded", "failed", "cancelled", "crashed", "idle", "review"].includes(this.value.status)) return;
-    await this.cancelRunOnce(runId, false);
+    if (this.value.status === "cancelling") return;
+    const previousStatus = this.value.status;
+    this.value = { ...this.value, status: "cancelling", error: null };
+    this.emit();
+    try {
+      await this.cancelRunOnce(runId, false);
+    } catch (error) {
+      if (this.value.runId === runId && this.value.status === "cancelling") {
+        this.value = { ...this.value, status: previousStatus };
+        this.emit();
+      }
+      throw error;
+    }
   }
 
   fail(identity: TaskWorkspaceIdentity, error: unknown): void {
     this.requireCurrent(identity);
+    this.cancelRequestedRunId = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.value = {
@@ -143,7 +160,7 @@ export class TaskExecutionController {
 
   dismiss(identity: TaskWorkspaceIdentity): void {
     this.requireCurrent(identity);
-    if (this.value.status === "queued" || this.value.status === "running") {
+    if (this.value.status === "starting" || this.value.status === "queued" || this.value.status === "running" || this.value.status === "cancelling") {
       throw new Error("An active task must be cancelled before its output can be closed.");
     }
     this.prepareRequest += 1;
@@ -155,7 +172,7 @@ export class TaskExecutionController {
 
   dispose(): void {
     const runId = this.value.runId;
-    if (runId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
+    if (runId && ["queued", "running", "cancelling"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
     this.disposed = true;
     this.prepareRequest += 1;
     this.unsubscribe?.();
@@ -180,11 +197,13 @@ export class TaskExecutionController {
       else next = { ...next, outputTruncated: true };
     } else if (event.kind === "truncated") next = { ...next, outputTruncated: true };
     else {
-      next = { ...next, status: event.status, error: event.status === "failed" || event.status === "crashed" ? event.message : null };
+      const status = next.status === "cancelling" && event.status === "running" ? "cancelling" : event.status;
+      next = { ...next, status, error: event.status === "failed" || event.status === "crashed" ? event.message : null };
     }
     this.value = next;
     this.emit();
     if (["succeeded", "failed", "cancelled", "crashed"].includes(next.status)) {
+      this.cancelRequestedRunId = null;
       this.unsubscribe?.(); this.unsubscribe = null;
     }
   }
