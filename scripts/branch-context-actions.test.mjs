@@ -99,6 +99,30 @@ test("non-current branch Update advances the exact ref without activating the br
   ]);
   assert.equal(calls.some(([kind]) => kind === "activateCurrent"), false);
   assert.equal(calls.some(([kind]) => kind === "accepted"), true);
+  assert.equal(calls.some(([kind, message]) =>
+    kind === "information" && message === "Updated topic"), true);
+  assert.equal(calls.some(([kind]) => kind === "error"), false);
+});
+
+test("non-current branch Update reports a native failure as an error tip", async () => {
+  const branch = {
+    ...local("topic"), upstream: "origin/topic", upstreamRemote: "origin",
+    upstreamRef: "refs/heads/topic", ahead: 0, behind: 2,
+    primaryWorktreePath: null, linkedWorktreePath: null,
+  };
+  const currentSnapshot = snapshot([local("main", true), branch]);
+  currentSnapshot.remotes = [
+    { name: "origin", url: "file:///origin", fetchSupported: true, pushSupported: true },
+  ];
+  const selected = target(branch);
+  const calls = [];
+  const failure = new Error("remote update rejected");
+  const runtime = branchRemoteRuntime(currentSnapshot, selected, calls, failure);
+
+  await runtime.activate("pull", selected, {});
+
+  assert.equal(calls.some(([kind, error]) => kind === "error" && error === failure), true);
+  assert.equal(calls.some(([kind]) => kind === "information"), false);
 });
 
 test("non-current branch Push opens review for the exact source ref", async () => {
@@ -123,7 +147,7 @@ test("non-current branch Push opens review for the exact source ref", async () =
   ]);
 });
 
-function branchRemoteRuntime(currentSnapshot, selected, calls) {
+function branchRemoteRuntime(currentSnapshot, selected, calls, updateError = null) {
   let generation = 4;
   return new BranchRemoteActionRuntime({
     snapshot: () => currentSnapshot,
@@ -140,6 +164,7 @@ function branchRemoteRuntime(currentSnapshot, selected, calls) {
     focusPushDialog: () => calls.push(["focusPush"]),
     updateLocalBranch: async (...args) => {
       calls.push(["update", ...args]);
+      if (updateError) throw updateError;
       return { snapshot: currentSnapshot, invalidatedSlices: ["refs"] };
     },
     beginTransition: () => generation,
@@ -151,6 +176,7 @@ function branchRemoteRuntime(currentSnapshot, selected, calls) {
     setLoading: (loading) => calls.push(["loading", loading]),
     setStatus: () => {},
     showWarning: (message) => calls.push(["warning", message]),
+    showInformation: (message) => calls.push(["information", message]),
     showError: (error) => calls.push(["error", error]),
     describeError: String,
   });

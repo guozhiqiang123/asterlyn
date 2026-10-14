@@ -34,6 +34,7 @@ export interface BranchRemoteActionRuntimePorts {
   readonly setLoading: (loading: boolean, message: string) => void;
   readonly setStatus: (message: string, kind: "warning" | "success") => void;
   readonly showWarning: (message: string) => void;
+  readonly showInformation: (message: string) => void;
   readonly showError: (error: unknown) => void;
   readonly describeError: (error: unknown) => string;
 }
@@ -173,7 +174,7 @@ export class BranchRemoteActionRuntime {
       );
       if (!this.ports.matches(generation, snapshot.root)) return;
       this.ports.acceptRemoteOutcome(outcome);
-      this.ports.setStatus(copy.updated(target.branch.name), "success");
+      this.ports.showInformation(copy.updated(target.branch.name));
     } catch (error) {
       if (!this.ports.matches(generation, snapshot.root)) return;
       this.ports.showError(error);

@@ -762,7 +762,8 @@ export class AsterlynApp {
       matches: (generation, repositoryRoot) => this.windowSession.matches(generation, repositoryRoot), completeTransition: (generation) => this.windowSession.completeTransition(generation),
       currentGeneration: () => this.windowSession.generation, acceptRemoteOutcome: (outcome) => { this.repositoryIntegration.acceptRemoteOutcome(outcome); },
       clearError: () => this.clearError(), setLoading: (loading, message) => this.setLoading(loading, message), setStatus: (message, kind) => this.setStatus(message, kind),
-      showWarning: (message) => this.showWarning(message), showError: (error) => this.showError(error), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      showWarning: (message) => this.showWarning(message), showInformation: (message) => this.showInformation(message),
+      showError: (error) => this.showError(error), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
     });
     this.remoteRuntime = createRemoteRuntime(root, bridge,
       { remote: initialCatalog.remote, errors: initialCatalog.errors },
