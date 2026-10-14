@@ -208,3 +208,28 @@ Each implemented phase records:
 - Trust denial is not an error and never degrades ordinary editing or Git features.
 - No phase writes plugin metadata into the user's repository.
 
+## Implementation status and acceptance evidence
+
+### PS0 — accepted
+
+- Commit: `69b8922` (`docs: plan bundled plugin system`).
+- The decision, security boundary, phased delivery plan, roadmap distinction, and quality-gate
+  references landed before implementation.
+
+### PS1 — accepted locally on 2026-10-14
+
+- Added a window-scoped bundled plugin runtime with validated identifiers and versions, immutable
+  cloned evidence, plugin-qualified contribution IDs, atomic contribution publication, serialized
+  workspace transitions, failure isolation, diagnostics, and reverse-order disposal.
+- Added a bounded path-only Android/Gradle detector and registered an inert compile-time plugin.
+  The plugin starts no process and contributes no command or provider in this phase.
+- Focused plugin and detector tests: 25 passed.
+- Complete deterministic script suite: 1,007 passed.
+- Frontend type check and production build: passed; the main production chunk remained 441.59 kB
+  uncompressed, below the 500 kB gate. The PS1 plugin modules are not imported by the production
+  composition root, so they add no startup request or runtime work yet.
+- Rust, native packaging, accessibility, memory, cancellation, and task-output measurements were
+  not applicable: PS1 changes no Rust code, UI, process execution, or installed application
+  behavior. These gates become active in the phases that introduce those capabilities.
+- Known limitation: the Android plugin is intentionally detection-only until PS2 supplies the
+  host-owned Tasks surface and contribution adapters.
