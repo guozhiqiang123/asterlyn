@@ -29,6 +29,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0016-temporal-presentation-and-editor-change-indicators.md`](architecture/decisions/0016-temporal-presentation-and-editor-change-indicators.md) — one localized time policy plus repository-derived, shared editor change indicators.
 - [`architecture/decisions/0017-editable-ignored-files.md`](architecture/decisions/0017-editable-ignored-files.md) — explicit ignored identity with individually authorized editing, saving, and Files mutations.
 - [`architecture/decisions/0018-command-and-keybinding-system.md`](architecture/decisions/0018-command-and-keybinding-system.md) — stable command discovery, scoped customizable keybindings, bounded persistence, and editor/terminal arbitration.
+- [`architecture/decisions/0019-plugin-contribution-kernel.md`](architecture/decisions/0019-plugin-contribution-kernel.md) — bundled plugin contributions, workspace trust, task authority, and the deferred external plugin ABI.
 
 ## Delivery
 
@@ -64,6 +65,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
 - [`engineering/in-app-update-plan.md`](engineering/in-app-update-plan.md) — startup/manual update discovery, verified native package installation, restart behavior, and updater trust boundaries.
+- [`engineering/plugin-system-plan.md`](engineering/plugin-system-plan.md) — phased bundled-plugin kernel, Tasks tool, supervised execution, Android/Gradle workflow, and external-host gate.
 - [`engineering/unpushed-head-commit-actions-plan.md`](engineering/unpushed-head-commit-actions-plan.md) — reviewed Undo/Drop actions for an unpublished latest commit, with exact native revalidation and no changelist-context emulation.
 - [`engineering/non-current-branch-sync-plan.md`](engineering/non-current-branch-sync-plan.md) — per-local-branch upstream divergence plus reviewed Update and Push without checking out the target branch.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.

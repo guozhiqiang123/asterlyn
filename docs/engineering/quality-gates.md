@@ -86,7 +86,7 @@ Performance budgets are guardrails. They may change only through a documented de
 - Never invoke repository-derived text through a shell.
 - Redact credentials and secrets from diagnostics.
 - Treat repository tasks and configuration as untrusted until workspace trust is granted.
-- Keep extension, remote-agent, and AI capabilities out of M1; each requires a threat model before implementation. The explicitly confirmed stable-channel updater is governed by [`in-app-update-plan.md`](in-app-update-plan.md).
+- Keep external extensions, remote-agent, and AI capabilities out of M1; each requires a threat model before implementation. Bundled project-tooling contributions remain compile-time reviewed application code and must use the restricted host boundary in [`ADR-0019`](../architecture/decisions/0019-plugin-contribution-kernel.md); they do not authorize external plugin loading. The explicitly confirmed stable-channel updater is governed by [`in-app-update-plan.md`](in-app-update-plan.md).
 - Generate dependency/SBOM evidence for release artifacts. A confirmed updater must verify the exact platform artifact against published Release metadata and must verify a platform signature whenever that release channel has an independent signing authority; unsigned/ad-hoc channels must disclose that residual trust limit instead of presenting a digest as a signature.
 
 ## Release channels

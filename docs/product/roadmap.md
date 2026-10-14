@@ -49,13 +49,13 @@ Introduce an LSP/DAP-agnostic service supervisor, per-language packs, diagnostic
 
 ## Stage 5 — Build, run, test, and debug workbench (months 20–34)
 
-Add task graphs, run configurations, test discovery/results, debugger sessions, coverage, profiling hooks, problem navigation, framework adapters, environment/secret handling, containers, and selected database/HTTP tooling.
+Add task graphs, run configurations, test discovery/results, debugger sessions, coverage, profiling hooks, problem navigation, framework adapters, environment/secret handling, containers, and selected database/HTTP tooling. A window-scoped bundled contribution kernel may be used here to prove project-tooling boundaries with first-party integrations such as Android/Gradle; this does not publish a stable third-party ABI.
 
 **Exit gate:** at least two project ecosystems can be opened, edited, built, tested, run, and debugged without leaving the product for routine work; task execution has cancellation, output limits, and trust boundaries.
 
 ## Stage 6 — Extensibility, remote work, collaboration, and AI (months 28–44)
 
-Stabilize capability APIs only after internal use. Add signed/sandboxed extensions, remote workspace agents, SSH/container environments, review collaboration, optional account sync, and replaceable AI providers. Extensions and AI receive explicit capabilities rather than ambient filesystem/process access.
+Stabilize capability APIs only after internal bundled-plugin use. Add signed/sandboxed external extensions, remote workspace agents, SSH/container environments, review collaboration, optional account sync, and replaceable AI providers. Extensions and AI receive explicit capabilities rather than ambient filesystem/process access.
 
 **Exit gate:** extensions survive compatibility tests across supported versions; remote failure modes do not corrupt local state; AI is optional and does not sit on the baseline path.
 
