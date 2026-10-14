@@ -368,7 +368,8 @@ class CompositeActivation implements Disposable {
 function validatePlugin(plugin: BundledPlugin): void {
   validatePluginId(plugin.id);
   validatePluginVersion(plugin.version);
-  if (typeof plugin.matches !== "function" || typeof plugin.activate !== "function") {
+  if (typeof plugin.matches !== "function" || typeof plugin.activate !== "function" ||
+    (plugin.evidenceKey !== undefined && typeof plugin.evidenceKey !== "function")) {
     throw new Error(`Invalid plugin descriptor: ${plugin.id}`);
   }
 }
@@ -387,7 +388,8 @@ function validateContribution(contribution: PluginContribution): void {
     if (contribution.kind === "provider" &&
       (!contribution.label.trim() || typeof contribution.snapshot !== "function" ||
         (contribution.subscribe !== undefined && typeof contribution.subscribe !== "function") ||
-        (contribution.refresh !== undefined && typeof contribution.refresh !== "function"))) {
+        (contribution.refresh !== undefined && typeof contribution.refresh !== "function") ||
+        (contribution.run !== undefined && typeof contribution.run !== "function"))) {
       throw new Error(`Invalid provider contribution: ${contribution.id}`);
     }
   } catch (error) {

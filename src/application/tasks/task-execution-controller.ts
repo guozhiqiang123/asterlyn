@@ -129,6 +129,30 @@ export class TaskExecutionController {
     await this.cancelRunOnce(runId, false);
   }
 
+  fail(identity: TaskWorkspaceIdentity, error: unknown): void {
+    this.requireCurrent(identity);
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.value = {
+      ...this.value,
+      status: "crashed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+    this.emit();
+  }
+
+  dismiss(identity: TaskWorkspaceIdentity): void {
+    this.requireCurrent(identity);
+    if (this.value.status === "queued" || this.value.status === "running") {
+      throw new Error("An active task must be cancelled before its output can be closed.");
+    }
+    this.prepareRequest += 1;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.value = emptyState(identity);
+    this.emit();
+  }
+
   dispose(): void {
     const runId = this.value.runId;
     if (runId && ["queued", "running"].includes(this.value.status)) void this.cancelRunOnce(runId, true);

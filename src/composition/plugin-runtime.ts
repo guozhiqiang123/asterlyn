@@ -7,7 +7,7 @@ import {
 } from "../application/plugins/index.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
-import type { PluginTaskExecutionResult, PluginTaskRefreshPlan } from "../application/plugins/plugin-types.ts";
+import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { PluginContributionRuntime } from "./plugin-contribution-runtime.ts";
 
 export interface PluginCompositionRuntimeOptions {
@@ -21,6 +21,11 @@ export interface PluginCompositionRuntimeOptions {
   readonly executeTaskRefresh: (
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRefreshPlan,
+    signal: AbortSignal,
+  ) => Promise<PluginTaskExecutionResult>;
+  readonly executeTaskRun?: (
+    identity: PluginWorkspaceIdentity,
+    plan: PluginTaskRunPlan,
     signal: AbortSignal,
   ) => Promise<PluginTaskExecutionResult>;
   readonly providerRefreshTitle?: (providerLabel: string) => string;
@@ -57,16 +62,20 @@ export class PluginCompositionRuntime {
     evidence: PluginWorkspaceCatalogEvidence,
   ): Promise<void> {
     if (!this.matches(identity) || this.disposed) return;
-    const evidenceKey = catalogEvidenceKey(evidence);
-    if (evidenceKey === this.evidenceKey) return;
     const plugins = await this.bundledPlugins();
     if (!this.matches(identity) || this.disposed) return;
+    const evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
+    if (evidenceKey === this.evidenceKey) return;
     await this.runtime.activate(identity, evidence, plugins);
     if (this.matches(identity) && !this.disposed) this.evidenceKey = evidenceKey;
   }
 
   refreshProviders(identity: PluginWorkspaceIdentity): Promise<void> {
     return this.contributions.refreshProviders(identity);
+  }
+
+  runTask(taskKey: string, identity: PluginWorkspaceIdentity): Promise<void> {
+    return this.contributions.runTask(taskKey, identity);
   }
 
 
@@ -95,4 +104,17 @@ function catalogEvidenceKey(evidence: PluginWorkspaceCatalogEvidence): string {
     evidence.truncated,
     evidence.files.map((file) => file.workspacePath).sort(),
   ]);
+}
+
+function pluginEvidenceKey(
+  identity: PluginWorkspaceIdentity,
+  evidence: PluginWorkspaceCatalogEvidence,
+  plugins: readonly BundledPlugin[],
+): string {
+  const fallback = catalogEvidenceKey(evidence);
+  return JSON.stringify(plugins.map((plugin) => {
+    if (!plugin.evidenceKey) return [plugin.id, fallback];
+    try { return [plugin.id, plugin.evidenceKey({ identity, evidence })]; }
+    catch { return [plugin.id, fallback]; }
+  }));
 }

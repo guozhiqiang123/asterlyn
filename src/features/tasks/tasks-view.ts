@@ -1,4 +1,4 @@
-import type { TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
+import type { TaskProviderUnavailableReason, TaskRunState } from "../../application/tasks/task-types.ts";
 import type { TasksState } from "./tasks-model.ts";
 
 export interface TasksCopy {
@@ -9,10 +9,14 @@ export interface TasksCopy {
   readonly unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>;
   readonly loading: string;
   readonly error: string;
+  readonly busy: string;
   readonly noResults: string;
   readonly queryPlaceholder: string;
   readonly run: string;
+  readonly retry: string;
+  readonly revealOutput: string;
   readonly notRunnable: string;
+  readonly status: Readonly<Record<string, string>>;
 }
 
 export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
@@ -27,10 +31,14 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   },
   loading: "Loading tasks…",
   error: "Task discovery failed.",
+  busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
   run: "Run task",
+  retry: "Retry task",
+  revealOutput: "Reveal output",
   notRunnable: "This task is not runnable.",
+  status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
 export function renderTasksView(state: TasksState, copy: TasksCopy = DEFAULT_TASKS_COPY): string {
@@ -38,7 +46,7 @@ export function renderTasksView(state: TasksState, copy: TasksCopy = DEFAULT_TAS
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
   const groups = groupEntries(state.visibleEntries);
   const list = state.status === "ready" && state.visibleEntries.length > 0
-    ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
+    ? `<div class="tasks-list" role="listbox" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${groups.map(([group, entries]) => `<section class="tasks-group" data-task-group="${escapeAttribute(group)}"><h3>${escapeHtml(group)}</h3>${entries.map((entry) => taskRow(entry.key, entry.providerLabel, entry.task.label, entry.task.description, entry.task.runnable, entry.task.disabledReason, entry.task.runState, entry.key === state.visibleEntries[state.selectedIndex]?.key, copy)).join("")}</section>`).join("")}</div>`
     : "";
   return `<section class="tasks-tool" role="region" aria-label="${escapeAttribute(copy.title)}"><header class="tasks-header"><h2>${escapeHtml(copy.title)}</h2><button type="button" data-tasks-action="refresh" aria-label="${escapeAttribute(copy.refresh)}" title="${escapeAttribute(copy.refresh)}">↻</button></header>${query}${status}${list}</section>`;
 }
@@ -64,11 +72,20 @@ function taskRow(
   description: string | undefined,
   runnable: boolean,
   disabledReason: string | undefined,
+  runState: TaskRunState | undefined,
   selected: boolean,
   copy: TasksCopy,
 ): string {
+  const active = runState === "queued" || runState === "running";
+  const terminal = runState === "succeeded" || runState === "failed" || runState === "cancelled" || runState === "crashed";
   const title = disabledReason ?? (runnable ? copy.run : copy.notRunnable);
-  return `<button type="button" role="option" class="tasks-row" data-task-key="${escapeAttribute(key)}" data-task-action="run" aria-selected="${selected}" aria-label="${escapeAttribute(label)}" title="${escapeAttribute(title)}" ${runnable ? "" : "disabled"}><strong>${escapeHtml(label)}</strong><small class="tasks-provider">${escapeHtml(providerLabel)}</small>${description ? `<small>${escapeHtml(description)}</small>` : ""}</button>`;
+  const status = runState && runState !== "idle"
+    ? `<small class="tasks-run-status" role="status">${escapeHtml(copy.status[runState] ?? runState)}</small>`
+    : "";
+  const actions = terminal
+    ? `<span class="tasks-row-actions"><button type="button" data-task-action="retry" title="${escapeAttribute(copy.retry)}">${escapeHtml(copy.retry)}</button><button type="button" data-task-action="reveal-output" title="${escapeAttribute(copy.revealOutput)}">${escapeHtml(copy.revealOutput)}</button></span>`
+    : "";
+  return `<div role="option" class="tasks-row" data-task-key="${escapeAttribute(key)}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(title)}" ${runnable && !active ? "" : "disabled"}><strong>${escapeHtml(label)}</strong><small class="tasks-provider">${escapeHtml(providerLabel)}</small>${description ? `<small>${escapeHtml(description)}</small>` : ""}${status}</button>${actions}</div>`;
 }
 
 function groupEntries(state: TasksState["visibleEntries"]): readonly [string, TasksState["visibleEntries"]][] {

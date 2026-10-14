@@ -1,6 +1,7 @@
 import type {
   TaskDescriptor,
   TaskProviderUnavailableReason,
+  TaskRunState,
 } from "../../application/tasks/task-types.ts";
 import {
   taskEntryKey,
@@ -206,6 +207,7 @@ function normalizeTask(candidate: TaskDescriptor): TaskDescriptor | null {
     runnable: candidate.runnable,
     description: boundedString(candidate.description),
     disabledReason: boundedString(candidate.disabledReason),
+    runState: isTaskRunState(candidate.runState) ? candidate.runState : undefined,
   };
 }
 
@@ -217,6 +219,11 @@ function boundedString(value: unknown): string | undefined {
 
 function isUnavailableReason(value: unknown): value is TaskProviderUnavailableReason {
   return value === "discovery-not-supported" || value === "evidence-incomplete" || value === "workspace-untrusted";
+}
+
+function isTaskRunState(value: unknown): value is TaskRunState {
+  return value === "idle" || value === "queued" || value === "running" ||
+    value === "succeeded" || value === "failed" || value === "cancelled" || value === "crashed";
 }
 
 function aggregateStatus(providers: readonly TaskProviderProjection[]): TasksStatus {

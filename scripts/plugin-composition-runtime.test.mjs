@@ -33,3 +33,23 @@ test("composition lazily loads plugins, deduplicates evidence, and rejects stale
   assert.deepEqual(providers.at(-1), []);
   runtime.dispose();
 });
+
+test("plugin-scoped evidence keys preserve activation across unrelated generated files", async () => {
+  let activations = 0;
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    loadPlugins: async () => [{
+      id: "fixture", version: "1.0.0", matches: () => true,
+      evidenceKey: ({ evidence: snapshot }) => JSON.stringify(snapshot.files.filter((file) => file.workspacePath === "settings.gradle")),
+      activate: () => { activations += 1; },
+    }],
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle", "app/build/outputs/app.apk"]));
+  assert.equal(activations, 1);
+  runtime.dispose();
+});

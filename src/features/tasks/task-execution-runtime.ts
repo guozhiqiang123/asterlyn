@@ -1,8 +1,17 @@
-import type { TaskExecutionController, TaskWorkspaceIdentity } from "../../application/tasks/task-execution-controller.ts";
+import type {
+  TaskExecutionController,
+  TaskExecutionState,
+  TaskWorkspaceIdentity,
+} from "../../application/tasks/task-execution-controller.ts";
 import type { TaskExecutionRequest } from "../../models.ts";
 import type { PluginTaskExecutionResult } from "../../application/plugins/plugin-types.ts";
 import { EN_US_TASK_EXECUTION_COPY, type TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
 import { renderTaskExecutionReview } from "./task-execution-view.ts";
+
+export interface TaskExecutionRuntimeOptions {
+  readonly retry?: (identity: TaskWorkspaceIdentity, taskKey: string) => void;
+  readonly visibilityChanged?: () => void;
+}
 
 export class TaskExecutionRuntime {
   private identity: TaskWorkspaceIdentity | null = null;
@@ -10,28 +19,53 @@ export class TaskExecutionRuntime {
   private readonly root: HTMLElement;
   private readonly controller: TaskExecutionController;
   private readonly copy: () => TaskExecutionCopy;
+  private readonly options: TaskExecutionRuntimeOptions;
   private readonly listeners = new AbortController();
   private focusReturn: HTMLElement | null = null;
-  private wasOpen = false;
+  private visible = false;
+  private terminalState: TaskExecutionState | null = null;
   private finished: ((result: PluginTaskExecutionResult) => void) | null = null;
-  constructor(root: HTMLElement, controller: TaskExecutionController, copy: () => TaskExecutionCopy = () => EN_US_TASK_EXECUTION_COPY) {
+
+  constructor(
+    root: HTMLElement,
+    controller: TaskExecutionController,
+    copy: () => TaskExecutionCopy = () => EN_US_TASK_EXECUTION_COPY,
+    options: TaskExecutionRuntimeOptions = {},
+  ) {
     this.root = root;
     this.controller = controller;
     this.copy = copy;
-    this.unsubscribe = controller.subscribe((state) => { this.render(); this.observeTerminal(state); });
-    root.addEventListener("click", (event) => { const target = (event.target as HTMLElement).closest<HTMLElement>("[data-task-execution-action]"); if (!target || !this.identity) return; if (target.dataset.taskExecutionAction === "confirm") void controller.confirm(this.identity).catch(() => undefined); else if (target.dataset.taskExecutionAction === "cancel") void controller.cancel(this.identity).catch(() => undefined); else if (target.dataset.taskExecutionAction === "trust") void controller.setWorkspaceTrust(this.identity, "trusted").catch(() => undefined); else if (target.dataset.taskExecutionAction === "deny") void controller.setWorkspaceTrust(this.identity, "denied").catch(() => undefined); }, { signal: this.listeners.signal });
+    this.options = options;
+    this.unsubscribe = controller.subscribe((state) => {
+      this.observeTerminal(state);
+      this.render();
+    });
+    root.addEventListener("click", (event) => {
+      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-task-execution-action]");
+      if (!target || !this.identity) return;
+      const action = target.dataset.taskExecutionAction;
+      if (action === "confirm") void controller.confirm(this.identity).catch((error) => this.fail(error));
+      else if (action === "cancel") void controller.cancel(this.identity).catch((error) => this.fail(error));
+      else if (action === "trust") void controller.setWorkspaceTrust(this.identity, "trusted").catch((error) => this.fail(error));
+      else if (action === "deny") void controller.setWorkspaceTrust(this.identity, "denied").catch((error) => this.fail(error));
+      else if (action === "close") this.dismiss();
+      else if (action === "retry") this.retry();
+    }, { signal: this.listeners.signal });
     root.addEventListener("keydown", (event) => {
-      if (!this.identity || !this.controller.state.review) return;
+      if (!this.identity || !this.visible) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        void this.controller.cancel(this.identity).catch(() => undefined);
+        if (isTerminal(this.displayState())) this.dismiss();
+        else void this.controller.cancel(this.identity).catch((error) => this.fail(error));
       } else if (event.key === "Tab") {
         const host = this.host();
         if (host) trapFocus(host, event);
       }
     }, { signal: this.listeners.signal });
   }
-  get active(): boolean { return this.finished !== null || this.controller.state.review !== null; }
+
+  get active(): boolean { return this.visible || this.finished !== null; }
+
   activate(identity: TaskWorkspaceIdentity): void {
     if (this.finished) {
       const finished = this.finished;
@@ -39,38 +73,53 @@ export class TaskExecutionRuntime {
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was superseded by a workspace change." });
     }
     this.identity = identity;
+    this.visible = false;
+    this.terminalState = null;
     this.controller.activateWorkspace(identity);
     this.render();
   }
-  async prepare(identity: TaskWorkspaceIdentity, request: TaskExecutionRequest, finished: (result: PluginTaskExecutionResult) => void): Promise<void> {
+
+  async prepare(
+    identity: TaskWorkspaceIdentity,
+    request: TaskExecutionRequest,
+    finished: (result: PluginTaskExecutionResult) => void,
+  ): Promise<void> {
     if (this.finished) throw new Error("A task execution review is already active.");
     this.identity = identity;
     this.finished = finished;
-    try { await this.controller.prepare(identity, request); } catch (error) {
+    this.terminalState = null;
+    this.open();
+    try {
+      await this.controller.prepare(identity, request);
+    } catch (error) {
       if (this.finished === finished) this.finished = null;
+      this.visible = false;
+      this.options.visibilityChanged?.();
       throw error;
     }
-    if (this.finished !== finished) {
-      return;
-    }
-    this.render();
+    if (this.finished === finished) this.render();
   }
+
+  reveal(taskKey: string, identity: TaskWorkspaceIdentity): boolean {
+    const review = this.terminalState?.review;
+    if (!review || !sameIdentity(this.identity, identity) || executionTaskKey(review) !== taskKey) return false;
+    this.open();
+    this.render();
+    return true;
+  }
+
   render(): void {
     const host = this.host();
     if (!host) return;
-    const open = this.controller.state.review !== null;
-    if (open && !this.wasOpen) {
-      this.focusReturn = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const state = this.displayState();
+    if (!this.visible || !state?.review) {
+      if (host.querySelector(".task-execution-review")) host.replaceChildren();
+      return;
     }
-    if (!open && !this.wasOpen) return;
     const focusedAction = host.contains(document.activeElement)
       ? (document.activeElement as HTMLElement).dataset.taskExecutionAction ?? null
       : null;
-    this.wasOpen = open;
-    host.innerHTML = renderTaskExecutionReview(this.controller.state, this.copy());
-    if (!open) {
-      return;
-    }
+    host.innerHTML = renderTaskExecutionReview(state, this.copy());
     queueMicrotask(() => {
       const preferred = focusedAction
         ? host.querySelector<HTMLElement>(`[data-task-execution-action="${focusedAction}"]`)
@@ -78,16 +127,19 @@ export class TaskExecutionRuntime {
       (preferred ?? host.querySelector<HTMLElement>("button:not([disabled])"))?.focus();
     });
   }
+
   async cancel(identity: TaskWorkspaceIdentity): Promise<void> {
     if (this.finished && this.controller.state.status === "idle") {
       const finished = this.finished;
       this.finished = null;
-      this.controller.clear();
+      this.visible = false;
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was cancelled." });
+      this.options.visibilityChanged?.();
       return;
     }
     await this.controller.cancel(identity);
   }
+
   restoreFocus(fallback?: HTMLElement | null): void {
     const target = this.focusReturn;
     this.focusReturn = null;
@@ -96,26 +148,85 @@ export class TaskExecutionRuntime {
       else fallback?.focus();
     });
   }
+
   dispose(): void {
     if (this.finished) {
       const finished = this.finished;
       this.finished = null;
       finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was disposed." });
     }
+    this.visible = false;
+    this.terminalState = null;
     this.listeners.abort();
     this.unsubscribe();
     this.controller.dispose();
     this.host()?.replaceChildren();
-    this.wasOpen = false;
     this.restoreFocus();
   }
 
-  private observeTerminal(state: import("../../application/tasks/task-execution-controller.ts").TaskExecutionState): void {
-    if (!this.finished || (!["succeeded", "failed", "cancelled", "crashed"].includes(state.status) && state.status !== "idle")) return;
+  private open(): void {
+    if (!this.visible) {
+      this.focusReturn = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      this.visible = true;
+      this.options.visibilityChanged?.();
+    }
+  }
+
+  private dismiss(): void {
+    const identity = this.identity;
+    if (!identity || !isTerminal(this.displayState())) return;
+    this.visible = false;
+    this.controller.dismiss(identity);
+    this.options.visibilityChanged?.();
+    const fallback = this.root.querySelector<HTMLElement>("[data-tasks-action=refresh]");
+    this.restoreFocus(fallback);
+  }
+
+  private retry(): void {
+    const identity = this.identity;
+    const review = this.terminalState?.review;
+    if (!identity || !review) return;
+    const taskKey = executionTaskKey(review);
+    this.dismiss();
+    queueMicrotask(() => this.options.retry?.(identity, taskKey));
+  }
+
+  private fail(error: unknown): void {
+    const identity = this.identity;
+    if (!identity) return;
+    const localized = error instanceof Error && error.message.includes("already running for this workspace")
+      ? new Error(this.copy().busy)
+      : error;
+    try { this.controller.fail(identity, localized); }
+    catch { /* a stale failure cannot replace the current workspace */ }
+  }
+
+  private observeTerminal(state: TaskExecutionState): void {
+    if (!this.finished) return;
+    if (state.status === "idle") {
+      const finished = this.finished;
+      this.finished = null;
+      this.visible = false;
+      finished({ status: "cancelled", outputs: [], truncated: false, error: "Task execution was cancelled." });
+      this.options.visibilityChanged?.();
+      const fallback = this.root.querySelector<HTMLElement>("[data-tasks-action=refresh]");
+      this.restoreFocus(fallback);
+      return;
+    }
+    if (!isTerminal(state)) return;
+    this.terminalState = state;
     const finished = this.finished;
     this.finished = null;
-    this.controller.clear();
-    finished({ status: state.status === "idle" ? "cancelled" : state.status as "succeeded" | "failed" | "cancelled" | "crashed", outputs: state.outputs, truncated: state.outputTruncated, error: state.error });
+    finished({
+      status: state.status,
+      outputs: state.outputs,
+      truncated: state.outputTruncated,
+      error: state.error,
+    });
+  }
+
+  private displayState(): TaskExecutionState | null {
+    return this.controller.state.review ? this.controller.state : this.terminalState;
   }
 
   private host(): HTMLElement | null {
@@ -123,6 +234,18 @@ export class TaskExecutionRuntime {
       ? this.root
       : this.root.querySelector<HTMLElement>("#tasks-tool-host");
   }
+}
+
+function isTerminal(state: TaskExecutionState | null): state is TaskExecutionState & { readonly status: PluginTaskExecutionResult["status"] } {
+  return state !== null && (state.status === "succeeded" || state.status === "failed" || state.status === "cancelled" || state.status === "crashed");
+}
+
+function executionTaskKey(review: NonNullable<TaskExecutionState["review"]>): string {
+  return `${review.pluginId}.${review.providerId}:${review.taskId}`;
+}
+
+function sameIdentity(left: TaskWorkspaceIdentity | null, right: TaskWorkspaceIdentity): boolean {
+  return left?.root === right.root && left.generation === right.generation;
 }
 
 function trapFocus(host: HTMLElement, event: KeyboardEvent): void {

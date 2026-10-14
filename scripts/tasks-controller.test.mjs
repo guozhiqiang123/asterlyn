@@ -89,3 +89,14 @@ test("malformed and duplicate provider projections are isolated", () => {
   assert.deepEqual(controller.state.entries.map((entry) => entry.key), ["good:ok"]);
   assert.equal(controller.state.providers[0].snapshot.status, "error");
 });
+
+test("controller preserves only bounded known task run states", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  controller.acceptProviders(identity, [{ id: "p", label: "P", snapshot: ready([
+    task("running", "running", "Build", { runState: "running" }),
+    task("invalid", "invalid", "Build", { runState: "invented" }),
+  ]) }]);
+  assert.equal(controller.state.entries[0].task.runState, "running");
+  assert.equal(controller.state.entries[1].task.runState, undefined);
+});

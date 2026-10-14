@@ -12,6 +12,7 @@ import {
   type AndroidGradleEvidenceSnapshot,
 } from "./detector.ts";
 import { buildGradleWrapperRequest, parseGradleTasksOutput, type GradleTaskDiscoveryResult } from "./discovery.ts";
+import { applyGradleTaskResult, buildGradleTaskRunPlan, runnableGradleSnapshot, setGradleTaskRunState } from "./execution.ts";
 
 export const ANDROID_GRADLE_PLUGIN_ID = "dev.asterlyn.android-gradle";
 
@@ -25,6 +26,18 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
   id: ANDROID_GRADLE_PLUGIN_ID,
   version: "0.1.0",
   matches: (context: PluginMatchContext) => detectAndroidGradlePluginEvidence(context)?.android === true,
+  evidenceKey: (context: PluginMatchContext) => {
+    const evidence = detectAndroidGradlePluginEvidence(context);
+    return evidence ? JSON.stringify([
+      evidence.platform,
+      evidence.bounded,
+      evidence.catalogTruncated,
+      evidence.gradle,
+      evidence.android,
+      evidence.wrapper,
+      evidence.evidence,
+    ]) : "unsupported";
+  },
   activate: (context: PluginActivationContext) => {
     const detection = detectAndroidGradlePluginEvidence(context);
     if (!detection?.android) return;
@@ -60,11 +73,22 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
               if (output.stream !== "stdout") continue;
               try { const binary = atob(output.dataBase64); for (let index = 0; index < binary.length; index += 1) bytes.push(binary.charCodeAt(index)); } catch { snapshot = { status: "error", tasks: [], error: "Gradle task discovery output was invalid." }; return; }
             }
-            snapshot = parseGradleTasksOutput(new Uint8Array(bytes));
+            snapshot = runnableGradleSnapshot(parseGradleTasksOutput(new Uint8Array(bytes)));
           },
         };
         snapshot = { status: "loading", tasks: [] };
         return plan;
+      },
+      run: (taskId: string) => {
+        const plan = buildGradleTaskRunPlan(detection, snapshot, taskId);
+        if (!plan) return null;
+        snapshot = setGradleTaskRunState(snapshot, taskId, "queued");
+        return {
+          request: plan,
+          apply: (result: PluginTaskExecutionResult) => {
+            snapshot = applyGradleTaskResult(snapshot, taskId, result);
+          },
+        };
       },
     });
     context.contribute({

@@ -52,3 +52,17 @@ test("unavailable reasons render localized copy instead of internal enum codes",
   assert.match(html, /Untrusted workspace/);
   assert.doesNotMatch(html, /workspace-untrusted/);
 });
+
+test("terminal tasks expose localized status, retry, and output actions", () => {
+  const terminalCopy = { ...copy, retry: "Retry", revealOutput: "Reveal", status: { failed: "Failed" } };
+  const entry = { key: "p:failed", providerId: "p", providerLabel: "P", task: {
+    id: "failed", label: "assembleDebug", group: "Build", runnable: true, runState: "failed",
+  } };
+  const html = renderTasksView({
+    identity: { root: "/project", generation: 1 }, status: "ready", providers: [],
+    entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null,
+  }, terminalCopy);
+  assert.match(html, /role="status">Failed/);
+  assert.match(html, /data-task-action="retry"/);
+  assert.match(html, /data-task-action="reveal-output"/);
+});

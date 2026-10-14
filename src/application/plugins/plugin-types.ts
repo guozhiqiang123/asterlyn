@@ -52,6 +52,8 @@ export interface PluginProviderContribution {
   readonly snapshot: () => TaskProviderSnapshot;
   readonly subscribe?: (listener: () => void) => Disposable;
   readonly refresh?: () => PluginTaskRefreshPlan | null | Promise<PluginTaskRefreshPlan | null>;
+  /** Returns a host-reviewed execution plan for a task. Plugins never receive the bridge. */
+  readonly run?: (taskId: string) => PluginTaskRunPlan | null | Promise<PluginTaskRunPlan | null>;
 }
 
 export interface PluginTaskExecutionResult {
@@ -65,6 +67,9 @@ export interface PluginTaskRefreshPlan {
   readonly request: TaskExecutionRequest;
   readonly apply: (result: PluginTaskExecutionResult) => void;
 }
+
+/** Execution plans are deliberately the only value a provider may return to the host. */
+export interface PluginTaskRunPlan extends PluginTaskRefreshPlan {}
 
 export type PluginContribution = PluginCommandContribution | PluginProviderContribution;
 
@@ -83,6 +88,7 @@ export interface BundledPlugin {
   readonly id: string;
   readonly version: string;
   readonly matches: (context: PluginMatchContext) => boolean;
+  readonly evidenceKey?: (context: PluginMatchContext) => string;
   readonly activate: (context: PluginActivationContext) => void | Disposable | Promise<void | Disposable>;
 }
 

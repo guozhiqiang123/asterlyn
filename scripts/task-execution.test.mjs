@@ -184,6 +184,39 @@ test("review UI shows canonical executable, trust actions, ARIA, and merged UTF-
   assert.doesNotMatch(html, /<script>/u);
 });
 
+test("terminal execution UI keeps errors and exposes retry and close output", () => {
+  const html = renderTaskExecutionReview({
+    status: "failed", identity, review, runId: "run-terminal", outputs: [], outputBytes: 0,
+    outputTruncated: false, error: "Gradle failed", lastSequence: 2,
+  }, EN_US_TASK_EXECUTION_COPY);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(html, /Gradle failed/);
+  assert.match(html, /data-task-execution-action="retry"/);
+  assert.match(html, /data-task-execution-action="close"/);
+  assert.doesNotMatch(html, /data-task-execution-action="confirm"/);
+});
+
+test("host failures become dismissible terminal state without losing workspace identity", async () => {
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => { throw new Error("a task is already running for this workspace"); },
+    cancelTaskExecution: async () => {},
+    subscribeTaskSession: async () => () => {},
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [] });
+  await assert.rejects(controller.confirm(identity), /already running/);
+  controller.fail(identity, new Error("a task is already running for this workspace"));
+  assert.equal(controller.state.status, "crashed");
+  controller.dismiss(identity);
+  assert.equal(controller.state.status, "idle");
+  assert.deepEqual(controller.state.identity, identity);
+});
+
 test("task review runtime owns escape, focus trap, and focus restoration", async () => {
   const source = await readFile(
     new URL("../src/features/tasks/task-execution-runtime.ts", import.meta.url),

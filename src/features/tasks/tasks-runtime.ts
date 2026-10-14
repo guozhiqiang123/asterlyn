@@ -5,6 +5,7 @@ import { renderTasksView, type TasksCopy } from "./tasks-view.ts";
 export interface TasksRuntimeOptions {
   readonly copy?: () => TasksCopy;
   readonly runTask?: (taskKey: string, identity: TasksWorkspaceIdentity) => void | Promise<void>;
+  readonly revealOutput?: (taskKey: string, identity: TasksWorkspaceIdentity) => void;
   readonly refresh?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly error?: (error: unknown) => void;
   readonly shouldRender?: () => boolean;
@@ -78,8 +79,11 @@ export class TasksRuntime {
       if (action === "refresh") void this.refresh();
       const row = target.closest<HTMLElement>("[data-task-key]");
       if (row) {
-        this.controller.selectKey(row.dataset.taskKey ?? "");
-        if (row.dataset.taskAction === "run") void this.run(row.dataset.taskKey ?? "");
+        const taskKey = row.dataset.taskKey ?? "";
+        this.controller.selectKey(taskKey);
+        const taskAction = target.closest<HTMLElement>("[data-task-action]")?.dataset.taskAction;
+        if (taskAction === "run" || taskAction === "retry") void this.run(taskKey);
+        else if (taskAction === "reveal-output") this.revealOutput(taskKey);
       }
     }, { signal });
     host.addEventListener("keydown", (event) => {
@@ -105,12 +109,18 @@ export class TasksRuntime {
     try { await this.options.refresh(identity); } catch (error) { this.options.error?.(error); }
   }
 
+  private revealOutput(taskKey: string): void {
+    const identity = this.controller.state.identity;
+    if (identity) this.options.revealOutput?.(taskKey, identity);
+  }
+
   private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-tool-host"); }
 }
 
 export type TasksFocusSnapshot =
   | { readonly kind: "query"; readonly start: number | null; readonly end: number | null }
   | { readonly kind: "list" }
+  | { readonly kind: "task"; readonly key: string; readonly action: string }
   | null;
 
 export function captureTasksFocus(host: HTMLElement): TasksFocusSnapshot {
@@ -121,6 +131,8 @@ export function captureTasksFocus(host: HTMLElement): TasksFocusSnapshot {
     return { kind: "query", start: input.selectionStart, end: input.selectionEnd };
   }
   if (active.matches("[role=option], [role=listbox]")) return { kind: "list" };
+  const row = active.closest<HTMLElement>("[data-task-key]");
+  if (row) return { kind: "task", key: row.dataset.taskKey ?? "", action: active.dataset.taskAction ?? "run" };
   return null;
 }
 
@@ -131,6 +143,12 @@ export function restoreTasksFocus(host: HTMLElement, snapshot: TasksFocusSnapsho
     if (!input) return;
     input.focus({ preventScroll: true });
     if (snapshot.start !== null && snapshot.end !== null) input.setSelectionRange(snapshot.start, snapshot.end);
+    return;
+  }
+  if (snapshot.kind === "task") {
+    const rows = Array.from(host.querySelectorAll<HTMLElement>("[data-task-key]"));
+    const row = rows.find((candidate) => candidate.dataset.taskKey === snapshot.key);
+    (row?.querySelector<HTMLElement>(`[data-task-action="${snapshot.action}"]`) ?? row?.querySelector<HTMLElement>("[data-task-action]"))?.focus({ preventScroll: true });
     return;
   }
   const selected = host.querySelector<HTMLElement>('[role="option"][aria-selected="true"]') ??

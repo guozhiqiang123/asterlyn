@@ -8,8 +8,11 @@ export const ANDROID_GRADLE_DISCOVERY_LIMITS = Object.freeze({
   maxTasks: 512,
 });
 
+export const ANDROID_GRADLE_EXECUTION_FLAGS = Object.freeze([
+  "--console=plain", "--no-daemon", "--no-scan",
+]);
 export const ANDROID_GRADLE_TASK_ARGS = Object.freeze([
-  "tasks", "--all", "--console=plain", "--no-daemon", "--no-scan",
+  "tasks", "--all", ...ANDROID_GRADLE_EXECUTION_FLAGS,
 ]);
 
 export interface GradleTaskDescriptor extends TaskDescriptor {

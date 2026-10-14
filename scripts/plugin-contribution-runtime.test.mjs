@@ -184,6 +184,99 @@ test("a provider refresh command is localized by the host and targets its declar
   await runtime.dispose();
 });
 
+test("task execution uses the current provider identity and reports concurrent requests as busy", async () => {
+  const runtime = new PluginRuntime();
+  let snapshot = { status: "ready", tasks: [{ id: ":app:assembleDebug", label: "assembleDebug", group: "Build", runnable: true, runState: "idle" }] };
+  let finishExecution;
+  let applied = 0;
+  const projections = [];
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, providers) => projections.push(providers),
+    reportError: (error) => { throw error; },
+    executeTaskRefresh: async () => { throw new Error("not used"); },
+    executeTaskRun: async () => new Promise((resolve) => { finishExecution = resolve; }),
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle", snapshot: () => snapshot,
+    run: (taskId) => {
+      if (taskId !== ":app:assembleDebug") return null;
+      snapshot = { ...snapshot, tasks: snapshot.tasks.map((task) => ({ ...task, runState: "queued" })) };
+      return {
+        request: { pluginId: "android", providerId: "tasks", taskId, label: "assembleDebug", executablePath: "gradlew", args: [taskId] },
+        apply: (result) => { applied += 1; snapshot = { ...snapshot, tasks: snapshot.tasks.map((task) => ({ ...task, runState: result.status })) }; },
+      };
+    },
+  }))]);
+  const running = adapter.runTask("android.tasks::app:assembleDebug", identity);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(projections.at(-1)[0].snapshot.tasks[0].runState, "queued");
+  await assert.rejects(adapter.runTask("android.tasks::app:assembleDebug", identity), { name: "PluginTaskBusyError" });
+  finishExecution({ status: "succeeded", outputs: [], truncated: false, error: null });
+  await running;
+  assert.equal(applied, 1);
+  assert.equal(projections.at(-1)[0].snapshot.tasks[0].runState, "succeeded");
+  adapter.dispose();
+  await runtime.dispose();
+});
+
+test("task plans cannot substitute another task identity", async () => {
+  const runtime = new PluginRuntime();
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportError: () => undefined,
+    executeTaskRefresh: async () => { throw new Error("not used"); },
+    executeTaskRun: async () => { throw new Error("invalid plans must not execute"); },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "ready", tasks: [{ id: "clean", label: "clean", group: "Build", runnable: true }] }),
+    run: () => ({
+      request: { pluginId: "android", providerId: "tasks", taskId: "assemble", label: "assemble", executablePath: "gradlew", args: ["assemble"] },
+      apply: () => undefined,
+    }),
+  }))]);
+  await assert.rejects(adapter.runTask("android.tasks:clean", identity), /Invalid task execution plan/);
+  adapter.dispose();
+  await runtime.dispose();
+});
+
+test("workspace replacement aborts an active task and drops its stale terminal result", async () => {
+  const runtime = new PluginRuntime();
+  let applied = 0;
+  let aborted = 0;
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportError: (error) => { throw error; },
+    executeTaskRefresh: async () => { throw new Error("not used"); },
+    executeTaskRun: async (_identity, _plan, signal) => new Promise((resolve) => signal.addEventListener("abort", () => {
+      aborted += 1;
+      resolve({ status: "cancelled", outputs: [], truncated: false, error: null });
+    }, { once: true })),
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "ready", tasks: [{ id: "clean", label: "clean", group: "Build", runnable: true }] }),
+    run: () => ({
+      request: { pluginId: "android", providerId: "tasks", taskId: "clean", label: "clean", executablePath: "gradlew", args: ["clean"] },
+      apply: () => { applied += 1; },
+    }),
+  }))]);
+  const running = adapter.runTask("android.tasks:clean", identity);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  adapter.activateWorkspace({ root: "/next", generation: 3 });
+  await running;
+  assert.equal(aborted, 1);
+  assert.equal(applied, 0);
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 function plugin(id, activate) {
   return { id, version: "1.0.0", matches: () => true, activate };
 }

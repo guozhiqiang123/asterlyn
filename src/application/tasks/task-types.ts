@@ -1,5 +1,14 @@
 export type TaskProviderStatus = "unavailable" | "loading" | "ready" | "error";
 
+export type TaskRunState =
+  | "idle"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "crashed";
+
 export type TaskProviderUnavailableReason =
   | "discovery-not-supported"
   | "evidence-incomplete"
@@ -12,6 +21,7 @@ export interface TaskDescriptor {
   readonly description?: string;
   readonly runnable: boolean;
   readonly disabledReason?: string;
+  readonly runState?: TaskRunState;
 }
 
 /** A bounded, declarative projection. It grants no process or filesystem authority. */

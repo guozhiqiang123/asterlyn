@@ -146,14 +146,13 @@
   width: 100%;
   min-height: 38px;
   box-sizing: border-box;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px;
-  padding: 6px 12px;
+  padding: 0 8px 0 10px;
   border: 0;
   border-left: 2px solid transparent;
   color: var(--text-soft);
   background: transparent;
-  cursor: pointer;
   text-align: left;
 }
 
@@ -164,18 +163,30 @@
   color: var(--text);
 }
 
-.tasks-row:focus-visible {
+.tasks-row:focus-within {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 
-.tasks-row:disabled {
-  cursor: default;
-  opacity: 0.5;
+.tasks-row-primary {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px 2px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
 }
 
-.tasks-row strong,
-.tasks-row small {
+.tasks-row-primary:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.tasks-row-primary strong,
+.tasks-row-primary small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -184,6 +195,30 @@
 .tasks-row strong { font-size: 12px; font-weight: 550; }
 .tasks-row small { color: var(--text-muted); font-size: 10px; }
 .tasks-row .tasks-provider { color: var(--text-faint); }
+.tasks-row .tasks-run-status { color: var(--accent); }
+
+.tasks-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tasks-row-actions button {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--surface-inset);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tasks-row-actions button:hover,
+.tasks-row-actions button:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}
 
 .tasks-message {
   margin: 22px 14px;

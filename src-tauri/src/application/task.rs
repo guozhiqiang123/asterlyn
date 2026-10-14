@@ -185,20 +185,22 @@ impl TaskManager {
                 );
                 let result = collect(child, cancelled, &run, &root, sink.clone());
                 manager.finish(&root, &run);
-                if let Err(message) = result {
-                    emit(
-                        &sink,
-                        TaskSessionEvent::Status {
-                            protocol_version: PROTOCOL_VERSION,
-                            run_id: run,
-                            workspace_root: root.to_string_lossy().into_owned(),
-                            sequence: 2,
-                            status: asterlyn_task::TaskStatus::Crashed,
-                            message: Some(message),
-                            exit_code: None,
-                        },
-                    );
-                }
+                let (status, message, exit_code) = match result {
+                    Ok((status, exit_code)) => (status, None, exit_code),
+                    Err(message) => (asterlyn_task::TaskStatus::Crashed, Some(message), None),
+                };
+                emit(
+                    &sink,
+                    TaskSessionEvent::Status {
+                        protocol_version: PROTOCOL_VERSION,
+                        run_id: run,
+                        workspace_root: root.to_string_lossy().into_owned(),
+                        sequence: 0,
+                        status,
+                        message,
+                        exit_code,
+                    },
+                );
             });
             Ok(run_id)
         }
@@ -378,7 +380,7 @@ fn collect(
     run_id: &str,
     root: &Path,
     sink: Arc<SerialSink>,
-) -> Result<(), String> {
+) -> Result<(asterlyn_task::TaskStatus, Option<i32>), String> {
     let (stdout, stderr) = {
         let mut child_value = child.lock().map_err(lock_error)?;
         let value = child_value
@@ -423,25 +425,14 @@ fn collect(
             .join()
             .map_err(|_| "task output collector panicked".to_string())??;
     }
-    emit(
-        &sink,
-        TaskSessionEvent::Status {
-            protocol_version: PROTOCOL_VERSION,
-            run_id: run_id.to_string(),
-            workspace_root: root.to_string_lossy().into_owned(),
-            sequence: 0,
-            status: if cancelled.load(Ordering::Relaxed) {
-                asterlyn_task::TaskStatus::Cancelled
-            } else if status.success() {
-                asterlyn_task::TaskStatus::Succeeded
-            } else {
-                asterlyn_task::TaskStatus::Failed
-            },
-            message: None,
-            exit_code: status.code(),
-        },
-    );
-    Ok(())
+    let terminal = if cancelled.load(Ordering::Relaxed) {
+        asterlyn_task::TaskStatus::Cancelled
+    } else if status.success() {
+        asterlyn_task::TaskStatus::Succeeded
+    } else {
+        asterlyn_task::TaskStatus::Failed
+    };
+    Ok((terminal, status.code()))
 }
 
 fn kill_pid(pid: u32) {
@@ -852,6 +843,94 @@ mod tests {
             .sum();
         assert_eq!(delivered, MAX_OUTPUT_BYTES);
         assert_eq!(delivered as u64 + omitted, 3 * 1024 * 1024);
+    }
+
+    #[test]
+    fn a_workspace_rejects_a_second_active_task_without_replacing_the_first() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(directory.path()).unwrap();
+        write_executable(&root, "tool", "sleep 30");
+        let manager = TaskManager::default();
+        let first = prepare(&manager, "window-a", &root, 1, "tool", vec![]);
+        let second = prepare(&manager, "window-b", &root, 1, "tool", vec![]);
+        let (first_sink, first_events) = event_sink();
+        let (second_sink, _) = event_sink();
+        manager
+            .start(
+                "window-a",
+                &root,
+                1,
+                &first.review_id,
+                TrustState::Trusted,
+                first_sink,
+            )
+            .unwrap();
+        let error = manager
+            .start(
+                "window-b",
+                &root,
+                1,
+                &second.review_id,
+                TrustState::Trusted,
+                second_sink,
+            )
+            .unwrap_err();
+        assert_eq!(error, "a task is already running for this workspace");
+        manager.cancel_owner("window-a");
+        assert!(matches!(
+            wait_for_terminal(&first_events),
+            TaskSessionEvent::Status {
+                status: TaskStatus::Cancelled,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn gradle_shaped_tasks_can_retry_immediately_after_terminal_delivery() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(directory.path()).unwrap();
+        write_executable(
+            &root,
+            "gradlew",
+            "case \"$1\" in clean|:app:assembleDebug) printf '%s' \"$1\" ;; *) exit 9 ;; esac",
+        );
+        let manager = TaskManager::default();
+        for task in ["clean", ":app:assembleDebug"] {
+            let review = prepare(
+                &manager,
+                "window-a",
+                &root,
+                1,
+                "gradlew",
+                vec![
+                    task.into(),
+                    "--console=plain".into(),
+                    "--no-daemon".into(),
+                    "--no-scan".into(),
+                ],
+            );
+            let (sink, events) = event_sink();
+            manager
+                .start(
+                    "window-a",
+                    &root,
+                    1,
+                    &review.review_id,
+                    TrustState::Trusted,
+                    sink,
+                )
+                .unwrap();
+            assert!(matches!(
+                wait_for_terminal(&events),
+                TaskSessionEvent::Status {
+                    status: TaskStatus::Succeeded,
+                    exit_code: Some(0),
+                    ..
+                }
+            ));
+            assert_eq!(String::from_utf8(wait_for_stdout(&events)).unwrap(), task);
+        }
     }
 
     #[test]

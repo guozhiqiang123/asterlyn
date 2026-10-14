@@ -201,7 +201,7 @@ import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/w
 import { hideWorkspaceToolWindows } from "./shell/workspace-availability.ts";
 import { WindowSession } from "./application/window-session";
 import { approveProjectWindowClose } from "./application/window-close-gate.ts";
-import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts"; import { PluginTasksRuntime } from "./composition/plugin-tasks-runtime.ts";
+import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts"; import { PluginTasksRuntime } from "./composition/plugin-tasks-runtime.ts"; import { reconcileAfterSuccessfulTask } from "./composition/post-task-reconciliation.ts";
 import { historyPathApplyShortcut } from "./composition/history-shortcut-presentation.ts";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
 import { renderRepositoryProjectionSlices } from "./application/repository-projection-renderer.ts";
@@ -625,7 +625,7 @@ export class AsterlynApp {
       if (this.filesEditorRuntime.commands.state.mode === "commands") this.renderCommandSurface(true);
       if (this.shellState.page === "settings" && this.settingsState.section === "keybindings") this.renderSettingsPage();
     });
-    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge });
+    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, recentTaskStorage: window.localStorage, reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),

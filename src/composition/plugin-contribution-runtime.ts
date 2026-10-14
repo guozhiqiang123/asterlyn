@@ -8,6 +8,7 @@ import type {
   PluginContributionRegistry,
   PluginTaskExecutionResult,
   PluginTaskRefreshPlan,
+  PluginTaskRunPlan,
   PluginWorkspaceIdentity,
   RegisteredPluginContribution,
 } from "../application/plugins/index.ts";
@@ -29,6 +30,11 @@ export interface PluginContributionRuntimeOptions {
     plan: PluginTaskRefreshPlan,
     signal: AbortSignal,
   ) => Promise<PluginTaskExecutionResult>;
+  readonly executeTaskRun?: (
+    identity: PluginWorkspaceIdentity,
+    plan: PluginTaskRunPlan,
+    signal: AbortSignal,
+  ) => Promise<PluginTaskExecutionResult>;
   readonly providerRefreshTitle?: (providerLabel: string) => string;
 }
 
@@ -43,6 +49,7 @@ export class PluginContributionRuntime {
   private disposed = false;
   private refreshInFlight: Promise<void> | null = null;
   private refreshAbort: AbortController | null = null;
+  private runInFlight: Promise<void> | null = null;
 
   constructor(
     registry: PluginContributionRegistry,
@@ -58,16 +65,61 @@ export class PluginContributionRuntime {
     this.abortRefresh();
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
     this.refreshInFlight = null;
+    this.runInFlight = null;
     this.options.replaceProviders(this.identity, []);
   }
 
   async refreshProviders(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
     if (!this.matches(identity)) return;
+    if (this.runInFlight) throw new PluginTaskBusyError();
     if (this.refreshInFlight) return this.refreshInFlight;
     const operation = this.refreshProvidersSerialized(identity, providerQualifiedId);
     this.refreshInFlight = operation;
-    void operation.finally(() => { if (this.refreshInFlight === operation) this.refreshInFlight = null; });
+    void operation.then(
+      () => { if (this.refreshInFlight === operation) this.refreshInFlight = null; },
+      () => { if (this.refreshInFlight === operation) this.refreshInFlight = null; },
+    );
     return this.refreshInFlight;
+  }
+
+  async runTask(taskKey: string, identity: PluginWorkspaceIdentity): Promise<void> {
+    if (!this.matches(identity)) return;
+    if (this.refreshInFlight || this.runInFlight) throw new PluginTaskBusyError();
+    const [providerQualifiedId, ...taskParts] = taskKey.split(":");
+    const taskId = taskParts.join(":");
+    if (!providerQualifiedId) throw new Error(`Task is not runnable: ${taskKey}`);
+    const entry = this.providers.get(providerQualifiedId);
+    const contribution = entry?.contribution;
+    if (!contribution?.run || !taskId) throw new Error(`Task is not runnable: ${taskKey}`);
+    const snapshot = snapshotSafely(contribution, this.options.reportError);
+    const task = snapshot.status === "ready" ? snapshot.tasks.find((candidate) => candidate.id === taskId) : null;
+    if (!task || !task.runnable) throw new Error(`Task is not runnable: ${taskKey}`);
+    const operation = this.runTaskSerialized(identity, contribution, taskId);
+    this.runInFlight = operation;
+    void operation.then(
+      () => { if (this.runInFlight === operation) this.runInFlight = null; },
+      () => { if (this.runInFlight === operation) this.runInFlight = null; },
+    );
+    return operation;
+  }
+
+  private async runTaskSerialized(identity: PluginWorkspaceIdentity, contribution: RegisteredProvider, taskId: string): Promise<void> {
+    if (!this.options.executeTaskRun) throw new Error("Task execution is unavailable");
+    const plan = await contribution.run?.(taskId);
+    if (!this.matches(identity)) return;
+    if (!plan || !validTaskPlan(plan, contribution, taskId)) throw new Error(`Invalid task execution plan from ${contribution.qualifiedId}`);
+    this.publishProviders();
+    const abort = new AbortController();
+    this.refreshAbort = abort;
+    try {
+      const result = await this.options.executeTaskRun(identity, plan, abort.signal);
+      if (this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) {
+        plan.apply(result);
+        this.publishProviders();
+      }
+    } finally {
+      if (this.refreshAbort === abort) this.refreshAbort = null;
+    }
   }
   private async refreshProvidersSerialized(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
     for (const { contribution } of this.providers.values()) {
@@ -97,6 +149,7 @@ export class PluginContributionRuntime {
     if (this.disposed) return;
     this.disposed = true;
     this.abortRefresh();
+    this.runInFlight = null;
     this.identity = null;
     this.releaseRegistry();
     for (const entry of this.commands.values()) entry.release();
@@ -254,4 +307,13 @@ function validRefreshPlan(plan: PluginTaskRefreshPlan, contribution: RegisteredP
     typeof request.taskId === "string" && typeof request.label === "string" &&
     typeof request.executablePath === "string" && Array.isArray(request.args) &&
     request.args.every((arg) => typeof arg === "string"));
+}
+
+function validTaskPlan(plan: PluginTaskRunPlan, contribution: RegisteredProvider, taskId: string): boolean {
+  return validRefreshPlan(plan, contribution) && plan.request.taskId === taskId;
+}
+
+export class PluginTaskBusyError extends Error {
+  readonly code = "busy" as const;
+  constructor() { super("Task execution is already busy for this workspace."); this.name = "PluginTaskBusyError"; }
 }

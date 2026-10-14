@@ -5,11 +5,13 @@ import type { ProjectFile } from "../models.ts";
 import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
 import { TaskExecutionController } from "../application/tasks/task-execution-controller.ts";
 import { TaskExecutionRuntime } from "../features/tasks/task-execution-runtime.ts";
-import type { PluginTaskExecutionResult, PluginTaskRefreshPlan } from "../application/plugins/plugin-types.ts";
+import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY } from "../localization/task-execution-copy.ts";
 import { TasksController } from "../features/tasks/tasks-controller.ts";
 import { TasksRuntime } from "../features/tasks/tasks-runtime.ts";
 import { PluginCompositionRuntime } from "./plugin-runtime.ts";
+import { PluginTaskBusyError } from "./plugin-contribution-runtime.ts";
+import { RecentTaskStore, type RecentTaskStorage } from "../application/tasks/recent-task-store.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -18,6 +20,8 @@ export interface PluginTasksRuntimeOptions {
   readonly platform?: () => "posix" | "windows";
   readonly locale?: () => "en-US" | "zh-CN";
   readonly executionBridge: TaskExecutionBridge;
+  readonly recentTaskStorage?: RecentTaskStorage;
+  readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
 }
 
 export interface PluginWorkspaceCatalog {
@@ -32,16 +36,22 @@ export class PluginTasksRuntime {
   private readonly platform: () => "posix" | "windows";
   private readonly reportError: (error: unknown) => void;
   private readonly execution: TaskExecutionRuntime;
-  private readonly root: HTMLElement;
+  private readonly recentTasks: RecentTaskStore | null;
+  private readonly reconcileAfterTask: ((identity: PluginWorkspaceIdentity) => void | Promise<void>) | undefined;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
-    this.root = root;
+    this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
+    this.reconcileAfterTask = options.reconcileAfterTask;
     const controller = new TasksController();
     const executionController = new TaskExecutionController(options.executionBridge);
     this.execution = new TaskExecutionRuntime(
       root,
       executionController,
       () => options.locale?.() === "zh-CN" ? ZH_CN_TASK_EXECUTION_COPY : EN_US_TASK_EXECUTION_COPY,
+      {
+        retry: (identity, taskKey) => { void this.plugins.runTask(taskKey, identity).catch(options.reportError); },
+        visibilityChanged: () => this.render(),
+      },
     );
     this.plugins = new PluginCompositionRuntime({
       registerCommand: options.registerCommand,
@@ -49,12 +59,15 @@ export class PluginTasksRuntime {
       reportDiagnostic: (diagnostic) => options.reportError(diagnostic.error ?? new Error(diagnostic.message)),
       reportError: options.reportError,
       executeTaskRefresh: (identity, plan, signal) => this.executeTaskRefresh(identity, plan, signal),
+      executeTaskRun: (identity, plan, signal) => this.executeTaskRun(identity, plan, signal),
       providerRefreshTitle: (providerLabel) => `${options.copy().refresh}: ${providerLabel}`,
     });
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
       refresh: (identity) => this.plugins.refreshProviders(identity),
-      error: options.reportError,
+      runTask: (taskKey, identity) => this.plugins.runTask(taskKey, identity),
+      revealOutput: (taskKey, identity) => { this.execution.reveal(taskKey, identity); },
+      error: (error) => options.reportError(error instanceof PluginTaskBusyError ? new Error(options.copy().busy) : error),
       shouldRender: () => !this.execution.active,
     });
     this.platform = options.platform ?? browserPathPlatform;
@@ -99,6 +112,34 @@ export class PluginTasksRuntime {
     plan: PluginTaskRefreshPlan,
     signal: AbortSignal,
   ): Promise<PluginTaskExecutionResult> {
+    return this.executeTask(identity, plan, signal);
+  }
+
+  private async executeTaskRun(
+    identity: PluginWorkspaceIdentity,
+    plan: PluginTaskRunPlan,
+    signal: AbortSignal,
+  ): Promise<PluginTaskExecutionResult> {
+    const result = await this.executeTask(identity, plan, signal);
+    this.recentTasks?.record({
+      pluginId: plan.request.pluginId,
+      providerId: plan.request.providerId,
+      taskId: plan.request.taskId,
+      label: plan.request.label,
+      status: result.status,
+      timestamp: Date.now(),
+    });
+    if (result.status === "succeeded") {
+      void Promise.resolve().then(() => this.reconcileAfterTask?.(identity)).catch(this.reportError);
+    }
+    return result;
+  }
+
+  private async executeTask(
+    identity: PluginWorkspaceIdentity,
+    plan: PluginTaskRefreshPlan,
+    signal: AbortSignal,
+  ): Promise<PluginTaskExecutionResult> {
     return new Promise<PluginTaskExecutionResult>((resolve) => {
       let settled = false;
       const complete = (result: PluginTaskExecutionResult) => {
@@ -106,10 +147,6 @@ export class PluginTasksRuntime {
         settled = true;
         signal.removeEventListener("abort", abort);
         resolve(result);
-        queueMicrotask(() => {
-          const fallback = this.root.querySelector<HTMLElement>("[data-tasks-action=refresh]");
-          this.execution.restoreFocus(fallback);
-        });
       };
       const abort = () => {
         void this.execution.cancel(identity).catch((error) => complete({

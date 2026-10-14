@@ -338,3 +338,49 @@ Each implemented phase records:
   Windows wrapper selection is covered, but Windows process behavior still needs native CI/manual
   acceptance. PS5 owns runnable task identities, busy handling, retry, live output, and post-task
   workspace reconciliation.
+
+### PS5 — accepted locally on 2026-10-14
+
+- Discovered Gradle rows are runnable only through their exact current provider/task identity. The
+  bundled plugin returns fixed direct-argument plans (`task`, plain console, no daemon, no scan),
+  while the host revalidates plugin/provider/task provenance and remains the sole owner of review,
+  trust, confirmation, execution, cancellation, output, retry, and lifecycle aborts.
+- One active task is permitted per workspace across windows. Concurrent refresh/run requests return
+  an explicit busy error, and the native manager independently rejects a second process without
+  replacing the first. Terminal delivery now occurs only after the workspace run lock is released,
+  so an immediate Retry cannot race stale native ownership.
+- The execution dialog presents localized queued/running/succeeded/failed/cancelled/crashed state,
+  bounded live stdout/stderr, truncation and errors with polite/assertive live regions, Cancel,
+  Retry, and Close Output. The current task row retains a localized terminal state plus Retry and
+  Reveal Output; keyboard selection, modal focus trapping, dismissal, and focus restoration remain
+  host-owned.
+- Successful real task runs refresh the project-file catalog and only Git untracked/tracked
+  working-tree state. Exact root/generation checks guard every asynchronous stage; History, refs,
+  editor buffers, plugin evidence, and unrelated tools are not reset. Plugin-scoped evidence keys
+  keep the discovered projection alive when builds add unrelated generated files.
+- Recent task profile data is capped at 20 records and 64 KiB, validates atomically on read, and
+  stores only plugin/provider/task IDs, label, terminal status, and timestamp. Executable paths,
+  arguments, environment, and output are never persisted. Renderer output retention remains capped
+  at 1 MiB and native capture at 2 MiB per stream.
+- PS5-focused frontend tests: 43 passed. Native task-focused tests: 7 passed, including sequential
+  `clean` and `:app:assembleDebug` Gradle-shaped fixture runs, nonzero failure, cancellation,
+  process-tree cleanup, exact literal arguments, output bounds, cross-window busy rejection, and
+  immediate retry. The complete deterministic frontend suite passed 1,056 tests. The complete Rust
+  workspace passed 320 tests with 2 operating-system watcher tests ignored; formatting and strict
+  Clippy also passed.
+- Production type checking and build passed. The main chunk is 468.91 kB uncompressed, below the
+  500 kB gate; the lazy bundled-plugin chunk is 7.46 kB and the lazy task-related chunk is 22.84 kB.
+  An unmatched project still loads neither Android discovery nor task execution code and starts no
+  plugin process or timer.
+- On a 512-task maximum snapshot, 1,000 warmed queued-to-terminal projection updates measured
+  0.0185 ms p50, 0.0338 ms p95, and 0.1384 ms maximum on this host. Forced-GC retained-heap delta was
+  15,232 bytes. One thousand recent-profile writes took 10.90 ms total and produced a 3,001-byte,
+  20-record payload. These are local observations, not cross-platform performance guarantees.
+- The macOS arm64 application rendered its shell within six seconds, is ad-hoc signed with hardened
+  runtime, and passed strict deep verification before and after archive extraction. The verified
+  archive is `target/release/bundle/macos/Asterlyn-0.1.8-local-20261014-ps5-final.app.zip`, 9,661,103 bytes,
+  SHA-256 `e8b331260691da0019489ff6e3d0eb06e4a3e52127cb0dbb41fe9bacdb51877b`.
+- Known limitations: native Windows execution still requires Windows CI/manual acceptance; the
+  Gradle-shaped end-to-end fixture proves the exact wrapper/task contract but is not a full Android
+  SDK build. PS6 owns Android assemble/bundle/install/uninstall shortcuts, ambiguous module/variant
+  selection, bounded APK/AAB discovery, and Reveal artifact actions.

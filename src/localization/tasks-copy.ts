@@ -13,10 +13,14 @@ export const EN_US_TASKS_COPY: TasksCopy = Object.freeze({
   },
   loading: "Loading tasks…",
   error: "Task discovery failed.",
+  busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
   run: "Run task",
+  retry: "Retry task",
+  revealOutput: "Reveal output",
   notRunnable: "This task is not runnable.",
+  status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
 export const ZH_CN_TASKS_COPY: TasksCopy = Object.freeze({
@@ -32,8 +36,12 @@ export const ZH_CN_TASKS_COPY: TasksCopy = Object.freeze({
   },
   loading: "正在加载任务…",
   error: "任务发现失败。",
+  busy: "此工作区已有任务正在运行。",
   noResults: "没有匹配的任务。",
   queryPlaceholder: "筛选任务",
   run: "运行任务",
+  retry: "重试任务",
+  revealOutput: "查看输出",
   notRunnable: "此任务不可运行。",
+  status: { idle: "空闲", queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", crashed: "崩溃" },
 });

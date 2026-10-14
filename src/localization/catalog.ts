@@ -126,7 +126,7 @@ export interface TerminalCopy {
   closed: string; outputTruncated(bytes: number): string;
 }
 
-export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; error: string; noResults: string; queryPlaceholder: string; run: string; notRunnable: string; }
+export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; error: string; busy: string; noResults: string; queryPlaceholder: string; run: string; retry: string; revealOutput: string; notRunnable: string; status: Readonly<Record<string, string>>; }
 
 export interface SettingsCopy {
   planned: string; available: string;
