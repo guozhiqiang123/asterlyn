@@ -217,6 +217,8 @@ import {
 } from "./application/workspace-mutation-coordinator";
 import { RepositoryOperationCoordinator } from "./application/repository-operation-coordinator";
 import { createAppState } from "./app-state";
+import { HostNotificationCenter } from "./application/notifications/index.ts";
+import { NotificationPresentationRuntime } from "./presentation/notification-presentation-runtime.ts";
 import { WorkspaceWatchCoordinator } from "./application/workspace-watch-coordinator";
 import { browserRuntimeScheduler, browserWindowFocusPort } from "./adapters/browser/browser-runtime";
 import { workspaceWatchBridge } from "./workspace-watch-bridge";
@@ -462,7 +464,8 @@ export class AsterlynApp {
   private projectTreeWindowStart = 0;
   private changeTreeScrollFrame: number | null = null;
   private changeTreeWindowStart = 0;
-  private toastDismissTimer: number | null = null;
+  private readonly notificationCenter = new HostNotificationCenter();
+  private readonly notificationPresentationRuntime: NotificationPresentationRuntime;
   private readonly windowSession = new WindowSession({
     openProject: (path) => bridge.openProject(path),
     readProject: (path) => bridge.readProject(path),
@@ -485,6 +488,11 @@ export class AsterlynApp {
 
   constructor(private readonly root: HTMLElement, initialCatalog: LocaleCatalog) {
     this.localization = createLocalization(initialCatalog);
+    this.notificationPresentationRuntime = new NotificationPresentationRuntime(
+      root,
+      this.notificationCenter,
+      window,
+    );
     this.dialogRuntime = new ApplicationDialogRuntime(root, () => this.localization.catalog.common);
     this.contextMenuHost = new LazyContextMenuHost(document, window);
     this.stashRuntime = new StashRuntime(root, this.contextMenuHost, {
@@ -1810,6 +1818,7 @@ export class AsterlynApp {
       windowControlsAvailable: this.windowChromeBinding.available,
       localization: this.localization.catalog,
     });
+    this.notificationPresentationRuntime.refresh();
     this.root.ownerDocument.documentElement.dataset.startupState = "ready";
   }
   private async activateLocale(locale: "en-US" | "zh-CN"): Promise<void> {
@@ -1993,13 +2002,14 @@ export class AsterlynApp {
     if (this.disposed) return;
     this.disposed = true;
     this.shellEventBinding.dispose();
+    this.notificationPresentationRuntime.dispose();
+    this.notificationCenter.dispose();
     if (this.projectTreeScrollFrame !== null) cancelAnimationFrame(this.projectTreeScrollFrame);
     if (this.changeTreeScrollFrame !== null) cancelAnimationFrame(this.changeTreeScrollFrame);
     this.projectTreeScrollFrame = null;
     this.changeTreeScrollFrame = null;
     this.cancelScheduledCommandSurfaceResults();
     this.workspaceSearchDebouncer.cancel();
-    this.clearToastDismissTimer();
     this.changesContextRuntime.dispose();
     this.unversionedTrashRuntime.dispose();
     this.gitHistoryContextRuntime.dispose();
@@ -8547,56 +8557,27 @@ export class AsterlynApp {
   }
 
   private showError(error: unknown): void {
-    this.clearToastDismissTimer();
     const message = localizedOperationError(error, this.localization.catalog.errors);
     this.state.error = message;
-    this.query("#toast-message").textContent = message;
-    this.query(".toast-icon").textContent = "!";
-    const toast = this.query("#toast");
-    toast.classList.remove("hidden", "warning", "information");
+    this.notificationCenter.publish({ kind: "error", message, source: "host" });
     this.setStatus(this.localization.catalog.common.operationFailed, "warning");
   }
 
   private showWarning(message: string): void {
-    this.clearToastDismissTimer();
     this.state.error = message;
-    this.query("#toast-message").textContent = message;
-    this.query(".toast-icon").textContent = "!";
-    const toast = this.query("#toast");
-    toast.classList.add("warning");
-    toast.classList.remove("hidden", "information");
+    this.notificationCenter.publish({ kind: "warning", message, source: "host" });
     this.setStatus(message, "warning");
   }
 
   private showInformation(message: string): void {
-    this.clearToastDismissTimer();
     this.state.error = null;
-    this.query("#toast-message").textContent = message;
-    this.query(".toast-icon").textContent = "i";
-    const toast = this.query("#toast");
-    toast.classList.add("information");
-    toast.classList.remove("hidden", "warning");
+    this.notificationCenter.publish({ kind: "info", message, source: "host" });
     this.setStatus(message, "success");
-    this.toastDismissTimer = window.setTimeout(() => {
-      this.toastDismissTimer = null;
-      if (this.query("#toast-message").textContent !== message) return;
-      toast.classList.add("hidden");
-      toast.classList.remove("information");
-    }, 4_000);
   }
 
   private clearError(): void {
-    this.clearToastDismissTimer();
     this.state.error = null;
-    const toast = this.query("#toast");
-    toast.classList.add("hidden");
-    toast.classList.remove("warning", "information");
-  }
-
-  private clearToastDismissTimer(): void {
-    if (this.toastDismissTimer === null) return;
-    window.clearTimeout(this.toastDismissTimer);
-    this.toastDismissTimer = null;
+    this.notificationPresentationRuntime.dismiss();
   }
 
   private async chooseRepository(): Promise<void> {
